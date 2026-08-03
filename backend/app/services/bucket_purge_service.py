@@ -19,7 +19,7 @@ from app.models.bucket_purge import (
 )
 from app.services import s3_client
 from app.services.buckets_service import BucketsService
-from app.utils.s3_endpoint import resolve_s3_client_options
+from app.services.long_running_s3_client import LongRunningS3ClientService
 from app.routers.http_errors import sanitized_error_log_detail
 
 
@@ -47,33 +47,8 @@ class BucketPurgeOptions:
     individual_deletes: bool = False
 
 
-class BucketPurgeService:
-    def _account_credentials(self, account: S3ExecutionTarget) -> tuple[str, str]:
-        access_key, secret_key = account.effective_rgw_credentials()
-        if not access_key or not secret_key:
-            raise RuntimeError("S3 account is missing credentials")
-        return access_key, secret_key
-
-    def _client_kwargs(self, account: S3ExecutionTarget) -> dict[str, Any]:
-        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
-        session_token = account.session_token()
-        return {
-            "endpoint": endpoint,
-            "region": region,
-            "force_path_style": force_path_style,
-            "verify_tls": verify_tls,
-            "session_token": session_token,
-            "user_agent_extra": "s3-manager-bucket-purge",
-        }
-
-    def _build_client(self, account: S3ExecutionTarget):
-        access_key, secret_key = self._account_credentials(account)
-        return s3_client.get_s3_client(
-            access_key=access_key,
-            secret_key=secret_key,
-            request_profile="long_running",
-            **self._client_kwargs(account),
-        )
+class BucketPurgeService(LongRunningS3ClientService):
+    s3_user_agent_extra = "s3-manager-bucket-purge"
 
     def _resolve_initial_entry_estimates(self, targets: list[BucketPurgeResolvedTarget]) -> list[int | None]:
         estimates: list[int | None] = [None for _ in targets]

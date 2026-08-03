@@ -3,10 +3,8 @@
 from types import SimpleNamespace
 
 from app.services import (
-    bucket_integrity_service,
-    bucket_purge_service,
-    bucket_usage_stats_service,
     buckets_service,
+    long_running_s3_client,
     s3_client,
 )
 from app.services.bucket_integrity_service import BucketIntegrityCheckService
@@ -26,12 +24,7 @@ def test_compare_migration_purge_integrity_and_usage_select_long_running_profile
 
     monkeypatch.setattr(s3_client, "get_s3_client", fake_get_s3_client)
     monkeypatch.setattr(execution_context, "get_s3_client", fake_get_s3_client)
-    for module in (
-        buckets_service,
-        bucket_purge_service,
-        bucket_integrity_service,
-        bucket_usage_stats_service,
-    ):
+    for module in (buckets_service, long_running_s3_client):
         monkeypatch.setattr(
             module,
             "resolve_s3_client_options",
@@ -60,3 +53,8 @@ def test_compare_migration_purge_integrity_and_usage_select_long_running_profile
 
     assert len(captured) == 5
     assert all(call["request_profile"] == "long_running" for call in captured)
+    assert [call.get("user_agent_extra") for call in captured[1:4]] == [
+        "s3-manager-bucket-purge",
+        "s3-manager-bucket-integrity",
+        "s3-manager-bucket-usage-stats",
+    ]
