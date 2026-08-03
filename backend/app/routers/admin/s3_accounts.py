@@ -69,7 +69,7 @@ def list_accounts(
     include_quota: bool = Query(False, description="Include RGW quota information (slower)."),
     include_rgw_details: bool = Query(False, description="Include RGW user and topic details (slower)."),
     service: S3AccountsService = Depends(get_admin_accounts_service),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
 ) -> PaginatedS3AccountsResponse:
     accounts = service.list_accounts(
         include_usage_stats=False,
@@ -116,7 +116,7 @@ def list_accounts(
 @router.get("/minimal", response_model=list[S3AccountSummary])
 def list_accounts_minimal(
     service: S3AccountsService = Depends(get_admin_accounts_service),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
 ) -> list[S3AccountSummary]:
     return service.list_accounts_minimal()
 
@@ -129,7 +129,7 @@ def get_account(
         description="Include RGW usage stats (slower, triggers bucket listing).",
     ),
     service: S3AccountsService = Depends(get_admin_accounts_service),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
 ) -> S3Account:
     try:
         return service.get_account_detail(account_id, include_usage=include_usage)

@@ -2,12 +2,11 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from __future__ import annotations
-
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 
+from app.db import User
 from app.models.audit import AuditLogEntry, AuditLogListResponse
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
@@ -23,7 +22,7 @@ def list_audit_logs(
     scope: Optional[str] = Query(None, description="Filter by admin/manager scope"),
     account_id: Optional[int] = Query(None, description="Filter by account id"),
     search: Optional[str] = Query(None, description="Search by actor, action, or target"),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuditLogListResponse:
     effective_limit = min(max(limit, 1), 500)

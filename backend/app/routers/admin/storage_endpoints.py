@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.db import User
 from app.models.storage_endpoint import (
     StorageEndpoint,
     StorageEndpointCreate,
@@ -36,7 +37,7 @@ def get_service(db: Session = Depends(get_db)) -> StorageEndpointsService:
 def list_storage_endpoints(
     include_admin_ops_permissions: bool = Query(False),
     service: StorageEndpointsService = Depends(get_service),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
 ) -> list[StorageEndpoint]:
     return service.list_endpoints(include_admin_ops_permissions=include_admin_ops_permissions)
 
@@ -44,7 +45,7 @@ def list_storage_endpoints(
 @router.get("/meta", response_model=StorageEndpointMeta)
 def get_storage_endpoints_meta(
     service: StorageEndpointsService = Depends(get_service),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
 ) -> StorageEndpointMeta:
     return StorageEndpointMeta(managed_by_env=service.env_endpoints_locked())
 
@@ -53,7 +54,7 @@ def get_storage_endpoints_meta(
 def detect_storage_endpoint_features(
     payload: StorageEndpointFeatureDetectionRequest,
     service: StorageEndpointsService = Depends(get_service),
-    _: dict = Depends(get_current_ui_superadmin),
+    _: User = Depends(get_current_ui_superadmin),
 ) -> StorageEndpointFeatureDetectionResult:
     try:
         return service.detect_features(payload)
@@ -66,7 +67,7 @@ def get_storage_endpoint(
     endpoint_id: int,
     include_admin_ops_permissions: bool = Query(True),
     service: StorageEndpointsService = Depends(get_service),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
 ) -> StorageEndpoint:
     try:
         return service.get_endpoint(endpoint_id, include_admin_ops_permissions=include_admin_ops_permissions)
@@ -79,7 +80,7 @@ def create_storage_endpoint(
     payload: StorageEndpointCreate,
     service: StorageEndpointsService = Depends(get_service),
     audit_service: AuditService = Depends(get_audit_service),
-    current_user=Depends(get_current_ui_superadmin),
+    current_user: User = Depends(get_current_ui_superadmin),
 ) -> StorageEndpoint:
     try:
         created = service.create_endpoint(payload)
@@ -108,7 +109,7 @@ def update_storage_endpoint(
     payload: StorageEndpointUpdate,
     service: StorageEndpointsService = Depends(get_service),
     audit_service: AuditService = Depends(get_audit_service),
-    current_user=Depends(get_current_ui_superadmin),
+    current_user: User = Depends(get_current_ui_superadmin),
 ) -> StorageEndpoint:
     try:
         updated = service.update_endpoint(endpoint_id, payload)
@@ -144,7 +145,7 @@ def update_storage_endpoint_tags(
     payload: StorageEndpointTagsUpdate,
     service: StorageEndpointsService = Depends(get_service),
     audit_service: AuditService = Depends(get_audit_service),
-    current_user=Depends(get_current_ui_superadmin),
+    current_user: User = Depends(get_current_ui_superadmin),
 ) -> StorageEndpoint:
     try:
         updated = service.update_endpoint_tags(endpoint_id, payload)
@@ -173,7 +174,7 @@ def set_default_storage_endpoint(
     endpoint_id: int,
     service: StorageEndpointsService = Depends(get_service),
     audit_service: AuditService = Depends(get_audit_service),
-    current_user=Depends(get_current_ui_superadmin),
+    current_user: User = Depends(get_current_ui_superadmin),
 ) -> StorageEndpoint:
     try:
         updated = service.set_default_endpoint(endpoint_id)
@@ -205,7 +206,7 @@ def delete_storage_endpoint(
     endpoint_id: int,
     service: StorageEndpointsService = Depends(get_service),
     audit_service: AuditService = Depends(get_audit_service),
-    current_user=Depends(get_current_ui_superadmin),
+    current_user: User = Depends(get_current_ui_superadmin),
 ) -> None:
     try:
         service.delete_endpoint(endpoint_id)

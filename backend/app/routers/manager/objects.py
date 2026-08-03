@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
-from app.db import User
+from app.models.access_context import ManagerActor
 from app.services.s3_execution_context import S3ExecutionContext
 from app.models.object import ListObjectsResponse
 from app.routers.dependencies import get_account_context, get_current_account_admin
@@ -40,7 +40,7 @@ def list_objects(
     continuation_token: Optional[str] = None,
     account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
-    _: User = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(get_current_account_admin),
 ):
     try:
         return service.list_objects(bucket_name, account, prefix=prefix, continuation_token=continuation_token)
@@ -56,7 +56,7 @@ async def upload_object(
     key: Optional[str] = Form(None),
     account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
-    _: User = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(get_current_account_admin),
 ):
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing filename")
@@ -82,7 +82,7 @@ def create_folder(
     payload: CreateFolderPayload,
     account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
-    _: User = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(get_current_account_admin),
 ):
     try:
         service.create_folder(bucket_name, account, folder_prefix=payload.prefix)
@@ -97,7 +97,7 @@ def delete_objects(
     payload: DeleteObjectsPayload,
     account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
-    _: dict = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(get_current_account_admin),
 ):
     if not payload.keys:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No keys provided")
@@ -115,7 +115,7 @@ def get_download_url(
     expires_in: int = 300,
     account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
-    _: dict = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(get_current_account_admin),
 ):
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")

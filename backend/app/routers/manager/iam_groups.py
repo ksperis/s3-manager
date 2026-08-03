@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import User
+from app.models.access_context import ManagerActor
 from app.services.s3_execution_context import S3ExecutionContext
 from app.models.iam import IAMGroup, IAMGroupCreate, IAMUser
 from app.models.policy import InlinePolicy, Policy
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/manager/iam/groups", tags=["manager-iam-groups"])
 def list_groups(
     account: S3ExecutionContext = Depends(get_account_context),
     db: Session = Depends(get_db),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> list[IAMGroup]:
     _, service = get_account_and_service(account)
     try:
@@ -43,7 +43,7 @@ def list_groups(
 def create_group(
     payload: IAMGroupCreate,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> IAMGroup:
     _, service = get_account_and_service(account)
@@ -70,7 +70,7 @@ def create_group(
 def delete_group(
     group_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
@@ -92,7 +92,7 @@ def delete_group(
 def list_group_users(
     group_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> list[IAMUser]:
     _, service = get_account_and_service(account)
     try:
@@ -106,7 +106,7 @@ def add_user_to_group(
     group_name: str,
     payload: IAMUser,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> IAMUser:
     _, service = get_account_and_service(account)
@@ -131,7 +131,7 @@ def remove_user_from_group(
     group_name: str,
     user_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
@@ -154,7 +154,7 @@ def remove_user_from_group(
 def list_group_inline_policies(
     group_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> list[InlinePolicy]:
     _, service = get_account_and_service(account)
     try:
@@ -173,7 +173,7 @@ def put_group_inline_policy(
     policy_name: str,
     payload: InlinePolicy,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> InlinePolicy:
     ensure_inline_policy_name(payload, policy_name)
@@ -205,7 +205,7 @@ def delete_group_inline_policy(
     group_name: str,
     policy_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
@@ -228,7 +228,7 @@ def delete_group_inline_policy(
 def list_group_policies(
     group_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> list[Policy]:
     _, service = get_account_and_service(account)
     try:
@@ -242,7 +242,7 @@ def attach_group_policy(
     group_name: str,
     payload: Policy,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> Policy:
     _, service = get_account_and_service(account)
@@ -267,7 +267,7 @@ def detach_group_policy(
     group_name: str,
     policy_arn: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)

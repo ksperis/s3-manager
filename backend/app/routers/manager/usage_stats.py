@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
 from app.db import User
+from app.models.access_context import ManagerActor
 from app.models.bucket_usage_stats import (
     BucketUsageStatsAggregateResponse,
     BucketUsageStatsLatestResponse,
@@ -65,9 +66,9 @@ def _list_manager_bucket_names(account: S3ExecutionContext, service: BucketsServ
 @router.get("/manager/usage-stats/latest", response_model=BucketUsageStatsAggregateResponse)
 def get_manager_usage_stats_aggregate(
     db: Session = Depends(get_db),
-    _feature_user: object = Depends(require_bucket_usage_stats_enabled),
+    _feature_user: User = Depends(require_bucket_usage_stats_enabled),
     account: S3ExecutionContext = Depends(get_account_context),
-    _: object = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(get_current_account_admin),
     bucket_service: BucketsService = Depends(get_buckets_service),
 ) -> BucketUsageStatsAggregateResponse:
     require_bucket_management_context(account)
@@ -87,9 +88,9 @@ def get_manager_usage_stats_aggregate(
 def stream_manager_usage_stats_aggregate(
     payload: BucketUsageStatsScopeRequest,
     request: Request,
-    _feature_user: object = Depends(require_bucket_usage_stats_enabled),
+    _feature_user: User = Depends(require_bucket_usage_stats_enabled),
     account: S3ExecutionContext = Depends(get_account_context),
-    actor: object = Depends(get_current_account_admin),
+    actor: ManagerActor = Depends(get_current_account_admin),
     bucket_service: BucketsService = Depends(get_buckets_service),
 ) -> StreamingResponse:
     require_bucket_management_context(account)
@@ -118,7 +119,7 @@ def get_manager_bucket_usage_stats(
     bucket_name: str,
     db: Session = Depends(get_db),
     account: S3ExecutionContext = Depends(get_account_context),
-    _: object = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketUsageStatsLatestResponse:
     require_bucket_management_context(account)
     context_id = account.context_id
@@ -136,7 +137,7 @@ def stream_manager_bucket_usage_stats_for_bucket(
     bucket_name: str,
     request: Request,
     account: S3ExecutionContext = Depends(get_account_context),
-    actor: object = Depends(get_current_account_admin),
+    actor: ManagerActor = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     require_bucket_management_context(account)
     context_id = request.query_params.get("account_id") or account.context_id

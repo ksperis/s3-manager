@@ -46,7 +46,7 @@ def _resolve_endpoint(db: Session, endpoint_id: int) -> StorageEndpoint:
 def billing_summary(
     month: str = Query(..., description="YYYY-MM"),
     endpoint_id: int | None = Query(None),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> BillingSummary:
     _ensure_billing_enabled()
@@ -99,7 +99,7 @@ def billing_subjects(
     page_size: int = Query(25, ge=1, le=200),
     sort_by: str = Query("name"),
     sort_dir: str = Query("asc"),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> BillingSubjectsResponse:
     _ensure_billing_enabled()
@@ -117,7 +117,7 @@ def billing_subject_detail(
     subject_id: int,
     month: str = Query(..., description="YYYY-MM"),
     endpoint_id: int = Query(...),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> BillingSubjectDetail:
     _ensure_billing_enabled()
@@ -133,7 +133,7 @@ def billing_subject_detail(
 def billing_export_csv(
     month: str = Query(..., description="YYYY-MM"),
     endpoint_id: int = Query(...),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     _ensure_billing_enabled()

@@ -3,6 +3,9 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.db import User
 from app.models.admin_automation import (
     AdminAutomationApplyRequest,
     AdminAutomationApplyResponse,
@@ -13,7 +16,6 @@ from app.models.admin_automation import (
     StorageEndpointApplyRequest,
     UiUserApplyRequest,
 )
-from app.core.database import get_db
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.admin_automation_service import AdminAutomationService, get_admin_automation_service
 from app.services.audit_service import AuditService
@@ -28,7 +30,7 @@ def get_service(db: Session = Depends(get_db)) -> AdminAutomationService:
 @router.post("/apply", response_model=AdminAutomationApplyResponse)
 def apply_admin_automation(
     payload: AdminAutomationApplyRequest,
-    current_user=Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
@@ -53,7 +55,7 @@ def _apply_request(
 @router.post("/storage-endpoints/apply", response_model=AdminAutomationApplyResponse)
 def apply_storage_endpoint(
     payload: StorageEndpointApplyRequest,
-    current_user=Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
@@ -68,7 +70,7 @@ def apply_storage_endpoint(
 @router.post("/ui-users/apply", response_model=AdminAutomationApplyResponse)
 def apply_ui_user(
     payload: UiUserApplyRequest,
-    current_user=Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
@@ -83,7 +85,7 @@ def apply_ui_user(
 @router.post("/s3-accounts/apply", response_model=AdminAutomationApplyResponse)
 def apply_s3_account(
     payload: S3AccountApplyRequest,
-    current_user=Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
@@ -98,7 +100,7 @@ def apply_s3_account(
 @router.post("/s3-users/apply", response_model=AdminAutomationApplyResponse)
 def apply_s3_user(
     payload: S3UserApplyRequest,
-    current_user=Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
@@ -113,7 +115,7 @@ def apply_s3_user(
 @router.post("/account-links/apply", response_model=AdminAutomationApplyResponse)
 def apply_account_link(
     payload: AccountLinkApplyRequest,
-    current_user=Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
@@ -128,7 +130,7 @@ def apply_account_link(
 @router.post("/s3-connections/apply", response_model=AdminAutomationApplyResponse)
 def apply_s3_connection(
     payload: S3ConnectionApplyRequest,
-    current_user=Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:

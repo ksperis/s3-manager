@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.database import SessionLocal
 from app.db import User
+from app.models.access_context import ManagerActor
 from app.models.bucket_purge import BucketPurgeRequest, BucketPurgeResult, bucket_purge_confirmation_phrase
 from app.routers.bucket_purge_stream import stream_bucket_purge
 from app.routers.dependencies import (
@@ -75,7 +76,7 @@ def stream_manager_bucket_purge(
     request: Request,
     tool_user: User = Depends(require_bucket_purge_enabled),
     account: S3ExecutionContext = Depends(get_account_context),
-    _: object = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)
     require_bucket_management_context(account)

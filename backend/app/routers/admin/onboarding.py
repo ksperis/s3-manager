@@ -31,7 +31,7 @@ def _build_status(db: Session) -> OnboardingStatus:
 @router.get("", response_model=OnboardingStatus)
 def get_onboarding_status(
     db: Session = Depends(get_db),
-    _: None = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
 ) -> OnboardingStatus:
     return _build_status(db)
 

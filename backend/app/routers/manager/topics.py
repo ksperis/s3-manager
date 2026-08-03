@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from fastapi import APIRouter, Depends, status
 
-from app.db import User
+from app.models.access_context import ManagerActor
 from app.services.s3_execution_context import S3ExecutionContext
 from app.models.topic import Topic, TopicConfiguration, TopicCreate, TopicPolicy
 from app.routers.dependencies import (
@@ -22,8 +22,8 @@ router = APIRouter(prefix="/manager/topics", tags=["manager-topics"])
 def list_topics(
     account: S3ExecutionContext = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _sns_guard: object = Depends(require_sns_capable_manager),
-    _actor: User = Depends(get_current_account_admin),
+    _sns_guard: ManagerActor = Depends(require_sns_capable_manager),
+    _actor: ManagerActor = Depends(get_current_account_admin),
 ) -> list[Topic]:
     try:
         return service.list_topics(account)
@@ -36,8 +36,8 @@ def create_topic(
     payload: TopicCreate,
     account: S3ExecutionContext = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _: object = Depends(require_sns_capable_manager),
-    current_user: User = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(require_sns_capable_manager),
+    current_user: ManagerActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> Topic:
     try:
@@ -70,8 +70,8 @@ def delete_topic(
     topic_arn: str,
     account: S3ExecutionContext = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _: object = Depends(require_sns_capable_manager),
-    current_user: User = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(require_sns_capable_manager),
+    current_user: ManagerActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
@@ -93,8 +93,8 @@ def get_topic_policy(
     topic_arn: str,
     account: S3ExecutionContext = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _sns_guard: object = Depends(require_sns_capable_manager),
-    _actor: User = Depends(get_current_account_admin),
+    _sns_guard: ManagerActor = Depends(require_sns_capable_manager),
+    _actor: ManagerActor = Depends(get_current_account_admin),
 ) -> TopicPolicy:
     try:
         policy = service.get_topic_policy(account, topic_arn)
@@ -109,8 +109,8 @@ def put_topic_policy(
     payload: TopicPolicy,
     account: S3ExecutionContext = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _: object = Depends(require_sns_capable_manager),
-    current_user: User = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(require_sns_capable_manager),
+    current_user: ManagerActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> TopicPolicy:
     try:
@@ -136,8 +136,8 @@ def get_topic_configuration(
     topic_arn: str,
     account: S3ExecutionContext = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _sns_guard: object = Depends(require_sns_capable_manager),
-    _actor: User = Depends(get_current_account_admin),
+    _sns_guard: ManagerActor = Depends(require_sns_capable_manager),
+    _actor: ManagerActor = Depends(get_current_account_admin),
 ) -> TopicConfiguration:
     try:
         configuration = service.get_topic_configuration(account, topic_arn)
@@ -152,8 +152,8 @@ def put_topic_configuration(
     payload: TopicConfiguration,
     account: S3ExecutionContext = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _: object = Depends(require_sns_capable_manager),
-    current_user: User = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(require_sns_capable_manager),
+    current_user: ManagerActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> TopicConfiguration:
     try:

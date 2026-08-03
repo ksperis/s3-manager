@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import User
+from app.models.access_context import ManagerActor
 from app.services.s3_execution_context import S3ExecutionContext
 from app.models.managed_private_access import (
     ManagedIAMPrivateAccessRequest,
@@ -49,7 +50,7 @@ def _translate_error(exc: ManagedPrivateAccessError) -> HTTPException:
 def create_iam_private_access(
     payload: ManagedIAMPrivateAccessRequest,
     account: S3ExecutionContext = Depends(get_account_context),
-    _: object = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
 ) -> ManagedPrivateAccessResult:

@@ -7,6 +7,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
+from app.db import User
+from app.models.access_context import ManagerActor
 from app.models.bucket_integrity import BucketIntegrityCheckRequest
 from app.routers.bucket_integrity_stream import stream_bucket_integrity_check
 from app.routers.dependencies import (
@@ -40,9 +42,9 @@ def _require_buckets_payload(payload: BucketIntegrityCheckRequest) -> list[str]:
 def stream_manager_bucket_integrity_check(
     payload: BucketIntegrityCheckRequest,
     request: Request,
-    _tool_user: object = Depends(require_bucket_integrity_check_enabled),
+    _tool_user: User = Depends(require_bucket_integrity_check_enabled),
     account: S3ExecutionContext = Depends(get_account_context),
-    _: object = Depends(get_current_account_admin),
+    _: ManagerActor = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)
     require_bucket_management_context(account)

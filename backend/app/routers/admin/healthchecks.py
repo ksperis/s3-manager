@@ -41,7 +41,7 @@ def _ensure_endpoint_status_enabled() -> None:
 
 @router.get("/summary", response_model=EndpointHealthSummaryResponse)
 def health_summary(
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> EndpointHealthSummaryResponse:
     _ensure_endpoint_status_enabled()
@@ -53,7 +53,7 @@ def health_summary(
 def health_series(
     endpoint_id: int = Query(..., alias="endpoint_id"),
     window: HealthWindow = Query(HealthWindow.WEEK, description="Window: day, week, month, quarter, half_year, year"),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> EndpointHealthSeries:
     _ensure_endpoint_status_enabled()
@@ -68,7 +68,7 @@ def health_series(
 def health_incidents(
     endpoint_id: int = Query(..., alias="endpoint_id"),
     window: HealthWindow = Query(HealthWindow.MONTH, description="Window: day, week, month, quarter, half_year, year"),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> EndpointHealthIncidentsResponse:
     _ensure_endpoint_status_enabled()
@@ -85,7 +85,7 @@ def health_raw_checks(
     window: HealthWindow = Query(HealthWindow.WEEK, description="Window: day, week, month, quarter, half_year, year"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> EndpointHealthRawChecksResponse:
     _ensure_endpoint_status_enabled()
@@ -99,7 +99,7 @@ def health_raw_checks(
 @router.get("/overview", response_model=EndpointHealthOverviewResponse)
 def health_overview(
     window: HealthWindow = Query(HealthWindow.WEEK, description="Window: day, week, month, quarter, half_year, year"),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> EndpointHealthOverviewResponse:
     _ensure_endpoint_status_enabled()
@@ -110,7 +110,7 @@ def health_overview(
 @router.get("/latency-overview", response_model=EndpointHealthLatencyOverviewResponse)
 def health_latency_overview(
     window: HealthWindow = Query(HealthWindow.DAY, description="Window: day, week, month, quarter, half_year, year"),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> EndpointHealthLatencyOverviewResponse:
     _ensure_endpoint_status_enabled()
@@ -122,7 +122,7 @@ def health_latency_overview(
 def health_global_incidents(
     window: HealthWindow = Query(HealthWindow.HALF_YEAR, description="Window: day, week, month, quarter, half_year, year"),
     limit: int = Query(300, ge=1, le=2000),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> EndpointHealthGlobalIncidentsResponse:
     _ensure_endpoint_status_enabled()
@@ -134,7 +134,7 @@ def health_global_incidents(
 def workspace_health_overview(
     endpoint_id: int | None = Query(None, ge=1),
     incident_highlight_minutes: int | None = Query(None, ge=1),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> WorkspaceEndpointHealthOverviewResponse:
     _ensure_endpoint_status_enabled()

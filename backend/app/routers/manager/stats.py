@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.db import QuotaUsageDaily
+from app.models.access_context import ManagerActor
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
@@ -53,7 +54,7 @@ def _usage_history_trend_filters(account: S3ExecutionContext, model) -> list | N
 def account_stats(
     account: S3ExecutionContext = Depends(get_account_context),
     bucket_service: BucketsService = Depends(get_buckets_service),
-    _: dict = Depends(require_usage_capable_manager),
+    _: ManagerActor = Depends(require_usage_capable_manager),
 ) -> dict:
     if not account.rgw_account_id and not account.rgw_user_uid:
         raise HTTPException(status_code=400, detail="Storage metrics not available for this account")
@@ -116,7 +117,7 @@ def account_stats(
 @router.get("/usage-trends", response_model=ManagerUsageTrendsResponse, response_model_exclude_none=True)
 def account_usage_trends(
     account: S3ExecutionContext = Depends(get_account_context),
-    _: dict = Depends(require_usage_capable_manager),
+    _: ManagerActor = Depends(require_usage_capable_manager),
     db: Session = Depends(get_db),
 ) -> ManagerUsageTrendsResponse:
     if not load_app_settings().general.usage_history_enabled:
@@ -128,7 +129,7 @@ def account_usage_trends(
 def account_usage_history_trends(
     window: UsageHistoryTrendWindow = Query("month"),
     account: S3ExecutionContext = Depends(get_account_context),
-    _: dict = Depends(require_usage_capable_manager),
+    _: ManagerActor = Depends(require_usage_capable_manager),
     db: Session = Depends(get_db),
 ) -> UsageHistoryTrendResponse:
     service = UsageHistoryService(db)
@@ -155,7 +156,7 @@ def account_traffic(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
     bucket: Optional[str] = Query(None),
     account: S3ExecutionContext = Depends(get_account_context),
-    _: dict = Depends(require_metrics_capable_manager),
+    _: ManagerActor = Depends(require_metrics_capable_manager),
 ) -> dict:
     try:
         service = TrafficService(account)

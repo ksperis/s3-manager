@@ -71,7 +71,7 @@ def list_users(
     sort_by: str = Query("email"),
     sort_dir: str = Query("asc"),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    _: dict = Depends(get_current_super_admin),
+    _: DbUser = Depends(get_current_super_admin),
 ) -> PaginatedUsersResponse:
     items, total = users_service.paginate_users(
         page=page,
@@ -87,7 +87,7 @@ def list_users(
 @router.get("/minimal", response_model=list[UserSummary])
 def list_users_minimal(
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    _: dict = Depends(get_current_super_admin),
+    _: DbUser = Depends(get_current_super_admin),
 ) -> list[UserSummary]:
     return users_service.list_users_minimal()
 

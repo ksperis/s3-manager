@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import S3Account, S3Connection, S3User, User
+from app.models.access_context import ManagerActor
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import (
     get_account_context,
@@ -86,7 +87,7 @@ def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[
 @router.get("/context", response_model=ManagerContext)
 def get_manager_context(
     account=Depends(get_account_context),
-    actor=Depends(get_current_actor),
+    actor: ManagerActor = Depends(get_current_actor),
     db: Session = Depends(get_db),
     include_limits: bool = Query(default=False),
 ) -> ManagerContext:

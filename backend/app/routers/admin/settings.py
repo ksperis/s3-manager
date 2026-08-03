@@ -42,17 +42,17 @@ router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
 
 
 @router.get("", response_model=AppSettings)
-def get_settings(_: None = Depends(get_current_ui_superadmin)) -> AppSettings:
+def get_settings(_: User = Depends(get_current_ui_superadmin)) -> AppSettings:
     return load_app_settings()
 
 
 @router.get("/defaults", response_model=AppSettings)
-def get_default_settings(_: None = Depends(get_current_ui_superadmin)) -> AppSettings:
+def get_default_settings(_: User = Depends(get_current_ui_superadmin)) -> AppSettings:
     return load_default_app_settings()
 
 
 @router.get("/general-feature-locks", response_model=GeneralFeatureLocks)
-def get_general_feature_locks_route(_: None = Depends(get_current_ui_superadmin)) -> GeneralFeatureLocks:
+def get_general_feature_locks_route(_: User = Depends(get_current_ui_superadmin)) -> GeneralFeatureLocks:
     return get_general_feature_locks()
 
 

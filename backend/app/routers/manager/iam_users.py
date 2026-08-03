@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import User
+from app.models.access_context import ManagerActor
 from app.services.s3_execution_context import S3ExecutionContext
 from app.models.iam import AccessKey, AccessKeyStatusChange, IAMUser, IAMUserCreate, IAMUserWithKey
 from app.models.policy import InlinePolicy, Policy
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/manager/iam/users", tags=["manager-iam-users"])
 def list_users(
     account: S3ExecutionContext = Depends(get_account_context),
     db: Session = Depends(get_db),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> list[IAMUser]:
     _, service = get_account_and_service(account)
     try:
@@ -57,7 +57,7 @@ def list_users(
 def create_user(
     payload: IAMUserCreate,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> IAMUserWithKey:
     _, service = get_account_and_service(account)
@@ -98,7 +98,7 @@ def create_user(
 def delete_user(
     user_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> None:
@@ -129,7 +129,7 @@ def delete_user(
 def list_access_keys(
     user_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
     db: Session = Depends(get_db),
 ) -> list[AccessKey]:
     _, service = get_account_and_service(account)
@@ -156,7 +156,7 @@ def list_access_keys(
 def create_access_key(
     user_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> AccessKey:
@@ -189,7 +189,7 @@ def update_access_key_status(
     access_key_id: str,
     payload: AccessKeyStatusChange,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> AccessKey:
@@ -228,7 +228,7 @@ def delete_access_key(
     user_name: str,
     access_key_id: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> None:
@@ -258,7 +258,7 @@ def delete_access_key(
 def list_user_inline_policies(
     user_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> list[InlinePolicy]:
     _, service = get_account_and_service(account)
     try:
@@ -277,7 +277,7 @@ def put_user_inline_policy(
     policy_name: str,
     payload: InlinePolicy,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> InlinePolicy:
     ensure_inline_policy_name(payload, policy_name)
@@ -309,7 +309,7 @@ def delete_user_inline_policy(
     user_name: str,
     policy_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
@@ -332,7 +332,7 @@ def delete_user_inline_policy(
 def list_user_policies(
     user_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> list[Policy]:
     _, service = get_account_and_service(account)
     try:
@@ -346,7 +346,7 @@ def attach_user_policy(
     user_name: str,
     payload: Policy,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> Policy:
     _, service = get_account_and_service(account)
@@ -371,7 +371,7 @@ def detach_user_policy(
     user_name: str,
     policy_arn: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)

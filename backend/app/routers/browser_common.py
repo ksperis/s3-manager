@@ -2,18 +2,13 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from typing import Any, Optional, Union
+from typing import Optional
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from app.db import User
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.models.session import ManagerSessionPrincipal
-from app.services.audit_service import AuditService
 from app.utils.storage_endpoint_features import resolve_feature_flags
-
-BrowserAuditActor = Union[User, ManagerSessionPrincipal]
 
 
 class CreateFolderPayload(BaseModel):
@@ -48,44 +43,3 @@ def require_replication_feature(account: S3ExecutionTarget) -> None:
             detail="Bucket replication is disabled for this endpoint",
         )
 
-
-def record_browser_action(
-    audit_service: AuditService,
-    *,
-    actor: BrowserAuditActor,
-    scope: str,
-    action: str,
-    entity_type: Optional[str] = None,
-    entity_id: Optional[str] = None,
-    account: Optional[S3ExecutionTarget] = None,
-    metadata: Optional[dict[str, Any]] = None,
-    status: str = "success",
-    message: Optional[str] = None,
-) -> None:
-    if isinstance(actor, User):
-        audit_service.record_action(
-            user=actor,
-            scope=scope,
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            account=account,
-            metadata=metadata,
-            status=status,
-            message=message,
-        )
-        return
-    user_email, user_role = actor.email, actor.role
-    audit_service.record_action(
-        user=None,
-        user_email=user_email,
-        user_role=user_role,
-        scope=scope,
-        action=action,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        account=account,
-        metadata=metadata,
-        status=status,
-        message=message,
-    )

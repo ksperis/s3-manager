@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.db import User
+from app.models.access_context import ManagerActor
 from app.services.s3_execution_context import S3ExecutionContext
 from app.models.policy import Policy, PolicyCreate
 from app.routers.dependencies import (
@@ -28,7 +28,7 @@ def get_account_and_service(account: S3ExecutionContext) -> tuple[S3ExecutionCon
 @router.get("", response_model=list[Policy])
 def list_policies(
     service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> list[Policy]:
     _, service = service_and_acc
     try:
@@ -41,7 +41,7 @@ def list_policies(
 def get_policy(
     policy_arn: str,
     service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
-    _: dict = Depends(require_iam_capable_manager),
+    _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> Policy:
     _, service = service_and_acc
     policy = service.get_policy(policy_arn, include_document=True)
@@ -54,7 +54,7 @@ def get_policy(
 def create_policy(
     payload: PolicyCreate,
     service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> Policy:
     account, service = service_and_acc
@@ -80,7 +80,7 @@ def create_policy(
 def delete_policy(
     policy_arn: str,
     service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     account, service = service_and_acc

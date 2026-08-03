@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, S3User, StorageEndpoint, StorageProvider
+from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User
 from app.routers.dependencies import get_current_super_admin
 from app.core.sensitive_data import sanitized_error_log_detail
 from app.services.admin_metrics_service import AdminMetricsService
@@ -115,7 +115,7 @@ def _load_principal_bucket_stats(rgw_admin: RGWAdminClient, uid: str) -> dict:
 
 @router.get("/summary")
 def summary_stats(
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     """
@@ -127,7 +127,7 @@ def summary_stats(
 
 @router.get("/account")
 def account_stats(
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
     account_id: int = Query(..., alias="account_id"),
 ) -> dict:
@@ -145,7 +145,7 @@ def account_stats(
 
 @router.get("/s3-user")
 def s3_user_stats(
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
     user_id: int = Query(..., alias="user_id"),
 ) -> dict:
@@ -162,7 +162,7 @@ def s3_user_stats(
 
 @router.get("/overview")
 def global_stats(
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
     window: TrafficWindow = Query(TrafficWindow.WEEK),
     endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
@@ -179,7 +179,7 @@ def global_stats(
 
 @router.get("/storage")
 def storage_stats(
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
     endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
 ) -> dict:
@@ -196,7 +196,7 @@ def storage_stats(
 @router.get("/traffic")
 def traffic_stats(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
-    _: dict = Depends(get_current_super_admin),
+    _: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
     endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
 ) -> dict:

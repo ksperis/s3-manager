@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.access_context import ManagerActor
 from app.models.app_settings import BrandingSettings, GeneralSettings, LoginSettings
 from app.models.storage_endpoint import StorageEndpointPublic
 from app.routers.dependencies import get_current_actor
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 @router.get("/general", response_model=GeneralSettings)
-def get_general_settings(_: object = Depends(get_current_actor)) -> GeneralSettings:
+def get_general_settings(_: ManagerActor = Depends(get_current_actor)) -> GeneralSettings:
     return load_app_settings().general
 
 

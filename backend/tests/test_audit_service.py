@@ -5,6 +5,7 @@ import json
 import pytest
 
 from app.db import AuditLog, S3Account, User, UserRole
+from app.models.session import ManagerSessionPrincipal, SessionCapabilities
 from app.services.audit_policy import (
     DATA_PLANE_AUDIT_ACTIONS,
     NON_AUDIT_OPERATION_ACTIONS,
@@ -81,6 +82,32 @@ def test_record_action_omits_fk_for_synthetic_account_context(db_session) -> Non
     assert log.user_id == user.id
     assert log.account_id is None
     assert log.account_name == "synthetic-connection-context"
+
+
+def test_record_action_accepts_manager_session_actor(db_session) -> None:
+    actor = ManagerSessionPrincipal(
+        session_id="session-1",
+        access_key="access",
+        secret_key="secret",
+        actor_type="access_key",
+        account_id=None,
+        account_name="Session account",
+        user_uid=None,
+        capabilities=SessionCapabilities(can_manage_iam=True),
+    )
+
+    AuditService(db_session).record_action(
+        user=actor,
+        scope="manager",
+        action="create_iam_user",
+        entity_type="iam_user",
+        entity_id="session-created-user",
+    )
+
+    log = db_session.query(AuditLog).one()
+    assert log.user_id is None
+    assert log.user_email == actor.email
+    assert log.user_role == actor.role
 
 
 def test_record_action_sanitizes_sensitive_metadata_before_persisting(db_session) -> None:
