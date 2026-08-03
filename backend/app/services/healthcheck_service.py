@@ -996,9 +996,7 @@ class HealthCheckService:
         entry.down_count = counts.get(HealthCheckStatus.DOWN.value, 0)
         entry.unknown_count = counts.get(HealthCheckStatus.UNKNOWN.value, 0)
         entry.latency_sample_count = len(latencies)
-        entry.latency_min_ms = min(latencies) if latencies else None
         entry.latency_avg_ms = int(round(sum(latencies) / len(latencies))) if latencies else None
-        entry.latency_max_ms = max(latencies) if latencies else None
         entry.latency_p95_ms = _percentile(latencies, 0.95) if latencies else None
         entry.updated_at = utcnow()
 
