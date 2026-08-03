@@ -2,14 +2,13 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import datetime, date
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import StorageEndpoint, StorageProvider, User
 from app.models.billing import BillingSubjectDetail, BillingSubjectsResponse, BillingSummary
+from app.routers.billing_common import parse_billing_day
 from app.routers.dependencies import get_current_super_admin
 from app.routers.http_errors import sanitize_error_detail
 from app.services.billing_service import BillingService, BillingCollector
@@ -28,13 +27,6 @@ def _ensure_billing_enabled() -> None:
     app_settings = load_app_settings()
     if not app_settings.general.billing_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Billing is disabled")
-
-
-def _parse_day(value: str) -> date:
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid day format, expected YYYY-MM-DD") from exc
 
 
 def _resolve_endpoint(db: Session, endpoint_id: int) -> StorageEndpoint:
@@ -74,7 +66,7 @@ def billing_collect_daily(
     db: Session = Depends(get_db),
 ) -> dict:
     _ensure_billing_enabled()
-    parsed = _parse_day(day)
+    parsed = parse_billing_day(day)
     operation_name = billing_daily_operation_name(parsed.isoformat())
     lease_service = OperationLeaseService(db)
     lease = lease_service.acquire(

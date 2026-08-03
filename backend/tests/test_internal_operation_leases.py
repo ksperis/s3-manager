@@ -41,6 +41,18 @@ def test_internal_billing_collect_skips_when_lease_is_active(client, db_session,
     }
 
 
+def test_internal_billing_collect_rejects_invalid_day(client, monkeypatch):
+    _set_token(monkeypatch)
+
+    response = client.post(
+        "/api/internal/billing/collect/daily?day=2026-02-30",
+        headers={"X-Internal-Token": "expected-token"},
+    )
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Invalid day format, expected YYYY-MM-DD"
+
+
 def test_internal_healthchecks_skip_when_lease_is_active(client, db_session, monkeypatch):
     _set_token(monkeypatch)
     OperationLeaseService(db_session).acquire(

@@ -44,6 +44,15 @@ def test_admin_billing_collect_returns_conflict_when_lease_is_active(client, db_
     assert response.json()["detail"] == "A billing collection is already running for this day."
 
 
+def test_admin_billing_collect_rejects_invalid_day(client, monkeypatch):
+    monkeypatch.setattr(billing_router, "load_app_settings", _enabled_settings)
+
+    response = client.post("/api/admin/billing/collect/daily?day=2026-02-30")
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Invalid day format, expected YYYY-MM-DD"
+
+
 def test_admin_healthchecks_return_conflict_when_lease_is_active(client, db_session, monkeypatch):
     monkeypatch.setattr(healthchecks_router, "load_app_settings", _enabled_settings)
     OperationLeaseService(db_session).acquire(
