@@ -8,6 +8,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.db import UserRole
+from app.utils.s3_endpoint import normalize_s3_endpoint
 
 
 class S3KeyLogin(BaseModel):
@@ -18,10 +19,7 @@ class S3KeyLogin(BaseModel):
     @field_validator("endpoint_url", mode="before")
     @classmethod
     def normalize_endpoint(cls, value: Optional[str]) -> Optional[str]:
-        if not value:
-            return None
-        normalized = value.strip().rstrip("/")
-        return normalized or None
+        return normalize_s3_endpoint(value)
 
 
 class SessionCapabilities(BaseModel):
@@ -34,10 +32,7 @@ class SessionCapabilities(BaseModel):
     @field_validator("endpoint_url", mode="before")
     @classmethod
     def normalize_capability_endpoint(cls, value: Optional[str]) -> Optional[str]:
-        if not value:
-            return None
-        normalized = value.strip().rstrip("/")
-        return normalized or None
+        return normalize_s3_endpoint(value)
 
 
 class SessionDescriptor(BaseModel):
