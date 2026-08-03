@@ -9,7 +9,6 @@ import json
 import sqlite3
 
 from botocore.exceptions import BotoCoreError, ClientError
-from pydantic import BaseModel
 
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.object_diff_common import compare_object_entries
@@ -56,6 +55,7 @@ from app.utils.rgw import (
     get_supervision_credentials,
     is_rgw_account_id,
 )
+from app.utils.jsonable import model_to_jsonable
 from app.utils.s3_errors import format_s3_error, s3_error_code
 from app.utils.s3_etag import etag_md5
 from app.utils.s3_endpoint import resolve_s3_client_options
@@ -1295,13 +1295,6 @@ class BucketsService:
         *,
         include_sections: Optional[Set[str]] = None,
     ) -> CephAdminBucketConfigDiff:
-        def to_jsonable(value: Any) -> Any:
-            if value is None:
-                return None
-            if isinstance(value, BaseModel):
-                return value.model_dump(mode="json")
-            return value
-
         allowed_section_keys = {
             "versioning_status",
             "object_lock",
@@ -1338,8 +1331,8 @@ class BucketsService:
         source_logging: Any = None
         target_logging: Any = None
         if "access_logging" in selected_section_keys:
-            source_logging = to_jsonable(self.get_bucket_logging(source_bucket, source_account))
-            target_logging = to_jsonable(self.get_bucket_logging(target_bucket, target_account))
+            source_logging = model_to_jsonable(self.get_bucket_logging(source_bucket, source_account))
+            target_logging = model_to_jsonable(self.get_bucket_logging(target_bucket, target_account))
 
         source_tags: list[dict[str, str]] = []
         target_tags: list[dict[str, str]] = []
@@ -1354,15 +1347,20 @@ class BucketsService:
             )
         if "object_lock" in selected_section_keys:
             sections_data.append(
-                ("object_lock", "Object lock", to_jsonable(source_properties.object_lock), to_jsonable(target_properties.object_lock))
+                (
+                    "object_lock",
+                    "Object lock",
+                    model_to_jsonable(source_properties.object_lock),
+                    model_to_jsonable(target_properties.object_lock),
+                )
             )
         if "public_access_block" in selected_section_keys:
             sections_data.append(
                 (
                     "public_access_block",
                     "Public access block",
-                    to_jsonable(source_properties.public_access_block),
-                    to_jsonable(target_properties.public_access_block),
+                    model_to_jsonable(source_properties.public_access_block),
+                    model_to_jsonable(target_properties.public_access_block),
                 )
             )
         if "lifecycle_rules" in selected_section_keys:
@@ -1370,8 +1368,8 @@ class BucketsService:
                 (
                     "lifecycle_rules",
                     "Lifecycle rules",
-                    [to_jsonable(rule) for rule in source_properties.lifecycle_rules],
-                    [to_jsonable(rule) for rule in target_properties.lifecycle_rules],
+                    [model_to_jsonable(rule) for rule in source_properties.lifecycle_rules],
+                    [model_to_jsonable(rule) for rule in target_properties.lifecycle_rules],
                 )
             )
         if "cors_rules" in selected_section_keys:

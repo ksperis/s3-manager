@@ -6,8 +6,6 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel
-
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.bucket_config_backup import (
     BucketConfigBackupBucket,
@@ -16,16 +14,9 @@ from app.models.bucket_config_backup import (
     BucketConfigBackupSource,
 )
 from app.services.buckets_service import BucketsService
+from app.utils.jsonable import model_to_jsonable
 
 QuotaSnapshotLoader = Callable[[str], dict[str, int | None]]
-
-
-def _jsonable(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, BaseModel):
-        return value.model_dump(mode="json")
-    return value
 
 
 class BucketConfigBackupService:
@@ -89,9 +80,9 @@ class BucketConfigBackupService:
             status_value = self._buckets.get_bucket_versioning_status(bucket_name, account)
             return {"status": status_value, "enabled": status_value == "Enabled"}
         if feature == "object_lock":
-            return _jsonable(self._buckets.get_object_lock(bucket_name, account))
+            return model_to_jsonable(self._buckets.get_object_lock(bucket_name, account))
         if feature == "public_access_block":
-            return _jsonable(self._buckets.get_public_access_block(bucket_name, account))
+            return model_to_jsonable(self._buckets.get_public_access_block(bucket_name, account))
         if feature == "lifecycle":
             lifecycle = self._buckets.get_lifecycle(bucket_name, account)
             return {"rules": lifecycle.rules or []}
@@ -100,10 +91,10 @@ class BucketConfigBackupService:
         if feature == "policy":
             return {"policy": self._buckets.get_policy(bucket_name, account)}
         if feature == "access_logging":
-            return _jsonable(self._buckets.get_bucket_logging(bucket_name, account))
+            return model_to_jsonable(self._buckets.get_bucket_logging(bucket_name, account))
         if feature == "tags":
             tags = self._buckets.get_bucket_tags(bucket_name, account)
-            return {"tags": [_jsonable(tag) for tag in tags]}
+            return {"tags": [model_to_jsonable(tag) for tag in tags]}
         raise ValueError(f"Unsupported backup feature: {feature}")
 
     def _load_quota(
