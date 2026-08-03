@@ -180,7 +180,7 @@ def test_ceph_admin_put_bucket_replication_invalidates_listing_cache(monkeypatch
 
     monkeypatch.setattr(
         ceph_admin_buckets_router,
-        "_invalidate_bucket_listing_cache",
+        "invalidate_bucket_listing_cache",
         lambda endpoint_id: invalidated.append(endpoint_id),
     )
 
@@ -239,7 +239,7 @@ def test_ceph_admin_delete_bucket_replication_invalidates_listing_cache(monkeypa
 
     monkeypatch.setattr(
         ceph_admin_buckets_router,
-        "_invalidate_bucket_listing_cache",
+        "invalidate_bucket_listing_cache",
         lambda endpoint_id: invalidated.append(endpoint_id),
     )
 

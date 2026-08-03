@@ -23,6 +23,7 @@ from app.models.bucket import (
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.main import app
 from app.routers import dependencies
+from app.routers.ceph_admin import bucket_listing_cache
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.services.listing_progress import ListingCancelled, ListingProgressSnapshot
@@ -348,7 +349,7 @@ def test_ceph_admin_bucket_listing_cache_expires_after_ttl(monkeypatch: pytest.M
     ctx, rgw_admin = _build_ctx(endpoint_id=33, payload=payload)
     now = 500.0
 
-    monkeypatch.setattr(buckets_router, "monotonic", lambda: now)
+    monkeypatch.setattr(bucket_listing_cache, "monotonic", lambda: now)
 
     first = buckets_router.list_buckets(
         page=1,
@@ -542,7 +543,7 @@ def test_ceph_admin_bucket_listing_cache_can_be_invalidated_per_endpoint():
         with_stats=False,
         ctx=ctx,
     )
-    buckets_router._invalidate_bucket_listing_cache(ctx.endpoint.id)
+    buckets_router.invalidate_bucket_listing_cache(ctx.endpoint.id)
     buckets_router.list_buckets(
         page=1,
         page_size=25,

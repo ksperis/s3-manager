@@ -403,7 +403,7 @@ def _get_cached_users_listing(
     )
 
 
-def _invalidate_users_listing_cache(endpoint_id: int | None = None) -> None:
+def invalidate_users_listing_cache(endpoint_id: int | None = None) -> None:
     invalidate_cache(_USERS_LIST_CACHE, _USERS_LIST_CACHE_LOCK, endpoint_id=endpoint_id)
     invalidate_cache(_RGW_USERS_PAYLOAD_CACHE, _RGW_USERS_PAYLOAD_CACHE_LOCK, endpoint_id=endpoint_id)
 
@@ -1028,7 +1028,7 @@ def create_rgw_user(
                 detail="RGW user quota update is not supported on this cluster",
             )
 
-    _invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
+    invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     user_payload = _load_user_payload(uid, lookup_tenant, ctx)
     resolved_account_id = normalize_optional_scalar(
         user_payload.get("account_id") or extract_rgw_user_payload(user_payload).get("account_id")
@@ -1185,7 +1185,7 @@ def update_rgw_user_config(
         except RGWAdminError as exc:
             raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
-    _invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
+    invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     payload = _load_user_payload(uid, tenant, ctx)
     account_id = normalize_optional_scalar(payload.get("account_id") or extract_rgw_user_payload(payload).get("account_id"))
     account_name = _resolve_account_name(

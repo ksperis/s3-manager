@@ -22,7 +22,7 @@ from app.routers.ceph_admin.dependencies import (
     build_ceph_admin_s3_context,
     get_ceph_admin_context,
 )
-from app.routers.ceph_admin.buckets import _get_cached_rgw_bucket_entries
+from app.routers.ceph_admin.bucket_listing_cache import get_cached_rgw_bucket_entries
 from app.routers.dependencies import get_current_ceph_admin
 from app.core.sensitive_data import sanitize_error_detail
 from app.services.bucket_usage_stats_service import (
@@ -62,7 +62,7 @@ def _target_for_bucket(ctx: CephAdminContext, bucket_name: str) -> BucketUsageSt
 
 def _list_ceph_bucket_names(ctx: CephAdminContext) -> list[str]:
     try:
-        entries = _get_cached_rgw_bucket_entries(ctx, with_stats=False)
+        entries = get_cached_rgw_bucket_entries(ctx, with_stats=False)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
     names: list[str] = []

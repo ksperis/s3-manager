@@ -21,11 +21,11 @@ from app.models.ceph_admin import (
     CephAdminUserDeleteRequest,
 )
 from app.routers.bucket_index_check_stream import stream_bucket_index_checks
-from app.routers.ceph_admin import accounts as account_routes
-from app.routers.ceph_admin import buckets as bucket_routes
-from app.routers.ceph_admin import users as user_routes
+from app.routers.ceph_admin.accounts import invalidate_accounts_listing_cache
 from app.routers.ceph_admin.audit import record_ceph_admin_action
+from app.routers.ceph_admin.bucket_listing_cache import invalidate_bucket_listing_cache
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
+from app.routers.ceph_admin.users import invalidate_users_listing_cache
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.bucket_index_check_service import BucketIndexCheckService, execute_bucket_index_check_operation
 from app.services.rgw_admin import RGWAdminError, RGWAdminOperationResponse
@@ -90,14 +90,14 @@ def _require_confirmation(
 
 
 def _invalidate_all_admin_ops_caches(endpoint_id: int) -> None:
-    account_routes._invalidate_accounts_listing_cache(endpoint_id)
-    user_routes._invalidate_users_listing_cache(endpoint_id)
-    bucket_routes._invalidate_bucket_listing_cache(endpoint_id)
+    invalidate_accounts_listing_cache(endpoint_id)
+    invalidate_users_listing_cache(endpoint_id)
+    invalidate_bucket_listing_cache(endpoint_id)
     invalidate_bucket_owner_metadata_cache(endpoint_id)
 
 
 def _invalidate_bucket_admin_ops_caches(endpoint_id: int) -> None:
-    bucket_routes._invalidate_bucket_listing_cache(endpoint_id)
+    invalidate_bucket_listing_cache(endpoint_id)
     invalidate_bucket_owner_metadata_cache(endpoint_id)
 
 

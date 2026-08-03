@@ -285,7 +285,7 @@ def _build_account_detail(payload: dict[str, Any], account_id_fallback: str) -> 
     )
 
 
-def _invalidate_accounts_listing_cache(endpoint_id: int | None = None) -> None:
+def invalidate_accounts_listing_cache(endpoint_id: int | None = None) -> None:
     invalidate_cache(_ACCOUNTS_LIST_CACHE, _ACCOUNTS_LIST_CACHE_LOCK, endpoint_id=endpoint_id)
     invalidate_cache(_RGW_ACCOUNTS_PAYLOAD_CACHE, _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK, endpoint_id=endpoint_id)
 
@@ -825,7 +825,7 @@ def create_rgw_account(
                 detail="RGW bucket quota update is not supported on this cluster",
             )
 
-    _invalidate_accounts_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
+    invalidate_accounts_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     account_payload = _load_account_payload(account_id, ctx)
     account_detail = _build_account_detail(account_payload, account_id_fallback=account_id)
     record_ceph_admin_action(
@@ -979,7 +979,7 @@ def update_rgw_account_config(
         except RGWAdminError as exc:
             raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
-    _invalidate_accounts_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
+    invalidate_accounts_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     payload = _load_account_payload(normalized_account_id, ctx)
     record_ceph_admin_action(
         ctx,

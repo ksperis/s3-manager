@@ -7,7 +7,6 @@ from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from threading import Lock
-from time import monotonic
 from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -53,7 +52,6 @@ from app.models.ceph_admin import (
     PaginatedCephAdminBucketsResponse,
 )
 from app.models.browser import ListBrowserObjectsResponse
-from app.routers.ceph_admin import bucket_listing_cache as _bucket_listing_cache
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
@@ -72,6 +70,9 @@ from app.routers.ceph_admin.bucket_listing_cache import (
     _BucketListCacheKey,
     _BucketListingSnapshot,
     _clone_bucket_list,
+    get_cached_bucket_listing,
+    get_cached_rgw_bucket_entries,
+    invalidate_bucket_listing_cache,
 )
 from app.services.bucket_listing_enrichment import (
     _COLUMN_DETAIL_KEYS,
@@ -161,27 +162,6 @@ def _build_endpoint_context_from_credentials(endpoint, access_key: str, secret_k
     )
 
 
-def _sync_bucket_listing_cache_clock() -> None:
-    _bucket_listing_cache.monotonic = monotonic
-
-
-def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> list[dict]:
-    _sync_bucket_listing_cache_clock()
-    return _bucket_listing_cache._get_cached_rgw_bucket_entries(ctx, with_stats)
-
-
-def _get_cached_bucket_listing(
-    key: _BucketListCacheKey,
-    builder: Callable[[], _BucketListingSnapshot],
-) -> _BucketListingSnapshot:
-    _sync_bucket_listing_cache_clock()
-    return _bucket_listing_cache._get_cached_bucket_listing(key, builder)
-
-
-def _invalidate_bucket_listing_cache(endpoint_id: int) -> None:
-    return _bucket_listing_cache._invalidate_bucket_listing_cache(endpoint_id)
-
-
 def _require_sse_feature(ctx: CephAdminContext) -> None:
     if not resolve_feature_flags(ctx.endpoint).sse_enabled:
         raise HTTPException(
@@ -206,7 +186,7 @@ def _record_bucket_config_mutation(
     operation: Literal["update", "delete"],
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    invalidate_bucket_listing_cache(ctx.endpoint.id)
     record_ceph_admin_action(
         ctx,
         action=f"bucket_config.{config_area}.{operation}",
@@ -402,10 +382,10 @@ def _compute_bucket_listing(
                 allowed_names = set(name_candidates)
                 return [
                     entry
-                    for entry in _get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
+                    for entry in get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
                     if _extract_bucket_name(entry) in allowed_names
                 ]
-            return _get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
+            return get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
 
         try:
             entries = load_entries(with_stats)
@@ -782,7 +762,7 @@ def _compute_bucket_listing(
         )
 
     invoke_cancel_check(cancel_check)
-    listing = _get_cached_bucket_listing(cache_key, build_listing)
+    listing = get_cached_bucket_listing(cache_key, build_listing)
     results = listing.items
     progress.emit(percent=92, stage="sort_paginate", message="Sorting and paginating results", force=True)
 
@@ -942,7 +922,7 @@ def refresh_bucket_listing_cache(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> dict[str, object]:
     resolved_endpoint_id = int(getattr(ctx.endpoint, "id", endpoint_id) or endpoint_id)
-    _invalidate_bucket_listing_cache(resolved_endpoint_id)
+    invalidate_bucket_listing_cache(resolved_endpoint_id)
     invalidate_bucket_owner_metadata_cache(resolved_endpoint_id)
     return {"refreshed": True, "endpoint_id": resolved_endpoint_id}
 
@@ -1135,7 +1115,7 @@ def update_quota(
 
     try:
         service.set_bucket_quota(bucket_name, account, payload, rgw_admin=ctx.rgw_admin)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        invalidate_bucket_listing_cache(ctx.endpoint.id)
         record_ceph_admin_action(
             ctx,
             action="bucket_quota.update",

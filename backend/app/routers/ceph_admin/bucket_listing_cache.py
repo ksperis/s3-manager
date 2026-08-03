@@ -109,7 +109,7 @@ def _get_rgw_bucket_entries_from_cache(key: _RgwBucketPayloadCacheKey) -> list[d
     return None
 
 
-def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> list[dict]:
+def get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> list[dict]:
     endpoint_id = int(getattr(ctx.endpoint, "id", 0) or 0)
     key = _RgwBucketPayloadCacheKey(endpoint_id=endpoint_id, with_stats=with_stats)
     cached = _get_rgw_bucket_entries_from_cache(key)
@@ -145,7 +145,7 @@ def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> l
         return entries
 
 
-def _get_cached_bucket_listing(
+def get_cached_bucket_listing(
     key: _BucketListCacheKey,
     builder: Callable[[], _BucketListingSnapshot],
 ) -> _BucketListingSnapshot:
@@ -202,7 +202,7 @@ def _get_cached_bucket_listing(
                 _BUCKET_LIST_INFLIGHT.pop(key, None)
 
 
-def _invalidate_bucket_listing_cache(endpoint_id: int) -> None:
+def invalidate_bucket_listing_cache(endpoint_id: int) -> None:
     with _BUCKET_LIST_CACHE_LOCK:
         invalid_keys = [key for key, entry in _BUCKET_LIST_CACHE.items() if entry.endpoint_id == endpoint_id]
         for key in invalid_keys:
