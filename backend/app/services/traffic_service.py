@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.utils.numbers import int_or_zero
 from app.utils.rgw import get_supervision_credentials, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 
@@ -44,13 +45,6 @@ REQUEST_GROUPS: list[tuple[str, tuple[str, ...]]] = [
     ("list", ("list", "ls", "bucket_list")),
     ("metadata", ("acl", "policy", "tag", "meta", "multipart")),
 ]
-
-
-def _safe_int(value: Any) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
 
 
 def _parse_timestamp(value: Any) -> Optional[datetime]:
@@ -222,10 +216,10 @@ def aggregate_usage(
         categories = _normalize_categories(entry.get("categories"))
         for category_entry in categories:
             cat_name = category_entry.get("category") or category_entry.get("type")
-            bytes_out = _safe_int(category_entry.get("bytes_sent") or category_entry.get("sent"))
-            bytes_in = _safe_int(category_entry.get("bytes_received") or category_entry.get("received"))
-            ops = _safe_int(category_entry.get("ops") or category_entry.get("operations"))
-            success_ops = _safe_int(category_entry.get("successful_ops") or category_entry.get("success"))
+            bytes_out = int_or_zero(category_entry.get("bytes_sent") or category_entry.get("sent"))
+            bytes_in = int_or_zero(category_entry.get("bytes_received") or category_entry.get("received"))
+            ops = int_or_zero(category_entry.get("ops") or category_entry.get("operations"))
+            success_ops = int_or_zero(category_entry.get("successful_ops") or category_entry.get("success"))
 
             timeline_key = bucketed_timestamp.isoformat()
             timeline[timeline_key]["bytes_in"] += bytes_in

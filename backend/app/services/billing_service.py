@@ -46,6 +46,7 @@ from app.utils.rgw import extract_bucket_list, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 from app.utils.rgw import get_supervision_rgw_client
+from app.utils.numbers import int_or_zero
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -110,13 +111,6 @@ def _bytes_to_gb(value: Optional[int]) -> Optional[float]:
     if value is None:
         return None
     return float(value) / (1024 ** 3)
-
-
-def _safe_int(value: Any) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
 
 
 def _parse_ops_breakdown(raw: str) -> dict[str, int]:
@@ -309,9 +303,9 @@ class BillingCollector:
                     endpoint_id=endpoint.id,
                     s3_account_id=acc.id,
                     s3_user_id=None,
-                    bytes_in=_safe_int(totals.get("bytes_in")),
-                    bytes_out=_safe_int(totals.get("bytes_out")),
-                    ops_total=_safe_int(totals.get("ops")),
+                    bytes_in=int_or_zero(totals.get("bytes_in")),
+                    bytes_out=int_or_zero(totals.get("bytes_out")),
+                    ops_total=int_or_zero(totals.get("ops")),
                     ops_breakdown=breakdown,
                 )
                 created += 1
@@ -341,9 +335,9 @@ class BillingCollector:
                     endpoint_id=endpoint.id,
                     s3_account_id=None,
                     s3_user_id=user.id,
-                    bytes_in=_safe_int(totals.get("bytes_in")),
-                    bytes_out=_safe_int(totals.get("bytes_out")),
-                    ops_total=_safe_int(totals.get("ops")),
+                    bytes_in=int_or_zero(totals.get("bytes_in")),
+                    bytes_out=int_or_zero(totals.get("bytes_out")),
+                    ops_total=int_or_zero(totals.get("ops")),
                     ops_breakdown=breakdown,
                 )
                 created += 1
