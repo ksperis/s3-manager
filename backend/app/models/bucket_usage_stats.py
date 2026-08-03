@@ -5,12 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from app.models.bucket_operation import (
     BucketOperationTarget,
-    deduplicate_bucket_targets,
-    normalize_bucket_names,
+    ExclusiveBucketOperationRequest,
 )
 
 
@@ -22,19 +21,9 @@ class BucketUsageStatsTarget(BucketOperationTarget):
     pass
 
 
-class BucketUsageStatsRequest(BaseModel):
-    buckets: list[str] = Field(default_factory=list, max_length=200)
+class BucketUsageStatsRequest(ExclusiveBucketOperationRequest):
     targets: list[BucketUsageStatsTarget] = Field(default_factory=list, max_length=200)
     parallelism: int = Field(default=8, ge=1, le=32)
-
-    @model_validator(mode="after")
-    def validate_request(self):
-        self.buckets = normalize_bucket_names(self.buckets)
-        self.targets = deduplicate_bucket_targets(self.targets)
-        if bool(self.buckets) == bool(self.targets):
-            raise ValueError("Provide exactly one of buckets or targets.")
-        return self
-
 
 class BucketUsageStatsDistributionEntry(BaseModel):
     key: str

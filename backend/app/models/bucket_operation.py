@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TypeVar
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class BucketOperationTarget(BaseModel):
@@ -46,3 +46,22 @@ def deduplicate_bucket_targets(targets: list[_TargetT]) -> list[_TargetT]:
         seen.add(key)
         deduplicated.append(target)
     return deduplicated
+
+
+class BucketOperationRequest(BaseModel):
+    buckets: list[str] = Field(default_factory=list, max_length=200)
+    targets: list[BucketOperationTarget] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def normalize_targets(self):
+        self.buckets = normalize_bucket_names(self.buckets)
+        self.targets = deduplicate_bucket_targets(self.targets)
+        return self
+
+
+class ExclusiveBucketOperationRequest(BucketOperationRequest):
+    @model_validator(mode="after")
+    def require_one_target_source(self):
+        if bool(self.buckets) == bool(self.targets):
+            raise ValueError("Provide exactly one of buckets or targets.")
+        return self

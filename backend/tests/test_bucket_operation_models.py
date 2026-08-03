@@ -46,3 +46,21 @@ def test_bucket_operation_requests_share_deduplication(request_type, target_type
     request = request_type(targets=[target, target.model_copy()])
 
     assert request.targets == [target]
+
+
+@pytest.mark.parametrize(
+    ("request_type", "target_type"),
+    [
+        (BucketIntegrityCheckRequest, BucketIntegrityTarget),
+        (BucketUsageStatsRequest, BucketUsageStatsTarget),
+    ],
+)
+def test_exclusive_bucket_operation_requests_require_one_target_source(request_type, target_type):
+    with pytest.raises(ValidationError, match="Provide exactly one of buckets or targets"):
+        request_type()
+
+    with pytest.raises(ValidationError, match="Provide exactly one of buckets or targets"):
+        request_type(
+            buckets=["bucket-1"],
+            targets=[target_type(context_id="account-1", bucket_name="bucket-1")],
+        )

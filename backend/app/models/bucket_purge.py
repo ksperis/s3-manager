@@ -5,12 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from app.models.bucket_operation import (
+    BucketOperationRequest,
     BucketOperationTarget,
-    deduplicate_bucket_targets,
-    normalize_bucket_names,
 )
 
 
@@ -22,19 +21,11 @@ class BucketPurgeTarget(BucketOperationTarget):
     pass
 
 
-class BucketPurgeRequest(BaseModel):
-    buckets: list[str] = Field(default_factory=list, max_length=200)
+class BucketPurgeRequest(BucketOperationRequest):
     targets: list[BucketPurgeTarget] = Field(default_factory=list, max_length=200)
     parallelism: int = Field(default=10, ge=1, le=64)
     include_versions: bool = True
     confirmation: str = ""
-
-    @model_validator(mode="after")
-    def validate_request(self):
-        self.buckets = normalize_bucket_names(self.buckets)
-        self.targets = deduplicate_bucket_targets(self.targets)
-        return self
-
 
 def bucket_purge_confirmation_phrase(target_count: int) -> str:
     return f"PURGE {target_count} BUCKETS"

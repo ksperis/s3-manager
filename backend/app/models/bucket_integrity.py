@@ -5,12 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from app.models.bucket_operation import (
     BucketOperationTarget,
-    deduplicate_bucket_targets,
-    normalize_bucket_names,
+    ExclusiveBucketOperationRequest,
 )
 
 
@@ -23,23 +22,13 @@ class BucketIntegrityTarget(BucketOperationTarget):
     pass
 
 
-class BucketIntegrityCheckRequest(BaseModel):
-    buckets: list[str] = Field(default_factory=list, max_length=200)
+class BucketIntegrityCheckRequest(ExclusiveBucketOperationRequest):
     targets: list[BucketIntegrityTarget] = Field(default_factory=list, max_length=200)
     parallelism: int = Field(default=10, ge=1, le=64)
     all_versions: bool = False
     check_mode: BucketIntegrityCheckMode = "head"
     since: Optional[datetime] = None
     max_mb_per_object: Optional[float] = Field(default=None, gt=0, le=10240)
-
-    @model_validator(mode="after")
-    def validate_request(self):
-        self.buckets = normalize_bucket_names(self.buckets)
-        self.targets = deduplicate_bucket_targets(self.targets)
-        if bool(self.buckets) == bool(self.targets):
-            raise ValueError("Provide exactly one of buckets or targets.")
-        return self
-
 
 class BucketIntegrityFailure(BaseModel):
     bucket_name: str
