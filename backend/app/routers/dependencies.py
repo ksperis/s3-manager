@@ -6,10 +6,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.routers.dependencies_internal.account_context import (
-    _manager_membership_capabilities,
-    get_account_context,
-)
+from app.routers.dependencies_internal.account_context import get_account_context
 from app.routers.dependencies_internal.auth_session import (
     get_current_account_admin,
     get_current_account_user,
@@ -23,9 +20,6 @@ from app.routers.dependencies_internal.auth_session import (
     settings,
 )
 from app.routers.dependencies_internal.feature_gates import (
-    _build_bucket_migration_admin_account_context_ids,
-    _build_bucket_migration_allowed_context_ids,
-    _ensure_bucket_migration_allowed,
     ensure_manager_tool_allowed,
     get_current_bucket_migration_scope,
     is_manager_bucket_quota_available,

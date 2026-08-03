@@ -23,6 +23,7 @@ from app.db import (
 from app.models.app_settings import AppSettings, GeneralSettings
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.routers import dependencies
+from app.routers.dependencies_internal.account_context import manager_membership_capabilities
 from app.services import app_settings_service
 from app.routers.manager import context as manager_context_router
 from app.services.connection_identity_service import ConnectionIdentityResolution
@@ -143,7 +144,7 @@ def test_manager_membership_without_admin_is_forbidden():
         is_root=False,
     )
     with pytest.raises(HTTPException) as exc:
-        dependencies._manager_membership_capabilities(link)
+        manager_membership_capabilities(link)
     assert exc.value.status_code == 403
 
 
@@ -380,7 +381,7 @@ def test_manager_membership_account_admin_uses_root_key_capabilities():
         role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
         is_root=False,
     )
-    caps = dependencies._manager_membership_capabilities(link)
+    caps = manager_membership_capabilities(link)
     assert caps.using_root_key is True
     assert caps.can_manage_buckets is True
     assert caps.can_manage_iam is True

@@ -190,7 +190,7 @@ def ensure_manager_tool_allowed(user: User, tool: ManagerToolKey, db: Session | 
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
 
-def _ensure_bucket_migration_allowed(user: User, db: Session | None = None) -> None:
+def ensure_bucket_migration_allowed(user: User, db: Session | None = None) -> None:
     ensure_manager_tool_allowed(user, "bucket_migration", db=db)
 
 
@@ -200,7 +200,7 @@ def _manager_link_allows_bucket_migration(
     return EffectiveAccessService.manager_account_allowed(link.role)
 
 
-def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[str]:
+def build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[str]:
     allowed_context_ids: set[str] = set()
 
     service = effective_access_service.EffectiveAccessService(db)
@@ -219,7 +219,7 @@ def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[
     return allowed_context_ids
 
 
-def _build_bucket_migration_admin_account_context_ids(db: Session, user: User) -> set[str]:
+def build_bucket_migration_admin_account_context_ids(db: Session, user: User) -> set[str]:
     admin_account_context_ids: set[str] = set()
     account_links = effective_access_service.EffectiveAccessService(db).resolve_user(user).account_links
     for link in account_links:
@@ -232,9 +232,9 @@ def get_current_bucket_migration_scope(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> BucketMigrationAccessScope:
-    _ensure_bucket_migration_allowed(user, db=db)
-    allowed_context_ids = _build_bucket_migration_allowed_context_ids(db, user)
-    admin_account_context_ids = _build_bucket_migration_admin_account_context_ids(db, user)
+    ensure_bucket_migration_allowed(user, db=db)
+    allowed_context_ids = build_bucket_migration_allowed_context_ids(db, user)
+    admin_account_context_ids = build_bucket_migration_admin_account_context_ids(db, user)
     return BucketMigrationAccessScope(
         user=user,
         allowed_context_ids=allowed_context_ids,

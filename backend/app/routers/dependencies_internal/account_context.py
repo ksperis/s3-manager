@@ -217,7 +217,7 @@ def _resolve_user_account_link(
     return account, link
 
 
-def _manager_membership_capabilities(
+def manager_membership_capabilities(
     link: UserS3Account | EffectiveAccountLink,
 ) -> AccountCapabilities:
     is_account_admin = EffectiveAccessService.manager_account_allowed(link.role)
@@ -350,7 +350,7 @@ def get_account_context(
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
         if _is_portal_browser_request(request, surface):
             return _resolve_portal_browser_context(db, actor, account, link, request=request)
-        capabilities = _manager_membership_capabilities(link)
+        capabilities = manager_membership_capabilities(link)
         if not capabilities.can_manage_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
         access_key, secret_key = account.effective_rgw_credentials()
