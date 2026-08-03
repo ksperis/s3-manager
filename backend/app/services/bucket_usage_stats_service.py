@@ -28,6 +28,7 @@ from app.models.bucket_usage_stats import (
 )
 from app.services.long_running_s3_client import LongRunningS3ClientService
 from app.services.s3_execution_context import S3ExecutionTarget
+from app.utils.s3_errors import format_s3_error, s3_error_code
 from app.utils.time import assume_utc, utcnow
 
 
@@ -215,29 +216,12 @@ def _load_warnings(value: str | None) -> list[str]:
     return payload
 
 
-def _storage_error_code(exc: Exception) -> str:
-    if not isinstance(exc, ClientError):
-        return ""
-    error = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
-    return str(error.get("Code") or "").strip().lower()
-
-
 def _is_version_listing_unsupported(exc: Exception) -> bool:
-    code = _storage_error_code(exc)
+    code = s3_error_code(exc, lowercase=True)
     if code in {"notimplemented", "notsupported", "unsupported", "methodnotallowed", "notallowed"}:
         return True
     detail = str(exc).lower()
     return any(marker in detail for marker in ("not implemented", "not supported", "unsupported operation"))
-
-
-def _format_storage_error(exc: Exception) -> str:
-    if isinstance(exc, ClientError):
-        error = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
-        code = str(error.get("Code") or "").strip()
-        message = str(error.get("Message") or "").strip()
-        parts = [part for part in (code, message) if part and part.lower() != "none"]
-        return ": ".join(parts) if parts else str(exc)
-    return str(exc)
 
 
 def _dedupe_bucket_names(bucket_names: Iterable[str] | None) -> list[str] | None:
@@ -481,7 +465,9 @@ class BucketUsageStatsService(LongRunningS3ClientService):
                 emit_progress()
         except (ClientError, BotoCoreError, RuntimeError) as exc:
             if not _is_version_listing_unsupported(exc):
-                raise RuntimeError(f"Unable to list object versions for '{target.bucket_name}': {_format_storage_error(exc)}") from exc
+                raise RuntimeError(
+                    f"Unable to list object versions for '{target.bucket_name}': {format_s3_error(exc)}"
+                ) from exc
             warnings.append("Version listing is unavailable for this endpoint. Statistics were calculated from current objects only.")
             scan_mode = "current_only"
             version_listing_available = False
@@ -519,7 +505,9 @@ class BucketUsageStatsService(LongRunningS3ClientService):
                     age_dist.add(age_key, bytes_value=entry_bytes, label=age_label)
                     emit_progress()
             except (ClientError, BotoCoreError, RuntimeError) as fallback_exc:
-                raise RuntimeError(f"Unable to list current objects for '{target.bucket_name}': {_format_storage_error(fallback_exc)}") from fallback_exc
+                raise RuntimeError(
+                    f"Unable to list current objects for '{target.bucket_name}': {format_s3_error(fallback_exc)}"
+                ) from fallback_exc
 
         if scan_mode == "current_only":
             current_vs_noncurrent = []
@@ -910,7 +898,7 @@ class BucketUsageStatsService(LongRunningS3ClientService):
                     context_name=target.context_name,
                     status="failed",
                     duration_seconds=monotonic() - started,
-                    message=_format_storage_error(exc),
+                    message=format_s3_error(exc),
                 )
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:

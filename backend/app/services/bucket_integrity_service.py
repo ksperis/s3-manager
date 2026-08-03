@@ -20,6 +20,7 @@ from app.models.bucket_integrity import (
     BucketIntegrityFailureStage,
 )
 from app.services.long_running_s3_client import LongRunningS3ClientService
+from app.utils.s3_errors import format_s3_error
 from app.utils.time import assume_utc
 
 
@@ -74,18 +75,6 @@ class _ObjectCheckResult:
     success: bool
     bytes_read: int = 0
     message: str | None = None
-
-
-def _format_storage_error(exc: Exception) -> str:
-    if isinstance(exc, ClientError):
-        error = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
-        code = str(error.get("Code") or "").strip()
-        message = str(error.get("Message") or "").strip()
-        operation = str(getattr(exc, "operation_name", "") or "").strip()
-        parts = [part for part in (code, message) if part and part.lower() != "none"]
-        detail = ": ".join(parts) if parts else str(exc)
-        return f"{operation} failed with {detail}" if operation else detail
-    return str(exc)
 
 
 def _object_request_kwargs(bucket_name: str, obj: _ObjectRef) -> dict[str, Any]:
@@ -189,7 +178,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
                 stage="get",
                 success=False,
                 bytes_read=total_read,
-                message=_format_storage_error(exc),
+                message=format_s3_error(exc, include_operation=True),
             )
         finally:
             if body is not None:
@@ -225,7 +214,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
                 version_id=obj.version_id,
                 stage="head",
                 success=False,
-                message=_format_storage_error(exc),
+                message=format_s3_error(exc, include_operation=True),
             )
         return _ObjectCheckResult(
             key=obj.key,
@@ -450,7 +439,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
                 BucketIntegrityFailure(
                     bucket_name=target.bucket_name,
                     stage="list",
-                    message=_format_storage_error(exc),
+                    message=format_s3_error(exc, include_operation=True),
                 )
             )
             status = "failed"

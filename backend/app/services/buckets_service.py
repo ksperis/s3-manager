@@ -57,6 +57,7 @@ from app.utils.rgw import (
     get_supervision_credentials,
     is_rgw_account_id,
 )
+from app.utils.s3_errors import format_s3_error, s3_error_code
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
@@ -1028,17 +1029,6 @@ class BucketsService:
             **self._client_kwargs(account),
         )
 
-    def _format_storage_operation_error(self, exc: Exception) -> str:
-        if isinstance(exc, ClientError):
-            error = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
-            code = str(error.get("Code") or "").strip()
-            message = str(error.get("Message") or "").strip()
-            operation = str(getattr(exc, "operation_name", "") or "").strip()
-            parts = [part for part in (code, message) if part and part.lower() != "none"]
-            detail = ": ".join(parts) if parts else str(exc)
-            return f"{operation} failed with {detail}" if operation else detail
-        return str(exc)
-
     def _list_bucket_objects_for_compare(self, bucket_name: str, account: S3ExecutionTarget):
         client = self._compare_client(account)
         continuation_token: Optional[str] = None
@@ -1049,7 +1039,7 @@ class BucketsService:
             try:
                 page = client.list_objects_v2(**kwargs)
             except (RuntimeError, ClientError, BotoCoreError) as exc:
-                detail = self._format_storage_operation_error(exc)
+                detail = format_s3_error(exc, include_operation=True)
                 raise RuntimeError(f"Unable to list objects in bucket '{bucket_name}': {detail}") from exc
             for entry in page.get("Contents", []) or []:
                 key = entry.get("Key")
@@ -1139,11 +1129,9 @@ class BucketsService:
         )
 
     def _is_access_denied_error(self, exc: Exception) -> bool:
-        if isinstance(exc, ClientError):
-            error = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
-            code = str(error.get("Code") or "").strip().lower()
-            if code in {"accessdenied", "access_denied", "403", "unauthorized"}:
-                return True
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"accessdenied", "access_denied", "403", "unauthorized"}:
+            return True
         text = str(exc).strip().lower()
         return "accessdenied" in text or "access denied" in text or "403" in text
 

@@ -20,6 +20,7 @@ from app.models.bucket_purge import (
 from app.services import s3_client
 from app.services.buckets_service import BucketsService
 from app.services.long_running_s3_client import LongRunningS3ClientService
+from app.utils.s3_errors import format_s3_error
 from app.routers.http_errors import sanitized_error_log_detail
 
 
@@ -545,7 +546,7 @@ class BucketPurgeService(LongRunningS3ClientService):
                             "Objects may have been added while the deletion was running."
                         ),
                     )
-                return failure_result(stage="delete_bucket", message=s3_client._format_delete_failure(exc))
+                return failure_result(stage="delete_bucket", message=format_s3_error(exc))
             except BotoCoreError as exc:
                 return failure_result(stage="delete_bucket", message=sanitized_error_log_detail(exc))
 

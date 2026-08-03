@@ -13,6 +13,7 @@ from time import perf_counter
 
 from app.core.config import get_settings
 from app.services.aws_client_config import StorageRequestProfile, build_aws_config
+from app.utils.s3_errors import format_s3_error, s3_error_code
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -1370,27 +1371,11 @@ def _delete_objects_chunk(client, bucket_name: str, chunk: list[dict]) -> int:
 
 
 def _bucket_missing_error(exc: Exception) -> bool:
-    if not isinstance(exc, ClientError):
-        return False
-    code = str(exc.response.get("Error", {}).get("Code", "")).strip().lower() if hasattr(exc, "response") else ""
-    return code in {"nosuchbucket", "notfound"}
+    return s3_error_code(exc, lowercase=True) in {"nosuchbucket", "notfound"}
 
 
 def _version_listing_absent_error(exc: Exception) -> bool:
-    if not isinstance(exc, ClientError):
-        return False
-    code = str(exc.response.get("Error", {}).get("Code", "")).strip().lower() if hasattr(exc, "response") else ""
-    return code in {"nosuchbucket", "nosuchversion", "notfound"}
-
-
-def _format_delete_failure(exc: Exception) -> str:
-    if isinstance(exc, ClientError):
-        error = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
-        code = str(error.get("Code") or "").strip()
-        message = str(error.get("Message") or "").strip()
-        parts = [part for part in (code, message) if part and part.lower() != "none"]
-        return ": ".join(parts) if parts else str(exc)
-    return str(exc)
+    return s3_error_code(exc, lowercase=True) in {"nosuchbucket", "nosuchversion", "notfound"}
 
 
 def purge_bucket_contents(
@@ -1441,7 +1426,7 @@ def purge_bucket_contents(
         failures.append(
             BucketContentPurgeFailure(
                 stage=stage,
-                message=_format_delete_failure(exc),
+                message=format_s3_error(exc),
                 key=str(first.get("Key") or "") or None,
                 version_id=str(first.get("VersionId") or "") or None,
                 count=len(items or []),

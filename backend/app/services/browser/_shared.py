@@ -22,6 +22,7 @@ from app.models.browser import (
 )
 from app.services.object_listing_temp_store import TemporarySqliteStore
 from app.services.s3_execution_context import S3ExecutionTarget
+from app.utils.s3_errors import s3_error_code
 from app.utils.s3_endpoint import resolve_s3_client_options
 
 logger = logging.getLogger(__name__)
@@ -44,12 +45,8 @@ MISSING_OBJECT_LOCK_CONFIGURATION_CODES = {
 }
 
 
-def _client_error_code(exc: ClientError) -> str:
-    return str(exc.response.get("Error", {}).get("Code") or "").strip().lower()
-
-
 def _is_missing_object_lock_configuration(exc: ClientError) -> bool:
-    return _client_error_code(exc) in MISSING_OBJECT_LOCK_CONFIGURATION_CODES
+    return s3_error_code(exc, lowercase=True) in MISSING_OBJECT_LOCK_CONFIGURATION_CODES
 
 
 @dataclass(frozen=True)
