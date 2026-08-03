@@ -397,6 +397,19 @@ Account-specific RGW operations always use the persisted endpoint. Deploy the
 backend and frontend together because the request and response contracts are
 both strict.
 
+## 2026-08 strict credential encryption
+
+Migration `0098_encrypt_plaintext_secrets` encrypts any remaining plaintext
+credentials in storage endpoints, S3 accounts, IAM users, S3 users, S3
+connections, authentication providers, and S3 sessions. After this boundary,
+the ORM rejects plaintext or otherwise unreadable values instead of returning
+them as usable secrets.
+
+Before upgrading, configure `CREDENTIAL_KEYS` with the current key followed by
+every historical credential key still needed by the database. The migration
+stops when a stored Fernet token cannot be decrypted, rather than encrypting an
+unreadable token a second time. Its downgrade keeps credentials encrypted.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

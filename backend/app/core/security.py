@@ -1,9 +1,8 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.utils.time import utcnow
 import base64
+import binascii
 import hashlib
-import logging
 import secrets
 from datetime import datetime, timedelta
 from functools import lru_cache
@@ -14,10 +13,11 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.types import String, TypeDecorator
 
+from app.utils.time import utcnow
+
 from .config import get_settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-logger = logging.getLogger(__name__)
 
 _credential_keys_override: Optional[list[str]] = None
 
@@ -67,7 +67,7 @@ def _looks_like_fernet_key(value: str) -> bool:
         return False
     try:
         decoded = base64.urlsafe_b64decode(value.encode())
-    except Exception:
+    except (ValueError, binascii.Error):
         return False
     return len(decoded) == 32
 
@@ -137,21 +137,6 @@ def decrypt_secret(token: str) -> str:
     raise ValueError("Unable to decrypt secret")
 
 
-def is_encrypted_secret(value: Optional[str]) -> bool:
-    if not value:
-        return False
-    try:
-        for fernet in _get_credential_fernets():
-            try:
-                fernet.decrypt(value.encode())
-                return True
-            except InvalidToken:
-                continue
-        return False
-    except Exception:
-        return False
-
-
 class EncryptedString(TypeDecorator):
     impl = String
     cache_ok = True
@@ -159,15 +144,9 @@ class EncryptedString(TypeDecorator):
     def process_bind_param(self, value: Optional[str], dialect) -> Optional[str]:
         if value is None:
             return None
-        if is_encrypted_secret(value):
-            return value
         return encrypt_secret(value)
 
     def process_result_value(self, value: Optional[str], dialect) -> Optional[str]:
         if value is None:
             return None
-        try:
-            return decrypt_secret(value)
-        except ValueError:
-            logger.warning("Encountered unencrypted secret in database; returning raw value")
-            return value
+        return decrypt_secret(value)
