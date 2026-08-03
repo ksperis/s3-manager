@@ -12,6 +12,7 @@ from app.models.s3_connection import (
     S3ConnectionCredentialsValidationResult,
 )
 from app.services import s3_client
+from app.utils.s3_errors import s3_error_code
 from app.utils.s3_endpoint import validate_user_supplied_s3_endpoint
 
 AUTH_ERROR_CODES = {
@@ -59,7 +60,7 @@ class S3ConnectionValidationService:
                 message="Credentials validated.",
             )
         except ClientError as exc:
-            code = str(exc.response.get("Error", {}).get("Code") or "").strip()
+            code = s3_error_code(exc)
             if code == "AccessDenied":
                 return S3ConnectionCredentialsValidationResult(
                     ok=True,

@@ -10,6 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
 from app.services.aws_client_config import build_interactive_aws_config
+from app.utils.s3_errors import s3_error_code
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -187,7 +188,7 @@ def delete_topic(
     try:
         client.delete_topic(TopicArn=topic_arn)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
+        code = s3_error_code(exc)
         if code in {"NotFound", "NotFoundException"}:
             return
         raise RuntimeError(f"Unable to delete SNS topic '{topic_arn}': {exc}") from exc
@@ -207,7 +208,7 @@ def get_topic_attributes(
     try:
         resp = client.get_topic_attributes(TopicArn=topic_arn)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
+        code = s3_error_code(exc)
         if code in {"NotFound", "NotFoundException"}:
             return {}
         raise RuntimeError(f"Unable to fetch SNS topic attributes '{topic_arn}': {exc}") from exc

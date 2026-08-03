@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.utils.s3_errors import s3_error_code
 from app.utils.storage_endpoint_features import features_to_capabilities, normalize_features_config
 
 
@@ -232,11 +233,7 @@ class BucketMigrationInspector:
             try:
                 page = client.list_object_versions(**kwargs)
             except ClientError as exc:
-                code = (
-                    str(exc.response.get("Error", {}).get("Code", "")).strip().lower()
-                    if hasattr(exc, "response")
-                    else ""
-                )
+                code = s3_error_code(exc, lowercase=True)
                 if code in {"notimplemented", "notsupported", "unsupported"}:
                     raise RuntimeError(
                         f"Version listing is not supported for bucket '{bucket_name}': {exc}"
