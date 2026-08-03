@@ -64,10 +64,8 @@ Environment variables (or `.env` file) supported via `pydantic`:
 
 - `APP_NAME` (default: `s3-manager`)
 - `API_V1_PREFIX` (default: `/api`)
-- `FERNET_KEY` (default: `change-me`, JWT signing key)
-- `JWT_KEYS` (optional JSON list or comma-separated; overrides `FERNET_KEY`)
-- `CREDENTIAL_KEY` (default: `change-me`, encrypts secrets at rest)
-- `CREDENTIAL_KEYS` (optional JSON list or comma-separated; overrides `CREDENTIAL_KEY`)
+- `JWT_KEYS` (JSON list or comma-separated keyring; first key signs new JWTs)
+- `CREDENTIAL_KEYS` (JSON list or comma-separated keyring; first key encrypts new secrets)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `60`)
 - `REFRESH_TOKEN_EXPIRE_MINUTES` (default: `20160`)
 - `LOG_LEVEL` (default: `INFO`)
@@ -102,7 +100,7 @@ Environment variables (or `.env` file) supported via `pydantic`:
 JWT signing uses the first key in `JWT_KEYS` and validates against the full list.
 
 Security notes:
-- Production environments should set strong non-default values for `FERNET_KEY`/`JWT_KEYS` and `CREDENTIAL_KEY`/`CREDENTIAL_KEYS` (>=32 chars, high entropy).
+- Production environments should set strong non-default values for `JWT_KEYS` and `CREDENTIAL_KEYS` (>=32 chars, high entropy).
 - Production environments should set `REFRESH_TOKEN_COOKIE_SECURE=true` when using non-local origins, and `CORS_ORIGINS` should list explicit trusted origins rather than `*`.
 - Keep `SEED_SUPER_ADMIN_PASSWORD` as a bootstrap credential only and rotate it immediately.
 - Prefer `SEED_SUPER_ADMIN_MODE=if_empty` (default) or `disabled` in production to avoid accidental super-admin reseeding on restart.
@@ -116,7 +114,8 @@ To rotate the credential encryption key, run:
 python -m app.scripts.rotate_credential_keys --new-key "your-new-key"
 ```
 
-Then update `CREDENTIAL_KEY` / `CREDENTIAL_KEYS` to the new value.
+Then update `CREDENTIAL_KEYS` with the new value first and retain any previous
+key until every backend replica and stored credential has been rotated.
 
 To seed a default endpoint with features enabled, provide `SEED_S3_ENDPOINT` along with a JSON/YAML payload:
 

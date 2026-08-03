@@ -92,3 +92,19 @@ def test_ci_endpoint_payload_can_use_env_storage_endpoints():
     assert env["CEPH_TEST_SUPERVISION_SECRET_KEY"] == "supervision-sk"
     assert env["CEPH_TEST_CEPH_ADMIN_ACCESS_KEY"] == "ceph-admin-ak"
     assert env["CEPH_TEST_RGW_VERIFY_TLS"] == "true"
+
+
+def test_prepare_environment_uses_only_keyring_settings(monkeypatch, tmp_path):
+    _seed_required_endpoint_env(monkeypatch)
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("FERNET_KEY", "legacy-jwt-key")
+    monkeypatch.setenv("CREDENTIAL_KEY", "legacy-credential-key")
+    monkeypatch.delenv("JWT_KEYS", raising=False)
+    monkeypatch.delenv("CREDENTIAL_KEYS", raising=False)
+
+    env = run_ci._prepare_environment(tmp_path, "http://127.0.0.1:8765")
+
+    assert "FERNET_KEY" not in env
+    assert "CREDENTIAL_KEY" not in env
+    assert len(json.loads(env["JWT_KEYS"])) == 1
+    assert len(json.loads(env["CREDENTIAL_KEYS"])) == 1

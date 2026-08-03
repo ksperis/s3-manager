@@ -262,6 +262,8 @@ def _build_app_settings_payload() -> str:
 
 def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str, str]:
     env = os.environ.copy()
+    env.pop("FERNET_KEY", None)
+    env.pop("CREDENTIAL_KEY", None)
 
     # CI should not rely on a repo-local .env file or partially injected nested auth provider variables.
     if env.get("CI"):
@@ -320,11 +322,14 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
     )
 
     env["DATABASE_URL"] = f"sqlite:///{database_path.resolve().as_posix()}"
-    env["FERNET_KEY"] = _env_str("FERNET_KEY", _generate_secret(), source=env) or _generate_secret()
     env["JWT_KEYS"] = _env_str("JWT_KEYS", json.dumps([_generate_secret()]), source=env) or json.dumps(
         [_generate_secret()]
     )
-    env["CREDENTIAL_KEY"] = _env_str("CREDENTIAL_KEY", _generate_secret(), source=env) or _generate_secret()
+    env["CREDENTIAL_KEYS"] = _env_str(
+        "CREDENTIAL_KEYS",
+        json.dumps([_generate_secret()]),
+        source=env,
+    ) or json.dumps([_generate_secret()])
     env["SEED_SUPER_ADMIN_EMAIL"] = super_admin_email or "ci-ceph-functional-admin@example.com"
     env["SEED_SUPER_ADMIN_PASSWORD"] = super_admin_password or _generate_secret()
     env["SEED_SUPER_ADMIN_FULL_NAME"] = _env_str(

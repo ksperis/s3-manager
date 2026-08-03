@@ -59,6 +59,8 @@ def _build_app_settings_payload() -> str:
 
 def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env = os.environ.copy()
+    env.pop("FERNET_KEY", None)
+    env.pop("CREDENTIAL_KEY", None)
     for key in list(env):
         if key.startswith("OIDC_PROVIDERS__") or key.startswith("LDAP_PROVIDERS__"):
             env.pop(key, None)
@@ -81,9 +83,11 @@ def _prepare_environment(backend_root: Path) -> dict[str, str]:
 
     env["DATABASE_URL"] = f"sqlite:///{database_path.resolve().as_posix()}"
     env["APP_SETTINGS_PATH"] = app_settings_path.resolve().as_posix()
-    env["FERNET_KEY"] = _env_str("FERNET_KEY", _generate_secret()) or _generate_secret()
     env["JWT_KEYS"] = _env_str("JWT_KEYS", json.dumps([_generate_secret()])) or json.dumps([_generate_secret()])
-    env["CREDENTIAL_KEY"] = _env_str("CREDENTIAL_KEY", _generate_secret()) or _generate_secret()
+    env["CREDENTIAL_KEYS"] = _env_str(
+        "CREDENTIAL_KEYS",
+        json.dumps([_generate_secret()]),
+    ) or json.dumps([_generate_secret()])
 
     env["SEED_SUPER_ADMIN_EMAIL"] = _env_str(
         "SEED_SUPER_ADMIN_EMAIL",
