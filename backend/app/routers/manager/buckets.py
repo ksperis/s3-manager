@@ -74,26 +74,6 @@ router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
 logger = logging.getLogger(__name__)
 
 
-def _context_id_from_account(account: S3ExecutionContext) -> str:
-    connection_id = getattr(account, "s3_connection_id", None)
-    if isinstance(connection_id, int) and connection_id > 0:
-        return f"conn-{connection_id}"
-
-    s3_user_id = getattr(account, "s3_user_id", None)
-    if isinstance(s3_user_id, int) and s3_user_id > 0:
-        return f"s3u-{s3_user_id}"
-
-    ceph_admin_endpoint_id = getattr(account, "ceph_admin_endpoint_id", None)
-    if isinstance(ceph_admin_endpoint_id, int) and ceph_admin_endpoint_id > 0:
-        return f"ceph-admin-{ceph_admin_endpoint_id}"
-
-    account_id = getattr(account, "id", None)
-    if isinstance(account_id, int) and account_id > 0:
-        return str(account_id)
-
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported account context")
-
-
 def _invalidate_bucket_listing_for_account(account: S3ExecutionContext) -> None:
     invalidate_bucket_listing_cache_for_account(account)
 
@@ -211,8 +191,8 @@ def compare_bucket_pair(
         db=db,
     )
 
-    source_context_id = _context_id_from_account(source_account)
-    target_context_id = _context_id_from_account(target_account)
+    source_context_id = source_account.context_id
+    target_context_id = target_account.context_id
     same_context = bool(source_context_id and target_context_id and source_context_id == target_context_id)
     if same_context and payload.source_bucket == payload.target_bucket:
         raise HTTPException(
@@ -282,8 +262,8 @@ def run_compare_bucket_action(
         db=db,
     )
 
-    source_context_id = _context_id_from_account(source_account)
-    target_context_id = _context_id_from_account(target_account)
+    source_context_id = source_account.context_id
+    target_context_id = target_account.context_id
     same_context = bool(source_context_id and target_context_id and source_context_id == target_context_id)
     if same_context and payload.source_bucket == payload.target_bucket:
         raise HTTPException(
@@ -1204,7 +1184,7 @@ def stream_delete_bucket_with_purge(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Confirmation must be exactly '{expected}'.")
     require_bucket_management_context(account)
     options = BucketPurgeOptions(parallelism=payload.parallelism, include_versions=True)
-    context_id = request.query_params.get("account_id") or _context_id_from_account(account)
+    context_id = request.query_params.get("account_id") or account.context_id
     context_name = getattr(account, "name", None)
     target = BucketPurgeResolvedTarget(
         account=account,

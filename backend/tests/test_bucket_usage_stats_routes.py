@@ -9,12 +9,14 @@ from fastapi.responses import JSONResponse
 
 from app.db import S3Account, StorageEndpoint, User, UserRole
 from app.main import app
+from app.models.account_capabilities import AccountCapabilities
 from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsSnapshot
 from app.routers import dependencies
 from app.routers.admin import usage_stats as admin_usage_stats_router
 from app.routers.ceph_admin import usage_stats as ceph_usage_stats_router
 from app.routers.manager import usage_stats as manager_usage_stats_router
 from app.services.bucket_usage_stats_service import BucketUsageStatsService
+from app.services.s3_execution_context import S3ExecutionContext
 
 
 def _snapshot(bucket_name: str, *, scope_kind: str = "manager", scope_id: str = "1", bytes_value: int = 10) -> BucketUsageStatsSnapshot:
@@ -61,7 +63,16 @@ def _tool_user() -> User:
 
 def test_manager_usage_stats_latest_aggregates_snapshots_and_coverage(client: TestClient, db_session, monkeypatch):
     BucketUsageStatsService().upsert_snapshot(db_session, _snapshot("bucket-a", bytes_value=20))
-    account = S3Account(id=1, name="Managed Account", rgw_account_id="rgw-account")
+    account = S3ExecutionContext(
+        context_id="1",
+        context_kind="account",
+        name="Managed Account",
+        access_key=None,
+        secret_key=None,
+        id=1,
+        rgw_account_id="rgw-account",
+        manager_capabilities=AccountCapabilities(can_manage_buckets=True),
+    )
 
     monkeypatch.setattr(manager_usage_stats_router, "_list_manager_bucket_names", lambda account, service: ["bucket-a", "bucket-b"])
     app.dependency_overrides[manager_usage_stats_router.get_account_context] = lambda: account
@@ -82,7 +93,16 @@ def test_manager_usage_stats_latest_aggregates_snapshots_and_coverage(client: Te
 
 
 def test_manager_usage_stats_stream_builds_scope_targets(client: TestClient, monkeypatch):
-    account = S3Account(id=1, name="Managed Account", rgw_account_id="rgw-account")
+    account = S3ExecutionContext(
+        context_id="1",
+        context_kind="account",
+        name="Managed Account",
+        access_key=None,
+        secret_key=None,
+        id=1,
+        rgw_account_id="rgw-account",
+        manager_capabilities=AccountCapabilities(can_manage_buckets=True),
+    )
     captured: dict[str, object] = {}
 
     class FakeService:

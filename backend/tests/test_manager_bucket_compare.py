@@ -15,6 +15,7 @@ from app.models.manager_bucket_compare import ManagerBucketCompareActionRequest,
 from app.routers import dependencies as dependencies_router
 from app.services import app_settings_service
 from app.routers.manager import buckets as buckets_router
+from app.services.s3_execution_context import S3ExecutionContext
 
 
 def _build_request(account_id: str | None = None, path: str = "/api/manager/buckets/compare") -> Request:
@@ -29,8 +30,15 @@ def _build_request(account_id: str | None = None, path: str = "/api/manager/buck
     return Request(scope)
 
 
-def _build_account(account_id: int):
-    return SimpleNamespace(id=account_id)
+def _build_account(account_id: int) -> S3ExecutionContext:
+    return S3ExecutionContext(
+        context_id=str(account_id),
+        context_kind="account",
+        name=f"Account {account_id}",
+        access_key=None,
+        secret_key=None,
+        id=account_id,
+    )
 
 
 def _tool_user(*, bucket_compare: bool = True) -> User:

@@ -23,7 +23,6 @@ from app.routers.dependencies import (
 )
 from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.routers.manager.access import require_bucket_management_context
-from app.routers.manager.buckets import _context_id_from_account
 from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
 from app.services.bucket_usage_stats_service import (
     BucketUsageStatsOptions,
@@ -37,7 +36,7 @@ router = APIRouter(tags=["manager-bucket-usage-stats"])
 logger = logging.getLogger(__name__)
 
 def _target_for_bucket(account: S3ExecutionContext, bucket_name: str, *, context_id: str | None = None) -> BucketUsageStatsResolvedTarget:
-    resolved_context_id = context_id or _context_id_from_account(account)
+    resolved_context_id = context_id or account.context_id
     context_name = getattr(account, "name", None)
     return BucketUsageStatsResolvedTarget(
         account=account,
@@ -72,7 +71,7 @@ def get_manager_usage_stats_aggregate(
     bucket_service: BucketsService = Depends(get_buckets_service),
 ) -> BucketUsageStatsAggregateResponse:
     require_bucket_management_context(account)
-    context_id = _context_id_from_account(account)
+    context_id = account.context_id
     bucket_names = _list_manager_bucket_names(account, bucket_service)
     aggregate = BucketUsageStatsService().get_aggregate(
         db,
@@ -94,7 +93,7 @@ def stream_manager_usage_stats_aggregate(
     bucket_service: BucketsService = Depends(get_buckets_service),
 ) -> StreamingResponse:
     require_bucket_management_context(account)
-    context_id = _context_id_from_account(account)
+    context_id = account.context_id
     bucket_names = _list_manager_bucket_names(account, bucket_service)
     targets = [_target_for_bucket(account, bucket_name, context_id=context_id) for bucket_name in bucket_names]
     service = BucketUsageStatsService(SessionLocal)
@@ -122,7 +121,7 @@ def get_manager_bucket_usage_stats(
     _: object = Depends(get_current_account_admin),
 ) -> BucketUsageStatsLatestResponse:
     require_bucket_management_context(account)
-    context_id = _context_id_from_account(account)
+    context_id = account.context_id
     snapshot = BucketUsageStatsService().get_latest(
         db,
         scope_kind="manager",
@@ -140,7 +139,7 @@ def stream_manager_bucket_usage_stats_for_bucket(
     actor: object = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     require_bucket_management_context(account)
-    context_id = request.query_params.get("account_id") or _context_id_from_account(account)
+    context_id = request.query_params.get("account_id") or account.context_id
     target = _target_for_bucket(account, bucket_name, context_id=context_id)
     service = BucketUsageStatsService(SessionLocal)
     return stream_bucket_usage_stats(

@@ -14,7 +14,6 @@ from app.models.bucket_usage_stats import BucketUsageStatsRequest
 from app.routers.bucket_usage_stats_stream import stream_bucket_usage_stats
 from app.routers.dependencies import get_account_context, get_current_storage_ops_admin
 from app.routers.execution_contexts import list_execution_contexts
-from app.routers.manager.buckets import _context_id_from_account
 from app.services.bucket_usage_stats_service import (
     BucketUsageStatsOptions,
     BucketUsageStatsResolvedTarget,
@@ -55,7 +54,7 @@ def stream_storage_ops_bucket_usage_stats(
             actor=user,
             db=db,
         )
-        resolved_context_id = _context_id_from_account(account)
+        resolved_context_id = account.context_id
         context_name = context_names.get(target.context_id) or context_names.get(resolved_context_id) or resolved_context_id
         targets.append(
             BucketUsageStatsResolvedTarget(
