@@ -13,6 +13,7 @@ from app.db import StorageEndpoint, StorageProvider
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.utils.normalize import normalize_optional_string
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw import get_supervision_credentials, is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_rgw_admin_api_endpoint
@@ -62,13 +63,6 @@ _USER_DETAIL_CACHE_LOCK = Lock()
 _USER_DETAIL_INFLIGHT: dict[tuple[int, str | None, str], Future[object]] = {}
 
 
-def _normalize_optional_str(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    cleaned = value.strip()
-    return cleaned or None
-
-
 def _parse_owner_suspended(*values: object) -> bool | None:
     for value in values:
         if value is None:
@@ -92,10 +86,10 @@ def _nested_payload(payload: dict, key: str) -> dict:
 
 
 def _normalize_owner_identity(tenant: str | None, owner: str | None) -> BucketOwnerIdentity | None:
-    cleaned_owner = _normalize_optional_str(owner)
+    cleaned_owner = normalize_optional_string(owner)
     if not cleaned_owner:
         return None
-    cleaned_tenant = _normalize_optional_str(tenant)
+    cleaned_tenant = normalize_optional_string(tenant)
     if "$" in cleaned_owner:
         embedded_tenant, embedded_uid = cleaned_owner.split("$", 1)
         embedded_tenant = embedded_tenant.strip() or None
@@ -355,7 +349,7 @@ class BucketOwnerMetadataService:
         for entry in account_listing:
             if not isinstance(entry, dict):
                 continue
-            account_id = _normalize_optional_str(entry.get("account_id") or entry.get("id"))
+            account_id = normalize_optional_string(entry.get("account_id") or entry.get("id"))
             if account_id:
                 listing_by_id[account_id] = entry
 
@@ -367,7 +361,7 @@ class BucketOwnerMetadataService:
             suspended = None
             if isinstance(detail, dict):
                 if include_name:
-                    owner_name = _normalize_optional_str(detail.get("name") or detail.get("account_name"))
+                    owner_name = normalize_optional_string(detail.get("name") or detail.get("account_name"))
                 if include_suspended:
                     suspended = _parse_owner_suspended(
                         detail.get("suspended"),
@@ -433,7 +427,7 @@ class BucketOwnerMetadataService:
         if not isinstance(payload, dict):
             return BucketOwnerMetadata()
         user_payload = _nested_payload(payload, "user")
-        owner_name = _normalize_optional_str(payload.get("display_name")) if include_name else None
+        owner_name = normalize_optional_string(payload.get("display_name")) if include_name else None
         suspended = None
         if include_suspended:
             suspended = _parse_owner_suspended(

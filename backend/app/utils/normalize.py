@@ -5,6 +5,13 @@ from typing import Optional
 from app.db import StorageProvider
 
 
+def normalize_optional_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
 def normalize_storage_provider(provider: Optional[object]) -> StorageProvider:
     if provider is None:
         return StorageProvider.CEPH
@@ -30,4 +37,3 @@ def normalize_string_list(values: Optional[list[str]]) -> list[str]:
         seen.add(cleaned)
         normalized.append(cleaned)
     return normalized
-

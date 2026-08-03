@@ -29,19 +29,13 @@ from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.bucket_index_check_service import BucketIndexCheckService, execute_bucket_index_check_operation
 from app.services.rgw_admin import RGWAdminError, RGWAdminOperationResponse
+from app.utils.normalize import normalize_optional_string
 
 router = APIRouter(
     prefix="/ceph-admin/endpoints/{endpoint_id}",
     tags=["ceph-admin-admin-ops"],
 )
 logger = logging.getLogger(__name__)
-
-
-def _optional_str(value: Any) -> Optional[str]:
-    if not isinstance(value, str):
-        return None
-    normalized = value.strip()
-    return normalized or None
 
 
 def _qualified_user(uid: str, tenant: Optional[str]) -> str:
@@ -57,8 +51,8 @@ def _extract_user_identity(payload: Any) -> tuple[Optional[str], Optional[str]]:
         return None, None
     nested = payload.get("user")
     user_payload = nested if isinstance(nested, dict) else payload
-    raw_uid = _optional_str(user_payload.get("uid") or payload.get("uid"))
-    tenant = _optional_str(user_payload.get("tenant") or payload.get("tenant"))
+    raw_uid = normalize_optional_string(user_payload.get("uid") or payload.get("uid"))
+    tenant = normalize_optional_string(user_payload.get("tenant") or payload.get("tenant"))
     if raw_uid and "$" in raw_uid:
         embedded_tenant, uid = raw_uid.split("$", 1)
         if embedded_tenant and uid:
@@ -76,7 +70,7 @@ def _bucket_value(payload: Any, *keys: str) -> Optional[str]:
             candidates.append(nested)
     for candidate in candidates:
         for key in keys:
-            value = _optional_str(candidate.get(key))
+            value = normalize_optional_string(candidate.get(key))
             if value:
                 return value
     return None

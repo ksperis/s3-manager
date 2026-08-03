@@ -25,6 +25,7 @@ from app.routers.ceph_admin.dependencies import (
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
+from app.utils.normalize import normalize_optional_string
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 from app.utils.name_ordering import name_order_by
 from app.routers.http_errors import sanitize_error_detail
@@ -33,20 +34,13 @@ from app.utils.time import utcnow
 router = APIRouter(prefix="/ceph-admin/endpoints", tags=["ceph-admin-endpoints"])
 
 
-def _normalize_optional_str(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    cleaned = value.strip()
-    return cleaned or None
-
-
 def _extract_rgw_user_identity(payload: Any) -> tuple[str | None, str | None]:
     if not isinstance(payload, dict):
         return None, None
     nested = payload.get("user")
     user_payload = nested if isinstance(nested, dict) else payload
-    raw_uid = _normalize_optional_str(user_payload.get("uid") or payload.get("uid"))
-    tenant = _normalize_optional_str(user_payload.get("tenant") or payload.get("tenant"))
+    raw_uid = normalize_optional_string(user_payload.get("uid") or payload.get("uid"))
+    tenant = normalize_optional_string(user_payload.get("tenant") or payload.get("tenant"))
     if raw_uid and "$" in raw_uid:
         embedded_tenant, uid = raw_uid.split("$", 1)
         if embedded_tenant and uid:
@@ -130,18 +124,18 @@ def _iter_named_placements(value: Any) -> list[tuple[str, Any]]:
 
 def _summarize_rgw_info(payload: dict[str, Any]) -> CephAdminRgwInfoSummary:
     zonegroup_payload = payload.get("zonegroup") if isinstance(payload.get("zonegroup"), dict) else {}
-    default_placement = _normalize_optional_str(
+    default_placement = normalize_optional_string(
         payload.get("default_placement")
         or payload.get("default_placement_rule")
         or zonegroup_payload.get("default_placement")
         or zonegroup_payload.get("default_placement_rule")
     )
-    zonegroup = _normalize_optional_str(payload.get("zonegroup_name"))
+    zonegroup = normalize_optional_string(payload.get("zonegroup_name"))
     if zonegroup is None:
-        zonegroup = _normalize_optional_str(payload.get("zonegroup"))
+        zonegroup = normalize_optional_string(payload.get("zonegroup"))
     if zonegroup is None:
-        zonegroup = _normalize_optional_str(zonegroup_payload.get("name"))
-    realm = _normalize_optional_str(payload.get("realm_name") or payload.get("realm"))
+        zonegroup = normalize_optional_string(zonegroup_payload.get("name"))
+    realm = normalize_optional_string(payload.get("realm_name") or payload.get("realm"))
 
     placement_candidates: list[Any] = [
         payload.get("placement_targets"),
