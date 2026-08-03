@@ -61,7 +61,7 @@ from app.services.rgw_admin import RGWAdminError
 from app.services.managed_private_access_service import ManagedPrivateAccessService
 from app.services.bucket_listing_shared import _is_advanced_filter_stream_payload as _shared_is_advanced_filter_stream_payload
 from app.utils.quota_stats import extract_quota_limits
-from app.utils.rgw import extract_bucket_list
+from app.utils.rgw import extract_bucket_list, extract_rgw_user_payload
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
 
@@ -102,15 +102,6 @@ def _optional_account_lookup_enabled(ctx: CephAdminContext) -> bool | None:
         return resolve_feature_flags(ctx.endpoint).account_enabled
     except Exception:
         return None
-
-
-def _extract_user_payload(raw: dict) -> dict:
-    if not isinstance(raw, dict):
-        return {}
-    user_payload = raw.get("user")
-    if isinstance(user_payload, dict):
-        return user_payload
-    return raw
 
 
 def _extract_user_setting(payload: dict[str, Any], user_payload: dict[str, Any], *keys: str) -> Optional[str]:
@@ -317,7 +308,7 @@ def _enrich_users(
         except RGWAdminError as exc:
             raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         if payload and not payload.get("not_found"):
-            user_payload = _extract_user_payload(payload)
+            user_payload = extract_rgw_user_payload(payload)
             account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
             if "account" in requested:
                 user.account_id = account_id
@@ -543,7 +534,7 @@ def _resolve_user_identity(
     uid_fallback: str,
     tenant_fallback: Optional[str],
 ) -> tuple[Optional[str], str]:
-    user_payload = _extract_user_payload(payload)
+    user_payload = extract_rgw_user_payload(payload)
     uid_raw = _normalize_optional_str(user_payload.get("uid") or payload.get("uid")) or uid_fallback
     tenant = tenant_fallback
     uid = uid_raw
@@ -562,7 +553,7 @@ def _build_user_detail(
     account_name: Optional[str] = None,
     keys: Optional[list[CephAdminRgwAccessKey]] = None,
 ) -> CephAdminRgwUserDetail:
-    user_payload = _extract_user_payload(payload)
+    user_payload = extract_rgw_user_payload(payload)
     tenant, uid = _resolve_user_identity(payload, uid_fallback=uid_fallback, tenant_fallback=tenant_fallback)
     account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
     quota_size, quota_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
@@ -1043,13 +1034,13 @@ def create_rgw_user(
     _invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     user_payload = _load_user_payload(uid, lookup_tenant, ctx)
     resolved_account_id = _normalize_optional_str(
-        user_payload.get("account_id") or _extract_user_payload(user_payload).get("account_id")
+        user_payload.get("account_id") or extract_rgw_user_payload(user_payload).get("account_id")
     )
     account_name = _resolve_account_name(
         resolved_account_id,
         ctx,
         payload_account_name=_normalize_optional_str(
-            user_payload.get("account_name") or _extract_user_payload(user_payload).get("account_name")
+            user_payload.get("account_name") or extract_rgw_user_payload(user_payload).get("account_name")
         ),
     )
     keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=lookup_tenant))
@@ -1092,12 +1083,12 @@ def get_rgw_user_detail(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> CephAdminRgwUserDetail:
     payload = _load_user_payload(user_id, tenant, ctx)
-    account_id = _normalize_optional_str(payload.get("account_id") or _extract_user_payload(payload).get("account_id"))
+    account_id = _normalize_optional_str(payload.get("account_id") or extract_rgw_user_payload(payload).get("account_id"))
     account_name = _resolve_account_name(
         account_id,
         ctx,
         payload_account_name=_normalize_optional_str(
-            payload.get("account_name") or _extract_user_payload(payload).get("account_name")
+            payload.get("account_name") or extract_rgw_user_payload(payload).get("account_name")
         ),
     )
     keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(user_id.strip(), tenant=tenant))
@@ -1199,12 +1190,12 @@ def update_rgw_user_config(
 
     _invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     payload = _load_user_payload(uid, tenant, ctx)
-    account_id = _normalize_optional_str(payload.get("account_id") or _extract_user_payload(payload).get("account_id"))
+    account_id = _normalize_optional_str(payload.get("account_id") or extract_rgw_user_payload(payload).get("account_id"))
     account_name = _resolve_account_name(
         account_id,
         ctx,
         payload_account_name=_normalize_optional_str(
-            payload.get("account_name") or _extract_user_payload(payload).get("account_name")
+            payload.get("account_name") or extract_rgw_user_payload(payload).get("account_name")
         ),
     )
     keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=tenant))

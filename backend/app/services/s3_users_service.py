@@ -38,7 +38,7 @@ from app.models.s3_user import (
 from app.models.user import UserAssociationDetail
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services import s3_client
-from app.utils.rgw import extract_bucket_list
+from app.utils.rgw import extract_bucket_list, extract_rgw_user_payload
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.quota_stats import bytes_to_gb, extract_quota_limits, parse_positive_limit
 from app.utils.size_units import size_to_bytes
@@ -48,17 +48,8 @@ from app.utils.usage_stats import extract_usage_stats
 logger = logging.getLogger(__name__)
 
 
-def _extract_user_payload(raw: Any) -> dict[str, Any]:
-    if not isinstance(raw, dict):
-        return {}
-    user_payload = raw.get("user")
-    if isinstance(user_payload, dict):
-        return user_payload
-    return raw
-
-
 def _extract_max_buckets(payload: Any) -> Optional[int]:
-    user_payload = _extract_user_payload(payload)
+    user_payload = extract_rgw_user_payload(payload)
     return parse_positive_limit(user_payload.get("max_buckets") or (payload.get("max_buckets") if isinstance(payload, dict) else None))
 
 

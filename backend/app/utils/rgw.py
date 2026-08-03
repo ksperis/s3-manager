@@ -68,11 +68,19 @@ def extract_bucket_list(payload: Any) -> list[dict]:
     return []
 
 
+def extract_rgw_user_payload(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    user_payload = raw.get("user")
+    if isinstance(user_payload, dict):
+        return user_payload
+    return raw
+
+
 def extract_rgw_user_identity(payload: Any) -> tuple[Optional[str], Optional[str]]:
     if not isinstance(payload, dict):
         return None, None
-    nested = payload.get("user")
-    user_payload = nested if isinstance(nested, dict) else payload
+    user_payload = extract_rgw_user_payload(payload)
     raw_uid = normalize_optional_string(user_payload.get("uid") or payload.get("uid"))
     tenant = normalize_optional_string(user_payload.get("tenant") or payload.get("tenant"))
     if raw_uid and "$" in raw_uid:

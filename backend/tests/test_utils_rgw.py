@@ -5,6 +5,7 @@ import pytest
 
 from app.utils.rgw import (
     extract_rgw_user_identity,
+    extract_rgw_user_payload,
     get_supervision_rgw_client,
     is_rgw_account_id,
     resolve_account_scope,
@@ -39,6 +40,19 @@ def test_resolve_account_scope_with_tenant_name():
 )
 def test_extract_rgw_user_identity(payload, expected):
     assert extract_rgw_user_identity(payload) == expected
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"user": {"uid": "nested"}, "uid": "root"}, {"uid": "nested"}),
+        ({"uid": "root"}, {"uid": "root"}),
+        ({"user": "invalid", "uid": "root"}, {"user": "invalid", "uid": "root"}),
+        (None, {}),
+    ],
+)
+def test_extract_rgw_user_payload(payload, expected):
+    assert extract_rgw_user_payload(payload) == expected
 
 
 def test_get_supervision_rgw_client_uses_endpoint_url_when_admin_feature_disabled(monkeypatch):
