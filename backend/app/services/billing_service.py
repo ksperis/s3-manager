@@ -42,10 +42,11 @@ from app.models.billing import (
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import aggregate_usage, flatten_usage_entries
 from app.services.data_retention_service import DataRetentionService
-from app.utils.rgw import extract_bucket_list, resolve_admin_uid
+from app.utils.rgw_identifiers import resolve_admin_uid
+from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
-from app.utils.rgw import get_supervision_rgw_client
+from app.services.rgw_supervision import get_supervision_rgw_client
 from app.utils.numbers import int_or_zero
 
 logger = logging.getLogger(__name__)

@@ -139,7 +139,8 @@ from app.services.buckets_service import BucketsService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.rgw_admin import RGWAdminError
 from app.services.s3_execution_context import S3ExecutionContext
-from app.utils.rgw import extract_bucket_list, is_rgw_account_id
+from app.utils.rgw_identifiers import is_rgw_account_id
+from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, extract_usage_stats
 

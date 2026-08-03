@@ -16,7 +16,7 @@ from app.services import app_settings_service, effective_access_service
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.utils.rgw import has_supervision_credentials
+from app.services.rgw_supervision import has_supervision_credentials
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 
 from .account_context import get_account_context

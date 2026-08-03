@@ -12,7 +12,9 @@ from app.core.sensitive_data import sanitized_error_log_detail
 from app.services.admin_metrics_service import AdminMetricsService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import TrafficWindow
-from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
+from app.services.rgw_supervision import get_supervision_rgw_client
+from app.utils.rgw_identifiers import resolve_admin_uid
+from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import normalize_features_config
 from app.utils.usage_stats import build_bucket_overview, summarize_bucket_usage
 

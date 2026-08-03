@@ -16,7 +16,8 @@ from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_
 from app.utils.cache import prune_expired_lru_cache
 from app.utils.normalize import normalize_optional_string
 from app.utils.quota_stats import extract_quota_limits
-from app.utils.rgw import get_supervision_credentials, is_rgw_account_id
+from app.services.rgw_supervision import get_supervision_credentials
+from app.utils.rgw_identifiers import is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_rgw_admin_api_endpoint
 
 OWNER_DETAILS_CACHE_TTL_SECONDS = 30.0

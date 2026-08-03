@@ -38,8 +38,10 @@ from app.models.app_settings import QuotaNotificationSettings
 from app.services.app_settings_service import load_app_settings
 from app.services.data_retention_service import DataRetentionService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_supervision import get_supervision_rgw_client
 from app.services.user_notifications_service import UserNotificationsService
-from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
+from app.utils.rgw_identifiers import resolve_admin_uid
+from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
 from app.utils.usage_stats import extract_usage_stats
 

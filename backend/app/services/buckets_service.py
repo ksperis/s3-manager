@@ -48,13 +48,13 @@ from app.models.ceph_admin import (
     CephAdminBucketObjectDetail,
     CephAdminBucketObjectDiffEntry,
 )
-from app.utils.rgw import (
-    extract_bucket_list,
+from app.services.rgw_supervision import get_supervision_credentials
+from app.utils.rgw_identifiers import (
     resolve_account_scope,
     resolve_admin_uid,
-    get_supervision_credentials,
     is_rgw_account_id,
 )
+from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.jsonable import model_to_jsonable
 from app.utils.aws_errors import aws_error_code
 from app.utils.s3_errors import format_s3_error

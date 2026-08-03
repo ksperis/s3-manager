@@ -17,7 +17,8 @@ from app.services.traffic_service import (
     flatten_usage_entries,
     window_start,
 )
-from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client
+from app.services.rgw_supervision import get_supervision_rgw_client
+from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 from app.core.sensitive_data import sanitize_error_detail

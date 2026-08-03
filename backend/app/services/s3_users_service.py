@@ -38,7 +38,7 @@ from app.models.s3_user import (
 from app.models.user import UserAssociationDetail
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services import s3_client
-from app.utils.rgw import extract_bucket_list, extract_rgw_user_payload
+from app.utils.rgw_payloads import extract_bucket_list, extract_rgw_user_payload
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.quota_stats import bytes_to_gb, extract_quota_limits, parse_positive_limit
 from app.utils.size_units import size_to_bytes

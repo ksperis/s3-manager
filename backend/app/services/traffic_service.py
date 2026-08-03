@@ -10,8 +10,9 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_supervision import get_supervision_credentials
 from app.utils.numbers import int_or_zero
-from app.utils.rgw import get_supervision_credentials, resolve_admin_uid
+from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 
 logger = logging.getLogger(__name__)

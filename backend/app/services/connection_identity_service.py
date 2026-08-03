@@ -11,7 +11,7 @@ from typing import Optional
 from app.db import S3Connection, StorageProvider
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.utils.normalize import normalize_optional_string
-from app.utils.rgw import is_rgw_account_id
+from app.utils.rgw_identifiers import is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_rgw_admin_api_endpoint
 
 

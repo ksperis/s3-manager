@@ -12,7 +12,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import BucketMigrationItem
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.utils.rgw import resolve_admin_uid
+from app.utils.rgw_identifiers import resolve_admin_uid
 
 from ._shared import (
     _MIGRATION_USER_AGENT_MARKER,

@@ -36,7 +36,7 @@ from app.services import s3_client
 from app.services.avatar_image_service import ALLOWED_AVATAR_CONTENT_TYPES, validate_avatar_image
 from app.services.portal.exceptions import PortalStorageSpaceNotEmpty
 from app.services.rgw_admin import RGWAdminError
-from app.utils.rgw import resolve_admin_uid
+from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.time import normalize_utc, utcnow
 from app.utils.usage_stats import extract_usage_stats
 

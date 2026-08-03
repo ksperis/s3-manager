@@ -20,7 +20,8 @@ from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import get_s3_users_service
 from app.services.effective_access_service import EffectiveAccessService
-from app.utils.rgw import has_supervision_credentials, resolve_admin_uid
+from app.services.rgw_supervision import has_supervision_credentials
+from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags
 
 router = APIRouter(prefix="/manager", tags=["manager-context"])

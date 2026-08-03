@@ -30,7 +30,7 @@ from app.services.buckets_service import BucketsService
 from app.services.listing_progress import ListingProgressEmitter, interpolate_progress_percent, invoke_cancel_check
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.utils.normalize import normalize_optional_scalar, normalize_text
-from app.utils.rgw import is_rgw_account_id
+from app.utils.rgw_identifiers import is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, extract_usage_stats
 

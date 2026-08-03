@@ -14,7 +14,7 @@ from app.models.portal import (
     PortalUsageStorageSpace,
 )
 from app.services.rgw_admin import RGWAdminError
-from app.utils.rgw import resolve_admin_uid
+from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.usage_stats import extract_usage_stats
 

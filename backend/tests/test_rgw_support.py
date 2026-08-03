@@ -1,15 +1,11 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db import StorageEndpoint, StorageProvider
 import pytest
 
-from app.utils.rgw import (
-    extract_rgw_user_identity,
-    extract_rgw_user_payload,
-    get_supervision_rgw_client,
-    is_rgw_account_id,
-    resolve_account_scope,
-)
+from app.db import StorageEndpoint, StorageProvider
+from app.services.rgw_supervision import get_supervision_rgw_client
+from app.utils.rgw_identifiers import is_rgw_account_id, resolve_account_scope
+from app.utils.rgw_payloads import extract_rgw_user_identity, extract_rgw_user_payload
 
 
 def test_resolve_account_scope_with_account_id():
@@ -66,7 +62,7 @@ def test_get_supervision_rgw_client_uses_endpoint_url_when_admin_feature_disable
         captured["verify_tls"] = verify_tls
         return "client"
 
-    monkeypatch.setattr("app.utils.rgw.get_rgw_admin_client", fake_get_rgw_admin_client)
+    monkeypatch.setattr("app.services.rgw_supervision.get_rgw_admin_client", fake_get_rgw_admin_client)
     endpoint = StorageEndpoint(
         name="ceph",
         endpoint_url="https://rgw.example.test/",

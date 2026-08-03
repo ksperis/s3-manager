@@ -30,7 +30,7 @@ from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadat
 from app.services.bucket_index_check_service import BucketIndexCheckService, execute_bucket_index_check_operation
 from app.services.rgw_admin import RGWAdminError, RGWAdminOperationResponse
 from app.utils.normalize import normalize_optional_string
-from app.utils.rgw import extract_rgw_user_identity
+from app.utils.rgw_payloads import extract_rgw_user_identity
 
 router = APIRouter(
     prefix="/ceph-admin/endpoints/{endpoint_id}",

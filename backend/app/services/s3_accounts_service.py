@@ -46,7 +46,8 @@ from app.utils.storage_endpoint_features import (
     resolve_admin_endpoint,
     resolve_feature_flags,
 )
-from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid
+from app.utils.rgw_identifiers import normalize_rgw_identifier, resolve_admin_uid
+from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.usage_stats import extract_usage_stats
 from app.utils.quota_stats import bytes_to_gb, extract_positive_limit, extract_quota_limits
 from app.utils.size_units import size_to_bytes

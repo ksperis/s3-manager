@@ -13,7 +13,7 @@ from app.models.ceph_admin import CephAdminBucketSummary
 from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.services.bucket_owner_enrichment import BucketOwnerUsage
 from app.utils.cache import prune_expired_lru_cache
-from app.utils.rgw import extract_bucket_list
+from app.utils.rgw_payloads import extract_bucket_list
 
 BUCKET_LIST_CACHE_TTL_SECONDS = 1800.0
 BUCKET_LIST_CACHE_MAX_ENTRIES = 64

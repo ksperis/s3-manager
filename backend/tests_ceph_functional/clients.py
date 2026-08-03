@@ -10,7 +10,7 @@ from typing import Any, Iterable
 import requests
 
 from .config import CephTestSettings
-from app.utils.rgw import resolve_account_scope
+from app.utils.rgw_identifiers import resolve_account_scope
 
 try:
     from app.services.rgw_admin import RGWAdminClient, RGWAdminError

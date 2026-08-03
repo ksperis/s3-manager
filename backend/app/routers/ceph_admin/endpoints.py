@@ -26,7 +26,7 @@ from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
 from app.utils.normalize import normalize_optional_string
-from app.utils.rgw import extract_rgw_user_identity
+from app.utils.rgw_payloads import extract_rgw_user_identity
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 from app.utils.name_ordering import name_order_by
 from app.core.sensitive_data import sanitize_error_detail

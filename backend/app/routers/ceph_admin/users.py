@@ -62,7 +62,7 @@ from app.services.listing_progress import (
 )
 from app.utils.normalize import normalize_optional_scalar, normalize_text
 from app.utils.quota_stats import extract_quota_limits
-from app.utils.rgw import extract_bucket_list, extract_rgw_user_payload
+from app.utils.rgw_payloads import extract_bucket_list, extract_rgw_user_payload
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
 

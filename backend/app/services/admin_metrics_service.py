@@ -28,7 +28,8 @@ from app.services.traffic_service import (
     flatten_usage_entries,
     window_start,
 )
-from app.utils.rgw import extract_bucket_list, resolve_admin_uid
+from app.utils.rgw_identifiers import resolve_admin_uid
+from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.usage_stats import extract_usage_stats
 
 logger = logging.getLogger(__name__)
