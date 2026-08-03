@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.backend_audit_matrix import ALLOWLISTED_UNAUDITED_ROUTES, collect_rows, render_markdown
+from scripts.backend_audit_matrix import ALLOWLISTED_UNAUDITED_ROUTES, RouteAuditRow, collect_rows, render_markdown
 
 
 def test_backend_audit_matrix_collects_mutating_routes():
@@ -30,6 +30,36 @@ def test_backend_audit_matrix_renders_summary_sections():
     assert "Direct audit" in report
 
 
+def test_backend_audit_matrix_does_not_treat_context_fields_as_audit_signals():
+    signals = {
+        "record_action": False,
+        "audit_service": True,
+        "actor": True,
+        "scope": True,
+        "entity_type": True,
+        "entity_id": True,
+        "account": True,
+        "metadata": True,
+        "delegated_browser_audit": False,
+        "delegated_ceph_admin_audit": False,
+        "delegated_ceph_admin_bucket_config_audit": False,
+        "delegated_ceph_admin_bucket_config_wrapper": False,
+        "delegated_purge_stream": False,
+        "delegated_integrity_stream": False,
+    }
+    row = RouteAuditRow(
+        file=Path("app/routers/example.py"),
+        function="mutate_without_audit",
+        method="POST",
+        path="/example",
+        signals=signals,
+    )
+
+    assert row.has_audit_signal is False
+    signals["delegated_browser_audit"] = True
+    assert row.has_audit_signal is True
+
+
 def test_backend_audit_matrix_allowlists_non_mutating_post_routes():
     backend_root = Path(__file__).resolve().parents[1]
 
@@ -42,5 +72,5 @@ def test_backend_audit_matrix_allowlists_non_mutating_post_routes():
     for key, reason in ALLOWLISTED_UNAUDITED_ROUTES.items():
         row = by_key.get(key)
         assert row is not None, key
-        assert not row.has_any_audit_signal, key
+        assert not row.has_audit_signal, key
         assert row.allowlist_reason(backend_root) == reason

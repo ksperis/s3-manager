@@ -25,6 +25,16 @@ SIGNAL_FIELDS = {
     "delegated_purge_stream": "stream_bucket_purge(",
     "delegated_integrity_stream": "stream_bucket_integrity_check(",
 }
+DELEGATED_AUDIT_SIGNALS = frozenset(
+    {
+        "delegated_browser_audit",
+        "delegated_ceph_admin_audit",
+        "delegated_ceph_admin_bucket_config_audit",
+        "delegated_ceph_admin_bucket_config_wrapper",
+        "delegated_purge_stream",
+        "delegated_integrity_stream",
+    }
+)
 
 ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/admin/s3_connections.py", "validate_s3_connection_credentials", "/validate-credentials"): "credential validation probe",
@@ -62,8 +72,12 @@ class RouteAuditRow:
     signals: dict[str, bool]
 
     @property
-    def has_any_audit_signal(self) -> bool:
-        return any(self.signals.values())
+    def has_audit_signal(self) -> bool:
+        return self.signals["record_action"] or self.has_delegated_audit_signal
+
+    @property
+    def has_delegated_audit_signal(self) -> bool:
+        return any(self.signals[name] for name in DELEGATED_AUDIT_SIGNALS)
 
     def allowlist_reason(self, backend_root: Path) -> str | None:
         key = (self.method, str(self.file.relative_to(backend_root)), self.function, self.path)
@@ -123,23 +137,18 @@ def render_markdown(backend_root: Path) -> str:
     allowlisted_no_signal = [
         row
         for row in rows
-        if not row.has_any_audit_signal and row.allowlist_reason(backend_root)
+        if not row.has_audit_signal and row.allowlist_reason(backend_root)
     ]
     no_signal = [
         row
         for row in rows
-        if not row.has_any_audit_signal and not row.allowlist_reason(backend_root)
+        if not row.has_audit_signal and not row.allowlist_reason(backend_root)
     ]
     with_record = [row for row in rows if row.signals["record_action"]]
     delegated = [
         row
         for row in rows
-        if row.signals["delegated_browser_audit"]
-        or row.signals["delegated_ceph_admin_audit"]
-        or row.signals["delegated_ceph_admin_bucket_config_audit"]
-        or row.signals["delegated_ceph_admin_bucket_config_wrapper"]
-        or row.signals["delegated_purge_stream"]
-        or row.signals["delegated_integrity_stream"]
+        if row.has_delegated_audit_signal
     ]
     lines = [
         "# Backend mutating-route audit matrix",
@@ -182,14 +191,6 @@ def render_markdown(backend_root: Path) -> str:
         ]
     )
     for row in rows:
-        delegated_signal = (
-            row.signals["delegated_browser_audit"]
-            or row.signals["delegated_ceph_admin_audit"]
-            or row.signals["delegated_ceph_admin_bucket_config_audit"]
-            or row.signals["delegated_ceph_admin_bucket_config_wrapper"]
-            or row.signals["delegated_purge_stream"]
-            or row.signals["delegated_integrity_stream"]
-        )
         lines.append(
             "| {method} | `{file}` | `{function}` | `{path}` | {direct} | {actor} | {scope} | {entity} | {account} | {metadata} | {delegated} |".format(
                 method=row.method,
@@ -202,7 +203,7 @@ def render_markdown(backend_root: Path) -> str:
                 entity="yes" if row.signals["entity_type"] and row.signals["entity_id"] else "no",
                 account="yes" if row.signals["account"] else "no",
                 metadata="yes" if row.signals["metadata"] else "no",
-                delegated="yes" if delegated_signal else "no",
+                delegated="yes" if row.has_delegated_audit_signal else "no",
             )
         )
     return "\n".join(lines) + "\n"
