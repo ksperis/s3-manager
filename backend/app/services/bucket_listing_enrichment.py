@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Protocol
 
+from app.db import StorageEndpoint
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.bucket import (
     BucketEncryptionConfiguration,
@@ -19,28 +20,27 @@ from app.models.ceph_admin import (
     CephAdminBucketFilterRule,
     CephAdminBucketSummary,
 )
-from app.routers.ceph_admin.dependencies import CephAdminContext
-from app.routers.ceph_admin.listing_common import (
-    ListingProgressEmitter,
-    interpolate_progress_percent,
-    invoke_cancel_check,
-    normalize_optional_str,
-    normalize_text,
-)
-from app.services.bucket_listing_shared import _filter_requires_stats as _shared_filter_requires_stats
+from app.services.bucket_listing_shared import filter_requires_stats
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
 )
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService, BucketOwnerUsage
 from app.services.buckets_service import BucketsService
-from app.services.rgw_admin import RGWAdminError
+from app.services.listing_progress import ListingProgressEmitter, interpolate_progress_percent, invoke_cancel_check
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.utils.normalize import normalize_optional_scalar, normalize_text
 from app.utils.rgw import is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, extract_usage_stats
 
 BUCKET_ENRICH_MAX_WORKERS = 6
 BUCKET_OWNER_LOOKUP_MAX_WORKERS = 6
+
+
+class BucketListingAdminContext(Protocol):
+    endpoint: StorageEndpoint
+    rgw_admin: RGWAdminClient
 
 
 def _build_enrichment_progress_callback(
@@ -220,8 +220,8 @@ def _determine_owner_name_lookup_scope(query: CephAdminBucketFilterQuery | None)
 def _extract_bucket_owner_scope(entry: dict) -> tuple[str | None, str | None]:
     if not isinstance(entry, dict):
         return None, None
-    tenant = normalize_optional_str(entry.get("tenant"))
-    owner = normalize_optional_str(entry.get("owner"))
+    tenant = normalize_optional_scalar(entry.get("tenant"))
+    owner = normalize_optional_scalar(entry.get("owner"))
     if owner and "$" in owner:
         split_tenant, split_uid = _split_tenant_uid(owner)
         if split_tenant:
@@ -247,8 +247,8 @@ def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
     bucket_name = _extract_bucket_name(entry)
     if not bucket_name:
         return None
-    tenant = normalize_optional_str(entry.get("tenant"))
-    owner = normalize_optional_str(entry.get("owner"))
+    tenant = normalize_optional_scalar(entry.get("tenant"))
+    owner = normalize_optional_scalar(entry.get("owner"))
     usage_bytes, objects = extract_usage_stats(entry.get("usage"))
     quota_size = None
     quota_objects = None
@@ -322,7 +322,7 @@ def _extract_name_candidates(query: CephAdminBucketFilterQuery | None) -> list[s
 
 
 def _resolve_owner_name(
-    ctx: CephAdminContext,
+    ctx: BucketListingAdminContext,
     owner_id: str | None,
     tenant: str | None,
     cache: dict[str, str | None],
@@ -357,7 +357,7 @@ def _resolve_owner_name(
             account_payload = None
         if isinstance(account_payload, dict) and not account_payload.get("not_found"):
             # Strict account owner-name resolution: only RGW account "name" is accepted.
-            name = normalize_optional_str(account_payload.get("name"))
+            name = normalize_optional_scalar(account_payload.get("name"))
             cache[owner_key] = name
             return name
 
@@ -377,13 +377,13 @@ def _resolve_owner_name(
         user_payload = None
     if isinstance(user_payload, dict) and not user_payload.get("not_found"):
         # Strict user owner-name resolution: only RGW "display_name" is accepted.
-        name = normalize_optional_str(user_payload.get("display_name"))
+        name = normalize_optional_scalar(user_payload.get("display_name"))
     cache[owner_key] = name
     return name
 
 
 def _resolve_owner_names_for_buckets(
-    ctx: CephAdminContext,
+    ctx: BucketListingAdminContext,
     buckets: list[CephAdminBucketSummary],
     owner_scope: Literal["any", "account", "user"] = "any",
 ) -> dict[str, str | None]:
@@ -430,7 +430,7 @@ def _coerce_number(value: object) -> float | None:
 
 
 def _apply_owner_enrichment(
-    ctx: CephAdminContext,
+    ctx: BucketListingAdminContext,
     buckets: list[CephAdminBucketSummary],
     *,
     include_suspended: bool = False,
@@ -514,7 +514,7 @@ def _match_tag_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterR
     return matched
 
 
-def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
+def match_bucket_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
     field = rule.field
     op = rule.op
     if not field or not op:
@@ -631,7 +631,7 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
     return False
 
 
-def _match_feature_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
+def match_bucket_feature_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
     feature = rule.feature
     desired = (rule.state or "").strip().lower()
     if not feature or not desired:
@@ -1460,7 +1460,7 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
     return False
 
 
-def _match_feature_param_rules(
+def match_bucket_feature_param_rules(
     rules: list[CephAdminBucketFilterRule],
     match_mode: str,
     snapshot: dict[str, object],
@@ -1601,7 +1601,7 @@ def _load_feature_param_snapshot_for_bucket(
     return snapshot
 
 
-def _load_feature_param_snapshots(
+def load_bucket_feature_param_snapshots(
     buckets: list[CephAdminBucketSummary],
     rules: list[CephAdminBucketFilterRule],
     service: BucketsService,
@@ -1690,7 +1690,7 @@ def _filter_requires_owner_usage(query: CephAdminBucketFilterQuery | None) -> bo
 
 
 def _request_requires_bucket_stats(query: CephAdminBucketFilterQuery | None, sort_by: str) -> bool:
-    return sort_by in {"used_bytes", "object_count"} or _shared_filter_requires_stats(query)
+    return sort_by in {"used_bytes", "object_count"} or filter_requires_stats(query)
 
 
 def _request_requires_owner_metadata(
@@ -1710,7 +1710,7 @@ def _request_requires_tenant_metadata(
 
 
 def _backfill_bucket_owner_metadata(
-    ctx: CephAdminContext,
+    ctx: BucketListingAdminContext,
     buckets: list[CephAdminBucketSummary],
     *,
     include_tenant: bool = False,
@@ -1779,7 +1779,7 @@ def _backfill_bucket_owner_metadata(
     return buckets
 
 
-def _enrich_buckets(
+def enrich_buckets(
     buckets: list[CephAdminBucketSummary],
     requested: set[str],
     include_tags: bool,

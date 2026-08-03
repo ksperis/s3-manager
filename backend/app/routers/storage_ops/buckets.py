@@ -17,24 +17,21 @@ from app.db import User
 from app.models.bucket import BucketQuotaUpdate
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketListingRequest
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary, StorageOpsContextKind
+from app.services.bucket_listing_enrichment import (
+    enrich_buckets,
+    load_bucket_feature_param_snapshots,
+    match_bucket_feature_param_rules,
+    match_bucket_feature_rule,
+    match_bucket_field_rule,
+)
 from app.services.bucket_listing_shared import (
-    _enrich_buckets,
-    _is_advanced_filter_stream_payload,
-    _load_feature_param_snapshots,
-    _match_feature_param_rules,
-    _match_feature_rule,
-    _match_field_rule,
-    _parse_filter,
-    _filter_requires_stats,
+    filter_requires_stats,
+    is_advanced_filter_stream_payload,
+    parse_filter,
     parse_includes,
 )
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService, invalidate_bucket_owner_metadata_cache
 from app.routers.ceph_admin.listing_common import (
-    ListingProgressEmitter,
-    ListingProgressSnapshot,
-    interpolate_progress_percent,
-    invoke_cancel_check,
-    normalize_text,
     sort_value,
     stream_listing_response,
 )
@@ -55,6 +52,13 @@ from app.services.bucket_listing_cache import (
 )
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.connection_identity_service import ConnectionIdentityService
+from app.utils.normalize import normalize_text
+from app.services.listing_progress import (
+    ListingProgressEmitter,
+    ListingProgressSnapshot,
+    interpolate_progress_percent,
+    invoke_cancel_check,
+)
 
 router = APIRouter(prefix="/storage-ops/buckets", tags=["storage-ops-buckets"])
 logger = logging.getLogger(__name__)
@@ -253,14 +257,14 @@ def _build_cheap_field_prefilter(
 
 def _match_storage_ops_field_rule(bucket: StorageOpsBucketSummary, rule) -> bool:
     if rule.field != "name":
-        return _match_field_rule(bucket, rule)
+        return match_bucket_field_rule(bucket, rule)
     op = rule.op or ""
     if op in {"is_null", "not_null"}:
-        return _match_field_rule(bucket, rule)
+        return match_bucket_field_rule(bucket, rule)
     encoded_name = _encode_bucket_ref(bucket.context_id, bucket.bucket_name or bucket.name)
     encoded_bucket = bucket.model_copy(update={"name": encoded_name})
-    actual_match = _match_field_rule(bucket, rule)
-    encoded_match = _match_field_rule(encoded_bucket, rule)
+    actual_match = match_bucket_field_rule(bucket, rule)
+    encoded_match = match_bucket_field_rule(encoded_bucket, rule)
     if op in {"neq", "not_in"}:
         return actual_match and encoded_match
     return actual_match or encoded_match
@@ -280,7 +284,7 @@ def _apply_advanced_filter_for_context(
         def base_match(bucket: StorageOpsBucketSummary) -> bool:
             results: list[bool] = []
             results.extend(_match_storage_ops_field_rule(bucket, rule) for rule in field_rules)
-            results.extend(_match_feature_rule(bucket, rule) for rule in feature_state_rules)
+            results.extend(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules)
             if not results:
                 return True
             return all(results) if match_mode == "all" else any(results)
@@ -292,7 +296,7 @@ def _apply_advanced_filter_for_context(
             return mode == "all"
         base_results = [
             *(_match_storage_ops_field_rule(bucket, rule) for rule in field_rules),
-            *(_match_feature_rule(bucket, rule) for rule in feature_state_rules),
+            *(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules),
         ]
         return all(base_results) if mode == "all" else any(base_results)
 
@@ -300,7 +304,7 @@ def _apply_advanced_filter_for_context(
         base_candidates = [bucket for bucket in buckets if _base_match(bucket, "all")]
         if not base_candidates:
             return []
-        snapshots_by_key, _available_keys = _load_feature_param_snapshots(
+        snapshots_by_key, _available_keys = load_bucket_feature_param_snapshots(
             base_candidates,
             feature_param_rules,
             service,
@@ -310,7 +314,7 @@ def _apply_advanced_filter_for_context(
         for bucket in base_candidates:
             key = f"{bucket.tenant or ''}:{bucket.name}"
             snapshot = snapshots_by_key.get(key, {})
-            if _match_feature_param_rules(feature_param_rules, "all", snapshot):
+            if match_bucket_feature_param_rules(feature_param_rules, "all", snapshot):
                 filtered.append(bucket)
         return filtered
 
@@ -324,7 +328,7 @@ def _apply_advanced_filter_for_context(
     if not param_candidates:
         return pre_matched
 
-    snapshots_by_key, _available_keys = _load_feature_param_snapshots(
+    snapshots_by_key, _available_keys = load_bucket_feature_param_snapshots(
         param_candidates,
         feature_param_rules,
         service,
@@ -334,7 +338,7 @@ def _apply_advanced_filter_for_context(
     for bucket in param_candidates:
         key = f"{bucket.tenant or ''}:{bucket.name}"
         snapshot = snapshots_by_key.get(key, {})
-        if _match_feature_param_rules(feature_param_rules, "any", snapshot):
+        if match_bucket_feature_param_rules(feature_param_rules, "any", snapshot):
             filtered.append(bucket)
     return filtered
 
@@ -550,7 +554,7 @@ def _list_context_buckets(
 
     if (requested_features or include_tags) and context_buckets:
         enriched_buckets: list[StorageOpsBucketSummary] = []
-        for enriched in _enrich_buckets(
+        for enriched in enrich_buckets(
             context_buckets,
             requested_features,
             include_tags,
@@ -614,9 +618,9 @@ def _compute_storage_ops_listing(
     simple_filter: str | None = None
     parsed_filter: CephAdminBucketFilterQuery | None = None
     if advanced_filter:
-        simple_filter, parsed_filter = _parse_filter(advanced_filter)
+        simple_filter, parsed_filter = parse_filter(advanced_filter)
     elif filter:
-        simple_filter, parsed_filter = _parse_filter(filter)
+        simple_filter, parsed_filter = parse_filter(filter)
     include_set = parse_includes(include)
     filter_fields = _collect_filter_fields(parsed_filter)
     wants_owner_name = "owner_name" in include_set
@@ -677,7 +681,7 @@ def _compute_storage_ops_listing(
             "sse_kms_key_ids",
         }
     }
-    needs_stats = bool(with_stats or _filter_requires_stats(parsed_filter) or sort_by in {"used_bytes", "object_count"})
+    needs_stats = bool(with_stats or filter_requires_stats(parsed_filter) or sort_by in {"used_bytes", "object_count"})
     owner_usage_required = bool(needs_stats and (bool(filter_fields & (OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS)) or wants_owner_quota_usage))
     refs = _collect_context_refs(user, db)
     progress.emit(
@@ -967,7 +971,7 @@ async def stream_storage_ops_buckets(
     db: Session = Depends(get_db),
     service: BucketsService = Depends(get_buckets_service),
 ) -> StreamingResponse:
-    if not _is_advanced_filter_stream_payload(advanced_filter):
+    if not is_advanced_filter_stream_payload(advanced_filter):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="advanced_filter must be provided as a JSON payload for streaming search",

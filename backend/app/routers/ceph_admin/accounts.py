@@ -27,19 +27,13 @@ from app.routers.ceph_admin.listing_common import (
     EndpointCacheEntry,
     EndpointListCacheKey,
     EndpointPayloadCacheKey,
-    ListingProgressEmitter,
-    ListingProgressSnapshot,
     apply_advanced_filter,
     apply_simple_search,
     coerce_number,
     collect_filter_fields,
     fields_set,
     get_or_set_cache,
-    interpolate_progress_percent,
     invalidate_cache,
-    invoke_cancel_check,
-    normalize_optional_str,
-    normalize_text,
     paginate,
     parse_bool,
     parse_filter_query,
@@ -53,7 +47,14 @@ from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
-from app.services.bucket_listing_shared import _is_advanced_filter_stream_payload as _shared_is_advanced_filter_stream_payload
+from app.services.bucket_listing_shared import is_advanced_filter_stream_payload
+from app.services.listing_progress import (
+    ListingProgressEmitter,
+    ListingProgressSnapshot,
+    interpolate_progress_percent,
+    invoke_cancel_check,
+)
+from app.utils.normalize import normalize_optional_scalar, normalize_text
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_feature_flags
@@ -241,9 +242,9 @@ def _extract_quota_enabled(payload: dict[str, Any], keys: tuple[str, ...] = ("qu
 
 
 def _build_account_detail(payload: dict[str, Any], account_id_fallback: str) -> CephAdminRgwAccountDetail:
-    account_id = normalize_optional_str(payload.get("id") or payload.get("account_id")) or account_id_fallback
-    account_name = normalize_optional_str(payload.get("name") or payload.get("account_name") or payload.get("display_name"))
-    email = normalize_optional_str(payload.get("email") or payload.get("mail"))
+    account_id = normalize_optional_scalar(payload.get("id") or payload.get("account_id")) or account_id_fallback
+    account_name = normalize_optional_scalar(payload.get("name") or payload.get("account_name") or payload.get("display_name"))
+    email = normalize_optional_scalar(payload.get("email") or payload.get("mail"))
     limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
     max_users = parse_int(payload.get("max_users") or limits_payload.get("max_users"))
     max_buckets = parse_int(payload.get("max_buckets") or limits_payload.get("max_buckets"))
@@ -315,10 +316,10 @@ def _enrich_accounts(
         if payload and not payload.get("not_found"):
             if "profile" in requested:
                 if not account.account_name:
-                    account.account_name = normalize_optional_str(
+                    account.account_name = normalize_optional_scalar(
                         payload.get("account_name") or payload.get("name") or payload.get("display_name")
                     )
-                account.email = normalize_optional_str(payload.get("email") or payload.get("mail"))
+                account.email = normalize_optional_scalar(payload.get("email") or payload.get("mail"))
             if "limits" in requested:
                 limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
                 account.max_users = parse_int(payload.get("max_users") or limits_payload.get("max_users"))
@@ -440,10 +441,10 @@ def _compute_accounts_listing(
             user_count = None
             if isinstance(entry, dict):
                 account_id_value = entry.get("account_id") or entry.get("id")
-                account_name = normalize_optional_str(
+                account_name = normalize_optional_scalar(
                     entry.get("account_name") or entry.get("name") or entry.get("display_name")
                 )
-                email = normalize_optional_str(entry.get("email") or entry.get("mail"))
+                email = normalize_optional_scalar(entry.get("email") or entry.get("mail"))
                 limits_payload = entry.get("limits") if isinstance(entry.get("limits"), dict) else {}
                 max_users = parse_int(entry.get("max_users") or limits_payload.get("max_users"))
                 max_buckets = parse_int(entry.get("max_buckets") or limits_payload.get("max_buckets"))
@@ -694,7 +695,7 @@ async def stream_rgw_accounts(
     include: list[str] = Query(default=[]),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> StreamingResponse:
-    if not _shared_is_advanced_filter_stream_payload(advanced_filter):
+    if not is_advanced_filter_stream_payload(advanced_filter):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="advanced_filter must be provided as a JSON payload for streaming search",
@@ -770,15 +771,15 @@ def create_rgw_account(
     account_id = requested_account_id
     if isinstance(create_result, dict):
         account_id = (
-            normalize_optional_str(create_result.get("id"))
-            or normalize_optional_str(create_result.get("account_id"))
+            normalize_optional_scalar(create_result.get("id"))
+            or normalize_optional_scalar(create_result.get("account_id"))
             or account_id
         )
         account_payload = create_result.get("account")
         if not account_id and isinstance(account_payload, dict):
             account_id = (
-                normalize_optional_str(account_payload.get("id"))
-                or normalize_optional_str(account_payload.get("account_id"))
+                normalize_optional_scalar(account_payload.get("id"))
+                or normalize_optional_scalar(account_payload.get("account_id"))
             )
     if not account_id:
         raise HTTPException(

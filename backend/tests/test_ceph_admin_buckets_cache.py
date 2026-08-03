@@ -25,7 +25,7 @@ from app.main import app
 from app.routers import dependencies
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
-from app.routers.ceph_admin.listing_common import ListingCancelled
+from app.services.listing_progress import ListingCancelled, ListingProgressSnapshot
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.buckets_service import BucketsService
 
@@ -817,7 +817,7 @@ def test_ceph_admin_bucket_listing_any_mixed_filter_prefers_bulk_field_rules(mon
             enriched.append(CephAdminBucketSummary(**base))
         return enriched
 
-    monkeypatch.setattr(buckets_router, "_enrich_buckets", fake_enrich)
+    monkeypatch.setattr(buckets_router, "enrich_buckets", fake_enrich)
 
     mixed_filter = json.dumps(
         {
@@ -1070,7 +1070,7 @@ def test_ceph_admin_bucket_listing_tag_filter_matches_s3_tags(monkeypatch: pytes
             enriched.append(CephAdminBucketSummary(**base))
         return enriched
 
-    monkeypatch.setattr(buckets_router, "_enrich_buckets", fake_enrich)
+    monkeypatch.setattr(buckets_router, "enrich_buckets", fake_enrich)
 
     tag_filter = json.dumps(
         {
@@ -1120,7 +1120,7 @@ def test_ceph_admin_bucket_listing_any_tag_filter_prefers_bulk_field_rules(monke
             enriched.append(CephAdminBucketSummary(**base))
         return enriched
 
-    monkeypatch.setattr(buckets_router, "_enrich_buckets", fake_enrich)
+    monkeypatch.setattr(buckets_router, "enrich_buckets", fake_enrich)
 
     mixed_filter = json.dumps(
         {
@@ -2557,7 +2557,7 @@ def test_ceph_admin_bucket_listing_advanced_progress_is_monotonic():
         {"name": "bucket-c", "owner": "owner-c"},
     ]
     ctx, _ = _build_ctx(endpoint_id=301, payload=payload)
-    snapshots: list[buckets_router.ListingProgressSnapshot] = []
+    snapshots: list[ListingProgressSnapshot] = []
     advanced_filter = json.dumps({"match": "all", "rules": [{"field": "owner", "op": "contains", "value": "owner"}]})
 
     response = buckets_router._compute_bucket_listing(
@@ -2585,7 +2585,7 @@ def test_ceph_admin_bucket_listing_advanced_progress_is_monotonic():
 def test_ceph_admin_bucket_listing_scan_reports_item_progress():
     payload = [{"name": f"bucket-{idx:03d}", "owner": "owner-a"} for idx in range(101)]
     ctx, _ = _build_ctx(endpoint_id=3011, payload=payload)
-    snapshots: list[buckets_router.ListingProgressSnapshot] = []
+    snapshots: list[ListingProgressSnapshot] = []
     advanced_filter = json.dumps({"match": "all", "rules": [{"field": "owner", "op": "contains", "value": "owner"}]})
 
     response = buckets_router._compute_bucket_listing(
@@ -2652,7 +2652,7 @@ def test_ceph_admin_bucket_stream_emits_progress_result_and_done(monkeypatch: py
         emitted_calls["compute"] += 1
         if progress_callback:
             progress_callback(
-                buckets_router.ListingProgressSnapshot(
+                ListingProgressSnapshot(
                     percent=10,
                     stage="prepare",
                     processed=0,
@@ -2661,7 +2661,7 @@ def test_ceph_admin_bucket_stream_emits_progress_result_and_done(monkeypatch: py
                 )
             )
             progress_callback(
-                buckets_router.ListingProgressSnapshot(
+                ListingProgressSnapshot(
                     percent=65,
                     stage="expensive_filters",
                     processed=1,
@@ -2762,7 +2762,7 @@ def test_ceph_admin_bucket_stream_cancels_work_when_client_disconnects(monkeypat
     ):
         if progress_callback:
             progress_callback(
-                buckets_router.ListingProgressSnapshot(
+                ListingProgressSnapshot(
                     percent=5,
                     stage="prepare",
                     processed=0,

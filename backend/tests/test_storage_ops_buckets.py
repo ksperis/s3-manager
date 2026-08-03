@@ -20,6 +20,7 @@ from app.routers.storage_ops import buckets as storage_ops_router
 from app.routers.storage_ops import summary as storage_ops_summary_router
 from app.services import app_settings_service, effective_access_service
 from app.services.connection_identity_service import ConnectionIdentityResolution
+from app.services.listing_progress import ListingProgressSnapshot
 from app.main import app
 from tests.execution_context_factory import make_execution_context
 
@@ -335,7 +336,7 @@ def test_storage_ops_stream_emits_progress_and_result(client, monkeypatch):
         progress_callback = kwargs.get("progress_callback")
         if progress_callback:
             progress_callback(
-                storage_ops_router.ListingProgressSnapshot(
+                ListingProgressSnapshot(
                     percent=30,
                     stage="context_listing",
                     processed=1,
@@ -583,8 +584,8 @@ def test_storage_ops_feature_param_filter_prefilters_base_candidates(monkeypatch
         captured["bucket_names"] = [bucket.name for bucket in buckets]
         return {}, set()
 
-    monkeypatch.setattr(storage_ops_router, "_load_feature_param_snapshots", fake_load_feature_param_snapshots)
-    monkeypatch.setattr(storage_ops_router, "_match_feature_param_rules", lambda rules, match_mode, snapshot: True)
+    monkeypatch.setattr(storage_ops_router, "load_bucket_feature_param_snapshots", fake_load_feature_param_snapshots)
+    monkeypatch.setattr(storage_ops_router, "match_bucket_feature_param_rules", lambda rules, match_mode, snapshot: True)
 
     buckets = [
         StorageOpsBucketSummary(
@@ -1249,7 +1250,7 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-    monkeypatch.setattr(storage_ops_router, "_enrich_buckets", fake_enrich_buckets)
+    monkeypatch.setattr(storage_ops_router, "enrich_buckets", fake_enrich_buckets)
 
     app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
@@ -1318,7 +1319,7 @@ def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
             )
         return enriched
 
-    monkeypatch.setattr(storage_ops_router, "_enrich_buckets", fake_enrich_buckets)
+    monkeypatch.setattr(storage_ops_router, "enrich_buckets", fake_enrich_buckets)
     monkeypatch.setattr(storage_ops_router, "get_cached_bucket_listing_for_account", lambda **kwargs: kwargs["builder"]())
 
     result = storage_ops_router._list_context_buckets(

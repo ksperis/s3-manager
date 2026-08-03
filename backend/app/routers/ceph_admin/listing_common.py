@@ -18,6 +18,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
 
 from app.services.bucket_listing_shared import parse_includes as parse_bucket_listing_includes
+from app.services.listing_progress import (
+    ListingCancelled,
+    ListingProgressSnapshot,
+)
 from app.utils.cache import prune_expired_lru_cache
 from app.routers.http_errors import sanitize_error_detail
 from app.routers.sse_worker import (
@@ -30,10 +34,6 @@ _K = TypeVar("_K")
 _T = TypeVar("_T")
 _R = TypeVar("_R")
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
-
-PROGRESS_EMIT_EVERY_ITEMS = 100
-PROGRESS_EMIT_MIN_INTERVAL_SECONDS = 0.2
-
 
 @dataclass(frozen=True)
 class EndpointListCacheKey:
@@ -53,77 +53,6 @@ class EndpointCacheEntry:
     endpoint_id: int
     expires_at: float
     value: Any
-
-
-@dataclass(frozen=True)
-class ListingProgressSnapshot:
-    percent: int
-    stage: str
-    processed: int
-    total: int
-    message: str | None = None
-
-
-class ListingCancelled(RuntimeError):
-    pass
-
-
-class ListingProgressEmitter:
-    def __init__(self, callback: Callable[[ListingProgressSnapshot], None] | None) -> None:
-        self._callback = callback
-        self._last_emitted_at = 0.0
-        self._last_snapshot: ListingProgressSnapshot | None = None
-
-    def emit(
-        self,
-        *,
-        percent: int,
-        stage: str,
-        processed: int = 0,
-        total: int = 0,
-        message: str | None = None,
-        force: bool = False,
-    ) -> None:
-        if self._callback is None:
-            return
-        clamped_percent = max(0, min(100, int(percent)))
-        if self._last_snapshot is not None:
-            clamped_percent = max(clamped_percent, self._last_snapshot.percent)
-        snapshot = ListingProgressSnapshot(
-            percent=clamped_percent,
-            stage=stage,
-            processed=max(0, int(processed)),
-            total=max(0, int(total)),
-            message=message,
-        )
-        now = monotonic()
-        if not force:
-            is_progress_tick = snapshot.processed > 0 and (snapshot.processed % PROGRESS_EMIT_EVERY_ITEMS == 0)
-            interval_elapsed = (now - self._last_emitted_at) >= PROGRESS_EMIT_MIN_INTERVAL_SECONDS
-            if snapshot == self._last_snapshot:
-                return
-            if not is_progress_tick and not interval_elapsed and snapshot.processed != snapshot.total:
-                return
-        self._last_emitted_at = now
-        self._last_snapshot = snapshot
-        self._callback(snapshot)
-
-
-def invoke_cancel_check(cancel_check: Callable[[], None] | None) -> None:
-    if cancel_check is None:
-        return
-    cancel_check()
-
-
-def interpolate_progress_percent(start: int, end: int, *, processed: int, total: int) -> int:
-    clamped_start = max(0, min(100, int(start)))
-    clamped_end = max(clamped_start, min(100, int(end)))
-    safe_total = max(0, int(total))
-    if safe_total <= 0:
-        return clamped_start
-    safe_processed = max(0, min(safe_total, int(processed)))
-    span = clamped_end - clamped_start
-    return clamped_start + round((span * safe_processed) / safe_total)
 
 
 def normalize_http_error_detail(detail: object) -> object:
@@ -241,13 +170,6 @@ def parse_includes(include: list[str]) -> set[str]:
     return parse_bucket_listing_includes(include)
 
 
-def normalize_optional_str(value: Any) -> str | None:
-    if value is None:
-        return None
-    cleaned = str(value).strip()
-    return cleaned or None
-
-
 def parse_int(value: Any) -> int | None:
     if value is None:
         return None
@@ -313,10 +235,6 @@ def parse_filter_query(
         return query_cls.model_validate(parsed)
     except ValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
-
-
-def normalize_text(value: str) -> str:
-    return str(value or "").strip().lower()
 
 
 def coerce_number(value: object) -> float | None:

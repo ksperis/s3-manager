@@ -73,7 +73,7 @@ from app.routers.ceph_admin.bucket_listing_cache import (
     _BucketListingSnapshot,
     _clone_bucket_list,
 )
-from app.routers.ceph_admin.bucket_listing_enrichment import (
+from app.services.bucket_listing_enrichment import (
     _COLUMN_DETAIL_KEYS,
     _EXPENSIVE_FIELD_RULES,
     _OWNER_ENRICHED_FIELDS,
@@ -86,16 +86,16 @@ from app.routers.ceph_admin.bucket_listing_enrichment import (
     _bucket_identity_key,
     _build_bucket_summary,
     _determine_owner_name_lookup_scope,
-    _enrich_buckets,
+    enrich_buckets,
     _extract_bucket_name,
     _extract_name_candidates,
     _filter_requires_owner_usage,
     _feature_status_active,
     _feature_status_inactive,
-    _load_feature_param_snapshots,
-    _match_feature_param_rules,
-    _match_feature_rule,
-    _match_field_rule,
+    load_bucket_feature_param_snapshots,
+    match_bucket_feature_param_rules,
+    match_bucket_feature_rule,
+    match_bucket_field_rule,
     _owner_kind_from_owner,
     _request_requires_bucket_stats,
     _request_requires_owner_metadata,
@@ -104,10 +104,6 @@ from app.routers.ceph_admin.bucket_listing_enrichment import (
     _resolve_owner_names_for_buckets,
 )
 from app.routers.ceph_admin.listing_common import (
-    ListingProgressEmitter,
-    ListingProgressSnapshot,
-    interpolate_progress_percent,
-    invoke_cancel_check,
     serialize_filter,
     stream_listing_response,
 )
@@ -122,10 +118,16 @@ from app.services.bucket_config_backup_service import (
     quota_from_bucket_summary,
 )
 from app.services.bucket_listing_shared import (
-    _filter_requires_stats as _shared_filter_requires_stats,
-    _is_advanced_filter_stream_payload as _shared_is_advanced_filter_stream_payload,
-    _parse_filter as _shared_parse_filter,
+    filter_requires_stats,
+    is_advanced_filter_stream_payload,
+    parse_filter,
     parse_includes,
+)
+from app.services.listing_progress import (
+    ListingProgressEmitter,
+    ListingProgressSnapshot,
+    interpolate_progress_percent,
+    invoke_cancel_check,
 )
 from app.services.bucket_owner_enrichment import (
     BucketOwnerMetadataService,
@@ -333,9 +335,9 @@ def _compute_bucket_listing(
 
     if advanced_filter:
         simple_filter = filter.strip() if isinstance(filter, str) and filter.strip() else None
-        _, advanced_filter = _shared_parse_filter(advanced_filter)
+        _, advanced_filter = parse_filter(advanced_filter)
     else:
-        simple_filter, advanced_filter = _shared_parse_filter(filter)
+        simple_filter, advanced_filter = parse_filter(filter)
     simple_filter = simple_filter.strip() if isinstance(simple_filter, str) and simple_filter.strip() else None
     stats_required_for_request = _request_requires_bucket_stats(advanced_filter, sort_by)
     if stats_required_for_request:
@@ -512,7 +514,7 @@ def _compute_bucket_listing(
             cheap_field_rules = [rule for rule in field_rules if rule.field not in _EXPENSIVE_FIELD_RULES]
 
             if cheap_field_rules and match_mode == "all":
-                results = [bucket for bucket in results if all(_match_field_rule(bucket, rule) for rule in cheap_field_rules)]
+                results = [bucket for bucket in results if all(match_bucket_field_rule(bucket, rule) for rule in cheap_field_rules)]
             elif (
                 cheap_field_rules
                 and match_mode == "any"
@@ -520,7 +522,7 @@ def _compute_bucket_listing(
                 and not feature_state_rules
                 and not feature_param_rules
             ):
-                results = [bucket for bucket in results if any(_match_field_rule(bucket, rule) for rule in cheap_field_rules)]
+                results = [bucket for bucket in results if any(match_bucket_field_rule(bucket, rule) for rule in cheap_field_rules)]
 
             if expensive_field_rules or feature_state_rules or feature_param_rules:
                 filter_features = {rule.feature for rule in feature_state_rules if rule.feature}
@@ -574,7 +576,7 @@ def _compute_bucket_listing(
                             message="Loading bucket details",
                             force=True,
                         )
-                        expensive_candidates = _enrich_buckets(
+                        expensive_candidates = enrich_buckets(
                             expensive_candidates,
                             {feature for feature in filter_features if feature != "tags"},
                             include_tags=requires_tag_lookup or ("tags" in filter_features),
@@ -603,7 +605,7 @@ def _compute_bucket_listing(
                             message="Loading bucket feature parameters",
                             force=True,
                         )
-                    feature_param_snapshots, feature_param_available_keys = _load_feature_param_snapshots(
+                    feature_param_snapshots, feature_param_available_keys = load_bucket_feature_param_snapshots(
                         expensive_candidates,
                         feature_param_rules,
                         service=service,
@@ -630,18 +632,18 @@ def _compute_bucket_listing(
                         snapshot = feature_param_snapshots.get(bucket_key, {})
                         if match_mode == "all":
                             matches = (
-                                (all(_match_field_rule(bucket, rule) for rule in field_rules) if field_rules else True)
-                                and (all(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else True)
-                                and _match_feature_param_rules(feature_param_rules, match_mode, snapshot)
+                                (all(match_bucket_field_rule(bucket, rule) for rule in field_rules) if field_rules else True)
+                                and (all(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else True)
+                                and match_bucket_feature_param_rules(feature_param_rules, match_mode, snapshot)
                             )
                         else:
-                            field_match = any(_match_field_rule(bucket, rule) for rule in field_rules) if field_rules else False
+                            field_match = any(match_bucket_field_rule(bucket, rule) for rule in field_rules) if field_rules else False
                             state_match = (
-                                any(_match_feature_rule(bucket, rule) for rule in feature_state_rules)
+                                any(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules)
                                 if feature_state_rules
                                 else False
                             )
-                            param_match = _match_feature_param_rules(feature_param_rules, match_mode, snapshot)
+                            param_match = match_bucket_feature_param_rules(feature_param_rules, match_mode, snapshot)
                             matches = field_match or state_match or param_match
                         if matches:
                             filtered.append(bucket)
@@ -651,7 +653,7 @@ def _compute_bucket_listing(
                     if match_mode == "any" and cheap_field_rules:
                         unresolved: list[CephAdminBucketSummary] = []
                         for bucket in results:
-                            if any(_match_field_rule(bucket, rule) for rule in cheap_field_rules):
+                            if any(match_bucket_field_rule(bucket, rule) for rule in cheap_field_rules):
                                 field_matched.append(bucket)
                             else:
                                 unresolved.append(bucket)
@@ -693,7 +695,7 @@ def _compute_bucket_listing(
                             message="Loading bucket details",
                             force=True,
                         )
-                        expensive_candidates = _enrich_buckets(
+                        expensive_candidates = enrich_buckets(
                             expensive_candidates,
                             {feature for feature in filter_features if feature != "tags"},
                             include_tags=requires_tag_lookup or ("tags" in filter_features),
@@ -717,23 +719,23 @@ def _compute_bucket_listing(
                         results = [
                             bucket
                             for bucket in expensive_candidates
-                            if (all(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else True)
-                            and (all(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else True)
+                            if (all(match_bucket_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else True)
+                            and (all(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else True)
                         ]
                     elif cheap_field_rules:
                         expensive_matched = [
                             bucket
                             for bucket in expensive_candidates
-                            if (any(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
-                            or (any(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False)
+                            if (any(match_bucket_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
+                            or (any(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False)
                         ]
                         results = field_matched + expensive_matched
                     else:
                         results = [
                             bucket
                             for bucket in expensive_candidates
-                            if (any(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
-                            or (any(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False)
+                            if (any(match_bucket_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
+                            or (any(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False)
                         ]
 
                 for bucket in results:
@@ -841,7 +843,7 @@ def _compute_bucket_listing(
             message="Loading page bucket details",
             force=True,
         )
-        page_items = _enrich_buckets(
+        page_items = enrich_buckets(
             page_items,
             requested,
             include_tags="tags" in requested_features,
@@ -907,7 +909,7 @@ async def stream_buckets(
     with_stats: bool = True,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> StreamingResponse:
-    if not _shared_is_advanced_filter_stream_payload(advanced_filter):
+    if not is_advanced_filter_stream_payload(advanced_filter):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="advanced_filter must be provided as a JSON payload for streaming search",

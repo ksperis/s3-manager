@@ -12,6 +12,17 @@ def normalize_optional_string(value: object) -> str | None:
     return normalized or None
 
 
+def normalize_optional_scalar(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def normalize_text(value: object) -> str:
+    return str(value or "").strip().lower()
+
+
 def normalize_storage_provider(provider: Optional[object]) -> StorageProvider:
     if provider is None:
         return StorageProvider.CEPH

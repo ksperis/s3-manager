@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from fastapi import HTTPException
 
-from app.services.bucket_listing_shared import _parse_filter, parse_includes
+from app.services.bucket_listing_shared import parse_filter, parse_includes
 
 
 def test_parse_includes_trims_and_deduplicates_values():
@@ -11,7 +11,7 @@ def test_parse_includes_trims_and_deduplicates_values():
 
 
 def test_parse_filter_parses_advanced_filter_payload():
-    simple, advanced = _parse_filter('{"match":"all","rules":[]}')
+    simple, advanced = parse_filter('{"match":"all","rules":[]}')
     assert simple is None
     assert advanced is not None
     assert advanced.match == "all"
@@ -19,14 +19,14 @@ def test_parse_filter_parses_advanced_filter_payload():
 
 
 def test_parse_filter_keeps_plain_text_as_simple_filter():
-    simple, advanced = _parse_filter("my-bucket")
+    simple, advanced = parse_filter("my-bucket")
     assert simple == "my-bucket"
     assert advanced is None
 
 
 def test_parse_filter_rejects_invalid_advanced_filter_shape():
     try:
-        _parse_filter('{"rules":"invalid"}')
+        parse_filter('{"rules":"invalid"}')
     except HTTPException as exc:
         assert exc.status_code == 400
     else:
