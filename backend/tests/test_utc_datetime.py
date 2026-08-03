@@ -9,7 +9,7 @@ from sqlalchemy.exc import StatementError
 
 from app.db.utc_datetime import UTCDateTime
 from app.models.portal import PortalPublicLinkCreate
-from app.utils.time import normalize_utc, utcnow
+from app.utils.time import assume_utc, normalize_utc, utcnow
 
 
 def test_utcnow_returns_aware_utc() -> None:
@@ -26,6 +26,15 @@ def test_normalize_utc_rejects_naive_values_and_converts_offsets() -> None:
     value = datetime(2026, 1, 1, 1, tzinfo=timezone(timedelta(hours=1)))
 
     assert normalize_utc(value) == datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def test_assume_utc_accepts_naive_values_and_converts_offsets() -> None:
+    assert assume_utc(None) is None
+    assert assume_utc(datetime(2026, 1, 1)) == datetime(2026, 1, 1, tzinfo=UTC)
+
+    value = datetime(2026, 1, 1, 1, tzinfo=timezone(timedelta(hours=1)))
+
+    assert assume_utc(value) == datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def test_persisted_api_datetime_requires_an_explicit_timezone() -> None:

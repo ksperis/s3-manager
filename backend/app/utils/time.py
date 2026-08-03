@@ -5,6 +5,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 
+def assume_utc(value: datetime | None) -> datetime | None:
+    """Normalize a datetime to UTC, treating a naive value as already UTC."""
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 def normalize_utc(value: datetime, *, name: str = "datetime") -> datetime:
     """Validate a timezone-aware datetime and normalize it to UTC."""
     if not isinstance(value, datetime):

@@ -28,7 +28,7 @@ from app.models.bucket_usage_stats import (
 )
 from app.services.long_running_s3_client import LongRunningS3ClientService
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.utils.time import utcnow
+from app.utils.time import assume_utc, utcnow
 
 
 ProgressCallback = Callable[[BucketUsageStatsProgress], None]
@@ -215,14 +215,6 @@ def _load_warnings(value: str | None) -> list[str]:
     return payload
 
 
-def _normalize_dt(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
 def _storage_error_code(exc: Exception) -> str:
     if not isinstance(exc, ClientError):
         return ""
@@ -300,10 +292,10 @@ def _size_bucket_key(size: int) -> tuple[str, str]:
 
 
 def _age_bucket_key(last_modified: datetime | None, now: datetime) -> tuple[str, str]:
-    normalized = _normalize_dt(last_modified)
+    normalized = assume_utc(last_modified)
     if normalized is None:
         return "unknown", "Unknown"
-    normalized_now = _normalize_dt(now) or datetime.now(timezone.utc)
+    normalized_now = assume_utc(now) or datetime.now(timezone.utc)
     age_days = max(0, int((normalized_now - normalized).total_seconds() // 86400))
     for key, label, lower, upper in _AGE_BUCKETS:
         if upper is None and lower is not None and age_days >= lower:

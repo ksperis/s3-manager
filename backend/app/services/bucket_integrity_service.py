@@ -20,6 +20,7 @@ from app.models.bucket_integrity import (
     BucketIntegrityFailureStage,
 )
 from app.services.long_running_s3_client import LongRunningS3ClientService
+from app.utils.time import assume_utc
 
 
 ProgressCallback = Callable[[BucketIntegrityCheckProgress], None]
@@ -87,14 +88,6 @@ def _format_storage_error(exc: Exception) -> str:
     return str(exc)
 
 
-def _normalize_since(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
 def _object_request_kwargs(bucket_name: str, obj: _ObjectRef) -> dict[str, Any]:
     kwargs: dict[str, Any] = {"Bucket": bucket_name, "Key": obj.key}
     if obj.version_id:
@@ -114,7 +107,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
         since: datetime | None,
         cancel_check: CancelCheck | None,
     ):
-        since_utc = _normalize_since(since)
+        since_utc = assume_utc(since)
         if all_versions:
             paginator = client.get_paginator("list_object_versions")
             for page in paginator.paginate(Bucket=bucket_name):
@@ -126,7 +119,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
                         continue
                     last_modified = entry.get("LastModified")
                     if since_utc and isinstance(last_modified, datetime):
-                        entry_time = _normalize_since(last_modified)
+                        entry_time = assume_utc(last_modified)
                         if entry_time and entry_time < since_utc:
                             continue
                     version_id = entry.get("VersionId")
@@ -147,7 +140,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
                     continue
                 last_modified = entry.get("LastModified")
                 if since_utc and isinstance(last_modified, datetime):
-                    entry_time = _normalize_since(last_modified)
+                    entry_time = assume_utc(last_modified)
                     if entry_time and entry_time < since_utc:
                         continue
                 yield _ObjectRef(
