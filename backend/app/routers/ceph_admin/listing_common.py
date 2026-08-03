@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
 
 from app.services.bucket_listing_shared import parse_includes as parse_bucket_listing_includes
+from app.utils.cache import prune_expired_lru_cache
 from app.routers.http_errors import sanitize_error_detail
 from app.routers.sse_worker import (
     SSE_KEEPALIVE_INTERVAL_SECONDS,
@@ -332,14 +333,6 @@ def coerce_number(value: object) -> float | None:
     return None
 
 
-def prune_cache(cache: OrderedDict[_K, EndpointCacheEntry], *, now: float, max_entries: int) -> None:
-    expired = [key for key, entry in cache.items() if entry.expires_at <= now]
-    for key in expired:
-        cache.pop(key, None)
-    while len(cache) > max_entries:
-        cache.popitem(last=False)
-
-
 def get_or_set_cache(
     cache: OrderedDict[_K, EndpointCacheEntry],
     lock: Lock,
@@ -351,7 +344,7 @@ def get_or_set_cache(
 ) -> Any:
     now = monotonic()
     with lock:
-        prune_cache(cache, now=now, max_entries=max_entries)
+        prune_expired_lru_cache(cache, now=now, max_entries=max_entries)
         cached = cache.get(key)
         if cached is not None:
             cache.move_to_end(key)
@@ -359,10 +352,10 @@ def get_or_set_cache(
     value = builder()
     expires_at = monotonic() + ttl_seconds
     with lock:
-        prune_cache(cache, now=monotonic(), max_entries=max_entries)
+        prune_expired_lru_cache(cache, now=monotonic(), max_entries=max_entries)
         cache[key] = EndpointCacheEntry(endpoint_id=getattr(key, "endpoint_id", 0), expires_at=expires_at, value=value)
         cache.move_to_end(key)
-        prune_cache(cache, now=monotonic(), max_entries=max_entries)
+        prune_expired_lru_cache(cache, now=monotonic(), max_entries=max_entries)
     return value
 
 

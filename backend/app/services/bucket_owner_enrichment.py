@@ -13,6 +13,7 @@ from app.db import StorageEndpoint, StorageProvider
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.utils.cache import prune_expired_lru_cache
 from app.utils.normalize import normalize_optional_string
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw import get_supervision_credentials, is_rgw_account_id
@@ -150,14 +151,6 @@ def apply_bucket_owner_usage_map(
     return buckets
 
 
-def _prune_cache(cache: OrderedDict[object, _CacheEntry], *, now: float, max_entries: int) -> None:
-    expired = [key for key, entry in cache.items() if entry.expires_at <= now]
-    for key in expired:
-        cache.pop(key, None)
-    while len(cache) > max_entries:
-        cache.popitem(last=False)
-
-
 def _cache_get(
     cache: OrderedDict[object, _CacheEntry],
     lock: Lock,
@@ -167,7 +160,7 @@ def _cache_get(
 ) -> object | None:
     now = monotonic()
     with lock:
-        _prune_cache(cache, now=now, max_entries=max_entries)
+        prune_expired_lru_cache(cache, now=now, max_entries=max_entries)
         cached = cache.get(key)
         if cached is None:
             return None
@@ -185,10 +178,10 @@ def _cache_set(
 ) -> object:
     expires_at = monotonic() + OWNER_DETAILS_CACHE_TTL_SECONDS
     with lock:
-        _prune_cache(cache, now=monotonic(), max_entries=max_entries)
+        prune_expired_lru_cache(cache, now=monotonic(), max_entries=max_entries)
         cache[key] = _CacheEntry(expires_at=expires_at, value=value)
         cache.move_to_end(key)
-        _prune_cache(cache, now=monotonic(), max_entries=max_entries)
+        prune_expired_lru_cache(cache, now=monotonic(), max_entries=max_entries)
     return value
 
 
@@ -208,7 +201,7 @@ def _get_or_set_inflight_cache(
     is_owner = False
     future: Future[object] | None = None
     with lock:
-        _prune_cache(cache, now=monotonic(), max_entries=max_entries)
+        prune_expired_lru_cache(cache, now=monotonic(), max_entries=max_entries)
         cached = cache.get(key)
         if cached is not None:
             cache.move_to_end(key)

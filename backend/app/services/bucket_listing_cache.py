@@ -12,6 +12,7 @@ from typing import Callable
 
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.bucket import Bucket
+from app.utils.cache import prune_expired_lru_cache
 from app.utils.s3_endpoint import resolve_s3_client_options
 
 BUCKET_LISTING_CACHE_TTL_SECONDS = 1800.0
@@ -44,14 +45,6 @@ def _clone_bucket(item: Bucket) -> Bucket:
 
 def _clone_bucket_list(items: list[Bucket]) -> list[Bucket]:
     return [_clone_bucket(item) for item in items]
-
-
-def _prune_bucket_listing_cache(now: float) -> None:
-    expired_keys = [key for key, entry in _BUCKET_LISTING_CACHE.items() if entry.expires_at <= now]
-    for key in expired_keys:
-        _BUCKET_LISTING_CACHE.pop(key, None)
-    while len(_BUCKET_LISTING_CACHE) > BUCKET_LISTING_CACHE_MAX_ENTRIES:
-        _BUCKET_LISTING_CACHE.popitem(last=False)
 
 
 def _normalize_include_key(include: set[str]) -> str:
@@ -134,7 +127,11 @@ def get_cached_bucket_listing_for_account(
     is_owner = False
     in_flight: Future[list[Bucket]] | None = None
     with _BUCKET_LISTING_CACHE_LOCK:
-        _prune_bucket_listing_cache(now)
+        prune_expired_lru_cache(
+            _BUCKET_LISTING_CACHE,
+            now=now,
+            max_entries=BUCKET_LISTING_CACHE_MAX_ENTRIES,
+        )
         cached = _BUCKET_LISTING_CACHE.get(key)
         if cached is not None:
             _BUCKET_LISTING_CACHE.move_to_end(key)
@@ -153,14 +150,22 @@ def get_cached_bucket_listing_for_account(
         cached_items = _clone_bucket_list(items)
         expires_at = monotonic() + BUCKET_LISTING_CACHE_TTL_SECONDS
         with _BUCKET_LISTING_CACHE_LOCK:
-            _prune_bucket_listing_cache(monotonic())
+            prune_expired_lru_cache(
+                _BUCKET_LISTING_CACHE,
+                now=monotonic(),
+                max_entries=BUCKET_LISTING_CACHE_MAX_ENTRIES,
+            )
             _BUCKET_LISTING_CACHE[key] = BucketListingCacheEntry(
                 scope_key=key.scope_key,
                 expires_at=expires_at,
                 items=cached_items,
             )
             _BUCKET_LISTING_CACHE.move_to_end(key)
-            _prune_bucket_listing_cache(monotonic())
+            prune_expired_lru_cache(
+                _BUCKET_LISTING_CACHE,
+                now=monotonic(),
+                max_entries=BUCKET_LISTING_CACHE_MAX_ENTRIES,
+            )
         in_flight.set_result(cached_items)
         return _clone_bucket_list(cached_items)
     except Exception as exc:

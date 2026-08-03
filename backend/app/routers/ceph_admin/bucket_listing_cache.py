@@ -12,6 +12,7 @@ from typing import Callable
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.services.bucket_owner_enrichment import BucketOwnerUsage
+from app.utils.cache import prune_expired_lru_cache
 from app.utils.rgw import extract_bucket_list
 
 BUCKET_LIST_CACHE_TTL_SECONDS = 1800.0
@@ -77,22 +78,6 @@ def _clone_bucket_list(items: list[CephAdminBucketSummary]) -> list[CephAdminBuc
     return [_clone_bucket(item) for item in items]
 
 
-def _prune_bucket_listing_cache(now: float) -> None:
-    expired_keys = [key for key, entry in _BUCKET_LIST_CACHE.items() if entry.expires_at <= now]
-    for key in expired_keys:
-        _BUCKET_LIST_CACHE.pop(key, None)
-    while len(_BUCKET_LIST_CACHE) > BUCKET_LIST_CACHE_MAX_ENTRIES:
-        _BUCKET_LIST_CACHE.popitem(last=False)
-
-
-def _prune_rgw_bucket_payload_cache(now: float) -> None:
-    expired_keys = [key for key, entry in _RGW_BUCKET_PAYLOAD_CACHE.items() if entry.expires_at <= now]
-    for key in expired_keys:
-        _RGW_BUCKET_PAYLOAD_CACHE.pop(key, None)
-    while len(_RGW_BUCKET_PAYLOAD_CACHE) > RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES:
-        _RGW_BUCKET_PAYLOAD_CACHE.popitem(last=False)
-
-
 def _get_rgw_bucket_payload_endpoint_lock(endpoint_id: int) -> Lock:
     with _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS_LOCK:
         lock = _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS.get(endpoint_id)
@@ -105,7 +90,11 @@ def _get_rgw_bucket_payload_endpoint_lock(endpoint_id: int) -> Lock:
 def _get_rgw_bucket_entries_from_cache(key: _RgwBucketPayloadCacheKey) -> list[dict] | None:
     now = monotonic()
     with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-        _prune_rgw_bucket_payload_cache(now)
+        prune_expired_lru_cache(
+            _RGW_BUCKET_PAYLOAD_CACHE,
+            now=now,
+            max_entries=RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES,
+        )
         cached = _RGW_BUCKET_PAYLOAD_CACHE.get(key)
         if cached is not None:
             _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(key)
@@ -137,14 +126,22 @@ def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> l
         entries = extract_bucket_list(payload)
         expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
         with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-            _prune_rgw_bucket_payload_cache(monotonic())
+            prune_expired_lru_cache(
+                _RGW_BUCKET_PAYLOAD_CACHE,
+                now=monotonic(),
+                max_entries=RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES,
+            )
             _RGW_BUCKET_PAYLOAD_CACHE[key] = _RgwBucketPayloadCacheEntry(
                 endpoint_id=key.endpoint_id,
                 expires_at=expires_at,
                 entries=entries,
             )
             _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(key)
-            _prune_rgw_bucket_payload_cache(monotonic())
+            prune_expired_lru_cache(
+                _RGW_BUCKET_PAYLOAD_CACHE,
+                now=monotonic(),
+                max_entries=RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES,
+            )
         return entries
 
 
@@ -156,7 +153,11 @@ def _get_cached_bucket_listing(
     is_owner = False
     in_flight: Future[_BucketListingSnapshot] | None = None
     with _BUCKET_LIST_CACHE_LOCK:
-        _prune_bucket_listing_cache(now)
+        prune_expired_lru_cache(
+            _BUCKET_LIST_CACHE,
+            now=now,
+            max_entries=BUCKET_LIST_CACHE_MAX_ENTRIES,
+        )
         cached = _BUCKET_LIST_CACHE.get(key)
         if cached is not None:
             _BUCKET_LIST_CACHE.move_to_end(key)
@@ -174,14 +175,22 @@ def _get_cached_bucket_listing(
         listing = builder()
         expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
         with _BUCKET_LIST_CACHE_LOCK:
-            _prune_bucket_listing_cache(monotonic())
+            prune_expired_lru_cache(
+                _BUCKET_LIST_CACHE,
+                now=monotonic(),
+                max_entries=BUCKET_LIST_CACHE_MAX_ENTRIES,
+            )
             _BUCKET_LIST_CACHE[key] = _BucketListCacheEntry(
                 endpoint_id=key.endpoint_id,
                 expires_at=expires_at,
                 listing=listing,
             )
             _BUCKET_LIST_CACHE.move_to_end(key)
-            _prune_bucket_listing_cache(monotonic())
+            prune_expired_lru_cache(
+                _BUCKET_LIST_CACHE,
+                now=monotonic(),
+                max_entries=BUCKET_LIST_CACHE_MAX_ENTRIES,
+            )
         in_flight.set_result(listing)
         return listing
     except Exception as exc:
