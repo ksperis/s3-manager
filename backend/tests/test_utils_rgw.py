@@ -1,7 +1,14 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from app.db import StorageEndpoint, StorageProvider
-from app.utils.rgw import get_supervision_rgw_client, is_rgw_account_id, resolve_account_scope
+import pytest
+
+from app.utils.rgw import (
+    extract_rgw_user_identity,
+    get_supervision_rgw_client,
+    is_rgw_account_id,
+    resolve_account_scope,
+)
 
 
 def test_resolve_account_scope_with_account_id():
@@ -18,6 +25,20 @@ def test_resolve_account_scope_with_tenant_name():
     assert resolved_account_id is None
     assert tenant == identifier
     assert not is_rgw_account_id(identifier)
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"uid": " user ", "tenant": " tenant "}, ("user", "tenant")),
+        ({"user": {"uid": "tenant$user"}}, ("user", "tenant")),
+        ({"user": {"uid": "tenant$user", "tenant": "override"}}, ("user", "override")),
+        ({"user": {"uid": 12}, "uid": "fallback"}, (None, None)),
+        (None, (None, None)),
+    ],
+)
+def test_extract_rgw_user_identity(payload, expected):
+    assert extract_rgw_user_identity(payload) == expected
 
 
 def test_get_supervision_rgw_client_uses_endpoint_url_when_admin_feature_disabled(monkeypatch):

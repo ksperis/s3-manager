@@ -30,6 +30,7 @@ from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadat
 from app.services.bucket_index_check_service import BucketIndexCheckService, execute_bucket_index_check_operation
 from app.services.rgw_admin import RGWAdminError, RGWAdminOperationResponse
 from app.utils.normalize import normalize_optional_string
+from app.utils.rgw import extract_rgw_user_identity
 
 router = APIRouter(
     prefix="/ceph-admin/endpoints/{endpoint_id}",
@@ -44,20 +45,6 @@ def _qualified_user(uid: str, tenant: Optional[str]) -> str:
 
 def _qualified_bucket(bucket: str, tenant: Optional[str]) -> str:
     return f"{tenant}/{bucket}" if tenant else bucket
-
-
-def _extract_user_identity(payload: Any) -> tuple[Optional[str], Optional[str]]:
-    if not isinstance(payload, dict):
-        return None, None
-    nested = payload.get("user")
-    user_payload = nested if isinstance(nested, dict) else payload
-    raw_uid = normalize_optional_string(user_payload.get("uid") or payload.get("uid"))
-    tenant = normalize_optional_string(user_payload.get("tenant") or payload.get("tenant"))
-    if raw_uid and "$" in raw_uid:
-        embedded_tenant, uid = raw_uid.split("$", 1)
-        if embedded_tenant and uid:
-            return uid, tenant or embedded_tenant
-    return raw_uid, tenant
 
 
 def _bucket_value(payload: Any, *keys: str) -> Optional[str]:
@@ -274,7 +261,7 @@ def delete_user(
             exc=exc,
             metadata=metadata,
         )
-    active_uid, active_tenant = _extract_user_identity(active_identity)
+    active_uid, active_tenant = extract_rgw_user_identity(active_identity)
     if active_uid and _qualified_user(active_uid, active_tenant) == target:
         record_ceph_admin_action(
             ctx,

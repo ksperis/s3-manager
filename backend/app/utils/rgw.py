@@ -6,6 +6,7 @@ from typing import Any, Optional, Tuple
 from app.db import StorageEndpoint
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
+from app.utils.normalize import normalize_optional_string
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 
 _ACCOUNT_ID_PATTERN = re.compile(r"^RGW\d{17}$", re.IGNORECASE)
@@ -65,6 +66,20 @@ def extract_bucket_list(payload: Any) -> list[dict]:
         if isinstance(buckets, list):
             return normalize(buckets)
     return []
+
+
+def extract_rgw_user_identity(payload: Any) -> tuple[Optional[str], Optional[str]]:
+    if not isinstance(payload, dict):
+        return None, None
+    nested = payload.get("user")
+    user_payload = nested if isinstance(nested, dict) else payload
+    raw_uid = normalize_optional_string(user_payload.get("uid") or payload.get("uid"))
+    tenant = normalize_optional_string(user_payload.get("tenant") or payload.get("tenant"))
+    if raw_uid and "$" in raw_uid:
+        embedded_tenant, uid = raw_uid.split("$", 1)
+        if embedded_tenant and uid:
+            return uid, tenant or embedded_tenant
+    return raw_uid, tenant
 
 
 def resolve_admin_uid(account_id: Optional[str], user_uid: Optional[str]) -> Optional[str]:

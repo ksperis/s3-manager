@@ -26,26 +26,13 @@ from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
 from app.utils.normalize import normalize_optional_string
+from app.utils.rgw import extract_rgw_user_identity
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 from app.utils.name_ordering import name_order_by
 from app.routers.http_errors import sanitize_error_detail
 from app.utils.time import utcnow
 
 router = APIRouter(prefix="/ceph-admin/endpoints", tags=["ceph-admin-endpoints"])
-
-
-def _extract_rgw_user_identity(payload: Any) -> tuple[str | None, str | None]:
-    if not isinstance(payload, dict):
-        return None, None
-    nested = payload.get("user")
-    user_payload = nested if isinstance(nested, dict) else payload
-    raw_uid = normalize_optional_string(user_payload.get("uid") or payload.get("uid"))
-    tenant = normalize_optional_string(user_payload.get("tenant") or payload.get("tenant"))
-    if raw_uid and "$" in raw_uid:
-        embedded_tenant, uid = raw_uid.split("$", 1)
-        if embedded_tenant and uid:
-            return uid, tenant or embedded_tenant
-    return raw_uid, tenant
 
 
 def _extract_storage_classes(value: Any) -> set[str]:
@@ -226,7 +213,7 @@ def get_ceph_admin_endpoint_access(
                     verify_tls=bool(getattr(endpoint, "verify_tls", True)),
                     request_timeout_seconds=get_settings().rgw_admin_probe_timeout_seconds,
                 )
-                active_rgw_uid, active_rgw_tenant = _extract_rgw_user_identity(identity_probe.user_payload)
+                active_rgw_uid, active_rgw_tenant = extract_rgw_user_identity(identity_probe.user_payload)
                 # Account support is only discovered on explicit probes, never while rendering the shell.
                 admin_client.get_account(
                     "RGW00000000000000000",
