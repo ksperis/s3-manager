@@ -5,7 +5,7 @@ vi.mock("../../api/appSettings", () => ({
 }));
 
 import { fetchBrandingSettings } from "../../api/appSettings";
-import { applyBranding, bootstrapBranding, generatePrimaryScale, isValidHexColor } from "./brandingRuntime";
+import { applyBranding, bootstrapBranding, generatePrimaryScale } from "./brandingRuntime";
 
 const fetchBrandingSettingsMock = vi.mocked(fetchBrandingSettings);
 
@@ -14,13 +14,6 @@ describe("brandingRuntime", () => {
     document.documentElement.style.cssText = "";
     window.localStorage.clear();
     fetchBrandingSettingsMock.mockReset();
-  });
-
-  it("validates hex colors", () => {
-    expect(isValidHexColor("#0ea5e9")).toBe(true);
-    expect(isValidHexColor("#0EA5E9")).toBe(true);
-    expect(isValidHexColor("0ea5e9")).toBe(false);
-    expect(isValidHexColor("#0ea5e")).toBe(false);
   });
 
   it("generates a full scale for a valid color", () => {

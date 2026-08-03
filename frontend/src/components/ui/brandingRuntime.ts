@@ -107,10 +107,6 @@ function applyScaleToRoot(root: HTMLElement, mode: ThemeMode, scale: PrimaryScal
   }
 }
 
-export function isValidHexColor(value: string | null | undefined): value is string {
-  return normalizeHexColor(value) !== null;
-}
-
 export function generatePrimaryScale(primaryColor: string, mode: ThemeMode): PrimaryScale {
   const normalized = normalizeHexColor(primaryColor);
   if (!normalized) {
