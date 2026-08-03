@@ -55,7 +55,12 @@ from app.models.ceph_admin import (
 from app.models.browser import ListBrowserObjectsResponse
 from app.routers.ceph_admin import bucket_listing_cache as _bucket_listing_cache
 from app.routers.ceph_admin.audit import record_ceph_admin_action
-from app.routers.ceph_admin.dependencies import CephAdminContext, _resolve_storage_endpoint, get_ceph_admin_context
+from app.routers.ceph_admin.dependencies import (
+    CephAdminContext,
+    _resolve_storage_endpoint,
+    build_ceph_admin_s3_context,
+    get_ceph_admin_context,
+)
 from app.routers.ceph_admin.bucket_listing_cache import (
     _BUCKET_LIST_CACHE,
     _BUCKET_LIST_CACHE_LOCK,
@@ -145,14 +150,6 @@ _BUCKET_STATS_UNAVAILABLE_WARNING = (
 )
 
 
-def _build_endpoint_context(ctx: CephAdminContext) -> S3ExecutionContext:
-    return S3ExecutionContext.from_ceph_admin_endpoint(
-        ctx.endpoint,
-        access_key=ctx.access_key,
-        secret_key=ctx.secret_key,
-    )
-
-
 def _build_endpoint_context_from_credentials(endpoint, access_key: str, secret_key: str) -> S3ExecutionContext:
     return S3ExecutionContext.from_ceph_admin_endpoint(
         endpoint,
@@ -221,7 +218,7 @@ def _record_bucket_config_mutation(
 
 
 def _ceph_admin_bucket_config_account(ctx: CephAdminContext) -> tuple[BucketsService, S3ExecutionContext]:
-    return BucketsService(), _build_endpoint_context(ctx)
+    return BucketsService(), build_ceph_admin_s3_context(ctx)
 
 
 def _run_bucket_config_update(
@@ -537,7 +534,7 @@ def _compute_bucket_listing(
                     rule.field in (_OWNER_USAGE_FIELDS | _OWNER_USAGE_PERCENT_FIELDS) for rule in expensive_field_rules
                 )
                 service = BucketsService()
-                account = _build_endpoint_context(ctx)
+                account = build_ceph_admin_s3_context(ctx)
                 expensive_candidates = results
 
                 if feature_param_rules:
@@ -835,7 +832,7 @@ def _compute_bucket_listing(
     requested = ({feature for feature in requested_features if feature != "tags"} | requested_detail_fields)
     if requested or ("tags" in requested_features):
         service = BucketsService()
-        account = _build_endpoint_context(ctx)
+        account = build_ceph_admin_s3_context(ctx)
         progress.emit(
             percent=96,
             stage="page_enrichment",
@@ -953,7 +950,7 @@ def backup_bucket_configs(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketConfigBackupResponse:
     service = BucketConfigBackupService(BucketsService())
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
 
     def quota_loader(bucket_name: str) -> dict[str, int | None]:
         try:
@@ -985,7 +982,7 @@ def compare_bucket_pair(
     db: Session = Depends(get_db),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> CephAdminBucketCompareResult:
-    source_account = _build_endpoint_context(ctx)
+    source_account = build_ceph_admin_s3_context(ctx)
     target_endpoint = _resolve_storage_endpoint(db, payload.target_endpoint_id)
     target_access_key = getattr(target_endpoint, "ceph_admin_access_key", None)
     target_secret_key = getattr(target_endpoint, "ceph_admin_secret_key", None)
@@ -1057,7 +1054,7 @@ def list_bucket_objects(
     try:
         return service.list_objects(
             bucket_name,
-            _build_endpoint_context(ctx),
+            build_ceph_admin_s3_context(ctx),
             prefix=prefix,
             continuation_token=continuation_token,
             max_keys=max_keys,
@@ -1072,7 +1069,7 @@ def bucket_properties(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketProperties:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_properties_config(
         service=service,
         account=account,
@@ -1086,7 +1083,7 @@ def get_versioning(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketVersioningStatus:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_versioning_config(
         service=service,
         account=account,
@@ -1116,7 +1113,7 @@ def update_quota(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ):
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     try:
         bucket_info = ctx.rgw_admin.get_bucket_info(bucket_name, stats=False, allow_not_found=True)
     except RGWAdminError as exc:
@@ -1164,7 +1161,7 @@ def get_lifecycle(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketLifecycleConfig:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_lifecycle_config(
         service=service,
         account=account,
@@ -1206,7 +1203,7 @@ def get_cors(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ):
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_cors_config(
         service=service,
         account=account,
@@ -1248,7 +1245,7 @@ def get_policy(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketPolicyOut:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_policy_config(
         service=service,
         account=account,
@@ -1290,7 +1287,7 @@ def get_notifications(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketNotificationConfiguration:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_notifications_config(
         service=service,
         account=account,
@@ -1333,7 +1330,7 @@ def get_replication(
 ) -> BucketReplicationConfiguration:
     _require_replication_feature(ctx)
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_replication_config(
         service=service,
         account=account,
@@ -1377,7 +1374,7 @@ def get_logging(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketLoggingConfiguration:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_logging_config(
         service=service,
         account=account,
@@ -1419,7 +1416,7 @@ def get_website(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketWebsiteConfiguration:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_website_config(
         service=service,
         account=account,
@@ -1461,7 +1458,7 @@ def get_tags(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ):
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_tags_config(
         service=service,
         account=account,
@@ -1503,7 +1500,7 @@ def get_acl(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketAcl:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_acl_config(
         service=service,
         account=account,
@@ -1532,7 +1529,7 @@ def get_public_access_block(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketPublicAccessBlock:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_public_access_block_config(
         service=service,
         account=account,
@@ -1561,7 +1558,7 @@ def get_object_lock(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketObjectLock:
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_object_lock_config(
         service=service,
         account=account,
@@ -1591,7 +1588,7 @@ def get_bucket_encryption(
 ) -> BucketEncryptionConfiguration:
     _require_sse_feature(ctx)
     service = BucketsService()
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     return bucket_config_actions.get_bucket_encryption_config(
         service=service,
         account=account,

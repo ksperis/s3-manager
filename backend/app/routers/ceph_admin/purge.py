@@ -11,8 +11,11 @@ from app.core.database import SessionLocal
 from app.db import User
 from app.models.bucket_purge import BucketPurgeRequest, BucketPurgeResult, bucket_purge_confirmation_phrase
 from app.routers.bucket_purge_stream import stream_bucket_purge
-from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
-from app.routers.ceph_admin.integrity import _build_endpoint_context
+from app.routers.ceph_admin.dependencies import (
+    CephAdminContext,
+    build_ceph_admin_s3_context,
+    get_ceph_admin_context,
+)
 from app.routers.dependencies import get_current_ceph_admin, require_bucket_purge_global_enabled
 from app.services.audit_service import AuditService
 from app.services.bucket_purge_service import BucketPurgeOptions, BucketPurgeResolvedTarget, BucketPurgeService
@@ -74,7 +77,7 @@ def stream_ceph_admin_bucket_purge(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     options = BucketPurgeOptions(
         parallelism=payload.parallelism,
         include_versions=payload.include_versions,

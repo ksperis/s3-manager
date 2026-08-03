@@ -9,27 +9,22 @@ from fastapi.responses import StreamingResponse
 
 from app.models.bucket_integrity import BucketIntegrityCheckRequest
 from app.routers.bucket_integrity_stream import stream_bucket_integrity_check
-from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
+from app.routers.ceph_admin.dependencies import (
+    CephAdminContext,
+    build_ceph_admin_s3_context,
+    get_ceph_admin_context,
+)
 from app.services.bucket_integrity_service import (
     BucketIntegrityCheckService,
     BucketIntegrityOptions,
     BucketIntegrityResolvedTarget,
 )
-from app.services.s3_execution_context import S3ExecutionContext
 
 router = APIRouter(
     prefix="/ceph-admin/endpoints/{endpoint_id}/buckets/integrity-check",
     tags=["ceph-admin-bucket-integrity"],
 )
 logger = logging.getLogger(__name__)
-
-
-def _build_endpoint_context(ctx: CephAdminContext) -> S3ExecutionContext:
-    return S3ExecutionContext.from_ceph_admin_endpoint(
-        ctx.endpoint,
-        access_key=ctx.access_key,
-        secret_key=ctx.secret_key,
-    )
 
 
 def _require_buckets_payload(payload: BucketIntegrityCheckRequest) -> list[str]:
@@ -50,7 +45,7 @@ def stream_ceph_admin_bucket_integrity_check(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)
-    account = _build_endpoint_context(ctx)
+    account = build_ceph_admin_s3_context(ctx)
     options = BucketIntegrityOptions(
         parallelism=payload.parallelism,
         all_versions=payload.all_versions,
