@@ -38,6 +38,7 @@ from app.models.s3_connection_admin import (
 )
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
+from app.services.mappers.s3_connection import mask_access_key_id
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
@@ -58,15 +59,6 @@ from app.utils.name_ordering import name_order_by
 from app.routers.http_errors import sanitize_error_detail
 router = APIRouter(prefix="/admin/s3-connections", tags=["admin-s3-connections"])
 logger = logging.getLogger(__name__)
-
-
-def _mask_access_key(value: str) -> str:
-    if not value:
-        return ""
-    trimmed = value.strip()
-    if len(trimmed) <= 8:
-        return "***" + trimmed[-2:]
-    return f"{trimmed[:4]}***{trimmed[-4:]}"
 
 
 def _get_admin_shared_connection(db: Session, connection_id: int) -> S3Connection:
@@ -437,7 +429,7 @@ def create_s3_connection(
                 "access_manager": bool(conn.access_manager),
                 "access_browser": bool(conn.access_browser),
                 "can_manage_iam": s3_connection_can_manage_iam(conn.capabilities_json),
-                "access_key_id": _mask_access_key(conn.access_key_id),
+                "access_key_id": mask_access_key_id(conn.access_key_id),
                 "tags": serialize_tag_summaries(tags_service.get_connection_tags(conn)),
             },
         )
@@ -638,7 +630,7 @@ def rotate_s3_connection_credentials(
         action="connection.rotate_credentials",
         entity_type="s3_connection",
         entity_id=str(conn.id),
-        metadata={"access_key_id": _mask_access_key(payload.access_key_id)},
+        metadata={"access_key_id": mask_access_key_id(payload.access_key_id)},
     )
     created_by_user = db.query(User).filter(User.id == conn.created_by_user_id).first()
     created_by_email = created_by_user.email if created_by_user else None

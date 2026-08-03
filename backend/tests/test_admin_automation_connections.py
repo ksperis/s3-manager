@@ -14,11 +14,18 @@ from app.models.admin_automation import (
     S3ConnectionSpec,
 )
 from app.services.admin_automation_service import AdminAutomationService
+from app.services.mappers.s3_connection import mask_access_key_id
 
 
 class _Audit:
     def record_action(self, **_kwargs) -> None:
         return None
+
+
+def test_access_key_masking_is_canonical() -> None:
+    assert mask_access_key_id(None) == ""
+    assert mask_access_key_id(" short ") == "***rt"
+    assert mask_access_key_id(" 1234567890 ") == "1234***7890"
 
 
 def _user(db_session) -> User:

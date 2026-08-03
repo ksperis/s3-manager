@@ -10,7 +10,7 @@ from app.models.tagging import TagDefinitionSummary
 from app.utils.s3_connection_endpoint import resolve_connection_details
 
 
-def mask_access_key_id(value: str) -> str:
+def mask_access_key_id(value: str | None) -> str:
     if not value:
         return ""
     trimmed = value.strip()

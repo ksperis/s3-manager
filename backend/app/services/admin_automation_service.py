@@ -38,6 +38,7 @@ from app.models.s3_user import S3UserCreate, S3UserUpdate
 from app.models.storage_endpoint import StorageEndpointCreate, StorageEndpointUpdate
 from app.models.user import UserCreate, UserUpdate
 from app.services.audit_service import AuditService
+from app.services.mappers.s3_connection import mask_access_key_id
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.s3_accounts_service import S3AccountsService
 from app.services.s3_users_service import S3UsersService
@@ -749,8 +750,8 @@ class AdminAutomationService:
                 desired = self._normalize_optional_str(spec.admin_access_key)
                 if desired != self._normalize_optional_str(endpoint.admin_access_key):
                     diff["admin_access_key"] = {
-                        "from": self._mask_value(endpoint.admin_access_key),
-                        "to": self._mask_value(desired),
+                        "from": mask_access_key_id(endpoint.admin_access_key),
+                        "to": mask_access_key_id(desired),
                     }
             if "admin_secret_key" in fields_set:
                 diff["admin_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
@@ -758,8 +759,8 @@ class AdminAutomationService:
                 desired = self._normalize_optional_str(spec.supervision_access_key)
                 if desired != self._normalize_optional_str(endpoint.supervision_access_key):
                     diff["supervision_access_key"] = {
-                        "from": self._mask_value(endpoint.supervision_access_key),
-                        "to": self._mask_value(desired),
+                        "from": mask_access_key_id(endpoint.supervision_access_key),
+                        "to": mask_access_key_id(desired),
                     }
             if "supervision_secret_key" in fields_set:
                 diff["supervision_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
@@ -767,8 +768,8 @@ class AdminAutomationService:
                 desired = self._normalize_optional_str(spec.ceph_admin_access_key)
                 if desired != self._normalize_optional_str(endpoint.ceph_admin_access_key):
                     diff["ceph_admin_access_key"] = {
-                        "from": self._mask_value(endpoint.ceph_admin_access_key),
-                        "to": self._mask_value(desired),
+                        "from": mask_access_key_id(endpoint.ceph_admin_access_key),
+                        "to": mask_access_key_id(desired),
                     }
             if "ceph_admin_secret_key" in fields_set:
                 diff["ceph_admin_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
@@ -858,7 +859,7 @@ class AdminAutomationService:
                     diff["quota_max_objects"] = {"from": current_objects, "to": spec.quota_max_objects}
         if "rgw_access_key" in fields_set and spec.rgw_access_key is not None:
             if spec.rgw_access_key != account.rgw_access_key:
-                diff["rgw_access_key"] = {"from": self._mask_value(account.rgw_access_key), "to": self._mask_value(spec.rgw_access_key)}
+                diff["rgw_access_key"] = {"from": mask_access_key_id(account.rgw_access_key), "to": mask_access_key_id(spec.rgw_access_key)}
         if "rgw_secret_key" in fields_set and spec.rgw_secret_key is not None:
             diff["rgw_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
         if "root_user_uid" in fields_set and spec.root_user_uid is not None:
@@ -902,7 +903,7 @@ class AdminAutomationService:
                     diff["quota_max_objects"] = {"from": current_objects, "to": spec.quota_max_objects}
         if "rgw_access_key" in fields_set and spec.rgw_access_key is not None:
             if spec.rgw_access_key != s3_user.rgw_access_key:
-                diff["rgw_access_key"] = {"from": self._mask_value(s3_user.rgw_access_key), "to": self._mask_value(spec.rgw_access_key)}
+                diff["rgw_access_key"] = {"from": mask_access_key_id(s3_user.rgw_access_key), "to": mask_access_key_id(spec.rgw_access_key)}
         if "rgw_secret_key" in fields_set and spec.rgw_secret_key is not None:
             diff["rgw_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
         if "user_ids" in fields_set and spec.user_ids is not None:
@@ -953,8 +954,8 @@ class AdminAutomationService:
         if item.update_credentials:
             if "access_key_id" in fields_set and spec.access_key_id is not None and spec.access_key_id != conn.access_key_id:
                 diff["access_key_id"] = {
-                    "from": self._mask_value(conn.access_key_id),
-                    "to": self._mask_value(spec.access_key_id),
+                    "from": mask_access_key_id(conn.access_key_id),
+                    "to": mask_access_key_id(spec.access_key_id),
                 }
             if "secret_access_key" in fields_set and spec.secret_access_key is not None and spec.secret_access_key != conn.secret_access_key:
                 diff["secret_access_key"] = {"from": "<redacted>", "to": "<redacted>"}
@@ -1483,15 +1484,6 @@ class AdminAutomationService:
             return None
         trimmed = value.strip().rstrip("/")
         return trimmed or None
-
-    @staticmethod
-    def _mask_value(value: Optional[str]) -> str:
-        if not value:
-            return ""
-        trimmed = value.strip()
-        if len(trimmed) <= 8:
-            return "***" + trimmed[-2:]
-        return f"{trimmed[:4]}***{trimmed[-4:]}"
 
     @staticmethod
     def _created(resource: str, key: str, entity_id: Optional[int] = None, *, dry_run: bool) -> AdminAutomationItemResult:
