@@ -1,6 +1,5 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.utils.time import utcnow
 import logging
 from typing import Optional
 
@@ -18,6 +17,7 @@ from app.routers.dependencies import (
     require_metrics_capable_manager,
     require_usage_capable_manager,
 )
+from app.routers.http_errors import sanitize_error_detail, sanitized_error_log_detail
 from app.services.app_settings_service import load_app_settings
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.healthcheck_service import HealthCheckService
@@ -28,12 +28,14 @@ from app.services.traffic_service import TrafficService, TrafficWindow
 from app.services.usage_trends_service import account_usage_trend_filters, build_account_usage_trends
 from app.services.usage_history_service import UsageHistoryService
 from app.utils.s3_endpoint import resolve_iam_client_options
-from app.routers.http_errors import sanitize_error_detail, sanitized_error_log_detail
+from app.utils.time import utcnow
+from app.utils.usage_stats import build_bucket_overview
 
 router = APIRouter(prefix="/manager/stats", tags=["manager-stats"])
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
 
 def _safe_list(operation: str, func):
     try:
@@ -41,6 +43,7 @@ def _safe_list(operation: str, func):
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.warning("Unable to fetch IAM %s stats: %s", operation, exc)
         return []
+
 
 def _usage_history_trend_filters(account: S3ExecutionContext, model) -> list | None:
     return account_usage_trend_filters(account, model)
@@ -97,25 +100,6 @@ def account_stats(
     ]
     bucket_usage.sort(key=lambda bucket: bucket["used_bytes"] or 0, reverse=True)
 
-    non_empty_buckets = [entry for entry in bucket_usage if (entry["used_bytes"] or 0) > 0]
-    object_sorted = sorted(bucket_usage, key=lambda entry: entry["object_count"] or 0, reverse=True)
-    avg_bucket_size = (
-        int(sum((entry["used_bytes"] or 0) for entry in non_empty_buckets) / len(non_empty_buckets))
-        if non_empty_buckets
-        else None
-    )
-    object_samples = [entry["object_count"] or 0 for entry in bucket_usage if entry["object_count"] not in (None, 0)]
-    avg_object_count = int(sum(object_samples) / len(object_samples)) if object_samples else None
-    bucket_overview = {
-        "bucket_count": total_buckets,
-        "non_empty_buckets": len(non_empty_buckets),
-        "empty_buckets": max(total_buckets - len(non_empty_buckets), 0),
-        "avg_bucket_size_bytes": avg_bucket_size,
-        "avg_objects_per_bucket": avg_object_count,
-        "largest_bucket": bucket_usage[0] if bucket_usage else None,
-        "most_objects_bucket": object_sorted[0] if object_sorted else None,
-    }
-
     return {
         "total_buckets": total_buckets,
         "total_iam_users": len(users),
@@ -125,7 +109,7 @@ def account_stats(
         "total_bytes": total_bytes,
         "total_objects": total_objects,
         "bucket_usage": bucket_usage,
-        "bucket_overview": bucket_overview,
+        "bucket_overview": build_bucket_overview(bucket_usage),
     }
 
 

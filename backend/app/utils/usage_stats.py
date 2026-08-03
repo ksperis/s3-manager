@@ -123,3 +123,30 @@ def summarize_bucket_usage(
         total_objects if has_objects else None,
         len(bucket_usage),
     )
+
+
+def build_bucket_overview(bucket_usage: list[dict[str, Any]]) -> dict[str, Any]:
+    bucket_count = len(bucket_usage)
+    non_empty_buckets = [entry for entry in bucket_usage if (entry.get("used_bytes") or 0) > 0]
+    object_samples = [
+        entry.get("object_count") or 0
+        for entry in bucket_usage
+        if entry.get("object_count") not in (None, 0)
+    ]
+    avg_bucket_size = (
+        int(sum((entry.get("used_bytes") or 0) for entry in non_empty_buckets) / len(non_empty_buckets))
+        if non_empty_buckets
+        else None
+    )
+    avg_object_count = int(sum(object_samples) / len(object_samples)) if object_samples else None
+    largest_bucket = max(bucket_usage, key=lambda entry: entry.get("used_bytes") or 0, default=None)
+    most_objects_bucket = max(bucket_usage, key=lambda entry: entry.get("object_count") or 0, default=None)
+    return {
+        "bucket_count": bucket_count,
+        "non_empty_buckets": len(non_empty_buckets),
+        "empty_buckets": bucket_count - len(non_empty_buckets),
+        "avg_bucket_size_bytes": avg_bucket_size,
+        "avg_objects_per_bucket": avg_object_count,
+        "largest_bucket": largest_bucket,
+        "most_objects_bucket": most_objects_bucket,
+    }

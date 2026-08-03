@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.utils.usage_stats import extract_usage_stats
+from app.utils.usage_stats import build_bucket_overview, extract_usage_stats, summarize_bucket_usage
 
 
 def test_extract_usage_stats_keeps_zero_total_objects() -> None:
@@ -72,3 +72,30 @@ def test_extract_usage_stats_ignores_invalid_categorized_values() -> None:
 
     assert used_bytes == 2048
     assert object_count == 3
+
+
+def test_summarize_bucket_usage_and_overview_share_canonical_calculations() -> None:
+    bucket_usage, total_bytes, total_objects, bucket_count = summarize_bucket_usage(
+        [
+            {"bucket": "small", "usage": {"total_bytes": 100, "total_objects": 2}},
+            {"name": "large", "usage": {"total_bytes": 300, "total_objects": 1}},
+            {"name": "empty", "usage": {"total_bytes": 0, "total_objects": 0}},
+            "ignored",
+        ]
+    )
+
+    assert bucket_usage == [
+        {"name": "large", "used_bytes": 300, "object_count": 1},
+        {"name": "small", "used_bytes": 100, "object_count": 2},
+        {"name": "empty", "used_bytes": 0, "object_count": 0},
+    ]
+    assert (total_bytes, total_objects, bucket_count) == (400, 3, 3)
+    assert build_bucket_overview(bucket_usage) == {
+        "bucket_count": 3,
+        "non_empty_buckets": 2,
+        "empty_buckets": 1,
+        "avg_bucket_size_bytes": 200,
+        "avg_objects_per_bucket": 1,
+        "largest_bucket": bucket_usage[0],
+        "most_objects_bucket": bucket_usage[1],
+    }

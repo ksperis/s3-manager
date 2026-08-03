@@ -14,7 +14,7 @@ from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import TrafficWindow
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.storage_endpoint_features import normalize_features_config
-from app.utils.usage_stats import extract_usage_stats
+from app.utils.usage_stats import build_bucket_overview, summarize_bucket_usage
 
 router = APIRouter(prefix="/admin/stats", tags=["admin-stats"])
 
@@ -78,6 +78,7 @@ def _resolve_account_endpoint(db: Session, account: S3Account) -> StorageEndpoin
         )
     return _resolve_endpoint(db, account.storage_endpoint_id, require_storage_metrics=True)
 
+
 def _resolve_s3_user_endpoint(db: Session, s3_user: S3User) -> StorageEndpoint:
     if s3_user.storage_endpoint_id is None:
         raise HTTPException(
@@ -85,6 +86,29 @@ def _resolve_s3_user_endpoint(db: Session, s3_user: S3User) -> StorageEndpoint:
             detail="Storage endpoint is not configured for this user.",
         )
     return _resolve_endpoint(db, s3_user.storage_endpoint_id, require_storage_metrics=True)
+
+
+def _load_principal_bucket_stats(rgw_admin: RGWAdminClient, uid: str) -> dict:
+    try:
+        payload = rgw_admin.get_all_buckets(uid=uid, with_stats=True)
+    except RGWAdminError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Unable to fetch buckets: {sanitized_error_log_detail(exc)}",
+        ) from exc
+
+    bucket_usage, total_bytes, total_objects, total_buckets = summarize_bucket_usage(extract_bucket_list(payload))
+    return {
+        "total_buckets": total_buckets,
+        "total_iam_users": 0,
+        "total_iam_groups": 0,
+        "total_iam_roles": 0,
+        "total_iam_policies": 0,
+        "total_bytes": total_bytes or 0,
+        "total_objects": total_objects or 0,
+        "bucket_usage": bucket_usage,
+        "bucket_overview": build_bucket_overview(bucket_usage),
+    }
 
 
 @router.get("/summary")
@@ -114,72 +138,8 @@ def account_stats(
     uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
     if not uid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage metrics not available for this account")
-    try:
-        payload = rgw_admin.get_all_buckets(uid=uid, with_stats=True)
-    except RGWAdminError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Unable to fetch buckets: {sanitized_error_log_detail(exc)}",
-        ) from exc
+    return _load_principal_bucket_stats(rgw_admin, uid)
 
-    buckets = extract_bucket_list(payload)
-    bucket_usage: list[dict] = []
-    for bucket in buckets:
-        if not isinstance(bucket, dict):
-            continue
-        name = bucket.get("bucket") or bucket.get("name")
-        if not name:
-            continue
-        used_bytes, object_count = extract_usage_stats(bucket.get("usage"))
-        bucket_usage.append(
-            {
-                "name": name,
-                "used_bytes": used_bytes,
-                "object_count": object_count,
-            }
-        )
-
-    bucket_usage.sort(key=lambda bucket: bucket.get("used_bytes") or 0, reverse=True)
-    total_bytes = sum((entry.get("used_bytes") or 0) for entry in bucket_usage if entry.get("used_bytes") is not None)
-    total_objects = sum(
-        (entry.get("object_count") or 0) for entry in bucket_usage if entry.get("object_count") is not None
-    )
-    total_buckets = len(bucket_usage)
-
-    non_empty_buckets = [entry for entry in bucket_usage if (entry.get("used_bytes") or 0) > 0]
-    object_sorted = sorted(bucket_usage, key=lambda entry: entry.get("object_count") or 0, reverse=True)
-    avg_bucket_size = (
-        int(sum((entry.get("used_bytes") or 0) for entry in non_empty_buckets) / len(non_empty_buckets))
-        if non_empty_buckets
-        else None
-    )
-    object_samples = [
-        entry.get("object_count") or 0
-        for entry in bucket_usage
-        if entry.get("object_count") not in (None, 0)
-    ]
-    avg_object_count = int(sum(object_samples) / len(object_samples)) if object_samples else None
-    bucket_overview = {
-        "bucket_count": total_buckets,
-        "non_empty_buckets": len(non_empty_buckets),
-        "empty_buckets": max(total_buckets - len(non_empty_buckets), 0),
-        "avg_bucket_size_bytes": avg_bucket_size,
-        "avg_objects_per_bucket": avg_object_count,
-        "largest_bucket": bucket_usage[0] if bucket_usage else None,
-        "most_objects_bucket": object_sorted[0] if object_sorted else None,
-    }
-
-    return {
-        "total_buckets": total_buckets,
-        "total_iam_users": 0,
-        "total_iam_groups": 0,
-        "total_iam_roles": 0,
-        "total_iam_policies": 0,
-        "total_bytes": total_bytes,
-        "total_objects": total_objects,
-        "bucket_usage": bucket_usage,
-        "bucket_overview": bucket_overview,
-    }
 
 @router.get("/s3-user")
 def s3_user_stats(
@@ -195,72 +155,7 @@ def s3_user_stats(
     rgw_admin = _build_rgw_client(endpoint)
     if not s3_user.rgw_user_uid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage metrics not available for this user")
-    try:
-        payload = rgw_admin.get_all_buckets(uid=s3_user.rgw_user_uid, with_stats=True)
-    except RGWAdminError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Unable to fetch buckets: {sanitized_error_log_detail(exc)}",
-        ) from exc
-
-    buckets = extract_bucket_list(payload)
-    bucket_usage: list[dict] = []
-    for bucket in buckets:
-        if not isinstance(bucket, dict):
-            continue
-        name = bucket.get("bucket") or bucket.get("name")
-        if not name:
-            continue
-        used_bytes, object_count = extract_usage_stats(bucket.get("usage"))
-        bucket_usage.append(
-            {
-                "name": name,
-                "used_bytes": used_bytes,
-                "object_count": object_count,
-            }
-        )
-
-    bucket_usage.sort(key=lambda bucket: bucket.get("used_bytes") or 0, reverse=True)
-    total_bytes = sum((entry.get("used_bytes") or 0) for entry in bucket_usage if entry.get("used_bytes") is not None)
-    total_objects = sum(
-        (entry.get("object_count") or 0) for entry in bucket_usage if entry.get("object_count") is not None
-    )
-    total_buckets = len(bucket_usage)
-
-    non_empty_buckets = [entry for entry in bucket_usage if (entry.get("used_bytes") or 0) > 0]
-    object_sorted = sorted(bucket_usage, key=lambda entry: entry.get("object_count") or 0, reverse=True)
-    avg_bucket_size = (
-        int(sum((entry.get("used_bytes") or 0) for entry in non_empty_buckets) / len(non_empty_buckets))
-        if non_empty_buckets
-        else None
-    )
-    object_samples = [
-        entry.get("object_count") or 0
-        for entry in bucket_usage
-        if entry.get("object_count") not in (None, 0)
-    ]
-    avg_object_count = int(sum(object_samples) / len(object_samples)) if object_samples else None
-    bucket_overview = {
-        "bucket_count": total_buckets,
-        "non_empty_buckets": len(non_empty_buckets),
-        "empty_buckets": max(total_buckets - len(non_empty_buckets), 0),
-        "avg_bucket_size_bytes": avg_bucket_size,
-        "avg_objects_per_bucket": avg_object_count,
-        "largest_bucket": bucket_usage[0] if bucket_usage else None,
-        "most_objects_bucket": object_sorted[0] if object_sorted else None,
-    }
-
-    return {
-        "total_buckets": total_buckets,
-        "total_iam_users": 0,
-        "total_iam_groups": 0,
-        "total_iam_roles": 0,
-        "total_iam_policies": 0,
-        "total_bytes": total_bytes,
-        "total_objects": total_objects,
-        "bucket_usage": bucket_usage,
-        "bucket_overview": bucket_overview,
-    }
+    return _load_principal_bucket_stats(rgw_admin, s3_user.rgw_user_uid)
 
 
 @router.get("/overview")
