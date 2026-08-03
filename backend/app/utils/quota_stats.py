@@ -53,6 +53,13 @@ def parse_positive_limit(value: Any) -> Optional[int]:
     return parsed if parsed > 0 else None
 
 
+def extract_positive_limit(payload: Any, key: str) -> Optional[int]:
+    if not isinstance(payload, dict):
+        return None
+    limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
+    return parse_positive_limit(payload.get(key) or limits_payload.get(key))
+
+
 def extract_quota_limits(
     payload: Optional[Dict[str, Any]],
     *,

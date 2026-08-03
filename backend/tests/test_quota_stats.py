@@ -3,7 +3,7 @@
 
 import pytest
 
-from app.utils.quota_stats import parse_positive_limit
+from app.utils.quota_stats import extract_positive_limit, parse_positive_limit
 
 
 @pytest.mark.parametrize(
@@ -24,3 +24,17 @@ from app.utils.quota_stats import parse_positive_limit
 )
 def test_parse_positive_limit(value, expected):
     assert parse_positive_limit(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"max_buckets": 12}, 12),
+        ({"limits": {"max_buckets": " 8 "}}, 8),
+        ({"max_buckets": 0, "limits": {"max_buckets": 6}}, 6),
+        ({"limits": "invalid"}, None),
+        (None, None),
+    ],
+)
+def test_extract_positive_limit(payload, expected):
+    assert extract_positive_limit(payload, "max_buckets") == expected

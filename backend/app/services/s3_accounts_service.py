@@ -48,7 +48,7 @@ from app.utils.storage_endpoint_features import (
 )
 from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid
 from app.utils.usage_stats import extract_usage_stats
-from app.utils.quota_stats import bytes_to_gb, extract_quota_limits, parse_positive_limit
+from app.utils.quota_stats import bytes_to_gb, extract_positive_limit, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.name_ordering import name_order_by
 from app.utils.account_roles import require_account_role
@@ -56,13 +56,6 @@ from app.utils.time import utcnow
 
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
-    if not isinstance(payload, dict):
-        return None
-    limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
-    return parse_positive_limit(payload.get(key) or limits_payload.get(key))
 
 
 class S3AccountsService:
@@ -229,10 +222,10 @@ class S3AccountsService:
         return (
             bytes_to_gb(max_size_bytes),
             max_objects,
-            _extract_account_limit(payload, "max_buckets"),
-            _extract_account_limit(payload, "max_users"),
-            _extract_account_limit(payload, "max_roles"),
-            _extract_account_limit(payload, "max_groups"),
+            extract_positive_limit(payload, "max_buckets"),
+            extract_positive_limit(payload, "max_users"),
+            extract_positive_limit(payload, "max_roles"),
+            extract_positive_limit(payload, "max_groups"),
         )
 
     def _normalize_account_key(self, account_id: Optional[str]) -> Optional[str]:

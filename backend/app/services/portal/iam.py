@@ -35,7 +35,7 @@ from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.account_roles import portal_role_for
 from app.utils.normalize import normalize_string_list
-from app.utils.quota_stats import extract_quota_limits, parse_positive_limit
+from app.utils.quota_stats import extract_positive_limit, extract_quota_limits
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -46,13 +46,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
-    if not isinstance(payload, dict):
-        return None
-    limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
-    return parse_positive_limit(payload.get(key) or limits_payload.get(key))
 
 
 class PortalIamMixin:
@@ -933,7 +926,7 @@ class PortalIamMixin:
                 max_size_bytes, max_objects = admin.get_account_quota(account.rgw_account_id)
             except RGWAdminError as exc:
                 logger.warning("Unable to fetch portal quota fallback for %s: %s", account.rgw_account_id, exc)
-        return max_size_bytes, max_objects, _extract_account_limit(payload, "max_buckets")
+        return max_size_bytes, max_objects, extract_positive_limit(payload, "max_buckets")
 
     def _admin_bucket_list(self, account: S3Account, admin: Optional[RGWAdminClient] = None) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
