@@ -53,6 +53,7 @@ from app.services.portal_role_sync import (
     sync_portal_role_promotions,
 )
 from app.services.user_avatar_service import UserAvatarService
+from app.services.association_names import load_s3_user_names, load_shared_s3_connection_names
 from app.utils.account_roles import require_account_role
 logger = logging.getLogger(__name__)
 
@@ -424,26 +425,6 @@ class UsersService:
             for row in rows
         ]
 
-    def _load_s3_user_names(self, ids: list[int]) -> dict[int, str]:
-        if not ids:
-            return {}
-        rows = self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
-        return {row[0]: row[1] for row in rows}
-
-    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, str]:
-        if not ids:
-            return {}
-        rows = (
-            self.db.query(S3Connection.id, S3Connection.name)
-            .filter(
-                S3Connection.id.in_(ids),
-                S3Connection.is_shared.is_(True),
-                S3Connection.is_temporary.is_(False),
-            )
-            .all()
-        )
-        return {row[0]: row[1] for row in rows}
-
     def _load_group_names(self, ids: list[int]) -> dict[int, str]:
         if not ids:
             return {}
@@ -520,7 +501,7 @@ class UsersService:
         for user_id, s3_user_id in s3_links_rows:
             s3_links.setdefault(user_id, []).append(s3_user_id)
             s3_ids.add(s3_user_id)
-        s3_labels = self._load_s3_user_names(sorted(s3_ids))
+        s3_labels = load_s3_user_names(self.db, sorted(s3_ids))
         connection_links_rows = (
             self.db.query(UserS3Connection.user_id, UserS3Connection.s3_connection_id)
             .join(S3Connection, S3Connection.id == UserS3Connection.s3_connection_id)
@@ -536,7 +517,11 @@ class UsersService:
         for user_id, connection_id in connection_links_rows:
             connection_links.setdefault(user_id, []).append(connection_id)
             connection_ids.add(connection_id)
-        connection_labels = self._load_s3_connection_names(sorted(connection_ids))
+        connection_labels = load_shared_s3_connection_names(
+            self.db,
+            sorted(connection_ids),
+            exclude_temporary=True,
+        )
         outputs = [
             self.user_to_out(
                 user,
@@ -689,12 +674,16 @@ class UsersService:
         if s3_user_labels is not None:
             s3_user_names = s3_user_labels
         else:
-            s3_user_names = self._load_s3_user_names(s3_user_ids)
+            s3_user_names = load_s3_user_names(self.db, s3_user_ids)
         s3_connection_names: dict[int, str]
         if s3_connection_labels is not None:
             s3_connection_names = s3_connection_labels
         else:
-            s3_connection_names = self._load_s3_connection_names(s3_connection_ids)
+            s3_connection_names = load_shared_s3_connection_names(
+                self.db,
+                s3_connection_ids,
+                exclude_temporary=True,
+            )
         s3_user_details = [
             LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
             for s3_id in s3_user_ids

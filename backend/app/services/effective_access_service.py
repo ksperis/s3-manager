@@ -36,6 +36,7 @@ from app.models.user import (
     ManagerToolAccess,
 )
 from app.models.access_context import EffectiveAccountGroupRole, EffectiveAccountLink
+from app.services.association_names import load_s3_user_names, load_shared_s3_connection_names
 from app.utils.account_roles import max_account_role
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.time import utcnow
@@ -380,8 +381,12 @@ class EffectiveAccessService:
 
     def to_user_effective_access(self, user: User) -> EffectiveUserAccess:
         resolved = self.resolve_user(user)
-        s3_user_names = self._load_s3_user_names(resolved.s3_user_ids)
-        shared_connection_names = self._load_s3_connection_names(resolved.s3_connection_ids)
+        s3_user_names = load_s3_user_names(self.db, resolved.s3_user_ids)
+        shared_connection_names = load_shared_s3_connection_names(
+            self.db,
+            resolved.s3_connection_ids,
+            exclude_temporary=False,
+        )
         return EffectiveUserAccess(
             can_access_ceph_admin=resolved.can_access_ceph_admin,
             can_access_storage_ops=resolved.can_access_storage_ops,
@@ -423,21 +428,3 @@ class EffectiveAccessService:
                 for details in [shared_connection_names.get(conn_id)]
             ],
         )
-
-    def _load_s3_user_names(self, ids: list[int]) -> dict[int, str]:
-        if not ids:
-            return {}
-        return {
-            int(row[0]): str(row[1])
-            for row in self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
-        }
-
-    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, str]:
-        if not ids:
-            return {}
-        rows = (
-            self.db.query(S3Connection.id, S3Connection.name)
-            .filter(S3Connection.id.in_(ids), S3Connection.is_shared.is_(True))
-            .all()
-        )
-        return {int(row[0]): str(row[1]) for row in rows}

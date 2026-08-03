@@ -28,6 +28,7 @@ from app.models.user import (
 )
 from app.services.ui_group_avatar_service import UiGroupAvatarService
 from app.services.user_avatar_service import UserAvatarService
+from app.services.association_names import load_s3_user_names, load_shared_s3_connection_names
 from app.services.portal_role_sync import (
     capture_effective_portal_roles,
     sync_portal_role_downgrades,
@@ -293,8 +294,12 @@ class UiGroupsService:
         s3_connection_ids = sorted(row[0] for row in s3_connection_rows)
         account_ids = sorted(link.account_id for link in account_rows)
         account_names = self._load_account_names(account_ids)
-        s3_user_names = self._load_s3_user_names(s3_user_ids)
-        s3_connection_names = self._load_s3_connection_names(s3_connection_ids)
+        s3_user_names = load_s3_user_names(self.db, s3_user_ids)
+        s3_connection_names = load_shared_s3_connection_names(
+            self.db,
+            s3_connection_ids,
+            exclude_temporary=True,
+        )
         return UiGroupOut(
             id=group.id,
             name=group.name,
@@ -488,27 +493,6 @@ class UiGroupsService:
             .all()
         )
         return {row[0]: (row[1], row[2]) for row in rows}
-
-    def _load_s3_user_names(self, ids: list[int]) -> dict[int, str]:
-        if not ids:
-            return {}
-        rows = self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
-        return {row[0]: row[1] for row in rows}
-
-    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, str]:
-        if not ids:
-            return {}
-        rows = (
-            self.db.query(S3Connection.id, S3Connection.name)
-            .filter(
-                S3Connection.id.in_(ids),
-                S3Connection.is_shared.is_(True),
-                S3Connection.is_temporary.is_(False),
-            )
-            .all()
-        )
-        return {row[0]: row[1] for row in rows}
-
 
 def get_ui_groups_service(db: Session) -> UiGroupsService:
     return UiGroupsService(db)
