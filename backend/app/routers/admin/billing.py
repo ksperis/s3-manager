@@ -10,7 +10,7 @@ from app.db import StorageEndpoint, StorageProvider, User
 from app.models.billing import BillingSubjectDetail, BillingSubjectsResponse, BillingSummary
 from app.routers.billing_common import parse_billing_day
 from app.routers.dependencies import get_current_super_admin
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 from app.services.billing_service import BillingService, BillingCollector
 from app.services.app_settings_service import load_app_settings
 from app.services.operation_lease_service import (

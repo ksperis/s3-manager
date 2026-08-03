@@ -19,7 +19,7 @@ from app.models.key_rotation import (
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.normalize import normalize_optional_string
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
-from app.routers.http_errors import sanitized_error_log_detail
+from app.utils.http_errors import sanitized_error_log_detail
 
 logger = logging.getLogger(__name__)
 

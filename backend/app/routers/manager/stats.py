@@ -17,7 +17,7 @@ from app.routers.dependencies import (
     require_metrics_capable_manager,
     require_usage_capable_manager,
 )
-from app.routers.http_errors import sanitize_error_detail, sanitized_error_log_detail
+from app.utils.http_errors import sanitize_error_detail, sanitized_error_log_detail
 from app.services.app_settings_service import load_app_settings
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.healthcheck_service import HealthCheckService

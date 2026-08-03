@@ -30,7 +30,7 @@ from app.models.portal_requests import (
 )
 from app.models.access_context import AccountAccess
 from app.models.s3_account import S3AccountUpdate
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 from app.services.audit_service import AuditService
 from app.services.s3_accounts_service import S3AccountsService, get_s3_accounts_service
 from app.services.portal_service import PortalService

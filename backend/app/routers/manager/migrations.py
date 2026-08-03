@@ -26,7 +26,7 @@ from app.routers.dependencies import (
     get_audit_service,
     get_current_bucket_migration_scope,
 )
-from app.routers.http_errors import raise_http_exception_from_exception, sanitized_error_log_detail
+from app.utils.http_errors import raise_http_exception_from_exception, sanitized_error_log_detail
 from app.services.audit_service import AuditService
 from app.services.bucket_migration.worker import get_bucket_migration_worker
 from app.services.bucket_migration_service import BucketMigrationService

@@ -13,7 +13,7 @@ from app.services.operation_lease_service import (
     QUOTA_MONITOR_ALERTS_OPERATION,
     default_operation_lease_ttl_seconds,
 )
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/internal/quota-monitor", tags=["internal-quota-monitor"])
 

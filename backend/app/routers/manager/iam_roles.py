@@ -14,7 +14,7 @@ from app.routers.dependencies import (
     get_audit_service,
     require_iam_capable_manager,
 )
-from app.routers.http_errors import raise_http_exception_from_exception
+from app.utils.http_errors import raise_http_exception_from_exception
 from app.routers.manager.iam_common import (
     ensure_inline_policy_name,
     get_account_and_service,

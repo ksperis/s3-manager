@@ -9,7 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from app import main
-from app.routers.http_errors import (
+from app.utils.http_errors import (
     raise_bad_gateway_from_runtime,
     raise_bad_request_from_value_error,
     raise_http_exception_from_exception,

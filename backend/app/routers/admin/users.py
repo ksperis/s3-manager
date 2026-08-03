@@ -20,7 +20,7 @@ from app.models.user import (
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.users_service import UsersService, get_users_service
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 

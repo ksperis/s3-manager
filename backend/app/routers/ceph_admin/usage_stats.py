@@ -24,7 +24,7 @@ from app.routers.ceph_admin.dependencies import (
 )
 from app.routers.ceph_admin.buckets import _get_cached_rgw_bucket_entries
 from app.routers.dependencies import get_current_ceph_admin
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 from app.services.bucket_usage_stats_service import (
     BucketUsageStatsOptions,
     BucketUsageStatsResolvedTarget,

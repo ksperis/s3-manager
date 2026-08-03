@@ -21,7 +21,7 @@ from app.routers.dependencies import (
     get_current_account_admin,
     require_bucket_usage_stats_enabled,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.routers.manager.access import require_bucket_management_context
 from app.routers.manager.buckets import _context_id_from_account
 from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account

@@ -12,7 +12,7 @@ from app.routers.dependencies import (
 )
 from app.services.audit_service import AuditService
 from app.services.policies_service import PoliciesService, get_policies_service
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/manager/iam/policies", tags=["manager-iam-policies"])
 

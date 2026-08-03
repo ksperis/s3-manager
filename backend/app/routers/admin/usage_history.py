@@ -20,7 +20,7 @@ from app.services.operation_lease_service import (
 )
 from app.services.quota_monitoring_service import QuotaMonitoringService
 from app.services.usage_history_service import UsageHistoryService
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/usage-history", tags=["admin-usage-history"])
 

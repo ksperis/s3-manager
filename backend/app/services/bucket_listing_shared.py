@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from pydantic import ValidationError
 
 from app.models.ceph_admin import CephAdminBucketFilterQuery
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 
 
 def parse_includes(include: list[str]) -> set[str]:

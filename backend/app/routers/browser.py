@@ -92,7 +92,7 @@ from app.routers.browser_common import (
     require_replication_feature,
     require_sse_feature,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.routers.dependencies import (
     get_account_context,
     get_audit_service,

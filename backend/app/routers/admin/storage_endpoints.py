@@ -22,7 +22,7 @@ from app.services.storage_endpoints_service import (
     get_storage_endpoints_service,
 )
 from app.services.tags_service import serialize_tag_summaries
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/storage-endpoints", tags=["admin-storage-endpoints"])
 logger = logging.getLogger(__name__)

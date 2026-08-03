@@ -9,7 +9,7 @@ from app.models.app_settings import AppSettings, GeneralFeatureLocks, QuotaNotif
 from app.models.ldap import LDAPProviderAdminItem, LDAPProviderAdminPayload
 from app.models.oidc import OIDCProviderAdminItem, OIDCProviderAdminPayload
 from app.routers.dependencies import get_audit_service, get_current_ui_superadmin
-from app.routers.http_errors import raise_http_exception_from_exception
+from app.utils.http_errors import raise_http_exception_from_exception
 from app.services.audit_service import AuditService
 from app.services.app_settings_service import (
     get_general_feature_locks,

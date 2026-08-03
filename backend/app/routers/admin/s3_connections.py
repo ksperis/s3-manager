@@ -56,7 +56,7 @@ from app.utils.s3_connection_endpoint import (
     resolve_connection_details,
 )
 from app.utils.name_ordering import name_order_by
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 router = APIRouter(prefix="/admin/s3-connections", tags=["admin-s3-connections"])
 logger = logging.getLogger(__name__)
 

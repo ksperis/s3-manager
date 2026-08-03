@@ -11,7 +11,7 @@ from app.routers.dependencies import (
     get_current_account_admin,
     require_sns_capable_manager,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
+from app.utils.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.services.audit_service import AuditService
 from app.services.topics_service import TopicsService, get_topics_service
 

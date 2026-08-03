@@ -80,7 +80,7 @@ from app.routers.sse_worker import (
     format_sse_event,
     wait_for_cancellable_worker,
 )
-from app.routers.http_errors import (
+from app.utils.http_errors import (
     raise_bad_gateway_from_runtime,
     raise_http_exception_from_exception,
     sanitize_error_detail,

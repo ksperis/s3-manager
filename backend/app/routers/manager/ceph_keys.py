@@ -17,7 +17,7 @@ from app.routers.dependencies import (
 from app.services.audit_service import AuditService
 from app.services.s3_users_service import S3UsersService, get_s3_users_service
 from app.services.managed_private_access_service import ManagedPrivateAccessService
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/manager/ceph/keys", tags=["manager-ceph-keys"])
 

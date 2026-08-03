@@ -23,7 +23,7 @@ from app.models.oidc import (
 from app.models.ldap import LDAPLoginRequest, LDAPProviderInfo
 from app.models.user import UserCreate, UserOut
 from app.routers.dependencies import get_audit_service, get_current_super_admin, get_current_ui_superadmin
-from app.routers.http_errors import raise_http_exception_from_exception
+from app.utils.http_errors import raise_http_exception_from_exception
 from app.services.audit_service import AuditService
 from app.services.api_token_service import ApiTokenError, ApiTokenNotFoundError, ApiTokenService
 from app.services.oidc_service import (

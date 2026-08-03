@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import S3Account, S3User, StorageEndpoint, StorageProvider
 from app.routers.dependencies import get_current_super_admin
-from app.routers.http_errors import sanitized_error_log_detail
+from app.utils.http_errors import sanitized_error_log_detail
 from app.services.admin_metrics_service import AdminMetricsService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import TrafficWindow

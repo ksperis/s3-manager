@@ -29,7 +29,7 @@ from app.utils.normalize import normalize_optional_string
 from app.utils.rgw import extract_rgw_user_identity
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 from app.utils.name_ordering import name_order_by
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 from app.utils.time import utcnow
 
 router = APIRouter(prefix="/ceph-admin/endpoints", tags=["ceph-admin-endpoints"])

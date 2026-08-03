@@ -50,7 +50,7 @@ from app.routers.ceph_admin.listing_common import (
 )
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
-from app.routers.http_errors import raise_http_exception_from_exception
+from app.utils.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
 from app.services.managed_private_access_service import ManagedPrivateAccessService
 from app.services.bucket_listing_shared import is_advanced_filter_stream_payload

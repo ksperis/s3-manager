@@ -16,7 +16,7 @@ from app.models.managed_private_access import (
     ManagedRGWUserPrivateAccessRequest,
 )
 from app.models.s3_connection import CredentialOwnerType
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 from app.services.audit_service import AuditService
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.rgw_iam import RGWIAMService, get_iam_service

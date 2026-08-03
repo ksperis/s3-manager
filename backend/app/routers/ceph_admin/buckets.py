@@ -107,7 +107,7 @@ from app.routers.ceph_admin.listing_common import (
     serialize_filter,
     stream_listing_response,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
+from app.utils.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.services import bucket_config_actions
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,

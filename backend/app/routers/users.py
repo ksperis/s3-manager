@@ -15,7 +15,7 @@ from app.services.user_notifications_service import UserNotificationsService
 from app.services.users_service import UsersService, get_users_service
 from app.services.user_avatar_service import MAX_AVATAR_BYTES, UserAvatarService
 from app.core.database import get_db
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/users", tags=["users"])
 

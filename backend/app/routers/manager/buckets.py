@@ -58,7 +58,7 @@ from app.services.bucket_listing_cache import (
 )
 from app.services.bucket_listing_shared import parse_includes
 from app.routers.browser_common import require_replication_feature, require_sse_feature
-from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.routers.manager.access import require_bucket_management_context
 from app.routers.dependencies import (
     get_account_context,

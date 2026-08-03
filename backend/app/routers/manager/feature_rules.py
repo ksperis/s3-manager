@@ -18,7 +18,7 @@ from app.routers.dependencies import (
     get_current_account_admin,
     require_manager_feature_rules_enabled,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     normalize_bucket_notification_configuration,

@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.db import AccountRole, S3Account, StorageProvider, User, UserS3Account
 from app.models.access_context import AccountAccess, EffectiveAccountLink
 from app.models.account_capabilities import AccountCapabilities
-from app.routers.http_errors import raise_http_exception_from_exception
+from app.utils.http_errors import raise_http_exception_from_exception
 from app.services import app_settings_service
 from app.services.s3_execution_context import S3ExecutionContext
 from app.utils.storage_endpoint_features import resolve_feature_flags

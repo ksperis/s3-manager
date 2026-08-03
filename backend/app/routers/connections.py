@@ -26,7 +26,7 @@ from app.services.managed_private_access_service import (
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.utils.tagging import TAG_DOMAIN_PRIVATE_CONNECTION_USER
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 

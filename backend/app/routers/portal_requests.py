@@ -12,7 +12,7 @@ from app.db import User
 from app.models.access_context import AccountAccess
 from app.models.portal_requests import PortalAdminRequestCreate, PortalAdminRequestOut, PortalAdminRequestStatus
 from app.routers.dependencies import get_portal_account_access, require_portal_manager
-from app.routers.http_errors import sanitize_error_detail
+from app.utils.http_errors import sanitize_error_detail
 from app.services.portal_requests_service import (
     PortalRequestNotFound,
     PortalRequestsService,
