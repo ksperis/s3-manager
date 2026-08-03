@@ -57,7 +57,7 @@ from app.services.bucket_listing_cache import (
     invalidate_bucket_listing_cache_for_account,
 )
 from app.services.bucket_listing_shared import parse_includes
-from app.utils.storage_endpoint_features import resolve_feature_flags
+from app.routers.browser_common import require_replication_feature, require_sse_feature
 from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.routers.manager.access import require_bucket_management_context
 from app.routers.dependencies import (
@@ -72,26 +72,6 @@ from app.routers.dependencies import (
 
 router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
 logger = logging.getLogger(__name__)
-
-
-def _require_sse_feature(account: S3ExecutionContext) -> None:
-    endpoint = getattr(account, "storage_endpoint", None)
-    if endpoint is None:
-        return
-    if not resolve_feature_flags(endpoint).sse_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Server-side encryption is disabled for this endpoint",
-        )
-
-
-def _require_replication_feature(account: S3ExecutionContext) -> None:
-    endpoint = getattr(account, "storage_endpoint", None)
-    if endpoint is None or not resolve_feature_flags(endpoint).replication_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bucket replication is disabled for this endpoint",
-        )
 
 
 def _context_id_from_account(account: S3ExecutionContext) -> str:
@@ -481,7 +461,7 @@ def get_bucket_encryption(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketEncryptionConfiguration:
-    _require_sse_feature(account)
+    require_sse_feature(account)
     return bucket_config_actions.get_bucket_encryption_config(
         service=service,
         account=account,
@@ -498,7 +478,7 @@ def put_bucket_encryption(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketEncryptionConfiguration:
-    _require_sse_feature(account)
+    require_sse_feature(account)
     result, audit_metadata = bucket_config_actions.put_bucket_encryption_config(
         service=service,
         account=account,
@@ -526,7 +506,7 @@ def delete_bucket_encryption(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    _require_sse_feature(account)
+    require_sse_feature(account)
     bucket_config_actions.delete_bucket_encryption_config(
         service=service,
         account=account,
@@ -898,7 +878,7 @@ def get_replication(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketReplicationConfiguration:
-    _require_replication_feature(account)
+    require_replication_feature(account)
     return bucket_config_actions.get_bucket_replication_config(
         service=service,
         account=account,
@@ -915,7 +895,7 @@ def put_replication(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketReplicationConfiguration:
-    _require_replication_feature(account)
+    require_replication_feature(account)
     result, audit_metadata = bucket_config_actions.put_bucket_replication_config(
         service=service,
         account=account,
@@ -943,7 +923,7 @@ def delete_replication(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    _require_replication_feature(account)
+    require_replication_feature(account)
     bucket_config_actions.delete_bucket_replication_config(
         service=service,
         account=account,
