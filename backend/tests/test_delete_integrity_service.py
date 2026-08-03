@@ -79,17 +79,16 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
         name="own-token",
         expires_at=datetime(2099, 1, 1, tzinfo=UTC),
     )
-    revoked_by_owner = ApiToken(
+    other_token = ApiToken(
         id="tok-other",
         jti="jti-other",
         token_hash="hash-other",
         user_id=other.id,
-        revoked_by_user_id=owner.id,
         name="other-token",
         expires_at=datetime(2099, 1, 1, tzinfo=UTC),
     )
     db_session.add(own_token)
-    db_session.add(revoked_by_owner)
+    db_session.add(other_token)
 
     own_refresh = RefreshSession(
         id="ref-own",
@@ -98,16 +97,15 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
         auth_type="ui",
         expires_at=datetime(2099, 1, 1, tzinfo=UTC),
     )
-    revoked_refresh = RefreshSession(
+    other_refresh = RefreshSession(
         id="ref-other",
         token_hash="ref-hash-other",
         user_id=other.id,
-        revoked_by_user_id=owner.id,
         auth_type="ui",
         expires_at=datetime(2099, 1, 1, tzinfo=UTC),
     )
     db_session.add(own_refresh)
-    db_session.add(revoked_refresh)
+    db_session.add(other_refresh)
 
     db_session.commit()
 
@@ -126,8 +124,8 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
     assert db_session.query(RefreshSession).filter(RefreshSession.id == "ref-own").first() is None
     token = db_session.query(ApiToken).filter(ApiToken.id == "tok-other").first()
     refresh = db_session.query(RefreshSession).filter(RefreshSession.id == "ref-other").first()
-    assert token is not None and token.revoked_by_user_id is None
-    assert refresh is not None and refresh.revoked_by_user_id is None
+    assert token is not None
+    assert refresh is not None
 
 
 def test_unlink_account_cleans_links_and_purges_derived_rows(db_session):

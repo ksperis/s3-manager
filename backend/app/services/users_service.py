@@ -383,19 +383,9 @@ class UsersService:
             .delete(synchronize_session=False)
         )
         (
-            self.db.query(ApiToken)
-            .filter(ApiToken.revoked_by_user_id == user.id)
-            .update({ApiToken.revoked_by_user_id: None}, synchronize_session=False)
-        )
-        (
             self.db.query(RefreshSession)
             .filter(RefreshSession.user_id == user.id)
             .delete(synchronize_session=False)
-        )
-        (
-            self.db.query(RefreshSession)
-            .filter(RefreshSession.revoked_by_user_id == user.id)
-            .update({RefreshSession.revoked_by_user_id: None}, synchronize_session=False)
         )
         (
             self.db.query(AuditLog)
