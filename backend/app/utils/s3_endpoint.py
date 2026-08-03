@@ -98,6 +98,16 @@ def resolve_s3_client_options(account: object) -> tuple[Optional[str], Optional[
     return endpoint, region, force_path_style, verify_tls
 
 
+def resolve_s3_client_kwargs(account: object) -> dict[str, object]:
+    endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+    return {
+        "endpoint": endpoint,
+        "region": region,
+        "force_path_style": force_path_style,
+        "verify_tls": verify_tls,
+    }
+
+
 def resolve_iam_client_options(account: object) -> tuple[Optional[str], Optional[str], bool]:
     """Resolve IAM client options for account-like manager contexts."""
     from app.utils.s3_connection_endpoint import resolve_connection_details

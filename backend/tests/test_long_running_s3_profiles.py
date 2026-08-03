@@ -2,11 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from types import SimpleNamespace
 
-from app.services import (
-    buckets_service,
-    long_running_s3_client,
-    s3_client,
-)
+from app.services import s3_client
 from app.services.bucket_integrity_service import BucketIntegrityCheckService
 from app.services.bucket_migration import execution_context
 from app.services.bucket_migration.execution_context import BucketMigrationExecutionContextMixin
@@ -24,13 +20,6 @@ def test_compare_migration_purge_integrity_and_usage_select_long_running_profile
 
     monkeypatch.setattr(s3_client, "get_s3_client", fake_get_s3_client)
     monkeypatch.setattr(execution_context, "get_s3_client", fake_get_s3_client)
-    for module in (buckets_service, long_running_s3_client):
-        monkeypatch.setattr(
-            module,
-            "resolve_s3_client_options",
-            lambda _account: ("https://s3.example.test", "us-east-1", False, True),
-        )
-
     account = SimpleNamespace(
         effective_rgw_credentials=lambda: ("AK", "SK"),
         session_token=lambda: None,

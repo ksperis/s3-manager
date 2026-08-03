@@ -20,7 +20,7 @@ from app.services.aws_client_config import StorageRequestProfile
 from app.services.s3_client import get_s3_client
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.sts_service import get_session_token
-from app.utils.s3_endpoint import resolve_s3_client_options
+from app.utils.s3_endpoint import resolve_s3_client_kwargs, resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
 
 from ._shared import (
@@ -67,13 +67,7 @@ class BrowserContextMixin:
         return access_key, secret_key, session_token
 
     def _s3_client_kwargs(self, account: S3ExecutionTarget) -> dict:
-        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
-        return {
-            "endpoint": endpoint,
-            "region": region,
-            "force_path_style": force_path_style,
-            "verify_tls": verify_tls,
-        }
+        return resolve_s3_client_kwargs(account)
 
     def _client(self, account: S3ExecutionTarget, *, request_profile: StorageRequestProfile = "interactive"):
         access_key, secret_key, session_token = self._resolve_s3_credentials(account)

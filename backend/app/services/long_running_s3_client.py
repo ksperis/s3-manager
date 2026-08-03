@@ -5,7 +5,7 @@ from typing import Any
 
 from app.services import s3_client
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.utils.s3_endpoint import resolve_s3_client_options
+from app.utils.s3_endpoint import resolve_s3_client_kwargs
 
 
 class LongRunningS3ClientService:
@@ -18,12 +18,8 @@ class LongRunningS3ClientService:
         return access_key, secret_key
 
     def _client_kwargs(self, account: S3ExecutionTarget) -> dict[str, Any]:
-        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
         return {
-            "endpoint": endpoint,
-            "region": region,
-            "force_path_style": force_path_style,
-            "verify_tls": verify_tls,
+            **resolve_s3_client_kwargs(account),
             "session_token": account.session_token(),
             "user_agent_extra": self.s3_user_agent_extra,
         }

@@ -4,7 +4,12 @@ import pytest
 
 from app.db import StorageEndpoint, StorageProvider
 from app.utils import s3_endpoint
-from app.utils.s3_endpoint import resolve_iam_client_options, resolve_s3_client_options, validate_custom_login_s3_endpoint
+from app.utils.s3_endpoint import (
+    resolve_iam_client_options,
+    resolve_s3_client_kwargs,
+    resolve_s3_client_options,
+    validate_custom_login_s3_endpoint,
+)
 from app.utils.storage_endpoint_features import AWS_IAM_ENDPOINT, AWS_S3_ENDPOINT
 
 
@@ -64,6 +69,12 @@ def test_resolve_s3_client_options_uses_storage_endpoint_force_path_style():
         True,
         True,
     )
+    assert resolve_s3_client_kwargs(account) == {
+        "endpoint": "https://s3.path-style.example.test",
+        "region": "eu-west-1",
+        "force_path_style": True,
+        "verify_tls": True,
+    }
 
 
 def test_resolve_s3_client_options_uses_explicitsession_endpoint_override():

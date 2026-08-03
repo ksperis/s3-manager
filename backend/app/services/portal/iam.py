@@ -37,7 +37,7 @@ from app.utils.account_roles import portal_role_for
 from app.utils.normalize import normalize_string_list
 from app.utils.quota_stats import extract_positive_limit, extract_quota_limits
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
-from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
+from app.utils.s3_endpoint import resolve_s3_client_kwargs, resolve_s3_client_options, resolve_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 
@@ -840,13 +840,7 @@ class PortalIamMixin:
         return access_key, secret_key
 
     def _s3_client_kwargs(self, account: S3Account) -> dict:
-        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
-        return {
-            "endpoint": endpoint,
-            "region": region,
-            "force_path_style": force_path_style,
-            "verify_tls": verify_tls,
-        }
+        return resolve_s3_client_kwargs(account)
 
     def _supervision_admin_for_account(self, account: S3Account) -> RGWAdminClient:
         endpoint = getattr(account, "storage_endpoint", None)
