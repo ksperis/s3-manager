@@ -14,6 +14,13 @@ PortalQuotaDirection = Literal["increase", "decrease"]
 PortalQuotaUnit = Literal["MiB", "GiB", "TiB"]
 
 
+def _normalize_optional_request_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = " ".join(value.split())
+    return cleaned or None
+
+
 class PortalUserAccessRequestCreate(BaseModel):
     request_type: Literal["portal_user_access"]
     target_name: str = Field(min_length=1, max_length=120)
@@ -28,13 +35,7 @@ class PortalUserAccessRequestCreate(BaseModel):
             raise ValueError("Name is required")
         return cleaned
 
-    @field_validator("reason")
-    @classmethod
-    def _normalize_reason(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        cleaned = " ".join(value.split())
-        return cleaned or None
+    _normalize_reason = field_validator("reason")(_normalize_optional_request_text)
 
 
 class PortalUserRemovalRequestCreate(BaseModel):
@@ -43,13 +44,7 @@ class PortalUserRemovalRequestCreate(BaseModel):
     target_name: Optional[str] = Field(default=None, max_length=120)
     reason: Optional[str] = Field(default=None, max_length=2000)
 
-    @field_validator("target_name", "reason")
-    @classmethod
-    def _normalize_optional_text(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        cleaned = " ".join(value.split())
-        return cleaned or None
+    _normalize_optional_text = field_validator("target_name", "reason")(_normalize_optional_request_text)
 
 
 class PortalAccountQuotaChangeRequestCreate(BaseModel):
@@ -59,13 +54,7 @@ class PortalAccountQuotaChangeRequestCreate(BaseModel):
     target_quota_unit: PortalQuotaUnit = "GiB"
     reason: Optional[str] = Field(default=None, max_length=2000)
 
-    @field_validator("reason")
-    @classmethod
-    def _normalize_reason(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        cleaned = " ".join(value.split())
-        return cleaned or None
+    _normalize_reason = field_validator("reason")(_normalize_optional_request_text)
 
 
 PortalAdminRequestCreate = Annotated[
@@ -89,13 +78,7 @@ class PortalAdminRequestMessageCreate(BaseModel):
 class PortalAdminRequestDecision(BaseModel):
     message: Optional[str] = Field(default=None, max_length=2000)
 
-    @field_validator("message")
-    @classmethod
-    def _normalize_optional_message(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        cleaned = " ".join(value.split())
-        return cleaned or None
+    _normalize_optional_message = field_validator("message")(_normalize_optional_request_text)
 
 
 class PortalAdminRequestMessageOut(BaseModel):

@@ -17,6 +17,7 @@ from app.db import (
     UserS3Account,
 )
 from app.models.portal_requests import (
+    PortalAdminRequestDecision,
     PortalAccountQuotaChangeRequestCreate,
     PortalUserAccessRequestCreate,
     PortalUserRemovalRequestCreate,
@@ -38,6 +39,13 @@ class FakeAccountsService:
     def update_account(self, account_id, payload):  # noqa: ANN001
         self.updates.append((account_id, payload))
         return None
+
+
+def test_portal_request_optional_text_is_normalized() -> None:
+    payload = PortalAdminRequestDecision(message="  project\n  code  ")
+
+    assert payload.message == "project code"
+    assert PortalAdminRequestDecision(message="   ").message is None
 
 
 def test_portal_request_json_requires_an_object():
