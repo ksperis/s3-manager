@@ -21,11 +21,11 @@ from app.models.ceph_admin import (
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.routers.ceph_admin.listing_common import (
-    ListingProgressEmitter as _BucketListingProgressEmitter,
-    interpolate_progress_percent as _common_interpolate_progress_percent,
-    invoke_cancel_check as _invoke_cancel_check,
-    normalize_optional_str as _normalize_optional_str,
-    normalize_text as _normalize_text,
+    ListingProgressEmitter,
+    interpolate_progress_percent,
+    invoke_cancel_check,
+    normalize_optional_str,
+    normalize_text,
 )
 from app.services.bucket_listing_shared import _filter_requires_stats as _shared_filter_requires_stats
 from app.services.bucket_notification_state import (
@@ -44,7 +44,7 @@ BUCKET_OWNER_LOOKUP_MAX_WORKERS = 6
 
 
 def _build_enrichment_progress_callback(
-    progress: _BucketListingProgressEmitter | None,
+    progress: ListingProgressEmitter | None,
     *,
     stage: str,
     message: str,
@@ -56,7 +56,7 @@ def _build_enrichment_progress_callback(
         if progress is None:
             return
         progress.emit(
-            percent=_common_interpolate_progress_percent(start, end, processed=processed, total=total),
+            percent=interpolate_progress_percent(start, end, processed=processed, total=total),
             stage=stage,
             processed=processed,
             total=total,
@@ -220,8 +220,8 @@ def _determine_owner_name_lookup_scope(query: CephAdminBucketFilterQuery | None)
 def _extract_bucket_owner_scope(entry: dict) -> tuple[str | None, str | None]:
     if not isinstance(entry, dict):
         return None, None
-    tenant = _normalize_optional_str(entry.get("tenant"))
-    owner = _normalize_optional_str(entry.get("owner"))
+    tenant = normalize_optional_str(entry.get("tenant"))
+    owner = normalize_optional_str(entry.get("owner"))
     if owner and "$" in owner:
         split_tenant, split_uid = _split_tenant_uid(owner)
         if split_tenant:
@@ -247,8 +247,8 @@ def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
     bucket_name = _extract_bucket_name(entry)
     if not bucket_name:
         return None
-    tenant = _normalize_optional_str(entry.get("tenant"))
-    owner = _normalize_optional_str(entry.get("owner"))
+    tenant = normalize_optional_str(entry.get("tenant"))
+    owner = normalize_optional_str(entry.get("owner"))
     usage_bytes, objects = extract_usage_stats(entry.get("usage"))
     quota_size = None
     quota_objects = None
@@ -357,7 +357,7 @@ def _resolve_owner_name(
             account_payload = None
         if isinstance(account_payload, dict) and not account_payload.get("not_found"):
             # Strict account owner-name resolution: only RGW account "name" is accepted.
-            name = _normalize_optional_str(account_payload.get("name"))
+            name = normalize_optional_str(account_payload.get("name"))
             cache[owner_key] = name
             return name
 
@@ -377,7 +377,7 @@ def _resolve_owner_name(
         user_payload = None
     if isinstance(user_payload, dict) and not user_payload.get("not_found"):
         # Strict user owner-name resolution: only RGW "display_name" is accepted.
-        name = _normalize_optional_str(user_payload.get("display_name"))
+        name = normalize_optional_str(user_payload.get("display_name"))
     cache[owner_key] = name
     return name
 
@@ -570,14 +570,14 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
         "bucket_identity",
     }
     if field in string_fields:
-        left = _normalize_text(str(value))
+        left = normalize_text(str(value))
         if field == "owner_kind":
             normalized_kind = _normalize_owner_kind(rule.value)
-            right = normalized_kind if normalized_kind else _normalize_text(str(rule.value or ""))
+            right = normalized_kind if normalized_kind else normalize_text(str(rule.value or ""))
             if not right:
                 return False
         else:
-            right = _normalize_text(str(rule.value or ""))
+            right = normalize_text(str(rule.value or ""))
         if op == "contains":
             return right in left
         if op == "starts_with":
@@ -597,7 +597,7 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
                 if not candidates:
                     return False
             else:
-                candidates = {_normalize_text(str(item)) for item in rule.value}
+                candidates = {normalize_text(str(item)) for item in rule.value}
             result = left in candidates
             return result if op == "in" else not result
         return False
@@ -695,10 +695,10 @@ def _coerce_bool(value: object) -> bool | None:
 def _match_text_value(left: str | None, op: str, right_raw: object) -> bool:
     if left is None:
         return False
-    right = _normalize_text(str(right_raw or ""))
+    right = normalize_text(str(right_raw or ""))
     if not right:
         return False
-    left_norm = _normalize_text(left)
+    left_norm = normalize_text(left)
     if op == "eq":
         return left_norm == right
     if op == "neq":
@@ -1607,7 +1607,7 @@ def _load_feature_param_snapshots(
     service: BucketsService,
     account: S3ExecutionTarget,
     *,
-    progress: _BucketListingProgressEmitter | None = None,
+    progress: ListingProgressEmitter | None = None,
     progress_stage: str = "feature_param_enrichment",
     progress_message: str = "Loading bucket feature parameters",
     progress_start: int = 82,
@@ -1638,20 +1638,20 @@ def _load_feature_param_snapshots(
 
     if max_workers <= 1:
         for index, bucket in enumerate(buckets, start=1):
-            _invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
             key, snapshot = load_one(bucket)
             snapshots[key] = snapshot
             emit_progress(index)
-            _invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
     else:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(load_one, bucket) for bucket in buckets]
             for index, future in enumerate(as_completed(futures), start=1):
-                _invoke_cancel_check(cancel_check)
+                invoke_cancel_check(cancel_check)
                 key, snapshot = future.result()
                 snapshots[key] = snapshot
                 emit_progress(index)
-                _invoke_cancel_check(cancel_check)
+                invoke_cancel_check(cancel_check)
 
     available_keys: set[str] = set()
     for key, snapshot in snapshots.items():
@@ -1714,7 +1714,7 @@ def _backfill_bucket_owner_metadata(
     buckets: list[CephAdminBucketSummary],
     *,
     include_tenant: bool = False,
-    progress: _BucketListingProgressEmitter | None = None,
+    progress: ListingProgressEmitter | None = None,
     progress_stage: str = "owner_backfill",
     progress_message: str = "Loading bucket owner metadata",
     progress_start: int = 63,
@@ -1757,19 +1757,19 @@ def _backfill_bucket_owner_metadata(
     if max_workers <= 1:
         resolved = []
         for index, bucket in enumerate(pending, start=1):
-            _invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
             resolved.append(load_one(bucket))
             emit_progress(index)
-            _invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
     else:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(load_one, bucket) for bucket in pending]
             resolved = []
             for index, future in enumerate(as_completed(futures), start=1):
-                _invoke_cancel_check(cancel_check)
+                invoke_cancel_check(cancel_check)
                 resolved.append(future.result())
                 emit_progress(index)
-                _invoke_cancel_check(cancel_check)
+                invoke_cancel_check(cancel_check)
 
     for bucket, tenant, owner in resolved:
         if not bucket.owner and owner:
@@ -1786,7 +1786,7 @@ def _enrich_buckets(
     service: BucketsService,
     account: S3ExecutionTarget,
     *,
-    progress: _BucketListingProgressEmitter | None = None,
+    progress: ListingProgressEmitter | None = None,
     progress_stage: str = "bucket_enrichment",
     progress_message: str = "Loading bucket details",
     progress_start: int = 75,
@@ -2142,10 +2142,10 @@ def _enrich_buckets(
     if max_workers <= 1:
         enriched = []
         for index, bucket in enumerate(buckets, start=1):
-            _invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
             enriched.append(enrich_one(bucket))
             emit_progress(index)
-            _invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
         return enriched
 
     # Bucket-level S3 reads are network-bound and independent; run a bounded parallel fan-out.
@@ -2153,10 +2153,10 @@ def _enrich_buckets(
         futures = {executor.submit(enrich_one, bucket): index for index, bucket in enumerate(buckets)}
         enriched: list[CephAdminBucketSummary | None] = [None] * len(buckets)
         for processed, future in enumerate(as_completed(futures), start=1):
-            _invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
             enriched[futures[future]] = future.result()
             emit_progress(processed)
-            _invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
         return [bucket for bucket in enriched if bucket is not None]
 
 

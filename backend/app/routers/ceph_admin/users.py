@@ -30,29 +30,29 @@ from app.models.ceph_admin import (
     PaginatedCephAdminUsersResponse,
 )
 from app.routers.ceph_admin.listing_common import (
-    EndpointCacheEntry as _common_EndpointCacheEntry,
-    EndpointListCacheKey as _common_EndpointListCacheKey,
-    EndpointPayloadCacheKey as _common_EndpointPayloadCacheKey,
-    ListingProgressEmitter as _common_ListingProgressEmitter,
-    ListingProgressSnapshot as _common_ListingProgressSnapshot,
-    apply_advanced_filter as _common_apply_advanced_filter,
-    apply_simple_search as _common_apply_simple_search,
-    coerce_number as _coerce_number,
-    collect_filter_fields as _common_collect_filter_fields,
-    fields_set as _fields_set,
-    get_or_set_cache as _common_get_or_set_cache,
-    invalidate_cache as _common_invalidate_cache,
-    normalize_optional_str as _normalize_optional_str,
-    normalize_text as _normalize_text,
-    paginate as _common_paginate,
-    parse_filter_query as _common_parse_filter_query,
-    parse_includes as _parse_includes,
-    parse_int as _parse_int,
-    serialize_filter as _serialize_filter,
-    sort_value as _common_sort_value,
-    interpolate_progress_percent as _common_interpolate_progress_percent,
-    invoke_cancel_check as _common_invoke_cancel_check,
-    stream_listing_response as _common_stream_listing_response,
+    EndpointCacheEntry,
+    EndpointListCacheKey,
+    EndpointPayloadCacheKey,
+    ListingProgressEmitter,
+    ListingProgressSnapshot,
+    apply_advanced_filter,
+    apply_simple_search,
+    coerce_number,
+    collect_filter_fields,
+    fields_set,
+    get_or_set_cache,
+    interpolate_progress_percent,
+    invalidate_cache,
+    invoke_cancel_check,
+    normalize_optional_str,
+    normalize_text,
+    paginate,
+    parse_filter_query,
+    parse_includes,
+    parse_int,
+    serialize_filter,
+    sort_value,
+    stream_listing_response,
 )
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
@@ -72,13 +72,9 @@ USERS_LIST_CACHE_TTL_SECONDS = 30.0
 USERS_LIST_CACHE_MAX_ENTRIES = 64
 RGW_USERS_PAYLOAD_CACHE_MAX_ENTRIES = 16
 
-_UsersListCacheKey = _common_EndpointListCacheKey
-_RgwUsersPayloadCacheKey = _common_EndpointPayloadCacheKey
-
-
-_USERS_LIST_CACHE: OrderedDict[_UsersListCacheKey, _common_EndpointCacheEntry] = OrderedDict()
+_USERS_LIST_CACHE: OrderedDict[EndpointListCacheKey, EndpointCacheEntry] = OrderedDict()
 _USERS_LIST_CACHE_LOCK = Lock()
-_RGW_USERS_PAYLOAD_CACHE: OrderedDict[_RgwUsersPayloadCacheKey, _common_EndpointCacheEntry] = OrderedDict()
+_RGW_USERS_PAYLOAD_CACHE: OrderedDict[EndpointPayloadCacheKey, EndpointCacheEntry] = OrderedDict()
 _RGW_USERS_PAYLOAD_CACHE_LOCK = Lock()
 
 
@@ -106,10 +102,10 @@ def _optional_account_lookup_enabled(ctx: CephAdminContext) -> bool | None:
 
 def _extract_user_setting(payload: dict[str, Any], user_payload: dict[str, Any], *keys: str) -> Optional[str]:
     for key in keys:
-        value = _normalize_optional_str(user_payload.get(key))
+        value = normalize_optional_str(user_payload.get(key))
         if value is not None:
             return value
-        value = _normalize_optional_str(payload.get(key))
+        value = normalize_optional_str(payload.get(key))
         if value is not None:
             return value
     return None
@@ -151,7 +147,7 @@ def _clear_optional_user_details(item: CephAdminRgwUserSummary) -> None:
 
 
 def _parse_advanced_filter(raw: str | None) -> CephAdminUserFilterQuery | None:
-    return _common_parse_filter_query(raw, query_cls=CephAdminUserFilterQuery)
+    return parse_filter_query(raw, query_cls=CephAdminUserFilterQuery)
 
 
 def _coerce_bool(value: object) -> bool | None:
@@ -206,8 +202,8 @@ def _match_user_field_rule(user: CephAdminRgwUserSummary, rule: CephAdminUserFil
 
     string_fields = {"uid", "tenant", "account_id", "account_name", "full_name", "email"}
     if field in string_fields:
-        left = _normalize_text(str(value))
-        right = _normalize_text(str(rule.value or ""))
+        left = normalize_text(str(value))
+        right = normalize_text(str(rule.value or ""))
         if op == "contains":
             return right in left
         if op == "starts_with":
@@ -221,16 +217,16 @@ def _match_user_field_rule(user: CephAdminRgwUserSummary, rule: CephAdminUserFil
         if op in ("in", "not_in"):
             if not isinstance(rule.value, list):
                 return False
-            candidates = {_normalize_text(str(item)) for item in rule.value}
+            candidates = {normalize_text(str(item)) for item in rule.value}
             result = left in candidates
             return result if op == "in" else not result
         return False
 
-    left_num = _coerce_number(value)
+    left_num = coerce_number(value)
     if left_num is None:
         return False
     if op in ("eq", "neq", "gt", "gte", "lt", "lte"):
-        right_num = _coerce_number(rule.value)
+        right_num = coerce_number(rule.value)
         if right_num is None:
             return False
         if op == "eq":
@@ -248,7 +244,7 @@ def _match_user_field_rule(user: CephAdminRgwUserSummary, rule: CephAdminUserFil
     if op in ("in", "not_in"):
         if not isinstance(rule.value, list):
             return False
-        candidates = {_coerce_number(item) for item in rule.value}
+        candidates = {coerce_number(item) for item in rule.value}
         candidates = {item for item in candidates if item is not None}
         result = left_num in candidates
         return result if op == "in" else not result
@@ -288,7 +284,7 @@ def _enrich_users(
     requested: set[str],
     ctx: CephAdminContext,
     *,
-    progress: _common_ListingProgressEmitter | None = None,
+    progress: ListingProgressEmitter | None = None,
     progress_stage: str = "detail_enrichment",
     progress_message: str = "Loading user details",
     progress_start: int = 50,
@@ -301,7 +297,7 @@ def _enrich_users(
     enriched: list[CephAdminRgwUserSummary] = []
     total = len(users)
     for index, item in enumerate(users, start=1):
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
         user = _clone_user(item)
         try:
             payload = ctx.rgw_admin.get_user(user.uid, tenant=user.tenant, allow_not_found=True)
@@ -309,10 +305,10 @@ def _enrich_users(
             raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         if payload and not payload.get("not_found"):
             user_payload = extract_rgw_user_payload(payload)
-            account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
+            account_id = normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
             if "account" in requested:
                 user.account_id = account_id
-                payload_account_name = _normalize_optional_str(
+                payload_account_name = normalize_optional_str(
                     payload.get("account_name") or user_payload.get("account_name")
                 )
                 if account_id:
@@ -327,19 +323,19 @@ def _enrich_users(
                                 )
                             except RGWAdminError as exc:
                                 raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-                        account_name_by_id[account_id] = _normalize_optional_str(
+                        account_name_by_id[account_id] = normalize_optional_str(
                             account_payload.get("name") if isinstance(account_payload, dict) else None
                         )
                     user.account_name = account_name_by_id.get(account_id) or payload_account_name
                 else:
                     user.account_name = payload_account_name
             if "profile" in requested:
-                user.full_name = _normalize_optional_str(user_payload.get("display_name") or payload.get("display_name"))
-                user.email = _normalize_optional_str(user_payload.get("email") or payload.get("email"))
+                user.full_name = normalize_optional_str(user_payload.get("display_name") or payload.get("display_name"))
+                user.email = normalize_optional_str(user_payload.get("email") or payload.get("email"))
             if "status" in requested:
                 user.suspended = _parse_suspended(user_payload.get("suspended") or payload.get("suspended"))
             if "limits" in requested:
-                user.max_buckets = _parse_int(user_payload.get("max_buckets") or payload.get("max_buckets"))
+                user.max_buckets = parse_int(user_payload.get("max_buckets") or payload.get("max_buckets"))
             if "quota" in requested:
                 quota_size, quota_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
                 user.quota_max_size_bytes = quota_size
@@ -358,7 +354,7 @@ def _enrich_users(
         enriched.append(user)
         if progress is not None:
             progress.emit(
-                percent=_common_interpolate_progress_percent(
+                percent=interpolate_progress_percent(
                     progress_start,
                     progress_end,
                     processed=index,
@@ -369,12 +365,12 @@ def _enrich_users(
                 total=total,
                 message=progress_message,
             )
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
     return enriched
 
 
 def _get_cached_rgw_users_payload(ctx: CephAdminContext) -> list[Any]:
-    key = _RgwUsersPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0))
+    key = EndpointPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0))
     def _fetch_payload() -> list[Any]:
         try:
             payload = ctx.rgw_admin.list_users()
@@ -382,7 +378,7 @@ def _get_cached_rgw_users_payload(ctx: CephAdminContext) -> list[Any]:
             raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         return payload or []
 
-    return _common_get_or_set_cache(
+    return get_or_set_cache(
         _RGW_USERS_PAYLOAD_CACHE,
         _RGW_USERS_PAYLOAD_CACHE_LOCK,
         key,
@@ -393,10 +389,10 @@ def _get_cached_rgw_users_payload(ctx: CephAdminContext) -> list[Any]:
 
 
 def _get_cached_users_listing(
-    key: _UsersListCacheKey,
+    key: EndpointListCacheKey,
     builder: Callable[[], list[CephAdminRgwUserSummary]],
 ) -> list[CephAdminRgwUserSummary]:
-    return _common_get_or_set_cache(
+    return get_or_set_cache(
         _USERS_LIST_CACHE,
         _USERS_LIST_CACHE_LOCK,
         key,
@@ -407,8 +403,8 @@ def _get_cached_users_listing(
 
 
 def _invalidate_users_listing_cache(endpoint_id: int | None = None) -> None:
-    _common_invalidate_cache(_USERS_LIST_CACHE, _USERS_LIST_CACHE_LOCK, endpoint_id=endpoint_id)
-    _common_invalidate_cache(_RGW_USERS_PAYLOAD_CACHE, _RGW_USERS_PAYLOAD_CACHE_LOCK, endpoint_id=endpoint_id)
+    invalidate_cache(_USERS_LIST_CACHE, _USERS_LIST_CACHE_LOCK, endpoint_id=endpoint_id)
+    invalidate_cache(_RGW_USERS_PAYLOAD_CACHE, _RGW_USERS_PAYLOAD_CACHE_LOCK, endpoint_id=endpoint_id)
 
 
 def _extract_quota_enabled(payload: dict[str, Any], keys: tuple[str, ...] = ("user_quota", "quota")) -> Optional[bool]:
@@ -428,15 +424,15 @@ def _extract_caps(payload: dict[str, Any]) -> list[str]:
     result: list[str] = []
     if isinstance(values, dict):
         for key, value in values.items():
-            key_value = _normalize_optional_str(key)
-            perm_value = _normalize_optional_str(value)
+            key_value = normalize_optional_str(key)
+            perm_value = normalize_optional_str(value)
             if key_value and perm_value:
                 result.append(f"{key_value}={perm_value}")
     elif isinstance(values, list):
         for entry in values:
             if isinstance(entry, dict):
-                cap_type = _normalize_optional_str(entry.get("type"))
-                perm = _normalize_optional_str(entry.get("perm"))
+                cap_type = normalize_optional_str(entry.get("type"))
+                perm = normalize_optional_str(entry.get("perm"))
                 if cap_type and perm:
                     result.append(f"{cap_type}={perm}")
                 elif cap_type:
@@ -469,10 +465,10 @@ def _parse_key_status(status_value: Any) -> tuple[Optional[str], Optional[bool]]
 
 def _serialize_access_key(entry: dict[str, Any]) -> Optional[CephAdminRgwAccessKey]:
     access_key_value = entry.get("access_key") or entry.get("access_key_id")
-    access_key = _normalize_optional_str(access_key_value)
+    access_key = normalize_optional_str(access_key_value)
     if not access_key:
         return None
-    secret_key = _normalize_optional_str(entry.get("secret_key"))
+    secret_key = normalize_optional_str(entry.get("secret_key"))
     status_text, is_active = _parse_key_status(entry.get("status") or entry.get("key_status") or entry.get("state"))
     return CephAdminRgwAccessKey(
         access_key=access_key,
@@ -480,8 +476,8 @@ def _serialize_access_key(entry: dict[str, Any]) -> Optional[CephAdminRgwAccessK
         status=status_text,
         is_active=is_active,
         created_at=entry.get("create_date") or entry.get("created_at"),
-        user=_normalize_optional_str(entry.get("user") or entry.get("uid")),
-        subuser=_normalize_optional_str(entry.get("subuser")),
+        user=normalize_optional_str(entry.get("user") or entry.get("uid")),
+        subuser=normalize_optional_str(entry.get("subuser")),
     )
 
 
@@ -535,7 +531,7 @@ def _resolve_user_identity(
     tenant_fallback: Optional[str],
 ) -> tuple[Optional[str], str]:
     user_payload = extract_rgw_user_payload(payload)
-    uid_raw = _normalize_optional_str(user_payload.get("uid") or payload.get("uid")) or uid_fallback
+    uid_raw = normalize_optional_str(user_payload.get("uid") or payload.get("uid")) or uid_fallback
     tenant = tenant_fallback
     uid = uid_raw
     if "$" in uid_raw:
@@ -555,7 +551,7 @@ def _build_user_detail(
 ) -> CephAdminRgwUserDetail:
     user_payload = extract_rgw_user_payload(payload)
     tenant, uid = _resolve_user_identity(payload, uid_fallback=uid_fallback, tenant_fallback=tenant_fallback)
-    account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
+    account_id = normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
     quota_size, quota_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
     quota_enabled = _extract_quota_enabled(payload, keys=("user_quota", "quota"))
     quota = None
@@ -568,16 +564,16 @@ def _build_user_detail(
     return CephAdminRgwUserDetail(
         uid=uid,
         tenant=tenant,
-        display_name=_normalize_optional_str(user_payload.get("display_name") or payload.get("display_name")),
-        email=_normalize_optional_str(user_payload.get("email") or payload.get("email")),
+        display_name=normalize_optional_str(user_payload.get("display_name") or payload.get("display_name")),
+        email=normalize_optional_str(user_payload.get("email") or payload.get("email")),
         account_id=account_id,
         account_name=account_name,
         suspended=_parse_suspended(user_payload.get("suspended") or payload.get("suspended")),
         admin=_coerce_bool(user_payload.get("admin") if "admin" in user_payload else payload.get("admin")),
         system=_coerce_bool(user_payload.get("system") if "system" in user_payload else payload.get("system")),
         account_root=_coerce_bool(user_payload.get("account_root") or payload.get("account_root")),
-        max_buckets=_parse_int(user_payload.get("max_buckets") or payload.get("max_buckets")),
-        op_mask=_normalize_optional_str(user_payload.get("op_mask") or payload.get("op_mask")),
+        max_buckets=parse_int(user_payload.get("max_buckets") or payload.get("max_buckets")),
+        op_mask=normalize_optional_str(user_payload.get("op_mask") or payload.get("op_mask")),
         default_placement=_extract_user_setting(
             payload,
             user_payload,
@@ -630,7 +626,7 @@ def _resolve_account_name(
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     if not isinstance(account_payload, dict) or account_payload.get("not_found"):
         return payload_account_name
-    return _normalize_optional_str(
+    return normalize_optional_str(
         account_payload.get("name") or account_payload.get("display_name") or account_payload.get("account_name")
     ) or payload_account_name
 
@@ -694,27 +690,27 @@ def _compute_users_listing(
     sort_dir: str = Query("asc"),
     include: list[str] = Query(default=[]),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
-    progress_callback: Callable[[_common_ListingProgressSnapshot], None] | None = None,
+    progress_callback: Callable[[ListingProgressSnapshot], None] | None = None,
     cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedCephAdminUsersResponse:
-    progress = _common_ListingProgressEmitter(progress_callback)
+    progress = ListingProgressEmitter(progress_callback)
     progress.emit(percent=0, stage="prepare", message="Preparing advanced search", force=True)
-    _common_invoke_cancel_check(cancel_check)
+    invoke_cancel_check(cancel_check)
 
-    include_set = _parse_includes(include)
+    include_set = parse_includes(include)
     requested = include_set & {"account", "profile", "status", "limits", "quota"}
     parsed_advanced_filter = _parse_advanced_filter(advanced_filter)
     advanced_filter_active = bool(parsed_advanced_filter and parsed_advanced_filter.rules)
-    cache_key = _UsersListCacheKey(
+    cache_key = EndpointListCacheKey(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
-        advanced_filter=_serialize_filter(parsed_advanced_filter),
+        advanced_filter=serialize_filter(parsed_advanced_filter),
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
 
     def build_listing() -> list[CephAdminRgwUserSummary]:
         progress.emit(percent=10, stage="load_entries", message="Loading RGW users", force=True)
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
         payload = _get_cached_rgw_users_payload(ctx)
         results: list[CephAdminRgwUserSummary] = []
         for entry in payload or []:
@@ -736,9 +732,9 @@ def _compute_users_listing(
             message="RGW user scanning completed",
             force=True,
         )
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
 
-        advanced_fields = _common_collect_filter_fields(parsed_advanced_filter)
+        advanced_fields = collect_filter_fields(parsed_advanced_filter)
         sort_fields = {sort_by} if sort_by else {"uid"}
         needed_for_listing = _includes_for_user_fields(advanced_fields | sort_fields)
         if needed_for_listing:
@@ -761,7 +757,7 @@ def _compute_users_listing(
                 progress_end=64,
                 cancel_check=cancel_check,
             )
-            _common_invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
 
         if advanced_filter_active:
             progress.emit(
@@ -772,8 +768,8 @@ def _compute_users_listing(
                 message="Applying advanced filters",
                 force=True,
             )
-        results = _common_apply_advanced_filter(results, parsed_advanced_filter, _match_user_rules)
-        _common_invoke_cancel_check(cancel_check)
+        results = apply_advanced_filter(results, parsed_advanced_filter, _match_user_rules)
+        invoke_cancel_check(cancel_check)
 
         def sort_key(item: CephAdminRgwUserSummary):
             if sort_by == "tenant":
@@ -794,7 +790,7 @@ def _compute_users_listing(
                 value = item.quota_max_objects
             else:
                 value = item.uid
-            return _common_sort_value(value, item.uid or "")
+            return sort_value(value, item.uid or "")
 
         results.sort(key=sort_key, reverse=sort_dir == "desc")
         if needed_for_listing:
@@ -811,8 +807,8 @@ def _compute_users_listing(
         message="Base listing ready",
         force=True,
     )
-    _common_invoke_cancel_check(cancel_check)
-    filtered_results = _common_apply_simple_search(
+    invoke_cancel_check(cancel_check)
+    filtered_results = apply_simple_search(
         results,
         search=search,
         parsed_filter=parsed_advanced_filter,
@@ -829,8 +825,8 @@ def _compute_users_listing(
         message="Preparing result page",
         force=True,
     )
-    _common_invoke_cancel_check(cancel_check)
-    page_items, total, has_next = _common_paginate(
+    invoke_cancel_check(cancel_check)
+    page_items, total, has_next = paginate(
         filtered_results,
         page=page,
         page_size=page_size,
@@ -856,7 +852,7 @@ def _compute_users_listing(
             progress_end=99,
             cancel_check=cancel_check,
         )
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
 
     progress.emit(
         percent=100,
@@ -917,7 +913,7 @@ async def stream_rgw_users(
             detail="advanced_filter must be provided as a JSON payload for streaming search",
         )
 
-    return _common_stream_listing_response(
+    return stream_listing_response(
         request,
         compute=lambda progress_callback, cancel_check: _compute_users_listing(
             page=page,
@@ -985,7 +981,7 @@ def create_rgw_user(
                 detail="RGW user creation is not supported on this cluster",
             )
 
-    field_set = _fields_set(payload)
+    field_set = fields_set(payload)
     should_update_user = bool(
         {"display_name", "email", "suspended", "max_buckets", "op_mask", "admin", "system", "account_root"} & field_set
     )
@@ -1033,13 +1029,13 @@ def create_rgw_user(
 
     _invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     user_payload = _load_user_payload(uid, lookup_tenant, ctx)
-    resolved_account_id = _normalize_optional_str(
+    resolved_account_id = normalize_optional_str(
         user_payload.get("account_id") or extract_rgw_user_payload(user_payload).get("account_id")
     )
     account_name = _resolve_account_name(
         resolved_account_id,
         ctx,
-        payload_account_name=_normalize_optional_str(
+        payload_account_name=normalize_optional_str(
             user_payload.get("account_name") or extract_rgw_user_payload(user_payload).get("account_name")
         ),
     )
@@ -1083,11 +1079,11 @@ def get_rgw_user_detail(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> CephAdminRgwUserDetail:
     payload = _load_user_payload(user_id, tenant, ctx)
-    account_id = _normalize_optional_str(payload.get("account_id") or extract_rgw_user_payload(payload).get("account_id"))
+    account_id = normalize_optional_str(payload.get("account_id") or extract_rgw_user_payload(payload).get("account_id"))
     account_name = _resolve_account_name(
         account_id,
         ctx,
-        payload_account_name=_normalize_optional_str(
+        payload_account_name=normalize_optional_str(
             payload.get("account_name") or extract_rgw_user_payload(payload).get("account_name")
         ),
     )
@@ -1111,7 +1107,7 @@ def update_rgw_user_config(
     uid = user_id.strip()
     if not uid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="uid is required")
-    field_set = _fields_set(update)
+    field_set = fields_set(update)
     should_update_user = bool(
         {"display_name", "email", "suspended", "max_buckets", "op_mask", "admin", "system", "account_root"} & field_set
     ) or bool(update.extra_params)
@@ -1190,11 +1186,11 @@ def update_rgw_user_config(
 
     _invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     payload = _load_user_payload(uid, tenant, ctx)
-    account_id = _normalize_optional_str(payload.get("account_id") or extract_rgw_user_payload(payload).get("account_id"))
+    account_id = normalize_optional_str(payload.get("account_id") or extract_rgw_user_payload(payload).get("account_id"))
     account_name = _resolve_account_name(
         account_id,
         ctx,
-        payload_account_name=_normalize_optional_str(
+        payload_account_name=normalize_optional_str(
             payload.get("account_name") or extract_rgw_user_payload(payload).get("account_name")
         ),
     )

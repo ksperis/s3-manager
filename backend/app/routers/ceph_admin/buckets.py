@@ -104,12 +104,12 @@ from app.routers.ceph_admin.bucket_listing_enrichment import (
     _resolve_owner_names_for_buckets,
 )
 from app.routers.ceph_admin.listing_common import (
-    ListingProgressEmitter as _BucketListingProgressEmitter,
-    ListingProgressSnapshot as _BucketListingProgressSnapshot,
-    interpolate_progress_percent as _common_interpolate_progress_percent,
-    invoke_cancel_check as _invoke_cancel_check,
-    serialize_filter as _serialize_filter,
-    stream_listing_response as _common_stream_listing_response,
+    ListingProgressEmitter,
+    ListingProgressSnapshot,
+    interpolate_progress_percent,
+    invoke_cancel_check,
+    serialize_filter,
+    stream_listing_response,
 )
 from app.routers.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.services import bucket_config_actions
@@ -323,12 +323,12 @@ def _compute_bucket_listing(
     include: list[str],
     with_stats: bool,
     ctx: CephAdminContext,
-    progress_callback: Callable[[_BucketListingProgressSnapshot], None] | None = None,
+    progress_callback: Callable[[ListingProgressSnapshot], None] | None = None,
     cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedCephAdminBucketsResponse:
-    progress = _BucketListingProgressEmitter(progress_callback)
+    progress = ListingProgressEmitter(progress_callback)
     include_progress_hooks = progress_callback is not None or cancel_check is not None
-    _invoke_cancel_check(cancel_check)
+    invoke_cancel_check(cancel_check)
     progress.emit(percent=5, stage="prepare", message="Preparing advanced search", force=True)
 
     if advanced_filter:
@@ -374,17 +374,17 @@ def _compute_bucket_listing(
 
     cache_key = _BucketListCacheKey(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
-        advanced_filter=_serialize_filter(advanced_filter),
+        advanced_filter=serialize_filter(advanced_filter),
         sort_by=sort_by,
         sort_dir=sort_dir,
         with_stats=with_stats,
         with_owner_metadata=needs_owner_metadata,
         with_owner_usage=owner_usage_required_for_request,
     )
-    _invoke_cancel_check(cancel_check)
+    invoke_cancel_check(cancel_check)
 
     def build_listing() -> _BucketListingSnapshot:
-        _invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
         name_candidates = None if owner_usage_required_for_request else _extract_name_candidates(advanced_filter)
         effective_with_stats = with_stats
         stats_available = True
@@ -445,7 +445,7 @@ def _compute_bucket_listing(
         results: list[CephAdminBucketSummary] = []
         total_entries = len(entries)
         for idx, entry in enumerate(entries, start=1):
-            _invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
             summary = _build_bucket_summary(entry)
             if summary:
                 if not effective_with_stats:
@@ -470,7 +470,7 @@ def _compute_bucket_listing(
             message="Bucket scanning completed",
             force=True,
         )
-        _invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
 
         if needs_owner_metadata and results:
             progress.emit(
@@ -743,7 +743,7 @@ def _compute_bucket_listing(
             progress.emit(percent=90, stage="expensive_filters", message="Advanced filters applied", force=True)
         else:
             progress.emit(percent=90, stage="expensive_filters", message="No expensive filters", force=True)
-        _invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
 
         def sort_value(bucket: CephAdminBucketSummary):
             if sort_by == "tenant":
@@ -778,7 +778,7 @@ def _compute_bucket_listing(
             owner_usage_by_key=owner_usage_by_key,
         )
 
-    _invoke_cancel_check(cancel_check)
+    invoke_cancel_check(cancel_check)
     listing = _get_cached_bucket_listing(cache_key, build_listing)
     results = listing.items
     progress.emit(percent=92, stage="sort_paginate", message="Sorting and paginating results", force=True)
@@ -797,7 +797,7 @@ def _compute_bucket_listing(
                 or filter_value in (bucket.owner or "").lower()
             ]
 
-    _invoke_cancel_check(cancel_check)
+    invoke_cancel_check(cancel_check)
     total = len(filtered_results)
     start = max(page - 1, 0) * page_size
     end = start + page_size
@@ -879,7 +879,7 @@ def _compute_bucket_listing(
             usage_by_key=listing.owner_usage_by_key,
         )
 
-    _invoke_cancel_check(cancel_check)
+    invoke_cancel_check(cancel_check)
     has_next = end < total
     response = PaginatedCephAdminBucketsResponse(
         items=page_items,
@@ -913,7 +913,7 @@ async def stream_buckets(
             detail="advanced_filter must be provided as a JSON payload for streaming search",
         )
 
-    return _common_stream_listing_response(
+    return stream_listing_response(
         request,
         compute=lambda progress_callback, cancel_check: _compute_bucket_listing(
             page=page,

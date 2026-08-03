@@ -88,9 +88,9 @@ from app.routers.browser_common import (
     CreateFolderPayload,
     EnsureCorsPayload,
     ProxyUploadResponse,
-    record_browser_action as _common_record_browser_action,
-    require_replication_feature as _common_require_replication_feature,
-    require_sse_feature as _common_require_sse_feature,
+    record_browser_action,
+    require_replication_feature,
+    require_sse_feature,
 )
 from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.routers.dependencies import (
@@ -312,7 +312,7 @@ def create_bucket(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bucket name is required")
     try:
         service.create_bucket(bucket_name, account, versioning=payload.versioning)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
+        record_browser_action(audit_service, actor=actor, scope="browser",
             action="create_bucket",
             entity_type="bucket",
             entity_id=bucket_name,
@@ -376,7 +376,7 @@ def create_bucket_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=payload.name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -406,7 +406,7 @@ def delete_bucket_config(
         force=force,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -436,7 +436,7 @@ def update_bucket_quota_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -481,7 +481,7 @@ def update_bucket_versioning_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -526,7 +526,7 @@ def put_bucket_object_lock_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -547,7 +547,7 @@ def get_bucket_encryption_config(
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketEncryptionConfiguration:
-    _common_require_sse_feature(account)
+    require_sse_feature(account)
     return bucket_config_actions.get_bucket_encryption_config(
         service=service,
         account=account,
@@ -565,7 +565,7 @@ def put_bucket_encryption_config(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketEncryptionConfiguration:
-    _common_require_sse_feature(account)
+    require_sse_feature(account)
     result, audit_metadata = bucket_config_actions.put_bucket_encryption_config(
         service=service,
         account=account,
@@ -573,7 +573,7 @@ def put_bucket_encryption_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -595,14 +595,14 @@ def delete_bucket_encryption_config(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    _common_require_sse_feature(account)
+    require_sse_feature(account)
     bucket_config_actions.delete_bucket_encryption_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -645,7 +645,7 @@ def put_bucket_policy_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -673,7 +673,7 @@ def delete_bucket_policy_config(
         bucket_name=bucket_name,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -716,7 +716,7 @@ def put_bucket_acl_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -761,7 +761,7 @@ def put_bucket_public_access_block_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -806,7 +806,7 @@ def put_bucket_lifecycle_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -834,7 +834,7 @@ def delete_bucket_lifecycle_config(
         bucket_name=bucket_name,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -877,7 +877,7 @@ def put_bucket_cors_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -905,7 +905,7 @@ def delete_bucket_cors_config(
         bucket_name=bucket_name,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -948,7 +948,7 @@ def put_bucket_notifications_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -976,7 +976,7 @@ def delete_bucket_notifications_config(
         bucket_name=bucket_name,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -995,7 +995,7 @@ def get_bucket_replication_config(
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketReplicationConfiguration:
-    _common_require_replication_feature(account)
+    require_replication_feature(account)
     return bucket_config_actions.get_bucket_replication_config(
         service=service,
         account=account,
@@ -1013,7 +1013,7 @@ def put_bucket_replication_config(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketReplicationConfiguration:
-    _common_require_replication_feature(account)
+    require_replication_feature(account)
     result, audit_metadata = bucket_config_actions.put_bucket_replication_config(
         service=service,
         account=account,
@@ -1021,7 +1021,7 @@ def put_bucket_replication_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -1043,14 +1043,14 @@ def delete_bucket_replication_config(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    _common_require_replication_feature(account)
+    require_replication_feature(account)
     bucket_config_actions.delete_bucket_replication_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -1093,7 +1093,7 @@ def put_bucket_logging_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -1121,7 +1121,7 @@ def delete_bucket_logging_config(
         bucket_name=bucket_name,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -1164,7 +1164,7 @@ def put_bucket_website_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -1192,7 +1192,7 @@ def delete_bucket_website_config(
         bucket_name=bucket_name,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -1235,7 +1235,7 @@ def put_bucket_tags_config(
         payload=payload,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -1263,7 +1263,7 @@ def delete_bucket_tags_config(
         bucket_name=bucket_name,
     )
     _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    _common_record_browser_action(
+    record_browser_action(
         audit_service,
         actor=actor,
         scope="browser",
@@ -1374,7 +1374,7 @@ def ensure_bucket_cors(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing origin")
     try:
         status_result = service.ensure_bucket_cors(bucket_name, account, payload.origin)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
+        record_browser_action(audit_service, actor=actor, scope="browser",
             action="ensure_bucket_cors",
             entity_type="bucket",
             entity_id=bucket_name,
@@ -1448,7 +1448,7 @@ def head_object(
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
-        _common_require_sse_feature(account)
+        require_sse_feature(account)
     try:
         return service.head_object(bucket_name, account, key, version_id=version_id, sse_customer=sse_customer)
     except RuntimeError as exc:
@@ -1666,7 +1666,7 @@ def upload_via_proxy(
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
-        _common_require_sse_feature(account)
+        require_sse_feature(account)
     try:
         service.upload_via_proxy(
             bucket_name,
@@ -1694,7 +1694,7 @@ def download_object(
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
-        _common_require_sse_feature(account)
+        require_sse_feature(account)
     try:
         stream, content_type, filename = service.download_object(
             bucket_name,
@@ -1721,7 +1721,7 @@ def presign(
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> PresignedUrl:
     if sse_customer:
-        _common_require_sse_feature(account)
+        require_sse_feature(account)
     try:
         return service.presign(bucket_name, account, payload, sse_customer=sse_customer)
     except RuntimeError as exc:
@@ -1740,7 +1740,7 @@ def multipart_init(
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
-        _common_require_sse_feature(account)
+        require_sse_feature(account)
     try:
         return service.initiate_multipart_upload(
             bucket_name,
@@ -1814,7 +1814,7 @@ def presign_part_for_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     payload.upload_id = upload_id
     if sse_customer:
-        _common_require_sse_feature(account)
+        require_sse_feature(account)
     try:
         return service.presign_part(bucket_name, account, payload, sse_customer=sse_customer)
     except RuntimeError as exc:

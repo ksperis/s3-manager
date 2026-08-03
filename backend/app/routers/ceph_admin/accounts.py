@@ -24,30 +24,30 @@ from app.models.ceph_admin import (
     PaginatedCephAdminAccountsResponse,
 )
 from app.routers.ceph_admin.listing_common import (
-    EndpointCacheEntry as _common_EndpointCacheEntry,
-    EndpointListCacheKey as _common_EndpointListCacheKey,
-    EndpointPayloadCacheKey as _common_EndpointPayloadCacheKey,
-    ListingProgressEmitter as _common_ListingProgressEmitter,
-    ListingProgressSnapshot as _common_ListingProgressSnapshot,
-    apply_advanced_filter as _common_apply_advanced_filter,
-    apply_simple_search as _common_apply_simple_search,
-    coerce_number as _coerce_number,
-    collect_filter_fields as _common_collect_filter_fields,
-    fields_set as _fields_set,
-    get_or_set_cache as _common_get_or_set_cache,
-    invalidate_cache as _common_invalidate_cache,
-    normalize_optional_str as _normalize_optional_str,
-    normalize_text as _normalize_text,
-    paginate as _common_paginate,
-    parse_bool as _parse_bool,
-    parse_filter_query as _common_parse_filter_query,
-    parse_includes as _parse_includes,
-    parse_int as _parse_int,
-    serialize_filter as _serialize_filter,
-    sort_value as _common_sort_value,
-    interpolate_progress_percent as _common_interpolate_progress_percent,
-    invoke_cancel_check as _common_invoke_cancel_check,
-    stream_listing_response as _common_stream_listing_response,
+    EndpointCacheEntry,
+    EndpointListCacheKey,
+    EndpointPayloadCacheKey,
+    ListingProgressEmitter,
+    ListingProgressSnapshot,
+    apply_advanced_filter,
+    apply_simple_search,
+    coerce_number,
+    collect_filter_fields,
+    fields_set,
+    get_or_set_cache,
+    interpolate_progress_percent,
+    invalidate_cache,
+    invoke_cancel_check,
+    normalize_optional_str,
+    normalize_text,
+    paginate,
+    parse_bool,
+    parse_filter_query,
+    parse_includes,
+    parse_int,
+    serialize_filter,
+    sort_value,
+    stream_listing_response,
 )
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
@@ -66,13 +66,9 @@ ACCOUNTS_LIST_CACHE_TTL_SECONDS = 30.0
 ACCOUNTS_LIST_CACHE_MAX_ENTRIES = 64
 RGW_ACCOUNTS_PAYLOAD_CACHE_MAX_ENTRIES = 16
 
-_AccountsListCacheKey = _common_EndpointListCacheKey
-_RgwAccountsPayloadCacheKey = _common_EndpointPayloadCacheKey
-
-
-_ACCOUNTS_LIST_CACHE: OrderedDict[_AccountsListCacheKey, _common_EndpointCacheEntry] = OrderedDict()
+_ACCOUNTS_LIST_CACHE: OrderedDict[EndpointListCacheKey, EndpointCacheEntry] = OrderedDict()
 _ACCOUNTS_LIST_CACHE_LOCK = Lock()
-_RGW_ACCOUNTS_PAYLOAD_CACHE: OrderedDict[_RgwAccountsPayloadCacheKey, _common_EndpointCacheEntry] = OrderedDict()
+_RGW_ACCOUNTS_PAYLOAD_CACHE: OrderedDict[EndpointPayloadCacheKey, EndpointCacheEntry] = OrderedDict()
 _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK = Lock()
 
 
@@ -85,7 +81,7 @@ def _clone_account_list(items: list[CephAdminRgwAccountSummary]) -> list[CephAdm
 
 
 def _parse_advanced_filter(raw: str | None) -> CephAdminAccountFilterQuery | None:
-    return _common_parse_filter_query(raw, query_cls=CephAdminAccountFilterQuery)
+    return parse_filter_query(raw, query_cls=CephAdminAccountFilterQuery)
 
 
 def _match_account_field_rule(account: CephAdminRgwAccountSummary, rule: CephAdminAccountFilterRule) -> bool:
@@ -106,8 +102,8 @@ def _match_account_field_rule(account: CephAdminRgwAccountSummary, rule: CephAdm
 
     string_fields = {"account_id", "account_name", "email"}
     if field in string_fields:
-        left = _normalize_text(str(value))
-        right = _normalize_text(str(rule.value or ""))
+        left = normalize_text(str(value))
+        right = normalize_text(str(rule.value or ""))
         if op == "contains":
             return right in left
         if op == "starts_with":
@@ -121,16 +117,16 @@ def _match_account_field_rule(account: CephAdminRgwAccountSummary, rule: CephAdm
         if op in ("in", "not_in"):
             if not isinstance(rule.value, list):
                 return False
-            candidates = {_normalize_text(str(item)) for item in rule.value}
+            candidates = {normalize_text(str(item)) for item in rule.value}
             result = left in candidates
             return result if op == "in" else not result
         return False
 
-    left_num = _coerce_number(value)
+    left_num = coerce_number(value)
     if left_num is None:
         return False
     if op in ("eq", "neq", "gt", "gte", "lt", "lte"):
-        right_num = _coerce_number(rule.value)
+        right_num = coerce_number(rule.value)
         if right_num is None:
             return False
         if op == "eq":
@@ -148,7 +144,7 @@ def _match_account_field_rule(account: CephAdminRgwAccountSummary, rule: CephAdm
     if op in ("in", "not_in"):
         if not isinstance(rule.value, list):
             return False
-        candidates = {_coerce_number(item) for item in rule.value}
+        candidates = {coerce_number(item) for item in rule.value}
         candidates = {item for item in candidates if item is not None}
         result = left_num in candidates
         return result if op == "in" else not result
@@ -198,7 +194,7 @@ def _account_profile_needs_enrichment(account: CephAdminRgwAccountSummary) -> bo
 
 def _extract_count(data: dict[str, Any], keys: tuple[str, ...]) -> Optional[int]:
     for key in keys:
-        parsed = _parse_int(data.get(key))
+        parsed = parse_int(data.get(key))
         if parsed is not None:
             return parsed
     return None
@@ -238,22 +234,22 @@ def _extract_quota_enabled(payload: dict[str, Any], keys: tuple[str, ...] = ("qu
     for key in keys:
         value = payload.get(key)
         if isinstance(value, dict):
-            parsed = _parse_bool(value.get("enabled"))
+            parsed = parse_bool(value.get("enabled"))
             if parsed is not None:
                 return parsed
     return None
 
 
 def _build_account_detail(payload: dict[str, Any], account_id_fallback: str) -> CephAdminRgwAccountDetail:
-    account_id = _normalize_optional_str(payload.get("id") or payload.get("account_id")) or account_id_fallback
-    account_name = _normalize_optional_str(payload.get("name") or payload.get("account_name") or payload.get("display_name"))
-    email = _normalize_optional_str(payload.get("email") or payload.get("mail"))
+    account_id = normalize_optional_str(payload.get("id") or payload.get("account_id")) or account_id_fallback
+    account_name = normalize_optional_str(payload.get("name") or payload.get("account_name") or payload.get("display_name"))
+    email = normalize_optional_str(payload.get("email") or payload.get("mail"))
     limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
-    max_users = _parse_int(payload.get("max_users") or limits_payload.get("max_users"))
-    max_buckets = _parse_int(payload.get("max_buckets") or limits_payload.get("max_buckets"))
-    max_roles = _parse_int(payload.get("max_roles") or limits_payload.get("max_roles"))
-    max_groups = _parse_int(payload.get("max_groups") or limits_payload.get("max_groups"))
-    max_access_keys = _parse_int(payload.get("max_access_keys") or limits_payload.get("max_access_keys"))
+    max_users = parse_int(payload.get("max_users") or limits_payload.get("max_users"))
+    max_buckets = parse_int(payload.get("max_buckets") or limits_payload.get("max_buckets"))
+    max_roles = parse_int(payload.get("max_roles") or limits_payload.get("max_roles"))
+    max_groups = parse_int(payload.get("max_groups") or limits_payload.get("max_groups"))
+    max_access_keys = parse_int(payload.get("max_access_keys") or limits_payload.get("max_access_keys"))
     quota_size, quota_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
     quota_enabled = _extract_quota_enabled(payload, keys=("quota", "account_quota"))
     quota = None
@@ -289,8 +285,8 @@ def _build_account_detail(payload: dict[str, Any], account_id_fallback: str) -> 
 
 
 def _invalidate_accounts_listing_cache(endpoint_id: int | None = None) -> None:
-    _common_invalidate_cache(_ACCOUNTS_LIST_CACHE, _ACCOUNTS_LIST_CACHE_LOCK, endpoint_id=endpoint_id)
-    _common_invalidate_cache(_RGW_ACCOUNTS_PAYLOAD_CACHE, _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK, endpoint_id=endpoint_id)
+    invalidate_cache(_ACCOUNTS_LIST_CACHE, _ACCOUNTS_LIST_CACHE_LOCK, endpoint_id=endpoint_id)
+    invalidate_cache(_RGW_ACCOUNTS_PAYLOAD_CACHE, _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK, endpoint_id=endpoint_id)
 
 
 def _enrich_accounts(
@@ -298,7 +294,7 @@ def _enrich_accounts(
     requested: set[str],
     ctx: CephAdminContext,
     *,
-    progress: _common_ListingProgressEmitter | None = None,
+    progress: ListingProgressEmitter | None = None,
     progress_stage: str = "detail_enrichment",
     progress_message: str = "Loading account details",
     progress_start: int = 50,
@@ -310,7 +306,7 @@ def _enrich_accounts(
     enriched: list[CephAdminRgwAccountSummary] = []
     total = len(accounts)
     for index, item in enumerate(accounts, start=1):
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
         account = _clone_account(item)
         try:
             payload = ctx.rgw_admin.get_account(account.account_id, allow_not_found=True)
@@ -319,14 +315,14 @@ def _enrich_accounts(
         if payload and not payload.get("not_found"):
             if "profile" in requested:
                 if not account.account_name:
-                    account.account_name = _normalize_optional_str(
+                    account.account_name = normalize_optional_str(
                         payload.get("account_name") or payload.get("name") or payload.get("display_name")
                     )
-                account.email = _normalize_optional_str(payload.get("email") or payload.get("mail"))
+                account.email = normalize_optional_str(payload.get("email") or payload.get("mail"))
             if "limits" in requested:
                 limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
-                account.max_users = _parse_int(payload.get("max_users") or limits_payload.get("max_users"))
-                account.max_buckets = _parse_int(payload.get("max_buckets") or limits_payload.get("max_buckets"))
+                account.max_users = parse_int(payload.get("max_users") or limits_payload.get("max_users"))
+                account.max_buckets = parse_int(payload.get("max_buckets") or limits_payload.get("max_buckets"))
             if "quota" in requested:
                 quota_size, quota_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
                 account.quota_max_size_bytes = quota_size
@@ -347,7 +343,7 @@ def _enrich_accounts(
         enriched.append(account)
         if progress is not None:
             progress.emit(
-                percent=_common_interpolate_progress_percent(
+                percent=interpolate_progress_percent(
                     progress_start,
                     progress_end,
                     processed=index,
@@ -358,12 +354,12 @@ def _enrich_accounts(
                 total=total,
                 message=progress_message,
             )
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
     return enriched
 
 
 def _get_cached_rgw_accounts_payload(ctx: CephAdminContext) -> list[Any]:
-    key = _RgwAccountsPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0))
+    key = EndpointPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0))
 
     def _fetch_payload() -> list[Any]:
         try:
@@ -375,7 +371,7 @@ def _get_cached_rgw_accounts_payload(ctx: CephAdminContext) -> list[Any]:
             raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         return payload or []
 
-    return _common_get_or_set_cache(
+    return get_or_set_cache(
         _RGW_ACCOUNTS_PAYLOAD_CACHE,
         _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK,
         key,
@@ -386,10 +382,10 @@ def _get_cached_rgw_accounts_payload(ctx: CephAdminContext) -> list[Any]:
 
 
 def _get_cached_accounts_listing(
-    key: _AccountsListCacheKey,
+    key: EndpointListCacheKey,
     builder: Callable[[], list[CephAdminRgwAccountSummary]],
 ) -> list[CephAdminRgwAccountSummary]:
-    return _common_get_or_set_cache(
+    return get_or_set_cache(
         _ACCOUNTS_LIST_CACHE,
         _ACCOUNTS_LIST_CACHE_LOCK,
         key,
@@ -409,27 +405,27 @@ def _compute_accounts_listing(
     sort_dir: str = Query("asc"),
     include: list[str] = Query(default=[]),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
-    progress_callback: Callable[[_common_ListingProgressSnapshot], None] | None = None,
+    progress_callback: Callable[[ListingProgressSnapshot], None] | None = None,
     cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedCephAdminAccountsResponse:
-    progress = _common_ListingProgressEmitter(progress_callback)
+    progress = ListingProgressEmitter(progress_callback)
     progress.emit(percent=0, stage="prepare", message="Preparing advanced search", force=True)
-    _common_invoke_cancel_check(cancel_check)
+    invoke_cancel_check(cancel_check)
 
-    include_set = _parse_includes(include)
+    include_set = parse_includes(include)
     requested = include_set & {"profile", "limits", "quota", "stats"}
     parsed_advanced_filter = _parse_advanced_filter(advanced_filter)
     advanced_filter_active = bool(parsed_advanced_filter and parsed_advanced_filter.rules)
-    cache_key = _AccountsListCacheKey(
+    cache_key = EndpointListCacheKey(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
-        advanced_filter=_serialize_filter(parsed_advanced_filter),
+        advanced_filter=serialize_filter(parsed_advanced_filter),
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
 
     def build_listing() -> list[CephAdminRgwAccountSummary]:
         progress.emit(percent=10, stage="load_entries", message="Loading RGW accounts", force=True)
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
         payload = _get_cached_rgw_accounts_payload(ctx)
         results: list[CephAdminRgwAccountSummary] = []
         for entry in payload or []:
@@ -444,13 +440,13 @@ def _compute_accounts_listing(
             user_count = None
             if isinstance(entry, dict):
                 account_id_value = entry.get("account_id") or entry.get("id")
-                account_name = _normalize_optional_str(
+                account_name = normalize_optional_str(
                     entry.get("account_name") or entry.get("name") or entry.get("display_name")
                 )
-                email = _normalize_optional_str(entry.get("email") or entry.get("mail"))
+                email = normalize_optional_str(entry.get("email") or entry.get("mail"))
                 limits_payload = entry.get("limits") if isinstance(entry.get("limits"), dict) else {}
-                max_users = _parse_int(entry.get("max_users") or limits_payload.get("max_users"))
-                max_buckets = _parse_int(entry.get("max_buckets") or limits_payload.get("max_buckets"))
+                max_users = parse_int(entry.get("max_users") or limits_payload.get("max_users"))
+                max_buckets = parse_int(entry.get("max_buckets") or limits_payload.get("max_buckets"))
                 quota_max_size_bytes, quota_max_objects = extract_quota_limits(entry, keys=("quota", "account_quota"))
                 bucket_count = _extract_bucket_count(entry)
                 user_count = _extract_user_count(entry)
@@ -480,9 +476,9 @@ def _compute_accounts_listing(
             message="RGW account scanning completed",
             force=True,
         )
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
 
-        advanced_fields = _common_collect_filter_fields(parsed_advanced_filter)
+        advanced_fields = collect_filter_fields(parsed_advanced_filter)
         sort_fields = {sort_by} if sort_by else {"account_id"}
         listing_fields = {
             field
@@ -510,7 +506,7 @@ def _compute_accounts_listing(
                 progress_end=64,
                 cancel_check=cancel_check,
             )
-            _common_invoke_cancel_check(cancel_check)
+            invoke_cancel_check(cancel_check)
 
         if advanced_filter_active:
             progress.emit(
@@ -521,8 +517,8 @@ def _compute_accounts_listing(
                 message="Applying advanced filters",
                 force=True,
             )
-        results = _common_apply_advanced_filter(results, parsed_advanced_filter, _match_account_rules)
-        _common_invoke_cancel_check(cancel_check)
+        results = apply_advanced_filter(results, parsed_advanced_filter, _match_account_rules)
+        invoke_cancel_check(cancel_check)
 
         def sort_key(item: CephAdminRgwAccountSummary):
             if sort_by in ("account_name", "name"):
@@ -543,7 +539,7 @@ def _compute_accounts_listing(
                 value = item.user_count
             else:
                 value = item.account_id
-            return _common_sort_value(value, item.account_id or "")
+            return sort_value(value, item.account_id or "")
 
         results.sort(key=sort_key, reverse=sort_dir == "desc")
         return results
@@ -557,8 +553,8 @@ def _compute_accounts_listing(
         message="Base listing ready",
         force=True,
     )
-    _common_invoke_cancel_check(cancel_check)
-    filtered_results = _common_apply_simple_search(
+    invoke_cancel_check(cancel_check)
+    filtered_results = apply_simple_search(
         results,
         search=search,
         parsed_filter=parsed_advanced_filter,
@@ -593,8 +589,8 @@ def _compute_accounts_listing(
             progress_end=84,
             cancel_check=cancel_check,
         )
-        _common_invoke_cancel_check(cancel_check)
-        filtered_results = _common_apply_simple_search(
+        invoke_cancel_check(cancel_check)
+        filtered_results = apply_simple_search(
             searchable_results,
             search=search,
             parsed_filter=parsed_advanced_filter,
@@ -611,8 +607,8 @@ def _compute_accounts_listing(
         message="Preparing result page",
         force=True,
     )
-    _common_invoke_cancel_check(cancel_check)
-    page_items, total, has_next = _common_paginate(
+    invoke_cancel_check(cancel_check)
+    page_items, total, has_next = paginate(
         filtered_results,
         page=page,
         page_size=page_size,
@@ -643,7 +639,7 @@ def _compute_accounts_listing(
             progress_end=99,
             cancel_check=cancel_check,
         )
-        _common_invoke_cancel_check(cancel_check)
+        invoke_cancel_check(cancel_check)
 
     progress.emit(
         percent=100,
@@ -704,7 +700,7 @@ async def stream_rgw_accounts(
             detail="advanced_filter must be provided as a JSON payload for streaming search",
         )
 
-    return _common_stream_listing_response(
+    return stream_listing_response(
         request,
         compute=lambda progress_callback, cancel_check: _compute_accounts_listing(
             page=page,
@@ -774,15 +770,15 @@ def create_rgw_account(
     account_id = requested_account_id
     if isinstance(create_result, dict):
         account_id = (
-            _normalize_optional_str(create_result.get("id"))
-            or _normalize_optional_str(create_result.get("account_id"))
+            normalize_optional_str(create_result.get("id"))
+            or normalize_optional_str(create_result.get("account_id"))
             or account_id
         )
         account_payload = create_result.get("account")
         if not account_id and isinstance(account_payload, dict):
             account_id = (
-                _normalize_optional_str(account_payload.get("id"))
-                or _normalize_optional_str(account_payload.get("account_id"))
+                normalize_optional_str(account_payload.get("id"))
+                or normalize_optional_str(account_payload.get("account_id"))
             )
     if not account_id:
         raise HTTPException(
@@ -868,7 +864,7 @@ def update_rgw_account_config(
     if not normalized_account_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account_id is required")
 
-    field_set = _fields_set(update)
+    field_set = fields_set(update)
     should_update_account = bool(
         {"account_name", "email", "max_users", "max_buckets", "max_roles", "max_groups", "max_access_keys"} & field_set
     ) or bool(update.extra_params)
