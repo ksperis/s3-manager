@@ -12,7 +12,7 @@ from typing import Optional
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal, engine
-from app.core.db_init import init_db
+from app.services.database_initialization import init_db
 from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider
 from app.models.s3_account import S3AccountCreate, S3AccountUpdate
 from app.models.user import UserCreate
