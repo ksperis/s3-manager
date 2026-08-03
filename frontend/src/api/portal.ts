@@ -248,25 +248,6 @@ export type PortalStorageObjectVersionsResponse = {
   next_version_id_marker?: string | null;
 };
 
-type PortalTrashItem = {
-  key: string;
-  name: string;
-  deleted_at?: string | null;
-  delete_marker_version_id: string;
-  previous_version_id?: string | null;
-  previous_last_modified?: string | null;
-  size?: number | null;
-};
-
-type PortalTrashResponse = {
-  versioning_status: PortalStorageSpaceVersioningStatus;
-  can_restore: boolean;
-  items: PortalTrashItem[];
-  is_truncated: boolean;
-  next_key_marker?: string | null;
-  next_version_id_marker?: string | null;
-};
-
 type PortalStorageObjectRestoreResponse = {
   key: string;
   restored_from_version_id: string;
@@ -681,31 +662,6 @@ export async function fetchPortalCollaboratorAccessReview(
   return data;
 }
 
-export async function fetchPortalServerAccessLogs(
-  accountId: S3AccountSelector,
-  options: {
-    date: string;
-    spaceId?: string;
-    limit?: number;
-    offset?: number;
-    timezoneOffsetMinutes?: number;
-    advancedFilter?: string;
-  }
-): Promise<PortalServerAccessLogEntry[]> {
-  const baseParams: Record<string, string | number> = {
-    date: options.date,
-    timezone_offset_minutes: options.timezoneOffsetMinutes ?? new Date().getTimezoneOffset(),
-  };
-  if (options.spaceId) baseParams.space_id = options.spaceId;
-  if (options.limit) baseParams.limit = options.limit;
-  if (options.offset) baseParams.offset = options.offset;
-  if (options.advancedFilter) baseParams.advanced_filter = options.advancedFilter;
-  const { data } = await client.get<PortalServerAccessLogEntry[]>("/portal/access-logs", {
-    params: withS3AccountParam(baseParams, accountId),
-  });
-  return data;
-}
-
 export async function fetchPortalServerAccessLogPage(
   accountId: S3AccountSelector,
   options: {
@@ -811,17 +767,6 @@ export async function importPortalStorageSpace(
   const { data } = await client.post<PortalStorageSpace>("/portal/storage-spaces/import", payload, {
     params: withS3AccountParam(undefined, accountId),
   });
-  return data;
-}
-
-export async function fetchPortalStorageSpace(
-  accountId: S3AccountSelector,
-  spaceId: string
-): Promise<PortalStorageSpace> {
-  const { data } = await client.get<PortalStorageSpace>(
-    `/portal/storage-spaces/${encodeURIComponent(spaceId)}`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
   return data;
 }
 
@@ -949,31 +894,6 @@ export async function fetchPortalStorageSpaceObjectVersions(
       params: withS3AccountParam(
         {
           key,
-          ...(markers?.keyMarker ? { key_marker: markers.keyMarker } : {}),
-          ...(markers?.versionIdMarker
-            ? { version_id_marker: markers.versionIdMarker }
-            : {}),
-        },
-        accountId
-      ),
-    }
-  );
-  return data;
-}
-
-export async function fetchPortalStorageSpaceTrash(
-  accountId: S3AccountSelector,
-  spaceId: string,
-  markers?: {
-    keyMarker?: string | null;
-    versionIdMarker?: string | null;
-  }
-): Promise<PortalTrashResponse> {
-  const { data } = await client.get<PortalTrashResponse>(
-    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/trash`,
-    {
-      params: withS3AccountParam(
-        {
           ...(markers?.keyMarker ? { key_marker: markers.keyMarker } : {}),
           ...(markers?.versionIdMarker
             ? { version_id_marker: markers.versionIdMarker }
@@ -1122,17 +1042,6 @@ export async function downloadPortalStorageSpaceObject(
   const fallback = key.split("/").filter(Boolean).at(-1) ?? "download";
   const filename = filenameFromContentDisposition(response.headers?.["content-disposition"], fallback);
   return { blob: response.data, filename };
-}
-
-export async function listPortalStorageSpaceShares(
-  accountId: S3AccountSelector,
-  spaceId: string
-): Promise<PortalStorageSpaceShare[]> {
-  const { data } = await client.get<PortalStorageSpaceShare[]>(
-    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
 }
 
 export async function listPortalShareCandidates(

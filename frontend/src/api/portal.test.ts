@@ -32,7 +32,6 @@ import {
   fetchPortalCollaboratorAccessReview,
   downloadPortalServerAccessRawLogs,
   fetchPortalServerAccessLogPage,
-  fetchPortalServerAccessLogs,
   grantPortalStorageSpaceShare,
   createPortalStorageSpace,
   createPortalStorageSpacePublicLink,
@@ -43,8 +42,6 @@ import {
   fetchPortalStorageSpaceObjectVersions,
   fetchPortalStorageSpaceAccessSummary,
   fetchPortalStorageSpaceUsageStats,
-  fetchPortalStorageSpaceTrash,
-  fetchPortalStorageSpace,
   fetchPortalUsageHistoryTrends,
   fetchPortalUsageTrends,
   getPortalUsageStatsAggregate,
@@ -52,7 +49,6 @@ import {
   listPortalShareCandidates,
   listPortalStorageSpaceShareCandidates,
   listPortalStorageSpacePublicLinks,
-  listPortalStorageSpaceShares,
   listPortalStorageSpaces,
   portalStorageSpaceVersionCleanupConfirmationPhrase,
   revokePortalStorageSpacePublicLink,
@@ -127,18 +123,6 @@ describe("portal storage spaces api", () => {
     );
   });
 
-  it("fetches a storage space detail through the canonical portal endpoint", async () => {
-    clientMock.get.mockResolvedValueOnce({ data: { id: "research-data", name: "Research Data", role: "Owner" } });
-
-    await fetchPortalStorageSpace("101", "research data");
-
-    expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data", {
-      params: {
-        account_id: "101",
-      },
-    });
-  });
-
   it("deletes a storage space through the canonical portal endpoint", async () => {
     await deletePortalStorageSpace("101", "research data");
 
@@ -174,8 +158,8 @@ describe("portal storage spaces api", () => {
     });
   });
 
-  it("loads file history and trash, then restores a selected version", async () => {
-    clientMock.get.mockResolvedValue({ data: { versions: [], items: [] } });
+  it("loads file history, then restores a selected version", async () => {
+    clientMock.get.mockResolvedValue({ data: { versions: [] } });
     clientMock.post.mockResolvedValueOnce({
       data: {
         key: "raw-data/report.csv",
@@ -190,10 +174,6 @@ describe("portal storage spaces api", () => {
       "raw-data/report.csv",
       { keyMarker: "raw-data/report.csv", versionIdMarker: "v3" },
     );
-    await fetchPortalStorageSpaceTrash("101", "research data", {
-      keyMarker: "raw-data/old.csv",
-      versionIdMarker: "d2",
-    });
     await restorePortalStorageSpaceObject(
       "101",
       "research data",
@@ -201,8 +181,7 @@ describe("portal storage spaces api", () => {
       "v2",
     );
 
-    expect(clientMock.get).toHaveBeenNthCalledWith(
-      1,
+    expect(clientMock.get).toHaveBeenCalledWith(
       "/portal/storage-spaces/research%20data/objects/versions",
       {
         params: {
@@ -210,17 +189,6 @@ describe("portal storage spaces api", () => {
           key: "raw-data/report.csv",
           key_marker: "raw-data/report.csv",
           version_id_marker: "v3",
-        },
-      },
-    );
-    expect(clientMock.get).toHaveBeenNthCalledWith(
-      2,
-      "/portal/storage-spaces/research%20data/trash",
-      {
-        params: {
-          account_id: "101",
-          key_marker: "raw-data/old.csv",
-          version_id_marker: "d2",
         },
       },
     );
@@ -277,16 +245,12 @@ describe("portal storage spaces api", () => {
     clientMock.post.mockResolvedValueOnce({ data: { id: "research-data:12", role: "Viewer" } });
     clientMock.get.mockResolvedValueOnce({ data: [] });
 
-    await listPortalStorageSpaceShares("101", "research data");
     await listPortalShareCandidates("101");
     await listPortalStorageSpaceShareCandidates("101", "research data");
     await grantPortalStorageSpaceShare("101", "research data", { email: "viewer@example.com", role: "Viewer" });
     await updatePortalStorageSpaceShare("101", "research data", 12, "Editor");
     await revokePortalStorageSpaceShare("101", "research data", 12);
 
-    expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/shares", {
-      params: { account_id: "101" },
-    });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/share-candidates", {
       params: { account_id: "101" },
     });
@@ -337,14 +301,6 @@ describe("portal storage spaces api", () => {
   it("fetches portal activity access logs and alerts", async () => {
     await fetchPortalActivity("101", { spaceId: "research data", limit: 25 });
     await fetchPortalCollaborators("101");
-    await fetchPortalServerAccessLogs("101", {
-      date: "2026-07-08",
-      spaceId: "research data",
-      limit: 25,
-      offset: 50,
-      timezoneOffsetMinutes: -120,
-      advancedFilter: '{"match":"all","rules":[{"field":"identity","op":"contains","value":"portal-6-1"}]}',
-    });
     await fetchPortalServerAccessLogPage("101", {
       date: "2026-07-08",
       spaceId: "research data",
@@ -370,17 +326,6 @@ describe("portal storage spaces api", () => {
     });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/collaborators", {
       params: { account_id: "101" },
-    });
-    expect(clientMock.get).toHaveBeenCalledWith("/portal/access-logs", {
-      params: {
-        account_id: "101",
-        date: "2026-07-08",
-        space_id: "research data",
-        limit: 25,
-        offset: 50,
-        timezone_offset_minutes: -120,
-        advanced_filter: '{"match":"all","rules":[{"field":"identity","op":"contains","value":"portal-6-1"}]}',
-      },
     });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/access-logs/page", {
       params: {
