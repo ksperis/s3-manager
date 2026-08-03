@@ -42,6 +42,30 @@ from app.utils.usage_stats import compute_usage_ratio_percent, extract_usage_sta
 BUCKET_ENRICH_MAX_WORKERS = 6
 BUCKET_OWNER_LOOKUP_MAX_WORKERS = 6
 
+
+def _build_enrichment_progress_callback(
+    progress: _BucketListingProgressEmitter | None,
+    *,
+    stage: str,
+    message: str,
+    start: int,
+    end: int,
+    total: int,
+) -> Callable[[int], None]:
+    def emit(processed: int) -> None:
+        if progress is None:
+            return
+        progress.emit(
+            percent=_common_interpolate_progress_percent(start, end, processed=processed, total=total),
+            stage=stage,
+            processed=processed,
+            total=total,
+            message=message,
+        )
+
+    return emit
+
+
 _FEATURE_PARAM_UNAVAILABLE = object()
 _FEATURE_PARAM_SOURCE_BY_PARAM: dict[str, str] = {
     "lifecycle_rule_id": "lifecycle",
@@ -1603,22 +1627,14 @@ def _load_feature_param_snapshots(
 
     max_workers = min(BUCKET_ENRICH_MAX_WORKERS, len(buckets))
     total = len(buckets)
-
-    def emit_progress(processed: int) -> None:
-        if progress is None:
-            return
-        progress.emit(
-            percent=_common_interpolate_progress_percent(
-                progress_start,
-                progress_end,
-                processed=processed,
-                total=total,
-            ),
-            stage=progress_stage,
-            processed=processed,
-            total=total,
-            message=progress_message,
-        )
+    emit_progress = _build_enrichment_progress_callback(
+        progress,
+        stage=progress_stage,
+        message=progress_message,
+        start=progress_start,
+        end=progress_end,
+        total=total,
+    )
 
     if max_workers <= 1:
         for index, bucket in enumerate(buckets, start=1):
@@ -1729,22 +1745,14 @@ def _backfill_bucket_owner_metadata(
 
     max_workers = min(BUCKET_OWNER_LOOKUP_MAX_WORKERS, len(pending))
     total = len(pending)
-
-    def emit_progress(processed: int) -> None:
-        if progress is None:
-            return
-        progress.emit(
-            percent=_common_interpolate_progress_percent(
-                progress_start,
-                progress_end,
-                processed=processed,
-                total=total,
-            ),
-            stage=progress_stage,
-            processed=processed,
-            total=total,
-            message=progress_message,
-        )
+    emit_progress = _build_enrichment_progress_callback(
+        progress,
+        stage=progress_stage,
+        message=progress_message,
+        start=progress_start,
+        end=progress_end,
+        total=total,
+    )
 
     if max_workers <= 1:
         resolved = []
@@ -2122,22 +2130,14 @@ def _enrich_buckets(
 
     max_workers = min(BUCKET_ENRICH_MAX_WORKERS, len(buckets))
     total = len(buckets)
-
-    def emit_progress(processed: int) -> None:
-        if progress is None:
-            return
-        progress.emit(
-            percent=_common_interpolate_progress_percent(
-                progress_start,
-                progress_end,
-                processed=processed,
-                total=total,
-            ),
-            stage=progress_stage,
-            processed=processed,
-            total=total,
-            message=progress_message,
-        )
+    emit_progress = _build_enrichment_progress_callback(
+        progress,
+        stage=progress_stage,
+        message=progress_message,
+        start=progress_start,
+        end=progress_end,
+        total=total,
+    )
 
     if max_workers <= 1:
         enriched = []
