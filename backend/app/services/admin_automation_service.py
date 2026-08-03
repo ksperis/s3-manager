@@ -43,6 +43,7 @@ from app.services.resource_deletion_purge_service import ResourceDeletionPurgeSe
 from app.services.s3_accounts_service import S3AccountsService
 from app.services.s3_users_service import S3UsersService
 from app.services.storage_endpoints_service import StorageEndpointsService
+from app.utils.normalize import normalize_optional_string
 from app.services.users_service import UsersService
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import S3ConnectionsService
@@ -708,7 +709,7 @@ class AdminAutomationService:
         diff: dict[str, dict[str, Any]] = {}
         fields_set = spec.model_fields_set
         if "name" in fields_set:
-            desired = self._normalize_optional_str(spec.name) or endpoint.name
+            desired = normalize_optional_string(spec.name) or endpoint.name
             if desired != endpoint.name:
                 diff["name"] = {"from": endpoint.name, "to": desired}
         if "endpoint_url" in fields_set:
@@ -717,8 +718,8 @@ class AdminAutomationService:
             if desired != current:
                 diff["endpoint_url"] = {"from": current, "to": desired}
         if "region" in fields_set:
-            desired = self._normalize_optional_str(spec.region)
-            if desired != self._normalize_optional_str(endpoint.region):
+            desired = normalize_optional_string(spec.region)
+            if desired != normalize_optional_string(endpoint.region):
                 diff["region"] = {"from": endpoint.region, "to": desired}
         if "force_path_style" in fields_set and spec.force_path_style is not None:
             desired_force_path_style = bool(spec.force_path_style)
@@ -747,8 +748,8 @@ class AdminAutomationService:
                 diff["features_config"] = {"from": current_features, "to": desired_features}
         if item.update_secrets:
             if "admin_access_key" in fields_set:
-                desired = self._normalize_optional_str(spec.admin_access_key)
-                if desired != self._normalize_optional_str(endpoint.admin_access_key):
+                desired = normalize_optional_string(spec.admin_access_key)
+                if desired != normalize_optional_string(endpoint.admin_access_key):
                     diff["admin_access_key"] = {
                         "from": mask_access_key_id(endpoint.admin_access_key),
                         "to": mask_access_key_id(desired),
@@ -756,8 +757,8 @@ class AdminAutomationService:
             if "admin_secret_key" in fields_set:
                 diff["admin_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
             if "supervision_access_key" in fields_set:
-                desired = self._normalize_optional_str(spec.supervision_access_key)
-                if desired != self._normalize_optional_str(endpoint.supervision_access_key):
+                desired = normalize_optional_string(spec.supervision_access_key)
+                if desired != normalize_optional_string(endpoint.supervision_access_key):
                     diff["supervision_access_key"] = {
                         "from": mask_access_key_id(endpoint.supervision_access_key),
                         "to": mask_access_key_id(desired),
@@ -765,8 +766,8 @@ class AdminAutomationService:
             if "supervision_secret_key" in fields_set:
                 diff["supervision_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
             if "ceph_admin_access_key" in fields_set:
-                desired = self._normalize_optional_str(spec.ceph_admin_access_key)
-                if desired != self._normalize_optional_str(endpoint.ceph_admin_access_key):
+                desired = normalize_optional_string(spec.ceph_admin_access_key)
+                if desired != normalize_optional_string(endpoint.ceph_admin_access_key):
                     diff["ceph_admin_access_key"] = {
                         "from": mask_access_key_id(endpoint.ceph_admin_access_key),
                         "to": mask_access_key_id(desired),
@@ -784,8 +785,8 @@ class AdminAutomationService:
         if "email" in fields_set and spec.email and spec.email != user.email:
             diff["email"] = {"from": user.email, "to": spec.email}
         if "full_name" in fields_set:
-            desired = self._normalize_optional_str(spec.full_name)
-            if desired != self._normalize_optional_str(user.full_name):
+            desired = normalize_optional_string(spec.full_name)
+            if desired != normalize_optional_string(user.full_name):
                 diff["full_name"] = {"from": user.full_name, "to": desired}
         if "role" in fields_set and spec.role and spec.role != user.role:
             diff["role"] = {"from": user.role, "to": spec.role}
@@ -833,8 +834,8 @@ class AdminAutomationService:
         if "name" in fields_set and spec.name and spec.name != account.name:
             diff["name"] = {"from": account.name, "to": spec.name}
         if "email" in fields_set:
-            desired = self._normalize_optional_str(spec.email)
-            if desired != self._normalize_optional_str(account.email):
+            desired = normalize_optional_string(spec.email)
+            if desired != normalize_optional_string(account.email):
                 diff["email"] = {"from": account.email, "to": desired}
         if {"storage_endpoint_id", "storage_endpoint_name", "storage_endpoint_url"} & fields_set:
             endpoint = self._resolve_storage_endpoint(
@@ -878,8 +879,8 @@ class AdminAutomationService:
         if "name" in fields_set and spec.name and spec.name != s3_user.name:
             diff["name"] = {"from": s3_user.name, "to": spec.name}
         if "email" in fields_set:
-            desired = self._normalize_optional_str(spec.email)
-            if desired != self._normalize_optional_str(s3_user.email):
+            desired = normalize_optional_string(spec.email)
+            if desired != normalize_optional_string(s3_user.email):
                 diff["email"] = {"from": s3_user.email, "to": desired}
         if {"storage_endpoint_id", "storage_endpoint_name", "storage_endpoint_url"} & fields_set:
             endpoint = self._resolve_storage_endpoint(
@@ -962,14 +963,14 @@ class AdminAutomationService:
         return diff
 
     def _build_storage_endpoint_create(self, item: StorageEndpointApply, spec) -> StorageEndpointCreate:
-        name = self._normalize_optional_str(spec.name or item.match.name) or "Endpoint"
+        name = normalize_optional_string(spec.name or item.match.name) or "Endpoint"
         endpoint_url = self._normalize_endpoint_url(spec.endpoint_url or item.match.endpoint_url)
         if not endpoint_url:
             raise ValueError("storage_endpoints.spec.endpoint_url is required to create a new endpoint")
         return StorageEndpointCreate(
             name=name,
             endpoint_url=endpoint_url,
-            region=self._normalize_optional_str(spec.region),
+            region=normalize_optional_string(spec.region),
             force_path_style=bool(spec.force_path_style if spec.force_path_style is not None else False),
             verify_tls=bool(spec.verify_tls if spec.verify_tls is not None else True),
             provider=spec.provider or StorageProvider.CEPH,
@@ -1470,13 +1471,6 @@ class AdminAutomationService:
         if item.match.name:
             return f"name={item.match.name}"
         return f"id={item.match.id}"
-
-    @staticmethod
-    def _normalize_optional_str(value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        trimmed = value.strip()
-        return trimmed or None
 
     @staticmethod
     def _normalize_endpoint_url(value: Optional[str]) -> Optional[str]:

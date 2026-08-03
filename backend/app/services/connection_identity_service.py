@@ -10,6 +10,7 @@ from typing import Optional
 
 from app.db import S3Connection, StorageProvider
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
+from app.utils.normalize import normalize_optional_string
 from app.utils.rgw import is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_rgw_admin_api_endpoint
 
@@ -271,16 +272,9 @@ class ConnectionIdentityService:
             _CACHE[key] = _CacheEntry(expires_at=expires_at, value=value)
 
 
-def _normalize_optional_str(value: Optional[str]) -> Optional[str]:
-    if value is None:
-        return None
-    normalized = value.strip()
-    return normalized or None
-
-
 def _identity_from_metadata(owner_type: Optional[str], owner_identifier: Optional[str]) -> tuple[Optional[str], Optional[str]]:
-    type_slug = (_normalize_optional_str(owner_type) or "").lower()
-    identifier = _normalize_optional_str(owner_identifier)
+    type_slug = (normalize_optional_string(owner_type) or "").lower()
+    identifier = normalize_optional_string(owner_identifier)
     if not identifier:
         return None, None
 
@@ -330,7 +324,7 @@ def _identity_from_rgw_payload(payload: object) -> tuple[Optional[str], Optional
     uid: Optional[str] = None
     account_id: Optional[str] = None
     for candidate in candidates:
-        uid = _normalize_optional_str(
+        uid = normalize_optional_string(
             candidate.get("uid")
             or candidate.get("user_id")
             or (candidate.get("user") if isinstance(candidate.get("user"), str) else None)
@@ -338,7 +332,7 @@ def _identity_from_rgw_payload(payload: object) -> tuple[Optional[str], Optional
         if uid:
             break
     for candidate in candidates:
-        account_id = _normalize_optional_str(
+        account_id = normalize_optional_string(
             candidate.get("account_id")
             or candidate.get("account")
             or candidate.get("tenant")

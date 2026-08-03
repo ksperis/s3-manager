@@ -17,6 +17,7 @@ from app.models.key_rotation import (
     KeyRotationType,
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.utils.normalize import normalize_optional_string
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
 from app.routers.http_errors import sanitized_error_log_detail
 
@@ -233,7 +234,7 @@ class KeyRotationService:
                 )
                 continue
 
-            old_access_key = self._clean_key(account.rgw_access_key)
+            old_access_key = normalize_optional_string(account.rgw_access_key)
             new_access_key: Optional[str] = None
             active_tenant: Optional[str] = None
             try:
@@ -325,8 +326,8 @@ class KeyRotationService:
                 0,
             )
 
-        old_access_key = self._clean_key(endpoint.supervision_access_key)
-        old_secret_key = self._clean_key(endpoint.supervision_secret_key)
+        old_access_key = normalize_optional_string(endpoint.supervision_access_key)
+        old_secret_key = normalize_optional_string(endpoint.supervision_secret_key)
         if not old_access_key or not old_secret_key:
             return (
                 [
@@ -344,8 +345,8 @@ class KeyRotationService:
                 0,
             )
 
-        admin_access_key = self._clean_key(endpoint.admin_access_key)
-        admin_secret_key = self._clean_key(endpoint.admin_secret_key)
+        admin_access_key = normalize_optional_string(endpoint.admin_access_key)
+        admin_secret_key = normalize_optional_string(endpoint.admin_secret_key)
         if not admin_access_key or not admin_secret_key:
             return (
                 [
@@ -490,7 +491,7 @@ class KeyRotationService:
 
         for s3_user in s3_users:
             user_label = s3_user.name or s3_user.rgw_user_uid
-            old_access_key = self._clean_key(s3_user.rgw_access_key)
+            old_access_key = normalize_optional_string(s3_user.rgw_access_key)
             new_access_key: Optional[str] = None
             active_tenant: Optional[str] = None
             try:
@@ -585,8 +586,8 @@ class KeyRotationService:
                 0,
             )
 
-        old_access_key = self._clean_key(getattr(endpoint, access_key_field))
-        old_secret_key = self._clean_key(getattr(endpoint, secret_key_field))
+        old_access_key = normalize_optional_string(getattr(endpoint, access_key_field))
+        old_secret_key = normalize_optional_string(getattr(endpoint, secret_key_field))
         if not old_access_key or not old_secret_key:
             return (
                 [
@@ -760,7 +761,7 @@ class KeyRotationService:
         preferred_tenant: Optional[str],
     ) -> Optional[str]:
         attempts: list[Optional[str]] = []
-        for candidate in (self._clean_key(preferred_tenant), None):
+        for candidate in (normalize_optional_string(preferred_tenant), None):
             if candidate in attempts:
                 continue
             attempts.append(candidate)
@@ -787,7 +788,7 @@ class KeyRotationService:
         tenant: Optional[str],
     ) -> tuple[dict, Optional[str]]:
         attempts: list[Optional[str]] = []
-        for candidate in (self._clean_key(tenant), None):
+        for candidate in (normalize_optional_string(tenant), None):
             if candidate in attempts:
                 continue
             attempts.append(candidate)
@@ -811,7 +812,7 @@ class KeyRotationService:
         previous_access_key: Optional[str],
         deactivate_only: bool,
     ) -> tuple[str, str, Optional[str], Optional[str]]:
-        old_access_key = self._clean_key(previous_access_key)
+        old_access_key = normalize_optional_string(previous_access_key)
         response, active_tenant = self._create_access_key_with_fallback(admin, uid=uid, tenant=tenant)
         new_access_key, new_secret_key = self._extract_new_key_pair(
             admin,
@@ -865,7 +866,7 @@ class KeyRotationService:
         access_key: Optional[str],
         tenant: Optional[str],
     ) -> None:
-        candidate = self._clean_key(access_key)
+        candidate = normalize_optional_string(access_key)
         if not candidate:
             return
         try:
@@ -885,13 +886,13 @@ class KeyRotationService:
         entries = admin._extract_keys(response)
         if not entries:
             return None, None
-        excluded = self._clean_key(exclude_access_key)
+        excluded = normalize_optional_string(exclude_access_key)
 
         def _access(entry: dict) -> Optional[str]:
-            return self._clean_key(entry.get("access_key") or entry.get("access-key"))
+            return normalize_optional_string(entry.get("access_key") or entry.get("access-key"))
 
         def _secret(entry: dict) -> Optional[str]:
-            return self._clean_key(entry.get("secret_key") or entry.get("secret-key"))
+            return normalize_optional_string(entry.get("secret_key") or entry.get("secret-key"))
 
         for require_secret in (True, False):
             for entry in entries:
@@ -941,7 +942,7 @@ class KeyRotationService:
         for candidate in candidates:
             for field_name in ("uid", "user_id", "user"):
                 field_value = candidate.get(field_name)
-                normalized = self._clean_key(field_value if isinstance(field_value, str) else None)
+                normalized = normalize_optional_string(field_value)
                 if normalized:
                     uid = normalized
                     break
@@ -951,7 +952,7 @@ class KeyRotationService:
         for candidate in candidates:
             for field_name in ("tenant", "account_id"):
                 field_value = candidate.get(field_name)
-                normalized = self._clean_key(field_value if isinstance(field_value, str) else None)
+                normalized = normalize_optional_string(field_value)
                 if normalized:
                     tenant = normalized
                     break
@@ -968,14 +969,8 @@ class KeyRotationService:
             raise ValueError("Unable to resolve RGW user identity for this access key.")
         return uid, tenant
 
-    def _clean_key(self, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        normalized = value.strip()
-        return normalized or None
-
     def _mask_access_key(self, value: Optional[str]) -> Optional[str]:
-        normalized = self._clean_key(value)
+        normalized = normalize_optional_string(value)
         if not normalized:
             return None
         if len(normalized) <= 8:

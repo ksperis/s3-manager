@@ -34,6 +34,7 @@ from app.services.portal_role_sync import (
     sync_portal_role_downgrades,
     sync_portal_role_promotions,
 )
+from app.utils.normalize import normalize_optional_string
 from app.utils.time import utcnow
 from app.utils.account_roles import require_account_role
 
@@ -56,7 +57,7 @@ class UiGroupsService:
         now = utcnow()
         group = UiGroup(
             name=name,
-            description=self._normalize_description(payload.description),
+            description=normalize_optional_string(payload.description),
             can_access_ceph_admin=bool(payload.can_access_ceph_admin),
             can_access_storage_ops=bool(payload.can_access_storage_ops),
             can_access_manager_bucket_compare=bool(manager_tool_access.bucket_compare),
@@ -119,7 +120,7 @@ class UiGroupsService:
                 raise ValueError("UI group already exists")
             group.name = name
         if payload.description is not None:
-            group.description = self._normalize_description(payload.description)
+            group.description = normalize_optional_string(payload.description)
         if payload.avatar_source is not None:
             UiGroupAvatarService(self.db).set_choice(group, payload.avatar_source, payload.avatar_icon)
         if payload.can_access_ceph_admin is not None:
@@ -442,12 +443,6 @@ class UiGroupsService:
         if not name:
             raise ValueError("UI group name is required")
         return name
-
-    def _normalize_description(self, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        normalized = value.strip()
-        return normalized or None
 
     def _ensure_users_exist(self, ids: list[int]) -> None:
         if not ids:
