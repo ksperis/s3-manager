@@ -43,12 +43,12 @@ from app.services.resource_deletion_purge_service import ResourceDeletionPurgeSe
 from app.services.s3_accounts_service import S3AccountsService
 from app.services.s3_users_service import S3UsersService
 from app.services.storage_endpoints_service import StorageEndpointsService
-from app.utils.normalize import normalize_optional_string
 from app.services.users_service import UsersService
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import S3ConnectionsService
-from app.utils.normalize import normalize_storage_provider
+from app.utils.normalize import normalize_optional_string, normalize_storage_provider
 from app.utils.quota_stats import bytes_to_gb
+from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.size_units import size_to_bytes
 from app.utils.storage_endpoint_features import dump_features_config, normalize_features_config
 from app.utils.s3_connection_endpoint import (
@@ -713,8 +713,8 @@ class AdminAutomationService:
             if desired != endpoint.name:
                 diff["name"] = {"from": endpoint.name, "to": desired}
         if "endpoint_url" in fields_set:
-            desired = self._normalize_endpoint_url(spec.endpoint_url)
-            current = self._normalize_endpoint_url(endpoint.endpoint_url)
+            desired = normalize_s3_endpoint(spec.endpoint_url)
+            current = normalize_s3_endpoint(endpoint.endpoint_url)
             if desired != current:
                 diff["endpoint_url"] = {"from": current, "to": desired}
         if "region" in fields_set:
@@ -964,7 +964,7 @@ class AdminAutomationService:
 
     def _build_storage_endpoint_create(self, item: StorageEndpointApply, spec) -> StorageEndpointCreate:
         name = normalize_optional_string(spec.name or item.match.name) or "Endpoint"
-        endpoint_url = self._normalize_endpoint_url(spec.endpoint_url or item.match.endpoint_url)
+        endpoint_url = normalize_s3_endpoint(spec.endpoint_url or item.match.endpoint_url)
         if not endpoint_url:
             raise ValueError("storage_endpoints.spec.endpoint_url is required to create a new endpoint")
         return StorageEndpointCreate(
@@ -1055,7 +1055,7 @@ class AdminAutomationService:
                 raise ValueError("Storage endpoint not found")
             return endpoint
         if endpoint_url:
-            normalized = self._normalize_endpoint_url(endpoint_url)
+            normalized = normalize_s3_endpoint(endpoint_url)
             endpoint = (
                 self.db.query(StorageEndpoint)
                 .filter(StorageEndpoint.endpoint_url == normalized)
@@ -1335,7 +1335,7 @@ class AdminAutomationService:
         if match.id is not None:
             return self.db.query(StorageEndpoint).filter(StorageEndpoint.id == match.id).first()
         if match.endpoint_url:
-            normalized = self._normalize_endpoint_url(match.endpoint_url)
+            normalized = normalize_s3_endpoint(match.endpoint_url)
             return self.db.query(StorageEndpoint).filter(StorageEndpoint.endpoint_url == normalized).first()
         if match.name:
             return self.db.query(StorageEndpoint).filter(StorageEndpoint.name == match.name).first()
@@ -1471,13 +1471,6 @@ class AdminAutomationService:
         if item.match.name:
             return f"name={item.match.name}"
         return f"id={item.match.id}"
-
-    @staticmethod
-    def _normalize_endpoint_url(value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        trimmed = value.strip().rstrip("/")
-        return trimmed or None
 
     @staticmethod
     def _created(resource: str, key: str, entity_id: Optional[int] = None, *, dry_run: bool) -> AdminAutomationItemResult:

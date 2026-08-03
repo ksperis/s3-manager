@@ -31,7 +31,8 @@ from app.services.mappers.storage_endpoint import storage_endpoint_from_db
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
-from app.utils.s3_endpoint import configured_s3_endpoint
+from app.utils.normalize import normalize_optional_string, normalize_storage_provider
+from app.utils.s3_endpoint import configured_s3_endpoint, normalize_s3_endpoint
 from app.utils.storage_endpoint_features import (
     AWS_DEFAULT_REGION,
     dump_features_config,
@@ -40,7 +41,6 @@ from app.utils.storage_endpoint_features import (
     resolve_admin_endpoint,
 )
 from app.utils.name_ordering import name_order_by
-from app.utils.normalize import normalize_storage_provider
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -116,17 +116,6 @@ class StorageEndpointsService:
         if self.env_endpoints_locked():
             raise ValueError("Storage endpoints are managed by ENV_STORAGE_ENDPOINTS.")
 
-    def _normalize_url(self, value: Optional[str]) -> Optional[str]:
-        if not value:
-            return None
-        return value.strip().rstrip("/")
-
-    def _clean_optional(self, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        value = value.strip()
-        return value or None
-
     def _normalize_name(self, value: Optional[str], fallback: str = "Endpoint") -> str:
         normalized = (value or fallback).strip()
         return normalized or fallback
@@ -135,7 +124,7 @@ class StorageEndpointsService:
         return normalize_storage_provider(provider)
 
     def _normalize_region(self, provider: StorageProvider, value: Optional[str]) -> Optional[str]:
-        region = self._clean_optional(value)
+        region = normalize_optional_string(value)
         if provider == StorageProvider.AWS and not region:
             return AWS_DEFAULT_REGION
         return region
@@ -318,7 +307,7 @@ class StorageEndpointsService:
         return None, None, None, None, None, None
 
     def detect_features(self, payload: StorageEndpointFeatureDetectionRequest) -> StorageEndpointFeatureDetectionResult:
-        endpoint_url = self._normalize_url(payload.endpoint_url)
+        endpoint_url = normalize_s3_endpoint(payload.endpoint_url)
         if not endpoint_url:
             raise ValueError("Endpoint URL is required.")
 
@@ -328,8 +317,8 @@ class StorageEndpointsService:
             if not stored_endpoint:
                 raise ValueError("Endpoint not found.")
 
-        region = self._clean_optional(payload.region) or (stored_endpoint.region if stored_endpoint else None)
-        admin_endpoint = self._normalize_url(payload.admin_endpoint) or endpoint_url
+        region = normalize_optional_string(payload.region) or (stored_endpoint.region if stored_endpoint else None)
+        admin_endpoint = normalize_s3_endpoint(payload.admin_endpoint) or endpoint_url
         verify_tls = (
             bool(payload.verify_tls)
             if payload.verify_tls is not None
@@ -338,10 +327,10 @@ class StorageEndpointsService:
             else True
         )
 
-        admin_access_key = self._clean_optional(payload.admin_access_key)
-        admin_secret_key = self._clean_optional(payload.admin_secret_key)
-        supervision_access_key = self._clean_optional(payload.supervision_access_key)
-        supervision_secret_key = self._clean_optional(payload.supervision_secret_key)
+        admin_access_key = normalize_optional_string(payload.admin_access_key)
+        admin_secret_key = normalize_optional_string(payload.admin_secret_key)
+        supervision_access_key = normalize_optional_string(payload.supervision_access_key)
+        supervision_secret_key = normalize_optional_string(payload.supervision_secret_key)
 
         if stored_endpoint:
             if admin_access_key and not admin_secret_key and admin_access_key == (stored_endpoint.admin_access_key or ""):
@@ -439,7 +428,7 @@ class StorageEndpointsService:
 
         for entry in env_endpoints:
             name = self._normalize_name(entry.name, fallback="Endpoint")
-            endpoint_url = self._normalize_url(entry.endpoint_url)
+            endpoint_url = normalize_s3_endpoint(entry.endpoint_url)
             if not endpoint_url:
                 raise ValueError("ENV_STORAGE_ENDPOINTS requires endpoint_url for each entry.")
             if endpoint_url in seen_urls:
@@ -459,7 +448,7 @@ class StorageEndpointsService:
 
         existing = self.db.query(StorageEndpoint).all()
         existing_by_url = {
-            self._normalize_url(endpoint.endpoint_url): endpoint
+            normalize_s3_endpoint(endpoint.endpoint_url): endpoint
             for endpoint in existing
             if endpoint.endpoint_url
         }
@@ -470,12 +459,12 @@ class StorageEndpointsService:
             region = self._normalize_region(provider, entry.region)
             force_path_style = bool(entry.force_path_style)
             verify_tls = bool(entry.verify_tls)
-            admin_access = self._clean_optional(entry.admin_access_key)
-            admin_secret = self._clean_optional(entry.admin_secret_key)
-            supervision_access = self._clean_optional(entry.supervision_access_key)
-            supervision_secret = self._clean_optional(entry.supervision_secret_key)
-            ceph_admin_access = self._clean_optional(entry.ceph_admin_access_key)
-            ceph_admin_secret = self._clean_optional(entry.ceph_admin_secret_key)
+            admin_access = normalize_optional_string(entry.admin_access_key)
+            admin_secret = normalize_optional_string(entry.admin_secret_key)
+            supervision_access = normalize_optional_string(entry.supervision_access_key)
+            supervision_secret = normalize_optional_string(entry.supervision_secret_key)
+            ceph_admin_access = normalize_optional_string(entry.ceph_admin_access_key)
+            ceph_admin_secret = normalize_optional_string(entry.ceph_admin_secret_key)
             raw_features = entry.features_config
             if entry.features is not None:
                 raw_features = dump_features_config(entry.features)
@@ -588,7 +577,7 @@ class StorageEndpointsService:
             .first()
         )
         if endpoint and endpoint.endpoint_url:
-            return self._normalize_url(endpoint.endpoint_url)
+            return normalize_s3_endpoint(endpoint.endpoint_url)
         return configured_s3_endpoint()
 
     def get_endpoint(self, endpoint_id: int, *, include_admin_ops_permissions: bool = True) -> StorageEndpointSchema:
@@ -609,17 +598,17 @@ class StorageEndpointsService:
     def create_endpoint(self, payload: StorageEndpointCreate) -> StorageEndpointSchema:
         self._ensure_env_editable()
         name = self._normalize_name(payload.name, fallback="Endpoint")
-        endpoint_url = self._normalize_url(payload.endpoint_url)
+        endpoint_url = normalize_s3_endpoint(payload.endpoint_url)
         force_path_style = bool(payload.force_path_style)
         verify_tls = bool(payload.verify_tls)
         provider = self._normalize_provider(payload.provider)
         region = self._normalize_region(provider, payload.region)
-        admin_access = self._clean_optional(payload.admin_access_key)
-        admin_secret = self._clean_optional(payload.admin_secret_key)
-        supervision_access = self._clean_optional(payload.supervision_access_key)
-        supervision_secret = self._clean_optional(payload.supervision_secret_key)
-        ceph_admin_access = self._clean_optional(payload.ceph_admin_access_key)
-        ceph_admin_secret = self._clean_optional(payload.ceph_admin_secret_key)
+        admin_access = normalize_optional_string(payload.admin_access_key)
+        admin_secret = normalize_optional_string(payload.admin_secret_key)
+        supervision_access = normalize_optional_string(payload.supervision_access_key)
+        supervision_secret = normalize_optional_string(payload.supervision_secret_key)
+        ceph_admin_access = normalize_optional_string(payload.ceph_admin_access_key)
+        ceph_admin_secret = normalize_optional_string(payload.ceph_admin_secret_key)
         features, features_config = self._normalize_features(provider, payload.features_config, region)
         admin_endpoint = features.get("admin", {}).get("endpoint")
 
@@ -686,12 +675,12 @@ class StorageEndpointsService:
             else endpoint.name
         )
         endpoint_url = (
-            self._normalize_url(payload.endpoint_url)
+            normalize_s3_endpoint(payload.endpoint_url)
             if "endpoint_url" in fields_set
             else endpoint.endpoint_url
         )
         region = (
-            self._clean_optional(payload.region)
+            normalize_optional_string(payload.region)
             if "region" in fields_set
             else endpoint.region
         )
@@ -710,32 +699,32 @@ class StorageEndpointsService:
         provider = self._normalize_provider(payload.provider if "provider" in fields_set else endpoint.provider)
         region = self._normalize_region(provider, region)
         admin_access = (
-            self._clean_optional(payload.admin_access_key)
+            normalize_optional_string(payload.admin_access_key)
             if "admin_access_key" in fields_set
             else endpoint.admin_access_key
         )
         admin_secret = (
-            self._clean_optional(payload.admin_secret_key)
+            normalize_optional_string(payload.admin_secret_key)
             if "admin_secret_key" in fields_set
             else endpoint.admin_secret_key
         )
         supervision_access = (
-            self._clean_optional(payload.supervision_access_key)
+            normalize_optional_string(payload.supervision_access_key)
             if "supervision_access_key" in fields_set
             else endpoint.supervision_access_key
         )
         supervision_secret = (
-            self._clean_optional(payload.supervision_secret_key)
+            normalize_optional_string(payload.supervision_secret_key)
             if "supervision_secret_key" in fields_set
             else endpoint.supervision_secret_key
         )
         ceph_admin_access = (
-            self._clean_optional(payload.ceph_admin_access_key)
+            normalize_optional_string(payload.ceph_admin_access_key)
             if "ceph_admin_access_key" in fields_set
             else endpoint.ceph_admin_access_key
         )
         ceph_admin_secret = (
-            self._clean_optional(payload.ceph_admin_secret_key)
+            normalize_optional_string(payload.ceph_admin_secret_key)
             if "ceph_admin_secret_key" in fields_set
             else endpoint.ceph_admin_secret_key
         )
