@@ -1,7 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import json
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
@@ -9,6 +8,15 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+from app.utils.ldap_validation import (
+    LDAP_PROVIDER_DEFAULT_USER_FILTER,
+    LDAP_PROVIDER_ID_PATTERN,
+    normalize_optional_ldap_string,
+    normalize_required_ldap_string,
+    validate_ldap_url,
+    validate_ldap_user_filter,
+)
 
 
 class OIDCProviderSettings(BaseModel):
@@ -50,7 +58,7 @@ class LDAPProviderSettings(BaseModel):
     bind_dn: Optional[str] = None
     bind_password: Optional[str] = None
     user_base_dn: str
-    user_filter: str = "(|(mail={username})(uid={username})(sAMAccountName={username})(userPrincipalName={username}))"
+    user_filter: str = LDAP_PROVIDER_DEFAULT_USER_FILTER
     email_attribute: str = "mail"
     name_attribute: Optional[str] = "displayName"
     subject_attribute: Optional[str] = None
@@ -63,54 +71,27 @@ class LDAPProviderSettings(BaseModel):
     allow_insecure: bool = False
     allow_email_linking: bool = False
 
-    @field_validator(
+    normalize_required_strings = field_validator(
         "display_name",
         "url",
         "user_base_dn",
         "user_filter",
         "email_attribute",
         mode="before",
-    )
-    @classmethod
-    def normalize_required_strings(cls, value):
-        if not isinstance(value, str):
-            raise ValueError("LDAP provider fields must be strings")
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("LDAP provider fields cannot be empty")
-        return normalized
+    )(normalize_required_ldap_string)
 
-    @field_validator(
+    normalize_optional_strings = field_validator(
         "bind_dn",
         "bind_password",
         "name_attribute",
         "subject_attribute",
         "tls_ca_file",
         mode="before",
-    )
-    @classmethod
-    def normalize_optional_strings(cls, value):
-        if value is None:
-            return None
-        if not isinstance(value, str):
-            raise ValueError("LDAP provider fields must be strings")
-        normalized = value.strip()
-        return normalized or None
+    )(normalize_optional_ldap_string)
 
-    @field_validator("url")
-    @classmethod
-    def validate_url(cls, value: str) -> str:
-        parsed = urlparse(value)
-        if parsed.scheme not in {"ldap", "ldaps"} or not parsed.hostname:
-            raise ValueError("LDAP provider url must be an ldap:// or ldaps:// URL")
-        return value
+    validate_url = field_validator("url")(validate_ldap_url)
 
-    @field_validator("user_filter")
-    @classmethod
-    def validate_user_filter(cls, value: str) -> str:
-        if "{username}" not in value:
-            raise ValueError("LDAP provider user_filter must contain {username}")
-        return value
+    validate_user_filter = field_validator("user_filter")(validate_ldap_user_filter)
 
     @model_validator(mode="after")
     def validate_transport(self):
@@ -137,9 +118,6 @@ DEFAULT_INSECURE_SECRET_VALUES = {
     "password",
     "secret",
 }
-LDAP_PROVIDER_ID_PATTERN = re.compile(r"^[a-z0-9_-]+$")
-
-
 def _default_sqlite_database_url() -> str:
     return f"sqlite:///{DEFAULT_SQLITE_DB_PATH.resolve().as_posix()}"
 
