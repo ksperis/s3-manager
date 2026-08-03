@@ -16,6 +16,7 @@ from app.routers.dependencies import (
     get_current_account_admin,
     require_bucket_purge_enabled,
 )
+from app.routers.manager.access import require_bucket_management_context
 from app.services.audit_service import AuditService
 from app.services.bucket_purge_service import BucketPurgeOptions, BucketPurgeResolvedTarget, BucketPurgeService
 from app.services.s3_execution_context import S3ExecutionContext
@@ -33,13 +34,6 @@ def _require_buckets_payload(payload: BucketPurgeRequest) -> list[str]:
     if (payload.confirmation or "").strip() != expected:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Confirmation must be exactly '{expected}'.")
     return payload.buckets
-
-
-def _require_bucket_management_context(account: S3ExecutionContext) -> None:
-    caps = getattr(account, "manager_capabilities", None)
-    if caps is not None and not bool(getattr(caps, "can_manage_buckets", False)):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management is not allowed for this context")
-
 
 def _record_audit(
     *,
@@ -84,7 +78,7 @@ def stream_manager_bucket_purge(
     _: object = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)
-    _require_bucket_management_context(account)
+    require_bucket_management_context(account)
     options = BucketPurgeOptions(parallelism=payload.parallelism, include_versions=payload.include_versions)
     context_id = request.query_params.get("account_id")
     context_name = getattr(account, "name", None)

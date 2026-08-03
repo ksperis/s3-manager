@@ -14,6 +14,7 @@ from app.routers.dependencies import (
     get_current_account_admin,
     require_bucket_integrity_check_enabled,
 )
+from app.routers.manager.access import require_bucket_management_context
 from app.services.bucket_integrity_service import (
     BucketIntegrityCheckService,
     BucketIntegrityOptions,
@@ -35,13 +36,6 @@ def _require_buckets_payload(payload: BucketIntegrityCheckRequest) -> list[str]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one bucket is required.")
     return payload.buckets
 
-
-def _require_bucket_management_context(account: S3ExecutionContext) -> None:
-    caps = getattr(account, "manager_capabilities", None)
-    if caps is not None and not bool(getattr(caps, "can_manage_buckets", False)):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management is not allowed for this context")
-
-
 @router.post("/stream")
 def stream_manager_bucket_integrity_check(
     payload: BucketIntegrityCheckRequest,
@@ -51,7 +45,7 @@ def stream_manager_bucket_integrity_check(
     _: object = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)
-    _require_bucket_management_context(account)
+    require_bucket_management_context(account)
     options = BucketIntegrityOptions(
         parallelism=payload.parallelism,
         all_versions=payload.all_versions,

@@ -59,6 +59,7 @@ from app.services.bucket_listing_cache import (
 from app.services.bucket_listing_shared import parse_includes
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.routers.manager.access import require_bucket_management_context
 from app.routers.dependencies import (
     get_account_context,
     get_audit_service,
@@ -115,13 +116,6 @@ def _context_id_from_account(account: S3ExecutionContext) -> str:
 
 def _invalidate_bucket_listing_for_account(account: S3ExecutionContext) -> None:
     invalidate_bucket_listing_cache_for_account(account)
-
-
-def _require_bucket_management_context(account: S3ExecutionContext) -> None:
-    caps = getattr(account, "manager_capabilities", None)
-    if caps is not None and not bool(getattr(caps, "can_manage_buckets", False)):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management is not allowed for this context")
-
 
 def _record_bucket_delete_with_purge_audit(
     *,
@@ -1228,7 +1222,7 @@ def stream_delete_bucket_with_purge(
     expected = bucket_delete_with_purge_confirmation_phrase(bucket_name)
     if (payload.confirmation or "").strip() != expected:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Confirmation must be exactly '{expected}'.")
-    _require_bucket_management_context(account)
+    require_bucket_management_context(account)
     options = BucketPurgeOptions(parallelism=payload.parallelism, include_versions=True)
     context_id = request.query_params.get("account_id") or _context_id_from_account(account)
     context_name = getattr(account, "name", None)
