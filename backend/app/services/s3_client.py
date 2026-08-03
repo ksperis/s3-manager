@@ -272,8 +272,8 @@ def set_bucket_public_access_block(
         else:
             client.delete_public_access_block(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if not block and code.lower() in {"nosuchpublicaccessblockconfiguration", "nosuchpublicaccessblock"}:
+        code = s3_error_code(exc, lowercase=True)
+        if not block and code in {"nosuchpublicaccessblockconfiguration", "nosuchpublicaccessblock"}:
             return
         raise RuntimeError(f"Unable to update public access block for bucket '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -313,8 +313,8 @@ def get_bucket_public_access_block(
             "restrict_public_buckets": normalized["RestrictPublicBuckets"],
         }
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchpublicaccessblockconfiguration", "nosuchpublicaccessblock"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchpublicaccessblockconfiguration", "nosuchpublicaccessblock"}:
             return None
         raise RuntimeError(f"Unable to fetch public access block for bucket '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -382,8 +382,8 @@ def get_bucket_object_lock(
             "years": retention.get("Years"),
         }
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"objectlockconfigurationnotfounderror", "invalidbucketstate", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"objectlockconfigurationnotfounderror", "invalidbucketstate", "nosuchbucket"}:
             return None
         raise RuntimeError(f"Unable to fetch object lock config for bucket '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -512,8 +512,8 @@ def get_bucket_tags(
             tags.append({"key": key, "value": str(tag.get("Value") or "")})
         return tags
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchtags", "nosuchtagset", "nosuchtagseterror", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchtags", "nosuchtagset", "nosuchtagseterror", "nosuchbucket"}:
             return []
         raise RuntimeError(f"Unable to fetch bucket tags for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -687,8 +687,8 @@ def get_bucket_replication(
     try:
         resp = client.get_bucket_replication(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"replicationconfigurationnotfounderror", "nosuchreplicationconfiguration", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"replicationconfigurationnotfounderror", "nosuchreplicationconfiguration", "nosuchbucket"}:
             return {}
         raise RuntimeError(f"Unable to fetch bucket replication for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -751,8 +751,8 @@ def delete_bucket_replication(
     try:
         client.delete_bucket_replication(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"replicationconfigurationnotfounderror", "nosuchreplicationconfiguration", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"replicationconfigurationnotfounderror", "nosuchreplicationconfiguration", "nosuchbucket"}:
             return
         raise RuntimeError(f"Unable to delete bucket replication for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -826,8 +826,8 @@ def get_bucket_lifecycle(
     try:
         resp = client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchlifecycleconfiguration", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchlifecycleconfiguration", "nosuchbucket"}:
             return []
         raise RuntimeError(f"Unable to fetch lifecycle for bucket '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -884,8 +884,8 @@ def delete_bucket_lifecycle(
     try:
         client.delete_bucket_lifecycle(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchlifecycleconfiguration", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchlifecycleconfiguration", "nosuchbucket"}:
             return
         raise RuntimeError(f"Unable to delete lifecycle for bucket '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -917,8 +917,8 @@ def get_bucket_encryption(
         config = resp.get("ServerSideEncryptionConfiguration") or {}
         return config.get("Rules", []) or []
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"serversideencryptionconfigurationnotfounderror", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"serversideencryptionconfigurationnotfounderror", "nosuchbucket"}:
             return []
         raise RuntimeError(f"Unable to fetch bucket encryption for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -977,8 +977,8 @@ def delete_bucket_encryption(
     try:
         client.delete_bucket_encryption(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"serversideencryptionconfigurationnotfounderror", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"serversideencryptionconfigurationnotfounderror", "nosuchbucket"}:
             return
         raise RuntimeError(f"Unable to delete bucket encryption for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -1009,8 +1009,8 @@ def get_bucket_cors(
         resp = client.get_bucket_cors(Bucket=bucket_name)
         return resp.get("CORSRules", []) or []
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchcorsconfiguration", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchcorsconfiguration", "nosuchbucket"}:
             return []
         raise RuntimeError(f"Unable to fetch bucket CORS for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -1066,8 +1066,8 @@ def delete_bucket_cors(
     try:
         client.delete_bucket_cors(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchcorsconfiguration", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchcorsconfiguration", "nosuchbucket"}:
             return
         raise RuntimeError(f"Unable to delete bucket CORS for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -1097,8 +1097,8 @@ def get_bucket_website(
     try:
         resp = client.get_bucket_website(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchwebsiteconfiguration", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchwebsiteconfiguration", "nosuchbucket"}:
             return None
         raise RuntimeError(f"Unable to fetch bucket website for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -1159,8 +1159,8 @@ def delete_bucket_website(
     try:
         client.delete_bucket_website(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchwebsiteconfiguration", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchwebsiteconfiguration", "nosuchbucket"}:
             return
         raise RuntimeError(f"Unable to delete bucket website for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -1190,8 +1190,8 @@ def get_bucket_policy(
     try:
         resp = client.get_bucket_policy(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchbucketpolicy", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchbucketpolicy", "nosuchbucket"}:
             return None
         raise RuntimeError(f"Unable to fetch bucket policy for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -1254,8 +1254,8 @@ def delete_bucket_policy(
     try:
         client.delete_bucket_policy(Bucket=bucket_name)
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if code.lower() in {"nosuchbucketpolicy", "nosuchbucket"}:
+        code = s3_error_code(exc, lowercase=True)
+        if code in {"nosuchbucketpolicy", "nosuchbucket"}:
             return
         raise RuntimeError(f"Unable to delete bucket policy for '{bucket_name}': {exc}") from exc
     except BotoCoreError as exc:
@@ -1310,7 +1310,7 @@ def _delete_objects_individually(
         try:
             client.delete_object(**kwargs)
         except ClientError as exc:
-            code = str(exc.response.get("Error", {}).get("Code", "")).strip().lower() if hasattr(exc, "response") else ""
+            code = s3_error_code(exc, lowercase=True)
             if code in {"nosuchkey", "nosuchversion", "notfound"}:
                 continue
             label = f"{key} (version {version_id})" if version_id else key
@@ -1597,8 +1597,8 @@ def delete_bucket(
                 extra = f" (+{purge_result.failed_count - len(sample_failures)} more)" if purge_result.failed_count > len(sample_failures) else ""
                 raise RuntimeError(f"Unable to purge bucket contents in '{bucket_name}': {sample}{extra}")
         except ClientError as exc:
-            error_code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-            if error_code.lower() not in {"nosuchbucket", "nosuchversion"}:
+            error_code = s3_error_code(exc, lowercase=True)
+            if error_code not in {"nosuchbucket", "nosuchversion"}:
                 raise RuntimeError(f"Unable to purge bucket contents in '{bucket_name}': {exc}") from exc
         except BotoCoreError as exc:
             raise RuntimeError(f"Unable to purge bucket contents in '{bucket_name}': {exc}") from exc
@@ -1606,8 +1606,8 @@ def delete_bucket(
     try:
         client.delete_bucket(Bucket=bucket_name)
     except ClientError as exc:
-        error_code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
-        if error_code.lower() == "bucketnotempty":
+        error_code = s3_error_code(exc, lowercase=True)
+        if error_code == "bucketnotempty":
             raise BucketNotEmptyError(
                 f"Bucket '{bucket_name}' is not empty. Retry with force=true to delete all objects."
             ) from exc
