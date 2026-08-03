@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from fastapi import HTTPException
 
-from app.services.bucket_listing_shared import _format_sse_event, _parse_filter, parse_includes
+from app.services.bucket_listing_shared import _parse_filter, parse_includes
 
 
 def test_parse_includes_trims_and_deduplicates_values():
@@ -31,8 +31,3 @@ def test_parse_filter_rejects_invalid_advanced_filter_shape():
         assert exc.status_code == 400
     else:
         raise AssertionError("Expected HTTPException")
-
-
-def test_format_sse_event_uses_sse_newline_delimiters():
-    payload = {"request_id": "r1", "percent": 42}
-    assert _format_sse_event("progress", payload) == 'event: progress\ndata: {"request_id":"r1","percent":42}\n\n'

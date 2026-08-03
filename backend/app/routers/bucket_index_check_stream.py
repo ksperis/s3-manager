@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import threading
 import uuid
@@ -14,20 +13,12 @@ from fastapi.responses import StreamingResponse
 
 from app.models.ceph_admin import CephAdminBucketIndexCheckBatchProgress, CephAdminBucketIndexCheckBatchResult
 from app.routers.ceph_admin.listing_common import normalize_http_error_detail
-from app.routers.sse_worker import wait_for_cancellable_worker
+from app.routers.sse_worker import (
+    SSE_KEEPALIVE_INTERVAL_SECONDS,
+    format_sse_event,
+    wait_for_cancellable_worker,
+)
 from app.services.bucket_index_check_service import BucketIndexCheckCancelled
-
-SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
-
-
-def _format_sse_event(event: str, payload: dict[str, object]) -> str:
-    payload_json = json.dumps(payload, separators=(",", ":"), ensure_ascii=False, default=str)
-    lines = [f"event: {event}"]
-    for line in payload_json.splitlines() or [payload_json]:
-        lines.append(f"data: {line}")
-    lines.append("")
-    return "\n".join(lines) + "\n"
-
 
 def stream_bucket_index_checks(
     request: Request,
@@ -50,7 +41,7 @@ def stream_bucket_index_checks(
 
         def progress_callback(progress: CephAdminBucketIndexCheckBatchProgress) -> None:
             payload = progress.model_copy(update={"request_id": request_id}).model_dump(mode="json")
-            push_message(_format_sse_event("progress", payload))
+            push_message(format_sse_event("progress", payload))
 
         def cancel_check() -> None:
             if cancel_event.is_set():
@@ -59,13 +50,13 @@ def stream_bucket_index_checks(
         def worker() -> None:
             try:
                 result = run_check(progress_callback, cancel_check)
-                push_message(_format_sse_event("result", result.model_dump(mode="json")))
-                push_message(_format_sse_event("done", {"request_id": request_id, "status": result.status}))
+                push_message(format_sse_event("result", result.model_dump(mode="json")))
+                push_message(format_sse_event("done", {"request_id": request_id, "status": result.status}))
             except BucketIndexCheckCancelled:
-                push_message(_format_sse_event("done", {"request_id": request_id, "status": "canceled"}))
+                push_message(format_sse_event("done", {"request_id": request_id, "status": "canceled"}))
             except HTTPException as exc:
                 push_message(
-                    _format_sse_event(
+                    format_sse_event(
                         "error",
                         {
                             "request_id": request_id,
@@ -74,16 +65,16 @@ def stream_bucket_index_checks(
                         },
                     )
                 )
-                push_message(_format_sse_event("done", {"request_id": request_id, "status": "failed"}))
+                push_message(format_sse_event("done", {"request_id": request_id, "status": "failed"}))
             except Exception:  # pragma: no cover
                 logger.exception("Ceph Admin bucket index checks failed.")
                 push_message(
-                    _format_sse_event(
+                    format_sse_event(
                         "error",
                         {"request_id": request_id, "detail": "Ceph Admin bucket index checks failed."},
                     )
                 )
-                push_message(_format_sse_event("done", {"request_id": request_id, "status": "failed"}))
+                push_message(format_sse_event("done", {"request_id": request_id, "status": "failed"}))
             finally:
                 push_message(None)
 

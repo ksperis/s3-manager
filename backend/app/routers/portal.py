@@ -69,14 +69,17 @@ from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.routers.ceph_admin.listing_common import parse_filter_query as parse_advanced_filter_query
 from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
-from app.routers.bucket_purge_stream import SSE_KEEPALIVE_INTERVAL_SECONDS, format_sse_event
 from app.routers.dependencies import (
     get_audit_service,
     get_current_account_user,
     get_portal_account_access,
     require_portal_manager,
 )
-from app.routers.sse_worker import wait_for_cancellable_worker
+from app.routers.sse_worker import (
+    SSE_KEEPALIVE_INTERVAL_SECONDS,
+    format_sse_event,
+    wait_for_cancellable_worker,
+)
 from app.routers.http_errors import (
     raise_bad_gateway_from_runtime,
     raise_http_exception_from_exception,

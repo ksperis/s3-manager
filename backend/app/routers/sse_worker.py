@@ -3,8 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import threading
+
+SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
+
+
+def format_sse_event(event: str, payload: dict[str, object]) -> str:
+    payload_json = json.dumps(
+        payload,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    lines = [f"event: {event}"]
+    lines.extend(f"data: {line}" for line in payload_json.splitlines() or [payload_json])
+    lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 async def wait_for_cancellable_worker(

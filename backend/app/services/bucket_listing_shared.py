@@ -25,11 +25,6 @@ def parse_includes(include: list[str]) -> set[str]:
                 include_set.add(normalized)
     return include_set
 
-
-def _format_sse_event(event: str, payload: dict[str, object]) -> str:
-    return f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
-
-
 def _is_advanced_filter_stream_payload(raw_advanced_filter: str | None) -> bool:
     if not isinstance(raw_advanced_filter, str):
         return False

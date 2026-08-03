@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import threading
 import uuid
@@ -14,20 +13,12 @@ from fastapi.responses import StreamingResponse
 
 from app.models.bucket_purge import BucketPurgeProgress, BucketPurgeResult
 from app.routers.ceph_admin.listing_common import normalize_http_error_detail
-from app.routers.sse_worker import wait_for_cancellable_worker
+from app.routers.sse_worker import (
+    SSE_KEEPALIVE_INTERVAL_SECONDS,
+    format_sse_event,
+    wait_for_cancellable_worker,
+)
 from app.services.bucket_purge_service import BucketPurgeCancelled
-
-SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
-
-
-def format_sse_event(event: str, payload: dict[str, object]) -> str:
-    payload_json = json.dumps(payload, separators=(",", ":"), ensure_ascii=False, default=str)
-    lines = [f"event: {event}"]
-    for line in payload_json.splitlines() or [payload_json]:
-        lines.append(f"data: {line}")
-    lines.append("")
-    return "\n".join(lines) + "\n"
-
 
 def stream_bucket_purge(
     request: Request,

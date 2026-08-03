@@ -17,12 +17,13 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
 
-from app.services.bucket_listing_shared import (
-    _format_sse_event,
-    parse_includes as parse_bucket_listing_includes,
-)
+from app.services.bucket_listing_shared import parse_includes as parse_bucket_listing_includes
 from app.routers.http_errors import sanitize_error_detail
-from app.routers.sse_worker import wait_for_cancellable_worker
+from app.routers.sse_worker import (
+    SSE_KEEPALIVE_INTERVAL_SECONDS,
+    format_sse_event,
+    wait_for_cancellable_worker,
+)
 
 _K = TypeVar("_K")
 _T = TypeVar("_T")
@@ -31,9 +32,6 @@ _ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 PROGRESS_EMIT_EVERY_ITEMS = 100
 PROGRESS_EMIT_MIN_INTERVAL_SECONDS = 0.2
-SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
-
-
 @dataclass(frozen=True)
 class EndpointListCacheKey:
     endpoint_id: int
@@ -159,7 +157,7 @@ def stream_listing_response(
             }
             if snapshot.message:
                 payload["message"] = snapshot.message
-            push_message(_format_sse_event("progress", payload))
+            push_message(format_sse_event("progress", payload))
 
         def cancel_check() -> None:
             if cancel_event.is_set():
@@ -169,13 +167,13 @@ def stream_listing_response(
             try:
                 result = compute(progress_callback, cancel_check)
                 payload = result.model_dump(mode="json")
-                push_message(_format_sse_event("result", payload))
-                push_message(_format_sse_event("done", {"request_id": request_id}))
+                push_message(format_sse_event("result", payload))
+                push_message(format_sse_event("done", {"request_id": request_id}))
             except ListingCancelled:
                 return
             except HTTPException as exc:
                 push_message(
-                    _format_sse_event(
+                    format_sse_event(
                         "error",
                         {
                             "request_id": request_id,
@@ -183,11 +181,11 @@ def stream_listing_response(
                         },
                     )
                 )
-                push_message(_format_sse_event("done", {"request_id": request_id}))
+                push_message(format_sse_event("done", {"request_id": request_id}))
             except Exception as exc:  # pragma: no cover
                 logger.exception("%s: %s", failure_message, exc)
                 push_message(
-                    _format_sse_event(
+                    format_sse_event(
                         "error",
                         {
                             "request_id": request_id,
@@ -195,7 +193,7 @@ def stream_listing_response(
                         },
                     )
                 )
-                push_message(_format_sse_event("done", {"request_id": request_id}))
+                push_message(format_sse_event("done", {"request_id": request_id}))
             finally:
                 push_message(None)
 
