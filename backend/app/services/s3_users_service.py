@@ -40,32 +40,12 @@ from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_
 from app.services import s3_client
 from app.utils.rgw import extract_bucket_list
 from app.utils.s3_endpoint import resolve_s3_client_options
-from app.utils.quota_stats import bytes_to_gb, extract_quota_limits
+from app.utils.quota_stats import bytes_to_gb, extract_quota_limits, parse_positive_limit
 from app.utils.size_units import size_to_bytes
 from app.utils.name_ordering import name_order_by
 from app.utils.usage_stats import extract_usage_stats
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_positive_limit(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        parsed = int(value)
-    elif isinstance(value, str):
-        normalized = value.strip()
-        if not normalized:
-            return None
-        try:
-            parsed = int(float(normalized))
-        except ValueError:
-            return None
-    else:
-        return None
-    return parsed if parsed > 0 else None
 
 
 def _extract_user_payload(raw: Any) -> dict[str, Any]:
@@ -79,7 +59,7 @@ def _extract_user_payload(raw: Any) -> dict[str, Any]:
 
 def _extract_max_buckets(payload: Any) -> Optional[int]:
     user_payload = _extract_user_payload(payload)
-    return _parse_positive_limit(user_payload.get("max_buckets") or (payload.get("max_buckets") if isinstance(payload, dict) else None))
+    return parse_positive_limit(user_payload.get("max_buckets") or (payload.get("max_buckets") if isinstance(payload, dict) else None))
 
 
 class S3UsersService:

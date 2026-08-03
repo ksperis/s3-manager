@@ -35,6 +35,24 @@ def _parse_int(value: Any) -> Optional[int]:
     return None
 
 
+def parse_positive_limit(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        parsed = int(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            parsed = int(float(normalized))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed > 0 else None
+
+
 def extract_quota_limits(
     payload: Optional[Dict[str, Any]],
     *,

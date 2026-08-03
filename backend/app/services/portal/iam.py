@@ -35,7 +35,7 @@ from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.account_roles import portal_role_for
 from app.utils.normalize import normalize_string_list
-from app.utils.quota_stats import extract_quota_limits
+from app.utils.quota_stats import extract_quota_limits, parse_positive_limit
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -48,29 +48,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _parse_positive_limit(value: Any) -> Optional[int]:
-    if value is None or isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        parsed = int(value)
-    elif isinstance(value, str):
-        normalized = value.strip()
-        if not normalized:
-            return None
-        try:
-            parsed = int(float(normalized))
-        except ValueError:
-            return None
-    else:
-        return None
-    return parsed if parsed > 0 else None
-
-
 def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
     if not isinstance(payload, dict):
         return None
     limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
-    return _parse_positive_limit(payload.get(key) or limits_payload.get(key))
+    return parse_positive_limit(payload.get(key) or limits_payload.get(key))
 
 
 class PortalIamMixin:
