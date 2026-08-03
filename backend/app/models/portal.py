@@ -673,14 +673,6 @@ class PortalAlert(BaseModel):
     created_at: Optional[datetime] = None
 
 
-class PortalUserCard(BaseModel):
-    id: Optional[int] = None
-    email: str
-    role: Optional[str] = None
-    iam_username: Optional[str] = None
-    iam_only: bool = False
-
-
 class PortalAccountSettings(BaseModel):
     effective: PortalSettings
     admin_override: PortalSettingsOverride

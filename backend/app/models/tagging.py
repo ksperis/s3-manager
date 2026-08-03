@@ -9,8 +9,6 @@ from pydantic import BaseModel, Field, field_validator
 from app.utils.tagging import (
     DEFAULT_TAG_COLOR_KEY,
     DEFAULT_TAG_SCOPE,
-    TAG_DOMAIN_ADMIN_MANAGED,
-    TAG_DOMAIN_ENDPOINT,
     normalize_tag_color_key,
     normalize_tag_items_input,
     normalize_tag_label,
@@ -48,10 +46,6 @@ class TagDefinitionInput(BaseModel):
 
 class TagDefinitionListResponse(BaseModel):
     items: list[TagDefinitionSummary] = Field(default_factory=list)
-
-
-class TagCatalogDomainQuery(BaseModel):
-    domain: Literal[TAG_DOMAIN_ADMIN_MANAGED, TAG_DOMAIN_ENDPOINT]
 
 
 def validate_tag_definition_list(value: object, *, allow_none: bool = False) -> Optional[list[dict[str, str]]]:
