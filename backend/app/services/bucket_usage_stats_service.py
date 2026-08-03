@@ -28,7 +28,8 @@ from app.models.bucket_usage_stats import (
 )
 from app.services.long_running_s3_client import LongRunningS3ClientService
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.utils.s3_errors import format_s3_error, s3_error_code
+from app.utils.aws_errors import aws_error_code
+from app.utils.s3_errors import format_s3_error
 from app.utils.time import assume_utc, utcnow
 
 
@@ -217,7 +218,7 @@ def _load_warnings(value: str | None) -> list[str]:
 
 
 def _is_version_listing_unsupported(exc: Exception) -> bool:
-    code = s3_error_code(exc, lowercase=True)
+    code = aws_error_code(exc, lowercase=True)
     if code in {"notimplemented", "notsupported", "unsupported", "methodnotallowed", "notallowed"}:
         return True
     detail = str(exc).lower()

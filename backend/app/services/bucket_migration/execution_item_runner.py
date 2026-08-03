@@ -10,7 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import BucketMigration, BucketMigrationItem
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.utils.s3_errors import s3_error_code
+from app.utils.aws_errors import aws_error_code
 from app.utils.time import utcnow
 
 from ._shared import (
@@ -770,7 +770,7 @@ class BucketMigrationItemRunnerMixin:
             client.head_bucket(Bucket=target_bucket)
             return True
         except ClientError as exc:
-            code = s3_error_code(exc, lowercase=True)
+            code = aws_error_code(exc, lowercase=True)
             status_code = (
                 int(exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") or 0)
                 if hasattr(exc, "response")

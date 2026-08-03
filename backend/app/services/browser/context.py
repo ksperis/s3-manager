@@ -21,7 +21,7 @@ from app.services.s3_client import get_s3_client
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.sts_service import get_session_token
 from app.utils.s3_endpoint import resolve_s3_client_kwargs, resolve_s3_client_options
-from app.utils.s3_errors import s3_error_code
+from app.utils.aws_errors import aws_error_code
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
 
 from ._shared import (
@@ -326,7 +326,7 @@ class BrowserContextMixin:
         try:
             resp = client.get_bucket_cors(Bucket=bucket_name)
         except (ClientError, BotoCoreError) as exc:
-            code = s3_error_code(exc)
+            code = aws_error_code(exc)
             if code in {"NoSuchCORSConfiguration", "NoSuchCORS"}:
                 return BucketCorsStatus(enabled=False, rules=[])
             return BucketCorsStatus(enabled=False, rules=[], error=str(exc))
@@ -379,7 +379,7 @@ class BrowserContextMixin:
             resp = client.get_bucket_cors(Bucket=bucket_name)
             rules = resp.get("CORSRules", []) or []
         except (ClientError, BotoCoreError) as exc:
-            code = s3_error_code(exc)
+            code = aws_error_code(exc)
             if code in {"NoSuchCORSConfiguration", "NoSuchCORS"}:
                 rules = []
             else:

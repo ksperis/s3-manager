@@ -56,7 +56,8 @@ from app.utils.rgw import (
     is_rgw_account_id,
 )
 from app.utils.jsonable import model_to_jsonable
-from app.utils.s3_errors import format_s3_error, s3_error_code
+from app.utils.aws_errors import aws_error_code
+from app.utils.s3_errors import format_s3_error
 from app.utils.s3_etag import etag_md5
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -1119,7 +1120,7 @@ class BucketsService:
         )
 
     def _is_access_denied_error(self, exc: Exception) -> bool:
-        code = s3_error_code(exc, lowercase=True)
+        code = aws_error_code(exc, lowercase=True)
         if code in {"accessdenied", "access_denied", "403", "unauthorized"}:
             return True
         text = str(exc).strip().lower()

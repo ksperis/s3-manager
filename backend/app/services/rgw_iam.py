@@ -9,8 +9,13 @@ from app.models.iam import AccessKey, IAMGroup, IAMRole, IAMUser
 from app.models.policy import Policy
 from app.core.config import get_settings
 from app.services.aws_client_config import build_interactive_aws_config
+from app.utils.aws_errors import aws_error_code
 
 settings = get_settings()
+
+
+def _is_no_such_entity(exc: ClientError) -> bool:
+    return aws_error_code(exc) == "NoSuchEntity"
 
 
 def get_iam_client(
@@ -112,7 +117,7 @@ class RGWIAMService:
                 arn=u.get("Arn"),
             ), new_key
         except ClientError as exc:
-            code = exc.response.get("Error", {}).get("Code")
+            code = aws_error_code(exc)
             if allow_existing and code in {"EntityAlreadyExists", "UserAlreadyExists"}:
                 existing = self.get_user(name)
                 if existing is not None:
@@ -133,7 +138,7 @@ class RGWIAMService:
                 arn=u.get("Arn"),
             )
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return None
             raise RuntimeError(f"Unable to fetch IAM user: {exc}") from exc
         except BotoCoreError as exc:
@@ -143,7 +148,7 @@ class RGWIAMService:
         try:
             self.client.delete_user(UserName=name)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to delete IAM user: {exc}") from exc
         except BotoCoreError as exc:
@@ -167,7 +172,7 @@ class RGWIAMService:
         try:
             self.client.delete_access_key(UserName=user_name, AccessKeyId=access_key_id)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to delete IAM access key: {exc}") from exc
         except BotoCoreError as exc:
@@ -177,7 +182,7 @@ class RGWIAMService:
         try:
             self.client.update_access_key(UserName=user_name, AccessKeyId=access_key_id, Status=status)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 raise RuntimeError("Access key not found") from exc
             raise RuntimeError(f"Unable to update IAM access key: {exc}") from exc
         except BotoCoreError as exc:
@@ -202,7 +207,7 @@ class RGWIAMService:
             resp = self.client.get_user_policy(UserName=user_name, PolicyName=policy_name)
             return self._normalize_policy_document(resp.get("PolicyDocument"))
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return None
             raise RuntimeError(f"Unable to fetch inline policy for user: {exc}") from exc
         except BotoCoreError as exc:
@@ -219,7 +224,7 @@ class RGWIAMService:
         try:
             self.client.delete_user_policy(UserName=user_name, PolicyName=policy_name)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to delete inline policy from user: {exc}") from exc
         except BotoCoreError as exc:
@@ -235,7 +240,7 @@ class RGWIAMService:
         try:
             self.client.detach_user_policy(UserName=user_name, PolicyArn=policy_arn)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to detach policy from user: {exc}") from exc
         except BotoCoreError as exc:
@@ -279,7 +284,7 @@ class RGWIAMService:
         try:
             self.client.delete_group(GroupName=name)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to delete IAM group: {exc}") from exc
         except BotoCoreError as exc:
@@ -306,7 +311,7 @@ class RGWIAMService:
         try:
             self.client.remove_user_from_group(GroupName=group_name, UserName=user_name)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to remove user from group: {exc}") from exc
         except BotoCoreError as exc:
@@ -331,7 +336,7 @@ class RGWIAMService:
             resp = self.client.get_group_policy(GroupName=group_name, PolicyName=policy_name)
             return self._normalize_policy_document(resp.get("PolicyDocument"))
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return None
             raise RuntimeError(f"Unable to fetch inline policy for group: {exc}") from exc
         except BotoCoreError as exc:
@@ -348,7 +353,7 @@ class RGWIAMService:
         try:
             self.client.delete_group_policy(GroupName=group_name, PolicyName=policy_name)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to delete inline policy from group: {exc}") from exc
         except BotoCoreError as exc:
@@ -364,7 +369,7 @@ class RGWIAMService:
         try:
             self.client.detach_group_policy(GroupName=group_name, PolicyArn=policy_arn)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to detach policy from group: {exc}") from exc
         except BotoCoreError as exc:
@@ -412,7 +417,7 @@ class RGWIAMService:
                 assume_role_policy_document=assume_doc,
             )
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return None
             raise RuntimeError(f"Unable to fetch IAM role: {exc}") from exc
         except BotoCoreError as exc:
@@ -422,7 +427,7 @@ class RGWIAMService:
         try:
             self.client.delete_role(RoleName=name)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to delete IAM role: {exc}") from exc
         except BotoCoreError as exc:
@@ -468,7 +473,7 @@ class RGWIAMService:
                     document = None
             return self._policy_from_data(policy_data, document=document)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 # Try to resolve from the static set
                 return next((p for p in self._default_policies if p.arn == policy_arn), None)
             # Unsupported endpoint — fall back to static if available
@@ -482,9 +487,8 @@ class RGWIAMService:
         try:
             resp = self.client.create_policy(PolicyName=name, PolicyDocument=json.dumps(document))
         except ClientError as exc:
-            err = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
             status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") if hasattr(exc, "response") else None
-            if status == 405 or err.get("Code") in {"NotImplemented", "MethodNotAllowed"}:
+            if status == 405 or aws_error_code(exc) in {"NotImplemented", "MethodNotAllowed"}:
                 raise ValueError("IAM CreatePolicy is not supported by this endpoint") from exc
             raise RuntimeError(f"Unable to create IAM policy: {exc}") from exc
         except BotoCoreError as exc:
@@ -495,7 +499,7 @@ class RGWIAMService:
         try:
             self.client.delete_policy(PolicyArn=policy_arn)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to delete IAM policy: {exc}") from exc
         except BotoCoreError as exc:
@@ -520,7 +524,7 @@ class RGWIAMService:
             resp = self.client.get_role_policy(RoleName=role_name, PolicyName=policy_name)
             return self._normalize_policy_document(resp.get("PolicyDocument"))
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return None
             raise RuntimeError(f"Unable to fetch inline policy for role: {exc}") from exc
         except BotoCoreError as exc:
@@ -537,7 +541,7 @@ class RGWIAMService:
         try:
             self.client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to delete inline policy from role: {exc}") from exc
         except BotoCoreError as exc:
@@ -553,7 +557,7 @@ class RGWIAMService:
         try:
             self.client.detach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchEntity"}:
+            if _is_no_such_entity(exc):
                 return
             raise RuntimeError(f"Unable to detach policy from role: {exc}") from exc
         except BotoCoreError as exc:

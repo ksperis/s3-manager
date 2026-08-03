@@ -74,7 +74,6 @@ from app.routers.manager import integrity as manager_integrity
 from app.routers.manager import purge as manager_purge
 from app.routers.manager import usage_stats as manager_usage_stats
 from app.services.bucket_migration.worker import get_bucket_migration_worker
-from app.utils.s3_errors import s3_error_code
 from app.routers.dependencies import (
     require_browser_enabled,
     require_ceph_admin_enabled,
@@ -83,6 +82,7 @@ from app.routers.dependencies import (
     require_portal_enabled,
     require_storage_ops_enabled,
 )
+from app.utils.aws_errors import aws_error_code
 
 settings = get_settings()
 
@@ -311,7 +311,7 @@ async def log_http_exceptions(request: Request, exc: StarletteHTTPException):
             cause = cause.__cause__
         error_code = None
         if isinstance(cause, ClientError):
-            error_code = s3_error_code(cause)
+            error_code = aws_error_code(cause)
         if error_code == "AccessDenied":
             logger.error(
                 "Request %s %s responded with %s: %s",

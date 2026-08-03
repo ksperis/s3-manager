@@ -20,7 +20,8 @@ from app.models.bucket_purge import (
 from app.services import s3_client
 from app.services.buckets_service import BucketsService
 from app.services.long_running_s3_client import LongRunningS3ClientService
-from app.utils.s3_errors import format_s3_error, s3_error_code
+from app.utils.aws_errors import aws_error_code
+from app.utils.s3_errors import format_s3_error
 from app.routers.http_errors import sanitized_error_log_detail
 
 
@@ -537,7 +538,7 @@ class BucketPurgeService(LongRunningS3ClientService):
             try:
                 client.delete_bucket(Bucket=target.bucket_name)
             except ClientError as exc:
-                error_code = s3_error_code(exc, lowercase=True)
+                error_code = aws_error_code(exc, lowercase=True)
                 if error_code == "bucketnotempty":
                     return failure_result(
                         stage="delete_bucket",

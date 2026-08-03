@@ -36,7 +36,7 @@ from app.models.portal import (
 from app.services import s3_client
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
 from app.services.s3_client import get_s3_client
-from app.utils.s3_errors import s3_error_code
+from app.utils.aws_errors import aws_error_code
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
 
 if TYPE_CHECKING:
@@ -204,7 +204,7 @@ class PortalServerAccessLoggingMixin:
         try:
             client.head_bucket(Bucket=log_bucket)
         except ClientError as exc:
-            code = s3_error_code(exc, lowercase=True)
+            code = aws_error_code(exc, lowercase=True)
             if code not in {"404", "notfound", "nosuchbucket"}:
                 raise RuntimeError(f"Unable to inspect Portal access log bucket '{log_bucket}': {exc}") from exc
             access_key, secret_key = self._account_credentials(account)
@@ -298,7 +298,7 @@ class PortalServerAccessLoggingMixin:
         try:
             client.head_bucket(Bucket=log_bucket)
         except ClientError as exc:
-            code = s3_error_code(exc, lowercase=True)
+            code = aws_error_code(exc, lowercase=True)
             if code in {"404", "notfound", "nosuchbucket"}:
                 return
             raise RuntimeError(f"Unable to inspect Portal access log bucket '{log_bucket}': {exc}") from exc
@@ -562,7 +562,7 @@ class PortalServerAccessLoggingMixin:
                 try:
                     page = client.list_objects_v2(**kwargs)
                 except ClientError as exc:
-                    code = s3_error_code(exc, lowercase=True)
+                    code = aws_error_code(exc, lowercase=True)
                     if code in {"nosuchbucket", "404", "notfound"}:
                         return []
                     raise RuntimeError(f"Unable to list Portal Server Access Logging objects: {exc}") from exc
@@ -583,7 +583,7 @@ class PortalServerAccessLoggingMixin:
         try:
             response = client.get_object(Bucket=log_bucket, Key=object_key)
         except ClientError as exc:
-            code = s3_error_code(exc, lowercase=True)
+            code = aws_error_code(exc, lowercase=True)
             if code in {"nosuchkey", "404", "notfound"}:
                 return b""
             raise RuntimeError(f"Unable to read Portal Server Access Logging object '{object_key}': {exc}") from exc
