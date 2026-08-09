@@ -2110,8 +2110,8 @@ export default function UsersPage() {
               idPrefix="admin-user-edit"
               tabs={[
                 { id: "general", label: "General" },
-                { id: "associations", label: "Associations" },
                 { id: "groups", label: "Groups" },
+                { id: "associations", label: "Associations" },
                 { id: "access", label: "Workspaces" },
                 { id: "browser", label: "Browser" },
                 { id: "manager_tools", label: "Manager tools" },

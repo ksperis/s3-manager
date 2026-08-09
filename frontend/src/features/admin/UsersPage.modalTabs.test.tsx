@@ -536,6 +536,14 @@ describe("UsersPage modal tabs", () => {
     render(<UsersPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "General",
+      "Groups",
+      "Associations",
+      "Workspaces",
+      "Browser",
+      "Manager tools",
+    ]);
     expect(screen.getByRole("tab", { name: "General" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Associations" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Workspaces" })).toBeInTheDocument();
