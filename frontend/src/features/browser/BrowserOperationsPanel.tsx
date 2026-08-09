@@ -347,16 +347,6 @@ export default function BrowserOperationsPanel({
             <ChevronDownIcon className={cx("h-4 w-4 shrink-0 text-[var(--ui-text-muted)] transition", open ? "rotate-180" : "")} />
           </button>
           <div className="flex shrink-0 items-stretch">
-            <button
-              type="button"
-              className="flex items-center gap-1.5 px-2.5 ui-caption font-semibold text-[var(--ui-text-muted)] transition hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
-              onClick={onOpenDetails}
-              aria-label="Operations overview"
-              title="Operations overview"
-            >
-              <InfoIcon className="h-3.5 w-3.5" />
-              <span>Overview</span>
-            </button>
             {canDismiss ? (
               <button
                 type="button"
@@ -387,13 +377,23 @@ export default function BrowserOperationsPanel({
                 ))}
               </div>
             )}
-            {hasFinishedOperations ? (
-              <div className="flex justify-end border-t border-[color:var(--ui-border-soft)] py-2">
+            <div className="flex justify-end gap-2 border-t border-[color:var(--ui-border-soft)] py-2">
+              <button
+                type="button"
+                className={`${operationSecondaryClasses} gap-1.5 ui-caption`}
+                onClick={onOpenDetails}
+                aria-label="Operations overview"
+                title="Operations overview"
+              >
+                <InfoIcon className="h-3.5 w-3.5" />
+                <span>Overview</span>
+              </button>
+              {hasFinishedOperations ? (
                 <button type="button" className={`${operationSecondaryClasses} ui-caption`} onClick={onClearFinishedOperations}>
                   Clear completed/failed
                 </button>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>

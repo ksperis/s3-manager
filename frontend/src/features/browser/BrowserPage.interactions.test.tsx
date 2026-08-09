@@ -4645,6 +4645,20 @@ describe("BrowserPage interactions", () => {
     expect(
       within(dialog).queryByRole("button", { name: "Download details (JSON)" }),
     ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Operations overview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Clear completed/failed" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Expand operations" }));
+    expect(
+      within(dialog).getByRole("button", { name: "Operations overview" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Clear completed/failed" }),
+    ).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
     let detailsDialog = await screen.findByRole("dialog", {
       name: "Operations overview",
@@ -4655,7 +4669,6 @@ describe("BrowserPage interactions", () => {
     ).toBeInTheDocument();
     await user.click(within(detailsDialog).getByRole("button", { name: "Close modal" }));
 
-    await user.click(within(dialog).getByRole("button", { name: "Expand operations" }));
     const stopAllButton = await within(dialog).findByRole("button", {
       name: "Stop all",
     });
@@ -4686,7 +4699,20 @@ describe("BrowserPage interactions", () => {
     expect(
       within(dialog).queryByRole("button", { name: "Show files" }),
     ).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
+    const overviewButton = within(dialog).getByRole("button", {
+      name: "Operations overview",
+    });
+    const clearFinishedButton = within(dialog).getByRole("button", {
+      name: "Clear completed/failed",
+    });
+    expect(overviewButton.parentElement).toBe(clearFinishedButton.parentElement);
+    expect(
+      Boolean(
+        overviewButton.compareDocumentPosition(clearFinishedButton) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    await user.click(overviewButton);
     detailsDialog = await screen.findByRole("dialog", {
       name: "Operations overview",
     });
