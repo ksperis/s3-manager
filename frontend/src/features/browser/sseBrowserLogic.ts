@@ -12,5 +12,5 @@ type StsSseDecisionInput = {
 export const shouldUseStsPresigner = ({ stsAvailable, sseActive }: StsSseDecisionInput): boolean =>
   Boolean(stsAvailable && !sseActive);
 
-export const resolveSimpleUploadOperation = ({ stsAvailable, sseActive }: StsSseDecisionInput): PresignRequest["operation"] =>
-  shouldUseStsPresigner({ stsAvailable, sseActive }) || sseActive ? "put_object" : "post_object";
+export const resolveSimpleUploadOperation = (): PresignRequest["operation"] =>
+  "put_object";

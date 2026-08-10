@@ -7078,12 +7078,11 @@ export default function BrowserPage({
       );
       return;
     }
-    const operation = resolveSimpleUploadOperation({ stsAvailable, sseActive });
+    const operation = resolveSimpleUploadOperation();
     const presign = await presignObjectRequest(bucket, {
       key,
       operation,
       content_type: file.type || undefined,
-      content_length: file.size,
       expires_in: 1800,
     });
     const method = (presign.method || "").toUpperCase();

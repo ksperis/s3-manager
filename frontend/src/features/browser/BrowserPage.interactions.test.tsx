@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import axios from "axios";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -4817,6 +4818,58 @@ describe("BrowserPage interactions", () => {
     await act(async () => {
       secondUpload.resolve();
     });
+  });
+
+  it("uploads a small direct file with a presigned PUT", async () => {
+    const file = new File(["small direct payload"], "small-direct.txt", {
+      type: "text/plain",
+    });
+    const putSpy = vi.spyOn(axios, "put").mockResolvedValue({
+      headers: {},
+    } as Awaited<ReturnType<typeof axios.put>>);
+    const postSpy = vi.spyOn(axios, "post").mockResolvedValue({
+      headers: {},
+    } as Awaited<ReturnType<typeof axios.post>>);
+
+    try {
+      renderPage({ accountIdForApi: "acc-1" });
+      await findRowByLabel("a.txt");
+
+      const fileInput = document.querySelector(
+        'input[type="file"]:not([directory])',
+      ) as HTMLInputElement | null;
+      expect(fileInput).not.toBeNull();
+      fireEvent.change(fileInput as HTMLInputElement, {
+        target: { files: [file] },
+      });
+
+      await waitFor(() => {
+        expect(presignObjectMock).toHaveBeenCalledWith(
+          "acc-1",
+          "bucket-1",
+          {
+            key: "small-direct.txt",
+            operation: "put_object",
+            content_type: "text/plain",
+            expires_in: 1800,
+          },
+          null,
+          undefined,
+        );
+        expect(putSpy).toHaveBeenCalledWith(
+          "https://example.test/small-direct.txt",
+          file,
+          expect.objectContaining({
+            headers: { "Content-Type": "text/plain" },
+          }),
+        );
+      });
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(proxyUploadMock).not.toHaveBeenCalled();
+    } finally {
+      putSpy.mockRestore();
+      postSpy.mockRestore();
+    }
   });
 
   it("cancels cross-context move batches without deleting pending sources and keeps paste available", async () => {
