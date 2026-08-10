@@ -23,7 +23,12 @@ from app.db import (
     UserRole,
     UserS3User,
 )
-from app.models.s3_user import S3UserCreate, S3UserImport, S3UserUpdate
+from app.models.s3_user import (
+    S3UserCreate,
+    S3UserImport,
+    S3UserUpdate,
+    S3UserUserLink,
+)
 from app.services import s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.s3_users_service import S3UsersService
@@ -345,11 +350,14 @@ def test_update_links_normalizes_non_ui_roles_to_ui_user(db_session, monkeypatch
     db_session.add(actor)
     db_session.commit()
 
-    updated = service.update_user(created.id, S3UserUpdate(user_ids=[actor.id]))
+    updated = service.update_user(
+        created.id,
+        S3UserUpdate(user_links=[S3UserUserLink(user_id=actor.id)]),
+    )
 
     db_session.refresh(actor)
     assert actor.role == UserRole.UI_USER.value
-    assert actor.id in (updated.user_ids or [])
+    assert [link.user_id for link in updated.user_links] == [actor.id]
     link = db_session.query(UserS3User).filter_by(user_id=actor.id, s3_user_id=created.id).one()
     assert link is not None
 

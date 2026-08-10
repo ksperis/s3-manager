@@ -479,6 +479,14 @@ group membership only through `group_details`, and group responses expose
 members only through `user_details`; the duplicate `group_ids` and `user_ids`
 response fields are removed. Deploy the backend and frontend together.
 
+## 2026-08 canonical RGW user principal links
+
+Admin RGW user responses now expose UI-user and UI-group associations only
+through `user_links` and `group_links`. The duplicate `user_ids`, `user_details`,
+`group_ids`, and `group_details` response fields are removed. Updates also accept
+only the structured link fields; sending `user_ids` or `group_ids` returns `422`.
+Deploy the backend and frontend together.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

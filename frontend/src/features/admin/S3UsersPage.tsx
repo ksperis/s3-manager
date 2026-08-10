@@ -77,21 +77,17 @@ import { useAdminS3UserStats } from "./useAdminS3UserStats";
 type SortField = "name" | "uid";
 type EditTab = "general" | "users" | "groups" | "privileged";
 
-function missingUserSummary(id: number): UserSummary {
-  return { id, email: `User #${id}`, role: "ui_none" };
-}
-
 function getS3UserSearchCandidates(user: S3User): Array<string | number | null | undefined> {
   return [
     user.name,
     user.rgw_user_uid,
     user.email,
-    ...(user.user_details ?? []).flatMap((linkedUser) => [
-      linkedUser.email,
-      linkedUser.display_name,
-      linkedUser.full_name,
+    ...(user.user_links ?? []).flatMap((link) => [
+      link.user_email,
+      link.user_display_name,
+      link.user_full_name,
     ]),
-    ...(user.group_details ?? []).map((group) => group.name),
+    ...(user.group_links ?? []).map((link) => link.group_name),
     ...extractUiTagLabels(user.tags),
   ];
 }
@@ -344,7 +340,7 @@ export default function S3UsersPage() {
   }, [endpointsLoaded, loadingEndpoints]);
 
   const hasLinkedPortalUsers = useMemo(
-    () => users.some((user) => (user.user_ids?.length ?? 0) > 0),
+    () => users.some((user) => (user.user_links?.length ?? 0) > 0),
     [users]
   );
 
@@ -378,41 +374,27 @@ export default function S3UsersPage() {
     portalUsers.forEach((u) => map.set(u.id, u.email));
     return map;
   }, [portalUsers]);
-  const portalUsersById = useMemo(() => new Map(portalUsers.map((user) => [user.id, user])), [portalUsers]);
   const groupLabelById = useMemo(() => {
     const map = new Map<number, string>();
     uiGroups.forEach((group) => map.set(group.id, group.name));
     return map;
   }, [uiGroups]);
-  const groupsById = useMemo(() => new Map(uiGroups.map((group) => [group.id, group])), [uiGroups]);
   const renderUserAssociations = (user: S3User) => {
-    const userItems: AssociationPrincipalItem[] = (user.user_details && user.user_details.length > 0
-      ? user.user_details
-      : (user.user_ids ?? []).map(
-          (id) => portalUsersById.get(id) ?? missingUserSummary(id),
-        )
-    ).map((uiUser) => {
+    const userItems: AssociationPrincipalItem[] = (user.user_links ?? []).map((link) => {
       return {
-        id: uiUser.id,
+        id: link.user_id,
         kind: "user",
-        label: uiUser.display_name || uiUser.full_name || uiUser.email || `User #${uiUser.id}`,
-        email: uiUser.email,
-        avatar: uiUser.avatar,
+        label: link.user_display_name || link.user_full_name || link.user_email || `User #${link.user_id}`,
+        email: link.user_email,
+        avatar: link.user_avatar,
       };
     });
-    const groupItems: AssociationPrincipalItem[] = (user.group_details && user.group_details.length > 0
-      ? user.group_details.map((group) => ({
-          id: group.id,
-          kind: "group" as const,
-          label: group.name,
-          avatar: group.avatar || groupsById.get(group.id)?.avatar,
-        }))
-      : (user.group_ids ?? []).map((id) => ({
-          id,
-          kind: "group" as const,
-          label: groupsById.get(id)?.name || `Group #${id}`,
-          avatar: groupsById.get(id)?.avatar,
-        })));
+    const groupItems: AssociationPrincipalItem[] = (user.group_links ?? []).map((link) => ({
+      id: link.group_id,
+      kind: "group" as const,
+      label: link.group_name || `Group #${link.group_id}`,
+      avatar: link.group_avatar,
+    }));
     return <AssociationPrincipalStack items={[...userItems, ...groupItems]} />;
   };
   const availablePortalUsers = useMemo(() => {
@@ -523,24 +505,14 @@ export default function S3UsersPage() {
       name: user.name,
       email: user.email ?? "",
       tags: normalizeUiTags(user.tags),
-      user_links: user.user_links?.length
-        ? user.user_links.map((link) => ({
-            ...link,
-            allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
-          }))
-        : (user.user_ids ?? []).map((userId) => ({
-            user_id: userId,
-            allow_manager_browser_data_access: false,
-          })),
-      group_links: user.group_links?.length
-        ? user.group_links.map((link) => ({
-            ...link,
-            allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
-          }))
-        : (user.group_ids ?? []).map((groupId) => ({
-            group_id: groupId,
-            allow_manager_browser_data_access: false,
-          })),
+      user_links: (user.user_links ?? []).map((link) => ({
+        ...link,
+        allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
+      })),
+      group_links: (user.group_links ?? []).map((link) => ({
+        ...link,
+        allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
+      })),
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
       quota_max_objects: user.quota_max_objects != null ? String(user.quota_max_objects) : "",

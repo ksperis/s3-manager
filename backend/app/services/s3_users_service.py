@@ -31,13 +31,11 @@ from app.models.s3_user import (
     S3UserCreate,
     S3UserGeneratedKey,
     S3UserGroupLink,
-    S3UserGroupDetail,
     S3UserImport,
     S3UserSummary,
     S3UserUserLink,
     S3UserUpdate,
 )
-from app.models.user import UserAssociationDetail
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services import s3_client
 from app.utils.rgw_payloads import extract_bucket_list, extract_rgw_user_payload
@@ -388,10 +386,8 @@ class S3UsersService:
     def _serialize_s3_user(
         self,
         row: S3UserModel,
-        link_map: dict[int, list[int]],
-        user_details_map: dict[int, list[UserAssociationDetail]],
-        group_ids_map: dict[int, list[int]],
-        group_details_map: dict[int, list[S3UserGroupDetail]],
+        user_links_map: dict[int, list[S3UserUserLink]],
+        group_links_map: dict[int, list[S3UserGroupLink]],
         *,
         include_quota: bool = True,
     ) -> S3UserSchema:
@@ -406,10 +402,8 @@ class S3UsersService:
             rgw_user_uid=row.rgw_user_uid,
             email=row.email,
             created_at=row.created_at,
-            user_ids=link_map.get(row.id, []),
-            user_details=user_details_map.get(row.id, []),
-            group_ids=group_ids_map.get(row.id, []),
-            group_details=group_details_map.get(row.id, []),
+            user_links=user_links_map.get(row.id, []),
+            group_links=group_links_map.get(row.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id,
@@ -424,9 +418,9 @@ class S3UsersService:
     def _load_user_links(
         self,
         s3_user_ids: list[int],
-    ) -> tuple[dict[int, list[int]], dict[int, list[UserAssociationDetail]]]:
+    ) -> dict[int, list[S3UserUserLink]]:
         if not s3_user_ids:
-            return {}, {}
+            return {}
         rows = (
             self.db.query(
                 UserS3UserModel.s3_user_id,
@@ -438,33 +432,31 @@ class S3UsersService:
             .order_by(UserS3UserModel.s3_user_id.asc(), User.email.asc(), User.id.asc())
             .all()
         )
-        user_ids_by_s3_user: dict[int, list[int]] = {}
-        user_details_by_s3_user: dict[int, list[UserAssociationDetail]] = {}
+        links_by_s3_user: dict[int, list[S3UserUserLink]] = {}
         avatar_service = UserAvatarService(self.db)
         for s3_user_id, user, allow_manager_browser_data_access in rows:
             normalized_s3_user_id = int(s3_user_id)
             normalized_user_id = int(user.id)
-            user_ids_by_s3_user.setdefault(normalized_s3_user_id, []).append(normalized_user_id)
-            user_details_by_s3_user.setdefault(normalized_s3_user_id, []).append(
-                UserAssociationDetail(
-                    id=normalized_user_id,
-                    email=user.email,
-                    full_name=user.full_name,
-                    display_name=user.display_name,
-                    avatar=avatar_service.descriptor(user),
+            links_by_s3_user.setdefault(normalized_s3_user_id, []).append(
+                S3UserUserLink(
+                    user_id=normalized_user_id,
+                    user_email=user.email,
+                    user_full_name=user.full_name,
+                    user_display_name=user.display_name,
+                    user_avatar=avatar_service.descriptor(user),
                     allow_manager_browser_data_access=bool(
                         allow_manager_browser_data_access
                     ),
                 )
             )
-        return user_ids_by_s3_user, user_details_by_s3_user
+        return links_by_s3_user
 
     def _load_group_links(
         self,
         s3_user_ids: list[int],
-    ) -> tuple[dict[int, list[int]], dict[int, list[S3UserGroupDetail]]]:
+    ) -> dict[int, list[S3UserGroupLink]]:
         if not s3_user_ids:
-            return {}, {}
+            return {}
         rows = (
             self.db.query(
                 UiGroupS3User.s3_user_id,
@@ -476,37 +468,33 @@ class S3UsersService:
             .order_by(UiGroupS3User.s3_user_id.asc(), UiGroup.name.asc(), UiGroup.id.asc())
             .all()
         )
-        group_ids_by_user: dict[int, list[int]] = {}
-        group_details_by_user: dict[int, list[S3UserGroupDetail]] = {}
+        links_by_s3_user: dict[int, list[S3UserGroupLink]] = {}
         avatar_service = UiGroupAvatarService(self.db)
         for s3_user_id, group, allow_manager_browser_data_access in rows:
             normalized_user_id = int(s3_user_id)
             normalized_group_id = int(group.id)
-            group_ids_by_user.setdefault(normalized_user_id, []).append(normalized_group_id)
-            group_details_by_user.setdefault(normalized_user_id, []).append(
-                S3UserGroupDetail(
-                    id=normalized_group_id,
-                    name=group.name,
-                    avatar=avatar_service.descriptor(group),
+            links_by_s3_user.setdefault(normalized_user_id, []).append(
+                S3UserGroupLink(
+                    group_id=normalized_group_id,
+                    group_name=group.name,
+                    group_avatar=avatar_service.descriptor(group),
                     allow_manager_browser_data_access=bool(
                         allow_manager_browser_data_access
                     ),
                 )
             )
-        return group_ids_by_user, group_details_by_user
+        return links_by_s3_user
 
     def list_users(self, include_quota: bool = False) -> list[S3UserSchema]:
         rows = self.db.query(S3UserModel).order_by(*name_order_by(S3UserModel)).all()
-        user_ids = [row.id for row in rows]
-        link_map, user_details_map = self._load_user_links(user_ids)
-        group_ids_map, group_details_map = self._load_group_links(user_ids)
+        s3_user_ids = [row.id for row in rows]
+        user_links_map = self._load_user_links(s3_user_ids)
+        group_links_map = self._load_group_links(s3_user_ids)
         return [
             self._serialize_s3_user(
                 row,
-                link_map,
-                user_details_map,
-                group_ids_map,
-                group_details_map,
+                user_links_map,
+                group_links_map,
                 include_quota=include_quota,
             )
             for row in rows
@@ -596,16 +584,14 @@ class S3UsersService:
             else:
                 query = query.order_by(sort_column.asc(), S3UserModel.id.asc())
         rows = query.offset(offset).limit(page_size).all()
-        user_ids = [row.id for row in rows]
-        link_map, user_details_map = self._load_user_links(user_ids)
-        group_ids_map, group_details_map = self._load_group_links(user_ids)
+        s3_user_ids = [row.id for row in rows]
+        user_links_map = self._load_user_links(s3_user_ids)
+        group_links_map = self._load_group_links(s3_user_ids)
         return [
             self._serialize_s3_user(
                 row,
-                link_map,
-                user_details_map,
-                group_ids_map,
-                group_details_map,
+                user_links_map,
+                group_links_map,
                 include_quota=include_quota,
             )
             for row in rows
@@ -618,9 +604,8 @@ class S3UsersService:
         include_quota: bool = False,
     ) -> S3UserSchema:
         s3_user = self._get_s3_user(user_id)
-        user_ids_map, user_details_map = self._load_user_links([s3_user.id])
-        user_ids = user_ids_map.get(s3_user.id, [])
-        group_ids_map, group_details_map = self._load_group_links([s3_user.id])
+        user_links_map = self._load_user_links([s3_user.id])
+        group_links_map = self._load_group_links([s3_user.id])
         endpoint = self._endpoint_for_user(s3_user)
         quota_max_size_gb = None
         quota_max_objects = None
@@ -633,10 +618,8 @@ class S3UsersService:
             rgw_user_uid=s3_user.rgw_user_uid,
             email=s3_user.email,
             created_at=s3_user.created_at,
-            user_ids=user_ids,
-            user_details=user_details_map.get(s3_user.id, []),
-            group_ids=group_ids_map.get(s3_user.id, []),
-            group_details=group_details_map.get(s3_user.id, []),
+            user_links=user_links_map.get(s3_user.id, []),
+            group_links=group_links_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id,
@@ -706,9 +689,6 @@ class S3UsersService:
             rgw_user_uid=s3_user.rgw_user_uid,
             email=s3_user.email,
             created_at=s3_user.created_at,
-            user_ids=[],
-            group_ids=[],
-            group_details=[],
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id,
@@ -768,9 +748,6 @@ class S3UsersService:
                     rgw_user_uid=s3_user.rgw_user_uid,
                     email=s3_user.email,
                     created_at=s3_user.created_at,
-                    user_ids=[],
-                    group_ids=[],
-                    group_details=[],
                     quota_max_size_gb=quota_max_size_gb,
                     quota_max_objects=quota_max_objects,
                     storage_endpoint_id=endpoint.id,
@@ -795,12 +772,8 @@ class S3UsersService:
             s3_user.email = payload.email
         if payload.user_links is not None:
             self._ensure_user_link_objects(s3_user, payload.user_links)
-        elif payload.user_ids is not None:
-            self._ensure_links(s3_user, payload.user_ids)
         if payload.group_links is not None:
             self._ensure_group_link_objects(s3_user, payload.group_links)
-        elif payload.group_ids is not None:
-            self._ensure_group_links(s3_user, payload.group_ids)
         if payload.tags is not None:
             self.tags.replace_s3_user_tags(s3_user, payload.tags)
         if payload.allow_bucket_quota_management is not None:
@@ -823,9 +796,8 @@ class S3UsersService:
         self.db.add(s3_user)
         self.db.commit()
         self.db.refresh(s3_user)
-        user_ids_map, user_details_map = self._load_user_links([s3_user.id])
-        user_ids = user_ids_map.get(s3_user.id, [])
-        group_ids_map, group_details_map = self._load_group_links([s3_user.id])
+        user_links_map = self._load_user_links([s3_user.id])
+        group_links_map = self._load_group_links([s3_user.id])
         endpoint = self._endpoint_for_user(s3_user)
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
         return S3UserSchema(
@@ -834,10 +806,8 @@ class S3UsersService:
             rgw_user_uid=s3_user.rgw_user_uid,
             email=s3_user.email,
             created_at=s3_user.created_at,
-            user_ids=user_ids,
-            user_details=user_details_map.get(s3_user.id, []),
-            group_ids=group_ids_map.get(s3_user.id, []),
-            group_details=group_details_map.get(s3_user.id, []),
+            user_links=user_links_map.get(s3_user.id, []),
+            group_links=group_links_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id,
@@ -924,9 +894,8 @@ class S3UsersService:
         self.db.commit()
         self.db.refresh(s3_user)
         endpoint = self._endpoint_for_user(s3_user)
-        user_ids_map, user_details_map = self._load_user_links([s3_user.id])
-        user_ids = user_ids_map.get(s3_user.id, [])
-        group_ids_map, group_details_map = self._load_group_links([s3_user.id])
+        user_links_map = self._load_user_links([s3_user.id])
+        group_links_map = self._load_group_links([s3_user.id])
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
         return S3UserSchema(
             id=s3_user.id,
@@ -934,10 +903,8 @@ class S3UsersService:
             rgw_user_uid=s3_user.rgw_user_uid,
             email=s3_user.email,
             created_at=s3_user.created_at,
-            user_ids=user_ids,
-            user_details=user_details_map.get(s3_user.id, []),
-            group_ids=group_ids_map.get(s3_user.id, []),
-            group_details=group_details_map.get(s3_user.id, []),
+            user_links=user_links_map.get(s3_user.id, []),
+            group_links=group_links_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id,

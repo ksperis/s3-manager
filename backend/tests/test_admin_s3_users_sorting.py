@@ -129,18 +129,20 @@ def test_admin_s3_users_search_and_detail_include_direct_group_links(client, db_
     payload = response.json()
 
     assert [item["name"] for item in payload["items"]] == ["group-linked-user"]
-    assert payload["items"][0]["group_ids"] == [group.id]
-    assert payload["items"][0]["group_details"][0]["id"] == group.id
-    assert payload["items"][0]["group_details"][0]["name"] == "Ops Readers"
-    assert payload["items"][0]["group_details"][0]["avatar"]["initials"] == "OR"
+    assert "group_ids" not in payload["items"][0]
+    assert "group_details" not in payload["items"][0]
+    assert payload["items"][0]["group_links"][0]["group_id"] == group.id
+    assert payload["items"][0]["group_links"][0]["group_name"] == "Ops Readers"
+    assert payload["items"][0]["group_links"][0]["group_avatar"]["initials"] == "OR"
 
     detail = client.get(f"/api/admin/s3-users/{linked.id}")
     assert detail.status_code == 200, detail.text
     detail_payload = detail.json()
-    assert detail_payload["group_ids"] == [group.id]
-    assert detail_payload["group_details"][0]["id"] == group.id
-    assert detail_payload["group_details"][0]["name"] == "Ops Readers"
-    assert detail_payload["group_details"][0]["avatar"]["initials"] == "OR"
+    assert "group_ids" not in detail_payload
+    assert "group_details" not in detail_payload
+    assert detail_payload["group_links"][0]["group_id"] == group.id
+    assert detail_payload["group_links"][0]["group_name"] == "Ops Readers"
+    assert detail_payload["group_links"][0]["group_avatar"]["initials"] == "OR"
 
 
 def test_admin_s3_users_search_matches_linked_ui_user_email(client, db_session):
@@ -160,9 +162,11 @@ def test_admin_s3_users_search_matches_linked_ui_user_email(client, db_session):
     assert response.status_code == 200, response.text
     items = response.json()["items"]
     assert [item["name"] for item in items] == ["email-linked-user"]
-    assert items[0]["user_details"][0]["id"] == user.id
-    assert items[0]["user_details"][0]["email"] == "linked.search@example.test"
-    assert items[0]["user_details"][0]["avatar"]["initials"] == "LS"
+    assert "user_ids" not in items[0]
+    assert "user_details" not in items[0]
+    assert items[0]["user_links"][0]["user_id"] == user.id
+    assert items[0]["user_links"][0]["user_email"] == "linked.search@example.test"
+    assert items[0]["user_links"][0]["user_avatar"]["initials"] == "LS"
 
 
 def test_admin_s3_users_update_replaces_direct_group_links(client, db_session):
@@ -200,35 +204,19 @@ def test_admin_s3_users_update_replaces_direct_group_links(client, db_session):
     assert response.status_code == 200, response.text
     payload = response.json()
 
-    assert payload["group_ids"] == [new_group.id]
-    assert payload["group_details"][0]["id"] == new_group.id
-    assert payload["group_details"][0]["name"] == "New User Group"
-    assert payload["group_details"][0]["avatar"]["initials"] == "NG"
+    assert "group_ids" not in payload
+    assert "group_details" not in payload
     assert payload["user_links"][0]["user_id"] == linked_user.id
     assert payload["user_links"][0]["allow_manager_browser_data_access"] is True
     assert payload["group_links"][0]["group_id"] == new_group.id
+    assert payload["group_links"][0]["group_name"] == "New User Group"
+    assert payload["group_links"][0]["group_avatar"]["initials"] == "NG"
     assert payload["group_links"][0]["allow_manager_browser_data_access"] is True
     rows = db_session.query(UiGroupS3User).filter(UiGroupS3User.s3_user_id == s3_user.id).all()
     assert [row.group_id for row in rows] == [new_group.id]
 
-    compatible = client.put(
+    removed_contract = client.put(
         f"/api/admin/s3-users/{s3_user.id}",
         json={"user_ids": [linked_user.id], "group_ids": [new_group.id]},
     )
-    assert compatible.status_code == 200, compatible.text
-    assert compatible.json()["user_links"][0]["allow_manager_browser_data_access"] is True
-    assert compatible.json()["group_links"][0]["allow_manager_browser_data_access"] is True
-
-    ambiguous = client.put(
-        f"/api/admin/s3-users/{s3_user.id}",
-        json={
-            "user_ids": [linked_user.id],
-            "user_links": [
-                {
-                    "user_id": linked_user.id,
-                    "allow_manager_browser_data_access": False,
-                }
-            ],
-        },
-    )
-    assert ambiguous.status_code == 422
+    assert removed_contract.status_code == 422

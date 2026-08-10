@@ -6,7 +6,7 @@ import client from "./client";
 import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 import type { UiGroupAvatarDescriptor } from "./groups";
-import type { UserSummary } from "./users";
+import type { UserAvatarDescriptor } from "./users";
 
 export type S3User = {
   id: number;
@@ -15,11 +15,7 @@ export type S3User = {
   tags: TagDefinitionSummary[];
   email?: string | null;
   created_at?: string | null;
-  user_ids: number[];
-  user_details?: UserSummary[];
   user_links?: S3UserUserLink[];
-  group_ids?: number[];
-  group_details?: { id: number; name: string; avatar?: UiGroupAvatarDescriptor | null }[];
   group_links?: S3UserGroupLink[];
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
@@ -37,12 +33,14 @@ export type S3UserUserLink = {
   user_email?: string | null;
   user_full_name?: string | null;
   user_display_name?: string | null;
+  user_avatar?: UserAvatarDescriptor | null;
   allow_manager_browser_data_access?: boolean;
 };
 
 export type S3UserGroupLink = {
   group_id: number;
   group_name?: string | null;
+  group_avatar?: UiGroupAvatarDescriptor | null;
   allow_manager_browser_data_access?: boolean;
 };
 
@@ -83,9 +81,7 @@ type ImportS3UserPayload = {
 export type UpdateS3UserPayload = {
   name?: string | null;
   email?: string | null;
-  user_ids?: number[] | null;
   user_links?: S3UserUserLink[] | null;
-  group_ids?: number[] | null;
   group_links?: S3UserGroupLink[] | null;
   quota_max_size_gb?: number | null;
   quota_max_size_unit?: string | null;
