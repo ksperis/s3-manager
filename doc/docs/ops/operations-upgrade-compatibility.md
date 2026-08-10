@@ -416,6 +416,17 @@ Account-specific RGW operations always use the persisted endpoint. Deploy the
 backend and frontend together because the request and response contracts are
 both strict.
 
+## 2026-08 canonical secret keyrings
+
+The backend now accepts only the keyring settings `JWT_KEYS` and
+`CREDENTIAL_KEYS`. Before upgrading, replace a singular `FERNET_KEY` with a
+one-item `JWT_KEYS` list and replace a singular `CREDENTIAL_KEY` with a one-item
+`CREDENTIAL_KEYS` list. Keep every historical key required to validate active
+JWTs or decrypt stored credentials, with the key used for new values first.
+
+Empty keyrings are rejected at startup. The singular environment variables are
+ignored and no longer provide runtime compatibility.
+
 ## 2026-08 strict credential encryption
 
 Migration `0098_encrypt_plaintext_secrets` encrypts any remaining plaintext

@@ -93,7 +93,7 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     updated = rotate_credentials(new_key=args.new_key)
-    logger.info("Re-encrypted %s credential field(s). Update CREDENTIAL_KEY/CREDENTIAL_KEYS accordingly.", updated)
+    logger.info("Re-encrypted %s credential field(s). Update CREDENTIAL_KEYS accordingly.", updated)
 
 
 if __name__ == "__main__":

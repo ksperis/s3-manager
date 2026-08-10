@@ -58,8 +58,6 @@ def _build_app_settings_payload() -> str:
 
 def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env = os.environ.copy()
-    env.pop("FERNET_KEY", None)
-    env.pop("CREDENTIAL_KEY", None)
     for key in list(env):
         if key.startswith("OIDC_PROVIDERS__") or key.startswith("LDAP_PROVIDERS__"):
             env.pop(key, None)

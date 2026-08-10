@@ -147,18 +147,13 @@ class Settings(BaseSettings):
 
     app_name: str = Field("s3-manager", description="Application name")
     api_v1_prefix: str = "/api"
-    fernet_key: str = Field("change-me", description="JWT secret key (FERNET_KEY)")
     jwt_keys: list[str] = Field(
-        default_factory=list,
-        description="JWT key ring (JSON list or comma-separated)",
-    )
-    credential_key: str = Field(
-        "change-me",
-        description="Key used to encrypt credentials at rest (CREDENTIAL_KEY)",
+        default_factory=lambda: ["change-me"],
+        description="JWT key ring (JSON list)",
     )
     credential_keys: list[str] = Field(
-        default_factory=list,
-        description="Credential key ring (JSON list or comma-separated)",
+        default_factory=lambda: ["change-me"],
+        description="Credential key ring (JSON list)",
     )
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = Field(60 * 24 * 14, description="Refresh token expiry (minutes)")
@@ -481,23 +476,6 @@ class Settings(BaseSettings):
         description="Number of background webhook workers for bucket migration events (BUCKET_MIGRATION_WEBHOOK_WORKERS)",
     )
 
-    @field_validator("jwt_keys", "credential_keys", mode="before")
-    @classmethod
-    def parse_key_list(cls, value):
-        if value is None:
-            return []
-        if isinstance(value, str):
-            text = value.strip()
-            if not text:
-                return []
-            if text.startswith("["):
-                try:
-                    return json.loads(text)
-                except json.JSONDecodeError as exc:
-                    raise ValueError("Unable to parse keys JSON") from exc
-            return [item.strip() for item in text.split(",") if item.strip()]
-        return value
-
     @field_validator("database_url", mode="before")
     @classmethod
     def normalize_database_url(cls, value):
@@ -555,11 +533,11 @@ class Settings(BaseSettings):
         return text
 
     @model_validator(mode="after")
-    def ensure_key_defaults(self):
+    def validate_settings(self):
         if not self.jwt_keys:
-            self.jwt_keys = [self.fernet_key]
+            raise ValueError("jwt_keys must contain at least one key")
         if not self.credential_keys:
-            self.credential_keys = [self.credential_key]
+            raise ValueError("credential_keys must contain at least one key")
         if self.api_token_default_expire_days < 1:
             raise ValueError("api_token_default_expire_days must be >= 1")
         if self.api_token_max_expire_days < 1:
@@ -583,13 +561,13 @@ def collect_secret_warnings(settings: Settings) -> list[str]:
     weak_jwt = [key for key in settings.jwt_keys if is_weak_secret_value(key)]
     if weak_jwt:
         warnings.append(
-            "Weak/default JWT key detected (FERNET_KEY/JWT_KEYS). "
+            "Weak/default JWT key detected (JWT_KEYS). "
             "Use high-entropy values with at least 32 characters."
         )
     weak_credential = [key for key in settings.credential_keys if is_weak_secret_value(key)]
     if weak_credential:
         warnings.append(
-            "Weak/default credential encryption key detected (CREDENTIAL_KEY/CREDENTIAL_KEYS). "
+            "Weak/default credential encryption key detected (CREDENTIAL_KEYS). "
             "Use high-entropy values with at least 32 characters."
         )
     if (settings.seed_super_admin_password or "").strip().lower() in {"changeme", "change-me", "admin", "password"}:
