@@ -1,6 +1,8 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.db import S3Account
 from app.main import app
@@ -30,10 +32,8 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
                 email=payload.email,
                 rgw_account_id="RGW00000000000000101",
                 rgw_user_uid="RGW00000000000000101-admin",
-                root_user_email="RGW00000000000000101-admin",
                 quota_max_size_gb=payload.quota_max_size_gb,
                 quota_max_objects=payload.quota_max_objects,
-                user_ids=[],
                 user_links=[],
                 storage_endpoint_id=1,
                 storage_endpoint_name="Ceph",
@@ -70,6 +70,20 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
         "quota_max_size_gb": 500,
         "quota_max_objects": 1000000,
     }
+
+
+def test_admin_account_response_model_rejects_obsolete_fields():
+    with pytest.raises(ValidationError, match="root_user_email"):
+        S3AccountSchema(
+            id="101",
+            name="strict-account",
+            root_user_email="obsolete@example.test",
+            storage_endpoint_id=1,
+            storage_endpoint_name="Ceph",
+            storage_endpoint_url="https://s3.example.test",
+            storage_endpoint_is_default=True,
+            storage_endpoint_capabilities={"account": True},
+        )
 
 
 def test_admin_account_mutations_require_a_canonical_endpoint(client: TestClient):

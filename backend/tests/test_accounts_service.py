@@ -265,7 +265,7 @@ def test_import_account_uses_user_api_when_account_user_missing(db_session, monk
     assert db_account is not None
     assert db_account.rgw_access_key == "IMPORTED"
     assert db_account.rgw_secret_key == "SECRET"
-    assert created[0].root_user_email == "RGW12345678901234567-admin"
+    assert created[0].rgw_user_uid == "RGW12345678901234567-admin"
 
 
 class FakeRGWAdminImportCreatesRoot:
@@ -323,7 +323,7 @@ def test_import_account_creates_root_user_when_missing(db_session, monkeypatch):
     assert db_account.rgw_access_key == "NEWROOT"
     assert db_account.rgw_secret_key == "NEWSECRET"
     assert fake_admin.created_users == [("RGW98765432109876543-admin", account_id)]
-    assert created[0].root_user_email == "RGW98765432109876543-admin"
+    assert created[0].rgw_user_uid == "RGW98765432109876543-admin"
 
 
 class FakeRGWDeleteAdmin:

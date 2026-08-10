@@ -37,8 +37,6 @@ export type S3Account = {
   quota_max_objects?: number | null;
   rgw_account_id?: string;
   rgw_user_uid?: string | null;
-  root_user_email?: string | null;
-  root_user_id?: number | null;
   email?: string | null;
   used_bytes?: number | null;
   user_links: AccountUserLink[];

@@ -485,23 +485,10 @@ class S3AccountsService:
         user_links_by_account = self._load_non_root_user_links(account_ids)
         group_links_by_account = self._load_group_links(account_ids)
 
-        roots_by_account: dict[str, tuple[str, int]] = {}
-        for acc in db_accounts:
-            root_user = (
-                self.db.query(UserS3Account)
-                .filter(UserS3Account.account_id == acc.id, UserS3Account.is_root.is_(True))
-                .join(User)
-                .with_entities(User.email, User.id)
-                .first()
-            )
-            if root_user:
-                roots_by_account[acc.rgw_account_id or str(acc.id)] = (root_user[0], root_user[1])
-
         results: list[S3AccountSchema] = []
         for acc in db_accounts:
             endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
             endpoint_capabilities = self._endpoint_capabilities(endpoint)
-            root_meta = roots_by_account.get(acc.rgw_account_id or str(acc.id))
             used_bytes = None
             used_objects = None
             bucket_count = None
@@ -537,8 +524,6 @@ class S3AccountsService:
                     public_id=str(account_identifier),
                     quota_max_size_gb=quota_max_size_gb,
                     quota_max_objects=quota_max_objects,
-                    root_user_email=root_meta[0] if root_meta else None,
-                    root_user_id=root_meta[1] if root_meta else None,
                     used_bytes=used_bytes,
                     used_objects=used_objects,
                     rgw_user_count=rgw_user_count,
@@ -580,13 +565,6 @@ class S3AccountsService:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if not account:
             raise ValueError("S3Account not found")
-        root_user = (
-            self.db.query(UserS3Account)
-            .filter(UserS3Account.account_id == account.id, UserS3Account.is_root.is_(True))
-            .join(User)
-            .with_entities(User.email, User.id)
-            .first()
-        )
         user_links = self._load_non_root_user_links([account.id]).get(account.id, [])
         group_links = self._load_group_links([account.id]).get(account.id, [])
         used_bytes = used_objects = bucket_count = None
@@ -615,8 +593,6 @@ class S3AccountsService:
             public_id=account_identifier,
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            root_user_email=root_user[0] if root_user else None,
-            root_user_id=root_user[1] if root_user else None,
             used_bytes=used_bytes,
             used_objects=used_objects,
             bucket_count=bucket_count,
@@ -711,8 +687,6 @@ class S3AccountsService:
                 s3_account_from_db(
                     account,
                     public_id=str(account.id),
-                    root_user_email=root_uid,
-                    root_user_id=None,
                     quota_max_size_gb=None,
                     quota_max_objects=None,
                     user_links=[],
@@ -791,8 +765,6 @@ class S3AccountsService:
         return s3_account_from_db(
             account,
             public_id=str(account.id),
-            root_user_email=root_uid,
-            root_user_id=None,
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             user_links=[],
@@ -998,8 +970,6 @@ class S3AccountsService:
             public_id=str(account.id),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            root_user_email=None,
-            root_user_id=None,
             user_links=user_links,
             group_links=group_links,
             storage_endpoint=endpoint,

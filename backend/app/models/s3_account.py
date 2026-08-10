@@ -31,11 +31,11 @@ class AccountGroupLink(_CanonicalAccountLink):
     group_avatar: Optional[UiGroupAvatar] = None
 
 
-class _StrictS3AccountMutation(BaseModel):
+class _StrictS3AccountModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class S3Account(BaseModel):
+class S3Account(_StrictS3AccountModel):
     id: str
     db_id: Optional[int] = None
     name: str
@@ -43,8 +43,6 @@ class S3Account(BaseModel):
     rgw_user_uid: Optional[str] = None
     quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None
-    root_user_email: Optional[str] = None
-    root_user_id: Optional[int] = None
     email: Optional[str] = None
     used_bytes: Optional[int] = None
     used_objects: Optional[int] = None
@@ -64,7 +62,7 @@ class S3Account(BaseModel):
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
-class S3AccountCreate(_StrictS3AccountMutation):
+class S3AccountCreate(_StrictS3AccountModel):
     name: str
     email: Optional[str] = None
     quota_max_size_gb: Optional[float] = None
@@ -79,14 +77,14 @@ class S3AccountCreate(_StrictS3AccountMutation):
         return validate_tag_definition_list(value, allow_none=False) or []
 
 
-class S3AccountImport(_StrictS3AccountMutation):
+class S3AccountImport(_StrictS3AccountModel):
     rgw_account_id: str
     name: Optional[str] = None
     email: Optional[str] = None
     storage_endpoint_id: int
 
 
-class S3AccountUpdate(_StrictS3AccountMutation):
+class S3AccountUpdate(_StrictS3AccountModel):
     quota_max_size_gb: Optional[float] = None
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
@@ -118,7 +116,7 @@ class S3AccountUpdate(_StrictS3AccountMutation):
         return value
 
 
-class S3AccountSummary(BaseModel):
+class S3AccountSummary(_StrictS3AccountModel):
     id: str
     db_id: Optional[int] = None
     name: str

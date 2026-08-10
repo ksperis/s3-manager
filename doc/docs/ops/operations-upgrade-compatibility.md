@@ -505,7 +505,10 @@ sending `user_ids`, `group_ids`, or a null link list returns `422`. Send an empt
 list to clear an association set. The obsolete `is_s3_user` discriminator is
 also removed because these endpoints return RGW accounts exclusively. Consumers
 that operate on mixed execution contexts must use the canonical `kind` field.
-Deploy the backend and frontend together.
+The unused `root_user_email` and `root_user_id` projections are no longer
+returned, eliminating per-account root-link lookups. Account response models now
+reject unknown fields internally so obsolete projections cannot be silently
+reintroduced. Deploy the backend and frontend together.
 
 ## 2026-03 compatibility cleanup
 
