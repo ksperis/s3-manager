@@ -157,7 +157,6 @@ def _build_connection_context(
     connection: S3Connection,
     *,
     tags_service: TagsService,
-    hidden: bool = False,
 ) -> ExecutionContext:
     details = resolve_connection_details(connection)
     can_manage_iam = _connection_can_manage_iam(connection)
@@ -185,7 +184,6 @@ def _build_connection_context(
         kind="connection",
         id=f"conn-{connection.id}",
         display_name=connection.name,
-        hidden=hidden,
         endpoint_id=endpoint.id if endpoint else None,
         endpoint_name=(endpoint.name if endpoint else (details.endpoint_name or details.provider or "Custom endpoint")),
         endpoint_is_default=bool(endpoint.is_default) if endpoint else False,
@@ -306,7 +304,6 @@ def list_execution_contexts(
             _build_connection_context(
                 connection,
                 tags_service=tags_service,
-                hidden=bool(connection.is_temporary),
             )
         )
     return results

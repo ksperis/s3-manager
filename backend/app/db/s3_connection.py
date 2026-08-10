@@ -62,14 +62,11 @@ class S3Connection(Base):
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True, index=True)
     custom_endpoint_config = Column(Text, nullable=True)
 
-    # Credentials (session_token/expires_at reserved for future STS support)
+    # Credentials (session_token/expires_at support expiring STS credentials)
     access_key_id = Column(String, nullable=False)
     secret_access_key = Column(EncryptedString, nullable=False)
     session_token = Column(EncryptedString, nullable=True)
     expires_at = Column(UTCDateTime(), nullable=True)
-    is_temporary = Column(Boolean, nullable=False, default=False, server_default="0")
-    temp_user_uid = Column(String, nullable=True)
-    temp_access_key_id = Column(String, nullable=True)
 
     # Cached capability profile (JSON) computed from probes.
     capabilities_json = Column(

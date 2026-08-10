@@ -49,9 +49,8 @@ function BrowserShell() {
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [identityAccessMode, setIdentityAccessMode] = useState<ContextAccessMode>(null);
   const [sidebarBody, setSidebarBodyState] = useState<BrowserSidebarBodyRenderer | null>(null);
-  const visibleContexts = contexts.filter((ctx) => !ctx.hidden || ctx.id === selectedContextId);
   const selected = contexts.find((a) => a.id === selectedContextId);
-  const showSelector = requiresContextSelection && visibleContexts.length > 0;
+  const showSelector = requiresContextSelection && contexts.length > 0;
   const identityLabel = iamIdentity
     ? identityAccessMode === "connection"
       ? `S3 Identity: ${iamIdentity}`
@@ -145,7 +144,7 @@ function BrowserShell() {
       renderControl: (mode) =>
         showSelector ? (
           <TopbarContextAccountSelector
-            contexts={visibleContexts}
+            contexts={contexts}
             selectedContextId={selectedContextId}
             onContextChange={handleS3AccountChange}
             selectedLabel={selectedLabel}

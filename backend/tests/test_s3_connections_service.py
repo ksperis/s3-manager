@@ -54,7 +54,6 @@ def _create_row(db_session, **kwargs) -> S3Connection:
         access_key_id=kwargs.get("access_key_id", "AKIA-CONN-001"),
         secret_access_key=kwargs.get("secret_access_key", "SECRET-CONN-001"),
         capabilities_json=kwargs.get("capabilities_json", '{"can_manage_iam": false}'),
-        is_temporary=kwargs.get("is_temporary", False),
     )
     db_session.add(row)
     db_session.commit()
@@ -70,7 +69,6 @@ def test_list_for_user_and_list_owned_private_filters_scopes(db_session):
     owned_private = _create_row(db_session, created_by_user_id=owner.id, name="owned-private")
     shared_row = _create_row(db_session, created_by_user_id=other.id, name="shared", is_shared=True)
     _create_row(db_session, created_by_user_id=other.id, name="hidden-private")
-    _create_row(db_session, created_by_user_id=owner.id, name="temporary-owned", is_temporary=True)
     db_session.add(UserS3Connection(user_id=shared_user.id, s3_connection_id=shared_row.id))
     db_session.commit()
 
@@ -115,7 +113,6 @@ def test_get_owned_and_get_visible_with_access_control(db_session):
     other = _user(db_session, "other2@example.test")
     private_row = _create_row(db_session, created_by_user_id=owner.id, name="private")
     shared_row = _create_row(db_session, created_by_user_id=owner.id, name="shared", is_shared=True)
-    temporary_row = _create_row(db_session, created_by_user_id=owner.id, name="tmp", is_temporary=True)
     db_session.add(UserS3Connection(user_id=reader.id, s3_connection_id=shared_row.id))
     db_session.commit()
 
@@ -129,8 +126,6 @@ def test_get_owned_and_get_visible_with_access_control(db_session):
         service.get_visible(other.id, private_row.id)
     with pytest.raises(KeyError):
         service.get_visible(owner.id, shared_row.id)
-    with pytest.raises(KeyError):
-        service.get_visible(owner.id, temporary_row.id)
 
 
 def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session, monkeypatch):

@@ -36,7 +36,6 @@ class S3ConnectionsService:
             self.db.query(DBS3Connection)
             .outerjoin(UserS3Connection, UserS3Connection.s3_connection_id == DBS3Connection.id)
             .filter(
-                DBS3Connection.is_temporary.is_(False),
                 ((DBS3Connection.is_shared.is_(False)) & (DBS3Connection.created_by_user_id == user_id))
                 | ((DBS3Connection.is_shared.is_(True)) & (UserS3Connection.user_id == user_id)),
             )
@@ -53,7 +52,6 @@ class S3ConnectionsService:
             .filter(
                 DBS3Connection.created_by_user_id == user_id,
                 DBS3Connection.is_shared.is_(False),
-                DBS3Connection.is_temporary.is_(False),
             )
             .order_by(*name_order_by(DBS3Connection))
             .all()
@@ -63,10 +61,7 @@ class S3ConnectionsService:
     @staticmethod
     def admin_shared_predicates():
         """Return the single scope used by every Admin/automation selector."""
-        return (
-            DBS3Connection.is_shared.is_(True),
-            DBS3Connection.is_temporary.is_(False),
-        )
+        return (DBS3Connection.is_shared.is_(True),)
 
     def admin_shared_query(self):
         return self.db.query(DBS3Connection).filter(*self.admin_shared_predicates())
@@ -98,7 +93,7 @@ class S3ConnectionsService:
             .filter(DBS3Connection.created_by_user_id == user_id, DBS3Connection.id == connection_id)
             .first()
         )
-        if not row or row.is_temporary:
+        if not row:
             raise KeyError("S3Connection not found")
         if row.is_shared:
             raise KeyError("S3Connection not found")
@@ -106,7 +101,7 @@ class S3ConnectionsService:
 
     def get_visible(self, user_id: int, connection_id: int) -> DBS3Connection:
         row = self.db.query(DBS3Connection).filter(DBS3Connection.id == connection_id).first()
-        if not row or row.is_temporary:
+        if not row:
             raise KeyError("S3Connection not found")
         if row.is_shared:
             link = (

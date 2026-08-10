@@ -94,7 +94,6 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/internal/billing_collect.py", "collect_daily", "/collect/daily"): "internal token-protected job",
     ("POST", "app/routers/internal/healthchecks.py", "run_healthchecks", "/run"): "internal token-protected job",
     ("POST", "app/routers/internal/quota_monitor.py", "run_quota_monitor", "/run"): "internal token-protected job",
-    ("POST", "app/routers/internal/s3_connections.py", "cleanup_temporary_connections", "/cleanup"): "internal token-protected cleanup",
     ("POST", "app/routers/internal/usage_history.py", "collect_usage_history", "/collect"): "internal token-protected job",
     ("POST", "app/routers/manager/buckets.py", "compare_bucket_pair", "/compare"): "read-only comparison",
     ("POST", "app/routers/manager/objects.py", "delete_objects", "/delete"): "data-plane operation covered by provider access logs",

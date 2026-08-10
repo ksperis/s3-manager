@@ -89,7 +89,7 @@ execution of a selected context.
 |---|---|
 | Manager | `account_administrator` accounts, assigned RGW users, assigned shared Manager connections, and the owner's active private Manager connections. |
 | Manager Browser | The active Manager context only. Accounts require `account_administrator` and `allow_manager_browser_data_access = true` on the same direct or group link and execute as root. RGW users require the flag on any direct or group link and execute with that RGW user's credentials. Owned private connections require both Manager and Browser access. Shared connections are rejected. |
-| Browser | The owner's active, unexpired, non-temporary private connections with `access_browser = true`, plus compatible Portal projects whose effective `portal.browser_access_enabled` setting is true. Portal project execution uses the personal Portal IAM identity and Portal profile. |
+| Browser | The owner's active, unexpired private connections with `access_browser = true`, plus compatible Portal projects whose effective `portal.browser_access_enabled` setting is true. Portal project execution uses the personal Portal IAM identity and Portal profile. |
 | Portal | Compatible account membership projected to `portal_user` or `portal_manager`; account administrators project to Portal manager. Execution always uses the user's personal Portal IAM identity. |
 | Ceph Admin Browser | The explicit endpoint-wide Ceph Admin branch. |
 | Direct S3 session | The explicit session principal and its session capabilities. |

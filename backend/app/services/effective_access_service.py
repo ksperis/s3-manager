@@ -204,7 +204,6 @@ class EffectiveAccessService:
             .filter(UserS3Connection.user_id == user.id)
             .filter(
                 S3Connection.is_shared.is_(True),
-                S3Connection.is_temporary.is_(False),
             )
             .all()
         }
@@ -216,7 +215,6 @@ class EffectiveAccessService:
                 .filter(UiGroupS3Connection.group_id.in_(group_ids))
                 .filter(
                     S3Connection.is_shared.is_(True),
-                    S3Connection.is_temporary.is_(False),
                 )
                 .all()
             )
@@ -262,7 +260,6 @@ class EffectiveAccessService:
             .filter(
                 S3Connection.created_by_user_id == user.id,
                 S3Connection.is_shared.is_(False),
-                S3Connection.is_temporary.is_(False),
             )
             .first()
             is not None
@@ -300,7 +297,6 @@ class EffectiveAccessService:
         now = utcnow()
         query = self.db.query(S3Connection).filter(
             S3Connection.is_active.is_(True),
-            S3Connection.is_temporary.is_(False),
             (S3Connection.expires_at.is_(None)) | (S3Connection.expires_at > now),
         )
         if workspace == "browser":
@@ -345,7 +341,6 @@ class EffectiveAccessService:
             not connection.is_shared
             and connection.created_by_user_id == user.id
             and connection.is_active
-            and not connection.is_temporary
             and (connection.expires_at is None or connection.expires_at > now)
             and not connection.remediation_required
             and connection.access_manager
@@ -431,11 +426,7 @@ class EffectiveAccessService:
     def to_user_effective_access(self, user: User) -> EffectiveUserAccess:
         resolved = self.resolve_user(user)
         s3_user_names = load_s3_user_names(self.db, resolved.s3_user_ids)
-        shared_connection_names = load_shared_s3_connection_names(
-            self.db,
-            resolved.s3_connection_ids,
-            exclude_temporary=False,
-        )
+        shared_connection_names = load_shared_s3_connection_names(self.db, resolved.s3_connection_ids)
         return EffectiveUserAccess(
             can_access_ceph_admin=resolved.can_access_ceph_admin,
             can_access_storage_ops=resolved.can_access_storage_ops,

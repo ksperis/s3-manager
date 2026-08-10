@@ -20,7 +20,6 @@ export type ExecutionContext = {
   display_name: string;
   tags: TagDefinitionSummary[];
   endpoint_tags: TagDefinitionSummary[];
-  hidden?: boolean;
   role?: AccountAccessRole | null;
   manager_account_is_admin?: boolean | null;
   rgw_account_id?: string | null;

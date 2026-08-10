@@ -32,7 +32,6 @@ def _seed_connection(
         name=name,
         created_by_user_id=creator_id,
         is_shared=is_shared,
-        is_temporary=False,
         access_manager=True,
         access_browser=True,
         custom_endpoint_config=json.dumps(

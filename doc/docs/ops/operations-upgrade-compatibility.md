@@ -1,5 +1,20 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 removal of temporary S3 connections
+
+Migration `0106_remove_temporary_s3_connections` removes the retired
+`is_temporary`, `temp_user_uid`, and `temp_access_key_id` columns. The internal
+temporary-connection cleanup route and the hidden execution-context contract
+are removed with them. Expiring STS credentials remain supported through
+`session_token` and `expires_at`.
+
+The migration stops before changing the schema if a temporary connection still
+exists. While the previous release is running, revoke every remote RGW access
+key recorded by those rows and then delete the corresponding temporary
+connections. Verify a restorable database backup before retrying the upgrade.
+Deploy the migration, backend, and frontend together. Downgrade recreates empty
+compatibility columns but cannot restore the removed subsystem or remote keys.
+
 ## 2026-08 canonical execution-context catalogue
 
 The unused `GET /api/manager/accounts` endpoint has been removed. The frontend

@@ -16,7 +16,6 @@ class ExecutionContext(BaseModel):
     kind: Literal["account", "connection", "s3_user", "portal_account"]
     id: str
     display_name: str
-    hidden: bool = False
     role: Optional[str] = None
     manager_account_is_admin: Optional[bool] = None
     rgw_account_id: Optional[str] = None

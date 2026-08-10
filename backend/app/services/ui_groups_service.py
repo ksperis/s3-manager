@@ -235,7 +235,6 @@ class UiGroupsService:
                     and_(
                         UiGroupS3Connection.s3_connection_id == connection.id,
                         connection.is_shared.is_(True),
-                        connection.is_temporary.is_(False),
                     ),
                 )
                 .filter(
@@ -290,7 +289,6 @@ class UiGroupsService:
             .filter(
                 UiGroupS3Connection.group_id == group.id,
                 S3Connection.is_shared.is_(True),
-                S3Connection.is_temporary.is_(False),
             )
             .all()
         )
@@ -302,7 +300,6 @@ class UiGroupsService:
         s3_connection_names = load_shared_s3_connection_names(
             self.db,
             s3_connection_ids,
-            exclude_temporary=True,
         )
         return UiGroupOut(
             id=group.id,

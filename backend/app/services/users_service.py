@@ -467,7 +467,6 @@ class UsersService:
                     and_(
                         UserS3Connection.s3_connection_id == linked_connection.id,
                         linked_connection.is_shared.is_(True),
-                        linked_connection.is_temporary.is_(False),
                     ),
                 )
                 .outerjoin(UserUiGroup, User.id == UserUiGroup.user_id)
@@ -520,7 +519,6 @@ class UsersService:
             .filter(
                 UserS3Connection.user_id.in_(user_ids),
                 S3Connection.is_shared.is_(True),
-                S3Connection.is_temporary.is_(False),
             )
             .all()
         )
@@ -532,7 +530,6 @@ class UsersService:
         connection_labels = load_shared_s3_connection_names(
             self.db,
             sorted(connection_ids),
-            exclude_temporary=True,
         )
         outputs = [
             self.user_to_out(
@@ -736,7 +733,6 @@ class UsersService:
             s3_connection_names = load_shared_s3_connection_names(
                 self.db,
                 s3_connection_ids,
-                exclude_temporary=True,
             )
         s3_user_details = [
             LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")

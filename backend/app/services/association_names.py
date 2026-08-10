@@ -16,15 +16,11 @@ def load_s3_user_names(db: Session, ids: list[int]) -> dict[int, str]:
 def load_shared_s3_connection_names(
     db: Session,
     ids: list[int],
-    *,
-    exclude_temporary: bool,
 ) -> dict[int, str]:
     if not ids:
         return {}
-    query = db.query(S3Connection.id, S3Connection.name).filter(
+    rows = db.query(S3Connection.id, S3Connection.name).filter(
         S3Connection.id.in_(ids),
         S3Connection.is_shared.is_(True),
-    )
-    if exclude_temporary:
-        query = query.filter(S3Connection.is_temporary.is_(False))
-    return {int(row[0]): str(row[1]) for row in query.all()}
+    ).all()
+    return {int(row[0]): str(row[1]) for row in rows}
