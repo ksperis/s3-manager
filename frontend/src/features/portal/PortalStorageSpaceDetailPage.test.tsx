@@ -40,12 +40,7 @@ const mocks = vi.hoisted(() => ({
   hookResult: {
     accountIdForApi: "101",
     state: {
-      account_id: 101,
       account_role: "portal_manager",
-      iam_user: {},
-      access_keys: [],
-      quota_max_size_bytes: 10 * 1024 ** 3,
-      quota_max_objects: 1000,
       storage_space_version_cleanup_enabled: true,
     },
     selectedAccount: {

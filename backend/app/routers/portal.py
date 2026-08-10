@@ -552,7 +552,7 @@ def portal_state(
     if not eligible:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="; ".join(reasons) or "Portal not available")
     try:
-        return service.get_state(actor, access)
+        return service.get_state(access)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 

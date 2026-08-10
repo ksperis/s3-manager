@@ -79,17 +79,8 @@ class PortalIAMUser(BaseModel):
 
 
 class PortalState(BaseModel):
-    account_id: int
-    iam_user: PortalIAMUser
-    access_keys: list[PortalAccessKey]
-    iam_provisioned: bool = False
-    max_buckets: Optional[int] = None
-    s3_endpoint: Optional[str] = None
-    used_bytes: Optional[int] = None
-    used_objects: Optional[int] = None
-    quota_max_size_bytes: Optional[int] = None
-    quota_max_objects: Optional[int] = None
-    just_created: bool = False
+    model_config = ConfigDict(extra="forbid")
+
     account_role: Optional[str] = None
     can_manage_buckets: bool = False
     can_create_private_storage_spaces: bool = False

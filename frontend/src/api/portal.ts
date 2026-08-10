@@ -59,17 +59,6 @@ export type PortalIAMUser = {
 };
 
 export type PortalState = {
-  account_id: number;
-  iam_user: PortalIAMUser;
-  access_keys: PortalAccessKey[];
-  iam_provisioned?: boolean;
-  max_buckets?: number | null;
-  s3_endpoint?: string | null;
-  used_bytes?: number | null;
-  used_objects?: number | null;
-  quota_max_size_bytes?: number | null;
-  quota_max_objects?: number | null;
-  just_created?: boolean;
   account_role?: string | null;
   can_manage_buckets?: boolean;
   can_create_private_storage_spaces?: boolean;

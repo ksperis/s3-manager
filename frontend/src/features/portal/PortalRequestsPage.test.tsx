@@ -75,7 +75,6 @@ describe("PortalRequestsPage", () => {
     mocks.listPortalRequests.mockResolvedValue([pendingRequest]);
     mocks.createPortalRequest.mockResolvedValue({ ...pendingRequest, id: 8 });
     mocks.fetchPortalState.mockResolvedValue({
-      account_id: 101,
       account_role: "portal_manager",
       can_manage_portal_users: true,
     });
@@ -247,7 +246,6 @@ describe("PortalRequestsPage", () => {
 
   it("keeps managed request actions unavailable for non-manager Portal users", async () => {
     mocks.fetchPortalState.mockResolvedValue({
-      account_id: 101,
       account_role: "portal_user",
       can_manage_portal_users: false,
     });

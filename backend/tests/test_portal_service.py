@@ -74,6 +74,27 @@ from app.utils.time import utcnow
 from tests.s3_account_factory import make_s3_account
 
 
+@pytest.mark.parametrize(
+    "removed_field",
+    [
+        "account_id",
+        "iam_user",
+        "access_keys",
+        "iam_provisioned",
+        "max_buckets",
+        "s3_endpoint",
+        "used_bytes",
+        "used_objects",
+        "quota_max_size_bytes",
+        "quota_max_objects",
+        "just_created",
+    ],
+)
+def test_portal_state_rejects_removed_fields(removed_field):
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        PortalState(**{removed_field: None})
+
+
 def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False):
     return AccountAccess(
         account=account,
@@ -599,12 +620,19 @@ def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
 
     monkeypatch.setattr(service, "_get_iam_service", fail_get_iam_service)
 
-    state = service.get_state(user, access)
+    state = service.get_state(access)
 
-    assert state.iam_provisioned is False
-    assert state.iam_user.iam_username is None
-    assert state.access_keys == []
-    assert state.just_created is False
+    assert set(state.model_dump()) == {
+        "account_role",
+        "can_manage_buckets",
+        "can_create_private_storage_spaces",
+        "can_create_team_storage_spaces",
+        "can_manage_portal_users",
+        "allow_named_bucket_create",
+        "server_access_logging_enabled",
+        "storage_space_version_cleanup_enabled",
+    }
+    assert state.account_role == AccountRole.PORTAL_USER.value
 
 
 def test_get_state_does_not_load_dynamic_quota_limits(monkeypatch, db_session):
@@ -640,36 +668,9 @@ def test_get_state_does_not_load_dynamic_quota_limits(monkeypatch, db_session):
     )
     monkeypatch.setattr(service, "_get_iam_service", lambda *_args, **_kwargs: pytest.fail("IAM should not initialize without a portal link"))
 
-    state = service.get_state(user, access)
+    state = service.get_state(access)
 
-    assert state.quota_max_size_bytes is None
-    assert state.quota_max_objects is None
-    assert state.max_buckets is None
-
-
-def test_get_state_keeps_bucket_quota_null_when_limit_is_absent(monkeypatch, db_session):
-    account = make_s3_account(db_session,
-        name="portal-account-without-bucket-limit",
-        rgw_account_id="tenant-no-limit",
-        rgw_access_key="ROOT-AK",
-        rgw_secret_key="ROOT-SK",
-    )
-    user = User(email="portal-no-limit@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = _portal_access(account, user)
-    service = PortalService(db_session)
-
-    class FakeQuotaAdmin:
-        def get_account(self, account_id, allow_not_found=False, allow_not_implemented=False):
-            return {"quota": {"enabled": True, "max_size": 2048, "max_objects": 12}}
-
-    monkeypatch.setattr(service, "_quota_admin_for_account", lambda acc: FakeQuotaAdmin())
-
-    state = service.get_state(user, access)
-
-    assert state.max_buckets is None
+    assert state.can_create_private_storage_spaces is True
 
 
 def test_portal_traffic_aggregates_visible_buckets_for_portal_user(monkeypatch, db_session):
@@ -800,7 +801,7 @@ def test_list_access_keys_without_bootstrap_returns_empty(monkeypatch, db_sessio
     assert keys == []
 
 
-def test_get_state_keeps_portal_identity_metadata_local(monkeypatch, db_session):
+def test_get_state_does_not_load_portal_identity_metadata(monkeypatch, db_session):
     account = make_s3_account(db_session, name="portal-account-user-visibility", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-visibility@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -836,12 +837,10 @@ def test_get_state_keeps_portal_identity_metadata_local(monkeypatch, db_session)
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: pytest.fail("PortalState must not initialize IAM"))
     monkeypatch.setattr(service, "_account_quota", lambda acc: pytest.fail("PortalState must not load quotas"))
 
-    state = service.get_state(user, access)
+    state = service.get_state(access)
 
-    assert state.iam_provisioned is True
-    assert state.iam_user.iam_username == "portal-user-iam"
-    assert state.iam_user.arn is None
-    assert state.access_keys == []
+    assert "iam_user" not in state.model_dump()
+    assert state.can_manage_buckets is True
 
 
 def test_access_keys_state_hides_portal_key_and_exposes_policy(monkeypatch, db_session):
@@ -945,7 +944,7 @@ def test_get_state_does_not_list_buckets_for_portal_manager(monkeypatch, db_sess
     monkeypatch.setattr(service, "_account_quota", lambda acc: pytest.fail("PortalState must not load quotas"))
     monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: pytest.fail("PortalState must not list buckets"))
 
-    state = service.get_state(user, access)
+    state = service.get_state(access)
 
     assert state.can_manage_buckets is True
 
@@ -989,21 +988,9 @@ def test_get_state_does_not_list_buckets_for_portal_user(monkeypatch, db_session
     )
     service = PortalService(db_session)
 
-    class _FakeIAMService:
-        def get_user(self, iam_username):
-            return IAMUser(name=iam_username, arn=f"arn:aws:iam:::user/{iam_username}")
-
-        def list_access_keys(self, iam_username):  # noqa: ARG002
-            return [
-                PortalAccessKey(access_key_id="AK-PORTAL", status="Active", created_at="2026-01-01T00:00:00Z"),
-                PortalAccessKey(access_key_id="AK-USER", status="Active", created_at="2026-01-02T00:00:00Z"),
-            ]
-
-    monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
-    monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
     monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: pytest.fail("PortalState must not list buckets"))
 
-    state = service.get_state(user, access)
+    state = service.get_state(access)
 
     assert state.can_manage_buckets is False
     assert state.can_create_private_storage_spaces is True
@@ -1024,7 +1011,7 @@ def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_
     portal_settings = PortalSettings(allow_private_storage_space_create=False)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
 
-    state = service.get_state(user, access)
+    state = service.get_state(access)
 
     assert state.can_manage_buckets is False
     assert state.can_create_private_storage_spaces is False
@@ -1042,7 +1029,7 @@ def test_get_state_exposes_effective_server_access_logging_setting(monkeypatch, 
     portal_settings = PortalSettings(server_access_logging_enabled=False)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
 
-    state = service.get_state(user, access)
+    state = service.get_state(access)
 
     assert state.server_access_logging_enabled is False
 
@@ -1079,18 +1066,6 @@ def test_get_state_ignores_bucket_scope_for_portal_state(monkeypatch, db_session
     )
     service = PortalService(db_session)
 
-    class _FakeIAMService:
-        def get_user(self, iam_username):
-            return IAMUser(name=iam_username, arn=f"arn:aws:iam:::user/{iam_username}")
-
-        def list_access_keys(self, iam_username):  # noqa: ARG002
-            return [
-                PortalAccessKey(access_key_id="AK-PORTAL", status="Active", created_at="2026-01-01T00:00:00Z"),
-                PortalAccessKey(access_key_id="AK-USER", status="Active", created_at="2026-01-02T00:00:00Z"),
-            ]
-
-    monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
-    monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
     monkeypatch.setattr(
         service,
         "list_existing_user_bucket_access",
@@ -1098,10 +1073,9 @@ def test_get_state_ignores_bucket_scope_for_portal_state(monkeypatch, db_session
     )
     monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: pytest.fail("PortalState must not list buckets"))
 
-    state = service.get_state(user, access)
+    state = service.get_state(access)
 
-    assert state.iam_provisioned is True
-    assert state.access_keys == []
+    assert state.can_manage_buckets is False
 
 
 def test_list_storage_spaces_maps_visible_metadata_to_workspace_summary(db_session):

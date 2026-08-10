@@ -8,13 +8,11 @@ from typing import Optional, TYPE_CHECKING
 from app.db import AccountRole, User
 from app.models.bucket import Bucket
 from app.models.portal import (
-    PortalIAMUser,
     PortalState,
     PortalUsage,
     PortalUsageStorageSpace,
 )
 from app.services.rgw_admin import RGWAdminError
-from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
 if TYPE_CHECKING:
@@ -73,15 +71,8 @@ class PortalStateUsageMixin:
             object_count=other_objects,
         )
 
-    def get_state(self, user: User, access: "AccountAccess") -> PortalState:
+    def get_state(self, access: "AccountAccess") -> PortalState:
         account = access.account
-        link = self._existing_portal_link(user, account)
-        iam_provisioned = bool(
-            link
-            and link.iam_username
-            and link.active_access_key
-            and link.active_secret_key
-        )
         portal_settings = self._effective_portal_settings(account)
         can_create_private_storage_spaces = bool(
             portal_settings.allow_private_storage_space_create
@@ -89,16 +80,6 @@ class PortalStateUsageMixin:
         )
         can_create_team_storage_spaces = access.role == AccountRole.PORTAL_MANAGER.value
         return PortalState(
-            account_id=account.id,
-            iam_user=PortalIAMUser(
-                iam_user_id=link.iam_user_id if link else None,
-                iam_username=link.iam_username if link else None,
-                arn=None,
-                created_at=link.created_at if link else None,
-            ),
-            access_keys=[],
-            iam_provisioned=iam_provisioned,
-            s3_endpoint=resolve_s3_endpoint(account),
             account_role=access.role,
             can_manage_buckets=access.capabilities.can_manage_buckets,
             can_create_private_storage_spaces=can_create_private_storage_spaces,

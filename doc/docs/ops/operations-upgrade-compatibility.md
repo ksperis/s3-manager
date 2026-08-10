@@ -1,5 +1,15 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 minimal Portal state contract
+
+`GET /api/portal/state` now returns only effective Portal role, permissions,
+and feature flags. The duplicated project ID, IAM identity, access-key list,
+provisioning marker, endpoint, usage, quota, and creation marker fields have
+been removed. Use the selected `/api/portal/accounts` entry for project
+identity, `/api/portal/access-keys` for IAM identity and keys, and
+`/api/portal/usage` for usage and quotas. Deploy the backend and frontend
+together.
+
 ## 2026-08 removal of temporary S3 connections
 
 Migration `0106_remove_temporary_s3_connections` removes the retired
