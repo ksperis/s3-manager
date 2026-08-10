@@ -311,7 +311,7 @@ describe("AccountsPage modal tabs", () => {
     expect(within(table).getByText("ceph-main").closest("td")).toHaveAttribute("data-label", "Endpoint");
     const associations = screen.getByLabelText("2 linked principals");
     expect(associations).toHaveAccessibleDescription(
-      "Linked principals (2)\nui7@example.com — Roles: Portal user, UI user\nResearch Group — Roles: Account administrator, UI group",
+      "Linked principals (2)\nUI user: ui7@example.com — Roles: Portal user\nUI group: Research Group — Roles: Account administrator",
     );
     expect(associations).toBeInTheDocument();
     expect(associations.querySelector(".rounded-lg")).toBeInTheDocument();
@@ -499,7 +499,7 @@ describe("AccountsPage modal tabs", () => {
     render(<AccountsPage />);
 
     expect(await screen.findByLabelText("1 linked principal")).toHaveAccessibleDescription(
-      "Linked principals (1)\nui7@example.com — Roles: Account administrator, UI user",
+      "Linked principals (1)\nUI user: ui7@example.com — Roles: Account administrator",
     );
     expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
 

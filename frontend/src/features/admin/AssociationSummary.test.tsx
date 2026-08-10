@@ -28,7 +28,7 @@ describe("AssociationPrincipalStack", () => {
 
     const tooltip = screen.getByLabelText("2 linked principals");
     expect(tooltip).toHaveAccessibleDescription(
-      "Linked principals (2)\nAlice Example · alice@example.com — Roles: Portal user, UI user\nStorage Operators — Roles: Account administrator, UI group",
+      "Linked principals (2)\nUI user: Alice Example · alice@example.com — Roles: Portal user\nUI group: Storage Operators — Roles: Account administrator",
     );
     expect(tooltip).toBeInTheDocument();
     expect(container.querySelector(".rounded-lg")).toBeInTheDocument();
@@ -46,6 +46,8 @@ describe("AssociationPrincipalStack", () => {
     expect(within(visualTooltip).getByText("Portal user")).toBeInTheDocument();
     expect(within(visualTooltip).getByText("Portal user")).toHaveClass("text-[9px]");
     expect(within(visualTooltip).getByText("Account administrator")).toBeInTheDocument();
+    expect(within(visualTooltip).getAllByText("UI user")).toHaveLength(1);
+    expect(within(visualTooltip).getAllByText("UI group")).toHaveLength(1);
   });
 
   it("bounds very long tooltip lists and reports the remaining principals", () => {
@@ -63,7 +65,7 @@ describe("AssociationPrincipalStack", () => {
 
     const tooltip = screen.getByLabelText("3 linked principals");
     expect(tooltip).toHaveAccessibleDescription(
-      "Linked principals (3)\nAlice · alice@example.com — Roles: Portal user, UI user\nOperators — Roles: Account administrator, UI group\n… 1 more",
+      "Linked principals (3)\nUI user: Alice · alice@example.com — Roles: Portal user\nUI group: Operators — Roles: Account administrator\n… 1 more",
     );
     expect(tooltip).toBeInTheDocument();
     fireEvent.mouseEnter(tooltip);
@@ -101,7 +103,15 @@ describe("AssociationPrincipalStack", () => {
             label: "Accounts",
             itemLabel: "RGW account",
             items: [
-              { id: 1, label: "Research", role_labels: ["Account administrator"] },
+              {
+                id: 1,
+                label: "Research",
+                role_labels: [
+                  "Account administrator",
+                  "Direct: Portal user",
+                  "Group Storage Operators: Account administrator (maximum)",
+                ],
+              },
               { id: 2, label: "Archive", role_labels: ["Portal user"] },
             ],
           },
@@ -123,11 +133,12 @@ describe("AssociationPrincipalStack", () => {
 
     const summary = screen.getByLabelText("4 linked associations");
     expect(summary).toHaveAccessibleDescription(
-      "Linked associations (4)\nRGW account: Research — Roles: Account administrator\nRGW account: Archive — Roles: Portal user\nRGW user: research-user — Roles: Direct access\n… 1 more",
+      "Linked associations (4)\nRGW account: Research — Roles: Account administrator\nRGW account: Archive — Roles: Portal user\nRGW user: research-user\n… 1 more",
     );
     fireEvent.focus(summary);
     const visualTooltip = screen.getByRole("tooltip", { name: "Linked associations details" });
     expect(within(visualTooltip).getByText("Account administrator")).toBeInTheDocument();
+    expect(within(visualTooltip).queryByText("Direct access")).not.toBeInTheDocument();
     expect(within(visualTooltip).getByText("+1 more entry")).toBeInTheDocument();
     expect(screen.getByLabelText("2 accounts")).toBeInTheDocument();
     expect(screen.getByLabelText("1 rgw users")).toBeInTheDocument();

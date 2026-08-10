@@ -217,7 +217,7 @@ describe("UsersPage modal tabs", () => {
 
     const associations = await screen.findByLabelText("3 linked associations");
     expect(associations).toHaveAccessibleDescription(
-      "Linked associations (3)\nRGW account: acc-1 — Roles: Account administrator, Direct: Portal user, Group storage-operators: Account administrator (maximum)\nRGW user: s3-user-1 — Roles: Direct access\nS3 connection: conn-1 — Roles: Direct access",
+      "Linked associations (3)\nRGW account: acc-1 — Roles: Account administrator\nRGW user: s3-user-1\nS3 connection: conn-1",
     );
     expect(screen.getByLabelText("1 accounts")).toBeInTheDocument();
     expect(screen.getByLabelText("1 rgw users")).toBeInTheDocument();

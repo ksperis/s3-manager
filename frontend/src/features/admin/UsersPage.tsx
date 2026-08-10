@@ -5,7 +5,6 @@
 import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CreateUserPayload,
-  type EffectiveAccountMembership,
   UpdateUserPayload,
   User,
   type UiRole,
@@ -37,7 +36,6 @@ import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import {
   CompactAssociationSummary,
   accountAssociationRoleLabels,
-  connectionAssociationRoleLabels,
   type CompactAssociationCategory,
 } from "./AssociationSummary";
 import {
@@ -890,29 +888,7 @@ export default function UsersPage() {
       const label = accountOptionsById.get(id)?.name ?? `Account #${id}`;
       const role = normalizeAccountAccessRole(link.role);
       const effectiveRoleLabel = accountAssociationRoleLabels({ id, label, role }, showPortalRole)[0];
-      const provenance = effectiveAccountLinks.length > 0
-        ? (link as EffectiveAccountMembership).provenance
-        : null;
-      const roleLabels = [effectiveRoleLabel];
-      if (provenance?.direct_role) {
-        const directRoleLabel = accountAssociationRoleLabels(
-          { id, label, role: provenance.direct_role },
-          showPortalRole,
-        )[0];
-        roleLabels.push(
-          `Direct: ${directRoleLabel}${provenance.direct_determines_effective_role ? " (maximum)" : ""}`,
-        );
-      }
-      for (const group of provenance?.groups ?? []) {
-        const groupRoleLabel = accountAssociationRoleLabels(
-          { id, label, role: group.role },
-          showPortalRole,
-        )[0];
-        roleLabels.push(
-          `Group ${group.group_name}: ${groupRoleLabel}${group.determines_effective_role ? " (maximum)" : ""}`,
-        );
-      }
-      return { id, label, role, role_labels: roleLabels };
+      return { id, label, role, role_labels: [effectiveRoleLabel] };
     });
     const effectiveS3UserDetails = user.effective_access?.s3_user_details ?? [];
     const s3UserItems =
@@ -920,18 +896,15 @@ export default function UsersPage() {
         ? effectiveS3UserDetails.map((entry) => ({
             id: entry.id,
             label: entry.name || `User #${entry.id}`,
-            role_labels: ["Direct or group access"],
           }))
         : user.s3_user_details && user.s3_user_details.length > 0
         ? user.s3_user_details.map((entry) => ({
             id: entry.id,
             label: entry.name || `User #${entry.id}`,
-            role_labels: ["Direct access"],
           }))
         : (user.s3_users ?? []).map((id) => ({
             id: Number(id),
             label: s3UserLabelById.get(Number(id)) ?? `User #${id}`,
-            role_labels: ["Direct access"],
           }));
     const effectiveConnectionDetails = user.effective_access?.s3_connection_details ?? [];
     const connectionItems =
@@ -939,18 +912,15 @@ export default function UsersPage() {
         ? effectiveConnectionDetails.map((entry) => ({
             id: entry.id,
             label: entry.name || `Connection #${entry.id}`,
-            role_labels: ["Direct or group access"],
           }))
         : user.s3_connection_details && user.s3_connection_details.length > 0
         ? user.s3_connection_details.map((entry) => ({
             id: entry.id,
             label: entry.name || `Connection #${entry.id}`,
-            role_labels: connectionAssociationRoleLabels(entry),
           }))
         : (user.s3_connections ?? []).map((id) => ({
             id: Number(id),
             label: s3ConnectionLabelById.get(Number(id)) ?? `Connection #${id}`,
-            role_labels: ["Direct access"],
           }));
     const categories: CompactAssociationCategory[] = [
       {

@@ -176,7 +176,7 @@ describe("GroupsPage", () => {
 
     const associations = await screen.findByLabelText("3 linked associations");
     expect(associations).toHaveAccessibleDescription(
-      "Linked associations (3)\nRGW account: production-account — Roles: Account administrator\nRGW user: archive-rgw-user — Roles: Direct access\nS3 connection: archive-shared-connection — Roles: Direct access",
+      "Linked associations (3)\nRGW account: production-account — Roles: Account administrator\nRGW user: archive-rgw-user\nS3 connection: archive-shared-connection",
     );
     expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
     expect(screen.getByLabelText("Search")).toHaveAttribute(
@@ -199,7 +199,7 @@ describe("GroupsPage", () => {
     expect(associations.closest("td")).toHaveAttribute("data-label", "Storage associations");
     const members = screen.getByLabelText("1 linked principal");
     expect(members).toHaveAccessibleDescription(
-      "Linked principals (1)\nalice@example.com — Roles: User, UI user",
+      "Linked principals (1)\nUI user: alice@example.com — Roles: User",
     );
     expect(members.closest("td")).toHaveAttribute("data-label", "Members");
     expect(screen.getByRole("link", { name: "Edit UI user alice@example.com" })).toHaveAttribute(
@@ -248,7 +248,7 @@ describe("GroupsPage", () => {
     const memberStack = await screen.findByLabelText("7 linked principals");
     expect(within(memberStack).getAllByRole("link")).toHaveLength(5);
     expect(within(memberStack).getByText("+2")).toBeInTheDocument();
-    expect(memberStack).toHaveAccessibleDescription(/member-7@example\.com — Roles: User, UI user/);
+    expect(memberStack).toHaveAccessibleDescription(/UI user: member-7@example\.com — Roles: User/);
   });
 
   it("hides portal role labels when portal is disabled and preserves existing group account roles", async () => {

@@ -69,12 +69,23 @@ function roleBadgeClasses(role: string): string {
   return "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
 }
 
+function isAccessProvenanceLabel(role: string): boolean {
+  const normalized = role.trim().toLowerCase();
+  return (
+    normalized === "direct access" ||
+    normalized === "direct or group access" ||
+    normalized.startsWith("direct:") ||
+    normalized.startsWith("group ")
+  );
+}
+
 function tooltipDescription(label: string, entries: AssociationRoleTooltipEntry[], remaining: number): string {
   const lines = [
     `${label} (${entries.length + remaining})`,
-    ...entries.map((entry) =>
-      `${entry.descriptionKindLabel ? `${entry.descriptionKindLabel}: ` : ""}${entry.identity} — Roles: ${entry.roles.join(", ")}`,
-    ),
+    ...entries.map((entry) => {
+      const identity = `${entry.descriptionKindLabel ? `${entry.descriptionKindLabel}: ` : ""}${entry.identity}`;
+      return entry.roles.length > 0 ? `${identity} — Roles: ${entry.roles.join(", ")}` : identity;
+    }),
   ];
   if (remaining > 0) lines.push(`… ${remaining} more`);
   return lines.join("\n");
@@ -176,16 +187,18 @@ export function AssociationRoleTooltip({
                     {entry.identity}
                   </span>
                 </div>
-                <div className="flex shrink-0 flex-wrap justify-end gap-0.5">
-                  {entry.roles.map((role) => (
-                    <span
-                      key={`${entry.key}:${role}`}
-                      className={`rounded-full border px-1 py-0.5 text-[9px] font-semibold leading-none ${roleBadgeClasses(role)}`}
-                    >
-                      {role}
-                    </span>
-                  ))}
-                </div>
+                {entry.roles.length > 0 ? (
+                  <div className="flex shrink-0 flex-wrap justify-end gap-0.5">
+                    {entry.roles.map((role) => (
+                      <span
+                        key={`${entry.key}:${role}`}
+                        className={`rounded-full border px-1 py-0.5 text-[9px] font-semibold leading-none ${roleBadgeClasses(role)}`}
+                      >
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -217,10 +230,6 @@ export function accountAssociationRoleLabels(
   return roles;
 }
 
-export function connectionAssociationRoleLabels(_connection: object): string[] {
-  return ["Direct access"];
-}
-
 export function uiPrincipalRoleLabel(role?: string | null): string {
   const normalized = (role ?? "").toLowerCase();
   if (["ui_superadmin", "super_admin", "superadmin"].includes(normalized)) return "Superadmin";
@@ -248,7 +257,7 @@ export function CompactAssociationSummary({
       kindLabel: category.itemLabel,
       descriptionKindLabel: category.itemLabel,
       identity: item.label,
-      roles: item.role_labels?.length ? item.role_labels : ["Direct access"],
+      roles: (item.role_labels ?? []).filter((role) => !isAccessProvenanceLabel(role)),
     })),
   );
   return (
@@ -277,6 +286,7 @@ export function CompactAssociationSummary({
 function principalTooltipEntry(item: AssociationPrincipalItem, _showPortalRole: boolean): AssociationRoleTooltipEntry {
   const identity = item.email && item.email !== item.label ? `${item.label} · ${item.email}` : item.label;
   const roles: string[] = [...(item.role_labels ?? [])];
+  const kindLabel = item.kind === "group" ? "UI group" : "UI user";
   if (item.role) {
     const portalRole = normalizeAccountAccessRole(item.role);
     roles.push(
@@ -287,11 +297,11 @@ function principalTooltipEntry(item: AssociationPrincipalItem, _showPortalRole: 
           : "Portal user"
     );
   }
-  roles.push(item.kind === "group" ? "UI group" : "UI user");
   return {
     key: `${item.kind}:${item.id}`,
     identity,
-    kindLabel: item.kind === "group" ? "UI group" : "UI user",
+    kindLabel,
+    descriptionKindLabel: kindLabel,
     roles,
   };
 }

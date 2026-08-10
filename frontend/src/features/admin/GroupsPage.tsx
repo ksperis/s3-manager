@@ -44,7 +44,6 @@ import {
   AssociationPrincipalStack,
   CompactAssociationSummary,
   accountAssociationRoleLabels,
-  connectionAssociationRoleLabels,
   uiPrincipalRoleLabel,
   type AssociationAccountItem,
   type AssociationPrincipalItem,
@@ -906,7 +905,6 @@ export default function GroupsPage() {
       return {
         id: s3UserId,
         label: s3UserDetailsById.get(s3UserId)?.name ?? s3UserLabelById.get(s3UserId) ?? `S3 User #${id}`,
-        role_labels: ["Direct access"],
       };
     });
     const connectionItems = (group.s3_connections ?? []).map((id) => {
@@ -918,7 +916,6 @@ export default function GroupsPage() {
           details?.name ??
           connectionLabelById.get(connectionId) ??
           `Connection #${id}`,
-        role_labels: connectionAssociationRoleLabels(details ?? {}),
       };
     });
     const categories: CompactAssociationCategory[] = [

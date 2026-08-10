@@ -155,7 +155,7 @@ describe("S3ConnectionsPage modal tabs", () => {
     expect(within(table).getByTitle("owner@example.com").closest("td")).toHaveAttribute("data-label", "Created by");
     const associations = await screen.findByLabelText("2 linked principals");
     expect(associations).toHaveAccessibleDescription(
-      "Linked principals (2)\nu11@example.com — Roles: UI user\nStorage Operators — Roles: UI group",
+      "Linked principals (2)\nUI user: u11@example.com\nUI group: Storage Operators",
     );
     expect(associations).toBeInTheDocument();
     expect(associations.querySelector(".rounded-lg")).toBeInTheDocument();

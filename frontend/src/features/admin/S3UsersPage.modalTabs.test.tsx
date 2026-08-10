@@ -219,7 +219,7 @@ describe("S3UsersPage modal tabs", () => {
     const associations = await screen.findByLabelText("2 linked principals");
     await waitFor(() => {
       expect(associations).toHaveAccessibleDescription(
-        "Linked principals (2)\nui33@example.com — Roles: UI user\nStorage Group — Roles: UI group",
+        "Linked principals (2)\nUI user: ui33@example.com\nUI group: Storage Group",
       );
     });
     expect(associations).toBeInTheDocument();
