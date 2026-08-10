@@ -924,6 +924,22 @@ class PortalIamMixin:
         payload = rgw_admin.get_all_buckets(uid=account.rgw_user_uid, with_stats=True)
         return extract_bucket_list(payload)
 
+    def _admin_bucket_info(
+        self,
+        account: S3Account,
+        bucket_name: str,
+        admin: Optional[RGWAdminClient] = None,
+    ) -> Optional[dict]:
+        rgw_admin = admin or self._supervision_admin_for_account(account)
+        bucket_info = rgw_admin.get_bucket_info(
+            bucket_name,
+            allow_not_found=True,
+            uid=account.rgw_user_uid,
+        )
+        if bucket_info is None:
+            bucket_info = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True)
+        return bucket_info
+
     def _bucket_usage_from_list(self, buckets: list[dict]) -> tuple[Optional[int], Optional[int], int]:
         total_bytes = 0
         total_objects = 0

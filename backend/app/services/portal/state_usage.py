@@ -202,13 +202,7 @@ class PortalStateUsageMixin:
             logger.warning("Unable to initialize RGW admin client for bucket stats: %s", exc)
             raise RuntimeError("Impossible d'initialiser le client RGW.") from exc
         try:
-            stats = rgw_admin.get_bucket_info(
-                bucket_name,
-                allow_not_found=True,
-                uid=account.rgw_user_uid,
-            )
-            if stats is None:
-                stats = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True)
+            stats = self._admin_bucket_info(account, bucket_name, admin=rgw_admin)
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to fetch bucket stats: {exc}") from exc
         usage = stats.get("usage") if isinstance(stats, dict) else None

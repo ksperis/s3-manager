@@ -748,14 +748,7 @@ class PortalStorageSpacesMixin:
         bucket_name: str,
     ) -> tuple[bool, Optional[int], Optional[int]]:
         try:
-            rgw_admin = self._supervision_admin_for_account(account)
-            stats = rgw_admin.get_bucket_info(
-                bucket_name,
-                allow_not_found=True,
-                uid=account.rgw_user_uid,
-            )
-            if stats is None:
-                stats = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True)
+            stats = self._admin_bucket_info(account, bucket_name)
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to fetch Storage Space deletion stats: {exc}") from exc
         if stats is None:
