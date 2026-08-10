@@ -325,7 +325,7 @@ export default function AdminPortalRequestsPage() {
               >
                 <option value="all">All accounts</option>
                 {accounts.map((account) => (
-                  <option key={account.id} value={account.db_id ?? account.id}>
+                  <option key={account.id} value={account.id}>
                     {account.name}
                   </option>
                 ))}

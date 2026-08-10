@@ -36,6 +36,7 @@ def _quota_account(db_session, *, allow_target: bool = True) -> S3Account:
     account = S3Account(
         name="quota-account",
         rgw_account_id="RGW00000000000000033",
+        rgw_user_uid="rgw00000000000000033-admin",
         rgw_access_key="account-ak",
         rgw_secret_key="account-sk",
         allow_bucket_quota_management=allow_target,

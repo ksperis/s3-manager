@@ -30,9 +30,10 @@ function executionContext(
 
 function account(overrides: Partial<S3Account>): S3Account {
   return {
-    id: "1",
+    id: 1,
     name: "Primary",
     tags: [],
+    rgw_account_id: "RGW-PRIMARY",
     storage_endpoint_id: 1,
     storage_endpoint_name: "Default endpoint",
     storage_endpoint_url: "https://s3.example.test",
@@ -87,11 +88,11 @@ describe("formatAccountLabel", () => {
     ).toBe("Primary · S3 user (Ceph)");
   });
 
-  it("does not infer a stored account kind from its ID", () => {
+  it("formats a stored account with its endpoint metadata", () => {
     expect(
       formatAccountLabel(
         account({
-          id: "s3u-misleading",
+          id: 2,
           storage_endpoint_id: 2,
           storage_endpoint_name: "Ceph",
           storage_endpoint_is_default: false,

@@ -222,13 +222,13 @@ export default function S3AccountsPage() {
   const currentUser = useMemo(() => readStoredUser(), []);
   const isSuperAdmin = isAdminLikeRole(currentUser?.role);
   const canManagePrivilegedTargets = isAdminLikeRole(currentUser?.role);
-  const editingAccountId = editingS3Account?.db_id ?? null;
+  const editingAccountId = editingS3Account?.id ?? null;
   const editingCapabilities = editingS3Account?.storage_endpoint_capabilities ?? null;
   const editingEndpointId = editingS3Account?.storage_endpoint_id ?? null;
   const editingEndpointCanWrite = editingEndpointId ? endpointAccountsWrite[editingEndpointId] === true : false;
   const usageEnabled = Boolean(editingCapabilities?.usage);
   const adminEnabled = Boolean(editingCapabilities?.admin);
-  const hasUsageIdentity = Boolean(editingS3Account?.rgw_account_id || editingS3Account?.rgw_user_uid);
+  const hasUsageIdentity = Boolean(editingS3Account?.rgw_account_id);
   const allowUsageStats = usageEnabled && hasUsageIdentity;
   const allowQuotaUpdates =
     adminEnabled &&
@@ -311,8 +311,7 @@ export default function S3AccountsPage() {
         const exactMatches = allMatches.filter((account) => {
           const candidates = [
             account.name,
-            account.rgw_account_id ?? "",
-            account.id ?? "",
+            account.rgw_account_id,
             ...(account.user_links ?? []).flatMap((link) => [link.user_email, link.user_full_name]),
             ...(account.group_links ?? []).map((link) => link.group_name),
             ...extractUiTagLabels(account.tags),
@@ -657,13 +656,8 @@ export default function S3AccountsPage() {
 
   const loadAccountDetail = useCallback(
     async (account: S3Account | S3AccountSummary, options?: { includeUsage?: boolean }) => {
-      const targetId = accountDbId(account);
-      if (targetId == null || Number.isNaN(targetId)) {
-        setActionError("Unable to resolve the account identifier.");
-        return null;
-      }
       try {
-        const detail = await getS3Account(targetId, { includeUsage: options?.includeUsage });
+        const detail = await getS3Account(account.id, { includeUsage: options?.includeUsage });
         return detail;
       } catch (err) {
         setActionError(extractError(err));
@@ -715,7 +709,7 @@ export default function S3AccountsPage() {
       label: "RGW ID",
       field: "rgw_account_id",
       cellClassName: "min-w-[176px] align-top",
-      render: (account) => account.rgw_account_id ?? account.id,
+      render: (account) => account.rgw_account_id,
     },
     {
       id: "endpoint",
@@ -740,8 +734,7 @@ export default function S3AccountsPage() {
       mobileRole: "actions",
       cellClassName: "min-w-[144px] align-top",
       render: (account) => {
-        const summaryDbId = accountDbId(account);
-        const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;
+        const deleteBusy = deletingS3AccountId === account.id;
         return isSuperAdmin ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button type="button" onClick={() => startEditS3Account(account)} className={tableActionButtonClasses}>
@@ -820,14 +813,6 @@ export default function S3AccountsPage() {
     }
   };
 
-  const accountDbId = (account: S3Account | S3AccountSummary) => {
-    if (account.db_id != null) {
-      return Number(account.db_id);
-    }
-    const numericId = Number(account.id);
-    return Number.isNaN(numericId) ? null : numericId;
-  };
-
   const renderAccountAssociations = (account: S3Account | S3AccountSummary) => {
     const userItems: AssociationPrincipalItem[] = account.user_links.map((link) => {
       const user = usersById.get(link.user_id);
@@ -864,7 +849,7 @@ export default function S3AccountsPage() {
       (accountToDelete.rgw_user_count ?? 0) > 0 ||
       (accountToDelete.rgw_topic_count ?? 0) > 0);
   const deleteModalHasResources = deleteModalUnknownResources || deleteModalHasLinkedResources;
-  const deleteModalBusy = accountToDelete ? deletingS3AccountId === accountDbId(accountToDelete) : false;
+  const deleteModalBusy = accountToDelete ? deletingS3AccountId === accountToDelete.id : false;
   const selectedCreateEndpointId = form.storage_endpoint_id ? Number(form.storage_endpoint_id) : null;
   const selectedImportEndpointId = importTenantEndpointId ? Number(importTenantEndpointId) : null;
   const createPermissionLoading = selectedCreateEndpointId ? Boolean(endpointPermissionLoading[selectedCreateEndpointId]) : false;
@@ -1008,11 +993,7 @@ export default function S3AccountsPage() {
   const submitEditS3Account = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingS3Account) return;
-    const targetId = accountDbId(editingS3Account);
-    if (targetId == null || Number.isNaN(targetId)) {
-      setActionError("Unable to resolve the account identifier.");
-      return;
-    }
+    const targetId = editingS3Account.id;
     setActionError(null);
     setActionMessage(null);
     try {
@@ -1155,11 +1136,7 @@ export default function S3AccountsPage() {
 
   const confirmDeleteS3Account = async () => {
     if (!accountToDelete) return;
-    const targetId = accountDbId(accountToDelete);
-    if (targetId == null || Number.isNaN(targetId)) {
-      setActionError("Missing account identifier.");
-      return;
-    }
+    const targetId = accountToDelete.id;
     setDeletingS3AccountId(targetId);
     setActionError(null);
     setActionMessage(null);

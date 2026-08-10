@@ -39,6 +39,7 @@ def _account(db_session, endpoint_id: int, name: str = "tags-account") -> S3Acco
     account = S3Account(
         name=name,
         rgw_account_id=f"RGW-{name.upper()}",
+        rgw_user_uid=f"rgw-{name.lower()}-admin",
         rgw_access_key=f"AK-{name.upper()}",
         rgw_secret_key=f"SK-{name.upper()}",
         storage_endpoint_id=endpoint_id,

@@ -92,7 +92,14 @@ def test_manager_rgw_metrics_kill_switch_blocks_every_actor(monkeypatch, depende
     monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
-        dependency(account=S3Account(name="rgw-metrics-disabled"), actor=actor)
+        dependency(
+            account=S3Account(
+                name="rgw-metrics-disabled",
+                rgw_account_id="rgw-metrics-disabled",
+                rgw_user_uid="rgw-metrics-disabled-admin",
+            ),
+            actor=actor,
+        )
 
     assert exc.value.status_code == 403
     assert str(exc.value.detail) == "RGW traffic and usage metrics are disabled"
@@ -118,7 +125,17 @@ def test_manager_rgw_metrics_ignore_bucket_composition_kill_switch(monkeypatch, 
         role=UserRole.UI_ADMIN.value,
     )
 
-    assert dependency(account=S3Account(name="rgw-metrics-enabled"), actor=actor) is actor
+    assert (
+        dependency(
+            account=S3Account(
+                name="rgw-metrics-enabled",
+                rgw_account_id="rgw-metrics-enabled",
+                rgw_user_uid="rgw-metrics-enabled-admin",
+            ),
+            actor=actor,
+        )
+        is actor
+    )
 
 
 def test_manager_stats_overview_allows_connection_with_resolved_identity(db_session):
@@ -167,7 +184,11 @@ def test_manager_stats_overview_allows_connection_with_resolved_identity(db_sess
 
 
 def test_manager_stats_overview_sanitizes_bucket_error_details():
-    account = S3Account(name="stats-error-account", rgw_account_id="rgw-stats-error")
+    account = S3Account(
+        name="stats-error-account",
+        rgw_account_id="rgw-stats-error",
+        rgw_user_uid="rgw-stats-error-admin",
+    )
 
     class _LeakyBucketsService:
         def list_buckets(self, target_account):
@@ -262,6 +283,7 @@ def test_manager_stats_traffic_sanitizes_rgw_error_details(monkeypatch):
     account = S3Account(
         name="traffic-error-account",
         rgw_account_id="rgw-traffic-error",
+        rgw_user_uid="rgw-traffic-error-admin",
         rgw_access_key="ak",
         rgw_secret_key="sk",
     )
@@ -343,6 +365,7 @@ def test_manager_usage_trends_falls_back_per_metric(db_session, monkeypatch):
     account = S3Account(
         name="trend-account",
         rgw_account_id="trend-account",
+        rgw_user_uid="trend-account-admin",
         rgw_access_key="ak",
         rgw_secret_key="sk",
         storage_endpoint=endpoint,
@@ -403,6 +426,7 @@ def test_manager_usage_trends_returns_empty_when_history_disabled(db_session, mo
     account = S3Account(
         name="trend-disabled-account",
         rgw_account_id="trend-disabled-account",
+        rgw_user_uid="trend-disabled-account-admin",
         rgw_access_key="ak",
         rgw_secret_key="sk",
         storage_endpoint=endpoint,
@@ -426,6 +450,7 @@ def test_manager_usage_trends_are_scoped_to_s3_user_subject(db_session, monkeypa
     account = S3Account(
         name="account-subject",
         rgw_account_id="account-subject",
+        rgw_user_uid="account-subject-admin",
         rgw_access_key="ak",
         rgw_secret_key="sk",
         storage_endpoint=endpoint,
@@ -506,6 +531,7 @@ def test_manager_usage_history_trends_are_scoped_to_account(db_session, monkeypa
     account = S3Account(
         name="history-account",
         rgw_account_id="history-account",
+        rgw_user_uid="history-account-admin",
         rgw_access_key="ak",
         rgw_secret_key="sk",
         storage_endpoint=endpoint,
@@ -513,6 +539,7 @@ def test_manager_usage_history_trends_are_scoped_to_account(db_session, monkeypa
     other_account = S3Account(
         name="other-history-account",
         rgw_account_id="other-history-account",
+        rgw_user_uid="other-history-account-admin",
         rgw_access_key="bk",
         rgw_secret_key="bs",
         storage_endpoint=endpoint,
@@ -577,6 +604,7 @@ def test_manager_usage_history_trends_are_scoped_to_s3_user_subject(db_session, 
     account = S3Account(
         name="account-subject",
         rgw_account_id="account-subject",
+        rgw_user_uid="account-subject-admin",
         rgw_access_key="ak",
         rgw_secret_key="sk",
         storage_endpoint=endpoint,

@@ -16,15 +16,17 @@ class S3Account(Base):
     __tablename__ = "s3_accounts"
     __table_args__ = (
         Index("ix_s3_accounts_storage_endpoint", "storage_endpoint_id"),
+        CheckConstraint("TRIM(rgw_account_id) <> ''", name="ck_s3_accounts_rgw_account_id_nonempty"),
+        CheckConstraint("TRIM(rgw_user_uid) <> ''", name="ck_s3_accounts_rgw_user_uid_nonempty"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
-    rgw_account_id = Column(String, unique=True, nullable=True)
+    rgw_account_id = Column(String, unique=True, nullable=False)
     email = Column(String, nullable=True)
     rgw_access_key = Column(String, nullable=True)
     rgw_secret_key = Column(EncryptedString, nullable=True)
-    rgw_user_uid = Column(String, nullable=True)
+    rgw_user_uid = Column(String, nullable=False)
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=False)

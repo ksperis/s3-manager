@@ -26,12 +26,10 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
             captured["quota_max_size_gb"] = payload.quota_max_size_gb
             captured["quota_max_objects"] = payload.quota_max_objects
             return S3AccountSchema(
-                id="101",
-                db_id=101,
+                id=101,
                 name=payload.name,
                 email=payload.email,
                 rgw_account_id="RGW00000000000000101",
-                rgw_user_uid="RGW00000000000000101-admin",
                 quota_max_size_gb=payload.quota_max_size_gb,
                 quota_max_objects=payload.quota_max_objects,
                 user_links=[],
@@ -75,8 +73,9 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
 def test_admin_account_response_model_rejects_obsolete_fields():
     with pytest.raises(ValidationError, match="root_user_email"):
         S3AccountSchema(
-            id="101",
+            id=101,
             name="strict-account",
+            rgw_account_id="RGW-STRICT",
             root_user_email="obsolete@example.test",
             storage_endpoint_id=1,
             storage_endpoint_name="Ceph",

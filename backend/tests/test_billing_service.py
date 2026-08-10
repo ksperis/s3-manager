@@ -29,6 +29,7 @@ def _seed_account(db_session, endpoint_id: int) -> S3Account:
     account = S3Account(
         name="acme",
         rgw_account_id="RGW12345678901234567",
+        rgw_user_uid="rgw12345678901234567-admin",
         storage_endpoint_id=endpoint_id,
     )
     db_session.add(account)

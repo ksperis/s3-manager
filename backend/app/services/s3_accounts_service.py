@@ -46,7 +46,7 @@ from app.utils.storage_endpoint_features import (
     resolve_admin_endpoint,
     resolve_feature_flags,
 )
-from app.utils.rgw_identifiers import normalize_rgw_identifier, resolve_admin_uid
+from app.utils.rgw_identifiers import normalize_rgw_identifier
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.usage_stats import extract_usage_stats
 from app.utils.quota_stats import bytes_to_gb, extract_positive_limit, extract_quota_limits
@@ -115,8 +115,6 @@ class S3AccountsService:
         max_objects: Optional[int],
         max_size_unit: Optional[str] = None,
     ) -> None:
-        if not account.rgw_account_id:
-            raise ValueError("RGW account ID is missing; cannot apply quotas.")
         admin = self._admin_for_account(account)
         try:
             max_size_bytes = size_to_bytes(max_size_gb, max_size_unit)
@@ -144,13 +142,10 @@ class S3AccountsService:
         admin = self._admin_for_account(acc, allow_missing=True)
         if not admin:
             return None, None, None
-        uid = resolve_admin_uid(acc.rgw_account_id, acc.rgw_user_uid)
-        if not uid:
-            return None, None, None
         try:
-            payload = admin.get_all_buckets(uid=uid, with_stats=True)
+            payload = admin.get_all_buckets(uid=acc.rgw_user_uid, with_stats=True)
         except RGWAdminError as exc:
-            logger.warning("Unable to list buckets for account %s: %s", acc.rgw_account_id or acc.id, exc)
+            logger.warning("Unable to list buckets for account %s: %s", acc.rgw_account_id, exc)
             return None, None, None
         buckets = extract_bucket_list(payload)
         bucket_count: int = len(buckets)
@@ -181,8 +176,6 @@ class S3AccountsService:
         acc: S3Account,
         admin: Optional[RGWAdminClient] = None,
     ) -> tuple[Optional[float], Optional[int]]:
-        if not acc.rgw_account_id:
-            return None, None
         rgw_admin = admin or self._admin_for_account(acc, allow_missing=True)
         if not rgw_admin:
             return None, None
@@ -200,8 +193,6 @@ class S3AccountsService:
         self,
         account: S3Account,
     ) -> tuple[Optional[float], Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]]:
-        if not account.rgw_account_id:
-            return None, None, None, None, None, None
         rgw_admin = self._admin_for_account(account, allow_missing=True)
         if not rgw_admin:
             return None, None, None, None, None, None
@@ -500,7 +491,7 @@ class S3AccountsService:
             quota_max_objects = None
             if include_usage_stats:
                 used_bytes, used_objects, bucket_count = self._account_usage(acc)
-            account_identifier = acc.rgw_account_id or str(acc.id)
+            account_identifier = acc.rgw_account_id
             admin = None
             if include_quota or include_rgw_details:
                 admin = self._admin_for_account(acc, allow_missing=True)
@@ -521,7 +512,6 @@ class S3AccountsService:
             results.append(
                 s3_account_from_db(
                     acc,
-                    public_id=str(account_identifier),
                     quota_max_size_gb=quota_max_size_gb,
                     quota_max_objects=quota_max_objects,
                     used_bytes=used_bytes,
@@ -551,7 +541,6 @@ class S3AccountsService:
             summaries.append(
                 s3_account_summary_from_db(
                     acc,
-                    public_id=acc.rgw_account_id or str(acc.id),
                     user_links=user_links_by_account.get(acc.id, []),
                     group_links=group_links_by_account.get(acc.id, []),
                     storage_endpoint=endpoint,
@@ -570,7 +559,7 @@ class S3AccountsService:
         used_bytes = used_objects = bucket_count = None
         if include_usage:
             used_bytes, used_objects, bucket_count = self._account_usage(account)
-        account_identifier = account.rgw_account_id or str(account.id)
+        account_identifier = account.rgw_account_id
         admin = self._admin_for_account(account, allow_missing=True)
         rgw_user_count = rgw_user_uids = rgw_topic_count = rgw_topics = None
         quota_max_size_gb, quota_max_objects = self._account_quota(account, admin)
@@ -590,7 +579,6 @@ class S3AccountsService:
             )
         return s3_account_from_db(
             account,
-            public_id=account_identifier,
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             used_bytes=used_bytes,
@@ -686,7 +674,6 @@ class S3AccountsService:
             created.append(
                 s3_account_from_db(
                     account,
-                    public_id=str(account.id),
                     quota_max_size_gb=None,
                     quota_max_objects=None,
                     user_links=[],
@@ -764,7 +751,6 @@ class S3AccountsService:
         self.db.refresh(account)
         return s3_account_from_db(
             account,
-            public_id=str(account.id),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             user_links=[],
@@ -967,7 +953,6 @@ class S3AccountsService:
 
         return s3_account_from_db(
             account,
-            public_id=str(account.id),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             user_links=user_links,
@@ -982,8 +967,6 @@ class S3AccountsService:
         if not account:
             raise ValueError("S3Account not found")
         if delete_rgw:
-            if not account.rgw_account_id:
-                raise ValueError("Unable to delete RGW tenant: rgw_account_id is missing for this account.")
             admin = self._admin_for_account(account, allow_missing=False)
             account_identifier = account.rgw_account_id
             endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
@@ -1013,7 +996,7 @@ class S3AccountsService:
                     f"RGW tenant still has attached resources (buckets={bucket_count}, users={rgw_user_count}, topics={rgw_topic_count}); remove them first."
                 )
 
-            self._delete_root_user(account, required=True)
+            self._delete_root_user(account)
             try:
                 admin.delete_account(account_identifier)
             except RGWAdminError as exc:
@@ -1024,31 +1007,19 @@ class S3AccountsService:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if not account:
             raise ValueError("S3Account not found")
-        if account.rgw_account_id:
-            self._delete_root_user(account, required=True)
+        self._delete_root_user(account)
         self._remove_account_entry(account)
 
-    def _delete_root_user(self, account: S3Account, required: bool) -> None:
-        if not account.rgw_account_id:
-            if required:
-                raise ValueError("RGW account ID is missing; cannot delete the root user.")
-            return
-        rgw_id = account.rgw_account_id
-        candidate_uids = [self._root_uid(rgw_id)]
-        last_error: Optional[str] = None
+    def _delete_root_user(self, account: S3Account) -> None:
         admin = self._admin_for_account(account, allow_missing=False)
-        for candidate_uid in candidate_uids:
-            try:
-                admin.delete_user(candidate_uid, tenant=None)
-                logger.debug("Deleted RGW root user %s", candidate_uid)
-                return
-            except RGWAdminError as exc:
-                last_error = str(exc)
-                logger.debug("Unable to delete RGW root user %s: %s", candidate_uid, exc)
-        if required:
+        try:
+            admin.delete_user(account.rgw_user_uid, tenant=None)
+            logger.debug("Deleted RGW root user %s", account.rgw_user_uid)
+        except RGWAdminError as exc:
+            logger.debug("Unable to delete RGW root user %s: %s", account.rgw_user_uid, exc)
             raise ValueError(
-                f"Unable to delete RGW root user {candidate_uids[0]} for account {account.id}: {last_error or 'unknown error'}"
-            )
+                f"Unable to delete RGW root user {account.rgw_user_uid} for account {account.id}: {exc}"
+            ) from exc
 
     def _remove_account_entry(self, account: S3Account) -> None:
         self.db.query(AccountIAMUser).filter(AccountIAMUser.account_id == account.id).delete()

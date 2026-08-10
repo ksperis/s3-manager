@@ -49,7 +49,12 @@ def _assert_sanitized_bucket_error(exc: HTTPException) -> None:
 
 def test_admin_account_stats_sanitizes_rgw_error_details(db_session, monkeypatch):
     endpoint = _ceph_endpoint("admin-stats-account")
-    account = S3Account(name="admin-stats-account", rgw_account_id="rgw-account", storage_endpoint=endpoint)
+    account = S3Account(
+        name="admin-stats-account",
+        rgw_account_id="rgw-account",
+        rgw_user_uid="rgw-account-admin",
+        storage_endpoint=endpoint,
+    )
     db_session.add_all([endpoint, account])
     db_session.commit()
 

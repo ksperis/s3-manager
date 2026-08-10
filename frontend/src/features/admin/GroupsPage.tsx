@@ -101,10 +101,6 @@ const groupAvatarIcons: Array<{ value: UiGroupAvatarIcon; label: string }> = [
   { value: "briefcase", label: "Operations" },
   { value: "academic", label: "Research" },
 ];
-function accountDbId(account: S3AccountSummary): number {
-  return Number(account.db_id ?? account.id);
-}
-
 function includesQuery(label: string, query: string): boolean {
   return !query || label.toLowerCase().includes(query.trim().toLowerCase());
 }
@@ -204,7 +200,7 @@ export default function GroupsPage() {
   const accountOptionsById = useMemo(() => {
     const map = new Map<number, S3AccountSummary>();
     accounts.forEach((account) => {
-      const id = accountDbId(account);
+      const id = account.id;
       if (!Number.isNaN(id)) map.set(id, account);
     });
     return map;
@@ -474,7 +470,7 @@ export default function GroupsPage() {
     (user) => !selectedUserIds.has(user.id) && includesQuery(user.email, memberSearch)
   );
   const availableAccounts = accounts.filter(
-    (account) => !selectedAccountIds.has(accountDbId(account)) && includesQuery(account.name, accountSearch)
+    (account) => !selectedAccountIds.has(account.id) && includesQuery(account.name, accountSearch)
   );
   const availableS3Users = s3Users.filter(
     (user) => !selectedS3UserIds.has(user.id) && includesQuery(user.name, s3UserSearch)
@@ -688,7 +684,7 @@ export default function GroupsPage() {
                     }}
                   >
                     {visibleAccounts.map((account) => {
-                      const accountId = accountDbId(account);
+                      const accountId = account.id;
                       const selected = accountSelections.includes(accountId);
                       return (
                         <div key={accountId} className={adminAssociationAccountOptionRowClass(selected)}>

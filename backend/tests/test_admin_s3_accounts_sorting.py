@@ -17,6 +17,7 @@ def _seed_account(
         db_session,
         name=name,
         rgw_account_id=rgw_account_id,
+        rgw_user_uid=f"{rgw_account_id.lower()}-admin",
         rgw_access_key=f"AK-{name}",
         rgw_secret_key="SECRET",
     )
@@ -61,7 +62,7 @@ def test_admin_accounts_non_name_sort_keeps_behavior_with_stable_id_tiebreak(cli
     assert response.status_code == 200, response.text
     payload = response.json()
 
-    ids = [item["db_id"] for item in payload["items"]]
+    ids = [item["id"] for item in payload["items"]]
     names = [item["name"] for item in payload["items"]]
     assert names[0] == "higher"
     assert ids.index(case_2.id) < ids.index(case_1.id)

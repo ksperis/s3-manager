@@ -81,13 +81,13 @@ def _seed_endpoint(
     return endpoint
 
 
-def _seed_account(db_session, endpoint_id: int | None, *, name: str = "acc", rgw_account_id: str | None = "RGW0001") -> S3Account:
+def _seed_account(db_session, endpoint_id: int | None, *, name: str = "acc", rgw_account_id: str = "RGW0001") -> S3Account:
     account = S3Account(
         name=name,
         rgw_account_id=rgw_account_id,
         rgw_access_key="AKIA-ROOT",
         rgw_secret_key="SECRET-ROOT",
-        rgw_user_uid=(f"{rgw_account_id}-admin" if rgw_account_id else None),
+        rgw_user_uid=f"{rgw_account_id.lower()}-admin",
         storage_endpoint_id=endpoint_id,
     )
     db_session.add(account)
@@ -304,18 +304,13 @@ def test_delete_account_guardrails_and_success(db_session, monkeypatch):
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
 
 
-def test_delete_root_user_required_and_optional_paths(db_session, monkeypatch):
+def test_delete_root_user_success_and_failure(db_session, monkeypatch):
     endpoint = _seed_endpoint(db_session, name="ceph-root-delete", is_default=True)
     service, admin = _service(db_session)
 
-    missing_id_account = _seed_account(db_session, endpoint.id, name="missing-id", rgw_account_id=None)
-    with pytest.raises(ValueError, match="RGW account ID is missing"):
-        service._delete_root_user(missing_id_account, required=True)
-    service._delete_root_user(missing_id_account, required=False)
-
     account = _seed_account(db_session, endpoint.id, name="delete-root", rgw_account_id="RGW-ROOT-1")
     monkeypatch.setattr(service, "_admin_for_account", lambda *args, **kwargs: admin)
-    service._delete_root_user(account, required=True)
+    service._delete_root_user(account)
     assert admin.deleted_users == [("rgw-root-1-admin", None)]
 
     def _failing_delete(uid: str, tenant: str | None = None):
@@ -323,7 +318,7 @@ def test_delete_root_user_required_and_optional_paths(db_session, monkeypatch):
 
     admin.delete_user = _failing_delete  # type: ignore[method-assign]
     with pytest.raises(ValueError, match="Unable to delete RGW root user"):
-        service._delete_root_user(account, required=True)
+        service._delete_root_user(account)
 
 
 def test_list_accounts_and_minimal_are_sorted_case_insensitive(db_session):

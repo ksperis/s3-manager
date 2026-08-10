@@ -29,14 +29,12 @@ export type AccountGroupLink = {
 };
 
 export type S3Account = {
-  id: string;
-  db_id?: number | null;
+  id: number;
   name: string;
   tags: TagDefinitionSummary[];
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
-  rgw_account_id?: string;
-  rgw_user_uid?: string | null;
+  rgw_account_id: string;
   email?: string | null;
   used_bytes?: number | null;
   user_links: AccountUserLink[];
@@ -55,11 +53,10 @@ export type S3Account = {
 };
 
 export type S3AccountSummary = {
-  id: string;
-  db_id?: number | null;
+  id: number;
   name: string;
   tags: TagDefinitionSummary[];
-  rgw_account_id?: string | null;
+  rgw_account_id: string;
   user_links: AccountUserLink[];
   group_links: AccountGroupLink[];
   storage_endpoint_id: number;

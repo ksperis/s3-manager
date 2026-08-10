@@ -58,7 +58,9 @@ function renderPage() {
 describe("AdminPortalRequestsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.listMinimalS3Accounts.mockResolvedValue([{ id: "101", db_id: 101, name: "Research Account", tags: [] }]);
+    mocks.listMinimalS3Accounts.mockResolvedValue([
+      { id: 101, name: "Research Account", rgw_account_id: "RGW-RESEARCH", tags: [] },
+    ]);
     mocks.listMinimalUsers.mockResolvedValue([
       {
         id: 1,

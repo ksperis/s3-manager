@@ -67,6 +67,7 @@ def _create_account(db_session, *, name: str, endpoint_url: str, account_id: str
     account = S3Account(
         name=name,
         rgw_account_id=account_id,
+        rgw_user_uid=f"{account_id.lower()}-admin",
         rgw_access_key=f"AKIA-{name}",
         rgw_secret_key=f"SECRET-{name}",
         storage_endpoint_id=endpoint.id,
@@ -393,6 +394,7 @@ def test_create_migration_defaults_auto_grant_to_true_when_same_endpoint_copy_en
     target = S3Account(
         name="target",
         rgw_account_id="RGW002",
+        rgw_user_uid="rgw002-admin",
         rgw_access_key="AKIA-target",
         rgw_secret_key="SECRET-target",
         storage_endpoint_id=source.storage_endpoint_id,

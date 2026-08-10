@@ -391,14 +391,13 @@ class AdminAutomationService:
                         storage_endpoint_id=endpoint.id,
                     )
                 )
-                db_id = int(created.db_id) if created.db_id is not None else None
                 audit_service.record_action(
                     user=current_user,
                     scope="admin",
                     action="create_account",
                     entity_type="account",
                     entity_id=str(created.id),
-                    account_id=db_id,
+                    account_id=created.id,
                     account_name=created.name,
                     metadata={
                         "quota_max_size_gb": created.quota_max_size_gb,

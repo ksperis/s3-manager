@@ -161,6 +161,7 @@ def test_get_account_limits_returns_quota_and_entity_limits(db_session, monkeypa
     account = S3Account(
         name="LimitedAccount",
         rgw_account_id="RGW-LIMITED",
+        rgw_user_uid="rgw-limited-admin",
         storage_endpoint_id=endpoint.id,
     )
     db_session.add(account)
@@ -191,6 +192,7 @@ def test_get_account_limits_falls_back_to_quota_endpoint(db_session, monkeypatch
     account = S3Account(
         name="FallbackAccount",
         rgw_account_id="RGW-FALLBACK",
+        rgw_user_uid="rgw-fallback-admin",
         storage_endpoint_id=endpoint.id,
     )
     db_session.add(account)
@@ -265,7 +267,7 @@ def test_import_account_uses_user_api_when_account_user_missing(db_session, monk
     assert db_account is not None
     assert db_account.rgw_access_key == "IMPORTED"
     assert db_account.rgw_secret_key == "SECRET"
-    assert created[0].rgw_user_uid == "RGW12345678901234567-admin"
+    assert db_account.rgw_user_uid == "RGW12345678901234567-admin"
 
 
 class FakeRGWAdminImportCreatesRoot:
@@ -323,7 +325,7 @@ def test_import_account_creates_root_user_when_missing(db_session, monkeypatch):
     assert db_account.rgw_access_key == "NEWROOT"
     assert db_account.rgw_secret_key == "NEWSECRET"
     assert fake_admin.created_users == [("RGW98765432109876543-admin", account_id)]
-    assert created[0].rgw_user_uid == "RGW98765432109876543-admin"
+    assert db_account.rgw_user_uid == "RGW98765432109876543-admin"
 
 
 class FakeRGWDeleteAdmin:
@@ -424,7 +426,12 @@ def _seed_account_derived_rows(db_session, *, endpoint: StorageEndpoint, account
 
 def test_delete_account_skips_rgw_when_flag_false(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
-    account = S3Account(name="DeleteMe", rgw_account_id="RGW00000000000000001", storage_endpoint_id=endpoint.id)
+    account = S3Account(
+        name="DeleteMe",
+        rgw_account_id="RGW00000000000000001",
+        rgw_user_uid="rgw00000000000000001-admin",
+        storage_endpoint_id=endpoint.id,
+    )
     db_session.add(account)
     db_session.commit()
 
@@ -443,7 +450,12 @@ def test_delete_account_skips_rgw_when_flag_false(db_session, monkeypatch):
 
 def test_delete_account_purges_derived_database_rows(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
-    account = S3Account(name="DeleteDerived", rgw_account_id="RGW00000000000000004", storage_endpoint_id=endpoint.id)
+    account = S3Account(
+        name="DeleteDerived",
+        rgw_account_id="RGW00000000000000004",
+        rgw_user_uid="rgw00000000000000004-admin",
+        storage_endpoint_id=endpoint.id,
+    )
     db_session.add(account)
     db_session.commit()
     _seed_account_derived_rows(db_session, endpoint=endpoint, account=account)
@@ -470,7 +482,12 @@ def test_delete_account_purges_derived_database_rows(db_session, monkeypatch):
 
 def test_delete_account_calls_rgw_when_flag_true(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
-    account = S3Account(name="DeleteRGW", rgw_account_id="RGW00000000000000002", storage_endpoint_id=endpoint.id)
+    account = S3Account(
+        name="DeleteRGW",
+        rgw_account_id="RGW00000000000000002",
+        rgw_user_uid="rgw00000000000000002-admin",
+        storage_endpoint_id=endpoint.id,
+    )
     db_session.add(account)
     db_session.commit()
 
@@ -483,13 +500,18 @@ def test_delete_account_calls_rgw_when_flag_true(db_session, monkeypatch):
     svc.delete_account(account.id, delete_rgw=True)
 
     assert fake_admin.deleted == ["RGW00000000000000002"]
-    assert fake_admin.deleted_users == [("RGW00000000000000002-admin", None)]
+    assert fake_admin.deleted_users == [("rgw00000000000000002-admin", None)]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
 
 
 def test_unlink_account_deletes_root_and_interface_links(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
-    account = S3Account(name="UnlinkMe", rgw_account_id="RGW00000000000000003", storage_endpoint_id=endpoint.id)
+    account = S3Account(
+        name="UnlinkMe",
+        rgw_account_id="RGW00000000000000003",
+        rgw_user_uid="rgw00000000000000003-admin",
+        storage_endpoint_id=endpoint.id,
+    )
     db_session.add(account)
     db_session.flush()
     user = User(email="unlink@example.com", hashed_password="hash", role=UserRole.UI_USER.value)
@@ -511,14 +533,19 @@ def test_unlink_account_deletes_root_and_interface_links(db_session, monkeypatch
     svc.unlink_account(account.id)
 
     assert fake_admin.deleted == []
-    assert fake_admin.deleted_users == [("RGW00000000000000003-admin", None)]
+    assert fake_admin.deleted_users == [("rgw00000000000000003-admin", None)]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
     assert db_session.query(UserS3Account).filter(UserS3Account.account_id == account.id).first() is None
 
 
 def test_unlink_account_raises_when_root_user_cannot_be_deleted(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
-    account = S3Account(name="BrokenUnlink", rgw_account_id="RGW00000000000000004", storage_endpoint_id=endpoint.id)
+    account = S3Account(
+        name="BrokenUnlink",
+        rgw_account_id="RGW00000000000000004",
+        rgw_user_uid="rgw00000000000000004-admin",
+        storage_endpoint_id=endpoint.id,
+    )
     db_session.add(account)
     db_session.commit()
 

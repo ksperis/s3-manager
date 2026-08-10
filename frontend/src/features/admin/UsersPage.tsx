@@ -798,21 +798,11 @@ export default function UsersPage() {
   const s3UsersLoadStateRef = useRef<AuxiliaryLoadState>("idle");
   const s3ConnectionsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
   const groupsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
-  const accountDbId = (account: S3AccountSummary) => account.db_id ?? Number(account.id);
-  const accountOptions = useMemo(
-    () =>
-      accounts
-        .map((a) => ({ id: accountDbId(a), label: a.name }))
-        .filter((a) => !Number.isNaN(Number(a.id))),
-    [accounts]
-  );
+  const accountOptions = useMemo(() => accounts.map((a) => ({ id: a.id, label: a.name })), [accounts]);
   const accountOptionsById = useMemo(() => {
     const map = new Map<number, S3AccountSummary>();
     accounts.forEach((a) => {
-      const idNum = Number(a.db_id ?? a.id);
-      if (!Number.isNaN(idNum)) {
-        map.set(idNum, a);
-      }
+      map.set(a.id, a);
     });
     return map;
   }, [accounts]);

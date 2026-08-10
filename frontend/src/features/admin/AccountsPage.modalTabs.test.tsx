@@ -107,8 +107,7 @@ describe("AccountsPage modal tabs", () => {
     listS3AccountsMock.mockResolvedValue({
       items: [
         {
-          id: "RGW000000000000001",
-          db_id: 1,
+          id: 1,
           name: "acc-1",
           tags: [makeTag(501, "gold", "amber")],
           rgw_account_id: "RGW000000000000001",
@@ -165,8 +164,7 @@ describe("AccountsPage modal tabs", () => {
     listAdminTagDefinitionsMock.mockResolvedValue([makeTag(501, "gold", "amber"), makeTag(502, "prod")]);
 
     getS3AccountMock.mockResolvedValue({
-      id: "RGW000000000000001",
-      db_id: 1,
+      id: 1,
       name: "acc-1",
       tags: [makeTag(501, "gold", "amber")],
       rgw_account_id: "RGW000000000000001",
@@ -232,8 +230,7 @@ describe("AccountsPage modal tabs", () => {
     listS3AccountsMock.mockResolvedValueOnce({
       items: [
         {
-          id: "RGW000000000000001",
-          db_id: 1,
+          id: 1,
           name: "acc-1",
           tags: [],
           rgw_account_id: "RGW000000000000001",
@@ -421,8 +418,7 @@ describe("AccountsPage modal tabs", () => {
     listS3AccountsMock.mockResolvedValueOnce({
       items: [
         {
-          id: "RGW000000000000001",
-          db_id: 1,
+          id: 1,
           name: "acc-1",
           tags: [makeTag(501, "gold", "amber")],
           rgw_account_id: "RGW000000000000001",
@@ -439,8 +435,7 @@ describe("AccountsPage modal tabs", () => {
       has_next: false,
     });
     getS3AccountMock.mockResolvedValueOnce({
-      id: "RGW000000000000001",
-      db_id: 1,
+      id: 1,
       name: "acc-1",
       tags: [makeTag(501, "gold", "amber")],
       rgw_account_id: "RGW000000000000001",
@@ -768,8 +763,7 @@ describe("AccountsPage modal tabs", () => {
   it("keeps tagged accounts visible with exact quick filter mode", async () => {
     listS3AccountsMock.mockImplementation((params?: { search?: string }) => {
       const taggedAccount = {
-        id: "RGW000000000000001",
-        db_id: 1,
+        id: 1,
         name: "acc-1",
         tags: [makeTag(501, "gold", "amber")],
         rgw_account_id: "RGW000000000000001",
@@ -780,8 +774,7 @@ describe("AccountsPage modal tabs", () => {
         group_links: [],
       };
       const plainAccount = {
-        id: "RGW000000000000002",
-        db_id: 2,
+        id: 2,
         name: "acc-2",
         tags: [],
         rgw_account_id: "RGW000000000000002",

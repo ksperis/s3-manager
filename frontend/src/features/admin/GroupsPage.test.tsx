@@ -90,7 +90,7 @@ describe("GroupsPage", () => {
       { id: 3, email: "bob@example.com" },
     ]);
     listMinimalS3AccountsMock.mockResolvedValue([
-      { id: 1, db_id: 1, name: "acc-1", user_links: [], group_links: [] },
+      { id: 1, name: "acc-1", rgw_account_id: "RGW-ACC-1", user_links: [], group_links: [] },
     ]);
     listMinimalS3UsersMock.mockResolvedValue([{ id: 11, name: "s3-user-1" }]);
     listMinimalS3ConnectionsMock.mockResolvedValue([

@@ -302,6 +302,7 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
     account = S3Account(
         name="contract-account",
         rgw_account_id="RGWCONTRACT0001",
+        rgw_user_uid="rgwcontract0001-admin",
         rgw_access_key="AK-CONTRACT-ACCOUNT",
         rgw_secret_key="SK-CONTRACT-ACCOUNT",
         storage_endpoint_id=endpoint.id,

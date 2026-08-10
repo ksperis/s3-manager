@@ -130,7 +130,12 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
 
 def test_unlink_account_cleans_links_and_purges_derived_rows(db_session):
     endpoint = _seed_endpoint(db_session)
-    account = S3Account(name="to-unlink", storage_endpoint_id=endpoint.id)
+    account = S3Account(
+        name="to-unlink",
+        rgw_account_id="RGW-TO-UNLINK",
+        rgw_user_uid="rgw-to-unlink-admin",
+        storage_endpoint_id=endpoint.id,
+    )
     user = User(email="acc-user@example.com", hashed_password="x", role=UserRole.UI_USER.value)
     s3_user = S3User(
         name="billing-user",

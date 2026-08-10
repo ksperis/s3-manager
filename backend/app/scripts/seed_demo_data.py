@@ -426,9 +426,7 @@ def ensure_account(
         storage_endpoint_id=storage_endpoint_id,
     )
     created = accounts_service.create_account_with_manager(payload)
-    account = None
-    if created.db_id:
-        account = db.query(S3Account).filter(S3Account.id == created.db_id).first()
+    account = db.query(S3Account).filter(S3Account.id == created.id).first()
     if account is None:
         account = db.query(S3Account).filter(S3Account.name == name).first()
     if account is None:

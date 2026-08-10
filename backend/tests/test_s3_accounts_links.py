@@ -29,6 +29,7 @@ def test_list_accounts_exposes_user_email_in_user_links(db_session):
     account = S3Account(
         name="Account A",
         rgw_account_id="RGW00000000000000001",
+        rgw_user_uid="rgw00000000000000001-admin",
         storage_endpoint_id=endpoint.id,
     )
     db_session.add(account)
@@ -59,7 +60,7 @@ def test_list_accounts_exposes_user_email_in_user_links(db_session):
         include_rgw_details=False,
     )
 
-    target = next((item for item in accounts if item.db_id == account.id), None)
+    target = next((item for item in accounts if item.id == account.id), None)
     assert target is not None
     assert target.user_links is not None and len(target.user_links) == 1
     assert target.user_links[0].user_id == user.id
@@ -80,6 +81,7 @@ def test_accounts_expose_direct_group_links(db_session):
     account = S3Account(
         name="Account With Group",
         rgw_account_id="RGW00000000000000022",
+        rgw_user_uid="rgw00000000000000022-admin",
         storage_endpoint_id=endpoint.id,
     )
     group = UiGroup(name="Platform Operators")
@@ -100,7 +102,7 @@ def test_accounts_expose_direct_group_links(db_session):
         include_quota=False,
         include_rgw_details=False,
     )
-    listed = next(item for item in accounts if item.db_id == account.id)
+    listed = next(item for item in accounts if item.id == account.id)
     detailed = service.get_account_detail(account.id)
 
     for item in (listed, detailed):

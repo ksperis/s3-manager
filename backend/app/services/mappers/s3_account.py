@@ -18,7 +18,6 @@ from app.models.tagging import TagDefinitionSummary
 def s3_account_from_db(
     account: DBS3Account,
     *,
-    public_id: str | None = None,
     quota_max_size_gb: float | None = None,
     quota_max_objects: int | None = None,
     used_bytes: int | None = None,
@@ -35,11 +34,9 @@ def s3_account_from_db(
     tags: list[TagDefinitionSummary] | None = None,
 ) -> S3Account:
     return S3Account(
-        id=public_id or str(account.rgw_account_id or account.id),
-        db_id=account.id,
+        id=account.id,
         name=account.name,
         rgw_account_id=account.rgw_account_id,
-        rgw_user_uid=account.rgw_user_uid,
         quota_max_size_gb=quota_max_size_gb,
         quota_max_objects=quota_max_objects,
         email=account.email,
@@ -65,7 +62,6 @@ def s3_account_from_db(
 def s3_account_summary_from_db(
     account: DBS3Account,
     *,
-    public_id: str | None = None,
     user_links: list[AccountUserLink],
     group_links: list[AccountGroupLink],
     storage_endpoint: StorageEndpoint,
@@ -73,8 +69,7 @@ def s3_account_summary_from_db(
     tags: list[TagDefinitionSummary] | None = None,
 ) -> S3AccountSummary:
     return S3AccountSummary(
-        id=public_id or str(account.rgw_account_id or account.id),
-        db_id=account.id,
+        id=account.id,
         name=account.name,
         rgw_account_id=account.rgw_account_id,
         user_links=user_links,

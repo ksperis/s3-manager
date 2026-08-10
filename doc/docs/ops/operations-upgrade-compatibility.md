@@ -510,6 +510,19 @@ returned, eliminating per-account root-link lookups. Account response models now
 reject unknown fields internally so obsolete projections cannot be silently
 reintroduced. Deploy the backend and frontend together.
 
+## 2026-08 canonical RGW account identities
+
+Migration `0104_canonical_s3_account_identities` requires every persisted RGW
+account to have non-empty `rgw_account_id` and `rgw_user_uid` values. The
+migration intentionally stops with the affected database IDs and names when an
+incomplete row exists; repair those identities from the authoritative Ceph RGW
+configuration before retrying the upgrade.
+
+Admin RGW account responses now use the database identifier as the numeric `id`
+and expose the external RGW identifier through the required `rgw_account_id`
+field. The duplicate `db_id` field and the unused root `rgw_user_uid` projection
+are removed. Deploy the backend and frontend together.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

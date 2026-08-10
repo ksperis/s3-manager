@@ -51,6 +51,7 @@ def test_quota_policy_revalidates_direct_manager_access_after_revocation(db_sess
     account = S3Account(
         name="quota-direct-account",
         rgw_account_id="quota-direct-rgw",
+        rgw_user_uid="quota-direct-rgw-admin",
         rgw_access_key="ROOT-AK",
         rgw_secret_key="ROOT-SK",
         storage_endpoint=endpoint,

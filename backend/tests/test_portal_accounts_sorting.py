@@ -34,6 +34,7 @@ def _seed_account(db_session, *, name: str, rgw_account_id: str, endpoint_id: in
     row = S3Account(
         name=name,
         rgw_account_id=rgw_account_id,
+        rgw_user_uid=f"{rgw_account_id.lower()}-admin",
         rgw_access_key=f"AK-{name}",
         rgw_secret_key="SECRET",
         storage_endpoint_id=endpoint_id,

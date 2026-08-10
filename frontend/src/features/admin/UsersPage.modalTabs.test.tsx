@@ -90,8 +90,8 @@ describe("UsersPage modal tabs", () => {
     listMinimalS3AccountsMock.mockResolvedValue([
       {
         id: 1,
-        db_id: 1,
         name: "acc-1",
+        rgw_account_id: "RGW-ACC-1",
         user_links: [],
         group_links: [],
       },

@@ -33,6 +33,7 @@ def _seed_endpoint_and_account(db_session) -> tuple[StorageEndpoint, S3Account]:
     account = S3Account(
         name="retention-account",
         rgw_account_id="RGW12345678901234567",
+        rgw_user_uid="rgw12345678901234567-admin",
         storage_endpoint_id=endpoint.id,
     )
     db_session.add(account)

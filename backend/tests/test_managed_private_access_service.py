@@ -140,6 +140,7 @@ def _account(db_session, user, endpoint):
     account = S3Account(
         name="managed-account",
         rgw_account_id="tenant-a",
+        rgw_user_uid="tenant-a-admin",
         rgw_access_key="ROOT-AK",
         rgw_secret_key="ROOT-SK",
         storage_endpoint_id=endpoint.id,

@@ -656,6 +656,8 @@ def test_delete_endpoint_purges_derived_database_rows(db_session):
     account_endpoint = _create_ceph_endpoint(db_session, name="ceph-account-history")
     history_account = S3Account(
         name="endpoint-history-account",
+        rgw_account_id="RGW-ENDPOINT-HISTORY",
+        rgw_user_uid="rgw-endpoint-history-admin",
         storage_endpoint_id=account_endpoint.id,
     )
     db_session.add(history_account)

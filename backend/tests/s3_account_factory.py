@@ -10,6 +10,10 @@ from app.db import S3Account, StorageEndpoint, StorageProvider
 
 def make_s3_account(db: Session, **values: Any) -> S3Account:
     """Build a persisted-account fixture with an explicit, valid endpoint."""
+    if not values.get("rgw_account_id"):
+        values["rgw_account_id"] = f"RGW-TEST-{values.get('name') or 'account'}"
+    if not values.get("rgw_user_uid"):
+        values["rgw_user_uid"] = f"{str(values['rgw_account_id']).lower()}-admin"
     if values.get("storage_endpoint_id") is None and values.get("storage_endpoint") is None:
         values.pop("storage_endpoint", None)
         endpoint = (

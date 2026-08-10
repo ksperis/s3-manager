@@ -34,23 +34,12 @@ router = APIRouter(prefix="/admin/accounts", tags=["admin-accounts"])
 logger = logging.getLogger(__name__)
 
 
-def _account_stable_id(account: S3Account) -> int:
-    if account.db_id is not None:
-        return int(account.db_id)
-    try:
-        return int(account.id)
-    except (TypeError, ValueError):
-        return 0
-
-
 def _account_name_key(account: S3Account) -> tuple[str, str, int]:
-    name = account.name or ""
-    return (name.lower(), name, _account_stable_id(account))
+    return (account.name.lower(), account.name, account.id)
 
 
 def _account_rgw_key(account: S3Account) -> tuple[str, int]:
-    value = account.rgw_account_id or account.id or ""
-    return (str(value).lower(), _account_stable_id(account))
+    return (account.rgw_account_id.lower(), account.id)
 
 
 def get_admin_accounts_service(
@@ -82,7 +71,7 @@ def list_accounts(
             acc
             for acc in accounts
             if search_value in (acc.name or "").lower()
-            or search_value in (acc.rgw_account_id or acc.rgw_user_uid or acc.id or "").lower()
+            or search_value in acc.rgw_account_id.lower()
             or any(search_value in (tag.label or "").lower() for tag in (acc.tags or []))
             or any(
                 search_value in (link.user_email or "").lower()
@@ -209,14 +198,13 @@ def create_account(
     try:
         logger.debug("Creating account %s", payload.name)
         created = service.create_account_with_manager(payload)
-        db_account_id = int(created.db_id) if created.db_id is not None else None
         audit_service.record_action(
             user=current_user,
             scope="admin",
             action="create_account",
             entity_type="account",
-            entity_id=created.id,
-            account_id=db_account_id,
+            entity_id=str(created.id),
+            account_id=created.id,
             account_name=created.name,
             metadata={
                 "quota_max_size_gb": created.quota_max_size_gb,
@@ -263,14 +251,13 @@ def update_account(
     try:
         logger.debug("Updating account %s", account_id)
         updated = service.update_account(account_id, payload)
-        db_account_id = int(updated.db_id) if updated.db_id is not None else account_id
         audit_service.record_action(
             user=current_user,
             scope="admin",
             action="update_account",
             entity_type="account",
             entity_id=str(account_id),
-            account_id=db_account_id,
+            account_id=updated.id,
             account_name=updated.name,
             metadata=payload.model_dump(exclude_none=True),
         )

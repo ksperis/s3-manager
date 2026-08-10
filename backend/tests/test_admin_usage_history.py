@@ -38,6 +38,7 @@ def test_list_usage_history_daily_records(client: TestClient, db_session, monkey
     account = S3Account(
         name="Tenant A",
         rgw_account_id="tenant-a",
+        rgw_user_uid="tenant-a-admin",
         rgw_access_key="ak",
         rgw_secret_key="sk",
         storage_endpoint_id=endpoint.id,
@@ -121,6 +122,7 @@ def test_usage_history_trends_aggregate_endpoint_subjects(client: TestClient, db
     account = S3Account(
         name="Tenant A",
         rgw_account_id="tenant-a",
+        rgw_user_uid="tenant-a-admin",
         rgw_access_key="ak",
         rgw_secret_key="sk",
         storage_endpoint_id=endpoint.id,
@@ -128,6 +130,7 @@ def test_usage_history_trends_aggregate_endpoint_subjects(client: TestClient, db
     other_account = S3Account(
         name="Tenant B",
         rgw_account_id="tenant-b",
+        rgw_user_uid="tenant-b-admin",
         rgw_access_key="bk",
         rgw_secret_key="bs",
         storage_endpoint=other_endpoint,

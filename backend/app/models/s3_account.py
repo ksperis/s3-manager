@@ -36,11 +36,9 @@ class _StrictS3AccountModel(BaseModel):
 
 
 class S3Account(_StrictS3AccountModel):
-    id: str
-    db_id: Optional[int] = None
+    id: int
     name: str
-    rgw_account_id: Optional[str] = None
-    rgw_user_uid: Optional[str] = None
+    rgw_account_id: str
     quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None
     email: Optional[str] = None
@@ -117,10 +115,9 @@ class S3AccountUpdate(_StrictS3AccountModel):
 
 
 class S3AccountSummary(_StrictS3AccountModel):
-    id: str
-    db_id: Optional[int] = None
+    id: int
     name: str
-    rgw_account_id: Optional[str] = None
+    rgw_account_id: str
     user_links: list[AccountUserLink] = Field(default_factory=list)
     group_links: list[AccountGroupLink] = Field(default_factory=list)
     storage_endpoint_id: int
