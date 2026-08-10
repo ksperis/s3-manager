@@ -33,10 +33,12 @@ from app.db import (
 )
 from app.models.user import (
     AccountMembership,
+    AccountMembershipDetail,
     LinkedS3Connection,
     LinkedS3User,
     LinkedUiGroup,
     ManagerToolAccess,
+    S3UserMembership,
     UiPreferences,
     UserAvatarPreference,
     UserCreate,
@@ -244,8 +246,10 @@ class UsersService:
             user.quota_alerts_global_watch = False
         if payload.account_links is not None:
             self._set_account_links(user, payload.account_links)
-        if payload.s3_user_ids is not None:
-            self._set_s3_user_links(user, payload.s3_user_ids)
+        if payload.s3_user_links is not None:
+            self._set_s3_user_links(user, payload.s3_user_links)
+        elif payload.s3_user_ids is not None:
+            self._set_s3_user_ids(user, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
             self._set_s3_connection_links(user, payload.s3_connection_ids)
         if payload.group_ids is not None:
@@ -628,28 +632,44 @@ class UsersService:
         preloaded_connection_links: Optional[dict[int, list[int]]] = None,
     ) -> UserOut:
         account_ids: list[int] = []
-        account_links: list[AccountMembership] = []
+        account_links: list[AccountMembershipDetail] = []
         group_ids: list[int] = []
         s3_user_ids: list[int] = []
+        s3_user_links: list[S3UserMembership] = []
         s3_connection_ids: list[int] = []
         try:
             if hasattr(user, "account_links") and user.account_links is not None:
                 account_links = [
-                    AccountMembership(
+                    AccountMembershipDetail(
                         account_id=link.account_id,
                         role=link.role,
+                        allow_manager_browser_data_access=bool(
+                            link.allow_manager_browser_data_access
+                        ),
+                        is_root=bool(link.is_root),
                     )
                     for link in user.account_links
                 ]
                 account_ids = [link.account_id for link in user.account_links]
         except DetachedInstanceError:
             account_rows = (
-                self.db.query(UserS3Account.account_id, UserS3Account.role)
+                self.db.query(
+                    UserS3Account.account_id,
+                    UserS3Account.role,
+                    UserS3Account.allow_manager_browser_data_access,
+                    UserS3Account.is_root,
+                )
                 .filter(UserS3Account.user_id == user.id)
                 .all()
             )
             account_links = [
-                AccountMembership(account_id=row[0], role=row[1]) for row in account_rows
+                AccountMembershipDetail(
+                    account_id=row[0],
+                    role=row[1],
+                    allow_manager_browser_data_access=bool(row[2]),
+                    is_root=bool(row[3]),
+                )
+                for row in account_rows
             ]
             account_ids = [row[0] for row in account_rows]
         try:
@@ -663,10 +683,28 @@ class UsersService:
         try:
             if hasattr(user, "s3_user_links") and user.s3_user_links is not None:
                 s3_user_ids = [link.s3_user_id for link in user.s3_user_links]
+                s3_user_links = [
+                    S3UserMembership(
+                        s3_user_id=link.s3_user_id,
+                        allow_manager_browser_data_access=bool(
+                            link.allow_manager_browser_data_access
+                        ),
+                    )
+                    for link in user.s3_user_links
+                ]
         except DetachedInstanceError:
             s3_user_ids = [
-                row[0]
-                for row in self.db.query(UserS3User.s3_user_id).filter(UserS3User.user_id == user.id).all()
+                row.s3_user_id
+                for row in self.db.query(UserS3User).filter(UserS3User.user_id == user.id).all()
+            ]
+            s3_user_links = [
+                S3UserMembership(
+                    s3_user_id=row.s3_user_id,
+                    allow_manager_browser_data_access=bool(
+                        row.allow_manager_browser_data_access
+                    ),
+                )
+                for row in self.db.query(UserS3User).filter(UserS3User.user_id == user.id).all()
             ]
         try:
             if hasattr(user, "s3_connection_links") and user.s3_connection_links is not None:
@@ -678,6 +716,17 @@ class UsersService:
             ]
         if preloaded_s3_links is not None and user.id in preloaded_s3_links:
             s3_user_ids = preloaded_s3_links[user.id]
+            existing_permissions = {
+                link.s3_user_id: link.allow_manager_browser_data_access
+                for link in s3_user_links
+            }
+            s3_user_links = [
+                S3UserMembership(
+                    s3_user_id=s3_user_id,
+                    allow_manager_browser_data_access=existing_permissions.get(s3_user_id, False),
+                )
+                for s3_user_id in s3_user_ids
+            ]
         if preloaded_connection_links is not None and user.id in preloaded_connection_links:
             s3_connection_ids = preloaded_connection_links[user.id]
         s3_user_names: dict[int, str]
@@ -743,6 +792,7 @@ class UsersService:
             group_ids=group_ids,
             group_details=group_details,
             s3_users=s3_user_ids,
+            s3_user_links=s3_user_links,
             s3_user_details=s3_user_details,
             s3_connections=s3_connection_ids,
             s3_connection_details=s3_connection_details,
@@ -758,14 +808,32 @@ class UsersService:
         self.db.refresh(user)
         return user
 
-    def _set_s3_user_links(self, user: User, target_ids: list[int]) -> None:
-        cleaned_ids = sorted({int(s3_id) for s3_id in target_ids if s3_id is not None})
+    def _set_s3_user_ids(self, user: User, target_ids: list[int]) -> None:
+        existing = {
+            int(link.s3_user_id): bool(link.allow_manager_browser_data_access)
+            for link in self.db.query(UserS3User).filter(UserS3User.user_id == user.id).all()
+        }
+        self._set_s3_user_links(
+            user,
+            [
+                S3UserMembership(
+                    s3_user_id=int(s3_id),
+                    allow_manager_browser_data_access=existing.get(int(s3_id), False),
+                )
+                for s3_id in target_ids
+            ],
+        )
+
+    def _set_s3_user_links(self, user: User, links: list[S3UserMembership]) -> None:
+        cleaned = {int(link.s3_user_id): link for link in links}
+        cleaned_ids = sorted(cleaned)
         existing_links = (
             self.db.query(UserS3User)
             .filter(UserS3User.user_id == user.id)
             .all()
         )
-        existing_ids = {link.s3_user_id for link in existing_links}
+        existing_by_id = {link.s3_user_id: link for link in existing_links}
+        existing_ids = set(existing_by_id)
         desired_ids = set(cleaned_ids)
         to_remove = existing_ids - desired_ids
         to_add = desired_ids - existing_ids
@@ -786,7 +854,21 @@ class UsersService:
                 missing_str = ", ".join(str(mid) for mid in sorted(missing))
                 raise ValueError(f"S3 users not found: {missing_str}")
             for s3_user in s3_users:
-                self.db.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
+                self.db.add(
+                    UserS3User(
+                        user_id=user.id,
+                        s3_user_id=s3_user.id,
+                        allow_manager_browser_data_access=bool(
+                            cleaned[s3_user.id].allow_manager_browser_data_access
+                        ),
+                    )
+                )
+        for s3_user_id in desired_ids & existing_ids:
+            row = existing_by_id[s3_user_id]
+            row.allow_manager_browser_data_access = bool(
+                cleaned[s3_user_id].allow_manager_browser_data_access
+            )
+            self.db.add(row)
 
     def _affected_portal_account_ids(self, user: User, payload: UserUpdate) -> list[int]:
         if payload.account_links is None and payload.group_ids is None:
@@ -833,6 +915,9 @@ class UsersService:
             cleaned[account_id] = AccountMembership(
                 account_id=account_id,
                 role=require_account_role(link.role),
+                allow_manager_browser_data_access=bool(
+                    link.allow_manager_browser_data_access
+                ),
             )
         if cleaned:
             found_ids = {
@@ -861,17 +946,29 @@ class UsersService:
             if account_id not in desired_ids and account_id not in protected_root_ids:
                 self.db.delete(row)
         for account_id, link in cleaned.items():
-            if account_id in protected_root_ids:
-                continue
             row = existing_by_account.get(account_id)
+            if account_id in protected_root_ids:
+                if row is not None:
+                    row.allow_manager_browser_data_access = bool(
+                        link.allow_manager_browser_data_access
+                    )
+                    row.updated_at = utcnow()
+                    self.db.add(row)
+                continue
             if row is None:
                 row = UserS3Account(
                     user_id=user.id,
                     account_id=account_id,
                     is_root=False,
                     role=link.role,
+                    allow_manager_browser_data_access=bool(
+                        link.allow_manager_browser_data_access
+                    ),
                 )
             row.role = require_account_role(link.role)
+            row.allow_manager_browser_data_access = bool(
+                link.allow_manager_browser_data_access
+            )
             row.updated_at = utcnow()
             self.db.add(row)
         if desired_ids and user.role == UserRole.UI_NONE.value:

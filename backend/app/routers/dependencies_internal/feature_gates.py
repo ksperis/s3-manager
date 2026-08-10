@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -372,6 +372,28 @@ def require_browser_enabled() -> None:
     settings = app_settings_service.load_app_settings()
     if not settings.general.browser_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser feature is disabled")
+
+
+def require_browser_workspace_surface(request: Request) -> None:
+    surface = (request.headers.get("X-S3-Workspace") or "").strip().lower()
+    if surface not in {"", "portal", "manager-browser"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Browser workspace surface is not authorized",
+        )
+    if surface != "manager-browser":
+        return
+    settings = app_settings_service.load_app_settings()
+    if not settings.general.manager_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manager feature is disabled",
+        )
+    if not settings.general.browser_manager_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manager Browser feature is disabled",
+        )
 
 
 def require_portal_enabled() -> None:

@@ -116,11 +116,16 @@ def _resolve_s3_user_context(
     *,
     surface: str,
 ) -> S3ExecutionContext:
-    if surface != "manager":
+    if surface not in {"manager", "manager-browser"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 users are not available in Browser")
     effective = effective_access_service.EffectiveAccessService(db).resolve_user(user)
     if not effective.has_s3_user(s3_user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this S3 user")
+    if surface == "manager-browser" and not effective.can_browse_s3_user(s3_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manager Browser data access is not allowed for this S3 user",
+        )
 
     s3_user = db.query(S3User).filter(S3User.id == s3_user_id).first()
     if not s3_user:
@@ -150,7 +155,12 @@ def _resolve_connection_context(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
     service = effective_access_service.EffectiveAccessService(db)
     effective = service.resolve_user(user)
-    if not service.connection_is_allowed(user, conn, workspace=surface, resolved=effective):
+    allowed = (
+        service.manager_browser_connection_is_allowed(user, conn)
+        if surface == "manager-browser"
+        else service.connection_is_allowed(user, conn, workspace=surface, resolved=effective)
+    )
+    if not allowed:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Connection is not authorized in this workspace")
 
     # Keep a minimal usage signal for UX (recently used sorting / hints).
@@ -182,6 +192,8 @@ def _resolve_workspace_surface(request: Optional[Request]) -> str:
     path = str(request.url.path)
     browser_prefix = f"{settings.api_v1_prefix}/browser"
     if path.startswith(browser_prefix):
+        if (request.headers.get("X-S3-Workspace") or "").strip().lower() == "manager-browser":
+            return "manager-browser"
         return "browser"
     return "manager"
 
@@ -331,6 +343,11 @@ def get_account_context(
     is_storage_ops_surface = bool(request and str(request.url.path).startswith(f"{settings.api_v1_prefix}/storage-ops"))
     if isinstance(actor, User):
         if ceph_admin_endpoint_id is not None:
+            if surface == "manager-browser":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Ceph Admin contexts are not available in Manager Browser",
+                )
             return _resolve_ceph_admin_browser_context(db, actor, ceph_admin_endpoint_id, surface=surface)
         if connection_id is not None:
             return _resolve_connection_context(
@@ -350,6 +367,13 @@ def get_account_context(
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
         if _is_portal_browser_request(request, surface):
             return _resolve_portal_browser_context(db, actor, account, link, request=request)
+        if surface == "manager-browser" and not (
+            isinstance(link, EffectiveAccountLink) and link.manager_browser_allowed
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Manager Browser data access requires account administrator and explicit data access on the same association",
+            )
         capabilities = manager_membership_capabilities(link)
         if not capabilities.can_manage_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
@@ -369,4 +393,9 @@ def get_account_context(
     if s3_user_id is not None or connection_id is not None or ceph_admin_endpoint_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sessions cannot assume this context")
 
+    if surface == "manager-browser" and not actor.capabilities.access_browser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Browser access is not allowed for this session",
+        )
     return _resolve_session_account(db, actor, account_id, requested_endpoint=requested_endpoint)

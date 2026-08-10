@@ -88,6 +88,7 @@ execution of a selected context.
 | Workspace | Allowed UI-user contexts |
 |---|---|
 | Manager | `account_administrator` accounts, assigned RGW users, assigned shared Manager connections, and the owner's active private Manager connections. |
+| Manager Browser | The active Manager context only. Accounts require `account_administrator` and `allow_manager_browser_data_access = true` on the same direct or group link and execute as root. RGW users require the flag on any direct or group link and execute with that RGW user's credentials. Owned private connections require both Manager and Browser access. Shared connections are rejected. |
 | Browser | The owner's active, unexpired, non-temporary private connections with `access_browser = true`, plus compatible Portal projects whose effective `portal.browser_access_enabled` setting is true. Portal project execution uses the personal Portal IAM identity and Portal profile. |
 | Portal | Compatible account membership projected to `portal_user` or `portal_manager`; account administrators project to Portal manager. Execution always uses the user's personal Portal IAM identity. |
 | Ceph Admin Browser | The explicit endpoint-wide Ceph Admin branch. |
@@ -97,8 +98,12 @@ Generic account contexts, RGW users, and shared connections are rejected by
 standard Browser before credential resolution. An enabled Portal project is
 published as the distinct `portal_account` context and resolved through the
 Portal authorization branch, never through account administrator credentials.
-The embedded Manager Browser keeps its independent private-connection policy;
-it does not reuse the active Manager identity.
+The embedded Manager Browser has no catalogue or selection of its own. It
+reuses the active Manager identity and `ctx`, and every `/api/browser` request
+uses `X-S3-Workspace: manager-browser`. Account permission cannot be assembled
+from separate links: the administrator role and data-access flag must coexist
+on one direct or group association. Authorization is revalidated before any
+credential resolution so forged and revoked contexts return `403`.
 
 `GET /api/me/workspace-access` returns availability, context counts, and the
 backend-selected default workspace. Password login, LDAP, OIDC, redirects, and
@@ -116,8 +121,9 @@ allowed.
 ## Multi-tab context contract
 
 - The visible query parameter is the authority for each tab: `ctx` for Manager
-  and Browser, `project` for Portal, and `ep` for Ceph Admin.
-- Manager and Browser keep distinct default-context preferences. If a Browser
+  and standalone Browser, `project` for Portal, and `ep` for Ceph Admin.
+  `/manager/browser` uses the Manager `ctx` and topbar selector.
+- Manager and standalone Browser keep distinct default-context preferences. If a Browser
   preference or `ctx` value is no longer authorized, the client removes both,
   shows a warning, and requires an explicit selection. It never falls back to
   the first available context.

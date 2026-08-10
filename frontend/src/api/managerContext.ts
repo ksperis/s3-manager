@@ -12,7 +12,8 @@ export type ManagerContext = {
   iam_identity?: string | null;
   manager_stats_enabled: boolean;
   manager_stats_message?: string | null;
-  manager_browser_enabled?: boolean;
+  manager_browser_enabled: boolean;
+  manager_browser_message?: string | null;
   manager_bucket_quota_enabled?: boolean;
   manager_ceph_keys_enabled?: boolean;
   manager_private_access_enabled?: boolean;

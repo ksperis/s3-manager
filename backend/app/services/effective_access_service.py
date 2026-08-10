@@ -54,7 +54,8 @@ class _AccountRoleAccumulator:
     account_id: int
     is_root: bool = False
     direct_role: str | None = None
-    group_roles: list[tuple[int, str, str]] = field(default_factory=list)
+    direct_allow_manager_browser_data_access: bool = False
+    group_roles: list[tuple[int, str, str, bool]] = field(default_factory=list)
 
     def build(self) -> EffectiveAccountLink:
         direct_role = (
@@ -71,14 +72,18 @@ class _AccountRoleAccumulator:
             is_root=self.is_root,
             direct_role=direct_role,
             direct_determines_effective_role=direct_role == role,
+            direct_allow_manager_browser_data_access=(
+                self.direct_allow_manager_browser_data_access
+            ),
             group_sources=tuple(
                 EffectiveAccountGroupRole(
                     group_id=group_id,
                     group_name=group_name,
                     role=group_role,
                     determines_effective_role=group_role == role,
+                    allow_manager_browser_data_access=allow_manager_browser_data_access,
                 )
-                for group_id, group_name, group_role in sorted(
+                for group_id, group_name, group_role, allow_manager_browser_data_access in sorted(
                     self.group_roles,
                     key=lambda source: (source[1].lower(), source[0]),
                 )
@@ -92,6 +97,7 @@ class ResolvedUserAccess:
     group_details: list[LinkedUiGroup]
     account_links: list[EffectiveAccountLink]
     s3_user_ids: list[int]
+    manager_browser_s3_user_ids: list[int]
     s3_connection_ids: list[int]
     can_access_ceph_admin: bool
     can_access_storage_ops: bool
@@ -110,6 +116,9 @@ class ResolvedUserAccess:
 
     def has_s3_user(self, s3_user_id: int) -> bool:
         return s3_user_id in set(self.s3_user_ids)
+
+    def can_browse_s3_user(self, s3_user_id: int) -> bool:
+        return s3_user_id in set(self.manager_browser_s3_user_ids)
 
 class EffectiveAccessService:
     """Single source for role aggregation and executable UI-user contexts."""
@@ -143,6 +152,9 @@ class EffectiveAccessService:
                 if link.is_root
                 else str(link.role)
             )
+            accumulator.direct_allow_manager_browser_data_access = bool(
+                link.allow_manager_browser_data_access
+            )
 
         if group_ids:
             group_links = (
@@ -160,21 +172,29 @@ class EffectiveAccessService:
                         int(link.group_id),
                         group_names.get(int(link.group_id), f"Group #{link.group_id}"),
                         str(link.role),
+                        bool(link.allow_manager_browser_data_access),
                     )
                 )
 
+        direct_s3_user_rows = self.db.query(
+            UserS3User.s3_user_id,
+            UserS3User.allow_manager_browser_data_access,
+        ).filter(UserS3User.user_id == user.id).all()
         s3_user_ids = {
             int(row[0])
-            for row in self.db.query(UserS3User.s3_user_id)
-            .filter(UserS3User.user_id == user.id)
-            .all()
+            for row in direct_s3_user_rows
+        }
+        manager_browser_s3_user_ids = {
+            int(row[0]) for row in direct_s3_user_rows if bool(row[1])
         }
         if group_ids:
-            s3_user_ids.update(
-                int(row[0])
-                for row in self.db.query(UiGroupS3User.s3_user_id)
-                .filter(UiGroupS3User.group_id.in_(group_ids))
-                .all()
+            group_s3_user_rows = self.db.query(
+                UiGroupS3User.s3_user_id,
+                UiGroupS3User.allow_manager_browser_data_access,
+            ).filter(UiGroupS3User.group_id.in_(group_ids)).all()
+            s3_user_ids.update(int(row[0]) for row in group_s3_user_rows)
+            manager_browser_s3_user_ids.update(
+                int(row[0]) for row in group_s3_user_rows if bool(row[1])
             )
 
         shared_connection_ids = {
@@ -256,6 +276,7 @@ class EffectiveAccessService:
                 key=lambda link: link.account_id,
             ),
             s3_user_ids=sorted(s3_user_ids),
+            manager_browser_s3_user_ids=sorted(manager_browser_s3_user_ids),
             s3_connection_ids=sorted(shared_connection_ids),
             can_access_ceph_admin=can_access_ceph_admin,
             can_access_storage_ops=can_access_storage_ops,
@@ -312,6 +333,23 @@ class EffectiveAccessService:
         return any(
             candidate.id == connection.id
             for candidate in self.list_workspace_connections(user, workspace=workspace, resolved=resolved)
+        )
+
+    def manager_browser_connection_is_allowed(
+        self,
+        user: User,
+        connection: S3Connection,
+    ) -> bool:
+        now = utcnow()
+        return bool(
+            not connection.is_shared
+            and connection.created_by_user_id == user.id
+            and connection.is_active
+            and not connection.is_temporary
+            and (connection.expires_at is None or connection.expires_at > now)
+            and not connection.remediation_required
+            and connection.access_manager
+            and connection.access_browser
         )
 
     @staticmethod
@@ -411,15 +449,22 @@ class EffectiveAccessService:
                 EffectiveAccountMembership(
                     account_id=link.account_id,
                     role=link.role,
+                    allow_manager_browser_data_access=link.manager_browser_allowed,
                     provenance=EffectiveAccountRoleProvenance(
                         direct_role=link.direct_role,
                         direct_determines_effective_role=link.direct_determines_effective_role,
+                        direct_allow_manager_browser_data_access=(
+                            link.direct_allow_manager_browser_data_access
+                        ),
                         groups=[
                             EffectiveAccountGroupSource(
                                 group_id=source.group_id,
                                 group_name=source.group_name,
                                 role=source.role,
                                 determines_effective_role=source.determines_effective_role,
+                                allow_manager_browser_data_access=(
+                                    source.allow_manager_browser_data_access
+                                ),
                             )
                             for source in link.group_sources
                         ],
@@ -428,6 +473,7 @@ class EffectiveAccessService:
                 for link in resolved.account_links
             ],
             s3_users=resolved.s3_user_ids,
+            manager_browser_s3_users=resolved.manager_browser_s3_user_ids,
             s3_user_details=[
                 LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
                 for s3_id in resolved.s3_user_ids

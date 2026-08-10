@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.pagination import PaginatedResponse
 from app.models.user import (
@@ -11,6 +11,7 @@ from app.models.user import (
     LinkedS3Connection,
     LinkedS3User,
     ManagerToolAccess,
+    S3UserMembership,
     UserSummary,
 )
 
@@ -45,8 +46,15 @@ class UiGroupCreate(BaseModel):
     browser_advanced_features_enabled: bool = False
     user_ids: list[int] = Field(default_factory=list)
     account_links: list[AccountMembership] = Field(default_factory=list)
-    s3_user_ids: list[int] = Field(default_factory=list)
+    s3_user_links: Optional[list[S3UserMembership]] = None
+    s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: list[int] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def reject_ambiguous_s3_user_links(self) -> "UiGroupCreate":
+        if self.s3_user_links is not None and self.s3_user_ids is not None:
+            raise ValueError("s3_user_links and s3_user_ids cannot be provided together")
+        return self
 
 
 class UiGroupUpdate(BaseModel):
@@ -62,8 +70,15 @@ class UiGroupUpdate(BaseModel):
     browser_advanced_features_enabled: Optional[bool] = None
     user_ids: Optional[list[int]] = None
     account_links: Optional[list[AccountMembership]] = None
+    s3_user_links: Optional[list[S3UserMembership]] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
+
+    @model_validator(mode="after")
+    def reject_ambiguous_s3_user_links(self) -> "UiGroupUpdate":
+        if self.s3_user_links is not None and self.s3_user_ids is not None:
+            raise ValueError("s3_user_links and s3_user_ids cannot be provided together")
+        return self
 
 
 class UiGroupSummary(BaseModel):
@@ -89,6 +104,7 @@ class UiGroupOut(BaseModel):
     account_details: list[LinkedS3Account] = Field(default_factory=list)
     account_links: list[AccountMembership] = Field(default_factory=list)
     s3_users: list[int] = Field(default_factory=list)
+    s3_user_links: list[S3UserMembership] = Field(default_factory=list)
     s3_user_details: list[LinkedS3User] = Field(default_factory=list)
     s3_connections: list[int] = Field(default_factory=list)
     s3_connection_details: list[LinkedS3Connection] = Field(default_factory=list)

@@ -299,7 +299,11 @@ describe("GroupsPage", () => {
     expect(updateGroupMock).toHaveBeenCalledWith(
       50,
       expect.objectContaining({
-        account_links: [{ account_id: 99, role: "account_administrator" }],
+        account_links: [{
+          account_id: 99,
+          role: "account_administrator",
+          allow_manager_browser_data_access: false,
+        }],
       })
     );
   });
@@ -379,8 +383,15 @@ describe("GroupsPage", () => {
         feature_rules: true,
       },
       user_ids: [2],
-      account_links: [{ account_id: 1, role: "account_administrator" }],
-      s3_user_ids: [11],
+      account_links: [{
+        account_id: 1,
+        role: "account_administrator",
+        allow_manager_browser_data_access: false,
+      }],
+      s3_user_links: [{
+        s3_user_id: 11,
+        allow_manager_browser_data_access: false,
+      }],
       s3_connection_ids: [21],
     });
   });

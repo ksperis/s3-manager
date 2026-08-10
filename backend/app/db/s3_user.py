@@ -60,6 +60,12 @@ class UserS3User(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     s3_user_id = Column(Integer, ForeignKey("s3_users.id"), nullable=False)
+    allow_manager_browser_data_access = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
 
     user = relationship(
         "User",

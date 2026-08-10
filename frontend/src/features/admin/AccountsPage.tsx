@@ -79,6 +79,7 @@ import {
   adminAssociationTableHeaderRightClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
+import AdminAssociationAdvancedSettings from "./AdminAssociationAdvancedSettings";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -394,6 +395,7 @@ export default function S3AccountsPage() {
       id: link.user_id,
       label: link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`,
       role: normalizeAccountAccessRole(link.role),
+      allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
     }));
   }, [editForm.user_links, userLabelById]);
   const assignedGroups = useMemo(() => {
@@ -401,6 +403,7 @@ export default function S3AccountsPage() {
       id: link.group_id,
       label: link.group_name ?? groupLabelById.get(link.group_id) ?? `Group #${link.group_id}`,
       role: normalizeAccountAccessRole(link.role),
+      allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
     }));
   }, [editForm.group_links, groupLabelById]);
   const availableUsers = useMemo(() => {
@@ -1011,12 +1014,14 @@ export default function S3AccountsPage() {
           user_id: link.user_id,
           role: normalizeAccountAccessRole(link.role),
           user_email: link.user_email ?? undefined,
+          allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
         })) ?? [],
       group_links:
         detail.group_links?.map((link) => ({
           group_id: link.group_id,
           group_name: link.group_name ?? undefined,
           role: normalizeAccountAccessRole(link.role),
+          allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
         })) ?? [],
     };
     setEditingS3Account(detail);
@@ -1730,6 +1735,21 @@ export default function S3AccountsPage() {
                                 </UiSelect>
                               </td>
                               <td className={adminAssociationTableActionCellClass}>
+                                <AdminAssociationAdvancedSettings
+                                  targetLabel={u.label}
+                                  associationKind="account"
+                                  allowManagerBrowserDataAccess={u.allow_manager_browser_data_access}
+                                  onApply={(allowed) =>
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      user_links: prev.user_links.map((link) =>
+                                        link.user_id === u.id
+                                          ? { ...link, allow_manager_browser_data_access: allowed }
+                                          : link
+                                      ),
+                                    }))
+                                  }
+                                />
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1772,6 +1792,7 @@ export default function S3AccountsPage() {
                           user_id: id,
                           role: userPortalRoleChoice[id] ?? (portalEnabled ? "portal_user" as const : "account_administrator" as const),
                           user_email: userLabelById.get(id) ?? undefined,
+                          allow_manager_browser_data_access: false,
                         }));
                         setEditForm((prev) => ({
                           ...prev,
@@ -1883,6 +1904,21 @@ export default function S3AccountsPage() {
                                 </UiSelect>
                               </td>
                               <td className={adminAssociationTableActionCellClass}>
+                                <AdminAssociationAdvancedSettings
+                                  targetLabel={group.label}
+                                  associationKind="account"
+                                  allowManagerBrowserDataAccess={group.allow_manager_browser_data_access}
+                                  onApply={(allowed) =>
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      group_links: prev.group_links.map((link) =>
+                                        link.group_id === group.id
+                                          ? { ...link, allow_manager_browser_data_access: allowed }
+                                          : link
+                                      ),
+                                    }))
+                                  }
+                                />
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1924,6 +1960,7 @@ export default function S3AccountsPage() {
                         const toAdd = groupSelections.map((id) => ({
                           group_id: id,
                           group_name: groupLabelById.get(id) ?? undefined,
+                          allow_manager_browser_data_access: false,
                           role: groupPortalRoleChoice[id] ?? (portalEnabled ? "portal_user" as const : "account_administrator" as const),
                         }));
                         setEditForm((prev) => ({

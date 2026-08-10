@@ -30,9 +30,11 @@ from app.models.s3_user import (
     S3UserAccessKey,
     S3UserCreate,
     S3UserGeneratedKey,
+    S3UserGroupLink,
     S3UserGroupDetail,
     S3UserImport,
     S3UserSummary,
+    S3UserUserLink,
     S3UserUpdate,
 )
 from app.models.user import UserAssociationDetail
@@ -366,6 +368,23 @@ class S3UsersService:
                     self.db.add(user)
                 self.db.add(UserS3UserModel(user_id=user.id, s3_user_id=s3_user.id))
 
+    def _ensure_user_link_objects(
+        self,
+        s3_user: S3UserModel,
+        links: list[S3UserUserLink],
+    ) -> None:
+        desired = {int(link.user_id): link for link in links}
+        self._ensure_links(s3_user, list(desired))
+        self.db.flush()
+        for row in self.db.query(UserS3UserModel).filter(
+            UserS3UserModel.s3_user_id == s3_user.id,
+            UserS3UserModel.user_id.in_(desired),
+        ).all():
+            row.allow_manager_browser_data_access = bool(
+                desired[row.user_id].allow_manager_browser_data_access
+            )
+            self.db.add(row)
+
     def _serialize_s3_user(
         self,
         row: S3UserModel,
@@ -409,7 +428,11 @@ class S3UsersService:
         if not s3_user_ids:
             return {}, {}
         rows = (
-            self.db.query(UserS3UserModel.s3_user_id, User)
+            self.db.query(
+                UserS3UserModel.s3_user_id,
+                User,
+                UserS3UserModel.allow_manager_browser_data_access,
+            )
             .join(User, User.id == UserS3UserModel.user_id)
             .filter(UserS3UserModel.s3_user_id.in_(s3_user_ids))
             .order_by(UserS3UserModel.s3_user_id.asc(), User.email.asc(), User.id.asc())
@@ -418,7 +441,7 @@ class S3UsersService:
         user_ids_by_s3_user: dict[int, list[int]] = {}
         user_details_by_s3_user: dict[int, list[UserAssociationDetail]] = {}
         avatar_service = UserAvatarService(self.db)
-        for s3_user_id, user in rows:
+        for s3_user_id, user, allow_manager_browser_data_access in rows:
             normalized_s3_user_id = int(s3_user_id)
             normalized_user_id = int(user.id)
             user_ids_by_s3_user.setdefault(normalized_s3_user_id, []).append(normalized_user_id)
@@ -429,6 +452,9 @@ class S3UsersService:
                     full_name=user.full_name,
                     display_name=user.display_name,
                     avatar=avatar_service.descriptor(user),
+                    allow_manager_browser_data_access=bool(
+                        allow_manager_browser_data_access
+                    ),
                 )
             )
         return user_ids_by_s3_user, user_details_by_s3_user
@@ -440,7 +466,11 @@ class S3UsersService:
         if not s3_user_ids:
             return {}, {}
         rows = (
-            self.db.query(UiGroupS3User.s3_user_id, UiGroup)
+            self.db.query(
+                UiGroupS3User.s3_user_id,
+                UiGroup,
+                UiGroupS3User.allow_manager_browser_data_access,
+            )
             .join(UiGroup, UiGroup.id == UiGroupS3User.group_id)
             .filter(UiGroupS3User.s3_user_id.in_(s3_user_ids))
             .order_by(UiGroupS3User.s3_user_id.asc(), UiGroup.name.asc(), UiGroup.id.asc())
@@ -449,7 +479,7 @@ class S3UsersService:
         group_ids_by_user: dict[int, list[int]] = {}
         group_details_by_user: dict[int, list[S3UserGroupDetail]] = {}
         avatar_service = UiGroupAvatarService(self.db)
-        for s3_user_id, group in rows:
+        for s3_user_id, group, allow_manager_browser_data_access in rows:
             normalized_user_id = int(s3_user_id)
             normalized_group_id = int(group.id)
             group_ids_by_user.setdefault(normalized_user_id, []).append(normalized_group_id)
@@ -458,6 +488,9 @@ class S3UsersService:
                     id=normalized_group_id,
                     name=group.name,
                     avatar=avatar_service.descriptor(group),
+                    allow_manager_browser_data_access=bool(
+                        allow_manager_browser_data_access
+                    ),
                 )
             )
         return group_ids_by_user, group_details_by_user
@@ -760,9 +793,13 @@ class S3UsersService:
             s3_user.name = payload.name
         if payload.email is not None:
             s3_user.email = payload.email
-        if payload.user_ids is not None:
+        if payload.user_links is not None:
+            self._ensure_user_link_objects(s3_user, payload.user_links)
+        elif payload.user_ids is not None:
             self._ensure_links(s3_user, payload.user_ids)
-        if payload.group_ids is not None:
+        if payload.group_links is not None:
+            self._ensure_group_link_objects(s3_user, payload.group_links)
+        elif payload.group_ids is not None:
             self._ensure_group_links(s3_user, payload.group_ids)
         if payload.tags is not None:
             self.tags.replace_s3_user_tags(s3_user, payload.tags)
@@ -830,6 +867,23 @@ class S3UsersService:
             ).delete(synchronize_session=False)
         for group_id in desired_set - existing_ids:
             self.db.add(UiGroupS3User(group_id=group_id, s3_user_id=s3_user.id))
+
+    def _ensure_group_link_objects(
+        self,
+        s3_user: S3UserModel,
+        links: list[S3UserGroupLink],
+    ) -> None:
+        desired = {int(link.group_id): link for link in links}
+        self._ensure_group_links(s3_user, list(desired))
+        self.db.flush()
+        for row in self.db.query(UiGroupS3User).filter(
+            UiGroupS3User.s3_user_id == s3_user.id,
+            UiGroupS3User.group_id.in_(desired),
+        ).all():
+            row.allow_manager_browser_data_access = bool(
+                desired[row.group_id].allow_manager_browser_data_access
+            )
+            self.db.add(row)
 
     def rotate_keys(self, user_id: int) -> S3UserSchema:
         s3_user = self._get_s3_user(user_id)

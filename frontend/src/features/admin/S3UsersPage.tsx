@@ -14,6 +14,8 @@ import {
   listS3Users,
   updateS3User,
   type UpdateS3UserPayload,
+  type S3UserGroupLink,
+  type S3UserUserLink,
 } from "../../api/s3Users";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
@@ -66,6 +68,7 @@ import {
   adminAssociationTableHeaderRightClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
+import AdminAssociationAdvancedSettings from "./AdminAssociationAdvancedSettings";
 import { AdminAccessToggleSection } from "./AdminAccessSections";
 import AdminQuotaFields from "./AdminQuotaFields";
 import { AssociationPrincipalStack, type AssociationPrincipalItem } from "./AssociationSummary";
@@ -157,8 +160,8 @@ export default function S3UsersPage() {
     name: "",
     email: "",
     tags: [] as UiTagDefinition[],
-    user_ids: [] as number[],
-    group_ids: [] as number[],
+    user_links: [] as S3UserUserLink[],
+    group_links: [] as S3UserGroupLink[],
     quota_max_size_gb: "",
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
@@ -415,15 +418,15 @@ export default function S3UsersPage() {
   const availablePortalUsers = useMemo(() => {
     const query = portalUserSearch.trim().toLowerCase();
     return portalUserOptions.filter(
-      (opt) => !editForm.user_ids.includes(opt.id) && (!query || opt.label.toLowerCase().includes(query))
+      (opt) => !editForm.user_links.some((link) => link.user_id === opt.id) && (!query || opt.label.toLowerCase().includes(query))
     );
-  }, [portalUserOptions, editForm.user_ids, portalUserSearch]);
+  }, [portalUserOptions, editForm.user_links, portalUserSearch]);
   const availableGroups = useMemo(() => {
     const query = groupSearch.trim().toLowerCase();
     return uiGroups.filter(
-      (group) => !editForm.group_ids.includes(group.id) && (!query || group.name.toLowerCase().includes(query))
+      (group) => !editForm.group_links.some((link) => link.group_id === group.id) && (!query || group.name.toLowerCase().includes(query))
     );
-  }, [editForm.group_ids, groupSearch, uiGroups]);
+  }, [editForm.group_links, groupSearch, uiGroups]);
   const visiblePortalUsers = useMemo(
     () => availablePortalUsers.slice(0, MAX_LINK_OPTIONS),
     [availablePortalUsers]
@@ -520,8 +523,24 @@ export default function S3UsersPage() {
       name: user.name,
       email: user.email ?? "",
       tags: normalizeUiTags(user.tags),
-      user_ids: user.user_ids ?? [],
-      group_ids: user.group_ids ?? [],
+      user_links: user.user_links?.length
+        ? user.user_links.map((link) => ({
+            ...link,
+            allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
+          }))
+        : (user.user_ids ?? []).map((userId) => ({
+            user_id: userId,
+            allow_manager_browser_data_access: false,
+          })),
+      group_links: user.group_links?.length
+        ? user.group_links.map((link) => ({
+            ...link,
+            allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
+          }))
+        : (user.group_ids ?? []).map((groupId) => ({
+            group_id: groupId,
+            allow_manager_browser_data_access: false,
+          })),
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
       quota_max_objects: user.quota_max_objects != null ? String(user.quota_max_objects) : "",
@@ -557,8 +576,8 @@ export default function S3UsersPage() {
         name: editForm.name || undefined,
         email: editForm.email || undefined,
         tags: normalizeUiTags(editForm.tags),
-        user_ids: editForm.user_ids,
-        group_ids: editForm.group_ids,
+        user_links: editForm.user_links,
+        group_links: editForm.group_links,
       };
       if (canManagePrivilegedTargets) {
         payload.allow_bucket_quota_management = editForm.allow_bucket_quota_management;
@@ -1261,7 +1280,7 @@ export default function S3UsersPage() {
               <div className={cx("space-y-3 px-3 py-2", uiPanelMutedClass)}>
                 <AdminAssociationSectionHeader
                   title="Linked UI users"
-                  countLabel={`${editForm.user_ids.length} linked`}
+                  countLabel={`${editForm.user_links.length} linked`}
                   actionLabel={showEditPortalUserPanel ? "Close" : "Add UI users"}
                   onAction={() => setShowEditPortalUserPanel((prev) => !prev)}
                 />
@@ -1278,25 +1297,40 @@ export default function S3UsersPage() {
                       </tr>
                     </thead>
                     <tbody className={adminAssociationTableBodyClass}>
-                      {editForm.user_ids.length === 0 ? (
+                      {editForm.user_links.length === 0 ? (
                         <tr>
                           <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
                             No linked users yet.
                           </td>
                         </tr>
                       ) : (
-                        editForm.user_ids.map((id) => (
-                          <tr key={id}>
+                        editForm.user_links.map((link) => (
+                          <tr key={link.user_id}>
                             <td className={adminAssociationTableLabelCellClass}>
-                              {portalUserLabelById.get(id) ?? `User #${id}`}
+                              {portalUserLabelById.get(link.user_id) ?? `User #${link.user_id}`}
                             </td>
                             <td className={adminAssociationTableActionCellClass}>
+                              <AdminAssociationAdvancedSettings
+                                targetLabel={portalUserLabelById.get(link.user_id) ?? `User #${link.user_id}`}
+                                associationKind="rgw_user"
+                                allowManagerBrowserDataAccess={Boolean(link.allow_manager_browser_data_access)}
+                                onApply={(allowed) =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    user_links: prev.user_links.map((item) =>
+                                      item.user_id === link.user_id
+                                        ? { ...item, allow_manager_browser_data_access: allowed }
+                                        : item
+                                    ),
+                                  }))
+                                }
+                              />
                               <button
                                 type="button"
                                 onClick={() =>
                                   setEditForm((prev) => ({
                                     ...prev,
-                                    user_ids: prev.user_ids.filter((uid) => uid !== id),
+                                    user_links: prev.user_links.filter((item) => item.user_id !== link.user_id),
                                   }))
                                 }
                                 className={tableDeleteActionClasses}
@@ -1331,7 +1365,13 @@ export default function S3UsersPage() {
                       if (editPortalUserSelections.length === 0) return;
                       setEditForm((prev) => ({
                         ...prev,
-                        user_ids: [...prev.user_ids, ...editPortalUserSelections],
+                        user_links: [
+                          ...prev.user_links,
+                          ...editPortalUserSelections.map((userId) => ({
+                            user_id: userId,
+                            allow_manager_browser_data_access: false,
+                          })),
+                        ],
                       }));
                       setEditPortalUserSelections([]);
                       setPortalUserSearch("");
@@ -1367,7 +1407,7 @@ export default function S3UsersPage() {
               <div className={cx("space-y-3 px-3 py-2", uiPanelMutedClass)}>
                 <AdminAssociationSectionHeader
                   title="Linked UI groups"
-                  countLabel={`${editForm.group_ids.length} linked${uiGroupsLoading ? " · loading..." : ""}`}
+                  countLabel={`${editForm.group_links.length} linked${uiGroupsLoading ? " · loading..." : ""}`}
                   actionLabel={showEditGroupPanel ? "Close" : "Add UI groups"}
                   onAction={() => {
                     if (!showEditGroupPanel) {
@@ -1389,25 +1429,40 @@ export default function S3UsersPage() {
                       </tr>
                     </thead>
                     <tbody className={adminAssociationTableBodyClass}>
-                      {editForm.group_ids.length === 0 ? (
+                      {editForm.group_links.length === 0 ? (
                         <tr>
                           <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
                             No linked groups yet.
                           </td>
                         </tr>
                       ) : (
-                        editForm.group_ids.map((id) => (
-                          <tr key={id}>
+                        editForm.group_links.map((link) => (
+                          <tr key={link.group_id}>
                             <td className={adminAssociationTableLabelCellClass}>
-                              {groupLabelById.get(id) ?? `Group #${id}`}
+                              {groupLabelById.get(link.group_id) ?? `Group #${link.group_id}`}
                             </td>
                             <td className={adminAssociationTableActionCellClass}>
+                              <AdminAssociationAdvancedSettings
+                                targetLabel={groupLabelById.get(link.group_id) ?? `Group #${link.group_id}`}
+                                associationKind="rgw_user"
+                                allowManagerBrowserDataAccess={Boolean(link.allow_manager_browser_data_access)}
+                                onApply={(allowed) =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    group_links: prev.group_links.map((item) =>
+                                      item.group_id === link.group_id
+                                        ? { ...item, allow_manager_browser_data_access: allowed }
+                                        : item
+                                    ),
+                                  }))
+                                }
+                              />
                               <button
                                 type="button"
                                 onClick={() =>
                                   setEditForm((prev) => ({
                                     ...prev,
-                                    group_ids: prev.group_ids.filter((groupId) => groupId !== id),
+                                    group_links: prev.group_links.filter((item) => item.group_id !== link.group_id),
                                   }))
                                 }
                                 className={tableDeleteActionClasses}
@@ -1442,7 +1497,13 @@ export default function S3UsersPage() {
                       if (editGroupSelections.length === 0) return;
                       setEditForm((prev) => ({
                         ...prev,
-                        group_ids: [...prev.group_ids, ...editGroupSelections],
+                        group_links: [
+                          ...prev.group_links,
+                          ...editGroupSelections.map((groupId) => ({
+                            group_id: groupId,
+                            allow_manager_browser_data_access: false,
+                          })),
+                        ],
                       }));
                       setEditGroupSelections([]);
                       setGroupSearch("");

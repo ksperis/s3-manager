@@ -306,7 +306,7 @@ describe("S3UsersPage modal tabs", () => {
     });
   });
 
-  it("keeps Linked UI users changes across tabs and submits user_ids", async () => {
+  it("keeps Linked UI users changes across tabs and submits canonical user links", async () => {
     render(
       <MemoryRouter>
         <S3UsersPage />
@@ -341,12 +341,17 @@ describe("S3UsersPage modal tabs", () => {
     expect(lastCall?.[1]).toEqual(
       expect.objectContaining({
         tags: [expect.objectContaining({ label: "legacy", color_key: "neutral" })],
-        user_ids: [33],
+        user_links: [
+          {
+            user_id: 33,
+            allow_manager_browser_data_access: false,
+          },
+        ],
       })
     );
   });
 
-  it("keeps Linked UI groups changes across tabs and submits group_ids", async () => {
+  it("keeps Linked UI groups changes across tabs and submits canonical group links", async () => {
     render(
       <MemoryRouter>
         <S3UsersPage />
@@ -377,7 +382,12 @@ describe("S3UsersPage modal tabs", () => {
     expect(lastCall?.[0]).toBe(5);
     expect(lastCall?.[1]).toEqual(
       expect.objectContaining({
-        group_ids: [31],
+        group_links: [
+          {
+            group_id: 31,
+            allow_manager_browser_data_access: false,
+          },
+        ],
       })
     );
   });

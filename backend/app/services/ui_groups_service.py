@@ -24,6 +24,7 @@ from app.models.user import (
     LinkedS3Connection,
     LinkedS3User,
     ManagerToolAccess,
+    S3UserMembership,
     UserSummary,
 )
 from app.services.ui_group_avatar_service import UiGroupAvatarService
@@ -76,7 +77,10 @@ class UiGroupsService:
         UiGroupAvatarService(self.db).set_choice(group, payload.avatar_source, payload.avatar_icon)
         self._set_user_links(group, payload.user_ids)
         self._set_account_links(group, payload.account_links)
-        self._set_s3_user_links(group, payload.s3_user_ids)
+        if payload.s3_user_links is not None:
+            self._set_s3_user_links(group, payload.s3_user_links)
+        else:
+            self._set_s3_user_ids(group, payload.s3_user_ids or [])
         self._set_s3_connection_links(group, payload.s3_connection_ids)
         self.db.flush()
         portal_roles_after = capture_effective_portal_roles(
@@ -143,8 +147,10 @@ class UiGroupsService:
             self._set_user_links(group, payload.user_ids)
         if payload.account_links is not None:
             self._set_account_links(group, payload.account_links)
-        if payload.s3_user_ids is not None:
-            self._set_s3_user_links(group, payload.s3_user_ids)
+        if payload.s3_user_links is not None:
+            self._set_s3_user_links(group, payload.s3_user_links)
+        elif payload.s3_user_ids is not None:
+            self._set_s3_user_ids(group, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
             self._set_s3_connection_links(group, payload.s3_connection_ids)
         group.updated_at = utcnow()
@@ -279,7 +285,7 @@ class UiGroupsService:
             .all()
         )
         s3_user_rows = (
-            self.db.query(UiGroupS3User.s3_user_id)
+            self.db.query(UiGroupS3User)
             .filter(UiGroupS3User.group_id == group.id)
             .all()
         )
@@ -293,7 +299,7 @@ class UiGroupsService:
             )
             .all()
         )
-        s3_user_ids = sorted(row[0] for row in s3_user_rows)
+        s3_user_ids = sorted(row.s3_user_id for row in s3_user_rows)
         s3_connection_ids = sorted(row[0] for row in s3_connection_rows)
         account_ids = sorted(link.account_id for link in account_rows)
         account_names = self._load_account_names(account_ids)
@@ -346,10 +352,22 @@ class UiGroupsService:
                 AccountMembership(
                     account_id=link.account_id,
                     role=link.role,
+                    allow_manager_browser_data_access=bool(
+                        link.allow_manager_browser_data_access
+                    ),
                 )
                 for link in account_rows
             ],
             s3_users=s3_user_ids,
+            s3_user_links=[
+                S3UserMembership(
+                    s3_user_id=row.s3_user_id,
+                    allow_manager_browser_data_access=bool(
+                        row.allow_manager_browser_data_access
+                    ),
+                )
+                for row in s3_user_rows
+            ],
             s3_user_details=[
                 LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
                 for s3_id in s3_user_ids
@@ -384,6 +402,9 @@ class UiGroupsService:
             cleaned[account_id] = AccountMembership(
                 account_id=account_id,
                 role=require_account_role(link.role),
+                allow_manager_browser_data_access=bool(
+                    link.allow_manager_browser_data_access
+                ),
             )
         self._ensure_accounts_exist(sorted(cleaned))
         existing = self.db.query(UiGroupS3Account).filter(UiGroupS3Account.group_id == group.id).all()
@@ -394,16 +415,44 @@ class UiGroupsService:
         for account_id, payload in cleaned.items():
             row = existing_by_id.get(account_id)
             if row is None:
-                row = UiGroupS3Account(group_id=group.id, account_id=account_id, role=payload.role)
+                row = UiGroupS3Account(
+                    group_id=group.id,
+                    account_id=account_id,
+                    role=payload.role,
+                    allow_manager_browser_data_access=bool(
+                        payload.allow_manager_browser_data_access
+                    ),
+                )
             row.role = require_account_role(payload.role)
+            row.allow_manager_browser_data_access = bool(
+                payload.allow_manager_browser_data_access
+            )
             row.updated_at = utcnow()
             self.db.add(row)
 
-    def _set_s3_user_links(self, group: UiGroup, target_ids: list[int]) -> None:
-        cleaned_ids = self._clean_ids(target_ids)
+    def _set_s3_user_ids(self, group: UiGroup, target_ids: list[int]) -> None:
+        existing = {
+            int(link.s3_user_id): bool(link.allow_manager_browser_data_access)
+            for link in self.db.query(UiGroupS3User).filter(UiGroupS3User.group_id == group.id).all()
+        }
+        self._set_s3_user_links(
+            group,
+            [
+                S3UserMembership(
+                    s3_user_id=int(s3_user_id),
+                    allow_manager_browser_data_access=existing.get(int(s3_user_id), False),
+                )
+                for s3_user_id in target_ids
+            ],
+        )
+
+    def _set_s3_user_links(self, group: UiGroup, links: list[S3UserMembership]) -> None:
+        cleaned = {int(link.s3_user_id): link for link in links}
+        cleaned_ids = sorted(cleaned)
         self._ensure_s3_users_exist(cleaned_ids)
         existing = self.db.query(UiGroupS3User).filter(UiGroupS3User.group_id == group.id).all()
-        existing_ids = {link.s3_user_id for link in existing}
+        existing_by_id = {link.s3_user_id: link for link in existing}
+        existing_ids = set(existing_by_id)
         desired_ids = set(cleaned_ids)
         for s3_user_id in existing_ids - desired_ids:
             self.db.query(UiGroupS3User).filter(
@@ -411,7 +460,21 @@ class UiGroupsService:
                 UiGroupS3User.s3_user_id == s3_user_id,
             ).delete(synchronize_session=False)
         for s3_user_id in desired_ids - existing_ids:
-            self.db.add(UiGroupS3User(group_id=group.id, s3_user_id=s3_user_id))
+            self.db.add(
+                UiGroupS3User(
+                    group_id=group.id,
+                    s3_user_id=s3_user_id,
+                    allow_manager_browser_data_access=bool(
+                        cleaned[s3_user_id].allow_manager_browser_data_access
+                    ),
+                )
+            )
+        for s3_user_id in desired_ids & existing_ids:
+            row = existing_by_id[s3_user_id]
+            row.allow_manager_browser_data_access = bool(
+                cleaned[s3_user_id].allow_manager_browser_data_access
+            )
+            self.db.add(row)
 
     def _set_s3_connection_links(self, group: UiGroup, target_ids: list[int]) -> None:
         cleaned_ids = self._clean_ids(target_ids)

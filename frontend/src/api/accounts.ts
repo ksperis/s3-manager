@@ -14,6 +14,7 @@ import type { AccountAccessRole } from "./accountRoles";
 export type AccountUserLink = {
   user_id: number;
   role: AccountAccessRole;
+  allow_manager_browser_data_access?: boolean;
   user_email?: string | null;
   user_full_name?: string | null;
   user_avatar?: UserAvatarDescriptor | null;
@@ -24,6 +25,7 @@ export type AccountGroupLink = {
   group_name?: string | null;
   group_avatar?: UiGroupAvatarDescriptor | null;
   role: AccountAccessRole;
+  allow_manager_browser_data_access?: boolean;
 };
 
 export type S3Account = {

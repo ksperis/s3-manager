@@ -20,6 +20,7 @@ class EffectiveAccountGroupRole:
     group_name: str
     role: str
     determines_effective_role: bool = False
+    allow_manager_browser_data_access: bool = False
 
 
 @dataclass(frozen=True)
@@ -29,11 +30,24 @@ class EffectiveAccountLink:
     is_root: bool = False
     direct_role: Optional[str] = None
     direct_determines_effective_role: bool = False
+    direct_allow_manager_browser_data_access: bool = False
     group_sources: tuple[EffectiveAccountGroupRole, ...] = ()
 
     @property
     def portal_role(self) -> Optional[str]:
         return portal_role_for(self.role)
+
+    @property
+    def manager_browser_allowed(self) -> bool:
+        admin_role = "account_administrator"
+        return bool(
+            self.direct_role == admin_role
+            and self.direct_allow_manager_browser_data_access
+        ) or any(
+            source.role == admin_role
+            and source.allow_manager_browser_data_access
+            for source in self.group_sources
+        )
 
 
 @dataclass

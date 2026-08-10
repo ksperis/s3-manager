@@ -26,6 +26,7 @@ from app.routers.dependencies_internal.feature_gates import (
     is_manager_bucket_quota_available,
     is_manager_rgw_access_key_management_available,
     require_browser_enabled,
+    require_browser_workspace_surface,
     require_bucket_compare_enabled,
     require_bucket_integrity_check_enabled,
     require_bucket_purge_enabled,

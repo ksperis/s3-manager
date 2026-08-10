@@ -80,10 +80,16 @@ vi.mock("recharts", () => {
 });
 
 vi.mock("../browser/BrowserEmbed", () => ({
-  default: (props: { onSelectedBucketNameChange?: (bucketName: string) => void }) => (
+  default: (props: {
+    accountIdForApi?: string | number | null;
+    workspaceSurface?: string;
+    onSelectedBucketNameChange?: (bucketName: string) => void;
+  }) => (
     <button
       type="button"
       data-testid="browser-embed"
+      data-account-id={String(props.accountIdForApi ?? "")}
+      data-workspace-surface={props.workspaceSurface}
       onClick={() => props.onSelectedBucketNameChange?.("bucket-a")}
     >
       browser
@@ -260,7 +266,7 @@ describe("manager shell pages", () => {
       selectedS3AccountType: null,
       hasS3AccountContext: false,
       accountIdForApi: null,
-      accessMode: "default",
+      accessMode: "admin",
       managerStatsEnabled: false,
       managerStatsMessage: null,
       managerBrowserEnabled: true,
@@ -465,7 +471,6 @@ describe("manager shell pages", () => {
       selectedS3AccountType: "account",
       hasS3AccountContext: true,
       accountIdForApi: "account-1",
-      accessMode: "default",
       managerStatsEnabled: true,
       managerStatsMessage: null,
       managerBrowserEnabled: true,
@@ -1110,17 +1115,18 @@ describe("manager shell pages", () => {
     expect(screen.getByText(trendText("2 vs last week"))).toBeInTheDocument();
   });
 
-  it("renders the manager browser page with an independent private-context empty state", async () => {
+  it("renders the manager browser page from the active Manager context only", async () => {
     render(
       <MemoryRouter>
         <ManagerBrowserPage />
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("No private Browser connection")).toBeInTheDocument();
+    expect(await screen.findByText("Select a Manager context")).toBeInTheDocument();
     expect(within(screen.getByRole("navigation")).getByText("Manager")).toBeInTheDocument();
     expect(within(screen.getByRole("navigation")).getByText("Browser")).toBeInTheDocument();
     expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
+    expect(listExecutionContextsMock).not.toHaveBeenCalledWith("browser", expect.anything());
   });
 
   it("adds the selected bucket to the manager browser breadcrumb", async () => {
@@ -1139,30 +1145,72 @@ describe("manager shell pages", () => {
       selectedS3AccountType: "account",
       hasS3AccountContext: true,
       accountIdForApi: "account-1",
-      accessMode: "default",
       managerStatsEnabled: true,
       managerStatsMessage: null,
       managerBrowserEnabled: true,
+      managerBrowserMessage: null,
+      iamIdentity: "RGW-ROOT",
+      accessMode: "admin",
     });
 
-    listExecutionContextsMock.mockResolvedValue([
-      {
-        id: "conn-1",
-        kind: "connection",
-        display_name: "Private connection",
-        capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
-      },
-    ]);
-
     render(
-      <MemoryRouter initialEntries={["/manager/browser?ctx=conn-1"]}>
+      <MemoryRouter initialEntries={["/manager/browser?ctx=account-1"]}>
         <ManagerBrowserPage />
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByTestId("browser-embed"));
+    const embed = await screen.findByTestId("browser-embed");
+    expect(embed).toHaveAttribute("data-account-id", "account-1");
+    expect(embed).toHaveAttribute("data-workspace-surface", "manager");
+    expect(screen.getByText("Effective S3 identity")).toBeInTheDocument();
+    expect(screen.getAllByText("RGW-ROOT").length).toBeGreaterThan(0);
+    expect(screen.getByText(/RGW logs will attribute operations to RGW-ROOT, not to the UI user/)).toBeInTheDocument();
+    fireEvent.click(embed);
 
     expect(within(screen.getByRole("navigation")).getByText("bucket-a")).toBeInTheDocument();
+    expect(listExecutionContextsMock).not.toHaveBeenCalledWith("browser", expect.anything());
+  });
+
+  it("does not mount the data plane while Manager Browser access is loading or denied", () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [{ id: "account-1", name: "Account Alpha", type: "account" }],
+      selectedS3AccountId: "account-1",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      selectedS3AccountType: "account",
+      accessMode: "admin",
+      managerBrowserEnabled: false,
+      managerBrowserMessage: "Explicit data access is required.",
+      iamIdentity: "RGW-ROOT",
+    });
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <ManagerBrowserPage />
+      </MemoryRouter>
+    );
+    expect(screen.getByText("Browser unavailable for this context")).toBeInTheDocument();
+    expect(screen.getByText("Explicit data access is required.")).toBeInTheDocument();
+    expect(screen.queryByTestId("browser-embed")).not.toBeInTheDocument();
+
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [{ id: "account-1", name: "Account Alpha", type: "account" }],
+      selectedS3AccountId: "account-1",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      selectedS3AccountType: "account",
+      accessMode: "admin",
+      managerBrowserEnabled: null,
+      managerBrowserMessage: null,
+      iamIdentity: "RGW-ROOT",
+    });
+    rerender(
+      <MemoryRouter>
+        <ManagerBrowserPage />
+      </MemoryRouter>
+    );
+    expect(screen.getByText("Checking Browser access")).toBeInTheDocument();
+    expect(screen.queryByTestId("browser-embed")).not.toBeInTheDocument();
   });
 
   it("renders the manager buckets page without a page-level context strip", () => {

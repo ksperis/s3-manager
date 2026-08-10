@@ -110,7 +110,7 @@ export default function ManagerBucketComparePage() {
     return [...selectedBuckets].sort((a, b) => a.localeCompare(b));
   }, [selectedBuckets]);
   const managerBrowserAvailable =
-    generalSettings.browser_enabled && generalSettings.browser_manager_enabled && managerBrowserEnabled !== false;
+    generalSettings.browser_enabled && generalSettings.browser_manager_enabled && managerBrowserEnabled === true;
 
   const toggleBucket = (bucketName: string) => {
     setSelectedBuckets((current) => {

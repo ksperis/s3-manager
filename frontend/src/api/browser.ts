@@ -303,7 +303,13 @@ export function buildSseCustomerBackendHeaders(sseCustomerKeyBase64?: string | n
 }
 
 function buildBrowserWorkspaceHeaders(options?: BrowserRequestOptions): Record<string, string> {
-  return options?.workspaceSurface === "portal" ? { "X-S3-Workspace": "portal" } : {};
+  if (options?.workspaceSurface === "portal") {
+    return { "X-S3-Workspace": "portal" };
+  }
+  if (options?.workspaceSurface === "manager") {
+    return { "X-S3-Workspace": "manager-browser" };
+  }
+  return {};
 }
 
 function mergeBrowserHeaders(
@@ -460,7 +466,7 @@ export async function fetchBrowserUsageSummary(
 export async function createBrowserBucket(
   accountId: S3AccountSelector,
   name: string,
-  options?: { versioning?: boolean }
+  options?: { versioning?: boolean } & BrowserRequestOptions
 ): Promise<void> {
   await client.post(
     "/browser/buckets",
@@ -470,6 +476,7 @@ export async function createBrowserBucket(
     },
     {
       params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
     }
   );
 }
@@ -545,14 +552,17 @@ export async function fetchBrowserObjectColumns(
   options?: {
     sseCustomerKeyBase64?: string | null;
     signal?: AbortSignal;
-  }
+  } & BrowserRequestOptions
 ): Promise<BrowserObjectColumnsResponse> {
   const { data } = await client.post<BrowserObjectColumnsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/objects/columns`,
     payload,
     {
       params: withS3AccountParam(undefined, accountId),
-      headers: buildSseCustomerBackendHeaders(options?.sseCustomerKeyBase64),
+      headers: mergeBrowserHeaders(
+        buildSseCustomerBackendHeaders(options?.sseCustomerKeyBase64),
+        buildBrowserWorkspaceHeaders(options),
+      ),
       signal: options?.signal,
     }
   );
@@ -576,26 +586,38 @@ export async function getBucketCorsStatus(
 export async function ensureBucketCors(
   accountId: S3AccountSelector,
   bucketName: string,
-  origin: string
+  origin: string,
+  options?: BrowserRequestOptions
 ): Promise<BucketCorsStatus> {
   const { data } = await client.post<BucketCorsStatus>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/cors/ensure`,
     { origin },
-    { params: withS3AccountParam(undefined, accountId) }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
+    }
   );
   return data;
 }
 
-export async function getStsStatus(accountId: S3AccountSelector): Promise<StsStatus> {
+export async function getStsStatus(
+  accountId: S3AccountSelector,
+  options?: BrowserRequestOptions,
+): Promise<StsStatus> {
   const { data } = await client.get<StsStatus>("/browser/sts", {
     params: withS3AccountParam(undefined, accountId),
+    headers: buildBrowserWorkspaceHeaders(options),
   });
   return data;
 }
 
-export async function getStsCredentials(accountId: S3AccountSelector): Promise<StsCredentials> {
+export async function getStsCredentials(
+  accountId: S3AccountSelector,
+  options?: BrowserRequestOptions,
+): Promise<StsCredentials> {
   const { data } = await client.get<StsCredentials>("/browser/sts/credentials", {
     params: withS3AccountParam(undefined, accountId),
+    headers: buildBrowserWorkspaceHeaders(options),
   });
   return data;
 }
@@ -642,14 +664,18 @@ export async function fetchObjectMetadata(
   key: string,
   versionId?: string | null,
   sseCustomerKeyBase64?: string | null,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BrowserRequestOptions,
 ): Promise<ObjectMetadata> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectMetadata>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
     {
       params,
-      headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+      headers: mergeBrowserHeaders(
+        buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+        buildBrowserWorkspaceHeaders(options),
+      ),
       signal,
     }
   );
@@ -660,12 +686,13 @@ export async function getObjectTags(
   accountId: S3AccountSelector,
   bucketName: string,
   key: string,
-  versionId?: string | null
+  versionId?: string | null,
+  options?: BrowserRequestOptions,
 ): Promise<ObjectTags> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectTags>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-tags`,
-    { params }
+    { params, headers: buildBrowserWorkspaceHeaders(options) }
   );
   return data;
 }
@@ -674,13 +701,15 @@ export async function updateObjectTags(
   accountId: S3AccountSelector,
   bucketName: string,
   payload: ObjectTags,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BrowserRequestOptions,
 ): Promise<ObjectTags> {
   const { data } = await client.put<ObjectTags>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-tags`,
     payload,
     {
       params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
       signal,
     }
   );
@@ -691,12 +720,17 @@ export async function updateObjectMetadata(
   accountId: S3AccountSelector,
   bucketName: string,
   payload: ObjectMetadataUpdate,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BrowserRequestOptions,
 ): Promise<ObjectMetadata> {
   const { data } = await client.put<ObjectMetadata>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
     payload,
-    { params: withS3AccountParam(undefined, accountId), signal }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
+      signal,
+    }
   );
   return data;
 }
@@ -705,12 +739,17 @@ export async function updateObjectAcl(
   accountId: S3AccountSelector,
   bucketName: string,
   payload: ObjectAcl,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BrowserRequestOptions,
 ): Promise<ObjectAcl> {
   const { data } = await client.put<ObjectAcl>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-acl`,
     payload,
-    { params: withS3AccountParam(undefined, accountId), signal }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
+      signal,
+    }
   );
   return data;
 }
@@ -719,12 +758,13 @@ export async function getObjectLegalHold(
   accountId: S3AccountSelector,
   bucketName: string,
   key: string,
-  versionId?: string | null
+  versionId?: string | null,
+  options?: BrowserRequestOptions,
 ): Promise<ObjectLegalHold> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectLegalHold>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-legal-hold`,
-    { params }
+    { params, headers: buildBrowserWorkspaceHeaders(options) }
   );
   return data;
 }
@@ -733,12 +773,17 @@ export async function updateObjectLegalHold(
   accountId: S3AccountSelector,
   bucketName: string,
   payload: ObjectLegalHold,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BrowserRequestOptions,
 ): Promise<ObjectLegalHold> {
   const { data } = await client.put<ObjectLegalHold>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-legal-hold`,
     payload,
-    { params: withS3AccountParam(undefined, accountId), signal }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
+      signal,
+    }
   );
   return data;
 }
@@ -747,12 +792,13 @@ export async function getObjectRetention(
   accountId: S3AccountSelector,
   bucketName: string,
   key: string,
-  versionId?: string | null
+  versionId?: string | null,
+  options?: BrowserRequestOptions,
 ): Promise<ObjectRetention> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectRetention>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-retention`,
-    { params }
+    { params, headers: buildBrowserWorkspaceHeaders(options) }
   );
   return data;
 }
@@ -761,12 +807,17 @@ export async function updateObjectRetention(
   accountId: S3AccountSelector,
   bucketName: string,
   payload: ObjectRetention,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BrowserRequestOptions,
 ): Promise<ObjectRetention> {
   const { data } = await client.put<ObjectRetention>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-retention`,
     payload,
-    { params: withS3AccountParam(undefined, accountId), signal }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
+      signal,
+    }
   );
   return data;
 }
@@ -774,12 +825,16 @@ export async function updateObjectRetention(
 export async function restoreObject(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: ObjectRestoreRequest
+  payload: ObjectRestoreRequest,
+  options?: BrowserRequestOptions,
 ): Promise<void> {
   await client.post(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-restore`,
     payload,
-    { params: withS3AccountParam(undefined, accountId) }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
+    }
   );
 }
 
@@ -808,10 +863,12 @@ export async function copyObject(
   accountId: S3AccountSelector,
   bucketName: string,
   payload: CopyObjectPayload,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BrowserRequestOptions,
 ): Promise<void> {
   await client.post(`/browser/buckets/${encodeURIComponent(bucketName)}/copy`, payload, {
     params: withS3AccountParam(undefined, accountId),
+    headers: buildBrowserWorkspaceHeaders(options),
     signal,
   });
 }
@@ -835,12 +892,17 @@ export async function cleanupObjectVersions(
   accountId: S3AccountSelector,
   bucketName: string,
   payload: CleanupObjectVersionsPayload,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BrowserRequestOptions,
 ): Promise<CleanupObjectVersionsResponse> {
   const { data } = await client.post<CleanupObjectVersionsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/versions/cleanup`,
     payload,
-    { params: withS3AccountParam(undefined, accountId), signal }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
+      signal,
+    }
   );
   return data;
 }
@@ -935,7 +997,12 @@ export async function initiateMultipartUpload(
 export async function listMultipartUploads(
   accountId: S3AccountSelector,
   bucketName: string,
-  options?: { prefix?: string; keyMarker?: string | null; uploadIdMarker?: string | null; maxUploads?: number }
+  options?: {
+    prefix?: string;
+    keyMarker?: string | null;
+    uploadIdMarker?: string | null;
+    maxUploads?: number;
+  } & BrowserRequestOptions
 ): Promise<ListMultipartUploadsResponse> {
   const params = withS3AccountParam(
     {
@@ -948,7 +1015,7 @@ export async function listMultipartUploads(
   );
   const { data } = await client.get<ListMultipartUploadsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart`,
-    { params }
+    { params, headers: buildBrowserWorkspaceHeaders(options) }
   );
   return data;
 }

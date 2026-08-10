@@ -310,6 +310,7 @@ describe("UsersPage modal tabs", () => {
           account_links: [
             {
               account_id: 1,
+              allow_manager_browser_data_access: false,
               role: "account_administrator",
             },
           ],
@@ -317,6 +318,61 @@ describe("UsersPage modal tabs", () => {
       );
     });
     expect(assignUserToS3AccountMock).not.toHaveBeenCalled();
+  });
+
+  it("protects a root account link while allowing its advanced data access setting", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 12,
+          email: "root.link@example.com",
+          role: "ui_user",
+          accounts: [1],
+          account_links: [
+            {
+              account_id: 1,
+              role: "account_administrator",
+              is_root: true,
+              allow_manager_browser_data_access: false,
+            },
+          ],
+          s3_users: [],
+          s3_connections: [],
+          group_ids: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
+
+    expect(screen.getByRole("combobox", { name: "Access role for acc-1" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow Manager Browser data access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateUserMock).toHaveBeenCalledWith(
+        12,
+        expect.objectContaining({
+          account_links: [
+            {
+              account_id: 1,
+              allow_manager_browser_data_access: true,
+              role: "account_administrator",
+            },
+          ],
+        })
+      );
+    });
   });
 
   it("keeps associations when switching General/Associations and submits linked payload", async () => {
@@ -357,11 +413,22 @@ describe("UsersPage modal tabs", () => {
       expect(createUserMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, "account_administrator");
     expect(updateUserMock).toHaveBeenCalledWith(
       100,
       expect.objectContaining({
-        s3_user_ids: [11],
+        account_links: [
+          {
+            account_id: 1,
+            allow_manager_browser_data_access: false,
+            role: "account_administrator",
+          },
+        ],
+        s3_user_links: [
+          {
+            s3_user_id: 11,
+            allow_manager_browser_data_access: false,
+          },
+        ],
         s3_connection_ids: [21],
       })
     );
@@ -756,8 +823,18 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
-      expect(assignUserToS3AccountMock).toHaveBeenCalled();
+      expect(updateUserMock).toHaveBeenCalledWith(
+        100,
+        expect.objectContaining({
+          account_links: [
+            {
+              account_id: 1,
+              allow_manager_browser_data_access: false,
+              role: "portal_manager",
+            },
+          ],
+        })
+      );
     });
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, "portal_manager");
   });
 });

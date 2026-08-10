@@ -7,8 +7,8 @@ import {
   CreateUserPayload,
   UpdateUserPayload,
   User,
+  type S3UserMembership,
   type UiRole,
-  assignUserToS3Account,
   createUser,
   deleteUser,
   listUsers,
@@ -88,6 +88,7 @@ import {
   adminAssociationTableHeaderRightClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
+import AdminAssociationAdvancedSettings from "./AdminAssociationAdvancedSettings";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
 type UserModalTab = "general" | "associations" | "groups" | "access" | "connections" | "browser" | "manager";
@@ -96,6 +97,8 @@ type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 type AccountSelection = {
   id: number;
   role: AccountAccessRole;
+  allow_manager_browser_data_access?: boolean;
+  is_root?: boolean;
 };
 
 type Option = {
@@ -195,8 +198,8 @@ type AssociationsTabsProps = {
     toggleSelection: (id: number) => void;
   };
   s3Users: {
-    selected: number[];
-    setSelected: Dispatch<SetStateAction<number[]>>;
+    selected: S3UserMembership[];
+    setSelected: Dispatch<SetStateAction<S3UserMembership[]>>;
     labelById: Map<number, string>;
     available: Option[];
     visible: Option[];
@@ -292,6 +295,7 @@ const AssociationsTabs = ({
                                   size="compact"
                                   fieldClassName="w-52"
                                   value={normalizeAccountAccessRole(entry.role)}
+                                  disabled={Boolean(entry.is_root)}
                                   onChange={(e) =>
                                     accounts.setSelected((prev) =>
                                       prev.map((item) =>
@@ -306,12 +310,27 @@ const AssociationsTabs = ({
                                 </UiSelect>
                               </td>
                               <td className={adminAssociationTableActionCellClass}>
+                                <AdminAssociationAdvancedSettings
+                                  targetLabel={label}
+                                  associationKind="account"
+                                  allowManagerBrowserDataAccess={Boolean(entry.allow_manager_browser_data_access)}
+                                  onApply={(allowed) =>
+                                    accounts.setSelected((prev) =>
+                                      prev.map((item) =>
+                                        item.id === entry.id
+                                          ? { ...item, allow_manager_browser_data_access: allowed }
+                                          : item
+                                      )
+                                    )
+                                  }
+                                />
                                 <button
                                   type="button"
                                   onClick={() =>
                                     accounts.setSelected((prev) => prev.filter((acc) => acc.id !== entry.id))
                                   }
                                   className={tableDeleteActionClasses}
+                                  disabled={Boolean(entry.is_root)}
                                 >
                                   Remove
                                 </button>
@@ -346,7 +365,11 @@ const AssociationsTabs = ({
                         const role = accounts.portalRoleChoice[accountId] ?? (
                           showPortalRole ? "portal_user" : "account_administrator"
                         );
-                        return { id: accountId, role };
+                        return {
+                          id: accountId,
+                          role,
+                          allow_manager_browser_data_access: false,
+                        };
                       });
                       accounts.setSelected((prev) => [...prev, ...next]);
                       accounts.setSelections([]);
@@ -431,15 +454,29 @@ const AssociationsTabs = ({
                           </td>
                         </tr>
                       ) : (
-                        s3Users.selected.map((id) => (
-                          <tr key={id}>
+                        s3Users.selected.map((entry) => (
+                          <tr key={entry.s3_user_id}>
                             <td className={adminAssociationTableLabelCellClass}>
-                              {s3Users.labelById.get(id) ?? `User #${id}`}
+                              {s3Users.labelById.get(entry.s3_user_id) ?? `User #${entry.s3_user_id}`}
                             </td>
                             <td className={adminAssociationTableActionCellClass}>
+                              <AdminAssociationAdvancedSettings
+                                targetLabel={s3Users.labelById.get(entry.s3_user_id) ?? `User #${entry.s3_user_id}`}
+                                associationKind="rgw_user"
+                                allowManagerBrowserDataAccess={Boolean(entry.allow_manager_browser_data_access)}
+                                onApply={(allowed) =>
+                                  s3Users.setSelected((prev) =>
+                                    prev.map((item) =>
+                                      item.s3_user_id === entry.s3_user_id
+                                        ? { ...item, allow_manager_browser_data_access: allowed }
+                                        : item
+                                    )
+                                  )
+                                }
+                              />
                               <button
                                 type="button"
-                                onClick={() => s3Users.setSelected((prev) => prev.filter((s3Id) => s3Id !== id))}
+                                onClick={() => s3Users.setSelected((prev) => prev.filter((item) => item.s3_user_id !== entry.s3_user_id))}
                                 className={tableDeleteActionClasses}
                               >
                                 Remove
@@ -470,7 +507,13 @@ const AssociationsTabs = ({
                     }}
                     onAdd={() => {
                       if (s3Users.selections.length === 0) return;
-                      s3Users.setSelected((prev) => [...prev, ...s3Users.selections]);
+                      s3Users.setSelected((prev) => [
+                        ...prev,
+                        ...s3Users.selections.map((s3UserId) => ({
+                          s3_user_id: s3UserId,
+                          allow_manager_browser_data_access: false,
+                        })),
+                      ]);
                       s3Users.setSelections([]);
                       s3Users.setSearch("");
                       s3Users.setShowPanel(false);
@@ -677,7 +720,7 @@ export default function UsersPage() {
     })
   );
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<AccountSelection[]>([]);
-  const [createSelectedS3Users, setCreateSelectedS3Users] = useState<number[]>([]);
+  const [createSelectedS3Users, setCreateSelectedS3Users] = useState<S3UserMembership[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
   const [createSelectedGroups, setCreateSelectedGroups] = useState<number[]>([]);
   const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
@@ -716,7 +759,7 @@ export default function UsersPage() {
     })
   );
   const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<AccountSelection[]>([]);
-  const [editSelectedS3Users, setEditSelectedS3Users] = useState<number[]>([]);
+  const [editSelectedS3Users, setEditSelectedS3Users] = useState<S3UserMembership[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
   const [editSelectedGroups, setEditSelectedGroups] = useState<number[]>([]);
   const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
@@ -806,7 +849,7 @@ export default function UsersPage() {
   const availableCreateS3Users = useMemo(() => {
     const query = createS3Search.trim().toLowerCase();
     return s3UserOptions.filter(
-      (opt) => !createSelectedS3Users.includes(opt.id) && (!query || opt.label.toLowerCase().includes(query))
+      (opt) => !createSelectedS3Users.some((link) => link.s3_user_id === opt.id) && (!query || opt.label.toLowerCase().includes(query))
     );
   }, [s3UserOptions, createSelectedS3Users, createS3Search]);
   const availableCreateS3Connections = useMemo(() => {
@@ -819,7 +862,7 @@ export default function UsersPage() {
   const availableEditS3Users = useMemo(() => {
     const query = editS3Search.trim().toLowerCase();
     return s3UserOptions.filter(
-      (opt) => !editSelectedS3Users.includes(opt.id) && (!query || opt.label.toLowerCase().includes(query))
+      (opt) => !editSelectedS3Users.some((link) => link.s3_user_id === opt.id) && (!query || opt.label.toLowerCase().includes(query))
     );
   }, [s3UserOptions, editSelectedS3Users, editS3Search]);
   const availableEditS3Connections = useMemo(() => {
@@ -1461,21 +1504,16 @@ export default function UsersPage() {
     };
     try {
       const created = await createUser(payload);
-      if (created?.id && createSelectedS3Accounts.length > 0) {
-        await Promise.all(
-          createSelectedS3Accounts.map((entry) =>
-            assignUserToS3Account(
-              created.id,
-              Number(entry.id),
-              normalizeAccountAccessRole(entry.role)
-            )
-          )
-        );
-      }
       if (created?.id) {
-        const associationsPayload: UpdateUserPayload = {};
+        const associationsPayload: UpdateUserPayload = {
+          account_links: createSelectedS3Accounts.map((entry) => ({
+            account_id: Number(entry.id),
+            role: normalizeAccountAccessRole(entry.role),
+            allow_manager_browser_data_access: Boolean(entry.allow_manager_browser_data_access),
+          })),
+        };
         if (createSelectedS3Users.length > 0) {
-          associationsPayload.s3_user_ids = createSelectedS3Users;
+          associationsPayload.s3_user_links = createSelectedS3Users;
         }
         if (createSelectedS3Connections.length > 0) {
           associationsPayload.s3_connection_ids = createSelectedS3Connections;
@@ -1530,9 +1568,24 @@ export default function UsersPage() {
       user.accounts?.map((id) => ({
         id: Number(id),
         role: accountRoles.get(Number(id)) ?? "portal_user",
+        allow_manager_browser_data_access: Boolean(
+          user.account_links?.find((link) => Number(link.account_id) === Number(id))
+            ?.allow_manager_browser_data_access
+        ),
+        is_root: Boolean(
+          user.account_links?.find((link) => Number(link.account_id) === Number(id))?.is_root
+        ),
       })) ?? [];
     setEditSelectedS3Accounts(selectedAccounts);
-    const nextSelectedS3Users = user.s3_users ? user.s3_users.map((id) => Number(id)) : [];
+    const nextSelectedS3Users = user.s3_user_links?.length
+      ? user.s3_user_links.map((link) => ({
+          s3_user_id: Number(link.s3_user_id),
+          allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
+        }))
+      : (user.s3_users ?? []).map((id) => ({
+          s3_user_id: Number(id),
+          allow_manager_browser_data_access: false,
+        }));
     const nextSelectedS3Connections = user.s3_connections ? user.s3_connections.map((id) => Number(id)) : [];
     const nextSelectedGroups =
       user.group_ids && user.group_ids.length > 0
@@ -1648,9 +1701,10 @@ export default function UsersPage() {
       payload.account_links = editSelectedS3Accounts.map((entry) => ({
         account_id: Number(entry.id),
         role: normalizeAccountAccessRole(entry.role),
+        allow_manager_browser_data_access: Boolean(entry.allow_manager_browser_data_access),
       }));
       payload.group_ids = editSelectedGroups;
-      payload.s3_user_ids = editSelectedS3Users;
+      payload.s3_user_links = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
       const updatedUser = await updateUser(editingUser.id, payload);
       if (currentUserId !== null && currentUserId === editingUser.id && typeof window !== "undefined") {

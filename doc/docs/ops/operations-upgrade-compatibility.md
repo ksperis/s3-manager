@@ -429,6 +429,21 @@ every historical credential key still needed by the database. The migration
 stops when a stored Fernet token cannot be decrypted, rather than encrypting an
 unreadable token a second time. Its downgrade keeps credentials encrypted.
 
+## 2026-08 Manager Browser active context
+
+Migration `0103_manager_browser_data_access` adds the non-null
+`allow_manager_browser_data_access` flag to UI-user and UI-group associations
+with S3 Accounts and RGW users. The secure default is `false`; no existing
+association is enabled automatically.
+
+Deploy the backend and frontend together. The embedded `/manager/browser` now
+uses the active Manager `ctx` and sends `X-S3-Workspace: manager-browser` on all
+Browser API calls. An older frontend will not send that explicit surface, while
+an older backend cannot enforce the new per-association permission. After
+deployment, verify Account, RGW-user, owned private-connection, shared-
+connection, and immediate-revocation scenarios. Standalone `/browser`, Portal,
+and Ceph Admin Browser execution policies are unchanged.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

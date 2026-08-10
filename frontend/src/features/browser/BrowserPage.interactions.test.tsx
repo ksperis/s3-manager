@@ -4408,6 +4408,7 @@ describe("BrowserPage interactions", () => {
           move: false,
         },
         expect.any(AbortSignal),
+        undefined,
       );
     });
     expect(presignObjectMock).not.toHaveBeenCalled();
@@ -4442,6 +4443,7 @@ describe("BrowserPage interactions", () => {
         null,
         null,
         expect.any(AbortSignal),
+        undefined,
       );
       expect(presignObjectMock).toHaveBeenCalledWith(
         "acc-1",
@@ -5656,6 +5658,7 @@ describe("BrowserPage interactions", () => {
         "acc-1",
         "bucket-1",
         window.location.origin,
+        undefined,
       );
     });
     expect(

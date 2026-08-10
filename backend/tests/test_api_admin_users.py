@@ -142,6 +142,7 @@ def test_update_user_replaces_account_links_atomically(client: TestClient, db_se
                 {
                     "account_id": second_account.id,
                     "role": "account_administrator",
+                    "allow_manager_browser_data_access": True,
                 }
             ]
         },
@@ -154,9 +155,31 @@ def test_update_user_replaces_account_links_atomically(client: TestClient, db_se
         {
             "account_id": second_account.id,
             "role": "account_administrator",
+            "allow_manager_browser_data_access": True,
+            "is_root": False,
         }
     ]
     assert first_account.id not in payload["accounts"]
+
+
+def test_update_user_rejects_ambiguous_s3_user_link_contract(
+    client: TestClient,
+    seed_user_account,
+):
+    user, _ = seed_user_account
+    response = client.put(
+        f"/api/admin/users/{user.id}",
+        json={
+            "s3_user_ids": [99999],
+            "s3_user_links": [
+                {
+                    "s3_user_id": 99999,
+                    "allow_manager_browser_data_access": True,
+                }
+            ],
+        },
+    )
+    assert response.status_code == 422
 
 
 def test_admin_cannot_create_superadmin_or_grant_ceph_admin(client: TestClient):

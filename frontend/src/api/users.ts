@@ -11,6 +11,13 @@ export type UiRole = "ui_superadmin" | "ui_admin" | "ui_user" | "ui_none";
 export type AccountMembership = {
   account_id: number;
   role: AccountAccessRole;
+  allow_manager_browser_data_access?: boolean;
+  is_root?: boolean;
+};
+
+export type S3UserMembership = {
+  s3_user_id: number;
+  allow_manager_browser_data_access?: boolean;
 };
 
 export type EffectiveAccountMembership = AccountMembership & {
@@ -61,6 +68,7 @@ export type EffectiveUserAccess = {
   accounts: number[];
   account_links: EffectiveAccountMembership[];
   s3_users: number[];
+  manager_browser_s3_users?: number[];
   s3_user_details: { id: number; name: string }[];
   s3_connections: number[];
   s3_connection_details: {
@@ -92,6 +100,7 @@ export type User = {
   group_ids?: number[];
   group_details?: { id: number; name: string }[];
   s3_users?: number[];
+  s3_user_links?: S3UserMembership[];
   s3_user_details?: { id: number; name: string }[];
   s3_connections?: number[];
   s3_connection_details?: {
@@ -139,6 +148,7 @@ export type UpdateUserPayload = {
   browser_advanced_features_enabled?: boolean;
   is_active?: boolean;
   account_links?: AccountMembership[] | null;
+  s3_user_links?: S3UserMembership[] | null;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;
   group_ids?: number[] | null;
@@ -210,18 +220,5 @@ export async function uploadCurrentUserAvatar(file: File): Promise<User> {
 
 export async function deleteCurrentUserAvatar(): Promise<User> {
   const { data } = await client.delete<User>("/users/me/avatar");
-  return data;
-}
-
-
-export async function assignUserToS3Account(
-  userId: number,
-  accountId: number,
-  role: AccountAccessRole,
-): Promise<User> {
-  const { data } = await client.post<User>(`/admin/users/${userId}/assign-account`, {
-    account_id: accountId,
-    role,
-  });
   return data;
 }

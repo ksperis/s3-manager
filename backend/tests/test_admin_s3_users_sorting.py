@@ -169,12 +169,34 @@ def test_admin_s3_users_update_replaces_direct_group_links(client, db_session):
     s3_user = _seed_s3_user(db_session, name="group-edit-user", uid="uid-group-edit")
     old_group = UiGroup(name="Old User Group")
     new_group = UiGroup(name="New User Group")
-    db_session.add_all([old_group, new_group])
+    linked_user = User(
+        email="manager-browser-link@example.test",
+        hashed_password="x",
+        role=UserRole.UI_USER.value,
+        is_active=True,
+    )
+    db_session.add_all([old_group, new_group, linked_user])
     db_session.flush()
     db_session.add(UiGroupS3User(group_id=old_group.id, s3_user_id=s3_user.id))
     db_session.commit()
 
-    response = client.put(f"/api/admin/s3-users/{s3_user.id}", json={"group_ids": [new_group.id]})
+    response = client.put(
+        f"/api/admin/s3-users/{s3_user.id}",
+        json={
+            "user_links": [
+                {
+                    "user_id": linked_user.id,
+                    "allow_manager_browser_data_access": True,
+                }
+            ],
+            "group_links": [
+                {
+                    "group_id": new_group.id,
+                    "allow_manager_browser_data_access": True,
+                }
+            ],
+        },
+    )
     assert response.status_code == 200, response.text
     payload = response.json()
 
@@ -182,5 +204,31 @@ def test_admin_s3_users_update_replaces_direct_group_links(client, db_session):
     assert payload["group_details"][0]["id"] == new_group.id
     assert payload["group_details"][0]["name"] == "New User Group"
     assert payload["group_details"][0]["avatar"]["initials"] == "NG"
+    assert payload["user_links"][0]["user_id"] == linked_user.id
+    assert payload["user_links"][0]["allow_manager_browser_data_access"] is True
+    assert payload["group_links"][0]["group_id"] == new_group.id
+    assert payload["group_links"][0]["allow_manager_browser_data_access"] is True
     rows = db_session.query(UiGroupS3User).filter(UiGroupS3User.s3_user_id == s3_user.id).all()
     assert [row.group_id for row in rows] == [new_group.id]
+
+    compatible = client.put(
+        f"/api/admin/s3-users/{s3_user.id}",
+        json={"user_ids": [linked_user.id], "group_ids": [new_group.id]},
+    )
+    assert compatible.status_code == 200, compatible.text
+    assert compatible.json()["user_links"][0]["allow_manager_browser_data_access"] is True
+    assert compatible.json()["group_links"][0]["allow_manager_browser_data_access"] is True
+
+    ambiguous = client.put(
+        f"/api/admin/s3-users/{s3_user.id}",
+        json={
+            "user_ids": [linked_user.id],
+            "user_links": [
+                {
+                    "user_id": linked_user.id,
+                    "allow_manager_browser_data_access": False,
+                }
+            ],
+        },
+    )
+    assert ambiguous.status_code == 422

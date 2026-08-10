@@ -409,6 +409,7 @@ class S3AccountsService:
                 UserS3Account.account_id,
                 User,
                 UserS3Account.role,
+                UserS3Account.allow_manager_browser_data_access,
             )
             .join(User, User.id == UserS3Account.user_id)
             .filter(
@@ -421,7 +422,7 @@ class S3AccountsService:
         user_ids_by_account: dict[int, list[int]] = {}
         user_links_by_account: dict[int, list[AccountUserLink]] = {}
         avatar_service = UserAvatarService(self.db)
-        for account_id, user, role in rows:
+        for account_id, user, role, allow_manager_browser_data_access in rows:
             normalized_account_id = int(account_id)
             normalized_user_id = int(user.id)
             user_ids_by_account.setdefault(normalized_account_id, []).append(normalized_user_id)
@@ -429,6 +430,9 @@ class S3AccountsService:
                 AccountUserLink(
                     user_id=normalized_user_id,
                     role=role,
+                    allow_manager_browser_data_access=bool(
+                        allow_manager_browser_data_access
+                    ),
                     user_email=user.email,
                     user_full_name=user.display_name or user.full_name,
                     user_avatar=avatar_service.descriptor(user),
@@ -447,6 +451,7 @@ class S3AccountsService:
                 UiGroupS3Account.account_id,
                 UiGroup,
                 UiGroupS3Account.role,
+                UiGroupS3Account.allow_manager_browser_data_access,
             )
             .join(UiGroup, UiGroup.id == UiGroupS3Account.group_id)
             .filter(UiGroupS3Account.account_id.in_(account_ids))
@@ -456,7 +461,7 @@ class S3AccountsService:
         group_ids_by_account: dict[int, list[int]] = {}
         group_links_by_account: dict[int, list[AccountGroupLink]] = {}
         avatar_service = UiGroupAvatarService(self.db)
-        for account_id, group, role in rows:
+        for account_id, group, role, allow_manager_browser_data_access in rows:
             normalized_account_id = int(account_id)
             normalized_group_id = int(group.id)
             group_ids_by_account.setdefault(normalized_account_id, []).append(normalized_group_id)
@@ -466,6 +471,9 @@ class S3AccountsService:
                     group_name=group.name,
                     group_avatar=avatar_service.descriptor(group),
                     role=role,
+                    allow_manager_browser_data_access=bool(
+                        allow_manager_browser_data_access
+                    ),
                 )
             )
         return group_ids_by_account, group_links_by_account
@@ -931,8 +939,14 @@ class S3AccountsService:
                         account_id=account.id,
                         is_root=False,
                         role=role,
+                        allow_manager_browser_data_access=bool(
+                            link.allow_manager_browser_data_access
+                        ),
                     )
                 db_link.role = role
+                db_link.allow_manager_browser_data_access = bool(
+                    link.allow_manager_browser_data_access
+                )
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 
@@ -944,6 +958,9 @@ class S3AccountsService:
                     desired_links[group_id] = AccountGroupLink(
                         group_id=group_id,
                         role=require_account_role(link.role),
+                        allow_manager_browser_data_access=bool(
+                            link.allow_manager_browser_data_access
+                        ),
                     )
             elif payload.group_ids is not None:
                 if payload.group_ids:
@@ -964,8 +981,18 @@ class S3AccountsService:
             for group_id, link in desired_links.items():
                 db_link = existing_by_group.get(group_id)
                 if db_link is None:
-                    db_link = UiGroupS3Account(group_id=group_id, account_id=account.id, role=link.role)
+                    db_link = UiGroupS3Account(
+                        group_id=group_id,
+                        account_id=account.id,
+                        role=link.role,
+                        allow_manager_browser_data_access=bool(
+                            link.allow_manager_browser_data_access
+                        ),
+                    )
                 db_link.role = require_account_role(link.role)
+                db_link.allow_manager_browser_data_access = bool(
+                    link.allow_manager_browser_data_access
+                )
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 

@@ -98,6 +98,7 @@ from app.routers.dependencies import (
     forbid_browser_bucket_quota_management,
     get_optional_sse_customer_context,
     require_portal_browser_basic_route,
+    require_browser_workspace_surface,
 )
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
@@ -112,7 +113,10 @@ from app.utils.size_units import size_to_bytes
 router = APIRouter(
     prefix="/browser",
     tags=["browser"],
-    dependencies=[Depends(require_portal_browser_basic_route)],
+    dependencies=[
+        Depends(require_portal_browser_basic_route),
+        Depends(require_browser_workspace_surface),
+    ],
 )
 
 

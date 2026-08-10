@@ -17,8 +17,10 @@ export type S3User = {
   created_at?: string | null;
   user_ids: number[];
   user_details?: UserSummary[];
+  user_links?: S3UserUserLink[];
   group_ids?: number[];
   group_details?: { id: number; name: string; avatar?: UiGroupAvatarDescriptor | null }[];
+  group_links?: S3UserGroupLink[];
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
   storage_endpoint_id: number;
@@ -28,6 +30,20 @@ export type S3User = {
   allow_bucket_quota_management?: boolean;
   allow_access_key_management?: boolean;
   allow_managed_private_connection_provisioning?: boolean;
+};
+
+export type S3UserUserLink = {
+  user_id: number;
+  user_email?: string | null;
+  user_full_name?: string | null;
+  user_display_name?: string | null;
+  allow_manager_browser_data_access?: boolean;
+};
+
+export type S3UserGroupLink = {
+  group_id: number;
+  group_name?: string | null;
+  allow_manager_browser_data_access?: boolean;
 };
 
 export type S3UserSummary = {
@@ -68,7 +84,9 @@ export type UpdateS3UserPayload = {
   name?: string | null;
   email?: string | null;
   user_ids?: number[] | null;
+  user_links?: S3UserUserLink[] | null;
   group_ids?: number[] | null;
+  group_links?: S3UserGroupLink[] | null;
   quota_max_size_gb?: number | null;
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;

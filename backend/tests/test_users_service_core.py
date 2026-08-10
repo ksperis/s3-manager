@@ -255,7 +255,12 @@ def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_s
                 {
                     "account_id": added_account.id,
                     "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                }
+                },
+                {
+                    "account_id": root_account.id,
+                    "role": AccountRole.PORTAL_USER.value,
+                    "allow_manager_browser_data_access": True,
+                },
             ]
         ),
     )
@@ -268,7 +273,10 @@ def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_s
     )
     assert updated.role == UserRole.UI_USER.value
     assert {link.account_id for link in links} == {root_account.id, added_account.id}
-    assert next(link for link in links if link.account_id == root_account.id).is_root is True
+    root_link = next(link for link in links if link.account_id == root_account.id)
+    assert root_link.is_root is True
+    assert root_link.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert root_link.allow_manager_browser_data_access is True
     added_link = next(link for link in links if link.account_id == added_account.id)
     assert added_link.is_root is False
     assert added_link.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
@@ -377,7 +385,7 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
         account_root=False,
         role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
     )
-    service._set_s3_user_links(user, [s3_user.id])
+    service._set_s3_user_ids(user, [s3_user.id])
     service._set_s3_connection_links(user, [shared_conn.id])
     db_session.commit()
 

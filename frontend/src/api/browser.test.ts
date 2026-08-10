@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const clientMock = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  put: vi.fn(),
 }));
 
 vi.mock("./client", () => ({
@@ -12,9 +13,12 @@ vi.mock("./client", () => ({
 
 import {
   getBucketVersioning,
+  fetchObjectMetadata,
+  getStsCredentials,
   listBrowserObjects,
   listObjectVersions,
   proxyUpload,
+  updateObjectTags,
 } from "./browser";
 
 describe("browser api", () => {
@@ -31,6 +35,8 @@ describe("browser api", () => {
     });
     clientMock.post.mockReset();
     clientMock.post.mockResolvedValue({ data: undefined });
+    clientMock.put.mockReset();
+    clientMock.put.mockResolvedValue({ data: { key: "demo.txt", tags: [] } });
   });
 
   it("passes force_refresh when listing objects with an explicit refresh", async () => {
@@ -110,4 +116,38 @@ describe("browser api", () => {
       expect(form.get("content_type")).toBe(expectedContentType);
     },
   );
+
+  it("sends the explicit Manager Browser surface on simple and advanced calls", async () => {
+    clientMock.get.mockResolvedValue({ data: {} });
+
+    await getBucketVersioning("12", "bucket-a", { workspaceSurface: "manager" });
+    await getStsCredentials("12", { workspaceSurface: "manager" });
+    await fetchObjectMetadata(
+      "12",
+      "bucket-a",
+      "demo.txt",
+      null,
+      null,
+      undefined,
+      { workspaceSurface: "manager" },
+    );
+    await updateObjectTags(
+      "12",
+      "bucket-a",
+      { key: "demo.txt", tags: [] },
+      undefined,
+      { workspaceSurface: "manager" },
+    );
+
+    for (const call of clientMock.get.mock.calls) {
+      expect(call[1]).toEqual(
+        expect.objectContaining({ headers: { "X-S3-Workspace": "manager-browser" } }),
+      );
+    }
+    expect(clientMock.put).toHaveBeenCalledWith(
+      "/browser/buckets/bucket-a/object-tags",
+      { key: "demo.txt", tags: [] },
+      expect.objectContaining({ headers: { "X-S3-Workspace": "manager-browser" } }),
+    );
+  });
 });

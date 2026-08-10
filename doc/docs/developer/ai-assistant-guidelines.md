@@ -211,9 +211,13 @@ flows unless the pathway is explicit, authorized, and audited.
 - Standard Browser accepts active, unexpired owned private connections with
   Browser access and explicit `portal_account` contexts enabled by the
   effective project Portal setting. Portal contexts must keep the Portal
-  profile and personal IAM identity. Embedded Manager Browser remains limited
-  to private connections. Reject generic Accounts, RGW users, shared
-  connections, and forged catalogue IDs before resolving credentials.
+  profile and personal IAM identity. Embedded Manager Browser reuses the active
+  Manager `ctx` and must send `X-S3-Workspace: manager-browser` on every data-
+  plane request. Accounts require `account_administrator` and
+  `allow_manager_browser_data_access = true` on the same association; RGW users
+  aggregate the flag across direct and group links; private connections require
+  both Manager and Browser access. Shared connections and forged selections are
+  rejected before credentials are resolved.
 - Portal, direct S3 sessions, and Ceph Admin Browser remain explicit separate
   authorization branches. Portal always executes with the user's personal IAM
   identity, including when an account administrator projects to Portal manager.

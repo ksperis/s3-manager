@@ -72,6 +72,12 @@ class UiGroupS3Account(Base):
     group_id = Column(Integer, ForeignKey("ui_groups.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
     role = Column(String, nullable=False)
+    allow_manager_browser_data_access = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -89,6 +95,12 @@ class UiGroupS3User(Base):
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey("ui_groups.id"), nullable=False)
     s3_user_id = Column(Integer, ForeignKey("s3_users.id"), nullable=False)
+    allow_manager_browser_data_access = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
 
     group = relationship("UiGroup", back_populates="s3_user_links")
     s3_user = relationship("S3User")

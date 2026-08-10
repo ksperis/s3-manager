@@ -161,6 +161,20 @@ describe("ManagerLayout", () => {
     localStorage.clear();
   });
 
+  it("hides embedded Browser navigation unless the active context is explicitly enabled", () => {
+    setStoredManagerUser();
+    useS3AccountContextMock.mockReturnValue(buildContext({ managerBrowserEnabled: false }));
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    expect(capturedNavSections.flatMap((section) => section.links).map((link) => link.label)).not.toContain("Browser");
+  });
+
   it("shows Ceph section above Tools when manager_ceph_keys_enabled is true", () => {
     setStoredManagerUser();
     useS3AccountContextMock.mockReturnValue(buildContext({ managerCephKeysEnabled: true }));

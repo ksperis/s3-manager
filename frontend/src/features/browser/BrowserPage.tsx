@@ -625,7 +625,7 @@ export default function BrowserPage({
   const canCreateRoutedPublicLink = Boolean(onCreatePublicLinkForObject);
   const browserRequestOptions = useMemo<BrowserRequestOptions | undefined>(
     () =>
-      workspaceSurface === "portal"
+      workspaceSurface === "portal" || workspaceSurface === "manager"
         ? { workspaceSurface }
         : undefined,
     [workspaceSurface],
@@ -1925,7 +1925,7 @@ export default function BrowserPage({
       if (stsRefreshRef.current) {
         return stsRefreshRef.current;
       }
-      const request = getStsCredentials(accountIdForApi)
+      const request = getStsCredentials(accountIdForApi, browserRequestOptions)
         .then((creds) => {
           setStsCredentials(creds);
           setStsCredentialsError(null);
@@ -1944,7 +1944,13 @@ export default function BrowserPage({
       stsRefreshRef.current = request;
       return request;
     },
-    [accountIdForApi, hasS3AccountContext, stsEnabled, stsStatus?.available],
+    [
+      accountIdForApi,
+      browserRequestOptions,
+      hasS3AccountContext,
+      stsEnabled,
+      stsStatus?.available,
+    ],
   );
   const stsAvailable = Boolean(stsEnabled && stsStatus?.available);
   const useStsPresigner = shouldUseStsPresigner({ stsAvailable, sseActive });
@@ -3372,6 +3378,7 @@ export default function BrowserPage({
           keyMarker: resolvedKeyMarker ?? undefined,
           versionIdMarker: resolvedVersionIdMarker ?? undefined,
           maxKeys: VERSIONS_PAGE_SIZE,
+          requestOptions: browserRequestOptions,
         });
         const mergedVersions = opts?.append
           ? [...prefixVersionsRef.current, ...data.versions]
@@ -3408,7 +3415,14 @@ export default function BrowserPage({
         setPrefixVersionsLoading(false);
       }
     },
-    [accountIdForApi, bucketName, hasS3AccountContext, isVersioningEnabled, normalizedPrefix],
+    [
+      accountIdForApi,
+      browserRequestOptions,
+      bucketName,
+      hasS3AccountContext,
+      isVersioningEnabled,
+      normalizedPrefix,
+    ],
   );
 
   const loadObjectVersions = useCallback(
@@ -3443,6 +3457,7 @@ export default function BrowserPage({
           keyMarker: resolvedKeyMarker ?? undefined,
           versionIdMarker: resolvedVersionIdMarker ?? undefined,
           maxKeys: VERSIONS_PAGE_SIZE,
+          requestOptions: browserRequestOptions,
         });
         if (objectVersionsTargetKeyRef.current !== targetKey) {
           return;
@@ -3487,7 +3502,13 @@ export default function BrowserPage({
         }
       }
     },
-    [accountIdForApi, bucketName, hasS3AccountContext, isVersioningEnabled],
+    [
+      accountIdForApi,
+      browserRequestOptions,
+      bucketName,
+      hasS3AccountContext,
+      isVersioningEnabled,
+    ],
   );
 
   useLayoutEffect(() => {
@@ -4007,7 +4028,7 @@ export default function BrowserPage({
       return;
     }
     let isMounted = true;
-    getStsStatus(accountIdForApi)
+    getStsStatus(accountIdForApi, browserRequestOptions)
       .then((status) => {
         if (!isMounted) return;
         setStsStatus(status);
@@ -4022,7 +4043,7 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, accessMode, hasS3AccountContext, stsEnabled]);
+  }, [accountIdForApi, accessMode, browserRequestOptions, hasS3AccountContext, stsEnabled]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !stsEnabled || !stsStatus?.available) {
@@ -5735,6 +5756,7 @@ export default function BrowserPage({
           ? (options?.uploadIdMarker ?? undefined)
           : undefined,
         maxUploads: MULTIPART_UPLOADS_PAGE_SIZE,
+        ...browserRequestOptions,
       });
       const baseUploads = append ? multipartUploads : [];
       const knownIds = new Set(
@@ -5973,6 +5995,7 @@ export default function BrowserPage({
     try {
       await createBrowserBucket(accountIdForApi, bucketNameInput, {
         versioning: createBucketVersioning,
+        ...browserRequestOptions,
       });
       let corsApplied = false;
       if (uiOrigin) {
@@ -5981,6 +6004,7 @@ export default function BrowserPage({
             accountIdForApi,
             bucketNameInput,
             uiOrigin,
+            browserRequestOptions,
           );
           corsApplied = status.enabled;
           if (bucketName === bucketNameInput) {
@@ -6140,6 +6164,7 @@ export default function BrowserPage({
           },
           {
             sseCustomerKeyBase64,
+            ...browserRequestOptions,
           },
         );
         if (
@@ -6216,6 +6241,7 @@ export default function BrowserPage({
     },
     [
       accountIdForApi,
+      browserRequestOptions,
       bucketName,
       hasS3AccountContext,
       lazyMetadataColumnsVisible,
@@ -6369,6 +6395,7 @@ export default function BrowserPage({
         keyMarker: keyMarker ?? undefined,
         versionIdMarker: versionIdMarker ?? undefined,
         maxKeys: VERSIONS_PAGE_SIZE,
+        requestOptions: browserRequestOptions,
       });
       versionsCount += data.versions.length;
       deleteMarkersCount += data.delete_markers.length;
@@ -6513,6 +6540,7 @@ export default function BrowserPage({
         accountIdForApi,
         bucketName,
         uiOrigin,
+        browserRequestOptions,
       );
       setCorsStatus(status);
       if (status.enabled) {
@@ -7488,6 +7516,8 @@ export default function BrowserPage({
     }
     if (workspaceSurface === "portal") {
       headers["X-S3-Workspace"] = "portal";
+    } else if (workspaceSurface === "manager") {
+      headers["X-S3-Workspace"] = "manager-browser";
     }
     Object.assign(headers, buildSseCustomerBackendHeaders(sseKeyBase64));
     return headers;
@@ -7612,7 +7642,12 @@ export default function BrowserPage({
       targetBucket: string,
     ): Promise<ClipboardTransferMode> => {
       try {
-        const status = await getBucketCorsStatus(selector, targetBucket, uiOrigin);
+        const status = await getBucketCorsStatus(
+          selector,
+          targetBucket,
+          uiOrigin,
+          browserRequestOptions,
+        );
         if (status.enabled) {
           return "direct";
         }
@@ -7631,7 +7666,7 @@ export default function BrowserPage({
         `Direct transfer is unavailable for ${targetBucket} and proxy transfers are disabled.`,
       );
     },
-    [proxyAllowed, uiOrigin],
+    [browserRequestOptions, proxyAllowed, uiOrigin],
   );
 
   const downloadObjectBlobForTransfer = useCallback(
@@ -8004,6 +8039,7 @@ export default function BrowserPage({
         keyMarker,
         versionIdMarker,
         maxKeys: 1000,
+        requestOptions: browserRequestOptions,
       });
       versions.push(...data.versions);
       deleteMarkers.push(...data.delete_markers);
@@ -8028,6 +8064,7 @@ export default function BrowserPage({
         keyMarker,
         versionIdMarker,
         maxKeys: 1000,
+        requestOptions: browserRequestOptions,
       });
       versions.push(...data.versions);
       deleteMarkers.push(...data.delete_markers);
@@ -9178,6 +9215,7 @@ export default function BrowserPage({
             bucketName,
             payload,
             controller?.signal,
+            browserRequestOptions,
           );
         }
         if (shouldApplyTags) {
@@ -9189,6 +9227,7 @@ export default function BrowserPage({
               tags: tagsPairs,
             },
             controller?.signal,
+            browserRequestOptions,
           );
         }
         if (shouldApplyAcl) {
@@ -9200,6 +9239,7 @@ export default function BrowserPage({
               acl: bulkAclValue,
             },
             controller?.signal,
+            browserRequestOptions,
           );
         }
         if (shouldApplyLegalHold) {
@@ -9211,6 +9251,7 @@ export default function BrowserPage({
               status: bulkLegalHoldStatus,
             },
             controller?.signal,
+            browserRequestOptions,
           );
         }
         if (shouldApplyRetention) {
@@ -9224,6 +9265,7 @@ export default function BrowserPage({
               bypass_governance: bulkRetentionBypass,
             },
             controller?.signal,
+            browserRequestOptions,
           );
         }
       };
@@ -9414,7 +9456,7 @@ export default function BrowserPage({
                 destination_key: item.key,
                 replace_metadata: false,
                 move: false,
-              }, controller?.signal);
+              }, controller?.signal, browserRequestOptions);
               restoredCount += 1;
             } catch {
               if (controller?.signal.aborted) {
@@ -9526,6 +9568,7 @@ export default function BrowserPage({
           delete_orphan_markers: cleanupDeleteOrphanMarkers,
         },
         controller.signal,
+        browserRequestOptions,
       );
       const summary = `Removed ${result.deleted_versions} version(s) and ${result.deleted_delete_markers} delete marker(s).`;
       setCleanupSummary(summary);
@@ -9794,6 +9837,7 @@ export default function BrowserPage({
                   move: isMove,
                 },
                 controller.signal,
+                browserRequestOptions,
               );
             } else {
               const sourceSseKeyBase64 = getSseCustomerKeyForScope(
@@ -9811,6 +9855,7 @@ export default function BrowserPage({
                 null,
                 sourceSseKeyBase64,
                 controller.signal,
+                browserRequestOptions,
               );
               await transferClipboardObjectBetweenContexts({
                 source: {
@@ -9847,6 +9892,7 @@ export default function BrowserPage({
                     null,
                     sseCustomerKeyBase64,
                     controller.signal,
+                    browserRequestOptions,
                   );
                   return { sizeBytes: metadata.size };
                 },
@@ -9922,6 +9968,7 @@ export default function BrowserPage({
     }
   }, [
     accountIdForApi,
+    browserRequestOptions,
     bucketName,
     cancelCopyDetails,
     clipboard,
@@ -10109,6 +10156,7 @@ export default function BrowserPage({
           move: false,
         },
         controller.signal,
+        browserRequestOptions,
       );
       setStatusMessage(`Restored version ${item.version_id}`);
       await refreshObjectListing(item.key);
@@ -14094,6 +14142,7 @@ export default function BrowserPage({
           onRestoreVersion={handleRestoreVersion}
           onDeleteVersion={handleDeleteVersion}
           readOnly={resolvedFunctionalProfile !== "advanced"}
+          requestOptions={browserRequestOptions}
         />
       )}
       {configBucketName && bucketConfigurationEnabled && (
@@ -14103,13 +14152,21 @@ export default function BrowserPage({
           maxWidthClass="max-w-7xl"
           maxBodyHeightClass="h-[88vh]"
         >
-          <S3AccountProvider scope={bucketConfigContextScope}>
+          {workspaceSurface === "manager" ? (
             <BucketDetailPage
               bucketNameOverride={configBucketName}
               embedded
               hideObjectsTab
             />
-          </S3AccountProvider>
+          ) : (
+            <S3AccountProvider scope={bucketConfigContextScope}>
+              <BucketDetailPage
+                bucketNameOverride={configBucketName}
+                embedded
+                hideObjectsTab
+              />
+            </S3AccountProvider>
+          )}
         </Modal>
       )}
       {showCreateBucketModal && (

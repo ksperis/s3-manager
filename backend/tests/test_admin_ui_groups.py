@@ -130,9 +130,15 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
                 {
                     "account_id": account.id,
                     "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    "allow_manager_browser_data_access": True,
                 }
             ],
-            "s3_user_ids": [s3_user.id],
+            "s3_user_links": [
+                {
+                    "s3_user_id": s3_user.id,
+                    "allow_manager_browser_data_access": True,
+                }
+            ],
             "s3_connection_ids": [shared_connection.id],
         },
     )
@@ -153,10 +159,23 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
     }
     assert payload["user_ids"] == [user.id]
     assert payload["accounts"] == [account.id]
+    assert payload["account_links"] == [
+        {
+            "account_id": account.id,
+            "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            "allow_manager_browser_data_access": True,
+        }
+    ]
     assert payload["account_details"] == [
         {"id": account.id, "name": "group-account", "rgw_account_id": "RGW-group-account"}
     ]
     assert payload["s3_users"] == [s3_user.id]
+    assert payload["s3_user_links"] == [
+        {
+            "s3_user_id": s3_user.id,
+            "allow_manager_browser_data_access": True,
+        }
+    ]
     assert payload["s3_user_details"] == [{"id": s3_user.id, "name": "group-s3-user"}]
     assert payload["s3_connections"] == [shared_connection.id]
     assert payload["s3_connection_details"] == [
@@ -165,6 +184,20 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
             "name": "group-connection",
         }
     ]
+
+    ambiguous_links = client.put(
+        f"/api/admin/groups/{payload['id']}",
+        json={
+            "s3_user_ids": [s3_user.id],
+            "s3_user_links": [
+                {
+                    "s3_user_id": s3_user.id,
+                    "allow_manager_browser_data_access": False,
+                }
+            ],
+        },
+    )
+    assert ambiguous_links.status_code == 422
 
     reject_resp = client.put(
         f"/api/admin/groups/{payload['id']}",

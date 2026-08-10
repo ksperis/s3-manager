@@ -66,6 +66,7 @@ import {
   adminAssociationTableControlCellClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
+import AdminAssociationAdvancedSettings from "./AdminAssociationAdvancedSettings";
 import {
   DEFAULT_MANAGER_TOOL_ACCESS,
   buildManagerToolDefinitions,
@@ -154,7 +155,7 @@ export default function GroupsPage() {
     manager_tool_access: DEFAULT_MANAGER_TOOL_ACCESS,
     user_ids: [],
     account_links: [],
-    s3_user_ids: [],
+    s3_user_links: [],
     s3_connection_ids: [],
   });
   const [memberSearch, setMemberSearch] = useState("");
@@ -304,7 +305,7 @@ export default function GroupsPage() {
       manager_tool_access: { ...DEFAULT_MANAGER_TOOL_ACCESS },
       user_ids: [],
       account_links: [],
-      s3_user_ids: [],
+      s3_user_links: [],
       s3_connection_ids: [],
     });
     setModalTab("general");
@@ -353,8 +354,17 @@ export default function GroupsPage() {
         group.account_links?.map((link) => ({
           account_id: Number(link.account_id),
           role: normalizeAccountAccessRole(link.role),
+          allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
         })) ?? [],
-      s3_user_ids: group.s3_users ?? [],
+      s3_user_links: group.s3_user_links?.length
+        ? group.s3_user_links.map((link) => ({
+            s3_user_id: Number(link.s3_user_id),
+            allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
+          }))
+        : (group.s3_users ?? []).map((s3UserId) => ({
+            s3_user_id: Number(s3UserId),
+            allow_manager_browser_data_access: false,
+          })),
       s3_connection_ids: group.s3_connections ?? [],
     });
     setModalTab("general");
@@ -414,8 +424,9 @@ export default function GroupsPage() {
         form.account_links?.map((link) => ({
           account_id: Number(link.account_id),
           role: normalizeAccountAccessRole(link.role),
+          allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
         })) ?? [],
-      s3_user_ids: form.s3_user_ids ?? [],
+      s3_user_links: form.s3_user_links ?? [],
       s3_connection_ids: form.s3_connection_ids ?? [],
     };
     try {
@@ -460,7 +471,7 @@ export default function GroupsPage() {
   };
 
   const selectedUserIds = new Set(form.user_ids ?? []);
-  const selectedS3UserIds = new Set(form.s3_user_ids ?? []);
+  const selectedS3UserIds = new Set((form.s3_user_links ?? []).map((link) => link.s3_user_id));
   const selectedConnectionIds = new Set(form.s3_connection_ids ?? []);
   const selectedAccountIds = new Set((form.account_links ?? []).map((link) => Number(link.account_id)));
   const userLabelById = new Map(users.map((user) => [user.id, user.email]));
@@ -612,6 +623,16 @@ export default function GroupsPage() {
                       </UiSelect>
                     </td>
                     <td className={adminAssociationTableActionCellClass}>
+                      <AdminAssociationAdvancedSettings
+                        targetLabel={accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}
+                        associationKind="account"
+                        allowManagerBrowserDataAccess={Boolean(link.allow_manager_browser_data_access)}
+                        onApply={(allowed) =>
+                          updateAccountSelection(accountId, {
+                            allow_manager_browser_data_access: allowed,
+                          })
+                        }
+                      />
                       <button
                         type="button"
                         className={tableDeleteActionClasses}
@@ -662,6 +683,7 @@ export default function GroupsPage() {
                               : showPortalRole
                                 ? "portal_user" as const
                                 : "account_administrator" as const,
+                            allow_manager_browser_data_access: false,
                           })),
                         ].sort((left, right) => Number(left.account_id) - Number(right.account_id)),
                       }));
@@ -723,19 +745,36 @@ export default function GroupsPage() {
               headers={[{ label: "RGW user" }, { label: "Actions", align: "right" }]}
               hasItems={selectedS3UserIds.size > 0}
               emptyLabel="No linked RGW users yet."
-              rows={(form.s3_user_ids ?? []).map((s3UserId) => (
-                <tr key={s3UserId}>
+              rows={(form.s3_user_links ?? []).map((link) => (
+                <tr key={link.s3_user_id}>
                   <td className={adminAssociationTableLabelCellClass}>
-                    {s3UserLabelById.get(s3UserId) ?? `RGW User #${s3UserId}`}
+                    {s3UserLabelById.get(link.s3_user_id) ?? `RGW User #${link.s3_user_id}`}
                   </td>
                   <td className={adminAssociationTableActionCellClass}>
+                    <AdminAssociationAdvancedSettings
+                      targetLabel={s3UserLabelById.get(link.s3_user_id) ?? `RGW User #${link.s3_user_id}`}
+                      associationKind="rgw_user"
+                      allowManagerBrowserDataAccess={Boolean(link.allow_manager_browser_data_access)}
+                      onApply={(allowed) =>
+                        setForm((current) => ({
+                          ...current,
+                          s3_user_links: (current.s3_user_links ?? []).map((item) =>
+                            item.s3_user_id === link.s3_user_id
+                              ? { ...item, allow_manager_browser_data_access: allowed }
+                              : item
+                          ),
+                        }))
+                      }
+                    />
                     <button
                       type="button"
                       className={tableDeleteActionClasses}
                       onClick={() =>
                         setForm((current) => ({
                           ...current,
-                          s3_user_ids: (current.s3_user_ids ?? []).filter((id) => id !== s3UserId),
+                          s3_user_links: (current.s3_user_links ?? []).filter(
+                            (item) => item.s3_user_id !== link.s3_user_id
+                          ),
                         }))
                       }
                     >
@@ -767,9 +806,13 @@ export default function GroupsPage() {
                     onAdd={() => {
                       setForm((current) => ({
                         ...current,
-                        s3_user_ids: [...new Set([...(current.s3_user_ids ?? []), ...s3UserSelections])].sort(
-                          (a, b) => a - b
-                        ),
+                        s3_user_links: [
+                          ...(current.s3_user_links ?? []),
+                          ...s3UserSelections.map((s3UserId) => ({
+                            s3_user_id: s3UserId,
+                            allow_manager_browser_data_access: false,
+                          })),
+                        ].sort((a, b) => a.s3_user_id - b.s3_user_id),
                       }));
                       setShowS3UserPicker(false);
                       setS3UserSelections([]);

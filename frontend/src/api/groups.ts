@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
-import type { AccountMembership, ManagerToolAccess } from "./users";
+import type { AccountMembership, ManagerToolAccess, S3UserMembership } from "./users";
 import type { UserAvatarDescriptor } from "./users";
 import type { PaginatedResponse } from "./types";
 
@@ -51,6 +51,7 @@ export type UiGroup = {
   account_details?: { id: number; name: string; rgw_account_id?: string | null }[];
   account_links?: AccountMembership[];
   s3_users?: number[];
+  s3_user_links?: S3UserMembership[];
   s3_user_details?: { id: number; name: string }[];
   s3_connections?: number[];
   s3_connection_details?: {
@@ -74,6 +75,7 @@ export type UiGroupPayload = {
   browser_advanced_features_enabled?: boolean;
   user_ids?: number[];
   account_links?: AccountMembership[];
+  s3_user_links?: S3UserMembership[];
   s3_user_ids?: number[];
   s3_connection_ids?: number[];
 };

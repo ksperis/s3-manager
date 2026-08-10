@@ -35,7 +35,8 @@ class ManagerContext(BaseModel):
     iam_identity: Optional[str] = None
     manager_stats_enabled: bool = False
     manager_stats_message: Optional[str] = None
-    manager_browser_enabled: bool = True
+    manager_browser_enabled: bool
+    manager_browser_message: Optional[str] = None
     manager_bucket_quota_enabled: bool = False
     manager_ceph_keys_enabled: bool = False
     manager_private_access_enabled: bool = False
@@ -103,14 +104,46 @@ def get_manager_context(
         access_mode = "s3_user"
 
     iam_identity: Optional[str] = None
-    manager_browser_enabled = True
-    if s3_connection_id is not None:
-        connection = (
-            db.query(S3Connection.id, S3Connection.access_browser)
-            .filter(S3Connection.id == s3_connection_id)
-            .first()
-        )
-        manager_browser_enabled = bool(connection.access_browser) if connection else False
+    settings = load_app_settings()
+    manager_browser_enabled = False
+    manager_browser_message: Optional[str] = None
+    if not settings.general.browser_enabled:
+        manager_browser_message = "Browser is disabled."
+    elif not settings.general.manager_enabled:
+        manager_browser_message = "Manager is disabled."
+    elif not settings.general.browser_manager_enabled:
+        manager_browser_message = "Manager Browser is disabled."
+    elif isinstance(actor, ManagerSessionPrincipal):
+        manager_browser_enabled = bool(actor.capabilities.access_browser)
+        if not manager_browser_enabled:
+            manager_browser_message = "Browser access is not allowed for this session."
+    else:
+        access_service = EffectiveAccessService(db)
+        resolved_access = access_service.resolve_user(actor)
+        if s3_connection_id is not None:
+            connection = db.query(S3Connection).filter(S3Connection.id == s3_connection_id).first()
+            manager_browser_enabled = bool(
+                connection
+                and access_service.manager_browser_connection_is_allowed(actor, connection)
+            )
+            if not manager_browser_enabled:
+                manager_browser_message = (
+                    "Manager Browser requires an owned private connection with both Manager and Browser access. Shared connections are not supported."
+                )
+        elif s3_user_id is not None:
+            manager_browser_enabled = resolved_access.can_browse_s3_user(int(s3_user_id))
+            if not manager_browser_enabled:
+                manager_browser_message = (
+                    "Manager Browser data access is not allowed for this RGW user."
+                )
+        else:
+            account_id = getattr(account, "id", None)
+            link = resolved_access.account_link_for(int(account_id)) if account_id else None
+            manager_browser_enabled = bool(link and link.manager_browser_allowed)
+            if not manager_browser_enabled:
+                manager_browser_message = (
+                    "Manager Browser requires account administrator and explicit data access on the same association."
+                )
     if access_mode == "admin":
         iam_identity = resolve_admin_uid(getattr(account, "rgw_account_id", None), getattr(account, "rgw_user_uid", None))
     elif access_mode == "session":
@@ -178,6 +211,7 @@ def get_manager_context(
         manager_stats_enabled=manager_stats_enabled,
         manager_stats_message=manager_stats_message,
         manager_browser_enabled=manager_browser_enabled,
+        manager_browser_message=manager_browser_message,
         manager_bucket_quota_enabled=manager_bucket_quota_enabled,
         manager_ceph_keys_enabled=manager_ceph_keys_enabled,
         manager_private_access_enabled=manager_private_access_enabled,

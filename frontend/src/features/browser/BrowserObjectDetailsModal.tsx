@@ -24,6 +24,7 @@ import {
   updateObjectRetention,
   updateObjectTags,
   type BrowserObjectVersion,
+  type BrowserRequestOptions,
   type ObjectLegalHold,
   type ObjectMetadata,
   type ObjectMetadataUpdate,
@@ -87,6 +88,7 @@ type BrowserObjectDetailsModalProps = {
   onRestoreVersion: (version: BrowserObjectVersion) => Promise<void> | void;
   onDeleteVersion: (version: BrowserObjectVersion) => Promise<void> | void;
   readOnly?: boolean;
+  requestOptions?: BrowserRequestOptions;
 };
 
 type MetadataDraft = {
@@ -125,6 +127,7 @@ export default function BrowserObjectDetailsModal({
   onRestoreVersion,
   onDeleteVersion,
   readOnly = false,
+  requestOptions,
 }: BrowserObjectDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<ObjectDetailsTabId>(initialTab);
   const [itemSnapshot, setItemSnapshot] = useState(item);
@@ -315,8 +318,10 @@ export default function BrowserObjectDetailsModal({
           itemSnapshot.key,
           null,
           sseCustomerKeyBase64,
+          undefined,
+          requestOptions,
         ),
-        getObjectTags(accountId, bucketName, itemSnapshot.key),
+        getObjectTags(accountId, bucketName, itemSnapshot.key, null, requestOptions),
       ]);
       setMetadata(nextMetadata);
       setTagsVersionId(nextTags.version_id ?? null);
@@ -360,6 +365,7 @@ export default function BrowserObjectDetailsModal({
         keyMarker: append ? options?.keyMarker ?? versionKeyMarker : null,
         versionIdMarker: append ? options?.versionIdMarker ?? versionIdMarker : null,
         maxKeys: undefined,
+        requestOptions,
       });
       setVersions((prev) =>
         append ? [...prev, ...(data.versions ?? [])] : data.versions ?? [],
@@ -407,8 +413,8 @@ export default function BrowserObjectDetailsModal({
     setObjectLockUnavailable(false);
     try {
       const [nextLegalHold, nextRetention] = await Promise.allSettled([
-        getObjectLegalHold(accountId, bucketName, itemSnapshot.key, versionId ?? null),
-        getObjectRetention(accountId, bucketName, itemSnapshot.key, versionId ?? null),
+        getObjectLegalHold(accountId, bucketName, itemSnapshot.key, versionId ?? null, requestOptions),
+        getObjectRetention(accountId, bucketName, itemSnapshot.key, versionId ?? null, requestOptions),
       ]);
 
       const legalHoldFailure =
@@ -492,6 +498,7 @@ export default function BrowserObjectDetailsModal({
             itemSnapshot.key,
             signal,
             sseCustomerKeyBase64,
+            requestOptions,
           )
         : await (async () => {
             const presign = await presignObjectRequest(
@@ -518,6 +525,7 @@ export default function BrowserObjectDetailsModal({
       itemSnapshot.key,
       itemSnapshot.name,
       presignObjectRequest,
+      requestOptions,
       sseCustomerKeyBase64,
       useProxyTransfers,
     ],
@@ -534,6 +542,7 @@ export default function BrowserObjectDetailsModal({
           null,
           sseCustomerKeyBase64,
           signal,
+          requestOptions,
         );
         return nextMetadata.content_type ?? null;
       } catch (error) {
@@ -547,6 +556,7 @@ export default function BrowserObjectDetailsModal({
       itemSnapshot.key,
       metadata?.content_type,
       metadataLoaded,
+      requestOptions,
       sseCustomerKeyBase64,
     ],
   );
@@ -656,7 +666,7 @@ export default function BrowserObjectDetailsModal({
         expires: toIsoString(metadataDraft.expires),
         metadata: normalizeObjectDetailPairs(metadataItems),
       };
-      await updateObjectMetadata(accountId, bucketName, payload);
+      await updateObjectMetadata(accountId, bucketName, payload, undefined, requestOptions);
       await loadProperties(true);
       await onRefreshBrowserObjects(itemSnapshot.key);
       pushStatus("Metadata updated.", "success");
@@ -678,7 +688,7 @@ export default function BrowserObjectDetailsModal({
         tags: tagsDraft
           .filter((tag) => tag.key.trim().length > 0)
           .map((tag) => ({ key: tag.key, value: tag.value })),
-      } satisfies ObjectTags);
+      } satisfies ObjectTags, undefined, requestOptions);
       await loadProperties(true);
       await onRefreshBrowserObjects(itemSnapshot.key);
       pushStatus("Tags updated.", "success");
@@ -698,7 +708,7 @@ export default function BrowserObjectDetailsModal({
         key: itemSnapshot.key,
         version_id: versionId ?? null,
         storage_class: storageClass,
-      });
+      }, undefined, requestOptions);
       setItemSnapshot((prev) => ({ ...prev, storageClass }));
       await loadProperties(true);
       await onRefreshBrowserObjects(itemSnapshot.key);
@@ -722,7 +732,7 @@ export default function BrowserObjectDetailsModal({
         key: itemSnapshot.key,
         acl: aclValue,
         version_id: versionId ?? null,
-      });
+      }, undefined, requestOptions);
       pushStatus("ACL updated.", "success");
     } catch (err) {
       pushStatus(extractApiError(err, "Unable to update ACL."), "error");
@@ -740,7 +750,7 @@ export default function BrowserObjectDetailsModal({
         key: itemSnapshot.key,
         status: legalHoldStatus,
         version_id: versionId ?? null,
-      } satisfies ObjectLegalHold);
+      } satisfies ObjectLegalHold, undefined, requestOptions);
       await loadProtection(true);
       pushStatus("Legal hold updated.", "success");
     } catch (err) {
@@ -771,7 +781,7 @@ export default function BrowserObjectDetailsModal({
         retain_until: retainUntil,
         bypass_governance: retentionBypass,
         version_id: versionId ?? null,
-      } satisfies ObjectRetention);
+      } satisfies ObjectRetention, undefined, requestOptions);
       await loadProtection(true);
       pushStatus("Retention updated.", "success");
     } catch (err) {
@@ -799,7 +809,7 @@ export default function BrowserObjectDetailsModal({
         days,
         tier: restoreTier,
         version_id: versionId ?? null,
-      } satisfies ObjectRestoreRequest);
+      } satisfies ObjectRestoreRequest, requestOptions);
       await loadProperties(true);
       await onRefreshBrowserObjects(itemSnapshot.key);
       pushStatus("Restore request sent.", "success");
@@ -838,6 +848,7 @@ export default function BrowserObjectDetailsModal({
           expires_in: seconds,
         },
         sseCustomerKeyBase64,
+        requestOptions,
       );
       setPresignUrl(presigned.url);
       setPresignMethod(presigned.method);

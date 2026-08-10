@@ -15,6 +15,7 @@ class _CanonicalAccountLink(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     role: CanonicalAccountRole
+    allow_manager_browser_data_access: bool = False
 
 
 class AccountUserLink(_CanonicalAccountLink):

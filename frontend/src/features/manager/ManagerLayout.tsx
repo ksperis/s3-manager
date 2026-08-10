@@ -104,7 +104,7 @@ function ManagerShell() {
         : !usageFeatureEnabled && !metricsFeatureEnabled
           ? "Metrics are unavailable for this endpoint capabilities."
           : undefined;
-  const managerBrowserAvailable = managerBrowserEnabled !== false;
+  const managerBrowserAvailable = managerBrowserEnabled === true;
   const modeVisual = getContextAccessModeVisual(accessMode);
   const identityLabel = iamIdentity
     ? accessMode === "connection"

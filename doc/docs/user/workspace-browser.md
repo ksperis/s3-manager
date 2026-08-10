@@ -43,8 +43,17 @@ Use **Browser** for direct bucket/object operations.
 
 ## Notes
 
-- `/manager/browser` uses its own standard Browser selector and the same private
-  connection policy. It is independent of the active Manager context.
+- `/manager/browser` uses the active Manager topbar selection and `ctx`; it has
+  no separate selector or remembered Browser context. Availability depends on
+  the selected context: an Account association must carry both **Account
+  administrator** and **Allow Manager Browser data access** on the same link;
+  an RGW-user association needs that data-access permission directly or through
+  a UI group; an owned private connection needs both Manager and Browser access.
+  Shared S3 connections are not available in the embedded Browser.
+- The embedded Browser header shows the effective S3 identity. When operations
+  use Account root/admin or an RGW user shared by association, the warning is
+  literal: provider RGW logs attribute operations to that S3 identity, not to
+  the signed-in UI user.
 - `/ceph-admin/browser` remains a separate endpoint-wide Ceph Admin surface.
 - `/browser` uses the Standard profile when advanced features are disabled.
   Enabling **Advanced Browser actions and Workbench** adds technical S3 actions
@@ -81,6 +90,12 @@ You can perform day-to-day object operations directly from the UI.
     Portal projects additionally require `portal_enabled`,
     `browser_portal_enabled`, and effective project setting
     `portal.browser_access_enabled`.
+
+    The embedded Manager Browser instead requires `manager_enabled` and
+    `browser_manager_enabled`, plus the active-context permission described
+    above. Administrators configure association permission from **Advanced
+    association settings**. New and migrated associations are disabled by
+    default.
 
 !!! warning
     If the S3 backend does not have data-plane logging enabled and retained,

@@ -75,6 +75,12 @@ class UserS3Account(Base):
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
     is_root = Column(Boolean, nullable=False, default=False, server_default="0")
     role = Column(String, nullable=False)
+    allow_manager_browser_data_access = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, nullable=False)
 

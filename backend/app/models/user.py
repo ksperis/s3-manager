@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from app.models.pagination import PaginatedResponse
 from app.utils.account_roles import CanonicalAccountRole
 
@@ -42,6 +42,18 @@ class AccountMembership(BaseModel):
 
     account_id: int
     role: CanonicalAccountRole
+    allow_manager_browser_data_access: bool = False
+
+
+class AccountMembershipDetail(AccountMembership):
+    is_root: bool = False
+
+
+class S3UserMembership(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    s3_user_id: int
+    allow_manager_browser_data_access: bool = False
 
 
 class EffectiveAccountGroupSource(BaseModel):
@@ -49,11 +61,13 @@ class EffectiveAccountGroupSource(BaseModel):
     group_name: str
     role: str
     determines_effective_role: bool = False
+    allow_manager_browser_data_access: bool = False
 
 
 class EffectiveAccountRoleProvenance(BaseModel):
     direct_role: Optional[str] = None
     direct_determines_effective_role: bool = False
+    direct_allow_manager_browser_data_access: bool = False
     groups: list[EffectiveAccountGroupSource] = Field(default_factory=list)
 
 
@@ -108,6 +122,7 @@ class UserAssociationDetail(BaseModel):
     full_name: Optional[str] = None
     display_name: Optional[str] = None
     avatar: Optional[UserAvatar] = None
+    allow_manager_browser_data_access: bool = False
 
 
 class User(BaseModel):
@@ -162,9 +177,16 @@ class UserUpdate(BaseModel):
     manager_tool_access: Optional[ManagerToolAccess] = None
     browser_advanced_features_enabled: Optional[bool] = None
     account_links: Optional[list[AccountMembership]] = None
+    s3_user_links: Optional[list[S3UserMembership]] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
     group_ids: Optional[list[int]] = None
+
+    @model_validator(mode="after")
+    def reject_ambiguous_s3_user_links(self) -> "UserUpdate":
+        if self.s3_user_links is not None and self.s3_user_ids is not None:
+            raise ValueError("s3_user_links and s3_user_ids cannot be provided together")
+        return self
 
 
 class UserSelfUpdate(BaseModel):
@@ -196,6 +218,7 @@ class EffectiveUserAccess(BaseModel):
     accounts: list[int] = []
     account_links: list[EffectiveAccountMembership] = []
     s3_users: list[int] = []
+    manager_browser_s3_users: list[int] = []
     s3_user_details: list[LinkedS3User] = []
     s3_connections: list[int] = []
     s3_connection_details: list[LinkedS3Connection] = []
@@ -223,10 +246,11 @@ class UserOut(BaseModel):
     quota_alerts_global_watch: bool = False
     ui_preferences: UiPreferences = Field(default_factory=UiPreferences)
     accounts: list[int] = []
-    account_links: list[AccountMembership] = []
+    account_links: list[AccountMembershipDetail] = []
     group_ids: list[int] = []
     group_details: list[LinkedUiGroup] = []
     s3_users: list[int] = []
+    s3_user_links: list[S3UserMembership] = []
     s3_user_details: list[LinkedS3User] = []
     s3_connections: list[int] = []
     s3_connection_details: list[LinkedS3Connection] = []
