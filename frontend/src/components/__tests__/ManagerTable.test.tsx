@@ -77,6 +77,8 @@ describe("ManagerTable", () => {
 
     expect(screen.getByRole("columnheader", { name: "Name" })).toHaveAttribute("aria-sort", "ascending");
     expect(screen.getByRole("columnheader", { name: "Created" })).toHaveAttribute("aria-sort", "none");
+    expect(screen.getByRole("button", { name: "Name" })).toHaveClass("uppercase");
+    expect(screen.getByRole("button", { name: "Created" })).toHaveClass("uppercase");
 
     fireEvent.click(screen.getByRole("button", { name: "Created" }));
 

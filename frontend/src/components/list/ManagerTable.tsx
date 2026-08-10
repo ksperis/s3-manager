@@ -114,7 +114,7 @@ function renderColumnLabel<TSortField extends string>(
       type="button"
       onClick={() => column.sortField && sort?.onSort(column.sortField)}
       className={cx(
-        "flex w-full items-center text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100",
+        "flex w-full items-center text-left uppercase text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100",
         column.align === "right" ? "justify-end" : "gap-1"
       )}
     >

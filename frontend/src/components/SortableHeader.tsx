@@ -44,7 +44,7 @@ export default function SortableHeader<T extends string | null = string>({
       <button
         type="button"
         onClick={() => field && onSort?.(field as NonNullable<T>)}
-        className={`flex w-full items-center ${align === "right" ? "justify-end" : "gap-1"} text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100`}
+        className={`flex w-full items-center ${align === "right" ? "justify-end" : "gap-1"} text-left uppercase text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100`}
       >
         <span>{label}</span>
         {isActive && <span className="ui-caption">{direction === "asc" ? "▲" : "▼"}</span>}

@@ -39,6 +39,7 @@ describe("DataTableShell", () => {
     expect(screen.getByRole("table")).toHaveClass("manager-table");
     expect(screen.getByText("Archive")).toHaveClass("font-semibold");
     expect(screen.getByRole("columnheader", { name: "Count" })).toHaveClass("text-right");
+    expect(screen.getByRole("button", { name: /Name/ })).toHaveClass("uppercase");
 
     await user.click(screen.getByRole("button", { name: /Name/ }));
     expect(onSort).toHaveBeenCalledWith("name");
