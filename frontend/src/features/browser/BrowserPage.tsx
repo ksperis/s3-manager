@@ -25,7 +25,6 @@ import {
 import JSZip from "jszip";
 import { ZipWriter } from "@zip.js/zip.js";
 import axios, { type AxiosProgressEvent } from "axios";
-import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import {
@@ -34,7 +33,6 @@ import {
 } from "../../components/toolbarControlClasses";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import UiBadge from "../../components/ui/UiBadge";
-import UiButton from "../../components/ui/UiButton";
 import {
   cx,
   uiCardClass,
@@ -52,10 +50,8 @@ import {
   writeClientStorage,
 } from "../../utils/clientStorage";
 import {
-  S3_BUCKET_NAME_MAX_LENGTH,
   isValidS3BucketName,
   normalizeS3BucketName,
-  normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
 import { stableSignature } from "../../utils/stableSignature";
 import { readStoredUser } from "../../utils/workspaces";
@@ -141,6 +137,12 @@ import {
   BrowserConfirmModal,
   BrowserCopyValueModal,
 } from "./BrowserDialogModals";
+import {
+  BrowserBucketConfigurationModal,
+  BrowserCreateBucketModal,
+  BrowserCreateFolderModal,
+  BrowserSseCustomerKeyModal,
+} from "./BrowserBucketDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
 import {
   extractBrowserErrorDetails as extractErrorDetails,
@@ -174,8 +176,6 @@ import {
   writeBrowserRootUiLayout,
   writeBrowserRootUiPanelWidths,
 } from "./browserRootUiState";
-import BucketDetailPage from "../manager/BucketDetailPage";
-import { S3AccountProvider } from "../manager/S3AccountContext";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import {
   resolveSimpleUploadOperation,
@@ -185,7 +185,6 @@ import {
   activateSseCustomerKeyForScope,
   copySseCustomerKeyWithFallback,
   generateAndActivateSseCustomerKeyForScope,
-  resolveSseCustomerKeyInputType,
 } from "./sseCustomerKeyActions";
 import { resolveBrowserPanelVisibility } from "./browserResponsivePanels";
 import {
@@ -1134,7 +1133,7 @@ export default function BrowserPage({
   const layoutContainerRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
-  const newFolderInputRef = useRef<HTMLInputElement | null>(null);
+  const newFolderInputRef = useRef<HTMLInputElement>(null);
   const columnWidthsRef = useRef(columnWidths);
   const pathSuggestionsDebounceRef = useRef<number | null>(null);
   const bucketSearchDebounceRef = useRef<number | null>(null);
@@ -1259,8 +1258,6 @@ export default function BrowserPage({
     resolvedFunctionalProfile === "advanced";
   const bucketConfigurationEnabled =
     resolvedFunctionalProfile === "advanced";
-  const bucketConfigContextScope = "browser";
-
   const executionContextKind =
     executionContextKindOverride ?? selectedContext?.kind ?? null;
   const isCephAdminContext = executionContextKind === "ceph_admin";
@@ -14146,221 +14143,57 @@ export default function BrowserPage({
         />
       )}
       {configBucketName && bucketConfigurationEnabled && (
-        <Modal
-          title={`Configure bucket · ${configBucketName}`}
+        <BrowserBucketConfigurationModal
+          bucketName={configBucketName}
+          workspaceSurface={workspaceSurface}
           onClose={closeBucketConfigurationModal}
-          maxWidthClass="max-w-7xl"
-          maxBodyHeightClass="h-[88vh]"
-        >
-          {workspaceSurface === "manager" ? (
-            <BucketDetailPage
-              bucketNameOverride={configBucketName}
-              embedded
-              hideObjectsTab
-            />
-          ) : (
-            <S3AccountProvider scope={bucketConfigContextScope}>
-              <BucketDetailPage
-                bucketNameOverride={configBucketName}
-                embedded
-                hideObjectsTab
-              />
-            </S3AccountProvider>
-          )}
-        </Modal>
+        />
       )}
       {showCreateBucketModal && (
-        <Modal
-          title="Create bucket"
+        <BrowserCreateBucketModal
+          name={createBucketNameValue}
+          versioning={createBucketVersioning}
+          loading={createBucketLoading}
+          error={createBucketError}
+          isNameValid={isCreateBucketNameValid}
+          invalidNameMessage={invalidBucketNameMessage}
+          hasS3AccountContext={hasS3AccountContext}
+          confirmationDialog={createBucketCloseGuard.confirmationDialog}
+          onNameChange={(value) => {
+            setCreateBucketNameValue(value);
+            if (createBucketError) {
+              setCreateBucketError(null);
+            }
+          }}
+          onVersioningChange={setCreateBucketVersioning}
+          onSubmit={() => void handleCreateBucketSubmit()}
           onClose={createBucketCloseGuard.requestClose}
-          maxWidthClass="max-w-lg"
-        >
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleCreateBucketSubmit();
-            }}
-          >
-            <label className="block ui-caption font-semibold text-slate-600 dark:text-slate-300">
-              Bucket name
-              <input
-                type="text"
-                value={createBucketNameValue}
-                onChange={(event) => {
-                  setCreateBucketNameValue(
-                    normalizeS3BucketNameInput(event.target.value),
-                  );
-                  if (createBucketError) {
-                    setCreateBucketError(null);
-                  }
-                }}
-                placeholder="my-bucket"
-                maxLength={S3_BUCKET_NAME_MAX_LENGTH}
-                title={
-                  !createBucketNameValue || isCreateBucketNameValid
-                    ? undefined
-                    : invalidBucketNameMessage
-                }
-                className={`mt-1 w-full rounded-md border bg-white px-3 py-2 ui-body font-semibold shadow-sm focus:outline-none focus:ring-2 ${
-                  !createBucketNameValue || isCreateBucketNameValid
-                    ? "border-slate-300 text-slate-700 focus:border-primary focus:ring-primary/30 dark:border-slate-700 dark:text-slate-100"
-                    : "border-rose-400 text-rose-700 focus:border-rose-500 focus:ring-rose-200 dark:border-rose-500 dark:text-rose-200 dark:focus:ring-rose-900/50"
-                } dark:bg-slate-800`}
-                disabled={createBucketLoading}
-                spellCheck={false}
-                autoFocus
-              />
-            </label>
-            {createBucketNameValue && !isCreateBucketNameValid && (
-              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">
-                {invalidBucketNameMessage}
-              </p>
-            )}
-            <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={createBucketVersioning}
-                onChange={(event) =>
-                  setCreateBucketVersioning(event.target.checked)
-                }
-                disabled={createBucketLoading}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/40 dark:border-slate-600 dark:bg-slate-800"
-              />
-              Enable versioning
-            </label>
-            {createBucketError && (
-              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">
-                {createBucketError}
-              </p>
-            )}
-            <div className="flex items-center justify-end gap-2">
-              <UiButton
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={createBucketCloseGuard.requestClose}
-                disabled={createBucketLoading}
-              >
-                Cancel
-              </UiButton>
-              <UiButton
-                type="submit"
-                size="sm"
-                disabled={
-                  !hasS3AccountContext ||
-                  createBucketLoading ||
-                  !createBucketNameValue.trim() ||
-                  !isCreateBucketNameValid
-                }
-              >
-                {createBucketLoading ? "Creating..." : "Create bucket"}
-              </UiButton>
-            </div>
-          </form>
-          {createBucketCloseGuard.confirmationDialog}
-        </Modal>
+        />
       )}
       {showSseCustomerModal && (
-        <Modal
-          title="SSE-C key"
+        <BrowserSseCustomerKeyModal
+          value={sseCustomerKeyInput}
+          visible={sseCustomerKeyVisible}
+          error={sseCustomerKeyError}
+          notice={sseCustomerKeyNotice}
+          active={sseActive}
+          canGenerate={Boolean(sseCustomerScopeKey)}
+          confirmationDialog={sseCustomerCloseGuard.confirmationDialog}
+          onValueChange={(value) => {
+            setSseCustomerKeyInput(value);
+            if (sseCustomerKeyError) {
+              setSseCustomerKeyError(null);
+            }
+            if (sseCustomerKeyNotice) {
+              setSseCustomerKeyNotice(null);
+            }
+          }}
+          onToggleVisibility={() => setSseCustomerKeyVisible((prev) => !prev)}
+          onGenerate={() => void handleGenerateSseCustomerKey()}
+          onClear={handleClearSseCustomerKey}
+          onActivate={handleActivateSseCustomerKey}
           onClose={sseCustomerCloseGuard.requestClose}
-          maxWidthClass="max-w-lg"
-        >
-          <form
-            className="space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              handleActivateSseCustomerKey();
-            }}
-          >
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Enter a base64 key that decodes to exactly 32 bytes. The key is
-              stored in memory only for this browser session and this bucket.
-            </p>
-            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-              <span>Customer key (base64, 32 bytes)</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type={resolveSseCustomerKeyInputType(sseCustomerKeyVisible)}
-                  value={sseCustomerKeyInput}
-                  onChange={(event) => {
-                    setSseCustomerKeyInput(event.target.value);
-                    if (sseCustomerKeyError) {
-                      setSseCustomerKeyError(null);
-                    }
-                    if (sseCustomerKeyNotice) {
-                      setSseCustomerKeyNotice(null);
-                    }
-                  }}
-                  placeholder="Base64 key"
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  spellCheck={false}
-                  autoFocus
-                />
-                <UiButton
-                  type="button"
-                  variant="secondary"
-                  size="md"
-                  className="px-3 py-2 ui-caption"
-                  onClick={() => setSseCustomerKeyVisible((prev) => !prev)}
-                >
-                  {sseCustomerKeyVisible ? "Hide" : "Show"}
-                </UiButton>
-              </div>
-            </label>
-            {sseCustomerKeyError && (
-              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">
-                {sseCustomerKeyError}
-              </p>
-            )}
-            {sseCustomerKeyNotice && (
-              <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
-                {sseCustomerKeyNotice}
-              </p>
-            )}
-            {sseActive && (
-              <p className="ui-caption font-semibold text-emerald-700 dark:text-emerald-200">
-                SSE-C is currently enabled for this bucket.
-              </p>
-            )}
-            <div className="flex items-center justify-end gap-2">
-              <UiButton
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={sseCustomerCloseGuard.requestClose}
-              >
-                Cancel
-              </UiButton>
-              <UiButton
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => void handleGenerateSseCustomerKey()}
-                disabled={!sseCustomerScopeKey}
-              >
-                Generate
-              </UiButton>
-              <UiButton
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={handleClearSseCustomerKey}
-                disabled={!sseActive}
-              >
-                Clear
-              </UiButton>
-              <UiButton
-                type="submit"
-                size="sm"
-              >
-                Enable
-              </UiButton>
-            </div>
-          </form>
-          {sseCustomerCloseGuard.confirmationDialog}
-        </Modal>
+        />
       )}
       {showMultipartUploadsModal && bucketName && hasS3AccountContext && (
         <BrowserMultipartUploadsModal
@@ -14481,67 +14314,19 @@ export default function BrowserPage({
         />
       )}
       {showNewFolderModal && (
-        <Modal
-          title="Create folder"
+        <BrowserCreateFolderModal
+          inputRef={newFolderInputRef}
+          name={newFolderName}
+          loading={newFolderLoading}
+          error={newFolderError}
+          currentPath={currentPath}
+          bucketName={bucketName}
+          hasS3AccountContext={hasS3AccountContext}
+          confirmationDialog={newFolderCloseGuard.confirmationDialog}
+          onNameChange={setNewFolderName}
+          onSubmit={() => void handleCreateFolderFromModal()}
           onClose={newFolderCloseGuard.requestClose}
-          maxWidthClass="max-w-md"
-          initialFocusRef={newFolderInputRef}
-          closeOnBackdropClick={!newFolderLoading}
-        >
-          <form
-            className="space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleCreateFolderFromModal();
-            }}
-          >
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Destination:{" "}
-              <span className="font-semibold">
-                {currentPath || `${bucketName}/`}
-              </span>
-            </p>
-            <label className="block ui-caption font-semibold text-slate-600 dark:text-slate-300">
-              Folder name
-              <input
-                ref={newFolderInputRef}
-                type="text"
-                value={newFolderName}
-                onChange={(event) => setNewFolderName(event.target.value)}
-                placeholder="my-folder"
-                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                disabled={newFolderLoading}
-                spellCheck={false}
-              />
-            </label>
-            {newFolderError && (
-              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">
-                {newFolderError}
-              </p>
-            )}
-            <div className="flex items-center justify-end gap-2">
-              <UiButton
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={newFolderCloseGuard.requestClose}
-                disabled={newFolderLoading}
-              >
-                Cancel
-              </UiButton>
-              <UiButton
-                type="submit"
-                size="sm"
-                disabled={
-                  !bucketName || !hasS3AccountContext || newFolderLoading
-                }
-              >
-                {newFolderLoading ? "Creating..." : "Create"}
-              </UiButton>
-            </div>
-          </form>
-          {newFolderCloseGuard.confirmationDialog}
-        </Modal>
+        />
       )}
       {confirmDialog && (
         <BrowserConfirmModal
