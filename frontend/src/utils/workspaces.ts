@@ -59,9 +59,7 @@ export type SessionUser = {
     account_id: number;
     role: AccountAccessRole;
   }[] | null;
-  s3_users?: number[] | null;
   s3_user_details?: { id: number; name?: string | null }[] | null;
-  s3_connections?: number[] | null;
   s3_connection_details?: {
     id: number;
     name?: string | null;
@@ -156,16 +154,8 @@ function getAccountLinks(user: SessionUser | null): NonNullable<SessionUser["acc
   return getEffectiveAccess(user)?.account_links ?? user?.account_links ?? [];
 }
 
-function getS3UserIds(user: SessionUser | null): number[] {
-  return getEffectiveAccess(user)?.s3_users ?? user?.s3_users ?? [];
-}
-
 function getS3UserDetails(user: SessionUser | null): NonNullable<SessionUser["s3_user_details"]> {
   return getEffectiveAccess(user)?.s3_user_details ?? user?.s3_user_details ?? [];
-}
-
-function getConnectionIds(user: SessionUser | null): number[] {
-  return getEffectiveAccess(user)?.s3_connections ?? user?.s3_connections ?? [];
 }
 
 function getConnectionDetails(user: SessionUser | null): NonNullable<SessionUser["s3_connection_details"]> {
@@ -198,12 +188,10 @@ function resolveAvailableWorkspaces(
     });
   }
   const s3UserDetails = getS3UserDetails(user);
-  const s3UserIds = getS3UserIds(user);
   const connectionDetails = getConnectionDetails(user);
-  const connectionIds = getConnectionIds(user);
   const hasAccountAdmin = links.some((link) => link.role === "account_administrator");
-  const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
-  const hasManagerConnectionAccess = connectionDetails.length > 0 || connectionIds.length > 0;
+  const hasS3UserAccess = s3UserDetails.length > 0;
+  const hasManagerConnectionAccess = connectionDetails.length > 0;
   const hasManagerAccess =
     contextAvailability?.manager ??
     (hasAccountAdmin || hasManagerConnectionAccess || hasS3UserAccess);
@@ -271,13 +259,11 @@ function resolveRoleHomePath(user: SessionUser | null, generalSettings: GeneralS
   const links = getAccountLinks(user);
   const hasPortalAccess = hasPortalWorkspaceAccess(user);
   const s3UserDetails = getS3UserDetails(user);
-  const s3UserIds = getS3UserIds(user);
   const connectionDetails = getConnectionDetails(user);
-  const connectionIds = getConnectionIds(user);
   const hasAccountAdmin = links.some((link) => link.role === "account_administrator");
-  const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
+  const hasS3UserAccess = s3UserDetails.length > 0;
   const hasBrowserAccess = false;
-  const hasManagerConnectionAccess = connectionDetails.length > 0 || connectionIds.length > 0;
+  const hasManagerConnectionAccess = connectionDetails.length > 0;
   const hasManagerAccess =
     hasAccountAdmin ||
     hasManagerConnectionAccess ||

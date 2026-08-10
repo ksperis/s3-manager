@@ -33,16 +33,13 @@ type LoginResponse = {
     browser_advanced_features_enabled?: boolean;
     ui_language?: "en" | "fr" | "de" | null;
     ui_preferences?: UiPreferences | null;
-    accounts?: number[];
     account_links?: {
       account_id: number;
       role: AccountAccessRole;
     }[] | null;
     group_ids?: number[] | null;
     group_details?: { id: number; name: string }[] | null;
-    s3_users?: number[] | null;
     s3_user_details?: { id: number; name: string }[] | null;
-    s3_connections?: number[] | null;
     s3_connection_details?: {
       id: number;
       name: string;

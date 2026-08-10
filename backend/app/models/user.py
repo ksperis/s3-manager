@@ -210,13 +210,9 @@ class EffectiveUserAccess(BaseModel):
     has_owned_private_connections: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
     browser_advanced_features_enabled: bool = False
-    accounts: list[int] = []
-    account_links: list[EffectiveAccountMembership] = []
-    s3_users: list[int] = []
-    manager_browser_s3_users: list[int] = []
-    s3_user_details: list[LinkedS3User] = []
-    s3_connections: list[int] = []
-    s3_connection_details: list[LinkedS3Connection] = []
+    account_links: list[EffectiveAccountMembership] = Field(default_factory=list)
+    s3_user_details: list[LinkedS3User] = Field(default_factory=list)
+    s3_connection_details: list[LinkedS3Connection] = Field(default_factory=list)
 
 
 class UserOut(BaseModel):

@@ -472,7 +472,10 @@ must state its `s3_user_id` and may explicitly enable
 association details needed by the frontend. The duplicate `accounts`,
 `s3_users`, and `s3_connections` identifier arrays are no longer returned by
 Admin user or group responses; consume `account_links`, `s3_user_links`, and
-`s3_connection_details` instead. Deploy the backend and frontend together.
+`s3_connection_details` instead. The nested `effective_access` projection also
+stops duplicating canonical links and details through `accounts`, `s3_users`,
+`s3_connections`, and `manager_browser_s3_users`. Deploy the backend and
+frontend together.
 
 ## 2026-03 compatibility cleanup
 

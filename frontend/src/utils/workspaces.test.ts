@@ -93,8 +93,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       {
         ...adminUser,
         account_links: [],
-        s3_users: [],
-        s3_connections: [],
+        s3_user_details: [],
+        s3_connection_details: [],
       },
       {
         ...baseSettings,
@@ -192,7 +192,6 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
           bucket_migration: false,
           feature_rules: false,
         },
-        accounts: [42],
         account_links: [{
           account_id: 42,
           role: "account_administrator",
@@ -202,9 +201,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
             groups: [],
           },
         }],
-        s3_users: [],
         s3_user_details: [],
-        s3_connections: [],
         s3_connection_details: [],
       },
     };
@@ -225,7 +222,6 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 14,
       email: "grouped-browser@example.com",
       role: "ui_user",
-      s3_connections: [],
       effective_access: {
         can_access_ceph_admin: false,
         can_access_storage_ops: false,
@@ -235,12 +231,9 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
           bucket_migration: false,
           feature_rules: false,
         },
-        accounts: [],
         account_links: [],
-        s3_users: [],
         s3_user_details: [],
-        s3_connections: [55],
-        s3_connection_details: [{ id: 55, name: "shared-browser", access_browser: true }],
+        s3_connection_details: [{ id: 55, name: "shared-browser" }],
       },
     };
 
@@ -274,9 +267,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       email: "portal-browser@example.com",
       role: "ui_user",
       account_links: [{ account_id: 24, role: "portal_user" }],
-      s3_connections: [],
       s3_connection_details: [],
-      s3_users: [],
       s3_user_details: [],
     };
 

@@ -444,7 +444,6 @@ class EffectiveAccessService:
             has_owned_private_connections=resolved.has_owned_private_connections,
             manager_tool_access=resolved.manager_tool_access,
             browser_advanced_features_enabled=resolved.browser_advanced_features_enabled,
-            accounts=resolved.account_ids,
             account_links=[
                 EffectiveAccountMembership(
                     account_id=link.account_id,
@@ -472,13 +471,10 @@ class EffectiveAccessService:
                 )
                 for link in resolved.account_links
             ],
-            s3_users=resolved.s3_user_ids,
-            manager_browser_s3_users=resolved.manager_browser_s3_user_ids,
             s3_user_details=[
                 LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
                 for s3_id in resolved.s3_user_ids
             ],
-            s3_connections=resolved.s3_connection_ids,
             s3_connection_details=[
                 LinkedS3Connection(
                     id=conn_id,

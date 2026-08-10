@@ -351,7 +351,11 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
     assert out.effective_access.manager_tool_access.feature_rules is True
     assert "bucket_quota" not in out.effective_access.manager_tool_access.model_dump()
     assert "ceph_s3_user_keys" not in out.effective_access.manager_tool_access.model_dump()
-    assert out.effective_access.accounts == [account.id]
+    effective_payload = out.effective_access.model_dump()
+    assert "accounts" not in effective_payload
+    assert "s3_users" not in effective_payload
+    assert "manager_browser_s3_users" not in effective_payload
+    assert "s3_connections" not in effective_payload
     effective_account = out.effective_access.account_links[0]
     assert effective_account.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
     assert effective_account.provenance.direct_role == AccountRole.PORTAL_USER.value
@@ -359,8 +363,8 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
     assert len(effective_account.provenance.groups) == 1
     assert effective_account.provenance.groups[0].role == AccountRole.ACCOUNT_ADMINISTRATOR.value
     assert effective_account.provenance.groups[0].determines_effective_role is True
-    assert out.effective_access.s3_users == [s3_user.id]
-    assert out.effective_access.s3_connections == [connection.id]
+    assert [details.id for details in out.effective_access.s3_user_details] == [s3_user.id]
+    assert [details.id for details in out.effective_access.s3_connection_details] == [connection.id]
 
     account_ctx = dependencies.get_account_context(
         request=type("Request", (), {"url": type("Url", (), {"path": "/api/manager/buckets"})(), "headers": {}})(),
