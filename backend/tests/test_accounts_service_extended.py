@@ -253,7 +253,7 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
     assert updated.quota_max_size_gb == 12.5
     assert updated.quota_max_objects == 42
     assert quota_calls
-    assert sorted(updated.user_ids or []) == sorted([keep_user.id, add_user.id])
+    assert sorted(link.user_id for link in updated.user_links) == sorted([keep_user.id, add_user.id])
     # Non-admin UI role should be normalized to UI_USER on assignment
     db_session.refresh(add_user)
     assert add_user.role == UserRole.UI_USER.value

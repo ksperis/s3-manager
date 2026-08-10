@@ -115,8 +115,8 @@ describe("AccountsPage modal tabs", () => {
           storage_endpoint_id: 10,
           storage_endpoint_name: "ceph-main",
           storage_endpoint_url: "https://ceph.example.test",
-          user_ids: [],
           user_links: [],
+          group_links: [],
         },
       ],
       total: 1,
@@ -180,8 +180,8 @@ describe("AccountsPage modal tabs", () => {
       },
       quota_max_size_gb: null,
       quota_max_objects: null,
-      user_ids: [],
       user_links: [],
+      group_links: [],
     });
 
     updateS3AccountMock.mockResolvedValue(undefined);
@@ -217,6 +217,8 @@ describe("AccountsPage modal tabs", () => {
           tags: [],
           rgw_user_uid: "misleading-user-uid",
           is_s3_user: false,
+          user_links: [],
+          group_links: [],
         },
         {
           id: "user-with-account-id",
@@ -225,6 +227,8 @@ describe("AccountsPage modal tabs", () => {
           tags: [],
           rgw_account_id: "misleading-account-id",
           is_s3_user: true,
+          user_links: [],
+          group_links: [],
         },
       ],
       total: 2,
@@ -276,7 +280,6 @@ describe("AccountsPage modal tabs", () => {
           storage_endpoint_id: 10,
           storage_endpoint_name: "ceph-main",
           storage_endpoint_url: "https://ceph.example.test",
-          user_ids: [7],
           user_links: [
             {
               user_id: 7,
@@ -284,7 +287,6 @@ describe("AccountsPage modal tabs", () => {
               role: "portal_user",
             },
           ],
-          group_ids: [31],
           group_links: [
             {
               group_id: 31,
@@ -467,8 +469,8 @@ describe("AccountsPage modal tabs", () => {
           storage_endpoint_id: 10,
           storage_endpoint_name: "ceph-main",
           storage_endpoint_url: "https://ceph.example.test",
-          user_ids: [7],
           user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "account_administrator" }],
+          group_links: [],
         },
       ],
       total: 1,
@@ -492,8 +494,8 @@ describe("AccountsPage modal tabs", () => {
       },
       quota_max_size_gb: null,
       quota_max_objects: null,
-      user_ids: [7],
       user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "account_administrator" }],
+      group_links: [],
     });
 
     render(<AccountsPage />);
@@ -814,8 +816,8 @@ describe("AccountsPage modal tabs", () => {
         storage_endpoint_id: 10,
         storage_endpoint_name: "ceph-main",
         storage_endpoint_url: "https://ceph.example.test",
-        user_ids: [],
         user_links: [],
+        group_links: [],
       };
       const plainAccount = {
         id: "RGW000000000000002",
@@ -826,8 +828,8 @@ describe("AccountsPage modal tabs", () => {
         storage_endpoint_id: 10,
         storage_endpoint_name: "ceph-main",
         storage_endpoint_url: "https://ceph.example.test",
-        user_ids: [],
         user_links: [],
+        group_links: [],
       };
       const items = params?.search === "gold" ? [taggedAccount] : [taggedAccount, plainAccount];
       return Promise.resolve({

@@ -495,6 +495,15 @@ the only response representation. The `group_ids` update field remains the
 canonical write contract for replacing group links. Deploy the backend and
 frontend together.
 
+## 2026-08 canonical RGW account principal links
+
+Admin RGW account responses and minimal summaries now expose UI-user and
+UI-group associations only through `user_links` and `group_links`. The duplicate
+`user_ids` and `group_ids` response fields are removed. Updates also accept only
+the structured link fields, which require an explicit role for every principal;
+sending `user_ids`, `group_ids`, or a null link list returns `422`. Send an empty
+list to clear an association set. Deploy the backend and frontend together.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

@@ -104,8 +104,7 @@ def test_accounts_expose_direct_group_links(db_session):
     detailed = service.get_account_detail(account.id)
 
     for item in (listed, detailed):
-        assert item.group_ids == [group.id]
-        assert item.group_links is not None and len(item.group_links) == 1
+        assert len(item.group_links) == 1
         assert item.group_links[0].group_id == group.id
         assert item.group_links[0].group_name == "Platform Operators"
     assert item.group_links[0].role == AccountRole.ACCOUNT_ADMINISTRATOR.value

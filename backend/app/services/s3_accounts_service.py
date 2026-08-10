@@ -401,9 +401,9 @@ class S3AccountsService:
     def _load_non_root_user_links(
         self,
         account_ids: list[int],
-    ) -> tuple[dict[int, list[int]], dict[int, list[AccountUserLink]]]:
+    ) -> dict[int, list[AccountUserLink]]:
         if not account_ids:
-            return {}, {}
+            return {}
         rows = (
             self.db.query(
                 UserS3Account.account_id,
@@ -419,13 +419,11 @@ class S3AccountsService:
             .order_by(UserS3Account.account_id.asc(), User.email.asc(), User.id.asc())
             .all()
         )
-        user_ids_by_account: dict[int, list[int]] = {}
         user_links_by_account: dict[int, list[AccountUserLink]] = {}
         avatar_service = UserAvatarService(self.db)
         for account_id, user, role, allow_manager_browser_data_access in rows:
             normalized_account_id = int(account_id)
             normalized_user_id = int(user.id)
-            user_ids_by_account.setdefault(normalized_account_id, []).append(normalized_user_id)
             user_links_by_account.setdefault(normalized_account_id, []).append(
                 AccountUserLink(
                     user_id=normalized_user_id,
@@ -438,14 +436,14 @@ class S3AccountsService:
                     user_avatar=avatar_service.descriptor(user),
                 )
             )
-        return user_ids_by_account, user_links_by_account
+        return user_links_by_account
 
     def _load_group_links(
         self,
         account_ids: list[int],
-    ) -> tuple[dict[int, list[int]], dict[int, list[AccountGroupLink]]]:
+    ) -> dict[int, list[AccountGroupLink]]:
         if not account_ids:
-            return {}, {}
+            return {}
         rows = (
             self.db.query(
                 UiGroupS3Account.account_id,
@@ -458,13 +456,11 @@ class S3AccountsService:
             .order_by(UiGroupS3Account.account_id.asc(), UiGroup.name.asc(), UiGroup.id.asc())
             .all()
         )
-        group_ids_by_account: dict[int, list[int]] = {}
         group_links_by_account: dict[int, list[AccountGroupLink]] = {}
         avatar_service = UiGroupAvatarService(self.db)
         for account_id, group, role, allow_manager_browser_data_access in rows:
             normalized_account_id = int(account_id)
             normalized_group_id = int(group.id)
-            group_ids_by_account.setdefault(normalized_account_id, []).append(normalized_group_id)
             group_links_by_account.setdefault(normalized_account_id, []).append(
                 AccountGroupLink(
                     group_id=normalized_group_id,
@@ -476,7 +472,7 @@ class S3AccountsService:
                     ),
                 )
             )
-        return group_ids_by_account, group_links_by_account
+        return group_links_by_account
 
     def list_accounts(
         self,
@@ -486,8 +482,8 @@ class S3AccountsService:
     ) -> list[S3AccountSchema]:
         db_accounts = self.db.query(S3Account).order_by(*name_order_by(S3Account)).all()
         account_ids = [account.id for account in db_accounts]
-        user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
-        group_ids_by_account, group_links_by_account = self._load_group_links(account_ids)
+        user_links_by_account = self._load_non_root_user_links(account_ids)
+        group_links_by_account = self._load_group_links(account_ids)
 
         roots_by_account: dict[str, tuple[str, int]] = {}
         for acc in db_accounts:
@@ -550,10 +546,8 @@ class S3AccountsService:
                     rgw_topic_count=rgw_topic_count,
                     rgw_topics=rgw_topics,
                     bucket_count=bucket_count,
-                    user_ids=user_ids_by_account.get(acc.id),
-                    user_links=user_links_by_account.get(acc.id),
-                    group_ids=group_ids_by_account.get(acc.id),
-                    group_links=group_links_by_account.get(acc.id),
+                    user_links=user_links_by_account.get(acc.id, []),
+                    group_links=group_links_by_account.get(acc.id, []),
                     storage_endpoint=endpoint,
                     storage_endpoint_capabilities=endpoint_capabilities,
                     tags=self.tags.get_account_tags(acc),
@@ -564,8 +558,8 @@ class S3AccountsService:
     def list_accounts_minimal(self) -> list[S3AccountSummary]:
         db_accounts = self.db.query(S3Account).order_by(*name_order_by(S3Account)).all()
         account_ids = [account.id for account in db_accounts]
-        user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
-        group_ids_by_account, group_links_by_account = self._load_group_links(account_ids)
+        user_links_by_account = self._load_non_root_user_links(account_ids)
+        group_links_by_account = self._load_group_links(account_ids)
         summaries: list[S3AccountSummary] = []
         for acc in db_accounts:
             endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
@@ -573,10 +567,8 @@ class S3AccountsService:
                 s3_account_summary_from_db(
                     acc,
                     public_id=acc.rgw_account_id or str(acc.id),
-                    user_ids=user_ids_by_account.get(acc.id),
-                    user_links=user_links_by_account.get(acc.id),
-                    group_ids=group_ids_by_account.get(acc.id),
-                    group_links=group_links_by_account.get(acc.id),
+                    user_links=user_links_by_account.get(acc.id, []),
+                    group_links=group_links_by_account.get(acc.id, []),
                     storage_endpoint=endpoint,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
                     tags=self.tags.get_account_tags(acc),
@@ -595,12 +587,8 @@ class S3AccountsService:
             .with_entities(User.email, User.id)
             .first()
         )
-        user_ids_by_account, user_links_by_account = self._load_non_root_user_links([account.id])
-        user_ids = user_ids_by_account.get(account.id)
-        user_links = user_links_by_account.get(account.id)
-        group_ids_by_account, group_links_by_account = self._load_group_links([account.id])
-        group_ids = group_ids_by_account.get(account.id)
-        group_links = group_links_by_account.get(account.id)
+        user_links = self._load_non_root_user_links([account.id]).get(account.id, [])
+        group_links = self._load_group_links([account.id]).get(account.id, [])
         used_bytes = used_objects = bucket_count = None
         if include_usage:
             used_bytes, used_objects, bucket_count = self._account_usage(account)
@@ -636,9 +624,7 @@ class S3AccountsService:
             rgw_user_uids=rgw_user_uids,
             rgw_topic_count=rgw_topic_count,
             rgw_topics=rgw_topics,
-            user_ids=user_ids,
             user_links=user_links,
-            group_ids=group_ids,
             group_links=group_links,
             storage_endpoint=endpoint,
             storage_endpoint_capabilities=endpoint_capabilities,
@@ -729,9 +715,7 @@ class S3AccountsService:
                     root_user_id=None,
                     quota_max_size_gb=None,
                     quota_max_objects=None,
-                    user_ids=[],
                     user_links=[],
-                    group_ids=[],
                     group_links=[],
                     storage_endpoint=endpoint,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
@@ -811,9 +795,7 @@ class S3AccountsService:
             root_user_id=None,
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            user_ids=[],
             user_links=[],
-            group_ids=[],
             group_links=[],
             storage_endpoint=endpoint,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
@@ -826,27 +808,22 @@ class S3AccountsService:
             raise ValueError("S3Account not found")
 
         affected_portal_user_ids: set[int] = set()
-        if payload.user_links is not None or payload.user_ids is not None:
+        if payload.user_links is not None:
             affected_portal_user_ids.update(
                 row[0]
                 for row in self.db.query(UserS3Account.user_id)
                 .filter(UserS3Account.account_id == account.id, UserS3Account.is_root.is_(False))
                 .all()
             )
-            affected_portal_user_ids.update(
-                int(link.user_id)
-                for link in (payload.user_links or [])
-            )
-            affected_portal_user_ids.update(int(user_id) for user_id in (payload.user_ids or []))
-        if payload.group_links is not None or payload.group_ids is not None:
+            affected_portal_user_ids.update(int(link.user_id) for link in payload.user_links)
+        if payload.group_links is not None:
             affected_group_ids = {
                 row[0]
                 for row in self.db.query(UiGroupS3Account.group_id)
                 .filter(UiGroupS3Account.account_id == account.id)
                 .all()
             }
-            affected_group_ids.update(int(link.group_id) for link in (payload.group_links or []))
-            affected_group_ids.update(int(group_id) for group_id in (payload.group_ids or []))
+            affected_group_ids.update(int(link.group_id) for link in payload.group_links)
             if affected_group_ids:
                 affected_portal_user_ids.update(
                     row[0]
@@ -895,13 +872,8 @@ class S3AccountsService:
                     )
 
         # Update UI user associations (non-root links only)
-        if payload.user_links is not None or payload.user_ids is not None:
-            desired_links: list[AccountUserLink] = []
-            if payload.user_links is not None:
-                desired_links = payload.user_links
-            elif payload.user_ids is not None:
-                if payload.user_ids:
-                    raise ValueError("A role is required for each S3 account user association")
+        if payload.user_links is not None:
+            desired_links = payload.user_links
 
             existing_links = (
                 self.db.query(UserS3Account)
@@ -950,21 +922,17 @@ class S3AccountsService:
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 
-        if payload.group_links is not None or payload.group_ids is not None:
+        if payload.group_links is not None:
             desired_links: dict[int, AccountGroupLink] = {}
-            if payload.group_links is not None:
-                for link in payload.group_links:
-                    group_id = int(link.group_id)
-                    desired_links[group_id] = AccountGroupLink(
-                        group_id=group_id,
-                        role=require_account_role(link.role),
-                        allow_manager_browser_data_access=bool(
-                            link.allow_manager_browser_data_access
-                        ),
-                    )
-            elif payload.group_ids is not None:
-                if payload.group_ids:
-                    raise ValueError("A role is required for each S3 account group association")
+            for link in payload.group_links:
+                group_id = int(link.group_id)
+                desired_links[group_id] = AccountGroupLink(
+                    group_id=group_id,
+                    role=require_account_role(link.role),
+                    allow_manager_browser_data_access=bool(
+                        link.allow_manager_browser_data_access
+                    ),
+                )
 
             desired_ids = set(desired_links)
             if desired_ids:
@@ -1020,12 +988,8 @@ class S3AccountsService:
         )
         self.db.refresh(account)
 
-        user_ids_by_account, user_links_by_account = self._load_non_root_user_links([account.id])
-        user_ids = user_ids_by_account.get(account.id) or []
-        user_links = user_links_by_account.get(account.id) or []
-        group_ids_by_account, group_links_by_account = self._load_group_links([account.id])
-        group_ids = group_ids_by_account.get(account.id) or []
-        group_links = group_links_by_account.get(account.id) or []
+        user_links = self._load_non_root_user_links([account.id]).get(account.id, [])
+        group_links = self._load_group_links([account.id]).get(account.id, [])
         endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
         quota_max_size_gb, quota_max_objects = self._account_quota(account)
 
@@ -1036,9 +1000,7 @@ class S3AccountsService:
             quota_max_objects=quota_max_objects,
             root_user_email=None,
             root_user_id=None,
-            user_ids=user_ids,
             user_links=user_links,
-            group_ids=group_ids,
             group_links=group_links,
             storage_endpoint=endpoint,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),

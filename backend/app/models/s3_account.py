@@ -49,10 +49,8 @@ class S3Account(BaseModel):
     email: Optional[str] = None
     used_bytes: Optional[int] = None
     used_objects: Optional[int] = None
-    user_ids: Optional[list[int]] = None
-    user_links: Optional[list[AccountUserLink]] = None
-    group_ids: Optional[list[int]] = None
-    group_links: Optional[list[AccountGroupLink]] = None
+    user_links: list[AccountUserLink] = Field(default_factory=list)
+    group_links: list[AccountGroupLink] = Field(default_factory=list)
     bucket_count: Optional[int] = None
     rgw_user_count: Optional[int] = None
     rgw_user_uids: Optional[list[str]] = None
@@ -93,9 +91,7 @@ class S3AccountUpdate(_StrictS3AccountMutation):
     quota_max_size_gb: Optional[float] = None
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
-    user_ids: Optional[list[int]] = None
     user_links: Optional[list[AccountUserLink]] = None
-    group_ids: Optional[list[int]] = None
     group_links: Optional[list[AccountGroupLink]] = None
     name: Optional[str] = None
     email: Optional[str] = None
@@ -115,6 +111,13 @@ class S3AccountUpdate(_StrictS3AccountMutation):
             raise ValueError("storage_endpoint_id cannot be null")
         return value
 
+    @field_validator("user_links", "group_links", mode="before")
+    @classmethod
+    def reject_null_principal_links(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("principal links cannot be null; use an empty list to clear them")
+        return value
+
 
 class S3AccountSummary(BaseModel):
     id: str
@@ -122,10 +125,8 @@ class S3AccountSummary(BaseModel):
     name: str
     rgw_account_id: Optional[str] = None
     is_s3_user: bool = False
-    user_ids: Optional[list[int]] = None
-    user_links: Optional[list[AccountUserLink]] = None
-    group_ids: Optional[list[int]] = None
-    group_links: Optional[list[AccountGroupLink]] = None
+    user_links: list[AccountUserLink] = Field(default_factory=list)
+    group_links: list[AccountGroupLink] = Field(default_factory=list)
     storage_endpoint_id: int
     storage_endpoint_name: str
     storage_endpoint_url: str

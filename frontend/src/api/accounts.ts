@@ -42,10 +42,8 @@ export type S3Account = {
   root_user_id?: number | null;
   email?: string | null;
   used_bytes?: number | null;
-  user_ids?: number[] | null;
-  user_links?: AccountUserLink[] | null;
-  group_ids?: number[] | null;
-  group_links?: AccountGroupLink[] | null;
+  user_links: AccountUserLink[];
+  group_links: AccountGroupLink[];
   bucket_count?: number | null;
   rgw_user_count?: number | null;
   rgw_user_uids?: string[] | null;
@@ -66,10 +64,8 @@ export type S3AccountSummary = {
   tags: TagDefinitionSummary[];
   rgw_account_id?: string | null;
   is_s3_user: boolean;
-  user_ids?: number[] | null;
-  user_links?: AccountUserLink[] | null;
-  group_ids?: number[] | null;
-  group_links?: AccountGroupLink[] | null;
+  user_links: AccountUserLink[];
+  group_links: AccountGroupLink[];
   storage_endpoint_id: number;
   storage_endpoint_name: string;
   storage_endpoint_url: string;
@@ -129,10 +125,8 @@ type UpdateS3AccountPayload = {
   quota_max_size_gb?: number | null;
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
-  user_ids?: number[] | null;
-  user_links?: AccountUserLink[] | null;
-  group_ids?: number[] | null;
-  group_links?: AccountGroupLink[] | null;
+  user_links?: AccountUserLink[];
+  group_links?: AccountGroupLink[];
   name?: string | null;
   email?: string | null;
   storage_endpoint_id?: number;

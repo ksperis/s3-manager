@@ -847,20 +847,8 @@ export default function S3AccountsPage() {
     return Number.isNaN(numericId) ? null : numericId;
   };
 
-  const resolveAccountUserLinks = (account: S3Account | S3AccountSummary): AccountUserLink[] => {
-    if (account.user_links && account.user_links.length > 0) {
-      return account.user_links;
-    }
-    return (account.user_ids ?? []).map((id) => ({ user_id: id, role: "account_administrator" }));
-  };
-  const resolveAccountGroupLinks = (account: S3Account | S3AccountSummary): AccountGroupLink[] => {
-    if (account.group_links && account.group_links.length > 0) {
-      return account.group_links;
-    }
-    return (account.group_ids ?? []).map((id) => ({ group_id: id, role: "account_administrator" }));
-  };
   const renderAccountAssociations = (account: S3Account | S3AccountSummary) => {
-    const userItems: AssociationPrincipalItem[] = resolveAccountUserLinks(account).map((link) => {
+    const userItems: AssociationPrincipalItem[] = account.user_links.map((link) => {
       const user = usersById.get(link.user_id);
       return {
         id: link.user_id,
@@ -871,7 +859,7 @@ export default function S3AccountsPage() {
         role: link.role,
       };
     });
-    const groupItems: AssociationPrincipalItem[] = resolveAccountGroupLinks(account).map((link) => {
+    const groupItems: AssociationPrincipalItem[] = account.group_links.map((link) => {
       const group = groupsById.get(link.group_id);
       return {
         id: link.group_id,

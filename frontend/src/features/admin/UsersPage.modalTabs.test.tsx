@@ -92,8 +92,8 @@ describe("UsersPage modal tabs", () => {
         id: 1,
         db_id: 1,
         name: "acc-1",
-        user_ids: [],
         user_links: [],
+        group_links: [],
       },
     ]);
 

@@ -111,7 +111,7 @@ def test_admin_accounts_search_matches_direct_group_links(client, db_session):
     payload = response.json()
 
     assert [item["name"] for item in payload["items"]] == ["group-linked-account"]
-    assert payload["items"][0]["group_ids"] == [group.id]
+    assert "group_ids" not in payload["items"][0]
     group_link = payload["items"][0]["group_links"][0]
     assert group_link["group_id"] == group.id
     assert group_link["group_name"] == "Analytics Team"
@@ -180,7 +180,7 @@ def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
     assert response.status_code == 200, response.text
     payload = response.json()
 
-    assert payload["group_ids"] == [new_group.id]
+    assert "group_ids" not in payload
     group_link = payload["group_links"][0]
     assert group_link["group_id"] == new_group.id
     assert group_link["group_name"] == "New Account Group"
@@ -190,3 +190,27 @@ def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
     assert [(row.group_id, row.role) for row in rows] == [
         (new_group.id, AccountRole.PORTAL_MANAGER.value)
     ]
+
+
+def test_admin_accounts_update_rejects_legacy_principal_id_fields(client, db_session):
+    account = _seed_account(db_session, name="strict-account", rgw_account_id="RGW-STRICT")
+
+    for legacy_field in ("user_ids", "group_ids"):
+        response = client.put(
+            f"/api/admin/accounts/{account.id}",
+            json={legacy_field: []},
+        )
+
+        assert response.status_code == 422, response.text
+
+
+def test_admin_accounts_update_rejects_null_principal_links(client, db_session):
+    account = _seed_account(db_session, name="strict-links-account", rgw_account_id="RGW-STRICT-LINKS")
+
+    for link_field in ("user_links", "group_links"):
+        response = client.put(
+            f"/api/admin/accounts/{account.id}",
+            json={link_field: None},
+        )
+
+        assert response.status_code == 422, response.text
