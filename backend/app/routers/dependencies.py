@@ -21,9 +21,10 @@ from app.routers.dependencies_internal.auth_session import (
 )
 from app.routers.dependencies_internal.feature_gates import (
     ensure_manager_tool_allowed,
+    forbid_browser_bucket_quota_management,
     get_current_bucket_migration_scope,
     is_manager_bucket_quota_available,
-    is_manager_ceph_s3_user_keys_available,
+    is_manager_rgw_access_key_management_available,
     require_browser_enabled,
     require_bucket_compare_enabled,
     require_bucket_integrity_check_enabled,
@@ -33,14 +34,13 @@ from app.routers.dependencies_internal.feature_gates import (
     require_ceph_admin_enabled,
     require_iam_capable_manager,
     require_manager_bucket_quota,
-    require_manager_ceph_s3_user_keys,
+    require_manager_rgw_access_key_management,
     require_manager_context_enabled,
     require_manager_enabled,
     require_manager_feature_rules_enabled,
     require_metrics_capable_manager,
     require_portal_enabled,
     require_sns_capable_manager,
-    require_storage_ops_bucket_quota,
     require_storage_ops_enabled,
     require_usage_capable_manager,
 )

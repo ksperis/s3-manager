@@ -25,8 +25,9 @@ export type S3User = {
   storage_endpoint_name: string;
   storage_endpoint_url: string;
   bucket_count?: number | null;
-  allow_manager_bucket_quota?: boolean;
-  allow_manager_ceph_s3_user_keys?: boolean;
+  allow_bucket_quota_management?: boolean;
+  allow_access_key_management?: boolean;
+  allow_managed_private_connection_provisioning?: boolean;
 };
 
 export type S3UserSummary = {
@@ -37,8 +38,9 @@ export type S3UserSummary = {
   storage_endpoint_id: number;
   storage_endpoint_name: string;
   storage_endpoint_url: string;
-  allow_manager_bucket_quota?: boolean;
-  allow_manager_ceph_s3_user_keys?: boolean;
+  allow_bucket_quota_management?: boolean;
+  allow_access_key_management?: boolean;
+  allow_managed_private_connection_provisioning?: boolean;
 };
 
 type CreateS3UserPayload = {
@@ -50,8 +52,9 @@ type CreateS3UserPayload = {
   quota_max_objects?: number | null;
   storage_endpoint_id: number;
   tags?: TagDefinitionInput[] | null;
-  allow_manager_bucket_quota?: boolean | null;
-  allow_manager_ceph_s3_user_keys?: boolean | null;
+  allow_bucket_quota_management?: boolean | null;
+  allow_access_key_management?: boolean | null;
+  allow_managed_private_connection_provisioning?: boolean | null;
 };
 
 type ImportS3UserPayload = {
@@ -70,8 +73,9 @@ export type UpdateS3UserPayload = {
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
   tags?: TagDefinitionInput[] | null;
-  allow_manager_bucket_quota?: boolean | null;
-  allow_manager_ceph_s3_user_keys?: boolean | null;
+  allow_bucket_quota_management?: boolean | null;
+  allow_access_key_management?: boolean | null;
+  allow_managed_private_connection_provisioning?: boolean | null;
 };
 
 export type S3UserAccessKey = {

@@ -36,6 +36,8 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
      encryption audits.
    - bucket notification configurations can be added, updated, previewed, or
      deleted in bulk from the same action flow as lifecycle rules.
+   - bucket quota values remain available for inventory and export, but quota
+     writes are intentionally unavailable from Storage Ops.
    - selected buckets can run usage-stat calculations, with the latest snapshot
      available from each bucket detail page on the **Usage stats** tab.
    - bucket configuration opens on
@@ -74,6 +76,10 @@ You can search and operate on large bucket sets across authorized accounts, S3 u
     Storage Ops exposes the Notifications feature-state filter globally; each
     bucket status still follows the SNS capability of its underlying context.
     Feature-detail columns are opt-in and loaded only when selected or exported.
+
+!!! warning
+    Storage Ops cannot update bucket quotas. Use the eligible Account or RGW
+    User context in Manager, or the dedicated Ceph Admin workflow.
 
 ## Related pages
 

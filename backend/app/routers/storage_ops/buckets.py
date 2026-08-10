@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import User
-from app.models.bucket import BucketQuotaUpdate
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketListingRequest
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary, StorageOpsContextKind
 from app.services.bucket_listing_enrichment import (
@@ -37,14 +36,9 @@ from app.routers.ceph_admin.listing_common import (
 )
 from app.routers.dependencies import (
     get_account_context,
-    get_audit_service,
     get_current_storage_ops_admin,
-    is_manager_bucket_quota_available,
-    require_storage_ops_bucket_quota,
 )
 from app.routers.execution_contexts import list_execution_contexts
-from app.services import bucket_config_actions
-from app.services.audit_service import AuditService
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.bucket_listing_cache import (
     get_cached_bucket_listing_for_account,
@@ -496,7 +490,6 @@ def _list_context_buckets(
 
     context_buckets: list[StorageOpsBucketSummary] = []
     owner_identity = _resolve_context_owner(account)
-    bucket_quota_available = is_manager_bucket_quota_available(account)
     for bucket in listed:
         context_buckets.append(
             StorageOpsBucketSummary(
@@ -515,7 +508,6 @@ def _list_context_buckets(
                 endpoint_id=ref.endpoint_id,
                 endpoint_name=ref.endpoint_name,
                 bucket_identity=_build_bucket_identity(ref.endpoint_id, owner_identity.tenant, bucket.name),
-                bucket_quota_available=bucket_quota_available,
             )
         )
 
@@ -562,7 +554,6 @@ def _list_context_buckets(
             account,
         ):
             enriched_payload = enriched.model_dump(mode="json")
-            enriched_payload.pop("bucket_quota_available", None)
             enriched_buckets.append(
                 StorageOpsBucketSummary(
                     **enriched_payload,
@@ -573,7 +564,6 @@ def _list_context_buckets(
                     endpoint_name=ref.endpoint_name,
                     bucket_name=enriched.name,
                     bucket_identity=_build_bucket_identity(ref.endpoint_id, enriched.tenant, enriched.name),
-                    bucket_quota_available=bucket_quota_available,
                 )
             )
         context_buckets = enriched_buckets
@@ -860,45 +850,6 @@ def refresh_storage_ops_bucket_listing_cache(
     for endpoint_id in endpoint_ids:
         invalidate_bucket_owner_metadata_cache(endpoint_id)
     return {"refreshed": True, "contexts": len(resolved_contexts), "endpoints": len(endpoint_ids)}
-
-
-@router.put("/{bucket_ref}/quota", status_code=status.HTTP_200_OK)
-def update_storage_ops_bucket_quota(
-    bucket_ref: str,
-    payload: BucketQuotaUpdate,
-    request: Request,
-    user: User = Depends(require_storage_ops_bucket_quota),
-    db: Session = Depends(get_db),
-    service: BucketsService = Depends(get_buckets_service),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> dict[str, str]:
-    context_id, bucket_name = _decode_bucket_ref(bucket_ref)
-    account = get_account_context(request=request, account_ref=context_id, actor=user, db=db)
-    if not is_manager_bucket_quota_available(account, user, db=db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bucket quota management is not available for this context",
-        )
-    response, audit_metadata = bucket_config_actions.update_bucket_quota_config(
-        service=service,
-        account=account,
-        bucket_name=bucket_name,
-        payload=payload,
-    )
-    invalidate_bucket_listing_cache_for_account(account)
-    endpoint_id = int(getattr(getattr(account, "storage_endpoint", None), "id", 0) or 0)
-    if endpoint_id > 0:
-        invalidate_bucket_owner_metadata_cache(endpoint_id)
-    audit_service.record_action(
-        user=user,
-        scope="storage_ops",
-        action="update_bucket_quota",
-        entity_type="bucket",
-        entity_id=bucket_name,
-        account=account,
-        metadata={**audit_metadata, "context_id": context_id},
-    )
-    return response
 
 
 @router.get("", response_model=PaginatedStorageOpsBucketsResponse)

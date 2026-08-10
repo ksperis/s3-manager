@@ -12,7 +12,7 @@ from app.models.s3_user import S3UserAccessKey, S3UserAccessKeyStatusChange, S3U
 from app.routers.dependencies import (
     get_audit_service,
     get_current_account_user,
-    require_manager_ceph_s3_user_keys,
+    require_manager_rgw_access_key_management,
 )
 from app.services.audit_service import AuditService
 from app.services.s3_users_service import S3UsersService, get_s3_users_service
@@ -46,7 +46,7 @@ def _translate_s3_user_error(exc: ValueError) -> HTTPException:
 
 @router.get("", response_model=list[S3UserAccessKey])
 def list_ceph_access_keys(
-    account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
+    account: S3ExecutionContext = Depends(require_manager_rgw_access_key_management),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     _: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
@@ -71,7 +71,7 @@ def list_ceph_access_keys(
 
 @router.post("", response_model=S3UserGeneratedKey, status_code=status.HTTP_201_CREATED)
 def create_ceph_access_key(
-    account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
+    account: S3ExecutionContext = Depends(require_manager_rgw_access_key_management),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
     audit_service: AuditService = Depends(get_audit_service),
@@ -97,7 +97,7 @@ def create_ceph_access_key(
 def update_ceph_access_key_status(
     access_key: str,
     payload: S3UserAccessKeyStatusChange,
-    account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
+    account: S3ExecutionContext = Depends(require_manager_rgw_access_key_management),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
     audit_service: AuditService = Depends(get_audit_service),
@@ -133,7 +133,7 @@ def update_ceph_access_key_status(
 )
 def delete_ceph_access_key(
     access_key: str,
-    account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
+    account: S3ExecutionContext = Depends(require_manager_rgw_access_key_management),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
     audit_service: AuditService = Depends(get_audit_service),

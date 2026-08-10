@@ -184,8 +184,6 @@ function setManagerUser() {
         bucket_integrity_check: false,
         bucket_migration: false,
         feature_rules: false,
-        bucket_quota: false,
-        ceph_s3_user_keys: true,
       },
     })
   );

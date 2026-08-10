@@ -1995,23 +1995,7 @@ export default function UsersPage() {
                 <ManagerToolAccessSection
                   title="Bucket tools"
                   description="Manager permissions for advanced operations."
-                  tools={managerToolDefinitions.filter((tool) => tool.key !== "ceph_s3_user_keys" && tool.key !== "bucket_quota")}
-                  access={form.manager_tool_access}
-                  isToolDisabled={(tool) => !createTargetSupportsManagerTools || !tool.enabled}
-                  onChange={(key: ManagerToolKey, value) =>
-                    setForm((current) => ({
-                      ...current,
-                      manager_tool_access: {
-                        ...normalizeManagerToolAccess(current.manager_tool_access),
-                        [key]: value,
-                      },
-                    }))
-                  }
-                />
-                <ManagerToolAccessSection
-                  title="Privileged Ceph access"
-                  description="Ceph admin-API actions exposed outside the Ceph Admin workspace."
-                  tools={managerToolDefinitions.filter((tool) => tool.key === "ceph_s3_user_keys" || tool.key === "bucket_quota")}
+                  tools={managerToolDefinitions}
                   access={form.manager_tool_access}
                   isToolDisabled={(tool) => !createTargetSupportsManagerTools || !tool.enabled}
                   onChange={(key: ManagerToolKey, value) =>
@@ -2369,23 +2353,7 @@ export default function UsersPage() {
                 <ManagerToolAccessSection
                   title="Bucket tools"
                   description="Manager permissions for advanced operations."
-                  tools={managerToolDefinitions.filter((tool) => tool.key !== "ceph_s3_user_keys" && tool.key !== "bucket_quota")}
-                  access={editForm.manager_tool_access ?? editingUser.manager_tool_access}
-                  isToolDisabled={(tool) => !editTargetSupportsManagerTools || !tool.enabled}
-                  onChange={(key: ManagerToolKey, value) =>
-                    setEditForm((f) => ({
-                      ...f,
-                      manager_tool_access: {
-                        ...normalizeManagerToolAccess(f.manager_tool_access ?? editingUser.manager_tool_access),
-                        [key]: value,
-                      },
-                    }))
-                  }
-                />
-                <ManagerToolAccessSection
-                  title="Privileged Ceph access"
-                  description="Ceph admin-API actions exposed outside the Ceph Admin workspace."
-                  tools={managerToolDefinitions.filter((tool) => tool.key === "ceph_s3_user_keys" || tool.key === "bucket_quota")}
+                  tools={managerToolDefinitions}
                   access={editForm.manager_tool_access ?? editingUser.manager_tool_access}
                   isToolDisabled={(tool) => !editTargetSupportsManagerTools || !tool.enabled}
                   onChange={(key: ManagerToolKey, value) =>

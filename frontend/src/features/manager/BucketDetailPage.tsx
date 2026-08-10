@@ -124,7 +124,7 @@ import { MetricsCard } from "../../components/MetricsCard";
 import UsageTile from "../../components/UsageTile";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { formatCompactNumber } from "../../utils/format";
-import { getManagerToolAccess, isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
+import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
 import BucketUsageStatsPanel from "../shared/BucketUsageStatsPanel";
@@ -395,7 +395,7 @@ type BucketDetailPageProps = {
   mode?: BucketDetailMode;
   bucketNameOverride?: string;
   accountIdOverride?: string | null;
-  quotaAvailableOverride?: boolean | null;
+  hideQuotaTab?: boolean;
   embedded?: boolean;
   hideObjectsTab?: boolean;
   bucketListPathOverride?: string;
@@ -406,7 +406,7 @@ export default function BucketDetailPage({
   mode = "manager",
   bucketNameOverride,
   accountIdOverride = null,
-  quotaAvailableOverride = null,
+  hideQuotaTab = false,
   embedded = false,
   hideObjectsTab = false,
   bucketListPathOverride,
@@ -587,14 +587,8 @@ export default function BucketDetailPage({
   const endpointId = selectedEndpointId ?? null;
   const hasCephContext = Boolean(endpointId);
   const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
-  const storedUser = useMemo(() => readStoredUser(), []);
-  const managerBucketQuotaAccess = Boolean(getManagerToolAccess(storedUser)?.bucket_quota);
-  const hasQuotaOverride = quotaAvailableOverride !== null;
-  const quotaTargetAllows = hasQuotaOverride ? quotaAvailableOverride !== false : Boolean(managerBucketQuotaEnabled);
-  const quotaFeatureEnabled = isCephAdmin
-    ? isCephEndpoint
-    : Boolean((isCephEndpoint || hasQuotaOverride) && quotaTargetAllows);
-  const showQuotaTab = isCephAdmin || Boolean(quotaFeatureEnabled && managerBucketQuotaAccess && hasAccountContext);
+  const quotaFeatureEnabled = isCephAdmin ? isCephEndpoint : Boolean(isCephEndpoint && managerBucketQuotaEnabled);
+  const showQuotaTab = !hideQuotaTab && (isCephAdmin || Boolean(quotaFeatureEnabled && hasAccountContext));
   const showObjectsTab = !hideObjectsTab;
   const availableTabs = useMemo(() => {
     return resolveBucketDetailTabs({ mode, showObjectsTab, showQuotaTab });
@@ -666,7 +660,7 @@ export default function BucketDetailPage({
   const isAdmin = isAdminLikeRole(userRole);
   const canEditQuota =
     quotaFeatureEnabled &&
-    ((isCephAdmin && isAdmin && hasCephContext) || (!isCephAdmin && managerBucketQuotaAccess && hasAccountContext));
+    ((isCephAdmin && isAdmin && hasCephContext) || (!isCephAdmin && hasAccountContext));
   const quotaSectionRestricted = quotaFeatureEnabled && !canEditQuota;
   const objectLockPersistentlyEnabled = (objectLockConfig?.enabled ?? null) === true;
   const objectLockActive = (objectLockEnabled ?? null) === true || objectLockPersistentlyEnabled;

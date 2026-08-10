@@ -66,9 +66,7 @@ class UiGroupsService:
             can_access_manager_bucket_integrity_check=bool(manager_tool_access.bucket_integrity_check),
             can_access_manager_bucket_migration=bool(manager_tool_access.bucket_migration),
             can_access_manager_feature_rules=bool(manager_tool_access.feature_rules),
-            can_access_manager_bucket_quota=bool(manager_tool_access.bucket_quota),
             can_access_manager_bucket_purge=bool(manager_tool_access.bucket_purge),
-            can_access_manager_ceph_s3_user_keys=bool(manager_tool_access.ceph_s3_user_keys),
             browser_advanced_features_enabled=bool(payload.browser_advanced_features_enabled),
             created_at=now,
             updated_at=now,
@@ -138,9 +136,7 @@ class UiGroupsService:
             group.can_access_manager_bucket_integrity_check = bool(payload.manager_tool_access.bucket_integrity_check)
             group.can_access_manager_bucket_migration = bool(payload.manager_tool_access.bucket_migration)
             group.can_access_manager_feature_rules = bool(payload.manager_tool_access.feature_rules)
-            group.can_access_manager_bucket_quota = bool(payload.manager_tool_access.bucket_quota)
             group.can_access_manager_bucket_purge = bool(payload.manager_tool_access.bucket_purge)
-            group.can_access_manager_ceph_s3_user_keys = bool(payload.manager_tool_access.ceph_s3_user_keys)
         if payload.browser_advanced_features_enabled is not None:
             group.browser_advanced_features_enabled = bool(payload.browser_advanced_features_enabled)
         if payload.user_ids is not None:
@@ -321,9 +317,7 @@ class UiGroupsService:
                 bucket_integrity_check=bool(group.can_access_manager_bucket_integrity_check),
                 bucket_migration=bool(group.can_access_manager_bucket_migration),
                 feature_rules=bool(group.can_access_manager_feature_rules),
-                bucket_quota=bool(group.can_access_manager_bucket_quota),
                 bucket_purge=bool(group.can_access_manager_bucket_purge),
-                ceph_s3_user_keys=bool(group.can_access_manager_ceph_s3_user_keys),
             ),
             browser_advanced_features_enabled=bool(group.browser_advanced_features_enabled),
             user_ids=[row.id for row in user_rows],

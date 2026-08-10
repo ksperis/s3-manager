@@ -32,8 +32,6 @@ function setStoredUser(featureRules: boolean, effectiveFeatureRules = featureRul
         bucket_migration: false,
         bucket_purge: false,
         feature_rules: featureRules,
-        bucket_quota: false,
-        ceph_s3_user_keys: false,
       },
       effective_access: {
         manager_tool_access: {
@@ -42,8 +40,6 @@ function setStoredUser(featureRules: boolean, effectiveFeatureRules = featureRul
           bucket_migration: false,
           bucket_purge: false,
           feature_rules: effectiveFeatureRules,
-          bucket_quota: false,
-          ceph_s3_user_keys: false,
         },
       },
     })

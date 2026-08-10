@@ -125,7 +125,8 @@ function buildGeneralSettings(overrides?: Record<string, unknown>) {
     bucket_compare_enabled: true,
     bucket_integrity_check_enabled: false,
     bucket_usage_stats_enabled: true,
-    manager_ceph_s3_user_keys_enabled: true,
+    bucket_quota_management_enabled: true,
+    ceph_s3_user_access_key_management_enabled: true,
     allow_login_access_keys: false,
     allow_login_endpoint_list: false,
     allow_login_custom_endpoint: false,
@@ -144,8 +145,6 @@ function setStoredManagerUser(overrides?: Record<string, unknown>) {
         bucket_migration: false,
         bucket_purge: false,
         feature_rules: true,
-        bucket_quota: false,
-        ceph_s3_user_keys: true,
       },
       ...overrides,
     })
@@ -205,8 +204,6 @@ describe("ManagerLayout", () => {
         bucket_migration: false,
         bucket_purge: false,
         feature_rules: false,
-        bucket_quota: false,
-        ceph_s3_user_keys: false,
       },
     });
     useS3AccountContextMock.mockReturnValue(
@@ -232,8 +229,6 @@ describe("ManagerLayout", () => {
         bucket_migration: false,
         bucket_purge: false,
         feature_rules: true,
-        bucket_quota: false,
-        ceph_s3_user_keys: true,
       },
     });
     useS3AccountContextMock.mockReturnValue(buildContext());
@@ -264,8 +259,6 @@ describe("ManagerLayout", () => {
         bucket_migration: false,
         bucket_purge: true,
         feature_rules: false,
-        bucket_quota: false,
-        ceph_s3_user_keys: true,
       },
     });
     useS3AccountContextMock.mockReturnValue(buildContext());
@@ -295,8 +288,6 @@ describe("ManagerLayout", () => {
         bucket_migration: true,
         bucket_purge: true,
         feature_rules: true,
-        bucket_quota: false,
-        ceph_s3_user_keys: true,
       },
     });
     useS3AccountContextMock.mockReturnValue(buildContext());
@@ -333,8 +324,6 @@ describe("ManagerLayout", () => {
         bucket_migration: false,
         bucket_purge: false,
         feature_rules: false,
-        bucket_quota: false,
-        ceph_s3_user_keys: true,
       },
     });
     useS3AccountContextMock.mockReturnValue(buildContext());
@@ -365,8 +354,6 @@ describe("ManagerLayout", () => {
         bucket_migration: false,
         bucket_purge: false,
         feature_rules: false,
-        bucket_quota: false,
-        ceph_s3_user_keys: true,
       },
     });
     useS3AccountContextMock.mockReturnValue(buildContext());
@@ -389,8 +376,6 @@ describe("ManagerLayout", () => {
         bucket_migration: false,
         bucket_purge: false,
         feature_rules: false,
-        bucket_quota: false,
-        ceph_s3_user_keys: true,
       },
       effective_access: {
         manager_tool_access: {
@@ -399,8 +384,6 @@ describe("ManagerLayout", () => {
           bucket_migration: false,
           bucket_purge: false,
           feature_rules: true,
-          bucket_quota: false,
-          ceph_s3_user_keys: true,
         },
       },
     });

@@ -355,8 +355,6 @@ describe("BucketDetailPage replication state", () => {
           bucket_integrity_check: false,
           bucket_migration: false,
           feature_rules: false,
-          bucket_quota: true,
-          ceph_s3_user_keys: false,
         },
       })
     );
@@ -388,8 +386,6 @@ describe("BucketDetailPage replication state", () => {
           bucket_integrity_check: false,
           bucket_migration: false,
           feature_rules: false,
-          bucket_quota: true,
-          ceph_s3_user_keys: false,
         },
       })
     );
@@ -399,7 +395,7 @@ describe("BucketDetailPage replication state", () => {
         <BucketDetailPage
           bucketNameOverride="demo-bucket"
           accountIdOverride="conn-aws"
-          quotaAvailableOverride={false}
+          hideQuotaTab
           embedded
           hideObjectsTab
         />

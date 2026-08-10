@@ -44,9 +44,7 @@ Legend: {
     "can_access_manager_bucket_integrity_check": "BOOLEAN [NN]"
     "can_access_manager_bucket_migration": "BOOLEAN [NN]"
     "can_access_manager_feature_rules": "BOOLEAN [NN]"
-    "can_access_manager_bucket_quota": "BOOLEAN [NN]"
     "can_access_manager_bucket_purge": "BOOLEAN [NN]"
-    "can_access_manager_ceph_s3_user_keys": "BOOLEAN [NN]"
     "browser_advanced_features_enabled": "BOOLEAN [NN]"
     "auth_provider": "VARCHAR"
     "auth_provider_subject": "VARCHAR"
@@ -75,9 +73,7 @@ Legend: {
     "can_access_manager_bucket_integrity_check": "BOOLEAN [NN]"
     "can_access_manager_bucket_migration": "BOOLEAN [NN]"
     "can_access_manager_feature_rules": "BOOLEAN [NN]"
-    "can_access_manager_bucket_quota": "BOOLEAN [NN]"
     "can_access_manager_bucket_purge": "BOOLEAN [NN]"
-    "can_access_manager_ceph_s3_user_keys": "BOOLEAN [NN]"
     "browser_advanced_features_enabled": "BOOLEAN [NN]"
     "created_at": "DATETIME [NN]"
     "updated_at": "DATETIME [NN]"
@@ -238,7 +234,7 @@ Legend: {
     "updated_at": "DATETIME [NN]"
     "storage_endpoint_id": "INTEGER [FK]"
     "portal_settings_override": "TEXT"
-    "allow_manager_bucket_quota": "BOOLEAN [NN]"
+    "allow_bucket_quota_management": "BOOLEAN [NN]"
   }
   "user_s3_accounts": {
     class: table
@@ -275,8 +271,9 @@ Legend: {
     "created_at": "DATETIME [NN]"
     "updated_at": "DATETIME [NN]"
     "storage_endpoint_id": "INTEGER [FK]"
-    "allow_manager_bucket_quota": "BOOLEAN [NN]"
-    "allow_manager_ceph_s3_user_keys": "BOOLEAN [NN]"
+    "allow_bucket_quota_management": "BOOLEAN [NN]"
+    "allow_access_key_management": "BOOLEAN [NN]"
+    "allow_managed_private_connection_provisioning": "BOOLEAN [NN]"
   }
   "user_s3_users": {
     class: table

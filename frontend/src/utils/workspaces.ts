@@ -112,14 +112,7 @@ export function canCreateManualPrivateConnections(user: PrivateConnectionAccessU
   );
 }
 
-export function canProvisionManagedPrivateConnections(user: PrivateConnectionAccessUser | null): boolean {
-  return Boolean(
-    user?.effective_access?.can_provision_managed_private_connections ??
-      user?.can_provision_managed_private_connections
-  );
-}
-
-export function hasOwnedPrivateConnections(user: PrivateConnectionAccessUser | null): boolean {
+function hasOwnedPrivateConnections(user: PrivateConnectionAccessUser | null): boolean {
   return Boolean(user?.effective_access?.has_owned_private_connections);
 }
 

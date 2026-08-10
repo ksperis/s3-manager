@@ -45,8 +45,6 @@ class S3ExecutionContext:
     ceph_admin_endpoint_id: Optional[int] = None
     source_connection: Optional[S3Connection] = None
     manager_capabilities: AccountCapabilities = field(default_factory=AccountCapabilities)
-    allow_manager_bucket_quota: bool = False
-    allow_manager_ceph_s3_user_keys: bool = False
     portal_browser_role: Optional[str] = None
     portal_browser_access: Any = None
     portal_allowed_buckets: Optional[set[str]] = None
@@ -75,7 +73,6 @@ class S3ExecutionContext:
             storage_endpoint_id=account.storage_endpoint_id,
             storage_endpoint=account.storage_endpoint,
             manager_capabilities=manager_capabilities or AccountCapabilities(),
-            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
         )
 
     @classmethod
@@ -123,8 +120,6 @@ class S3ExecutionContext:
             storage_endpoint=user.storage_endpoint,
             s3_user_id=user.id,
             manager_capabilities=manager_capabilities or AccountCapabilities(),
-            allow_manager_bucket_quota=bool(user.allow_manager_bucket_quota),
-            allow_manager_ceph_s3_user_keys=bool(user.allow_manager_ceph_s3_user_keys),
         )
 
     @classmethod

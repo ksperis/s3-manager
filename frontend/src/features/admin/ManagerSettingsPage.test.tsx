@@ -40,7 +40,8 @@ function buildSettings(): AppSettings {
       bucket_compare_enabled: true,
       bucket_integrity_check_enabled: false,
       bucket_usage_stats_enabled: true,
-      manager_ceph_s3_user_keys_enabled: false,
+      bucket_quota_management_enabled: true,
+      ceph_s3_user_access_key_management_enabled: false,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,
@@ -105,7 +106,24 @@ describe("ManagerSettingsPage", () => {
       expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
-    expect(payload.general.manager_ceph_s3_user_keys_enabled).toBe(true);
+    expect(payload.general.ceph_s3_user_access_key_management_enabled).toBe(true);
+  });
+
+  it("renders bucket quota kill switch and sends it in save payload", async () => {
+    const user = userEvent.setup();
+    render(<ManagerSettingsPage />);
+
+    const toggle = (await screen.findByLabelText("Bucket quota management")) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+
+    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.general.bucket_quota_management_enabled).toBe(false);
   });
 
   it("renders bucket integrity toggle and sends it in save payload", async () => {
@@ -149,7 +167,7 @@ describe("ManagerSettingsPage", () => {
   it("resets Ceph S3 User keys toggle from defaults", async () => {
     const user = userEvent.setup();
     const defaults = buildSettings();
-    defaults.general.manager_ceph_s3_user_keys_enabled = true;
+    defaults.general.ceph_s3_user_access_key_management_enabled = true;
     fetchDefaultAppSettingsMock.mockResolvedValue(defaults);
 
     render(<ManagerSettingsPage />);

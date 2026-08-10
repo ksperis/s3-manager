@@ -19,7 +19,6 @@ class StorageOpsBucketSummary(CephAdminBucketSummary):
     endpoint_name: Optional[str] = None
     bucket_name: Optional[str] = None
     bucket_identity: Optional[str] = None
-    bucket_quota_available: bool = False
 
 
 class PaginatedStorageOpsBucketsResponse(PaginatedResponse):

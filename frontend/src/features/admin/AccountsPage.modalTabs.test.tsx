@@ -540,7 +540,7 @@ describe("AccountsPage modal tabs", () => {
       screen.getByText("Ceph admin-API actions granted directly to this account outside the Ceph Admin workspace.")
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Allow privileged Ceph bucket quota updates in Manager and Storage Ops.")
+      screen.getByText("Allow Ceph bucket quota updates for this S3 Account in Manager.")
     ).toBeInTheDocument();
     const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
     expect(quotaCheckbox).not.toBeChecked();
@@ -554,7 +554,7 @@ describe("AccountsPage modal tabs", () => {
     const lastCall = updateS3AccountMock.mock.calls.at(-1);
     expect(lastCall?.[1]).toEqual(
       expect.objectContaining({
-        allow_manager_bucket_quota: true,
+        allow_bucket_quota_management: true,
       })
     );
   });
@@ -581,7 +581,7 @@ describe("AccountsPage modal tabs", () => {
     const lastCall = updateS3AccountMock.mock.calls.at(-1);
     expect(lastCall?.[1]).toEqual(
       expect.objectContaining({
-        allow_manager_bucket_quota: true,
+        allow_bucket_quota_management: true,
       })
     );
   });

@@ -14,7 +14,7 @@ from app.routers.dependencies import (
     get_account_context,
     get_current_actor,
     is_manager_bucket_quota_available,
-    is_manager_ceph_s3_user_keys_available,
+    is_manager_rgw_access_key_management_available,
 )
 from app.services.app_settings_service import load_app_settings
 from app.services.connection_identity_service import ConnectionIdentityService
@@ -122,7 +122,7 @@ def get_manager_context(
         iam_identity = connection_iam_identity
 
     manager_ceph_keys_enabled = (
-        is_manager_ceph_s3_user_keys_available(account, actor, db=db)
+        is_manager_rgw_access_key_management_available(account, actor, db=db)
         if isinstance(actor, User)
         else False
     )

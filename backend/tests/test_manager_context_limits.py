@@ -18,7 +18,7 @@ def _prepare_context(db_session, monkeypatch):
     db_session.commit()
     monkeypatch.setattr(context_router, "_manager_stats_state", lambda *_args: (False, None, None))
     monkeypatch.setattr(context_router, "is_manager_bucket_quota_available", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(context_router, "is_manager_ceph_s3_user_keys_available", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(context_router, "is_manager_rgw_access_key_management_available", lambda *_args, **_kwargs: False)
     return account, actor
 
 

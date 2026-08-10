@@ -460,7 +460,7 @@ class ManagedPrivateAccessService:
             raise ManagedPrivateAccessError("RGW User not found")
         endpoint = s3_user.storage_endpoint
         if (
-            not s3_user.allow_manager_ceph_s3_user_keys
+            not s3_user.allow_managed_private_connection_provisioning
             or endpoint is None
             or str(endpoint.provider) != StorageProvider.CEPH.value
             or not resolve_feature_flags(endpoint).admin_enabled

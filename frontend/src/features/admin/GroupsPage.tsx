@@ -1323,22 +1323,7 @@ export default function GroupsPage() {
                 <ManagerToolAccessSection
                   title="Bucket tools"
                   description="Manager permissions inherited by group members."
-                  tools={managerToolDefinitions.filter((tool) => tool.key !== "ceph_s3_user_keys" && tool.key !== "bucket_quota")}
-                  access={form.manager_tool_access}
-                  onChange={(key: ManagerToolKey, value) =>
-                    setForm((current) => ({
-                      ...current,
-                      manager_tool_access: {
-                        ...normalizeManagerToolAccess(current.manager_tool_access),
-                        [key]: value,
-                      },
-                    }))
-                  }
-                />
-                <ManagerToolAccessSection
-                  title="Privileged Ceph access"
-                  description="Ceph admin-API actions inherited by group members outside the Ceph Admin workspace."
-                  tools={managerToolDefinitions.filter((tool) => tool.key === "ceph_s3_user_keys" || tool.key === "bucket_quota")}
+                  tools={managerToolDefinitions}
                   access={form.manager_tool_access}
                   onChange={(key: ManagerToolKey, value) =>
                     setForm((current) => ({

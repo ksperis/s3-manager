@@ -44,7 +44,6 @@ from app.models.bucket import (
     BucketProperties,
     BucketPublicAccessBlock,
     BucketVersioningStatus,
-    BucketQuotaUpdate,
     BucketTagsUpdate,
     BucketVersioningUpdate,
     BucketWebsiteConfiguration,
@@ -96,7 +95,7 @@ from app.routers.dependencies import (
     get_account_context,
     get_audit_service,
     get_current_account_admin,
-    get_current_super_admin,
+    forbid_browser_bucket_quota_management,
     get_optional_sse_customer_context,
     require_portal_browser_basic_route,
 )
@@ -416,32 +415,11 @@ def delete_bucket_config(
 
 
 @router.put("/buckets/config/{bucket_name}/quota")
-def update_bucket_quota_config(
+def deny_bucket_quota_update(
     bucket_name: str,
-    payload: BucketQuotaUpdate,
-    account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
-    browser_service: BrowserService = Depends(get_browser_service),
-    actor: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> dict[str, str]:
-    response, audit_metadata = bucket_config_actions.update_bucket_quota_config(
-        service=service,
-        account=account,
-        bucket_name=bucket_name,
-        payload=payload,
-    )
-    _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    audit_service.record_action(
-        user=actor,
-        scope="browser",
-        action="update_bucket_quota",
-        entity_type="bucket",
-        entity_id=bucket_name,
-        account=account,
-        metadata=audit_metadata,
-    )
-    return response
+    _: None = Depends(forbid_browser_bucket_quota_management),
+) -> None:
+    raise AssertionError(f"Browser bucket quota guard did not reject {bucket_name}")
 
 
 @router.get("/buckets/config/{bucket_name}/properties", response_model=BucketProperties)

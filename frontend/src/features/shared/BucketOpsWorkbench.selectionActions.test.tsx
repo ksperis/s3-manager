@@ -82,7 +82,6 @@ vi.mock("../../api/storageOps", () => ({
   streamStorageOpsBuckets: mocks.streamStorageOpsBuckets,
   updateStorageOpsBucketObjectLock: mocks.noopAsync,
   updateStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
-  updateStorageOpsBucketQuota: mocks.noopAsync,
 }));
 
 vi.mock("../cephAdmin/CephAdminEndpointContext", () => ({
@@ -491,94 +490,9 @@ describe("BucketOpsWorkbench selection actions", () => {
     expect(screen.getByRole("option", { name: "Delete notification configurations" })).toBeInTheDocument();
   });
 
-  it("disables Storage Ops bulk quota updates without privileged Ceph access", async () => {
+  it("does not expose Storage Ops bulk quota updates", async () => {
     mocks.listStorageOpsBuckets.mockResolvedValue({
       items: [{ name: "conn-2::bucket-001", bucket_name: "bucket-001", context_id: "conn-2" }],
-      total: 1,
-      page: 1,
-      page_size: 25,
-      has_next: false,
-      stats_available: true,
-    });
-
-    render(
-      <MemoryRouter>
-        <BucketOpsWorkbench mode="storage-ops" shell={{ pageDescription: "Storage Ops buckets" }} />
-      </MemoryRouter>
-    );
-
-    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("checkbox")[1]);
-    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
-
-    const quotaOption = screen.getByRole("option", {
-      name: "Set bucket quota (privileged Ceph access required)",
-    }) as HTMLOptionElement;
-    expect(quotaOption.disabled).toBe(true);
-  });
-
-  it("enables Storage Ops bulk quota updates with privileged Ceph access", async () => {
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_user",
-        manager_tool_access: {
-          bucket_compare: false,
-          bucket_integrity_check: false,
-          bucket_migration: false,
-          feature_rules: false,
-          bucket_quota: true,
-          ceph_s3_user_keys: false,
-        },
-      })
-    );
-    mocks.listStorageOpsBuckets.mockResolvedValue({
-      items: [{ name: "conn-2::bucket-001", bucket_name: "bucket-001", context_id: "conn-2" }],
-      total: 1,
-      page: 1,
-      page_size: 25,
-      has_next: false,
-      stats_available: true,
-    });
-
-    render(
-      <MemoryRouter>
-        <BucketOpsWorkbench mode="storage-ops" shell={{ pageDescription: "Storage Ops buckets" }} />
-      </MemoryRouter>
-    );
-
-    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("checkbox")[1]);
-    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
-
-    const quotaOption = screen.getByRole("option", { name: "Set bucket quota" }) as HTMLOptionElement;
-    expect(quotaOption.disabled).toBe(false);
-  });
-
-  it("reports Storage Ops bulk quota items without target grants during preview", async () => {
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_user",
-        manager_tool_access: {
-          bucket_compare: false,
-          bucket_integrity_check: false,
-          bucket_migration: false,
-          feature_rules: false,
-          bucket_quota: true,
-          ceph_s3_user_keys: false,
-        },
-      })
-    );
-    mocks.listStorageOpsBuckets.mockResolvedValue({
-      items: [
-        {
-          name: "conn-2::bucket-001",
-          bucket_name: "bucket-001",
-          context_id: "conn-2",
-          bucket_quota_available: false,
-        },
-      ],
       total: 1,
       page: 1,
       page_size: 25,
@@ -597,11 +511,9 @@ describe("BucketOpsWorkbench selection actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Bulk update" });
-    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "set_quota" } });
-    const quotaInputs = await within(dialog).findAllByPlaceholderText("Leave empty to clear");
-    fireEvent.change(quotaInputs[0], { target: { value: "1" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Preview" }));
+    expect(within(dialog).queryByRole("option", { name: /Set bucket quota/ })).not.toBeInTheDocument();
 
-    expect(await screen.findByText("Bucket quota management is not available for this context.")).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "copy_configs" } });
+    expect(within(dialog).queryByRole("checkbox", { name: "Quota" })).not.toBeInTheDocument();
   });
 });

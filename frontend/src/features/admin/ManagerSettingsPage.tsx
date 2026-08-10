@@ -116,7 +116,21 @@ export default function ManagerSettingsPage() {
             ...prev,
             general: {
               ...prev.general,
-              manager_ceph_s3_user_keys_enabled: value,
+              ceph_s3_user_access_key_management_enabled: value,
+            },
+          }
+        : prev
+    );
+  };
+
+  const handleToggleBucketQuotaManagement = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              bucket_quota_management_enabled: value,
             },
           }
         : prev
@@ -210,7 +224,8 @@ export default function ManagerSettingsPage() {
                     bucket_compare_enabled: defaults.general.bucket_compare_enabled,
                     bucket_integrity_check_enabled: defaults.general.bucket_integrity_check_enabled,
                     bucket_usage_stats_enabled: defaults.general.bucket_usage_stats_enabled,
-                    manager_ceph_s3_user_keys_enabled: defaults.general.manager_ceph_s3_user_keys_enabled,
+                    bucket_quota_management_enabled: defaults.general.bucket_quota_management_enabled,
+                    ceph_s3_user_access_key_management_enabled: defaults.general.ceph_s3_user_access_key_management_enabled,
                   },
                 }
               : defaults
@@ -330,11 +345,22 @@ export default function ManagerSettingsPage() {
                   }
                 />
                 <SettingsItem
+                  title="Bucket quota management"
+                  description="Enables Ceph bucket quota management for eligible S3 Account and RGW User contexts in Manager."
+                  action={
+                    <SettingsToggleAction
+                      checked={Boolean(settings.general.bucket_quota_management_enabled)}
+                      onChange={(value) => handleToggleBucketQuotaManagement(value)}
+                      ariaLabel="Bucket quota management"
+                    />
+                  }
+                />
+                <SettingsItem
                   title="Ceph S3 User keys manager"
                   description="Enables the Manager Ceph section for RGW access key management on eligible S3 User contexts."
                   action={
                     <SettingsToggleAction
-                      checked={Boolean(settings.general.manager_ceph_s3_user_keys_enabled)}
+                      checked={Boolean(settings.general.ceph_s3_user_access_key_management_enabled)}
                       onChange={(value) => handleToggleManagerCephS3UserKeysTool(value)}
                       ariaLabel="Ceph S3 User keys manager"
                     />

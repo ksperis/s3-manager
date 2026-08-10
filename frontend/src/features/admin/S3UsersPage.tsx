@@ -162,8 +162,9 @@ export default function S3UsersPage() {
     quota_max_size_gb: "",
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
-    allow_manager_bucket_quota: false,
-    allow_manager_ceph_s3_user_keys: false,
+    allow_bucket_quota_management: false,
+    allow_access_key_management: false,
+    allow_managed_private_connection_provisioning: false,
   });
   const [editInitialSignature, setEditInitialSignature] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
@@ -524,8 +525,11 @@ export default function S3UsersPage() {
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
       quota_max_objects: user.quota_max_objects != null ? String(user.quota_max_objects) : "",
-      allow_manager_bucket_quota: Boolean(user.allow_manager_bucket_quota),
-      allow_manager_ceph_s3_user_keys: Boolean(user.allow_manager_ceph_s3_user_keys),
+      allow_bucket_quota_management: Boolean(user.allow_bucket_quota_management),
+      allow_access_key_management: Boolean(user.allow_access_key_management),
+      allow_managed_private_connection_provisioning: Boolean(
+        user.allow_managed_private_connection_provisioning
+      ),
     };
     setEditingUser(user);
     setEditForm(nextEditForm);
@@ -557,8 +561,10 @@ export default function S3UsersPage() {
         group_ids: editForm.group_ids,
       };
       if (canManagePrivilegedTargets) {
-        payload.allow_manager_bucket_quota = editForm.allow_manager_bucket_quota;
-        payload.allow_manager_ceph_s3_user_keys = editForm.allow_manager_ceph_s3_user_keys;
+        payload.allow_bucket_quota_management = editForm.allow_bucket_quota_management;
+        payload.allow_access_key_management = editForm.allow_access_key_management;
+        payload.allow_managed_private_connection_provisioning =
+          editForm.allow_managed_private_connection_provisioning;
       }
       if (allowUserQuotaUpdates) {
         payload.quota_max_size_gb = editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null;
@@ -1475,24 +1481,35 @@ export default function S3UsersPage() {
                 items={[
                   {
                     title: "Bucket quota management",
-                    description: "Allow privileged Ceph bucket quota updates in Manager and Storage Ops.",
+                    description: "Allow Ceph bucket quota updates for this RGW User in Manager.",
                     ariaLabel: "Bucket quota management",
-                    checked: editForm.allow_manager_bucket_quota,
+                    checked: editForm.allow_bucket_quota_management,
                     onChange: (checked) =>
                       setEditForm((prev) => ({
                         ...prev,
-                        allow_manager_bucket_quota: checked,
+                        allow_bucket_quota_management: checked,
                       })),
                   },
                   {
                     title: "Ceph S3 User keys",
                     description: "Allow access to Manager > Ceph > Access keys.",
                     ariaLabel: "Ceph S3 User keys",
-                    checked: editForm.allow_manager_ceph_s3_user_keys,
+                    checked: editForm.allow_access_key_management,
                     onChange: (checked) =>
                       setEditForm((prev) => ({
                         ...prev,
-                        allow_manager_ceph_s3_user_keys: checked,
+                        allow_access_key_management: checked,
+                      })),
+                  },
+                  {
+                    title: "Managed private connection provisioning",
+                    description: "Allow Manager to provision a dedicated private Browser connection for this RGW User.",
+                    ariaLabel: "Managed private connection provisioning",
+                    checked: editForm.allow_managed_private_connection_provisioning,
+                    onChange: (checked) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        allow_managed_private_connection_provisioning: checked,
                       })),
                   },
                 ]}

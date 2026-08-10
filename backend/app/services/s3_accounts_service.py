@@ -861,8 +861,8 @@ class S3AccountsService:
             account.storage_endpoint_id = endpoint.id
         if payload.tags is not None:
             self.tags.replace_account_tags(account, payload.tags)
-        if payload.allow_manager_bucket_quota is not None:
-            account.allow_manager_bucket_quota = bool(payload.allow_manager_bucket_quota)
+        if payload.allow_bucket_quota_management is not None:
+            account.allow_bucket_quota_management = bool(payload.allow_bucket_quota_management)
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
             quota_requested = payload.quota_max_size_gb is not None or payload.quota_max_objects is not None

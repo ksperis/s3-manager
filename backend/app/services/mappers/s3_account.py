@@ -65,7 +65,7 @@ def s3_account_from_db(
         storage_endpoint_url=storage_endpoint.endpoint_url,
         storage_endpoint_is_default=bool(storage_endpoint.is_default),
         storage_endpoint_capabilities=storage_endpoint_capabilities,
-        allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
+        allow_bucket_quota_management=bool(account.allow_bucket_quota_management),
         tags=tags or [],
     )
 
@@ -96,6 +96,6 @@ def s3_account_summary_from_db(
         storage_endpoint_url=storage_endpoint.endpoint_url,
         storage_endpoint_is_default=bool(storage_endpoint.is_default),
         storage_endpoint_capabilities=storage_endpoint_capabilities,
-        allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
+        allow_bucket_quota_management=bool(account.allow_bucket_quota_management),
         tags=tags or [],
     )

@@ -107,8 +107,6 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     assert admin.can_access_manager_bucket_integrity_check is False
     assert admin.can_access_manager_bucket_migration is False
     assert admin.can_access_manager_feature_rules is False
-    assert admin.can_access_manager_bucket_quota is False
-    assert admin.can_access_manager_ceph_s3_user_keys is False
     assert admin.can_create_manual_private_connections is False
     assert admin.can_provision_managed_private_connections is False
 
@@ -149,8 +147,6 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
                 "bucket_integrity_check": True,
                 "bucket_migration": True,
                 "feature_rules": True,
-                "bucket_quota": True,
-                "ceph_s3_user_keys": True,
             },
         )
     )
@@ -161,8 +157,6 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     assert created.can_access_manager_bucket_integrity_check is True
     assert created.can_access_manager_bucket_migration is True
     assert created.can_access_manager_feature_rules is True
-    assert created.can_access_manager_bucket_quota is True
-    assert created.can_access_manager_ceph_s3_user_keys is True
     assert created.can_create_manual_private_connections is True
     assert created.can_provision_managed_private_connections is True
 
@@ -209,8 +203,6 @@ def test_update_user_and_link_validations(db_session):
                 "bucket_integrity_check": False,
                 "bucket_migration": True,
                 "feature_rules": True,
-                "bucket_quota": False,
-                "ceph_s3_user_keys": False,
             },
             s3_user_ids=[s3_user.id],
             s3_connection_ids=[shared_conn.id],
@@ -225,8 +217,6 @@ def test_update_user_and_link_validations(db_session):
     assert updated.can_access_manager_bucket_integrity_check is False
     assert updated.can_access_manager_bucket_migration is True
     assert updated.can_access_manager_feature_rules is True
-    assert updated.can_access_manager_bucket_quota is False
-    assert updated.can_access_manager_ceph_s3_user_keys is False
     assert updated.can_create_manual_private_connections is True
     assert updated.can_provision_managed_private_connections is True
     assert updated.quota_alerts_global_watch is False
@@ -312,8 +302,6 @@ def test_update_user_clears_manager_tools_for_no_access_role(db_session):
                 "bucket_integrity_check": True,
                 "bucket_migration": True,
                 "feature_rules": True,
-                "bucket_quota": True,
-                "ceph_s3_user_keys": True,
             },
         ),
     )
@@ -323,8 +311,6 @@ def test_update_user_clears_manager_tools_for_no_access_role(db_session):
     assert updated.can_access_manager_bucket_integrity_check is False
     assert updated.can_access_manager_bucket_migration is False
     assert updated.can_access_manager_feature_rules is False
-    assert updated.can_access_manager_bucket_quota is False
-    assert updated.can_access_manager_ceph_s3_user_keys is False
     assert updated.can_create_manual_private_connections is False
     assert updated.can_provision_managed_private_connections is False
 

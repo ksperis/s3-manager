@@ -182,7 +182,7 @@ export default function S3AccountsPage() {
     quota_max_objects: "",
     user_links: [] as AccountUserLink[],
     group_links: [] as AccountGroupLink[],
-    allow_manager_bucket_quota: false,
+    allow_bucket_quota_management: false,
   });
   const [editInitialSignature, setEditInitialSignature] = useState("");
   const [portalInitialSignature, setPortalInitialSignature] = useState("");
@@ -1005,7 +1005,7 @@ export default function S3AccountsPage() {
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
       quota_max_objects: detail.quota_max_objects != null ? String(detail.quota_max_objects) : "",
-      allow_manager_bucket_quota: Boolean(detail.allow_manager_bucket_quota),
+      allow_bucket_quota_management: Boolean(detail.allow_bucket_quota_management),
       user_links:
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
@@ -1047,7 +1047,7 @@ export default function S3AccountsPage() {
         group_links: editForm.group_links,
         tags: normalizeUiTags(editForm.tags),
         ...(canManagePrivilegedTargets
-          ? { allow_manager_bucket_quota: editForm.allow_manager_bucket_quota }
+          ? { allow_bucket_quota_management: editForm.allow_bucket_quota_management }
           : {}),
         ...(allowQuotaUpdates
           ? {
@@ -1985,13 +1985,13 @@ export default function S3AccountsPage() {
                   items={[
                     {
                       title: "Bucket quota management",
-                      description: "Allow privileged Ceph bucket quota updates in Manager and Storage Ops.",
+                      description: "Allow Ceph bucket quota updates for this S3 Account in Manager.",
                       ariaLabel: "Bucket quota management",
-                      checked: editForm.allow_manager_bucket_quota,
+                      checked: editForm.allow_bucket_quota_management,
                       onChange: (checked) =>
                         setEditForm((prev) => ({
                           ...prev,
-                          allow_manager_bucket_quota: checked,
+                          allow_bucket_quota_management: checked,
                         })),
                     },
                   ]}

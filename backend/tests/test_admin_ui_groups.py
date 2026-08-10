@@ -150,8 +150,6 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
         "bucket_migration": False,
         "bucket_purge": False,
         "feature_rules": False,
-        "bucket_quota": False,
-        "ceph_s3_user_keys": False,
     }
     assert payload["user_ids"] == [user.id]
     assert payload["accounts"] == [account.id]
@@ -297,8 +295,6 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
                 "bucket_migration": True,
                 "bucket_purge": True,
                 "feature_rules": True,
-                "bucket_quota": True,
-                "ceph_s3_user_keys": False,
             },
             "user_ids": [user.id],
             "account_links": [
@@ -328,7 +324,8 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
     assert out.effective_access.manager_tool_access.bucket_migration is True
     assert out.effective_access.manager_tool_access.bucket_purge is True
     assert out.effective_access.manager_tool_access.feature_rules is True
-    assert out.effective_access.manager_tool_access.bucket_quota is True
+    assert "bucket_quota" not in out.effective_access.manager_tool_access.model_dump()
+    assert "ceph_s3_user_keys" not in out.effective_access.manager_tool_access.model_dump()
     assert out.effective_access.accounts == [account.id]
     effective_account = out.effective_access.account_links[0]
     assert effective_account.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
@@ -374,7 +371,7 @@ def test_group_ceph_admin_grant_requires_superadmin(client: TestClient, db_sessi
     assert response.json()["detail"] == "Only superadmin users can grant privileged Ceph access"
 
 
-def test_group_bucket_quota_grant_requires_superadmin(client: TestClient, db_session):
+def test_group_payload_rejects_removed_bucket_quota_permission(client: TestClient, db_session):
     admin_user = User(
         id=7002,
         email="admin-ui-group-quota@example.com",
@@ -392,8 +389,7 @@ def test_group_bucket_quota_grant_requires_superadmin(client: TestClient, db_ses
         },
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Only superadmin users can grant privileged Ceph access"
+    assert response.status_code == 422
 
 
 def test_effective_ceph_admin_requires_user_admin_role(client: TestClient, db_session):

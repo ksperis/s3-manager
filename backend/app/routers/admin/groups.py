@@ -14,7 +14,6 @@ from app.models.ui_group import (
     UiGroupSummary,
     UiGroupUpdate,
 )
-from app.models.user import ManagerToolAccess
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.ui_groups_service import UiGroupsService, get_ui_groups_service
@@ -25,19 +24,13 @@ from app.core.sensitive_data import sanitize_error_detail
 router = APIRouter(prefix="/admin/groups", tags=["admin-groups"])
 
 
-def _manager_access_grants_bucket_quota(manager_tool_access: Optional[ManagerToolAccess]) -> bool:
-    return bool(manager_tool_access and manager_tool_access.bucket_quota is True)
-
-
 def _require_superadmin_for_privileged_grant(
     current_user: User,
     *,
     can_access_ceph_admin: Optional[bool],
-    manager_tool_access: Optional[ManagerToolAccess],
 ) -> None:
     wants_ceph_admin_grant = can_access_ceph_admin is True
-    wants_bucket_quota_grant = _manager_access_grants_bucket_quota(manager_tool_access)
-    if (wants_ceph_admin_grant or wants_bucket_quota_grant) and not is_superadmin_ui_role(current_user.role):
+    if wants_ceph_admin_grant and not is_superadmin_ui_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only superadmin users can grant privileged Ceph access",
@@ -83,7 +76,6 @@ def create_group(
     _require_superadmin_for_privileged_grant(
         current_user,
         can_access_ceph_admin=payload.can_access_ceph_admin,
-        manager_tool_access=payload.manager_tool_access,
     )
     try:
         group = groups_service.create_group(payload)
@@ -119,7 +111,6 @@ def update_group(
     _require_superadmin_for_privileged_grant(
         current_user,
         can_access_ceph_admin=payload.can_access_ceph_admin,
-        manager_tool_access=payload.manager_tool_access,
     )
     try:
         group = groups_service.update_group(group_id, payload)

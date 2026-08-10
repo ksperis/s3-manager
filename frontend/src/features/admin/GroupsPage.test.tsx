@@ -31,7 +31,8 @@ const generalSettingsState = {
   bucket_purge_enabled: false,
   bucket_compare_enabled: true,
   bucket_integrity_check_enabled: true,
-  manager_ceph_s3_user_keys_enabled: true,
+  bucket_quota_management_enabled: true,
+  ceph_s3_user_access_key_management_enabled: true,
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
@@ -151,8 +152,6 @@ describe("GroupsPage", () => {
             bucket_integrity_check: false,
             bucket_migration: false,
             feature_rules: false,
-            bucket_quota: false,
-            ceph_s3_user_keys: false,
           },
           user_ids: [2],
           user_details: [{ id: 2, email: "alice@example.com" }],
@@ -264,8 +263,6 @@ describe("GroupsPage", () => {
             bucket_integrity_check: false,
             bucket_migration: false,
             feature_rules: false,
-            bucket_quota: false,
-            ceph_s3_user_keys: false,
           },
           user_ids: [],
           user_details: [],
@@ -354,8 +351,8 @@ describe("GroupsPage", () => {
     expect(screen.getByRole("checkbox", { name: "Bucket integrity check" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Bucket migration" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Feature rule inventory" })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Bucket quota management" })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Ceph S3 User keys" })).not.toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: "Bucket quota management" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Ceph S3 User keys" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "Bucket compare" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Feature rule inventory" }));
 
@@ -380,8 +377,6 @@ describe("GroupsPage", () => {
         bucket_migration: false,
         bucket_purge: false,
         feature_rules: true,
-        bucket_quota: false,
-        ceph_s3_user_keys: false,
       },
       user_ids: [2],
       account_links: [{ account_id: 1, role: "account_administrator" }],
@@ -467,8 +462,6 @@ describe("GroupsPage", () => {
             bucket_integrity_check: false,
             bucket_migration: false,
             feature_rules: false,
-            bucket_quota: false,
-            ceph_s3_user_keys: false,
           },
           user_ids: [2],
           user_details: [{ id: 2, email: "alice@example.com" }],

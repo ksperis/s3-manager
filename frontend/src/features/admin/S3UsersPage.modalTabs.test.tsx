@@ -398,15 +398,18 @@ describe("S3UsersPage modal tabs", () => {
       screen.getByText("Ceph admin-API actions granted directly to this RGW user outside the Ceph Admin workspace.")
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Allow privileged Ceph bucket quota updates in Manager and Storage Ops.")
+      screen.getByText("Allow Ceph bucket quota updates for this RGW User in Manager.")
     ).toBeInTheDocument();
     expect(screen.getByText("Allow access to Manager > Ceph > Access keys.")).toBeInTheDocument();
     const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
     const keysCheckbox = screen.getByRole("checkbox", { name: /Ceph S3 User keys/ });
+    const privateCheckbox = screen.getByRole("checkbox", { name: /Managed private connection provisioning/ });
     expect(quotaCheckbox).not.toBeChecked();
     expect(keysCheckbox).not.toBeChecked();
+    expect(privateCheckbox).not.toBeChecked();
     fireEvent.click(quotaCheckbox);
     fireEvent.click(keysCheckbox);
+    fireEvent.click(privateCheckbox);
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
@@ -416,8 +419,9 @@ describe("S3UsersPage modal tabs", () => {
     const lastCall = updateS3UserMock.mock.calls.at(-1);
     expect(lastCall?.[1]).toEqual(
       expect.objectContaining({
-        allow_manager_bucket_quota: true,
-        allow_manager_ceph_s3_user_keys: true,
+        allow_bucket_quota_management: true,
+        allow_access_key_management: true,
+        allow_managed_private_connection_provisioning: true,
       })
     );
   });
@@ -451,8 +455,8 @@ describe("S3UsersPage modal tabs", () => {
     const lastCall = updateS3UserMock.mock.calls.at(-1);
     expect(lastCall?.[1]).toEqual(
       expect.objectContaining({
-        allow_manager_bucket_quota: true,
-        allow_manager_ceph_s3_user_keys: true,
+        allow_bucket_quota_management: true,
+        allow_access_key_management: true,
       })
     );
   });

@@ -396,8 +396,9 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_url=endpoint.endpoint_url,
-            allow_manager_bucket_quota=bool(row.allow_manager_bucket_quota),
-            allow_manager_ceph_s3_user_keys=bool(row.allow_manager_ceph_s3_user_keys),
+            allow_bucket_quota_management=bool(row.allow_bucket_quota_management),
+            allow_access_key_management=bool(row.allow_access_key_management),
+            allow_managed_private_connection_provisioning=bool(row.allow_managed_private_connection_provisioning),
             tags=self.tags.get_s3_user_tags(row),
         )
 
@@ -491,8 +492,9 @@ class S3UsersService:
                     storage_endpoint_id=endpoint.id,
                     storage_endpoint_name=endpoint.name,
                     storage_endpoint_url=endpoint.endpoint_url,
-                    allow_manager_bucket_quota=bool(row.allow_manager_bucket_quota),
-                    allow_manager_ceph_s3_user_keys=bool(row.allow_manager_ceph_s3_user_keys),
+                    allow_bucket_quota_management=bool(row.allow_bucket_quota_management),
+                    allow_access_key_management=bool(row.allow_access_key_management),
+                    allow_managed_private_connection_provisioning=bool(row.allow_managed_private_connection_provisioning),
                     tags=self.tags.get_s3_user_tags(row),
                 )
             )
@@ -608,8 +610,9 @@ class S3UsersService:
             storage_endpoint_name=endpoint.name,
             storage_endpoint_url=endpoint.endpoint_url,
             bucket_count=bucket_count,
-            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
-            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
+            allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
+            allow_access_key_management=bool(s3_user.allow_access_key_management),
+            allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -678,8 +681,9 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_url=endpoint.endpoint_url,
-            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
-            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
+            allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
+            allow_access_key_management=bool(s3_user.allow_access_key_management),
+            allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -739,8 +743,9 @@ class S3UsersService:
                     storage_endpoint_id=endpoint.id,
                     storage_endpoint_name=endpoint.name,
                     storage_endpoint_url=endpoint.endpoint_url,
-                    allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
-                    allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
+                    allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
+                    allow_access_key_management=bool(s3_user.allow_access_key_management),
+                    allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
                     tags=[],
                 )
             )
@@ -761,10 +766,14 @@ class S3UsersService:
             self._ensure_group_links(s3_user, payload.group_ids)
         if payload.tags is not None:
             self.tags.replace_s3_user_tags(s3_user, payload.tags)
-        if payload.allow_manager_bucket_quota is not None:
-            s3_user.allow_manager_bucket_quota = bool(payload.allow_manager_bucket_quota)
-        if payload.allow_manager_ceph_s3_user_keys is not None:
-            s3_user.allow_manager_ceph_s3_user_keys = bool(payload.allow_manager_ceph_s3_user_keys)
+        if payload.allow_bucket_quota_management is not None:
+            s3_user.allow_bucket_quota_management = bool(payload.allow_bucket_quota_management)
+        if payload.allow_access_key_management is not None:
+            s3_user.allow_access_key_management = bool(payload.allow_access_key_management)
+        if payload.allow_managed_private_connection_provisioning is not None:
+            s3_user.allow_managed_private_connection_provisioning = bool(
+                payload.allow_managed_private_connection_provisioning
+            )
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
             self._apply_user_quota(
@@ -797,8 +806,9 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_url=endpoint.endpoint_url,
-            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
-            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
+            allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
+            allow_access_key_management=bool(s3_user.allow_access_key_management),
+            allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -879,8 +889,9 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_url=endpoint.endpoint_url,
-            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
-            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
+            allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
+            allow_access_key_management=bool(s3_user.allow_access_key_management),
+            allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 

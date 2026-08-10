@@ -105,7 +105,6 @@ import {
   saveBucketListReturnContext,
 } from "./bucketListReturnContext";
 import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../../utils/uiTags";
-import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
 import {
   buildBucketPolicySummaryLines,
   buildBucketTagSummaryLines,
@@ -382,13 +381,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const staticWebsiteFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.static_website === true;
   const snsFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.sns === true;
   const sseFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.sse !== false;
-  const storedUser = useMemo(() => readStoredUser(), []);
-  const canManageBucketQuota = !isStorageOps || Boolean(getManagerToolAccess(storedUser)?.bucket_quota);
-  const quotaOperationDisabledReason = !usageFeatureEnabled
-    ? "bucket stats unavailable"
-    : !canManageBucketQuota
-      ? "privileged Ceph access required"
-      : null;
+  const quotaOperationDisabledReason = !usageFeatureEnabled ? "bucket stats unavailable" : null;
 
   const {
     listBuckets,
@@ -1761,17 +1754,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     });
     return next;
   }, [items]);
-  const storageOpsQuotaUnavailableSelectedBuckets = useMemo(() => {
-    const unavailable = new Set<string>();
-    if (!isStorageOps) return unavailable;
-    selectedBucketList.forEach((bucketName) => {
-      const bucket = selectedBucketItemByName.get(bucketName) as StorageOpsBucket | undefined;
-      if (bucket && bucket.bucket_quota_available === false) {
-        unavailable.add(bucketName);
-      }
-    });
-    return unavailable;
-  }, [isStorageOps, selectedBucketItemByName, selectedBucketList]);
   const selectedIntegrityTargets = useMemo<BucketIntegrityUiTarget[]>(() => {
     if (!isStorageOps) {
       return selectedBucketList.map((bucketName) => ({ bucketName }));
@@ -2664,15 +2646,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     payload: ParsedQuotaInput,
     skipConfigured: boolean
   ): Promise<BulkPreviewItem> => {
-    if (storageOpsQuotaUnavailableSelectedBuckets.has(bucketName)) {
-      return {
-        bucket: bucketName,
-        changed: false,
-        before: [{ text: "Bucket quota management unavailable." }],
-        after: [{ text: "Skipped." }],
-        error: "Bucket quota management is not available for this context.",
-      };
-    }
     const currentQuota = await fetchBucketQuota(bucketName);
     if (skipConfigured && hasConfiguredQuota(currentQuota)) {
       return {
@@ -3036,7 +3009,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const copyBulkConfigs = async () => {
     if (!selectedEndpointId || selectedBucketList.length === 0) return;
     const selectedFeatures = (Object.keys(bulkCopyFeatures) as BulkCopyFeatureKey[]).filter(
-      (feature) => bulkCopyFeatures[feature]
+      (feature) => bulkCopyFeatures[feature] && (!isStorageOps || feature !== "quota")
     );
     if (selectedFeatures.length === 0) {
       setBulkCopyError("Select at least one configuration to copy.");
@@ -3062,7 +3035,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           if (bulkCopyFeatures.versioning || bulkCopyFeatures.object_lock) {
             props = await getBucketProperties(selectedEndpointId, bucketName);
           }
-          const quota = bulkCopyFeatures.quota ? await fetchBucketQuota(bucketName) : null;
+          const quota = !isStorageOps && bulkCopyFeatures.quota ? await fetchBucketQuota(bucketName) : null;
           const versioningEnabled = bulkCopyFeatures.versioning
             ? normalizeVersioningStatus(props?.versioning_status) === true
             : null;
@@ -3161,7 +3134,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         sourceEndpointId: selectedEndpointId,
         sourceEndpointName: selectedEndpoint?.name ?? null,
         features: {
-          quota: bulkCopyFeatures.quota,
+          quota: !isStorageOps && bulkCopyFeatures.quota,
           versioning: bulkCopyFeatures.versioning,
           object_lock: bulkCopyFeatures.object_lock,
           public_access_block: bulkCopyFeatures.public_access_block,
@@ -3209,7 +3182,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       props = await getBucketProperties(selectedEndpointId!, mapping.destinationBucket);
     }
 
-    if (features.quota && source.quota) {
+    if (!isStorageOps && features.quota && source.quota) {
       const currentQuota = await fetchBucketQuota(mapping.destinationBucket);
       const sectionChanged =
         currentQuota.maxSizeBytes !== source.quota.maxSizeBytes || currentQuota.maxObjects !== source.quota.maxObjects;
@@ -3693,7 +3666,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             props = await getBucketProperties(selectedEndpointId, mapping.destinationBucket);
           }
 
-          if (features.quota && source.quota) {
+          if (!isStorageOps && features.quota && source.quota && updateBucketQuota) {
             const currentQuota = await fetchBucketQuota(mapping.destinationBucket);
             const quotaChanged =
               currentQuota.maxSizeBytes !== source.quota.maxSizeBytes || currentQuota.maxObjects !== source.quota.maxObjects;
@@ -3996,10 +3969,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       selectedBucketList,
       BULK_CONCURRENCY_LIMIT,
       async (bucketName) => {
-        if (bulkOperation === "set_quota" && parsedQuota) {
-          if (storageOpsQuotaUnavailableSelectedBuckets.has(bucketName)) {
-            throw new Error("Bucket quota management is not available for this context.");
-          }
+        if (bulkOperation === "set_quota" && parsedQuota && updateBucketQuota) {
           const currentQuota = await fetchBucketQuota(bucketName);
           if (bulkQuotaSkipConfigured && hasConfiguredQuota(currentQuota)) {
             return { changed: false };
@@ -5523,7 +5493,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       }, {
         state: {
           ...buildBucketDetailLocationState(origin),
-          bucketQuotaAvailable: Boolean((bucket as StorageOpsBucket).bucket_quota_available),
         },
       });
       return;
@@ -7896,11 +7865,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                     </option>
                   </optgroup>
                   <optgroup label="Access and quota">
-                    <option value="set_quota" disabled={Boolean(quotaOperationDisabledReason)}>
-                      {quotaOperationDisabledReason
-                        ? `Set bucket quota (${quotaOperationDisabledReason})`
-                        : "Set bucket quota"}
-                    </option>
+                    {!isStorageOps && (
+                      <option value="set_quota" disabled={Boolean(quotaOperationDisabledReason)}>
+                        {quotaOperationDisabledReason
+                          ? `Set bucket quota (${quotaOperationDisabledReason})`
+                          : "Set bucket quota"}
+                      </option>
+                    )}
                     <option value="add_public_access_block">Add block public access</option>
                     <option value="remove_public_access_block">Remove block public access</option>
                   </optgroup>
@@ -7936,7 +7907,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                     Configurations to copy
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {(Object.keys(BULK_COPY_FEATURE_LABELS) as BulkCopyFeatureKey[]).map((feature) => (
+                    {(Object.keys(BULK_COPY_FEATURE_LABELS) as BulkCopyFeatureKey[])
+                      .filter((feature) => !isStorageOps || feature !== "quota")
+                      .map((feature) => (
                       <UiCheckboxField
                         key={feature}
                         checked={bulkCopyFeatures[feature]}
@@ -7947,7 +7920,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       >
                         {BULK_COPY_FEATURE_LABELS[feature]}
                       </UiCheckboxField>
-                    ))}
+                      ))}
                   </div>
                 </div>
                 {bulkConfigClipboard && (

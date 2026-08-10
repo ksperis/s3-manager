@@ -100,40 +100,6 @@ def test_get_current_storage_ops_admin_accepts_standard_user_with_storage_ops_ri
     assert dependencies.get_current_storage_ops_admin(user=user).id == user.id
 
 
-def test_require_storage_ops_bucket_quota_rejects_without_privileged_access(monkeypatch):
-    class FakeEffectiveAccessService:
-        def __init__(self, db):
-            self.db = db
-
-        def resolve_user(self, user):
-            return SimpleNamespace(
-                can_access_storage_ops=True,
-                manager_tool_access=SimpleNamespace(bucket_quota=False),
-            )
-
-    monkeypatch.setattr(effective_access_service, "EffectiveAccessService", FakeEffectiveAccessService)
-    user = _admin_user()
-    with pytest.raises(HTTPException) as exc:
-        dependencies.require_storage_ops_bucket_quota(user=user)
-    assert exc.value.status_code == 403
-
-
-def test_require_storage_ops_bucket_quota_accepts_privileged_access(monkeypatch):
-    class FakeEffectiveAccessService:
-        def __init__(self, db):
-            self.db = db
-
-        def resolve_user(self, user):
-            return SimpleNamespace(
-                can_access_storage_ops=True,
-                manager_tool_access=SimpleNamespace(bucket_quota=True),
-            )
-
-    monkeypatch.setattr(effective_access_service, "EffectiveAccessService", FakeEffectiveAccessService)
-    user = _admin_user()
-    assert dependencies.require_storage_ops_bucket_quota(user=user).id == user.id
-
-
 def test_require_storage_ops_enabled_blocks_when_feature_is_disabled(monkeypatch):
     settings = app_settings_service.load_default_app_settings()
     settings.general.storage_ops_enabled = False
@@ -1572,7 +1538,7 @@ def test_storage_ops_bucket_quota_usage_percent_filter_forces_stats_and_filters_
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
 
-def test_storage_ops_bucket_listing_marks_quota_available_for_ceph_admin_context(client, monkeypatch):
+def test_storage_ops_bucket_listing_does_not_expose_quota_write_availability(client, monkeypatch):
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
@@ -1588,7 +1554,6 @@ def test_storage_ops_bucket_listing_marks_quota_available_for_ceph_admin_context
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
         return SimpleNamespace(
             context_id=account_ref,
-            allow_manager_bucket_quota=True,
             storage_endpoint=SimpleNamespace(
                 provider="ceph",
                 admin_endpoint="https://admin.example.test",
@@ -1612,116 +1577,24 @@ def test_storage_ops_bucket_listing_marks_quota_available_for_ceph_admin_context
         response = client.get("/api/storage-ops/buckets")
         assert response.status_code == 200
         payload = response.json()
-        assert payload["items"][0]["bucket_quota_available"] is True
+        assert "bucket_quota_available" not in payload["items"][0]
     finally:
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
 
-def test_storage_ops_bucket_listing_marks_quota_unavailable_for_connection_context(client, monkeypatch):
-    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
-        assert workspace == "manager"
-        return [
-            make_execution_context(
-                kind="connection",
-                id="conn-2",
-                display_name="Connection",
-                endpoint_name="Primary",
-                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
-            )
-        ]
-
-    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
-        return SimpleNamespace(
-            context_id=account_ref,
-            s3_connection_id=2,
-            allow_manager_bucket_quota=True,
-            storage_endpoint=SimpleNamespace(
-                provider="ceph",
-                admin_endpoint="https://admin.example.test",
-                admin_access_key="admin-ak",
-                admin_secret_key="admin-sk",
-                features_config='{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}',
-            ),
-        )
-
-    class FakeBucketsService:
-        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
-            return [Bucket(name="alpha")]
-
-    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
-    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
+def test_storage_ops_bucket_quota_update_route_is_removed(client):
     app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
-    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
-    app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
-    try:
-        response = client.get("/api/storage-ops/buckets")
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["items"][0]["bucket_quota_available"] is False
-    finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
-        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
-        app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
-
-
-def test_storage_ops_bucket_quota_update_resolves_context_and_updates_quota(client, monkeypatch):
-    user = _admin_user()
-    account = SimpleNamespace(context_id="conn-2", storage_endpoint=SimpleNamespace(id=55))
-    captured: dict[str, object] = {}
-
-    class FakeBucketsService:
-        def set_bucket_quota(self, name, account_arg, payload):  # noqa: ANN001
-            captured["bucket"] = name
-            captured["account"] = account_arg
-            captured["payload"] = payload
-            return {"updated": True, "bucket": name}
-
-    class FakeAuditService:
-        def record_action(self, **kwargs):  # noqa: ANN003
-            captured["audit"] = kwargs
-
-    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
-        captured["context_ref"] = account_ref
-        captured["actor"] = actor
-        return account
-
-    def fake_is_manager_bucket_quota_available(account_arg, user_arg, db=None):  # noqa: ANN001, ARG001
-        captured["availability_account"] = account_arg
-        captured["availability_user"] = user_arg
-        return True
-
-    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-    monkeypatch.setattr(storage_ops_router, "is_manager_bucket_quota_available", fake_is_manager_bucket_quota_available)
-
-    app.dependency_overrides[storage_ops_router.require_storage_ops_bucket_quota] = lambda: user
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
-    app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
-    app.dependency_overrides[storage_ops_router.get_audit_service] = lambda: FakeAuditService()
     try:
         response = client.put(
             "/api/storage-ops/buckets/conn-2%3A%3Ademo-bucket/quota",
             json={"max_size_gb": 3, "max_size_unit": "GiB", "max_objects": 3000},
         )
     finally:
-        app.dependency_overrides.pop(storage_ops_router.require_storage_ops_bucket_quota, None)
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
-        app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
-        app.dependency_overrides.pop(storage_ops_router.get_audit_service, None)
 
-    assert response.status_code == 200, response.text
-    assert response.json() == {"message": "Bucket quota updated"}
-    assert captured["context_ref"] == "conn-2"
-    assert captured["actor"] is user
-    assert captured["bucket"] == "demo-bucket"
-    assert captured["account"] is account
-    assert captured["payload"].max_objects == 3000
-    assert captured["availability_account"] is account
-    assert captured["availability_user"] is user
-    assert captured["audit"]["scope"] == "storage_ops"
-    assert captured["audit"]["metadata"]["context_id"] == "conn-2"
+    assert response.status_code in {404, 405}
 
 
 def test_storage_ops_bucket_listing_filters_by_owner_suspended_status(client, monkeypatch):

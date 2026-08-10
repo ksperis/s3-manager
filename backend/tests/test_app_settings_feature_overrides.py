@@ -206,7 +206,7 @@ def test_branding_settings_reject_invalid_logo_url():
 
 def test_manager_ceph_s3_user_keys_flag_default_enabled():
     settings = AppSettings()
-    assert settings.general.manager_ceph_s3_user_keys_enabled is True
+    assert settings.general.ceph_s3_user_access_key_management_enabled is True
 
 
 def test_app_settings_defaults_are_built_from_current_runtime_config(monkeypatch):
@@ -302,14 +302,14 @@ def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path, db_sessi
     )
 
     payload = AppSettings()
-    payload.general.manager_ceph_s3_user_keys_enabled = True
+    payload.general.ceph_s3_user_access_key_management_enabled = True
     saved = app_settings_service.save_app_settings(payload)
     loaded = app_settings_service.load_app_settings()
     raw = _raw_db_settings(db_session)
 
-    assert saved.general.manager_ceph_s3_user_keys_enabled is True
-    assert loaded.general.manager_ceph_s3_user_keys_enabled is True
-    assert raw["general"]["manager_ceph_s3_user_keys_enabled"] is True
+    assert saved.general.ceph_s3_user_access_key_management_enabled is True
+    assert loaded.general.ceph_s3_user_access_key_management_enabled is True
+    assert raw["general"]["ceph_s3_user_access_key_management_enabled"] is True
 
 
 def test_bucket_integrity_check_flag_persists(monkeypatch, tmp_path, db_session):

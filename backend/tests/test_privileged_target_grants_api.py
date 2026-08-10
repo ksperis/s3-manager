@@ -39,12 +39,12 @@ def test_ui_admin_can_grant_account_bucket_quota_target(client: TestClient, db_s
 
     response = client.put(
         f"/api/admin/accounts/{account.id}",
-        json={"allow_manager_bucket_quota": True},
+        json={"allow_bucket_quota_management": True},
     )
 
     assert response.status_code == 200, response.text
     db_session.refresh(account)
-    assert account.allow_manager_bucket_quota is True
+    assert account.allow_bucket_quota_management is True
 
 
 def test_ui_admin_can_update_account_without_changing_privileged_target(client: TestClient, db_session):
@@ -57,13 +57,13 @@ def test_ui_admin_can_update_account_without_changing_privileged_target(client: 
 
     response = client.put(
         f"/api/admin/accounts/{account.id}",
-        json={"name": "regular-account-renamed", "allow_manager_bucket_quota": False},
+        json={"name": "regular-account-renamed", "allow_bucket_quota_management": False},
     )
 
     assert response.status_code == 200, response.text
     db_session.refresh(account)
     assert account.name == "regular-account-renamed"
-    assert account.allow_manager_bucket_quota is False
+    assert account.allow_bucket_quota_management is False
 
 
 def test_ui_admin_can_grant_s3_user_privileged_targets(client: TestClient, db_session):
@@ -84,15 +84,15 @@ def test_ui_admin_can_grant_s3_user_privileged_targets(client: TestClient, db_se
     response = client.put(
         f"/api/admin/s3-users/{s3_user.id}",
         json={
-            "allow_manager_bucket_quota": True,
-            "allow_manager_ceph_s3_user_keys": True,
+            "allow_bucket_quota_management": True,
+            "allow_access_key_management": True,
         },
     )
 
     assert response.status_code == 200, response.text
     db_session.refresh(s3_user)
-    assert s3_user.allow_manager_bucket_quota is True
-    assert s3_user.allow_manager_ceph_s3_user_keys is True
+    assert s3_user.allow_bucket_quota_management is True
+    assert s3_user.allow_access_key_management is True
 
 
 def test_ui_admin_can_update_s3_user_without_changing_privileged_targets(client: TestClient, db_session):
@@ -114,13 +114,13 @@ def test_ui_admin_can_update_s3_user_without_changing_privileged_targets(client:
         f"/api/admin/s3-users/{s3_user.id}",
         json={
             "name": "regular-user-renamed",
-            "allow_manager_bucket_quota": False,
-            "allow_manager_ceph_s3_user_keys": False,
+            "allow_bucket_quota_management": False,
+            "allow_access_key_management": False,
         },
     )
 
     assert response.status_code == 200, response.text
     db_session.refresh(s3_user)
     assert s3_user.name == "regular-user-renamed"
-    assert s3_user.allow_manager_bucket_quota is False
-    assert s3_user.allow_manager_ceph_s3_user_keys is False
+    assert s3_user.allow_bucket_quota_management is False
+    assert s3_user.allow_access_key_management is False

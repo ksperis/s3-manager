@@ -100,13 +100,12 @@ class FakeIAM:
         self.deleted_users.append(username)
 
 
-def _user(db_session, *, email="owner@example.test", ceph_keys=False, managed=True):
+def _user(db_session, *, email="owner@example.test", managed=True):
     row = User(
         email=email,
         hashed_password="x",
         role=UserRole.UI_SUPERADMIN.value,
         is_active=True,
-        can_access_manager_ceph_s3_user_keys=ceph_keys,
         can_provision_managed_private_connections=managed,
     )
     db_session.add(row)
@@ -520,8 +519,8 @@ def test_failed_compensation_is_durable_cleanup_pending(db_session, monkeypatch)
     assert "NEVER-IN-RESPONSE" not in (retry_audit.message or "")
 
 
-def test_rgw_user_provisioning_uses_managed_permission_without_ceph_key_inventory_right(db_session, monkeypatch):
-    user = _user(db_session, email="rgw@example.test", ceph_keys=False)
+def test_rgw_user_provisioning_uses_dedicated_resource_opt_in(db_session, monkeypatch):
+    user = _user(db_session, email="rgw@example.test")
     endpoint = _endpoint(db_session, iam=False, admin=True)
     s3_user = S3User(
         name="RGW user",
@@ -529,7 +528,8 @@ def test_rgw_user_provisioning_uses_managed_permission_without_ceph_key_inventor
         rgw_access_key="TECHNICAL-AK",
         rgw_secret_key="TECHNICAL-SK",
         storage_endpoint_id=endpoint.id,
-        allow_manager_ceph_s3_user_keys=True,
+        allow_access_key_management=False,
+        allow_managed_private_connection_provisioning=True,
     )
     db_session.add(s3_user)
     db_session.flush()
@@ -565,7 +565,7 @@ def test_rgw_user_provisioning_uses_managed_permission_without_ceph_key_inventor
 
 
 def test_rgw_user_provisioning_requires_managed_connection_permission(db_session):
-    user = _user(db_session, email="rgw-denied@example.test", ceph_keys=True, managed=False)
+    user = _user(db_session, email="rgw-denied@example.test", managed=False)
     endpoint = _endpoint(db_session, iam=False, admin=True)
     s3_user = S3User(
         name="RGW denied",
@@ -573,7 +573,7 @@ def test_rgw_user_provisioning_requires_managed_connection_permission(db_session
         rgw_access_key="TECHNICAL-AK",
         rgw_secret_key="TECHNICAL-SK",
         storage_endpoint_id=endpoint.id,
-        allow_manager_ceph_s3_user_keys=True,
+        allow_managed_private_connection_provisioning=True,
     )
     db_session.add(s3_user)
     db_session.flush()
@@ -594,7 +594,7 @@ def test_rgw_user_provisioning_requires_managed_connection_permission(db_session
 
 
 def test_rgw_user_provisioning_requires_resource_opt_in_before_remote_calls(db_session, monkeypatch):
-    user = _user(db_session, email="rgw-no-opt-in@example.test", ceph_keys=False, managed=True)
+    user = _user(db_session, email="rgw-no-opt-in@example.test", managed=True)
     endpoint = _endpoint(db_session, iam=False, admin=True)
     s3_user = S3User(
         name="RGW no opt-in",
@@ -602,7 +602,8 @@ def test_rgw_user_provisioning_requires_resource_opt_in_before_remote_calls(db_s
         rgw_access_key="TECHNICAL-AK",
         rgw_secret_key="TECHNICAL-SK",
         storage_endpoint_id=endpoint.id,
-        allow_manager_ceph_s3_user_keys=False,
+        allow_access_key_management=True,
+        allow_managed_private_connection_provisioning=False,
     )
     db_session.add(s3_user)
     db_session.flush()

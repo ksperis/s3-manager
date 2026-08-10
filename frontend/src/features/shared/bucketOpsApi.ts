@@ -56,7 +56,6 @@ import {
   streamStorageOpsBuckets,
   updateStorageOpsBucketObjectLock,
   updateStorageOpsBucketPublicAccessBlock,
-  updateStorageOpsBucketQuota,
 } from "../../api/storageOps";
 import type { BucketOpsMode } from "./bucketOpsSurface";
 
@@ -89,7 +88,11 @@ const CEPH_ADMIN_BUCKET_OPS_API = {
   updateBucketQuota: updateCephAdminBucketQuota,
 } as const;
 
-const STORAGE_OPS_BUCKET_OPS_API = {
+type BucketOpsApi = Omit<typeof CEPH_ADMIN_BUCKET_OPS_API, "updateBucketQuota"> & {
+  updateBucketQuota?: typeof updateCephAdminBucketQuota;
+};
+
+const STORAGE_OPS_BUCKET_OPS_API: BucketOpsApi = {
   listBuckets: listStorageOpsBuckets,
   streamBuckets: streamStorageOpsBuckets,
   refreshBucketListingCache: refreshStorageOpsBucketListingCache,
@@ -115,10 +118,9 @@ const STORAGE_OPS_BUCKET_OPS_API = {
   getBucketEncryption: getStorageOpsBucketEncryption,
   setBucketVersioning: setStorageOpsBucketVersioning,
   updateBucketObjectLock: updateStorageOpsBucketObjectLock,
-  updateBucketQuota: updateStorageOpsBucketQuota,
-} as const;
+};
 
-export function resolveBucketOpsApi(mode: BucketOpsMode) {
+export function resolveBucketOpsApi(mode: BucketOpsMode): BucketOpsApi {
   return mode === "storage-ops"
     ? STORAGE_OPS_BUCKET_OPS_API
     : CEPH_ADMIN_BUCKET_OPS_API;

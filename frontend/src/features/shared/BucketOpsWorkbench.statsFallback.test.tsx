@@ -78,7 +78,6 @@ vi.mock("../../api/storageOps", () => ({
   streamStorageOpsBuckets: vi.fn(),
   updateStorageOpsBucketObjectLock: mocks.noopAsync,
   updateStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
-  updateStorageOpsBucketQuota: mocks.noopAsync,
 }));
 
 vi.mock("../cephAdmin/CephAdminEndpointContext", () => ({

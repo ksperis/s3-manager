@@ -21,10 +21,10 @@ This is different from:
 - Access to `/manager`.
 - The selected Manager context is a managed S3 User context, not an RGW account
   or S3 connection.
-- `manager_ceph_s3_user_keys_enabled=true` in Manager settings.
-- The UI user or an inherited UI group has the Manager tool access
-  `ceph_s3_user_keys`.
-- The S3 User record allows Manager Ceph S3 user key management.
+- `ceph_s3_user_access_key_management_enabled=true` in Manager settings.
+- The UI user has effective direct or group access to the selected S3 User
+  context.
+- The S3 User record has `allow_access_key_management=true`.
 - The endpoint is a Ceph-compatible endpoint with Admin Ops credentials
   available.
 
@@ -38,7 +38,11 @@ This is different from:
    secret. The secret is shown once.
 5. Select **Create my private access** to have S3-Manager create a distinct RGW
    User key and private connection without transmitting the secret to the
-   browser. Choose the connection name and its Browser/Manager availability.
+   browser. This separate workflow requires the UI right
+   `can_provision_managed_private_connections` and the S3 User opt-in
+   `allow_managed_private_connection_provisioning`; it does not use
+   `allow_access_key_management`. Choose the connection name and its
+   Browser/Manager availability.
 6. Disable a key before deleting it when you need a reversible validation step.
 7. Delete unused keys only after confirming no external workflow still depends
    on them.
@@ -58,9 +62,10 @@ client check confirms the expected storage behavior.
 ## If you do not see this action
 
 Check the selected Manager context first. The page is available only for S3 User
-contexts. Then check the global Manager setting, user or group Manager tool
-access, the S3 User `allow_manager_ceph_s3_user_keys` flag, endpoint provider,
-and Ceph Admin Ops credentials.
+contexts. Then check the global Manager setting, the effective S3 User context
+assignment, the S3 User
+`allow_access_key_management` flag, endpoint provider, and Ceph Admin Ops
+credentials.
 
 ## Limits / feature flags
 

@@ -26,8 +26,14 @@ class S3User(Base):
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=False)
-    allow_manager_bucket_quota = Column(Boolean, default=False, nullable=False, server_default="0")
-    allow_manager_ceph_s3_user_keys = Column(Boolean, default=False, nullable=False, server_default="0")
+    allow_bucket_quota_management = Column(Boolean, default=False, nullable=False, server_default="0")
+    allow_access_key_management = Column(Boolean, default=False, nullable=False, server_default="0")
+    allow_managed_private_connection_provisioning = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default="0",
+    )
 
     users = relationship(
         "User",

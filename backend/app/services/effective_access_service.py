@@ -222,9 +222,7 @@ class EffectiveAccessService:
                     "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
                     "bucket_migration": "can_access_manager_bucket_migration",
                     "feature_rules": "can_access_manager_feature_rules",
-                    "bucket_quota": "can_access_manager_bucket_quota",
                     "bucket_purge": "can_access_manager_bucket_purge",
-                    "ceph_s3_user_keys": "can_access_manager_ceph_s3_user_keys",
                 }.items()
             }
         )

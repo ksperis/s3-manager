@@ -38,7 +38,6 @@ import type {
   BucketPolicy,
   BucketProperties,
   BucketPublicAccessBlock,
-  BucketQuotaUpdate,
   BucketWebsiteConfiguration,
 } from "./buckets";
 import type {
@@ -68,7 +67,6 @@ export type StorageOpsBucket = CephAdminBucket & {
   endpoint_name?: string | null;
   bucket_name?: string | null;
   bucket_identity?: string | null;
-  bucket_quota_available?: boolean | null;
 };
 
 export type StorageOpsSummary = {
@@ -322,13 +320,4 @@ export async function updateStorageOpsBucketObjectLock(
 ): Promise<BucketObjectLockConfiguration> {
   const { contextId, bucketName } = resolveBucketTarget(bucketRef);
   return updateBucketObjectLock(contextId, bucketName, payload);
-}
-
-export async function updateStorageOpsBucketQuota(
-  _scopeId: number,
-  bucketRef: string,
-  payload: BucketQuotaUpdate
-): Promise<void> {
-  resolveBucketTarget(bucketRef);
-  await client.put(`/storage-ops/buckets/${encodeURIComponent(bucketRef)}/quota`, payload);
 }

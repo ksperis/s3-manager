@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
 from fastapi import HTTPException
 
 from app.db import User, UserRole
@@ -94,7 +95,7 @@ def _ui_user() -> User:
 def test_manager_ceph_keys_list_ok(client):
     service = _FakeS3UsersService()
 
-    app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context()
+    app.dependency_overrides[manager_ceph_keys_router.require_manager_rgw_access_key_management] = lambda: _account_context()
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
 
@@ -110,7 +111,7 @@ def test_manager_ceph_keys_create_records_audit(client):
     service = _FakeS3UsersService()
     audit = _FakeAuditService()
 
-    app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context()
+    app.dependency_overrides[manager_ceph_keys_router.require_manager_rgw_access_key_management] = lambda: _account_context()
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
     app.dependency_overrides[manager_ceph_keys_router.get_audit_service] = lambda: audit
@@ -129,7 +130,7 @@ def test_manager_ceph_keys_update_status_records_audit(client):
     service = _FakeS3UsersService()
     audit = _FakeAuditService()
 
-    app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context()
+    app.dependency_overrides[manager_ceph_keys_router.require_manager_rgw_access_key_management] = lambda: _account_context()
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
     app.dependency_overrides[manager_ceph_keys_router.get_audit_service] = lambda: audit
@@ -147,7 +148,7 @@ def test_manager_ceph_keys_delete_records_audit(client):
     service = _FakeS3UsersService()
     audit = _FakeAuditService()
 
-    app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context()
+    app.dependency_overrides[manager_ceph_keys_router.require_manager_rgw_access_key_management] = lambda: _account_context()
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
     app.dependency_overrides[manager_ceph_keys_router.get_audit_service] = lambda: audit
@@ -160,23 +161,46 @@ def test_manager_ceph_keys_delete_records_audit(client):
     assert audit.calls[0]["action"] == "delete_s3_user_access_key"
 
 
-def test_manager_ceph_keys_forbidden_when_management_not_possible(client):
+@pytest.mark.parametrize(
+    ("method", "path", "json_payload"),
+    [
+        ("get", "/api/manager/ceph/keys", None),
+        ("post", "/api/manager/ceph/keys", None),
+        ("put", "/api/manager/ceph/keys/AK-2/status", {"active": True}),
+        ("put", "/api/manager/ceph/keys/AK-2/status", {"active": False}),
+        ("delete", "/api/manager/ceph/keys/AK-2", None),
+    ],
+)
+def test_manager_ceph_key_endpoints_forbid_operations_before_ceph_call(
+    client,
+    method,
+    path,
+    json_payload,
+):
+    service = _FakeS3UsersService()
+
     def _forbidden_context():
         raise HTTPException(status_code=403, detail="Ceph key management is not available for this context")
 
-    app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = _forbidden_context
+    app.dependency_overrides[manager_ceph_keys_router.require_manager_rgw_access_key_management] = _forbidden_context
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
+    app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
 
-    response = client.get("/api/manager/ceph/keys")
+    response = (
+        getattr(client, method)(path, json=json_payload)
+        if json_payload is not None
+        else getattr(client, method)(path)
+    )
 
     assert response.status_code == 403, response.text
     assert "not available" in response.json()["detail"].lower()
+    assert service.calls == []
 
 
 def test_manager_ceph_keys_forbidden_when_context_is_not_s3_user(client):
     service = _FakeS3UsersService()
 
-    app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context(s3_user_id=None)
+    app.dependency_overrides[manager_ceph_keys_router.require_manager_rgw_access_key_management] = lambda: _account_context(s3_user_id=None)
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
 
@@ -190,7 +214,7 @@ def test_manager_ceph_keys_forbidden_when_context_is_not_s3_user(client):
 def test_manager_ceph_keys_rejects_disabling_portal_key(client):
     service = _FakePortalKeyLockedService()
 
-    app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context()
+    app.dependency_overrides[manager_ceph_keys_router.require_manager_rgw_access_key_management] = lambda: _account_context()
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
 
@@ -203,7 +227,7 @@ def test_manager_ceph_keys_rejects_disabling_portal_key(client):
 def test_manager_ceph_keys_rejects_deleting_portal_key(client):
     service = _FakePortalKeyLockedService()
 
-    app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context()
+    app.dependency_overrides[manager_ceph_keys_router.require_manager_rgw_access_key_management] = lambda: _account_context()
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
 

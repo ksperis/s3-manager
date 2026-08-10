@@ -54,7 +54,7 @@ export type S3Account = {
   storage_endpoint_url: string;
   storage_endpoint_is_default: boolean;
   storage_endpoint_capabilities: Record<string, boolean>;
-  allow_manager_bucket_quota?: boolean;
+  allow_bucket_quota_management?: boolean;
 };
 
 export type S3AccountSummary = {
@@ -73,7 +73,7 @@ export type S3AccountSummary = {
   storage_endpoint_url: string;
   storage_endpoint_is_default: boolean;
   storage_endpoint_capabilities: Record<string, boolean>;
-  allow_manager_bucket_quota?: boolean;
+  allow_bucket_quota_management?: boolean;
 };
 
 type PaginatedS3AccountsResponse = PaginatedResponse<S3Account>;
@@ -135,7 +135,7 @@ type UpdateS3AccountPayload = {
   email?: string | null;
   storage_endpoint_id?: number;
   tags?: TagDefinitionInput[] | null;
-  allow_manager_bucket_quota?: boolean | null;
+  allow_bucket_quota_management?: boolean | null;
 };
 
 export async function updateS3Account(accountId: number, payload: UpdateS3AccountPayload): Promise<S3Account> {

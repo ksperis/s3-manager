@@ -62,7 +62,7 @@ class S3Account(BaseModel):
     storage_endpoint_url: str
     storage_endpoint_is_default: bool
     storage_endpoint_capabilities: dict[str, bool]
-    allow_manager_bucket_quota: bool = False
+    allow_bucket_quota_management: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
@@ -100,7 +100,7 @@ class S3AccountUpdate(_StrictS3AccountMutation):
     email: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     tags: Optional[list[TagDefinitionInput]] = None
-    allow_manager_bucket_quota: Optional[bool] = None
+    allow_bucket_quota_management: Optional[bool] = None
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -130,7 +130,7 @@ class S3AccountSummary(BaseModel):
     storage_endpoint_url: str
     storage_endpoint_is_default: bool
     storage_endpoint_capabilities: dict[str, bool]
-    allow_manager_bucket_quota: bool = False
+    allow_bucket_quota_management: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 

@@ -8,28 +8,27 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import User, UserRole, UserS3Account
 from app.models.access_context import BucketMigrationAccessScope, EffectiveAccountLink, ManagerActor
 from app.models.account_capabilities import AccountCapabilities
 from app.models.session import ManagerSessionPrincipal
 from app.services import app_settings_service, effective_access_service
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.effective_access_service import EffectiveAccessService
+from app.services.manager_ceph_management_access_service import ManagerCephManagementAccessService
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.rgw_supervision import has_supervision_credentials
-from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
+from app.utils.storage_endpoint_features import resolve_feature_flags
 
 from .account_context import get_account_context
-from .auth_session import get_current_actor, get_current_storage_ops_admin, get_current_user
+from .auth_session import get_current_actor, get_current_user
 
 ManagerToolKey = Literal[
     "bucket_compare",
     "bucket_integrity_check",
     "bucket_migration",
     "feature_rules",
-    "bucket_quota",
     "bucket_purge",
-    "ceph_s3_user_keys",
 ]
 
 _MANAGER_TOOL_ACCESS_FIELDS: dict[ManagerToolKey, str] = {
@@ -37,9 +36,7 @@ _MANAGER_TOOL_ACCESS_FIELDS: dict[ManagerToolKey, str] = {
     "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
     "bucket_migration": "can_access_manager_bucket_migration",
     "feature_rules": "can_access_manager_feature_rules",
-    "bucket_quota": "can_access_manager_bucket_quota",
     "bucket_purge": "can_access_manager_bucket_purge",
-    "ceph_s3_user_keys": "can_access_manager_ceph_s3_user_keys",
 }
 
 _MANAGER_TOOL_GLOBAL_FIELDS: dict[ManagerToolKey, tuple[str, str]] = {
@@ -47,7 +44,6 @@ _MANAGER_TOOL_GLOBAL_FIELDS: dict[ManagerToolKey, tuple[str, str]] = {
     "bucket_integrity_check": ("bucket_integrity_check_enabled", "Bucket integrity check feature is disabled"),
     "bucket_migration": ("bucket_migration_enabled", "Bucket migration feature is disabled"),
     "bucket_purge": ("bucket_purge_enabled", "Bucket purge feature is disabled"),
-    "ceph_s3_user_keys": ("manager_ceph_s3_user_keys_enabled", "Ceph key management feature is disabled"),
 }
 
 _MANAGER_TOOL_ROLES = {
@@ -277,66 +273,19 @@ def require_manager_feature_rules_enabled(user: User = Depends(get_current_user)
     return user
 
 
-def _is_ceph_endpoint_admin_available(account: S3ExecutionTarget) -> bool:
-    endpoint = getattr(account, "storage_endpoint", None)
-    if endpoint is None:
-        return False
-    try:
-        if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-            return False
-    except (AttributeError, TypeError, ValueError):
-        return False
-
-    flags = resolve_feature_flags(endpoint)
-    if not flags.admin_enabled:
-        return False
-    if not resolve_admin_endpoint(endpoint):
-        return False
-
-    access_key = (getattr(endpoint, "admin_access_key", None) or "").strip()
-    secret_key = (getattr(endpoint, "admin_secret_key", None) or "").strip()
-    return bool(access_key and secret_key)
-
-
 def is_manager_bucket_quota_available(
     account: S3ExecutionTarget,
     user: Optional[User] = None,
     db: Session | None = None,
 ) -> bool:
-    if user is not None and not user_has_manager_tool_access(user, "bucket_quota", db=db):
+    if db is None:
         return False
-    if not _is_ceph_endpoint_admin_available(account):
-        return False
-    return _target_allows_manager_bucket_quota(account, db=db)
-
-
-def _s3_user_flag_enabled(
-    account: S3ExecutionTarget,
-    flag_name: str,
-    *,
-    db: Session | None = None,
-) -> bool:
-    s3_user_id = getattr(account, "s3_user_id", None)
-    if s3_user_id is None:
-        return False
-    if db is not None:
-        row = db.query(S3User).filter(S3User.id == s3_user_id).first()
-        if row is not None:
-            return bool(getattr(row, flag_name, False))
-    return bool(getattr(account, flag_name, False))
-
-
-def _target_allows_manager_bucket_quota(account: S3ExecutionTarget, *, db: Session | None = None) -> bool:
-    if getattr(account, "s3_connection_id", None) is not None:
-        return False
-    if getattr(account, "s3_user_id", None) is not None:
-        return _s3_user_flag_enabled(account, "allow_manager_bucket_quota", db=db)
-    account_id = getattr(account, "id", None)
-    if db is not None and isinstance(account_id, int) and account_id > 0:
-        row = db.query(S3Account).filter(S3Account.id == account_id).first()
-        if row is not None:
-            return bool(getattr(row, "allow_manager_bucket_quota", False))
-    return bool(getattr(account, "allow_manager_bucket_quota", False))
+    return ManagerCephManagementAccessService(db).evaluate(
+        "bucket_quota",
+        surface="manager",
+        actor=user,
+        account=account,
+    ).allowed
 
 
 def require_manager_bucket_quota(
@@ -344,54 +293,58 @@ def require_manager_bucket_quota(
     account: S3ExecutionTarget = Depends(get_account_context),
     db: Session = Depends(get_db),
 ) -> S3ExecutionTarget:
-    ensure_manager_tool_allowed(user, "bucket_quota", db=db)
-    if not is_manager_bucket_quota_available(account, user, db=db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bucket quota management is not available for this context",
-        )
+    decision = ManagerCephManagementAccessService(db).evaluate(
+        "bucket_quota",
+        surface="manager",
+        actor=user,
+        account=account,
+    )
+    if not decision.allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=decision.reason)
     return account
 
 
-def require_storage_ops_bucket_quota(
-    user: User = Depends(get_current_storage_ops_admin),
+def forbid_browser_bucket_quota_management(
+    actor: ManagerActor = Depends(get_current_actor),
     db: Session = Depends(get_db),
-) -> User:
-    ensure_manager_tool_allowed(user, "bucket_quota", db=db)
-    return user
+) -> None:
+    decision = ManagerCephManagementAccessService(db).evaluate(
+        "bucket_quota",
+        surface="browser",
+        actor=actor if isinstance(actor, User) else None,
+        account=None,
+    )
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=decision.reason)
 
 
-def is_manager_ceph_s3_user_keys_available(
+def is_manager_rgw_access_key_management_available(
     account: S3ExecutionTarget,
     user: Optional[User] = None,
     db: Session | None = None,
 ) -> bool:
-    enabled, _ = _manager_tool_global_state("ceph_s3_user_keys")
-    if not enabled:
+    if db is None:
         return False
-    if user is not None and not user_has_manager_tool_access(user, "ceph_s3_user_keys", db=db):
-        return False
-
-    s3_user_id = getattr(account, "s3_user_id", None)
-    if s3_user_id is None:
-        return False
-    if not _s3_user_flag_enabled(account, "allow_manager_ceph_s3_user_keys", db=db):
-        return False
-
-    return _is_ceph_endpoint_admin_available(account)
+    return ManagerCephManagementAccessService(db).evaluate(
+        "rgw_access_keys",
+        surface="manager",
+        actor=user,
+        account=account,
+    ).allowed
 
 
-def require_manager_ceph_s3_user_keys(
+def require_manager_rgw_access_key_management(
     user: User = Depends(get_current_user),
     account: S3ExecutionTarget = Depends(get_account_context),
     db: Session = Depends(get_db),
 ) -> S3ExecutionTarget:
-    ensure_manager_tool_allowed(user, "ceph_s3_user_keys", db=db)
-    if not is_manager_ceph_s3_user_keys_available(account, user, db=db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Ceph key management is not available for this context",
-        )
+    decision = ManagerCephManagementAccessService(db).evaluate(
+        "rgw_access_keys",
+        surface="manager",
+        actor=user,
+        account=account,
+    )
+    if not decision.allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=decision.reason)
     return account
 
 

@@ -9,7 +9,6 @@ from app.core.database import get_db
 from app.db import User as DbUser
 from app.db import UserRole, is_superadmin_ui_role
 from app.models.user import (
-    ManagerToolAccess,
     PaginatedUsersResponse,
     UserAssignS3Account,
     UserCreate,
@@ -25,21 +24,15 @@ from app.core.sensitive_data import sanitize_error_detail
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
 
-def _manager_access_grants_bucket_quota(manager_tool_access: Optional[ManagerToolAccess]) -> bool:
-    return bool(manager_tool_access and manager_tool_access.bucket_quota is True)
-
-
 def _require_superadmin_for_privileged_change(
     current_user: DbUser,
     *,
     role: Optional[str],
     can_access_ceph_admin: Optional[bool],
-    manager_tool_access: Optional[ManagerToolAccess],
 ) -> None:
     wants_superadmin = role == UserRole.UI_SUPERADMIN.value
     wants_ceph_admin_grant = can_access_ceph_admin is True
-    wants_bucket_quota_grant = _manager_access_grants_bucket_quota(manager_tool_access)
-    if (wants_superadmin or wants_ceph_admin_grant or wants_bucket_quota_grant) and not is_superadmin_ui_role(current_user.role):
+    if (wants_superadmin or wants_ceph_admin_grant) and not is_superadmin_ui_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only superadmin users can promote superadmins or grant privileged Ceph access",
@@ -55,8 +48,7 @@ def _require_superadmin_for_group_privileges(
     if group_ids is None:
         return
     grants_ceph_admin = users_service.groups_grant_ceph_admin(group_ids)
-    grants_bucket_quota = users_service.groups_grant_bucket_quota(group_ids)
-    if (grants_ceph_admin or grants_bucket_quota) and not is_superadmin_ui_role(current_user.role):
+    if grants_ceph_admin and not is_superadmin_ui_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only superadmin users can assign groups that grant privileged Ceph access",
@@ -103,7 +95,6 @@ def create_user(
         current_user,
         role=payload.role,
         can_access_ceph_admin=payload.can_access_ceph_admin,
-        manager_tool_access=payload.manager_tool_access,
     )
     _require_superadmin_for_group_privileges(current_user, users_service, group_ids=payload.group_ids)
     try:
@@ -137,7 +128,6 @@ def update_user(
         current_user,
         role=payload.role,
         can_access_ceph_admin=payload.can_access_ceph_admin,
-        manager_tool_access=payload.manager_tool_access,
     )
     _require_superadmin_for_group_privileges(current_user, users_service, group_ids=payload.group_ids)
     try:

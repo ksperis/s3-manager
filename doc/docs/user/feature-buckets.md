@@ -32,7 +32,10 @@ Confirm the workspace and execution context first. Bucket names can repeat acros
    every bucket in the active context.
 6. On Ceph Admin and Storage Ops bucket workbenches, select rows and open
    **Actions… > S3 API > Configure selected buckets…** to preview and apply
-   lifecycle, notification, quota, versioning, access, CORS, or policy changes.
+   lifecycle, notification, versioning, access, CORS, or policy changes. Ceph
+   Admin also supports quota changes; Storage Ops exposes quota values only for
+   inventory and export. Manager quota changes stay in the eligible Manager
+   bucket context.
 7. When the purge tool is enabled, use **Manager > Tools > Purge** or
    **Actions… > Destructive S3 operations > Purge bucket contents…** from Ceph
    Admin and Storage Ops bucket workbenches to empty

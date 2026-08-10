@@ -30,7 +30,8 @@ const generalSettingsState = {
   bucket_purge_enabled: false,
   bucket_compare_enabled: true,
   bucket_integrity_check_enabled: true,
-  manager_ceph_s3_user_keys_enabled: true,
+  bucket_quota_management_enabled: true,
+  ceph_s3_user_access_key_management_enabled: true,
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
@@ -571,8 +572,6 @@ describe("UsersPage modal tabs", () => {
             bucket_integrity_check: true,
             bucket_migration: true,
             feature_rules: false,
-            bucket_quota: false,
-            ceph_s3_user_keys: false,
           },
           accounts: [],
           account_links: [],
@@ -599,7 +598,9 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Allow managed private connection provisioning" }));
 
     expect(screen.getByText("Bucket tools")).toBeInTheDocument();
-    expect(screen.getByText("Privileged Ceph access")).toBeInTheDocument();
+    expect(screen.queryByText("Privileged Ceph access")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Bucket quota management" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Ceph S3 User keys" })).not.toBeInTheDocument();
     const bucketToolsGroup = screen.getByText("Bucket tools").closest("div");
     expect(bucketToolsGroup).not.toBeNull();
     expect(within(bucketToolsGroup as HTMLElement).getByText("Bucket compare")).toBeInTheDocument();
@@ -629,8 +630,6 @@ describe("UsersPage modal tabs", () => {
           bucket_migration: true,
           bucket_purge: false,
           feature_rules: false,
-          bucket_quota: false,
-          ceph_s3_user_keys: false,
         },
       })
     );

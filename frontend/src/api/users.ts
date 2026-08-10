@@ -32,8 +32,6 @@ export type ManagerToolAccess = {
   bucket_migration: boolean;
   bucket_purge: boolean;
   feature_rules: boolean;
-  bucket_quota: boolean;
-  ceph_s3_user_keys: boolean;
 };
 
 export type UiPreferences = {

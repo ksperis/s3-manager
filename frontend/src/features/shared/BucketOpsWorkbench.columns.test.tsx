@@ -81,7 +81,6 @@ vi.mock("../../api/storageOps", () => ({
   streamStorageOpsBuckets: mocks.streamStorageOpsBuckets,
   updateStorageOpsBucketObjectLock: mocks.noopAsync,
   updateStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
-  updateStorageOpsBucketQuota: mocks.noopAsync,
 }));
 
 vi.mock("../../api/executionContexts", () => ({
@@ -271,7 +270,6 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
             scopeKey: "storage-ops",
             listUrl: "/storage-ops/buckets",
           },
-          bucketQuotaAvailable: false,
         }),
       }
     );

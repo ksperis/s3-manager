@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 import { STORAGE_OPS_SCOPE_ID, listStorageOpsBuckets, type StorageOpsBucket } from "../../api/storageOps";
 import { listExecutionContexts } from "../../api/executionContexts";
@@ -14,16 +14,10 @@ import BucketDetailPage from "../manager/BucketDetailPage";
 import { useBucketListBackNavigation } from "../shared/bucketListReturnContext";
 import { storageOpsPageBreadcrumbs } from "./storageOpsBreadcrumbs";
 
-type BucketDetailLocationState = {
-  bucketQuotaAvailable?: boolean;
-};
-
 export default function StorageOpsBucketDetailPage() {
   const { bucketName = "" } = useParams<{ bucketName: string }>();
   const [searchParams] = useSearchParams();
-  const location = useLocation();
   const contextId = searchParams.get("ctx")?.trim() ?? "";
-  const initialQuotaAvailable = (location.state as BucketDetailLocationState | null)?.bucketQuotaAvailable;
   const [bucket, setBucket] = useState<StorageOpsBucket | null>(null);
   const [contextAvailable, setContextAvailable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(Boolean(bucketName && contextId));
@@ -153,7 +147,7 @@ export default function StorageOpsBucketDetailPage() {
           mode="manager"
           bucketNameOverride={bucketName}
           accountIdOverride={contextId}
-          quotaAvailableOverride={bucket.bucket_quota_available ?? initialQuotaAvailable ?? false}
+          hideQuotaTab
           embedded
           hideObjectsTab
         />
