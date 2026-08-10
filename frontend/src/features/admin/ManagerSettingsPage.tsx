@@ -36,8 +36,8 @@ export default function ManagerSettingsPage() {
       .catch((err) => setError(extractApiError(err, "Unable to load settings.")));
   }, []);
 
-  const handleToggleAllowManagerUserStats = (value: boolean) => {
-    setSettings((prev) => (prev ? { ...prev, manager: { ...prev.manager, allow_manager_user_usage_stats: value } } : prev));
+  const handleToggleManagerRgwUsageMetrics = (value: boolean) => {
+    setSettings((prev) => (prev ? { ...prev, manager: { ...prev.manager, manager_rgw_usage_metrics_enabled: value } } : prev));
   };
 
   const handleToggleBucketMigrationTool = (value: boolean) => {
@@ -109,14 +109,14 @@ export default function ManagerSettingsPage() {
     );
   };
 
-  const handleToggleManagerCephS3UserKeysTool = (value: boolean) => {
+  const handleToggleManagerCephS3UserKeys = (value: boolean) => {
     setSettings((prev) =>
       prev
         ? {
             ...prev,
             general: {
               ...prev.general,
-              ceph_s3_user_access_key_management_enabled: value,
+              manager_ceph_s3_user_keys_enabled: value,
             },
           }
         : prev
@@ -225,7 +225,7 @@ export default function ManagerSettingsPage() {
                     bucket_integrity_check_enabled: defaults.general.bucket_integrity_check_enabled,
                     bucket_usage_stats_enabled: defaults.general.bucket_usage_stats_enabled,
                     bucket_quota_management_enabled: defaults.general.bucket_quota_management_enabled,
-                    ceph_s3_user_access_key_management_enabled: defaults.general.ceph_s3_user_access_key_management_enabled,
+                    manager_ceph_s3_user_keys_enabled: defaults.general.manager_ceph_s3_user_keys_enabled,
                   },
                 }
               : defaults
@@ -241,7 +241,7 @@ export default function ManagerSettingsPage() {
   return (
     <PageShell
       title="Manager settings"
-      description="Configure manager workspace access and extra operational tools."
+      description="Configure global usage, metrics, and operational tools for Manager."
       breadcrumbs={adminPageBreadcrumbs("manager-settings")}
       actions={[
         {
@@ -265,29 +265,63 @@ export default function ManagerSettingsPage() {
           <div className="grid gap-4">
             <SettingsCard>
               <SettingsSection
-                title="Workspace access"
-                description="Manager workspace access rules for non-admin roles."
+                title="Usage and metrics"
+                description="Global controls for scan-based bucket composition and RGW-provided metrics."
                 layout="stack"
               >
                 <SettingsItem
-                  title="Allow stats for all users"
-                  description="Allows every non-admin profile to view bucket stats and usage from /manager."
+                  title="Bucket composition statistics"
+                  description="Enables scan-calculated bucket composition statistics in Manager and Portal."
                   action={
                     <SettingsToggleAction
-                      checked={Boolean(settings.manager.allow_manager_user_usage_stats)}
-                      onChange={(value) => handleToggleAllowManagerUserStats(value)}
-                      ariaLabel="Allow manager user stats"
+                      checked={Boolean(settings.general.bucket_usage_stats_enabled)}
+                      onChange={(value) => handleToggleBucketUsageStats(value)}
+                      ariaLabel="Bucket composition statistics"
+                    />
+                  }
+                />
+                <SettingsItem
+                  title="RGW traffic and usage metrics"
+                  description="Enables RGW traffic and usage metrics in Manager when context and endpoint prerequisites are met."
+                  action={
+                    <SettingsToggleAction
+                      checked={Boolean(settings.manager.manager_rgw_usage_metrics_enabled)}
+                      onChange={(value) => handleToggleManagerRgwUsageMetrics(value)}
+                      ariaLabel="RGW traffic and usage metrics"
                     />
                   }
                 />
               </SettingsSection>
-            </SettingsCard>
-            <SettingsCard>
+
+              <div className="my-4 border-t border-slate-200 dark:border-slate-700" />
+
               <SettingsSection
-                title="Extra Tools"
-                description="Optional manager tools and access policy for non-admin users."
+                title="Manager tools"
+                description="Optional administrative and operational tools available in Manager."
                 layout="stack"
               >
+                <SettingsItem
+                  title="Bucket quota management"
+                  description="Enables Ceph bucket quota management for eligible S3 Account and RGW User contexts in Manager."
+                  action={
+                    <SettingsToggleAction
+                      checked={Boolean(settings.general.bucket_quota_management_enabled)}
+                      onChange={(value) => handleToggleBucketQuotaManagement(value)}
+                      ariaLabel="Bucket quota management"
+                    />
+                  }
+                />
+                <SettingsItem
+                  title="Ceph S3 User access-key management"
+                  description="Enables the Manager Ceph section for RGW access-key management on eligible S3 User contexts."
+                  action={
+                    <SettingsToggleAction
+                      checked={Boolean(settings.general.manager_ceph_s3_user_keys_enabled)}
+                      onChange={(value) => handleToggleManagerCephS3UserKeys(value)}
+                      ariaLabel="Ceph S3 User access-key management"
+                    />
+                  }
+                />
                 <SettingsItem
                   title="Bucket migration tool"
                   description="Enables the Manager bucket migration tool."
@@ -297,17 +331,6 @@ export default function ManagerSettingsPage() {
                       onChange={(value) => handleToggleBucketMigrationTool(value)}
                       ariaLabel="Bucket migration tool"
                       badge={{ visible: true, label: "Experimental", tone: "warning" }}
-                    />
-                  }
-                />
-                <SettingsItem
-                  title="Bucket purge tool"
-                  description="Enables the Manager bucket purge tool and purge actions for Ceph Admin and Storage Ops."
-                  action={
-                    <SettingsToggleAction
-                      checked={Boolean(settings.general.bucket_purge_enabled)}
-                      onChange={(value) => handleToggleBucketPurgeTool(value)}
-                      ariaLabel="Bucket purge tool"
                     />
                   }
                 />
@@ -334,35 +357,13 @@ export default function ManagerSettingsPage() {
                   }
                 />
                 <SettingsItem
-                  title="Bucket usage stats"
-                  description="Enables bucket usage statistics on Manager pages and bucket details."
+                  title="Bucket purge tool"
+                  description="Enables the Manager bucket purge tool and purge actions for Ceph Admin and Storage Ops."
                   action={
                     <SettingsToggleAction
-                      checked={Boolean(settings.general.bucket_usage_stats_enabled)}
-                      onChange={(value) => handleToggleBucketUsageStats(value)}
-                      ariaLabel="Bucket usage stats"
-                    />
-                  }
-                />
-                <SettingsItem
-                  title="Bucket quota management"
-                  description="Enables Ceph bucket quota management for eligible S3 Account and RGW User contexts in Manager."
-                  action={
-                    <SettingsToggleAction
-                      checked={Boolean(settings.general.bucket_quota_management_enabled)}
-                      onChange={(value) => handleToggleBucketQuotaManagement(value)}
-                      ariaLabel="Bucket quota management"
-                    />
-                  }
-                />
-                <SettingsItem
-                  title="Ceph S3 User keys manager"
-                  description="Enables the Manager Ceph section for RGW access key management on eligible S3 User contexts."
-                  action={
-                    <SettingsToggleAction
-                      checked={Boolean(settings.general.ceph_s3_user_access_key_management_enabled)}
-                      onChange={(value) => handleToggleManagerCephS3UserKeysTool(value)}
-                      ariaLabel="Ceph S3 User keys manager"
+                      checked={Boolean(settings.general.bucket_purge_enabled)}
+                      onChange={(value) => handleToggleBucketPurgeTool(value)}
+                      ariaLabel="Bucket purge tool"
                     />
                   }
                 />

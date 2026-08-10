@@ -71,7 +71,7 @@ class ManagerCephManagementAccessService:
         settings = app_settings_service.load_app_settings().general
         if operation == "bucket_quota" and not settings.bucket_quota_management_enabled:
             return self._deny("Bucket quota management feature is disabled")
-        if operation == "rgw_access_keys" and not settings.ceph_s3_user_access_key_management_enabled:
+        if operation == "rgw_access_keys" and not settings.manager_ceph_s3_user_keys_enabled:
             return self._deny("Ceph access key management feature is disabled")
         if account is None:
             return self._deny(f"{label} is not available for this context")

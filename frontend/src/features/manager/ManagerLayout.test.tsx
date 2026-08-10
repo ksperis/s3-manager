@@ -126,7 +126,7 @@ function buildGeneralSettings(overrides?: Record<string, unknown>) {
     bucket_integrity_check_enabled: false,
     bucket_usage_stats_enabled: true,
     bucket_quota_management_enabled: true,
-    ceph_s3_user_access_key_management_enabled: true,
+    manager_ceph_s3_user_keys_enabled: true,
     allow_login_access_keys: false,
     allow_login_endpoint_list: false,
     allow_login_custom_endpoint: false,

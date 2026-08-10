@@ -39,7 +39,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
       bucket_integrity_check_enabled: true,
       bucket_usage_stats_enabled: true,
       bucket_quota_management_enabled: true,
-      ceph_s3_user_access_key_management_enabled: true,
+      manager_ceph_s3_user_keys_enabled: true,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,
@@ -63,7 +63,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
       },
     },
     manager: {
-      allow_manager_user_usage_stats: true,
+      manager_rgw_usage_metrics_enabled: true,
       bucket_migration_parallelism_default: 8,
       bucket_migration_parallelism_max: 16,
       bucket_migration_max_active_per_endpoint: 2,

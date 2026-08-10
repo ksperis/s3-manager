@@ -206,7 +206,12 @@ def test_branding_settings_reject_invalid_logo_url():
 
 def test_manager_ceph_s3_user_keys_flag_default_enabled():
     settings = AppSettings()
-    assert settings.general.ceph_s3_user_access_key_management_enabled is True
+    assert settings.general.manager_ceph_s3_user_keys_enabled is True
+
+
+def test_manager_rgw_usage_metrics_flag_default_enabled():
+    settings = AppSettings()
+    assert settings.manager.manager_rgw_usage_metrics_enabled is True
 
 
 def test_app_settings_defaults_are_built_from_current_runtime_config(monkeypatch):
@@ -302,14 +307,35 @@ def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path, db_sessi
     )
 
     payload = AppSettings()
-    payload.general.ceph_s3_user_access_key_management_enabled = True
+    payload.general.manager_ceph_s3_user_keys_enabled = True
     saved = app_settings_service.save_app_settings(payload)
     loaded = app_settings_service.load_app_settings()
     raw = _raw_db_settings(db_session)
 
-    assert saved.general.ceph_s3_user_access_key_management_enabled is True
-    assert loaded.general.ceph_s3_user_access_key_management_enabled is True
-    assert raw["general"]["ceph_s3_user_access_key_management_enabled"] is True
+    assert saved.general.manager_ceph_s3_user_keys_enabled is True
+    assert loaded.general.manager_ceph_s3_user_keys_enabled is True
+    assert raw["general"]["manager_ceph_s3_user_keys_enabled"] is True
+
+
+def test_manager_rgw_usage_metrics_flag_persists(monkeypatch, tmp_path, db_session):
+    settings_path = tmp_path / "app_settings.json"
+    monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
+    _use_settings_db(monkeypatch, db_session)
+    monkeypatch.setattr(
+        app_settings_service,
+        "get_settings",
+        lambda: _runtime_settings(),
+    )
+
+    payload = AppSettings()
+    payload.manager.manager_rgw_usage_metrics_enabled = False
+    saved = app_settings_service.save_app_settings(payload)
+    loaded = app_settings_service.load_app_settings()
+    raw = _raw_db_settings(db_session)
+
+    assert saved.manager.manager_rgw_usage_metrics_enabled is False
+    assert loaded.manager.manager_rgw_usage_metrics_enabled is False
+    assert raw["manager"]["manager_rgw_usage_metrics_enabled"] is False
 
 
 def test_bucket_integrity_check_flag_persists(monkeypatch, tmp_path, db_session):

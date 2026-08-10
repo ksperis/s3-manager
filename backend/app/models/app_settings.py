@@ -76,7 +76,7 @@ class GeneralSettings(BaseModel):
     bucket_usage_stats_enabled: bool = True
     bucket_purge_enabled: bool = False
     bucket_quota_management_enabled: bool = True
-    ceph_s3_user_access_key_management_enabled: bool = True
+    manager_ceph_s3_user_keys_enabled: bool = True
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False
@@ -163,7 +163,7 @@ class PortalSettings(BaseModel):
 
 
 class ManagerSettings(BaseModel):
-    allow_manager_user_usage_stats: bool = True
+    manager_rgw_usage_metrics_enabled: bool = True
     bucket_migration_parallelism_default: int = Field(
         default_factory=_default_bucket_migration_parallelism_max,
         ge=1,

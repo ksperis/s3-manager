@@ -21,7 +21,7 @@ This is different from:
 - Access to `/manager`.
 - The selected Manager context is a managed S3 User context, not an RGW account
   or S3 connection.
-- `ceph_s3_user_access_key_management_enabled=true` in Manager settings.
+- `manager_ceph_s3_user_keys_enabled=true` in Manager settings.
 - The UI user has effective direct or group access to the selected S3 User
   context.
 - The S3 User record has `allow_access_key_management=true`.

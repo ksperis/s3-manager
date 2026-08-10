@@ -63,7 +63,7 @@ describe("GeneralSettingsProvider fallbacks", () => {
       bucket_compare_enabled: true,
       bucket_integrity_check_enabled: true,
       bucket_quota_management_enabled: true,
-      ceph_s3_user_access_key_management_enabled: true,
+      manager_ceph_s3_user_keys_enabled: true,
       allow_login_access_keys: true,
       allow_login_endpoint_list: true,
       allow_login_custom_endpoint: true,

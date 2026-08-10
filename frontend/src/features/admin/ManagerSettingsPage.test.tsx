@@ -41,13 +41,13 @@ function buildSettings(): AppSettings {
       bucket_integrity_check_enabled: false,
       bucket_usage_stats_enabled: true,
       bucket_quota_management_enabled: true,
-      ceph_s3_user_access_key_management_enabled: false,
+      manager_ceph_s3_user_keys_enabled: false,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,
     },
     manager: {
-      allow_manager_user_usage_stats: true,
+      manager_rgw_usage_metrics_enabled: true,
       bucket_migration_parallelism_default: 8,
       bucket_migration_parallelism_max: 16,
       bucket_migration_max_active_per_endpoint: 2,
@@ -90,11 +90,11 @@ describe("ManagerSettingsPage", () => {
     updateAppSettingsMock.mockImplementation(async (payload: AppSettings) => payload);
   });
 
-  it("renders Ceph S3 User keys toggle and sends it in save payload", async () => {
+  it("renders Ceph access-key management and sends its kill switch in the save payload", async () => {
     const user = userEvent.setup();
     render(<ManagerSettingsPage />);
 
-    const toggle = (await screen.findByLabelText("Ceph S3 User keys manager")) as HTMLInputElement;
+    const toggle = (await screen.findByLabelText("Ceph S3 User access-key management")) as HTMLInputElement;
     expect(toggle.checked).toBe(false);
 
     await user.click(toggle);
@@ -106,7 +106,27 @@ describe("ManagerSettingsPage", () => {
       expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
-    expect(payload.general.ceph_s3_user_access_key_management_enabled).toBe(true);
+    expect(payload.general.manager_ceph_s3_user_keys_enabled).toBe(true);
+  });
+
+  it("saves RGW metrics independently from bucket composition statistics", async () => {
+    const user = userEvent.setup();
+    render(<ManagerSettingsPage />);
+
+    const compositionToggle = (await screen.findByLabelText("Bucket composition statistics")) as HTMLInputElement;
+    const rgwMetricsToggle = screen.getByLabelText("RGW traffic and usage metrics") as HTMLInputElement;
+    expect(compositionToggle.checked).toBe(true);
+    expect(rgwMetricsToggle.checked).toBe(true);
+
+    await user.click(rgwMetricsToggle);
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.manager.manager_rgw_usage_metrics_enabled).toBe(false);
+    expect(payload.general.bucket_usage_stats_enabled).toBe(true);
   });
 
   it("renders bucket quota kill switch and sends it in save payload", async () => {
@@ -164,21 +184,47 @@ describe("ManagerSettingsPage", () => {
     expect(payload.general.bucket_purge_enabled).toBe(true);
   });
 
-  it("resets Ceph S3 User keys toggle from defaults", async () => {
+  it("resets Ceph access-key management from defaults", async () => {
     const user = userEvent.setup();
     const defaults = buildSettings();
-    defaults.general.ceph_s3_user_access_key_management_enabled = true;
+    defaults.general.manager_ceph_s3_user_keys_enabled = true;
     fetchDefaultAppSettingsMock.mockResolvedValue(defaults);
 
     render(<ManagerSettingsPage />);
 
-    const toggle = (await screen.findByLabelText("Ceph S3 User keys manager")) as HTMLInputElement;
+    const toggle = (await screen.findByLabelText("Ceph S3 User access-key management")) as HTMLInputElement;
     expect(toggle.checked).toBe(false);
 
     await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
 
     await waitFor(() => {
       expect(toggle.checked).toBe(true);
+    });
+  });
+
+  it("resets RGW metrics and bucket composition from their independent defaults", async () => {
+    const user = userEvent.setup();
+    const current = buildSettings();
+    current.general.bucket_usage_stats_enabled = false;
+    current.manager.manager_rgw_usage_metrics_enabled = true;
+    fetchAppSettingsMock.mockResolvedValue(current);
+    const defaults = buildSettings();
+    defaults.general.bucket_usage_stats_enabled = true;
+    defaults.manager.manager_rgw_usage_metrics_enabled = false;
+    fetchDefaultAppSettingsMock.mockResolvedValue(defaults);
+
+    render(<ManagerSettingsPage />);
+
+    const compositionToggle = (await screen.findByLabelText("Bucket composition statistics")) as HTMLInputElement;
+    const rgwMetricsToggle = screen.getByLabelText("RGW traffic and usage metrics") as HTMLInputElement;
+    expect(compositionToggle.checked).toBe(false);
+    expect(rgwMetricsToggle.checked).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+
+    await waitFor(() => {
+      expect(compositionToggle.checked).toBe(true);
+      expect(rgwMetricsToggle.checked).toBe(false);
     });
   });
 
@@ -226,12 +272,24 @@ describe("ManagerSettingsPage", () => {
     expect(screen.getByText("Experimental")).toBeInTheDocument();
   });
 
-  it("does not render allow portal manager workspace toggle", async () => {
+  it("groups global usage and Manager tools without workspace policy wording", async () => {
     render(<ManagerSettingsPage />);
 
-    await screen.findByLabelText("Allow manager user stats");
-    expect(screen.queryByLabelText("Allow portal manager workspace")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Allow UI User access to bucket migration")).not.toBeInTheDocument();
-    expect(screen.queryByText("Deprecated")).not.toBeInTheDocument();
+    await screen.findByLabelText("Bucket composition statistics");
+    expect(screen.getByText("Usage and metrics")).toBeInTheDocument();
+    expect(screen.getByText("Manager tools")).toBeInTheDocument();
+    expect(screen.getByText("Optional administrative and operational tools available in Manager.")).toBeInTheDocument();
+    expect(screen.queryByText(/Workspace access/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/non-admin/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("checkbox").map((toggle) => toggle.getAttribute("aria-label"))).toEqual([
+      "Bucket composition statistics",
+      "RGW traffic and usage metrics",
+      "Bucket quota management",
+      "Ceph S3 User access-key management",
+      "Bucket migration tool",
+      "Bucket compare tool",
+      "Bucket integrity check tool",
+      "Bucket purge tool",
+    ]);
   });
 });

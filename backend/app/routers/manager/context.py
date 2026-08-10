@@ -48,6 +48,7 @@ class ManagerContext(BaseModel):
 
 
 def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[str]]:
+    rgw_usage_metrics_enabled = bool(load_app_settings().manager.manager_rgw_usage_metrics_enabled)
     connection_id = getattr(account, "s3_connection_id", None)
     if connection_id is not None:
         caps = getattr(account, "manager_capabilities", None)
@@ -59,15 +60,16 @@ def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[
         resolution = ConnectionIdentityService().resolve_metrics_identity(source_connection)
         if not resolution.eligible:
             return False, (resolution.reason or "Metrics are unavailable for this connection."), None
+        if not rgw_usage_metrics_enabled:
+            return False, "RGW traffic and usage metrics are disabled.", resolution.iam_identity
         if not has_supervision_credentials(account):
             return False, "Supervision credentials are not configured for this endpoint.", resolution.iam_identity
         if isinstance(actor, ManagerSessionPrincipal) and not actor.capabilities.can_view_traffic:
             return False, "Metrics are not available for this profile.", resolution.iam_identity
-        settings = load_app_settings()
-        if isinstance(actor, User) and not settings.manager.allow_manager_user_usage_stats:
-            return False, "Metrics are not available for this profile.", resolution.iam_identity
         return True, None, resolution.iam_identity
 
+    if not rgw_usage_metrics_enabled:
+        return False, "RGW traffic and usage metrics are disabled.", None
     if not has_supervision_credentials(account):
         return False, None, None
     if getattr(account, "s3_user_id", None) is not None and not getattr(account, "rgw_user_uid", None):
@@ -78,10 +80,7 @@ def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[
     if isinstance(actor, ManagerSessionPrincipal):
         return bool(actor.capabilities.can_view_traffic), None, None
     if isinstance(actor, User):
-        if getattr(caps, "using_root_key", False):
-            return True, None, None
-        settings = load_app_settings()
-        return bool(settings.manager.allow_manager_user_usage_stats), None, None
+        return True, None, None
     return False, None, None
 
 

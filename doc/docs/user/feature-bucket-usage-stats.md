@@ -14,6 +14,7 @@ Use this feature when you need a quick usage snapshot for buckets, including obj
 ## Prerequisites
 
 - Manager: `bucket_usage_stats_enabled` set to true.
+- Portal: `bucket_usage_stats_enabled` set to true and access to the target Storage Space.
 - Ceph Admin: access to the selected Ceph Admin endpoint with dedicated Ceph Admin credentials configured.
 - Storage Ops: access to Storage Ops and to the manager contexts that own the selected buckets.
 - S3 permissions to list objects or, when supported, list object versions.
@@ -43,12 +44,12 @@ The page shows the latest snapshot time, coverage, and whether the snapshot is c
 
 ## If you do not see this action
 
-Check `bucket_usage_stats_enabled`, workspace access, and whether the selected endpoint can list current objects or versions.
+Check `bucket_usage_stats_enabled`, access to the selected context, and whether the selected endpoint can list current objects or versions.
 
 ## Limits / feature flags
 
 !!! note
-    Manager visibility and recalculation are controlled by `bucket_usage_stats_enabled`; every Manager user with bucket management context can view and refresh usage stats. Ceph Admin and Storage Ops access stays controlled by their own workspace permissions and feature flags.
+    Manager and Portal composition statistics are controlled by `bucket_usage_stats_enabled`. This scan-based feature is independent from `manager_rgw_usage_metrics_enabled`, which controls RGW traffic and usage metrics in Manager. Ceph Admin and Storage Ops access stays controlled by their own workspace permissions and feature flags.
 
 !!! note
     When version listing is available, all object versions are counted for logical storage. `IsLatest=true` versions feed current bytes, `IsLatest=false` versions feed noncurrent bytes, and delete markers are counted separately without adding bytes.

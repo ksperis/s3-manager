@@ -114,7 +114,7 @@ def test_key_policy_accepts_group_access_and_revalidates_revocation(db_session, 
     ("operation", "setting_name"),
     [
         ("bucket_quota", "bucket_quota_management_enabled"),
-        ("rgw_access_keys", "ceph_s3_user_access_key_management_enabled"),
+        ("rgw_access_keys", "manager_ceph_s3_user_keys_enabled"),
     ],
 )
 def test_policy_applies_global_kill_switches(db_session, monkeypatch, operation, setting_name):

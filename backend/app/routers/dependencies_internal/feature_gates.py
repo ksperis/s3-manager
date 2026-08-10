@@ -72,6 +72,12 @@ def _require_supervision_access(
     disabled_detail: str,
     required_feature: str,
 ) -> ManagerActor:
+    if not app_settings_service.load_app_settings().manager.manager_rgw_usage_metrics_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="RGW traffic and usage metrics are disabled",
+        )
+
     caps: Optional[AccountCapabilities] = getattr(account, "manager_capabilities", None)  # type: ignore[attr-defined]
     endpoint = getattr(account, "storage_endpoint", None)
 
@@ -107,10 +113,6 @@ def _require_supervision_access(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Metrics are not available for this profile")
     if caps and not caps.can_manage_buckets:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Metrics are not available for this account")
-    if caps and isinstance(actor, User) and not caps.using_root_key:
-        settings = app_settings_service.load_app_settings()
-        if not settings.manager.allow_manager_user_usage_stats:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Metrics are not available for this profile")
     return actor
 
 

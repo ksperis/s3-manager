@@ -11,10 +11,12 @@ from fastapi import HTTPException
 
 from app.db import QuotaUsageDaily, QuotaUsageHourly, S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole
 from app.models.app_settings import AppSettings
+from app.models.session import ManagerSessionPrincipal, SessionCapabilities
 from app.routers import dependencies
+from app.routers.dependencies_internal import feature_gates
 from app.routers.manager import stats as manager_stats_router
 from app.services.rgw_admin import RGWAdminError
-from app.services import usage_history_service
+from app.services import app_settings_service, usage_history_service
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.traffic_service import TrafficWindow
 
@@ -47,6 +49,76 @@ def _usage_history_settings(enabled: bool) -> AppSettings:
     settings = AppSettings()
     settings.general.usage_history_enabled = enabled
     return settings
+
+
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        dependencies.require_usage_capable_manager,
+        dependencies.require_metrics_capable_manager,
+    ],
+)
+@pytest.mark.parametrize(
+    "actor",
+    [
+        User(
+            email="rgw-metrics-user@example.com",
+            hashed_password="x",
+            is_active=True,
+            role=UserRole.UI_USER.value,
+        ),
+        User(
+            email="rgw-metrics-root@example.com",
+            hashed_password="x",
+            is_active=True,
+            is_root=True,
+            role=UserRole.UI_ADMIN.value,
+        ),
+        ManagerSessionPrincipal(
+            session_id="rgw-metrics-session",
+            access_key="AK",
+            secret_key="SK",
+            actor_type="s3_key",
+            account_id="rgw-metrics",
+            account_name="RGW metrics",
+            user_uid=None,
+            capabilities=SessionCapabilities(can_manage_buckets=True, can_view_traffic=True),
+        ),
+    ],
+)
+def test_manager_rgw_metrics_kill_switch_blocks_every_actor(monkeypatch, dependency, actor):
+    settings = AppSettings()
+    settings.manager.manager_rgw_usage_metrics_enabled = False
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
+
+    with pytest.raises(HTTPException) as exc:
+        dependency(account=S3Account(name="rgw-metrics-disabled"), actor=actor)
+
+    assert exc.value.status_code == 403
+    assert str(exc.value.detail) == "RGW traffic and usage metrics are disabled"
+
+
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        dependencies.require_usage_capable_manager,
+        dependencies.require_metrics_capable_manager,
+    ],
+)
+def test_manager_rgw_metrics_ignore_bucket_composition_kill_switch(monkeypatch, dependency):
+    settings = AppSettings()
+    settings.general.bucket_usage_stats_enabled = False
+    settings.manager.manager_rgw_usage_metrics_enabled = True
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(feature_gates, "has_supervision_credentials", lambda account: True)
+    actor = User(
+        email="rgw-metrics-independent@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+
+    assert dependency(account=S3Account(name="rgw-metrics-enabled"), actor=actor) is actor
 
 
 def test_manager_stats_overview_allows_connection_with_resolved_identity(db_session):

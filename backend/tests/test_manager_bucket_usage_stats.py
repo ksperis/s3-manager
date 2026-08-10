@@ -44,9 +44,10 @@ def test_require_bucket_usage_stats_enabled_blocks_non_manager_roles(monkeypatch
     assert str(exc.value.detail) == "Not authorized"
 
 
-def test_require_bucket_usage_stats_enabled_allows_manager_user_without_tool_access(monkeypatch):
+def test_bucket_composition_stats_remain_enabled_when_rgw_metrics_are_disabled(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_usage_stats_enabled = True
+    settings.manager.manager_rgw_usage_metrics_enabled = False
     monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     assert dependencies_router.require_bucket_usage_stats_enabled(_manager_user()).email == "usage-stats-tool@example.com"

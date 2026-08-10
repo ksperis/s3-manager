@@ -22,12 +22,14 @@ s3-manager shows an action only when all required conditions are true:
 | Ceph Admin | Workspace selector | `ceph_admin_enabled`, Ceph-compatible endpoint, and `can_access_ceph_admin`. |
 | Storage Ops | Workspace selector | `storage_ops_enabled` and `can_access_storage_ops`. |
 | IAM | Manager | Endpoint IAM capability and effective Manager access. |
-| Ceph S3 User access keys | Manager > Ceph | Effective S3 User Manager context access, `ceph_s3_user_access_key_management_enabled`, `allow_access_key_management`, Ceph endpoint, and Admin Ops credentials. |
+| Ceph S3 User access keys | Manager > Ceph | Effective S3 User Manager context access, `manager_ceph_s3_user_keys_enabled`, `allow_access_key_management`, Ceph endpoint, and Admin Ops credentials. |
 | Bucket quota management | Manager, Ceph Admin | Manager requires effective Account or S3 User context access, `bucket_quota_management_enabled`, `allow_bucket_quota_management`, and Ceph Admin Ops capability. Ceph Admin keeps its administrative authorization. Browser and Storage Ops cannot write quotas. |
+| Bucket composition statistics | Manager, Portal | `bucket_usage_stats_enabled`, an eligible context, and S3 object or version-listing permission. |
+| RGW traffic and usage metrics | Manager | `manager_rgw_usage_metrics_enabled`, an eligible Manager context, endpoint metrics or usage capability, and supervision credentials. |
 | SNS topics and bucket notifications | Manager, Ceph Admin, Storage Ops | Endpoint SNS capability and feature-specific action rights. |
 | Bucket compare, integrity, purge, migration | Manager | Global Manager setting plus per-user or inherited Manager access. |
 | Feature rule inventory | Manager | Per-user or inherited Manager access and selected context capability. |
-| Usage, traffic, and billing | Admin, Manager, Portal | Collection jobs, endpoint capabilities, and feature flags. |
+| Usage, traffic, and billing | Admin, Portal | Collection jobs, endpoint capabilities, and feature flags. |
 | Key rotation | Admin settings | `ui_superadmin` access and eligible managed endpoint credentials. |
 | Portal governance activity, access logs, and settings | Portal | Portal account link, visible Storage Space scope, Portal Manager permission for access logs, and Portal feature flags. |
 

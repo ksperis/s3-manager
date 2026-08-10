@@ -66,7 +66,7 @@ export type GeneralSettings = {
   bucket_integrity_check_enabled: boolean;
   bucket_usage_stats_enabled: boolean;
   bucket_quota_management_enabled: boolean;
-  ceph_s3_user_access_key_management_enabled: boolean;
+  manager_ceph_s3_user_keys_enabled: boolean;
   allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;
   allow_login_custom_endpoint: boolean;
@@ -94,7 +94,7 @@ export type BrandingSettings = {
 };
 
 export type ManagerSettings = {
-  allow_manager_user_usage_stats: boolean;
+  manager_rgw_usage_metrics_enabled: boolean;
   bucket_migration_parallelism_default: number;
   bucket_migration_parallelism_max: number;
   bucket_migration_max_active_per_endpoint: number;
