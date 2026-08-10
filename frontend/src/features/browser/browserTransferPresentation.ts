@@ -109,13 +109,13 @@ export function buildBrowserTransferWarnings({
 }
 
 export function resolveDirectCredentialStsTooltip(
-  contextKind: "connection" | "legacy_user" | null,
+  contextKind: "connection" | "s3_user" | null,
 ): string {
   if (contextKind === "connection") {
     return "STS is not available for S3 connections. Presigned URLs are used instead.";
   }
-  if (contextKind === "legacy_user") {
-    return "STS is not available for legacy S3 users. Presigned URLs are used instead.";
+  if (contextKind === "s3_user") {
+    return "STS is not available for S3 users. Presigned URLs are used instead.";
   }
   return "";
 }

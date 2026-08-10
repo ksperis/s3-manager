@@ -31,7 +31,7 @@ def build_storage_ops_summary(*, user: User, db: Session) -> StorageOpsSummary:
     endpoint_names: set[str] = set()
 
     for context in contexts:
-        if context.kind not in {"account", "connection", "legacy_user"}:
+        if context.kind not in {"account", "connection", "s3_user"}:
             continue
         if context.id in seen_context_ids:
             continue
@@ -43,7 +43,7 @@ def build_storage_ops_summary(*, user: User, db: Session) -> StorageOpsSummary:
         if context.kind == "account":
             account_count += 1
             continue
-        if context.kind == "legacy_user":
+        if context.kind == "s3_user":
             s3_user_count += 1
             continue
         connection_id = _connection_id_from_context_id(context.id)

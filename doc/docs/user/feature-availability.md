@@ -18,7 +18,7 @@ s3-manager shows an action only when all required conditions are true:
 |---|---|---|
 | Portal | Workspace selector | `portal_enabled` plus explicit `portal_user` or `portal_manager` account link. |
 | Browser | Workspace selector, Manager, Portal, Ceph Admin | `browser_enabled` plus workspace-specific Browser flags and context access. |
-| Manager | Workspace selector | `manager_enabled` plus account, connection, or legacy S3 user access. |
+| Manager | Workspace selector | `manager_enabled` plus account, connection, or S3 user access. |
 | Ceph Admin | Workspace selector | `ceph_admin_enabled`, Ceph-compatible endpoint, and `can_access_ceph_admin`. |
 | Storage Ops | Workspace selector | `storage_ops_enabled` and `can_access_storage_ops`. |
 | IAM | Manager | Endpoint IAM capability and effective Manager access. |

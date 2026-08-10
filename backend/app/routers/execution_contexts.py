@@ -118,7 +118,7 @@ def _build_portal_account_context(
     )
 
 
-def _build_legacy_user_context(
+def _build_s3_user_context(
     s3_user: S3User,
     quota_max_size_gb: Optional[float],
     quota_max_objects: Optional[int],
@@ -131,7 +131,7 @@ def _build_legacy_user_context(
         normalize_features_config(endpoint.provider, endpoint.features_config)
     )
     return ExecutionContext(
-        kind="legacy_user",
+        kind="s3_user",
         id=f"s3u-{s3_user.id}",
         display_name=s3_user.name,
         max_buckets=max_buckets,
@@ -288,7 +288,7 @@ def list_execution_contexts(
     if workspace in {None, "manager"}:
         for s3_user in s3_users:
             results.append(
-                _build_legacy_user_context(
+                _build_s3_user_context(
                     s3_user,
                     None,
                     None,

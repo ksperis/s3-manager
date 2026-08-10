@@ -25,9 +25,9 @@ const CONTEXTS: ExecutionContext[] = [
     capabilities: { can_manage_iam: true, sts_capable: true, admin_api_capable: true },
   },
   {
-    kind: "legacy_user",
+    kind: "s3_user",
     id: "s3u-2",
-    display_name: "Legacy User 2",
+    display_name: "S3 User 2",
     endpoint_name: "Ceph endpoint",
     endpoint_is_default: true,
     endpoint_url: "https://ceph.example.test",

@@ -6,7 +6,7 @@ import client, { timeoutForRequestProfile } from "./client";
 import type { AccountAccessRole } from "./accountRoles";
 import type { TagDefinitionSummary } from "./tags";
 
-export type ExecutionContextKind = "account" | "connection" | "legacy_user" | "portal_account";
+export type ExecutionContextKind = "account" | "connection" | "s3_user" | "portal_account";
 
 export type ExecutionContextCapabilities = {
   can_manage_iam: boolean;

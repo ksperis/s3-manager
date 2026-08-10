@@ -128,12 +128,11 @@ export const formatStorageOpsContextKindLabel = (
 ) => {
   if (kind === "account") return "Account";
   if (kind === "connection") return "Connection";
-  if (kind === "s3_user" || kind === "legacy_user") return "S3 user";
+  if (kind === "s3_user") return "S3 user";
   return "Any";
 };
 
 export const toStorageOpsContextKind = (kind: ExecutionContext["kind"]): StorageOpsContextFilterKind => {
-  if (kind === "legacy_user") return "s3_user";
   if (kind === "portal_account") return "account";
   return kind;
 };

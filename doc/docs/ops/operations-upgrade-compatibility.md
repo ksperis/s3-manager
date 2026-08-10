@@ -455,6 +455,14 @@ deployment, verify Account, RGW-user, owned private-connection, shared-
 connection, and immediate-revocation scenarios. Standalone `/browser`, Portal,
 and Ceph Admin Browser execution policies are unchanged.
 
+## 2026-08 canonical S3 user execution context
+
+The execution-context API now reports managed RGW users with
+`kind="s3_user"`. The obsolete `legacy_user` value is rejected throughout the
+backend and frontend; no runtime alias is retained. Context identifiers remain
+`s3u-<id>`, so persisted bucket migrations and workspace selections do not
+require a database migration. Deploy the backend and frontend together.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

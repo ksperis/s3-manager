@@ -78,7 +78,7 @@ describe("formatAccountLabel", () => {
     expect(
       formatAccountLabel(
         executionContext({
-          kind: "legacy_user",
+          kind: "s3_user",
           id: "conn-misleading",
           endpoint_id: 2,
           endpoint_name: "Ceph",

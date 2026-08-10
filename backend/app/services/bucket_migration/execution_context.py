@@ -102,7 +102,7 @@ class BucketMigrationExecutionContextMixin:
             s3_user = self.db.query(S3User).filter(S3User.id == int(suffix)).first()
             if not s3_user:
                 raise ValueError("S3 user not found")
-            return S3ExecutionContext.from_legacy_user(s3_user)
+            return S3ExecutionContext.from_s3_user(s3_user)
 
         if not value.isdigit():
             raise ValueError("Invalid account context id")

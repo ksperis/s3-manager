@@ -155,7 +155,7 @@ class BrowserContextMixin:
         if getattr(account, "s3_connection_id", None) is not None:
             return "connection"
         if getattr(account, "s3_user_id", None) is not None:
-            return "legacy_user"
+            return "s3_user"
         return "account"
 
     def _account_cache_key(self, account: S3ExecutionTarget) -> str:

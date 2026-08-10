@@ -5,7 +5,7 @@ delete Ceph RGW access keys for a managed S3 User context from Manager.
 
 ## When to use
 
-Use **Manager > Ceph > Access keys** for a legacy or imported RGW S3 user whose
+Use **Manager > Ceph > Access keys** for a managed or imported RGW S3 user whose
 keys are intentionally delegated to Manager operators.
 
 This is different from:

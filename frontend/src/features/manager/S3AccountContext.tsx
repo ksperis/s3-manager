@@ -72,7 +72,7 @@ function deriveS3AccountType(context: ExecutionContext | null | undefined): stri
   if (context.kind === "connection") {
     return "connection";
   }
-  if (context.kind === "legacy_user") {
+  if (context.kind === "s3_user") {
     return "s3_user";
   }
   return "tenant";

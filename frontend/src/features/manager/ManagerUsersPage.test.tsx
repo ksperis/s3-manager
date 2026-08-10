@@ -51,8 +51,8 @@ describe("ManagerUsersPage", () => {
       accounts: [
         {
           id: "s3u-1",
-          kind: "legacy_user",
-          display_name: "Legacy user",
+          kind: "s3_user",
+          display_name: "S3 user",
           endpoint_name: "Default",
         },
       ],

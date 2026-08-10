@@ -216,9 +216,9 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
       },
       {
-        kind: "legacy_user",
+        kind: "s3_user",
         id: "s3u-3",
-        display_name: "Legacy User C",
+        display_name: "S3 User C",
         endpoint_name: "Primary",
         endpoint_id: 7,
         tags: [],
@@ -530,7 +530,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     fireEvent.change(endpointFilter, { target: { value: "cold" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[1]);
 
-    fireEvent.change(endpointFilter, { target: { value: "legacy user" } });
+    fireEvent.change(endpointFilter, { target: { value: "s3 user" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Deselect filtered" })[1]);
 
     fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));

@@ -63,7 +63,7 @@ export function getContextAccessModeVisual(mode: ContextAccessMode): {
 
 function contextKindRank(kind: ExecutionContext["kind"]): number {
   if (kind === "account") return 0;
-  if (kind === "legacy_user") return 1;
+  if (kind === "s3_user") return 1;
   return 2;
 }
 
@@ -103,8 +103,8 @@ export default function TopbarContextAccountSelector({
           const description =
             context.kind === "connection"
               ? "Private connection"
-              : context.kind === "legacy_user"
-                ? "Legacy S3 user identity"
+              : context.kind === "s3_user"
+                ? "S3 user identity"
                 : "RGW account";
           const selectorEntityTags = filterSelectorVisibleUiTags(context.tags);
           const selectorEndpointTags = filterSelectorVisibleUiTags(

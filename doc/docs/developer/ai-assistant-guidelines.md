@@ -41,7 +41,7 @@ It defines the executor identity used for S3 operations and may be:
 
 - account: `<id>`
 - connection: `conn-<id>`
-- legacy S3 user: `s3u-<id>`
+- S3 user: `s3u-<id>`
 - Ceph Admin endpoint: `ceph-admin-<endpoint_id>` for browser-only admin flows
 
 Execution-context selectors must return the explicit, non-persistent
@@ -97,7 +97,7 @@ Managed workflows may use dedicated technical IAM identities only when:
   Platform governance for UI users, endpoints, S3 accounts, S3 connections,
   audit, settings, and governance. It is never a generic S3 console.
 - `/manager`
-  S3 configuration console for S3 accounts, S3 connections, and legacy S3
+  S3 configuration console for S3 accounts, S3 connections, and S3
   users. It should map directly to S3 and IAM APIs without semantic
   simplification.
 - `/portal`
@@ -105,7 +105,7 @@ Managed workflows may use dedicated technical IAM identities only when:
   `portal_manager` account links. It is backed by Ceph RGW IAM users, groups,
   policies, and access keys; it is not a substitute for `/manager`.
 - `/browser`
-  Bucket and object exploration for S3 accounts, S3 connections, legacy S3
+  Bucket and object exploration for S3 accounts, S3 connections, S3
   users, and authorized Ceph Admin endpoint contexts.
 - `/ceph-admin`
   Admin-only Ceph RGW cluster workflows. It remains separate from `/manager`
@@ -134,7 +134,7 @@ as:
 - workflow IAM credentials
 - portal IAM credentials
 - S3 connection credentials
-- legacy S3 user credentials
+- S3 user credentials
 - session credentials when available
 - Ceph Admin endpoint credentials for authorized contexts
 
@@ -143,7 +143,7 @@ Execution rules:
 - `/manager` and `/browser` APIs that depend on account context require explicit
   `account_id` for UI users.
 - `/portal` APIs require explicit account context and must reject connection,
-  legacy S3 user, and Ceph Admin contexts.
+  S3 user, and Ceph Admin contexts.
 - `X-Manager-Access-Mode` is ignored in manager account context; account root
   credentials remain the source of execution.
 - Session principals may default to their bound account when `account_id` is

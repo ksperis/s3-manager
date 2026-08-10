@@ -649,7 +649,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const storageOpsContextItems = useMemo(
     () =>
       storageOpsContexts
-        .filter((context) => context.kind === "account" || context.kind === "connection" || context.kind === "legacy_user")
+        .filter((context) => context.kind === "account" || context.kind === "connection" || context.kind === "s3_user")
         .map((context) => {
           const kind = toStorageOpsContextKind(context.kind);
           const typeLabel = formatStorageOpsContextKindLabel(kind);

@@ -415,7 +415,7 @@ def test_manager_usage_trends_returns_empty_when_history_disabled(db_session, mo
     assert payload.model_dump(exclude_none=True) == {}
 
 
-def test_manager_usage_trends_are_scoped_to_legacy_user_subject(db_session, monkeypatch):
+def test_manager_usage_trends_are_scoped_to_s3_user_subject(db_session, monkeypatch):
     monkeypatch.setattr(manager_stats_router, "load_app_settings", lambda: _usage_history_settings(True))
     monkeypatch.setattr(
         manager_stats_router,
@@ -465,7 +465,7 @@ def test_manager_usage_trends_are_scoped_to_legacy_user_subject(db_session, monk
     )
     db_session.commit()
 
-    legacy_context = S3ExecutionContext.from_legacy_user(s3_user)
+    legacy_context = S3ExecutionContext.from_s3_user(s3_user)
 
     payload = manager_stats_router.account_usage_trends(account=legacy_context, _={}, db=db_session)
 
@@ -566,7 +566,7 @@ def test_manager_usage_history_trends_are_scoped_to_account(db_session, monkeypa
     assert payload.summary.max_usage_ratio_pct == 20.0
 
 
-def test_manager_usage_history_trends_are_scoped_to_legacy_user_subject(db_session, monkeypatch):
+def test_manager_usage_history_trends_are_scoped_to_s3_user_subject(db_session, monkeypatch):
     monkeypatch.setattr(manager_stats_router, "load_app_settings", lambda: _usage_history_settings(True))
     monkeypatch.setattr(
         usage_history_service,
@@ -620,7 +620,7 @@ def test_manager_usage_history_trends_are_scoped_to_legacy_user_subject(db_sessi
     )
     db_session.commit()
 
-    legacy_context = S3ExecutionContext.from_legacy_user(s3_user)
+    legacy_context = S3ExecutionContext.from_s3_user(s3_user)
 
     payload = manager_stats_router.account_usage_history_trends(window="month", account=legacy_context, _={}, db=db_session)
 

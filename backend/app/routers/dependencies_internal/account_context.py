@@ -103,7 +103,7 @@ def _build_s3_user_context(
     *,
     capabilities: Optional[AccountCapabilities] = None,
 ) -> S3ExecutionContext:
-    return S3ExecutionContext.from_legacy_user(
+    return S3ExecutionContext.from_s3_user(
         s3_user,
         manager_capabilities=capabilities,
     )

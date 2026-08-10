@@ -90,7 +90,7 @@ class ManagerCephManagementAccessService:
             resource = self.db.query(S3Account).filter(S3Account.id == account_id).first()
             if resource is None or not resource.allow_bucket_quota_management:
                 return self._deny("Bucket quota management is not enabled for this resource")
-        elif context_kind == "legacy_user":
+        elif context_kind == "s3_user":
             s3_user_id = getattr(account, "s3_user_id", None)
             if not isinstance(s3_user_id, int) or s3_user_id <= 0:
                 return self._deny(f"{label} is not available for this context")

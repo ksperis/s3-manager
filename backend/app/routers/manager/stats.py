@@ -140,7 +140,7 @@ def account_usage_history_trends(
             window=window,
             unavailable_reason=(
                 "Usage history trends are unavailable for private connection contexts because snapshots are stored "
-                "for RGW accounts and legacy S3 users."
+                "for RGW accounts and S3 users."
             ),
         )
     if _usage_history_trend_filters(account, QuotaUsageDaily) is None:

@@ -100,7 +100,7 @@ def test_key_policy_accepts_group_access_and_revalidates_revocation(db_session, 
         ]
     )
     db_session.commit()
-    context = S3ExecutionContext.from_legacy_user(s3_user)
+    context = S3ExecutionContext.from_s3_user(s3_user)
     policy = ManagerCephManagementAccessService(db_session)
 
     assert policy.evaluate("rgw_access_keys", surface="manager", actor=user, account=context).allowed is True
@@ -172,7 +172,7 @@ def test_policy_rejects_each_missing_ceph_admin_capability(
         operation,
         surface="manager",
         actor=user,
-        account=S3ExecutionContext.from_legacy_user(s3_user),
+        account=S3ExecutionContext.from_s3_user(s3_user),
     )
     assert decision.allowed is False
     assert decision.reason == "Ceph Admin API is not available for this context"

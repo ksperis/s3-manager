@@ -10,7 +10,7 @@ Use this page when a term in the UI or documentation is unclear.
 | Storage endpoint | A configured S3-compatible backend target. Ceph RGW, AWS-like, Scality, MinIO, and other providers can expose endpoints with different capabilities. |
 | S3 account | A platform-level account entity used mainly for Ceph RGW administration, IAM, quotas, usage, metrics, and account workflows. |
 | S3 connection | A credential-first connection to an S3-compatible endpoint. It is used for day-to-day bucket and object work across supported backends. |
-| Execution context | The selected identity and scope used to execute an action. It can be an account, connection, legacy S3 user, or authorized Ceph Admin endpoint context. |
+| Execution context | The selected identity and scope used to execute an action. It can be an account, connection, S3 user, or authorized Ceph Admin endpoint context. |
 | Storage Space | The Portal name for an assigned storage area. It can map to a bucket internally, but Portal keeps the user-facing language simple. |
 | Portal role | Owner for a private space, Viewer or Editor for a team space, and Manager for project-wide administration. These roles translate into storage-side permissions. |
 | Manager access | Per-user or inherited access to advanced Manager tools and managed private-connection provisioning. |

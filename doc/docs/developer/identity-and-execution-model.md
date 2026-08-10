@@ -9,7 +9,7 @@ credentials perform S3, IAM, or RGW operations.
 | Identity | What it controls | Examples |
 |---|---|---|
 | UI identity | Workspace visibility, Admin settings, Manager tool access, and audit actor. | `ui_none`, `ui_user`, `ui_admin`, `ui_superadmin`, UI groups, `can_access_storage_ops`, `can_access_ceph_admin`. |
-| Execution context | Credentials and account scope used by storage actions. | RGW account, S3 connection, legacy S3 user, session context, Ceph Admin endpoint. |
+| Execution context | Credentials and account scope used by storage actions. | RGW account, S3 connection, S3 user, session context, Ceph Admin endpoint. |
 | Portal grant model | User-facing Storage Space visibility and role. | Private Owner, team Viewer/Editor grants, project Manager, Portal account links. |
 | Backend workflow identity | Explicit technical credential used for controlled orchestration. | Portal IAM provisioning, healthchecks, billing, quota, key rotation. |
 
@@ -43,7 +43,7 @@ credentials perform S3, IAM, or RGW operations.
 
 The transversal execution-context boundary uses the explicit, non-persistent
 `S3ExecutionContext`. Persistent RGW accounts selected through this boundary
-are copied before credentials are attached. Connections, legacy S3 users,
+are copied before credentials are attached. Connections, S3 users,
 direct sessions, Portal Browser identities, and Ceph Admin endpoints never
 instantiate synthetic `S3Account` ORM records. `context_id` and `context_kind`
 are authoritative; database-like negative IDs and dynamically attached private

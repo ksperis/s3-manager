@@ -67,10 +67,10 @@ describe("TopbarContextAccountSelector", () => {
     const contexts = [
       makeContext({ id: "conn-delta", kind: "connection", display_name: "Delta connection" }),
       makeContext({ id: "acc-zulu", kind: "account", display_name: "Zulu account" }),
-      makeContext({ id: "legacy-echo", kind: "legacy_user", display_name: "Echo user" }),
+      makeContext({ id: "s3u-2", kind: "s3_user", display_name: "Echo user" }),
       makeContext({ id: "acc-alpha", kind: "account", display_name: "Alpha account" }),
       makeContext({ id: "conn-charlie", kind: "connection", display_name: "Charlie connection" }),
-      makeContext({ id: "legacy-bravo", kind: "legacy_user", display_name: "Bravo user" }),
+      makeContext({ id: "s3u-1", kind: "s3_user", display_name: "Bravo user" }),
     ];
     renderSelector({ contexts, selectedContextId: "acc-zulu" });
 

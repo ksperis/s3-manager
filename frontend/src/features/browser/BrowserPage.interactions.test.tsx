@@ -3179,20 +3179,20 @@ describe("BrowserPage interactions", () => {
     expect(screen.getByLabelText("Current location")).toHaveTextContent("/manager?ctx=101");
   });
 
-  it("opens a legacy S3 user Browser context in Manager from the sidebar", async () => {
+  it("opens an S3 user Browser context in Manager from the sidebar", async () => {
     const user = userEvent.setup();
-    const legacyUserContext = makeExecutionContext({
+    const s3UserContext = makeExecutionContext({
       id: "s3u-21215",
-      kind: "legacy_user",
+      kind: "s3_user",
       display_name: "Test_USER21215",
     });
     setBrowserContext({
-      contexts: [legacyUserContext],
+      contexts: [s3UserContext],
       selectedContextId: "s3u-21215",
-      selectedContext: legacyUserContext,
+      selectedContext: s3UserContext,
       requiresContextSelection: true,
       selectorForApi: "s3u-21215",
-      selectedKind: "legacy_user",
+      selectedKind: "s3_user",
     });
 
     renderPage({ accountIdForApi: "s3u-21215" });

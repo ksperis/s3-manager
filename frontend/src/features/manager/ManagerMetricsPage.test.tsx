@@ -365,7 +365,7 @@ describe("ManagerMetricsPage", () => {
       buildUsageHistoryTrends({
         available: false,
         unavailable_reason:
-          "Usage history trends are unavailable for private connection contexts because snapshots are stored for RGW accounts and legacy S3 users.",
+          "Usage history trends are unavailable for private connection contexts because snapshots are stored for RGW accounts and S3 users.",
         points: [],
       })
     );

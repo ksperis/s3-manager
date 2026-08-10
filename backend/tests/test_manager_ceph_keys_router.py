@@ -73,7 +73,7 @@ class _FakePortalKeyLockedService(_FakeS3UsersService):
 def _account_context(*, s3_user_id: int | None = 77) -> S3ExecutionContext:
     return S3ExecutionContext(
         context_id=f"s3u-{s3_user_id}" if s3_user_id is not None else "s3u-missing",
-        context_kind="legacy_user",
+        context_kind="s3_user",
         name="managed-s3-user",
         access_key="AK",
         secret_key="SK",

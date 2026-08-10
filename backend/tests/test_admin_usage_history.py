@@ -43,8 +43,8 @@ def test_list_usage_history_daily_records(client: TestClient, db_session, monkey
         storage_endpoint_id=endpoint.id,
     )
     s3_user = S3User(
-        name="Legacy User",
-        rgw_user_uid="legacy-user",
+        name="S3 User",
+        rgw_user_uid="s3-user",
         rgw_access_key="uak",
         rgw_secret_key="usk",
         storage_endpoint_id=endpoint.id,
@@ -133,8 +133,8 @@ def test_usage_history_trends_aggregate_endpoint_subjects(client: TestClient, db
         storage_endpoint=other_endpoint,
     )
     s3_user = S3User(
-        name="Legacy User",
-        rgw_user_uid="legacy-user",
+        name="S3 User",
+        rgw_user_uid="s3-user",
         rgw_access_key="uak",
         rgw_secret_key="usk",
         storage_endpoint_id=endpoint.id,
@@ -250,8 +250,8 @@ def test_list_usage_history_hourly_records_include_quota(client: TestClient, db_
     monkeypatch.setattr(usage_history_router, "load_app_settings", lambda: _settings(usage_history_enabled=True))
     endpoint = _seed_endpoint(db_session)
     s3_user = S3User(
-        name="Legacy User",
-        rgw_user_uid="legacy-user",
+        name="S3 User",
+        rgw_user_uid="s3-user",
         rgw_access_key="uak",
         rgw_secret_key="usk",
         storage_endpoint_id=endpoint.id,
@@ -281,8 +281,8 @@ def test_list_usage_history_hourly_records_include_quota(client: TestClient, db_
 
     assert response.status_code == 200, response.text
     item = response.json()["items"][0]
-    assert item["subject_name"] == "Legacy User"
-    assert item["subject_identifier"] == "legacy-user"
+    assert item["subject_name"] == "S3 User"
+    assert item["subject_identifier"] == "s3-user"
     assert item["bucket_count"] == 2
     assert item["quota_size_bytes"] == 8192
     assert item["usage_ratio_pct"] == 70.0

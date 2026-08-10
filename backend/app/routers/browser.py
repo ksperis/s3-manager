@@ -7,7 +7,7 @@ These endpoints back the `/browser` surface.
 
 They are credential-first and can be used with:
 - RGW accounts (account-centric) for members with bucket permissions
-- Legacy S3 users (when explicitly linked)
+- S3 users (when explicitly linked)
 - User-scoped S3 connections (selector `conn-<id>`)
 - Ceph Admin endpoint context (selector `ceph-admin-<endpoint_id>`)
 

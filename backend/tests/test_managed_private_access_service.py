@@ -535,7 +535,7 @@ def test_rgw_user_provisioning_uses_dedicated_resource_opt_in(db_session, monkey
     db_session.flush()
     db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
     db_session.commit()
-    context = S3ExecutionContext.from_legacy_user(s3_user)
+    context = S3ExecutionContext.from_s3_user(s3_user)
     monkeypatch.setattr(
         "app.services.managed_private_access_service.S3UsersService.create_access_key_entry",
         lambda _service, user_id: S3UserGeneratedKey(
@@ -579,7 +579,7 @@ def test_rgw_user_provisioning_requires_managed_connection_permission(db_session
     db_session.flush()
     db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
     db_session.commit()
-    context = S3ExecutionContext.from_legacy_user(s3_user)
+    context = S3ExecutionContext.from_s3_user(s3_user)
 
     with pytest.raises(ManagedPrivateAccessForbidden, match="not allowed"):
         ManagedPrivateAccessService(db_session).provision_rgw_user(
@@ -609,7 +609,7 @@ def test_rgw_user_provisioning_requires_resource_opt_in_before_remote_calls(db_s
     db_session.flush()
     db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
     db_session.commit()
-    context = S3ExecutionContext.from_legacy_user(s3_user)
+    context = S3ExecutionContext.from_s3_user(s3_user)
     monkeypatch.setattr(
         "app.services.managed_private_access_service.S3UsersService.create_access_key_entry",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("RGW must not be contacted")),

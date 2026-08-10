@@ -184,9 +184,9 @@ def test_storage_ops_summary_counts_authorized_accounts_connections_and_endpoint
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
             ),
             make_execution_context(
-                kind="legacy_user",
+                kind="s3_user",
                 id="s3u-9",
-                display_name="Legacy user",
+                display_name="S3 user",
                 endpoint_id=12,
                 endpoint_name="Endpoint Three",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=False, sts_capable=False, admin_api_capable=False),
@@ -234,9 +234,9 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
             ),
             make_execution_context(
-                kind="legacy_user",
+                kind="s3_user",
                 id="s3u-9",
-                display_name="Legacy User C",
+                display_name="S3 User C",
                 endpoint_id=12,
                 endpoint_name="Endpoint Three",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=False, sts_capable=False, admin_api_capable=False),
@@ -871,7 +871,7 @@ def test_storage_ops_context_filters_match_s3_user_kind():
             name="gamma",
             bucket_name="gamma",
             context_id="s3u-9",
-            context_name="Legacy User C",
+            context_name="S3 User C",
             context_kind="s3_user",
             endpoint_name="Primary Endpoint",
             tenant=None,
@@ -895,7 +895,7 @@ def test_storage_ops_context_filters_match_s3_user_kind():
             "match": "all",
             "rules": [
                 {"field": "context_kind", "op": "eq", "value": "s3_user"},
-                {"field": "context_name", "op": "contains", "value": "legacy"},
+                {"field": "context_name", "op": "contains", "value": "s3 user"},
                 {"field": "endpoint_name", "op": "contains", "value": "primary"},
             ],
         }

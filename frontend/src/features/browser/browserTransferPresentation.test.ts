@@ -123,8 +123,8 @@ describe("browser transfer presentation", () => {
       label: "Presign",
       title: expect.stringContaining("S3 connections"),
     });
-    expect(resolveDirectCredentialStsTooltip("legacy_user")).toContain(
-      "legacy S3 users",
+    expect(resolveDirectCredentialStsTooltip("s3_user")).toContain(
+      "S3 users",
     );
     expect(resolveDirectCredentialStsTooltip(null)).toBe("");
     expect(resolveBrowserTransferAccessBadge({ ...base, hasContext: false })).toBeNull();

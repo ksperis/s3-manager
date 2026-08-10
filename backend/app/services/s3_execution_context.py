@@ -13,7 +13,7 @@ from app.utils.s3_connection_endpoint import resolve_connection_endpoint
 S3ExecutionContextKind = Literal[
     "account",
     "connection",
-    "legacy_user",
+    "s3_user",
     "portal_account",
     "ceph_admin",
     "session",
@@ -102,7 +102,7 @@ class S3ExecutionContext:
         )
 
     @classmethod
-    def from_legacy_user(
+    def from_s3_user(
         cls,
         user: S3User,
         *,
@@ -110,7 +110,7 @@ class S3ExecutionContext:
     ) -> S3ExecutionContext:
         return cls(
             context_id=f"s3u-{user.id}",
-            context_kind="legacy_user",
+            context_kind="s3_user",
             name=user.name,
             access_key=user.rgw_access_key,
             secret_key=user.rgw_secret_key,

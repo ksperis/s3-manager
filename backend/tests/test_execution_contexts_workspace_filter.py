@@ -113,7 +113,7 @@ def _create_connection(
     return connection
 
 
-def _create_legacy_user(db_session, *, name: str, uid: str) -> S3User:
+def _create_s3_user(db_session, *, name: str, uid: str) -> S3User:
     endpoint = _create_endpoint(db_session, name=f"{name}-endpoint")
     s3_user = S3User(
         name=name,
@@ -155,7 +155,7 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
     user = _create_user(db_session)
     admin_account = _create_account(db_session, name="admin-account", rgw_account_id="RGWADMIN0001")
     portal_manager_account = _create_account(db_session, name="pm-account", rgw_account_id="RGWPM0001")
-    legacy_user = _create_legacy_user(db_session, name="legacy-user", uid="legacy-uid-1")
+    s3_user = _create_s3_user(db_session, name="s3-user", uid="s3-user-uid-1")
     manager_connection = _create_connection(
         db_session,
         created_by_user_id=user.id,
@@ -185,7 +185,7 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
                 role=AccountRole.PORTAL_MANAGER.value,
                 is_root=False,
             ),
-            UserS3User(user_id=user.id, s3_user_id=legacy_user.id),
+            UserS3User(user_id=user.id, s3_user_id=s3_user.id),
         ]
     )
     db_session.commit()
@@ -195,16 +195,16 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
 
     assert str(admin_account.id) in context_ids
     assert str(portal_manager_account.id) not in context_ids
-    assert f"s3u-{legacy_user.id}" in context_ids
+    assert f"s3u-{s3_user.id}" in context_ids
     assert f"conn-{manager_connection.id}" in context_ids
     assert f"conn-{browser_only_connection.id}" not in context_ids
-    assert any(context.kind == "legacy_user" for context in contexts)
+    assert any(context.kind == "s3_user" for context in contexts)
 
 
 def test_manager_workspace_catalog_omits_dynamic_quota_limits(db_session):
     user = _create_user(db_session)
     account = _create_account(db_session, name="quota-account", rgw_account_id="RGWQUOTA0001")
-    legacy_user = _create_legacy_user(db_session, name="quota-legacy", uid="quota-legacy-uid")
+    s3_user = _create_s3_user(db_session, name="quota-legacy", uid="quota-legacy-uid")
     manager_connection = _create_connection(
         db_session,
         created_by_user_id=user.id,
@@ -221,14 +221,14 @@ def test_manager_workspace_catalog_omits_dynamic_quota_limits(db_session):
                 role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 is_root=False,
             ),
-            UserS3User(user_id=user.id, s3_user_id=legacy_user.id),
+            UserS3User(user_id=user.id, s3_user_id=s3_user.id),
         ]
     )
     db_session.commit()
 
     contexts = execution_contexts.list_execution_contexts(workspace="manager", user=user, db=db_session)
     account_context = next(context for context in contexts if context.id == str(account.id))
-    legacy_context = next(context for context in contexts if context.id == f"s3u-{legacy_user.id}")
+    legacy_context = next(context for context in contexts if context.id == f"s3u-{s3_user.id}")
     connection_context = next(context for context in contexts if context.id == f"conn-{manager_connection.id}")
 
     assert account_context.quota_max_size_gb is None
@@ -254,7 +254,7 @@ def test_manager_workspace_catalog_omits_dynamic_quota_limits(db_session):
 def test_browser_workspace_returns_only_owned_private_connections(db_session):
     user = _create_user(db_session)
     account = _create_account(db_session, name="browser-account", rgw_account_id="RGWBROWSER0001")
-    legacy_user = _create_legacy_user(db_session, name="browser-legacy", uid="legacy-uid-2")
+    s3_user = _create_s3_user(db_session, name="browser-legacy", uid="legacy-uid-2")
     connection_a = _create_connection(db_session, created_by_user_id=user.id, name="browser-conn-a", can_manage_iam=False)
     connection_b = _create_connection(db_session, created_by_user_id=user.id, name="browser-conn-b", can_manage_iam=True)
 
@@ -266,7 +266,7 @@ def test_browser_workspace_returns_only_owned_private_connections(db_session):
                 role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 is_root=False,
             ),
-            UserS3User(user_id=user.id, s3_user_id=legacy_user.id),
+            UserS3User(user_id=user.id, s3_user_id=s3_user.id),
         ]
     )
     db_session.commit()

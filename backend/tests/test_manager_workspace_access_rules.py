@@ -838,8 +838,8 @@ def test_manager_workspace_accepts_s3_user_context(db_session):
         role=UserRole.UI_USER.value,
     )
     s3_user = S3User(
-        name="legacy-s3-user",
-        rgw_user_uid="legacy-user-uid",
+        name="s3-user",
+        rgw_user_uid="s3-user-uid",
         rgw_access_key="AK-S3U",
         rgw_secret_key="SK-S3U",
         storage_endpoint=endpoint,
@@ -861,7 +861,7 @@ def test_manager_workspace_accepts_s3_user_context(db_session):
 
     assert isinstance(account, S3ExecutionContext)
     assert account.id is None
-    assert account.context_kind == "legacy_user"
+    assert account.context_kind == "s3_user"
     assert account.context_id == f"s3u-{s3_user.id}"
     assert getattr(account, "s3_user_id", None) == s3_user.id
     assert account.effective_rgw_credentials() == ("AK-S3U", "SK-S3U")
@@ -994,7 +994,7 @@ def test_manager_context_s3_user_disables_ceph_keys_without_target_grant(db_sess
     assert payload.manager_ceph_keys_enabled is False
 
 
-def test_manager_context_s3_user_keys_do_not_require_legacy_user_tool_access(db_session, monkeypatch):
+def test_manager_context_s3_user_keys_do_not_require_s3_user_tool_access(db_session, monkeypatch):
     settings = AppSettings()
     settings.general.manager_ceph_s3_user_keys_enabled = True
     monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
@@ -1102,8 +1102,8 @@ def test_workspace_rejects_unlinked_s3_user_context(db_session):
         role=UserRole.UI_USER.value,
     )
     s3_user = S3User(
-        name="legacy-s3-user-ko",
-        rgw_user_uid="legacy-user-ko",
+        name="s3-user-ko",
+        rgw_user_uid="s3-user-ko",
         rgw_access_key="AK-S3U-KO",
         rgw_secret_key="SK-S3U-KO",
         storage_endpoint=endpoint,

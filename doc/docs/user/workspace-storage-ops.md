@@ -8,7 +8,7 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
 
 - UI role `ui_user`, `ui_admin`, or `ui_superadmin` with `can_access_storage_ops` entitlement.
 - `storage_ops_enabled` feature enabled.
-- At least one authorized manager context (`account`, legacy S3 user, or connection).
+- At least one authorized manager context (`account`, S3 user, or connection).
 
 ## Steps
 

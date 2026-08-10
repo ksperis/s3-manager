@@ -38,14 +38,14 @@ export function formatAccountLabel(
   context: AccountLike,
   includeContextBadge = true
 ): string {
-  const isLegacyUser = isExecutionContext(context)
-    ? context.kind === "legacy_user"
+  const isS3User = isExecutionContext(context)
+    ? context.kind === "s3_user"
     : Boolean(context.is_s3_user);
   const isConnection = isExecutionContext(context) && context.kind === "connection";
   const badge = includeContextBadge
     ? isConnection
       ? " · Connection"
-      : isLegacyUser
+      : isS3User
         ? " · S3 user"
         : ""
     : "";

@@ -139,13 +139,13 @@ def _collect_context_refs(user: User, db: Session) -> list[_StorageOpsContextRef
     refs: list[_StorageOpsContextRef] = []
     seen: set[str] = set()
     for context in contexts:
-        if context.kind not in {"account", "connection", "legacy_user"}:
+        if context.kind not in {"account", "connection", "s3_user"}:
             continue
         if context.id in seen:
             continue
         seen.add(context.id)
         context_kind: StorageOpsContextKind
-        if context.kind == "legacy_user":
+        if context.kind == "s3_user":
             context_kind = "s3_user"
         else:
             context_kind = context.kind

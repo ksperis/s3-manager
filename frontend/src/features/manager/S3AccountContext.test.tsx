@@ -35,9 +35,9 @@ const CONTEXTS: ExecutionContext[] = [
     capabilities: { can_manage_iam: true, sts_capable: true, admin_api_capable: true },
   },
   {
-    kind: "legacy_user",
+    kind: "s3_user",
     id: "s3u-2",
-    display_name: "Legacy User 2",
+    display_name: "S3 User 2",
     endpoint_name: "Ceph endpoint",
     endpoint_is_default: true,
     endpoint_url: "https://ceph.example.test",
@@ -111,7 +111,7 @@ describe("S3AccountProvider", () => {
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("s3u-2"));
   });
 
-  it("uses the context kind instead of a legacy-user ID prefix", async () => {
+  it("uses the context kind instead of an S3-user ID prefix", async () => {
     listExecutionContextsMock.mockResolvedValue([
       {
         kind: "account",
@@ -130,9 +130,9 @@ describe("S3AccountProvider", () => {
   it("uses the context kind instead of a connection ID prefix", async () => {
     listExecutionContextsMock.mockResolvedValue([
       {
-        kind: "legacy_user",
+        kind: "s3_user",
         id: "conn-misleading",
-        display_name: "Canonical legacy user",
+        display_name: "Canonical S3 user",
         capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
       },
     ]);

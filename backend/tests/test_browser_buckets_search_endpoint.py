@@ -241,7 +241,7 @@ def test_browser_usage_summary_uses_live_s3_user_usage(client, db_session, monke
     )
     db_session.add(s3_user)
     db_session.flush()
-    account = S3ExecutionContext.from_legacy_user(s3_user)
+    account = S3ExecutionContext.from_s3_user(s3_user)
 
     class FakeS3UsersService:
         def __init__(self, db):  # noqa: ANN001
@@ -283,7 +283,7 @@ def test_browser_usage_summary_hides_s3_user_when_live_usage_is_unavailable(clie
     )
     db_session.add(s3_user)
     db_session.flush()
-    account = S3ExecutionContext.from_legacy_user(s3_user)
+    account = S3ExecutionContext.from_s3_user(s3_user)
 
     class FakeS3UsersService:
         def __init__(self, db):  # noqa: ANN001

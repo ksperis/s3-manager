@@ -1264,12 +1264,12 @@ export default function BrowserPage({
   const executionContextKind =
     executionContextKindOverride ?? selectedContext?.kind ?? null;
   const isCephAdminContext = executionContextKind === "ceph_admin";
-  const isLegacyS3UserContext = executionContextKind === "legacy_user";
+  const isS3UserContext = executionContextKind === "s3_user";
   const isConnectionContext = executionContextKind === "connection";
   const directCredentialContextKind = isConnectionContext
     ? "connection"
-    : isLegacyS3UserContext
-      ? "legacy_user"
+    : isS3UserContext
+      ? "s3_user"
       : null;
   const stsEnabled =
     Boolean(effectiveCaps?.sts) &&
@@ -4326,7 +4326,7 @@ export default function BrowserPage({
   const workspaceAccountActionTarget = useMemo<"manager" | "portal" | null>(() => {
     if (
       selectedContext?.manager_account_is_admin === true ||
-      selectedContext?.kind === "legacy_user"
+      selectedContext?.kind === "s3_user"
     ) {
       return "manager";
     }
@@ -4557,7 +4557,7 @@ export default function BrowserPage({
     () => (bucketName ? (bucketInspectorByName[bucketName] ?? null) : null),
     [bucketInspectorByName, bucketName],
   );
-  const cephQuotaScopeLabel = isLegacyS3UserContext
+  const cephQuotaScopeLabel = isS3UserContext
     ? "User quota"
     : "Account quota";
   const bucketInspectorFeatures = useMemo(
