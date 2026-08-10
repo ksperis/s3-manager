@@ -40,7 +40,6 @@ from app.services.data_retention_service import DataRetentionService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_supervision import get_supervision_rgw_client
 from app.services.user_notifications_service import UserNotificationsService
-from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
 from app.utils.usage_stats import extract_usage_stats
@@ -391,14 +390,10 @@ class QuotaMonitoringService:
 
         accounts = self.db.query(S3Account).all()
         for account in accounts:
-            endpoint_id = account.storage_endpoint_id or default_endpoint_id
-            if endpoint_id is None:
-                continue
+            endpoint_id = account.storage_endpoint_id
             endpoint = endpoint_map.get(endpoint_id)
             if not endpoint:
                 continue
-            usage_uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
-            subject_identifier = account.rgw_account_id or account.rgw_user_uid or str(account.id)
             subjects.append(
                 SubjectContext(
                     subject_type="account",
@@ -406,8 +401,8 @@ class QuotaMonitoringService:
                     endpoint_id=endpoint_id,
                     endpoint_name=endpoint.name,
                     subject_name=account.name,
-                    subject_identifier=subject_identifier,
-                    usage_uid=usage_uid,
+                    subject_identifier=account.rgw_account_id,
+                    usage_uid=account.rgw_user_uid,
                     quota_account_id=account.rgw_account_id,
                     quota_user_uid=None,
                     contact_email=account.email,

@@ -46,8 +46,6 @@ def _validate_portal_account_surface(account: S3Account) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires a storage endpoint")
     if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires a Ceph RGW account")
-    if not account.rgw_account_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires an RGW account")
     if not resolve_feature_flags(endpoint).iam_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal is disabled for this endpoint")
 
@@ -217,4 +215,3 @@ def require_portal_manager(access: AccountAccess = Depends(get_portal_account_ac
     if access.role != AccountRole.PORTAL_MANAGER.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager rights required for this account")
     return access
-

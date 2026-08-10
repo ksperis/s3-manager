@@ -96,6 +96,7 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
 
     assert response.status_code == 200, response.text
     payload = response.json()
+    assert all(isinstance(item["id"], int) for item in payload)
     assert [item["name"] for item in payload] == ["alpha", "Beta", "Zulu"]
     assert [item["account_role"] for item in payload] == [
         AccountRole.PORTAL_MANAGER.value,

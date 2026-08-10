@@ -510,7 +510,7 @@ def list_portal_accounts(
     )
     return [
         PortalAccount(
-            id=str(account.id),
+            id=account.id,
             name=account.name,
             rgw_account_id=account.rgw_account_id,
             account_role=portal_roles[account.id],

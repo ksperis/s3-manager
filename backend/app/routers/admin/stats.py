@@ -13,7 +13,6 @@ from app.services.admin_metrics_service import AdminMetricsService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import TrafficWindow
 from app.services.rgw_supervision import get_supervision_rgw_client
-from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import normalize_features_config
 from app.utils.usage_stats import build_bucket_overview, summarize_bucket_usage
@@ -137,10 +136,7 @@ def account_stats(
 
     endpoint = _resolve_account_endpoint(db, account)
     rgw_admin = _build_rgw_client(endpoint)
-    uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage metrics not available for this account")
-    return _load_principal_bucket_stats(rgw_admin, uid)
+    return _load_principal_bucket_stats(rgw_admin, account.rgw_user_uid)
 
 
 @router.get("/s3-user")

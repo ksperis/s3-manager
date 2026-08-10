@@ -37,7 +37,6 @@ from app.services.rgw_supervision import get_supervision_rgw_client
 from app.utils.account_roles import portal_role_for
 from app.utils.normalize import normalize_string_list
 from app.utils.quota_stats import extract_positive_limit, extract_quota_limits
-from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.s3_endpoint import resolve_s3_client_kwargs, resolve_s3_client_options, resolve_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -890,8 +889,6 @@ class PortalIamMixin:
             return None
 
     def _account_quota(self, account: S3Account) -> tuple[Optional[int], Optional[int]]:
-        if not account.rgw_account_id:
-            return None, None
         admin = self._quota_admin_for_account(account)
         if not admin:
             return None, None
@@ -902,8 +899,6 @@ class PortalIamMixin:
             return None, None
 
     def _account_limits(self, account: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
-        if not account.rgw_account_id:
-            return None, None, None
         admin = self._quota_admin_for_account(account)
         if not admin:
             return None, None, None
@@ -925,11 +920,8 @@ class PortalIamMixin:
         return max_size_bytes, max_objects, extract_positive_limit(payload, "max_buckets")
 
     def _admin_bucket_list(self, account: S3Account, admin: Optional[RGWAdminClient] = None) -> list[dict]:
-        uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
-        if not uid:
-            return []
         rgw_admin = admin or self._supervision_admin_for_account(account)
-        payload = rgw_admin.get_all_buckets(uid=uid, with_stats=True)
+        payload = rgw_admin.get_all_buckets(uid=account.rgw_user_uid, with_stats=True)
         return extract_bucket_list(payload)
 
     def _bucket_usage_from_list(self, buckets: list[dict]) -> tuple[Optional[int], Optional[int], int]:
@@ -980,9 +972,6 @@ class PortalIamMixin:
         flags = resolve_feature_flags(endpoint)
         if not flags.iam_enabled:
             reasons.append("IAM is not enabled for this endpoint")
-
-        if not account.rgw_account_id:
-            reasons.append("Portal requires an RGW account")
 
         return (len(reasons) == 0), reasons
 
@@ -1192,13 +1181,11 @@ class PortalIamMixin:
         account: S3Account,
         usage_map: Optional[dict[str, tuple[Optional[int], Optional[int]]]] = None,
     ) -> tuple[Optional[int], Optional[int], Optional[int]]:
-        if not account.rgw_account_id and not account.rgw_user_uid:
-            return None, None, None
         try:
             rgw_admin = self._supervision_admin_for_account(account)
             buckets = self._admin_bucket_list(account, admin=rgw_admin)
         except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
-            logger.warning("Unable to list buckets for portal usage %s: %s", account.rgw_account_id or account.id, exc)
+            logger.warning("Unable to list buckets for portal usage %s: %s", account.rgw_account_id, exc)
             return None, None, None
         used_bytes, used_objects, bucket_count = self._bucket_usage_from_list(buckets)
         if usage_map is not None:

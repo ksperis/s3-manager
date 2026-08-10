@@ -42,7 +42,6 @@ from app.models.billing import (
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import aggregate_usage, flatten_usage_entries
 from app.services.data_retention_service import DataRetentionService
-from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
@@ -286,11 +285,14 @@ class BillingCollector:
 
         for acc in accounts:
             # RGW usage logs for accounts are keyed by account-id (not the -admin root uid).
-            uid = acc.rgw_account_id or acc.rgw_user_uid
-            if not uid:
-                continue
             try:
-                payload = rgw_admin.get_usage(uid=uid, start=start, end=end, show_entries=True, show_summary=False)
+                payload = rgw_admin.get_usage(
+                    uid=acc.rgw_account_id,
+                    start=start,
+                    end=end,
+                    show_entries=True,
+                    show_summary=False,
+                )
                 entries = flatten_usage_entries(payload)
                 aggregation = aggregate_usage(entries, start=start, end=end)
                 totals = aggregation.get("totals", {})
@@ -369,11 +371,11 @@ class BillingCollector:
         created = 0
         errors: list[dict[str, Any]] = []
         for acc in accounts:
-            uid = resolve_admin_uid(acc.rgw_account_id, acc.rgw_user_uid)
-            if not uid:
-                continue
             try:
-                total_bytes, total_objects, by_bucket = self._collect_bucket_stats(rgw_admin, uid)
+                total_bytes, total_objects, by_bucket = self._collect_bucket_stats(
+                    rgw_admin,
+                    acc.rgw_user_uid,
+                )
                 self._upsert_storage(
                     day=day,
                     endpoint_id=endpoint.id,

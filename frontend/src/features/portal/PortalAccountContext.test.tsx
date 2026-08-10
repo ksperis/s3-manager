@@ -19,7 +19,7 @@ vi.mock("../../i18n", () => ({
 
 const ACCOUNTS = [
   {
-    id: "101",
+    id: 101,
     name: "Project 101",
     rgw_account_id: "rgw-101",
     account_role: "portal_user",
@@ -29,7 +29,7 @@ const ACCOUNTS = [
     storage_endpoint_capabilities: {},
   },
   {
-    id: "102",
+    id: 102,
     name: "Project 102",
     rgw_account_id: "rgw-102",
     account_role: "portal_manager",

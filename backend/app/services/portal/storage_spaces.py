@@ -36,7 +36,6 @@ from app.services import s3_client
 from app.services.avatar_image_service import ALLOWED_AVATAR_CONTENT_TYPES, validate_avatar_image
 from app.services.portal.exceptions import PortalStorageSpaceNotEmpty
 from app.services.rgw_admin import RGWAdminError
-from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.time import normalize_utc, utcnow
 from app.utils.usage_stats import extract_usage_stats
 
@@ -750,12 +749,12 @@ class PortalStorageSpacesMixin:
     ) -> tuple[bool, Optional[int], Optional[int]]:
         try:
             rgw_admin = self._supervision_admin_for_account(account)
-            scope_kwargs: dict = {}
-            account_uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
-            if account_uid:
-                scope_kwargs["uid"] = account_uid
-            stats = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True, **scope_kwargs)
-            if stats is None and scope_kwargs:
+            stats = rgw_admin.get_bucket_info(
+                bucket_name,
+                allow_not_found=True,
+                uid=account.rgw_user_uid,
+            )
+            if stats is None:
                 stats = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True)
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to fetch Storage Space deletion stats: {exc}") from exc

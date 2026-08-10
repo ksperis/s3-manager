@@ -391,7 +391,7 @@ describe("GroupsPage", () => {
           name: "ops-group",
           description: null,
           account_links: [{ account_id: 1, role: "portal_user" }],
-          account_details: [{ id: 1, name: "acc-1" }],
+        account_details: [{ id: 1, name: "acc-1", rgw_account_id: "RGW-ACC-1" }],
         },
       ],
       total: 1,

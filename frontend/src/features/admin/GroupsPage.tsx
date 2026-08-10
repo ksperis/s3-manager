@@ -927,7 +927,7 @@ export default function GroupsPage() {
   );
 
   const renderGroupAssociations = (group: UiGroup) => {
-    const accountDetailsById = new Map((group.account_details ?? []).map((account) => [Number(account.id), account]));
+    const accountDetailsById = new Map((group.account_details ?? []).map((account) => [account.id, account]));
     const s3UserDetailsById = new Map((group.s3_user_details ?? []).map((user) => [Number(user.id), user]));
     const accountItems: AssociationAccountItem[] = (group.account_links ?? []).map((link) => {
       const accountId = Number(link.account_id);

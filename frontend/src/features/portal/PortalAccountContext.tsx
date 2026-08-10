@@ -130,7 +130,7 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
   };
 
   const selectedAccount = useMemo(
-    () => accounts.find((acc) => acc.id === selectedAccountId) ?? null,
+    () => accounts.find((account) => String(account.id) === selectedAccountId) ?? null,
     [accounts, selectedAccountId]
   );
   const hasAccountContext = Boolean(selectedAccount);

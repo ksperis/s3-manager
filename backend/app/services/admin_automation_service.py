@@ -1487,7 +1487,7 @@ class AdminAutomationService:
 
     def _account_link_key(self, item: AccountLinkApply) -> str:
         user_label = item.user.email or str(item.user.id)
-        account_label = item.account.name or item.account.rgw_account_id or str(item.account.id)
+        account_label = item.account.name
         return f"user={user_label},account={account_label}"
 
     def _s3_connection_key(self, item: S3ConnectionApply) -> str:

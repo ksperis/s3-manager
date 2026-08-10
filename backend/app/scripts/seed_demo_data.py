@@ -486,7 +486,7 @@ def create_account_data(
     if not endpoint:
         logger.error("No endpoint configured for account %s", plan.name)
         return
-    logger.info("Account ready: %s (rgw_id=%s)", account.name, account.rgw_account_id or account.id)
+    logger.info("Account ready: %s (rgw_id=%s)", account.name, account.rgw_account_id)
     iam_keys: dict[str, IAMAccessKey] = {}
 
     def _client_for(user_name: str):

@@ -46,7 +46,7 @@ export type UiGroup = {
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean;
   user_details?: UiGroupUserDetail[];
-  account_details?: { id: number; name: string; rgw_account_id?: string | null }[];
+  account_details?: { id: number; name: string; rgw_account_id: string }[];
   account_links?: AccountMembership[];
   s3_user_links?: S3UserMembership[];
   s3_user_details?: { id: number; name: string }[];

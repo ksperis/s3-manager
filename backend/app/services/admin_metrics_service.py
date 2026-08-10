@@ -182,19 +182,15 @@ class AdminMetricsService:
             used_objects = None
             bucket_count = None
 
-            account_id = acc.rgw_account_id
-            uid = None if account_id else acc.rgw_user_uid
             used_bytes, used_objects, bucket_count = self._collect_bucket_usage(
-                account_id=account_id,
-                uid=uid,
+                account_id=acc.rgw_account_id,
+                uid=acc.rgw_user_uid,
                 context=f"account:{acc.id}",
             )
             if bucket_count:
                 total_buckets += bucket_count
 
             if used_bytes is None and used_objects is None:
-                if not acc.rgw_account_id:
-                    continue
                 try:
                     stats = self.rgw_admin.get_account_stats(acc.rgw_account_id, sync=False) or {}
                 except RGWAdminError as exc:
@@ -221,7 +217,7 @@ class AdminMetricsService:
 
             account_usage.append(
                 {
-                    "account_id": acc.rgw_account_id or str(acc.id),
+                    "account_id": acc.rgw_account_id,
                     "account_name": acc.name,
                     "used_bytes": used_bytes,
                     "object_count": used_objects,
@@ -321,13 +317,13 @@ class AdminMetricsService:
 
         account_usage: list[dict] = []
         for acc in accounts:
-            owner_key = acc.rgw_account_id or acc.rgw_user_uid or ""
+            owner_key = acc.rgw_account_id
             used_bytes, used_objects, bucket_count = _aggregate_for_owner(owner_key)
             if used_bytes is None and used_objects is None:
                 continue
             account_usage.append(
                 {
-                    "account_id": acc.rgw_account_id or str(acc.id),
+                    "account_id": acc.rgw_account_id,
                     "account_name": acc.name,
                     "used_bytes": used_bytes,
                     "object_count": used_objects,
@@ -441,13 +437,8 @@ class AdminMetricsService:
 
         allowed: set[str] = set()
         for acc in accounts:
-            if acc.rgw_account_id:
-                allowed.add(acc.rgw_account_id.strip().lower())
-            resolved_uid = resolve_admin_uid(acc.rgw_account_id, acc.rgw_user_uid)
-            if resolved_uid:
-                allowed.add(resolved_uid.strip().lower())
-            if acc.rgw_user_uid:
-                allowed.add(acc.rgw_user_uid.strip().lower())
+            allowed.add(acc.rgw_account_id.strip().lower())
+            allowed.add(acc.rgw_user_uid.strip().lower())
         for user in s3_users:
             if user.rgw_user_uid:
                 allowed.add(user.rgw_user_uid.strip().lower())

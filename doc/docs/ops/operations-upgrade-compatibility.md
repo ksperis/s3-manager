@@ -523,6 +523,12 @@ and expose the external RGW identifier through the required `rgw_account_id`
 field. The duplicate `db_id` field and the unused root `rgw_user_uid` projection
 are removed. Deploy the backend and frontend together.
 
+Portal account responses use the same numeric database `id`; URL parameters and
+browser preferences may still serialize that value as text. Linked account
+details returned with UI groups now require `rgw_account_id`. Backend services
+that operate on persisted accounts consume the stored `rgw_user_uid` directly
+instead of deriving an `-admin` identity from the account ID.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

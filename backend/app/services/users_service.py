@@ -477,8 +477,8 @@ class UsersService:
                 or_(
                     User.email.ilike(pattern),
                     User.role.ilike(pattern),
-                    func.coalesce(S3Account.name, "").ilike(pattern),
-                    func.coalesce(S3Account.rgw_account_id, "").ilike(pattern),
+                    S3Account.name.ilike(pattern),
+                    S3Account.rgw_account_id.ilike(pattern),
                     func.coalesce(S3User.name, "").ilike(pattern),
                     func.coalesce(S3User.rgw_user_uid, "").ilike(pattern),
                     func.coalesce(linked_connection.name, "").ilike(pattern),

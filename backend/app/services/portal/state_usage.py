@@ -14,7 +14,6 @@ from app.models.portal import (
     PortalUsageStorageSpace,
 )
 from app.services.rgw_admin import RGWAdminError
-from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
@@ -203,12 +202,12 @@ class PortalStateUsageMixin:
             logger.warning("Unable to initialize RGW admin client for bucket stats: %s", exc)
             raise RuntimeError("Impossible d'initialiser le client RGW.") from exc
         try:
-            scope_kwargs: dict = {}
-            account_uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
-            if account_uid:
-                scope_kwargs["uid"] = account_uid
-            stats = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True, **scope_kwargs)
-            if stats is None and scope_kwargs:
+            stats = rgw_admin.get_bucket_info(
+                bucket_name,
+                allow_not_found=True,
+                uid=account.rgw_user_uid,
+            )
+            if stats is None:
                 stats = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True)
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to fetch bucket stats: {exc}") from exc

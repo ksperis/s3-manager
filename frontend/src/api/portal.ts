@@ -34,7 +34,7 @@ export type PortalAccessKey = {
 };
 
 export type PortalAccount = {
-  id: string;
+  id: number;
   name: string;
   rgw_account_id: string;
   account_role: "portal_user" | "portal_manager";

@@ -219,20 +219,7 @@ class KeyRotationService:
         disabled_old_keys = 0
 
         for account in accounts:
-            account_label = account.name or account.rgw_account_id or f"#{account.id}"
-            if not account.rgw_user_uid:
-                results.append(
-                    self._build_result(
-                        endpoint=endpoint,
-                        key_type=key_type,
-                        target_type="account",
-                        target_id=str(account.id),
-                        target_label=account_label,
-                        status="failed",
-                        message="Account RGW root user is missing.",
-                    )
-                )
-                continue
+            account_label = account.name
 
             old_access_key = normalize_optional_string(account.rgw_access_key)
             new_access_key: Optional[str] = None

@@ -645,7 +645,7 @@ const MANAGER_MIGRATIONS = [
 
 const PORTAL_ACCOUNTS = [
   {
-    id: "101",
+    id: 101,
     name: "Helios Retail",
     rgw_account_id: "RGW-HELIOS",
     account_role: "portal_manager",

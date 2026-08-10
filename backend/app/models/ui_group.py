@@ -30,7 +30,7 @@ class UiGroupAvatar(BaseModel):
 class LinkedS3Account(BaseModel):
     id: int
     name: str
-    rgw_account_id: Optional[str] = None
+    rgw_account_id: str
 
 
 class UiGroupCreate(BaseModel):

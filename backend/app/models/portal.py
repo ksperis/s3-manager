@@ -13,7 +13,7 @@ from app.models.user import UserAvatar
 class PortalAccount(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str
+    id: int
     name: str
     rgw_account_id: str
     account_role: Literal["portal_user", "portal_manager"]

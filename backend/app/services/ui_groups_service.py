@@ -335,11 +335,10 @@ class UiGroupsService:
             account_details=[
                 LinkedS3Account(
                     id=account_id,
-                    name=(details[0] if details else f"Account #{account_id}"),
-                    rgw_account_id=(details[1] if details else None),
+                    name=account_names[account_id][0],
+                    rgw_account_id=account_names[account_id][1],
                 )
                 for account_id in account_ids
-                for details in [account_names.get(account_id)]
             ],
             account_links=[
                 AccountMembership(
@@ -519,7 +518,7 @@ class UiGroupsService:
             UserUiGroup.user_id.in_(user_ids),
         ).delete(synchronize_session=False)
 
-    def _load_account_names(self, ids: list[int]) -> dict[int, tuple[str, Optional[str]]]:
+    def _load_account_names(self, ids: list[int]) -> dict[int, tuple[str, str]]:
         if not ids:
             return {}
         rows = (
