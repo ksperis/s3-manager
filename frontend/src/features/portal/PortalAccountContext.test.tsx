@@ -48,7 +48,7 @@ function Probe() {
     <>
       <div data-testid="selected">{selectedAccountId ?? "null"}</div>
       <div data-testid="location">{`${location.pathname}${location.search}`}</div>
-      <button type="button" onClick={() => navigate("/portal/spaces")}>Navigate without project</button>
+      <button type="button" onClick={() => navigate("/portal/storage-spaces")}>Navigate without project</button>
       <button type="button" onClick={() => navigate("/portal?project=102")}>Open project 102</button>
     </>
   );
@@ -87,7 +87,7 @@ describe("PortalAccountProvider", () => {
     localStorage.setItem("selectedPortalAccountId", "102");
     await user.click(screen.getByRole("button", { name: "Navigate without project" }));
 
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/portal/spaces?project=101"));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/portal/storage-spaces?project=101"));
     expect(screen.getByTestId("selected")).toHaveTextContent("101");
   });
 

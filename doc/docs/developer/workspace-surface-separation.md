@@ -148,11 +148,13 @@ labels.
 Portal canonical routes are:
 
 - `/portal`
+- `/portal/profile`
 - `/portal/storage-spaces`
 - `/portal/storage-spaces/:spaceId`
 - `/portal/storage-spaces/:spaceId/objects/*`
 - `/portal/access-keys`
 - `/portal/shares`
+- `/portal/shares/:userId`
 - `/portal/history`
 - `/portal/usage`
 - `/portal/requests`
