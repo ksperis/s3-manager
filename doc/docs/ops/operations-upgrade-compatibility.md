@@ -510,6 +510,29 @@ returned, eliminating per-account root-link lookups. Account response models now
 reject unknown fields internally so obsolete projections cannot be silently
 reintroduced. Deploy the backend and frontend together.
 
+## 2026-08 schema drift reconciliation
+
+Migration `0105_reconcile_schema_drift` converges databases created by two
+historical schema variants. It converts legacy text-backed
+`storage_endpoints.latitude` and `storage_endpoints.longitude` columns to
+floating-point columns, while leaving already-canonical databases unchanged.
+Blank coordinate strings become `NULL`. Non-numeric, non-finite, or out-of-range
+coordinates stop the migration with the affected endpoint ID and name; repair
+those values before retrying.
+
+Some older databases also contain the orphan
+`can_access_manager_bucket_usage_stats` column on `users` or `ui_groups`. No
+application model, permission check, or API consumes that flag. The migration
+drops the column only when it exists and requires a tested restorable backup:
+
+1. Back up the database and verify a restore.
+2. Set `S3_MANAGER_DB_BACKUP_VERIFIED=true` for the migration process.
+3. Run the Alembic upgrade.
+
+Fresh databases without the orphan columns do not require the backup flag. A
+downgrade recreates both legacy columns with `false`; it cannot restore discarded
+orphan values.
+
 ## 2026-08 canonical RGW account identities
 
 Migration `0104_canonical_s3_account_identities` requires every persisted RGW
