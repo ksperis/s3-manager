@@ -34,7 +34,8 @@ def test_assign_user_to_account_api(client: TestClient, seed_user_account):
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert acc.id in data.get("accounts", [])
+    assert "accounts" not in data
+    assert acc.id in [link["account_id"] for link in data["account_links"]]
 
 
 def test_assign_user_to_account_requires_a_canonical_role(
@@ -150,7 +151,7 @@ def test_update_user_replaces_account_links_atomically(client: TestClient, db_se
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["accounts"] == [second_account.id]
+    assert "accounts" not in payload
     assert payload["account_links"] == [
         {
             "account_id": second_account.id,
@@ -159,7 +160,7 @@ def test_update_user_replaces_account_links_atomically(client: TestClient, db_se
             "is_root": False,
         }
     ]
-    assert first_account.id not in payload["accounts"]
+    assert first_account.id not in [link["account_id"] for link in payload["account_links"]]
 
 
 def test_update_user_rejects_removed_s3_user_ids_contract(

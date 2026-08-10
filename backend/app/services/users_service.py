@@ -629,7 +629,6 @@ class UsersService:
         s3_connection_labels: Optional[dict[int, str]] = None,
         preloaded_connection_links: Optional[dict[int, list[int]]] = None,
     ) -> UserOut:
-        account_ids: list[int] = []
         account_links: list[AccountMembershipDetail] = []
         group_ids: list[int] = []
         s3_user_ids: list[int] = []
@@ -648,7 +647,6 @@ class UsersService:
                     )
                     for link in user.account_links
                 ]
-                account_ids = [link.account_id for link in user.account_links]
         except DetachedInstanceError:
             account_rows = (
                 self.db.query(
@@ -669,7 +667,6 @@ class UsersService:
                 )
                 for row in account_rows
             ]
-            account_ids = [row[0] for row in account_rows]
         try:
             if hasattr(user, "ui_group_links") and user.ui_group_links is not None:
                 group_ids = [link.group_id for link in user.ui_group_links]
@@ -785,14 +782,11 @@ class UsersService:
             quota_alerts_enabled=bool(user.quota_alerts_enabled),
             quota_alerts_global_watch=bool(user.quota_alerts_global_watch),
             ui_preferences=_parse_ui_preferences(user.ui_preferences_json),
-            accounts=account_ids,
             account_links=account_links,
             group_ids=group_ids,
             group_details=group_details,
-            s3_users=s3_user_ids,
             s3_user_links=s3_user_links,
             s3_user_details=s3_user_details,
-            s3_connections=s3_connection_ids,
             s3_connection_details=s3_connection_details,
             effective_access=effective_access,
             auth_provider=user.auth_provider,

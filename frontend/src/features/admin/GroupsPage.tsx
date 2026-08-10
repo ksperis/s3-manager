@@ -356,16 +356,11 @@ export default function GroupsPage() {
           role: normalizeAccountAccessRole(link.role),
           allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
         })) ?? [],
-      s3_user_links: group.s3_user_links?.length
-        ? group.s3_user_links.map((link) => ({
-            s3_user_id: Number(link.s3_user_id),
-            allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
-          }))
-        : (group.s3_users ?? []).map((s3UserId) => ({
-            s3_user_id: Number(s3UserId),
-            allow_manager_browser_data_access: false,
-          })),
-      s3_connection_ids: group.s3_connections ?? [],
+      s3_user_links: (group.s3_user_links ?? []).map((link) => ({
+        s3_user_id: Number(link.s3_user_id),
+        allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
+      })),
+      s3_connection_ids: (group.s3_connection_details ?? []).map((connection) => Number(connection.id)),
     });
     setModalTab("general");
     setAssociationTab("accounts");
@@ -938,9 +933,6 @@ export default function GroupsPage() {
   const renderGroupAssociations = (group: UiGroup) => {
     const accountDetailsById = new Map((group.account_details ?? []).map((account) => [Number(account.id), account]));
     const s3UserDetailsById = new Map((group.s3_user_details ?? []).map((user) => [Number(user.id), user]));
-    const connectionDetailsById = new Map(
-      (group.s3_connection_details ?? []).map((connection) => [Number(connection.id), connection])
-    );
     const accountItems: AssociationAccountItem[] = (group.account_links ?? []).map((link) => {
       const accountId = Number(link.account_id);
       return {
@@ -952,22 +944,21 @@ export default function GroupsPage() {
         role: link.role,
       };
     });
-    const s3UserItems = (group.s3_users ?? []).map((id) => {
-      const s3UserId = Number(id);
+    const s3UserItems = (group.s3_user_links ?? []).map((link) => {
+      const s3UserId = Number(link.s3_user_id);
       return {
         id: s3UserId,
-        label: s3UserDetailsById.get(s3UserId)?.name ?? s3UserLabelById.get(s3UserId) ?? `S3 User #${id}`,
+        label: s3UserDetailsById.get(s3UserId)?.name ?? s3UserLabelById.get(s3UserId) ?? `S3 User #${s3UserId}`,
       };
     });
-    const connectionItems = (group.s3_connections ?? []).map((id) => {
-      const connectionId = Number(id);
-      const details = connectionDetailsById.get(connectionId);
+    const connectionItems = (group.s3_connection_details ?? []).map((details) => {
+      const connectionId = Number(details.id);
       return {
         id: connectionId,
         label:
-          details?.name ??
+          details.name ??
           connectionLabelById.get(connectionId) ??
-          `Connection #${id}`,
+          `Connection #${connectionId}`,
       };
     });
     const categories: CompactAssociationCategory[] = [

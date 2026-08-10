@@ -158,7 +158,7 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
         "feature_rules": False,
     }
     assert payload["user_ids"] == [user.id]
-    assert payload["accounts"] == [account.id]
+    assert "accounts" not in payload
     assert payload["account_links"] == [
         {
             "account_id": account.id,
@@ -169,7 +169,7 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
     assert payload["account_details"] == [
         {"id": account.id, "name": "group-account", "rgw_account_id": "RGW-group-account"}
     ]
-    assert payload["s3_users"] == [s3_user.id]
+    assert "s3_users" not in payload
     assert payload["s3_user_links"] == [
         {
             "s3_user_id": s3_user.id,
@@ -177,7 +177,7 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
         }
     ]
     assert payload["s3_user_details"] == [{"id": s3_user.id, "name": "group-s3-user"}]
-    assert payload["s3_connections"] == [shared_connection.id]
+    assert "s3_connections" not in payload
     assert payload["s3_connection_details"] == [
         {
             "id": shared_connection.id,
@@ -230,7 +230,7 @@ def test_ui_group_projection_and_search_hide_private_connection_links(
     )
     assert listed.status_code == 200, listed.text
     group_payload = listed.json()["items"][0]
-    assert group_payload["s3_connections"] == []
+    assert "s3_connections" not in group_payload
     assert group_payload["s3_connection_details"] == []
 
     hidden_search = client.get(

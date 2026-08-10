@@ -333,7 +333,6 @@ class UiGroupsService:
                 )
                 for row in user_rows
             ],
-            accounts=account_ids,
             account_details=[
                 LinkedS3Account(
                     id=account_id,
@@ -353,7 +352,6 @@ class UiGroupsService:
                 )
                 for link in account_rows
             ],
-            s3_users=s3_user_ids,
             s3_user_links=[
                 S3UserMembership(
                     s3_user_id=row.s3_user_id,
@@ -367,7 +365,6 @@ class UiGroupsService:
                 LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
                 for s3_id in s3_user_ids
             ],
-            s3_connections=s3_connection_ids,
             s3_connection_details=[
                 LinkedS3Connection(
                     id=conn_id,

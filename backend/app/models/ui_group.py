@@ -90,13 +90,10 @@ class UiGroupOut(BaseModel):
     browser_advanced_features_enabled: bool = False
     user_ids: list[int] = Field(default_factory=list)
     user_details: list[UserSummary] = Field(default_factory=list)
-    accounts: list[int] = Field(default_factory=list)
     account_details: list[LinkedS3Account] = Field(default_factory=list)
     account_links: list[AccountMembership] = Field(default_factory=list)
-    s3_users: list[int] = Field(default_factory=list)
     s3_user_links: list[S3UserMembership] = Field(default_factory=list)
     s3_user_details: list[LinkedS3User] = Field(default_factory=list)
-    s3_connections: list[int] = Field(default_factory=list)
     s3_connection_details: list[LinkedS3Connection] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

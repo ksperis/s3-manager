@@ -408,7 +408,8 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
     db_session.expunge(user)
     out = service.user_to_out(user)
     assert out.id > 0
-    assert owned_conn.id in out.s3_connections or shared_conn.id in out.s3_connections
+    connection_ids = {connection.id for connection in out.s3_connection_details}
+    assert owned_conn.id in connection_ids or shared_conn.id in connection_ids
 
 
 def test_admin_user_projection_and_search_hide_private_connection_links(db_session):
@@ -429,7 +430,6 @@ def test_admin_user_projection_and_search_hide_private_connection_links(db_sessi
     db_session.commit()
 
     projected = service.user_to_out(user)
-    assert private_connection.id not in projected.s3_connections
     assert projected.s3_connection_details == []
 
     rows, total = service.paginate_users(

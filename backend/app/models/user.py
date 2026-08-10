@@ -240,14 +240,11 @@ class UserOut(BaseModel):
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
     ui_preferences: UiPreferences = Field(default_factory=UiPreferences)
-    accounts: list[int] = []
     account_links: list[AccountMembershipDetail] = []
     group_ids: list[int] = []
     group_details: list[LinkedUiGroup] = []
-    s3_users: list[int] = []
     s3_user_links: list[S3UserMembership] = []
     s3_user_details: list[LinkedS3User] = []
-    s3_connections: list[int] = []
     s3_connection_details: list[LinkedS3Connection] = []
     effective_access: Optional[EffectiveUserAccess] = None
     auth_provider: Optional[str] = None

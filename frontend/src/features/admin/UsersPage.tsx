@@ -945,14 +945,9 @@ export default function UsersPage() {
             id: entry.id,
             label: entry.name || `User #${entry.id}`,
           }))
-        : user.s3_user_details && user.s3_user_details.length > 0
-        ? user.s3_user_details.map((entry) => ({
+        : (user.s3_user_details ?? []).map((entry) => ({
             id: entry.id,
             label: entry.name || `User #${entry.id}`,
-          }))
-        : (user.s3_users ?? []).map((id) => ({
-            id: Number(id),
-            label: s3UserLabelById.get(Number(id)) ?? `User #${id}`,
           }));
     const effectiveConnectionDetails = user.effective_access?.s3_connection_details ?? [];
     const connectionItems =
@@ -961,14 +956,9 @@ export default function UsersPage() {
             id: entry.id,
             label: entry.name || `Connection #${entry.id}`,
           }))
-        : user.s3_connection_details && user.s3_connection_details.length > 0
-        ? user.s3_connection_details.map((entry) => ({
+        : (user.s3_connection_details ?? []).map((entry) => ({
             id: entry.id,
             label: entry.name || `Connection #${entry.id}`,
-          }))
-        : (user.s3_connections ?? []).map((id) => ({
-            id: Number(id),
-            label: s3ConnectionLabelById.get(Number(id)) ?? `Connection #${id}`,
           }));
     const categories: CompactAssociationCategory[] = [
       {
@@ -1561,32 +1551,18 @@ export default function UsersPage() {
     };
     setEditingUser(user);
     setEditForm(nextEditForm);
-    const accountRoles = new Map<number, AccountAccessRole>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizeAccountAccessRole(link.role)])
-    );
-    const selectedAccounts =
-      user.accounts?.map((id) => ({
-        id: Number(id),
-        role: accountRoles.get(Number(id)) ?? "portal_user",
-        allow_manager_browser_data_access: Boolean(
-          user.account_links?.find((link) => Number(link.account_id) === Number(id))
-            ?.allow_manager_browser_data_access
-        ),
-        is_root: Boolean(
-          user.account_links?.find((link) => Number(link.account_id) === Number(id))?.is_root
-        ),
-      })) ?? [];
+    const selectedAccounts = (user.account_links ?? []).map((link) => ({
+      id: Number(link.account_id),
+      role: normalizeAccountAccessRole(link.role),
+      allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
+      is_root: Boolean(link.is_root),
+    }));
     setEditSelectedS3Accounts(selectedAccounts);
-    const nextSelectedS3Users = user.s3_user_links?.length
-      ? user.s3_user_links.map((link) => ({
-          s3_user_id: Number(link.s3_user_id),
-          allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
-        }))
-      : (user.s3_users ?? []).map((id) => ({
-          s3_user_id: Number(id),
-          allow_manager_browser_data_access: false,
-        }));
-    const nextSelectedS3Connections = user.s3_connections ? user.s3_connections.map((id) => Number(id)) : [];
+    const nextSelectedS3Users = (user.s3_user_links ?? []).map((link) => ({
+      s3_user_id: Number(link.s3_user_id),
+      allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
+    }));
+    const nextSelectedS3Connections = (user.s3_connection_details ?? []).map((connection) => Number(connection.id));
     const nextSelectedGroups =
       user.group_ids && user.group_ids.length > 0
         ? user.group_ids.map((id) => Number(id))
@@ -1599,8 +1575,8 @@ export default function UsersPage() {
     setEditConnectionSearch("");
     setEditGroupSearch("");
     const hasAccounts = selectedAccounts.length > 0;
-    const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
-    const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0);
+    const hasS3Users = nextSelectedS3Users.length > 0;
+    const hasConnections = nextSelectedS3Connections.length > 0;
     const initialAssociationsTab: AssociationTab = hasAccounts
       ? "accounts"
       : hasS3Users
