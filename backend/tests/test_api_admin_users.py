@@ -213,6 +213,8 @@ def test_superadmin_can_create_superadmin_and_grant_ceph_admin(client: TestClien
     )
     assert create_superadmin.status_code == 201, create_superadmin.text
     assert create_superadmin.json()["role"] == UserRole.UI_SUPERADMIN.value
+    assert create_superadmin.json()["can_create_manual_private_connections"] is False
+    assert create_superadmin.json()["can_provision_managed_private_connections"] is False
 
     create_admin_with_ceph = client.post(
         "/api/admin/users",
@@ -221,12 +223,16 @@ def test_superadmin_can_create_superadmin_and_grant_ceph_admin(client: TestClien
             "password": "secret-pass-04",
             "role": UserRole.UI_ADMIN.value,
             "can_access_ceph_admin": True,
+            "can_create_manual_private_connections": True,
+            "can_provision_managed_private_connections": True,
         },
     )
     assert create_admin_with_ceph.status_code == 201, create_admin_with_ceph.text
     payload = create_admin_with_ceph.json()
     assert payload["role"] == UserRole.UI_ADMIN.value
     assert payload["can_access_ceph_admin"] is True
+    assert payload["can_create_manual_private_connections"] is True
+    assert payload["can_provision_managed_private_connections"] is True
     assert payload["browser_advanced_features_enabled"] is False
     assert payload["manager_tool_access"] == {
         "bucket_compare": False,

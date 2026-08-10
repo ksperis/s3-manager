@@ -18,6 +18,13 @@ vi.mock("../../api/cephAdmin", async () => {
 describe("CephAdminUserCreateModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_superadmin",
+        effective_access: { can_create_manual_private_connections: true },
+      })
+    );
     listCephAdminAccountsMock.mockResolvedValue({
       items: [
         {
@@ -129,5 +136,29 @@ describe("CephAdminUserCreateModal", () => {
     expect(within(dialog).getByText("SECRET-CEPH-BOB")).toHaveClass("font-mono");
     expect(within(dialog).getAllByRole("button", { name: "Copy" })).toHaveLength(2);
     expect(within(dialog).getByRole("button", { name: "Add as S3 Connection" })).toHaveClass("h-7");
+  });
+
+  it("hides Add as S3 Connection without manual creation permission", async () => {
+    localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_superadmin",
+        effective_access: { can_create_manual_private_connections: false },
+      })
+    );
+    createCephAdminUserMock.mockResolvedValue({
+      detail: { uid: "carol", display_name: "Carol Ops", caps: [], keys: [] },
+      generated_key: { access_key: "AKIA-CEPH-CAROL", secret_key: "SECRET-CEPH-CAROL" },
+    });
+
+    render(<CephAdminUserCreateModal endpointId={7} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("heading", { name: "Create user" }).closest(".workflow-page");
+    if (!dialog) throw new Error("Create user workflow page not found");
+    fireEvent.change(within(dialog).getByLabelText("UID *"), { target: { value: "carol" } });
+    fireEvent.change(within(dialog).getByLabelText("Display name"), { target: { value: "Carol Ops" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create user" }));
+
+    expect(await within(dialog).findByText("Access key created")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Add as S3 Connection" })).not.toBeInTheDocument();
   });
 });

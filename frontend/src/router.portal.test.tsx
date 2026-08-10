@@ -41,7 +41,6 @@ const baseSettings: GeneralSettings = {
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
-  allow_user_private_connections: false,
 };
 
 function findRouteByPath(routes: Array<{ path?: string; children?: unknown[] }>, path: string): { path?: string; children?: unknown[] } | null {

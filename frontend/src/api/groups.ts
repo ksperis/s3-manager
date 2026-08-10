@@ -41,6 +41,8 @@ export type UiGroup = {
   avatar?: UiGroupAvatarDescriptor | null;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
+  can_create_manual_private_connections?: boolean;
+  can_provision_managed_private_connections?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean;
   user_ids?: number[];
@@ -66,6 +68,8 @@ export type UiGroupPayload = {
   avatar_icon?: UiGroupAvatarIcon | null;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
+  can_create_manual_private_connections?: boolean;
+  can_provision_managed_private_connections?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean;
   user_ids?: number[];

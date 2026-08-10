@@ -31,6 +31,7 @@ def contract_client(db_session):
         hashed_password="x",
         is_active=True,
         role=UserRole.UI_SUPERADMIN.value,
+        can_create_manual_private_connections=True,
     )
     db_session.add(user)
     db_session.commit()

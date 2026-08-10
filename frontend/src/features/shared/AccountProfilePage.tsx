@@ -7,8 +7,11 @@ import { useLocation, useSearchParams } from "react-router-dom";
 
 import PageShell from "../../components/PageShell";
 import PageTabs, { PageTabPanel } from "../../components/PageTabs";
-import { useGeneralSettings } from "../../components/GeneralSettingsContext";
-import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
+import {
+  canAccessPrivateConnectionsSection,
+  isSuperAdminRole,
+  readStoredUser,
+} from "../../utils/workspaces";
 import ApiTokensPage from "../admin/ApiTokensPage";
 import ProfilePage from "./ProfilePage";
 import {
@@ -21,21 +24,18 @@ type AccountTab = "profile" | "connections" | "api-tokens";
 export default function AccountProfilePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const { generalSettings } = useGeneralSettings();
   const storedUser = useMemo(() => readStoredUser(), []);
   const isS3Session = storedUser?.authType === "s3_session";
-  const canManagePrivateConnections =
-    !isS3Session &&
-    (isAdminLikeRole(storedUser?.role) ||
-      (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
+  const canAccessPrivateConnections =
+    !isS3Session && canAccessPrivateConnectionsSection(storedUser);
   const canManageApiTokens = !isS3Session && isSuperAdminRole(storedUser?.role);
   const availableTabs = useMemo<AccountTab[]>(
     () => [
       "profile",
-      ...(canManagePrivateConnections ? (["connections"] as const) : []),
+      ...(canAccessPrivateConnections ? (["connections"] as const) : []),
       ...(canManageApiTokens ? (["api-tokens"] as const) : []),
     ],
-    [canManageApiTokens, canManagePrivateConnections]
+    [canAccessPrivateConnections, canManageApiTokens]
   );
   const requestedTab = searchParams.get("tab") as AccountTab | null;
   const activeTab: AccountTab = requestedTab && availableTabs.includes(requestedTab) ? requestedTab : "profile";
@@ -75,7 +75,7 @@ export default function AccountProfilePage() {
 
   const tabs = [
     { id: "profile", label: "Profile" },
-    ...(canManagePrivateConnections ? [{ id: "connections", label: "Private S3 connections" }] : []),
+    ...(canAccessPrivateConnections ? [{ id: "connections", label: "Private S3 connections" }] : []),
     ...(canManageApiTokens ? [{ id: "api-tokens", label: "API tokens" }] : []),
   ];
 

@@ -35,7 +35,6 @@ const generalSettingsState = {
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
-  allow_user_private_connections: false,
 };
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
@@ -346,7 +345,11 @@ describe("GroupsPage", () => {
     expect(screen.queryByRole("checkbox", { name: "private-conn" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
-    fireEvent.click(screen.getByRole("tab", { name: "Manager tools" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Connections" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow manual private connection creation" }));
+
+    fireEvent.click(screen.getByRole("tab", { name: "Manager" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow managed private connection provisioning" }));
     expect(screen.getByRole("checkbox", { name: "Bucket compare" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Bucket integrity check" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Bucket migration" })).not.toBeChecked();
@@ -368,6 +371,8 @@ describe("GroupsPage", () => {
       avatar_icon: null,
       can_access_ceph_admin: false,
       can_access_storage_ops: false,
+      can_create_manual_private_connections: true,
+      can_provision_managed_private_connections: true,
       browser_advanced_features_enabled: true,
       manager_tool_access: {
         bucket_compare: true,

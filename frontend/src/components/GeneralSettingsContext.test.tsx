@@ -66,7 +66,6 @@ describe("GeneralSettingsProvider fallbacks", () => {
       allow_login_access_keys: true,
       allow_login_endpoint_list: true,
       allow_login_custom_endpoint: true,
-      allow_user_private_connections: true,
     });
 
     render(

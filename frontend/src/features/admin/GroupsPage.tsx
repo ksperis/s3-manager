@@ -50,6 +50,7 @@ import {
   type CompactAssociationCategory,
 } from "./AssociationSummary";
 import {
+  AdminAccessToggleSection,
   BrowserAccessSection,
   ManagerToolAccessSection,
   WorkspaceAccessSection,
@@ -84,7 +85,7 @@ import {
   readAdminPrincipalEditRequest,
 } from "./adminPrincipalEditLink";
 
-type GroupModalTab = "general" | "members" | "associations" | "workspaces" | "browser" | "manager_tools";
+type GroupModalTab = "general" | "members" | "associations" | "workspaces" | "connections" | "browser" | "manager";
 type AssociationTab = "accounts" | "s3_users" | "connections";
 const labelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
 const fieldClass =
@@ -147,6 +148,8 @@ export default function GroupsPage() {
     description: "",
     can_access_ceph_admin: false,
     can_access_storage_ops: false,
+    can_create_manual_private_connections: false,
+    can_provision_managed_private_connections: false,
     browser_advanced_features_enabled: false,
     manager_tool_access: DEFAULT_MANAGER_TOOL_ACCESS,
     user_ids: [],
@@ -295,6 +298,8 @@ export default function GroupsPage() {
       avatar_icon: null,
       can_access_ceph_admin: false,
       can_access_storage_ops: false,
+      can_create_manual_private_connections: false,
+      can_provision_managed_private_connections: false,
       browser_advanced_features_enabled: false,
       manager_tool_access: { ...DEFAULT_MANAGER_TOOL_ACCESS },
       user_ids: [],
@@ -339,6 +344,8 @@ export default function GroupsPage() {
       avatar_icon: group.avatar?.icon ?? null,
       can_access_ceph_admin: Boolean(group.can_access_ceph_admin),
       can_access_storage_ops: Boolean(group.can_access_storage_ops),
+      can_create_manual_private_connections: Boolean(group.can_create_manual_private_connections),
+      can_provision_managed_private_connections: Boolean(group.can_provision_managed_private_connections),
       browser_advanced_features_enabled: Boolean(group.browser_advanced_features_enabled),
       manager_tool_access: normalizeManagerToolAccess(group.manager_tool_access),
       user_ids: group.user_ids ?? [],
@@ -398,6 +405,8 @@ export default function GroupsPage() {
       avatar_icon: form.avatar_icon,
       can_access_ceph_admin: Boolean(form.can_access_ceph_admin),
       can_access_storage_ops: Boolean(form.can_access_storage_ops),
+      can_create_manual_private_connections: Boolean(form.can_create_manual_private_connections),
+      can_provision_managed_private_connections: Boolean(form.can_provision_managed_private_connections),
       browser_advanced_features_enabled: Boolean(form.browser_advanced_features_enabled),
       manager_tool_access: normalizeManagerToolAccess(form.manager_tool_access),
       user_ids: form.user_ids ?? [],
@@ -982,7 +991,9 @@ export default function GroupsPage() {
       cellClassName: "align-top min-w-[12rem]",
       render: (group) => {
         const access = normalizeManagerToolAccess(group.manager_tool_access);
-        const toolCount = Object.values(access).filter(Boolean).length;
+        const toolCount =
+          Object.values(access).filter(Boolean).length +
+          Number(Boolean(group.can_provision_managed_private_connections));
         return (
           <div className="flex flex-wrap gap-2">
             {group.can_access_ceph_admin && (
@@ -995,12 +1006,17 @@ export default function GroupsPage() {
                 Storage Ops
               </span>
             )}
-            {toolCount > 0 && (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100">
-                {toolCount} Manager tools
+            {group.can_create_manual_private_connections && (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 ui-caption font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100">
+                Connections
               </span>
             )}
-            {!group.can_access_ceph_admin && !group.can_access_storage_ops && toolCount === 0 && (
+            {toolCount > 0 && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                {toolCount} Manager permissions
+              </span>
+            )}
+            {!group.can_access_ceph_admin && !group.can_access_storage_ops && !group.can_create_manual_private_connections && toolCount === 0 && (
               <span className="ui-caption text-slate-500 dark:text-slate-400">No workspace/tool rights</span>
             )}
           </div>
@@ -1122,8 +1138,9 @@ export default function GroupsPage() {
                 { id: "members", label: "Members" },
                 { id: "associations", label: "Associations" },
                 { id: "workspaces", label: "Workspaces" },
+                { id: "connections", label: "Connections" },
                 { id: "browser", label: "Browser" },
-                { id: "manager_tools", label: "Manager tools" },
+                { id: "manager", label: "Manager" },
               ]}
             >
 
@@ -1264,11 +1281,48 @@ export default function GroupsPage() {
               />
             )}
 
-            {modalTab === "manager_tools" && (
+            {modalTab === "connections" && (
+              <AdminAccessToggleSection
+                title="Connections"
+                description="Private S3 connection permissions inherited by group members."
+                items={[
+                  {
+                    title: "Create manual private connections",
+                    description: "Allow credentials supplied by the user on a registered endpoint or a custom URL.",
+                    checked: Boolean(form.can_create_manual_private_connections),
+                    onChange: (value) =>
+                      setForm((current) => ({
+                        ...current,
+                        can_create_manual_private_connections: value,
+                      })),
+                    ariaLabel: "Allow manual private connection creation",
+                  },
+                ]}
+              />
+            )}
+
+            {modalTab === "manager" && (
               <div className="space-y-4">
+                <AdminAccessToggleSection
+                  title="Managed private access"
+                  description="Server-side provisioning permissions inherited by group members."
+                  items={[
+                    {
+                      title: "Provision managed private connections",
+                      description: "Allow server-side IAM or RGW credential provisioning without revealing generated secrets.",
+                      checked: Boolean(form.can_provision_managed_private_connections),
+                      onChange: (value) =>
+                        setForm((current) => ({
+                          ...current,
+                          can_provision_managed_private_connections: value,
+                        })),
+                      ariaLabel: "Allow managed private connection provisioning",
+                    },
+                  ]}
+                />
                 <ManagerToolAccessSection
                   title="Bucket tools"
-                  description="Manager tools inherited by group members."
+                  description="Manager permissions inherited by group members."
                   tools={managerToolDefinitions.filter((tool) => tool.key !== "ceph_s3_user_keys" && tool.key !== "bucket_quota")}
                   access={form.manager_tool_access}
                   onChange={(key: ManagerToolKey, value) =>

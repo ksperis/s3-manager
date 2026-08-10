@@ -254,7 +254,6 @@ def _build_app_settings_payload() -> str:
             "allow_login_access_keys": False,
             "allow_login_endpoint_list": False,
             "allow_login_custom_endpoint": False,
-            "allow_user_private_connections": False,
         }
     }
     return json.dumps(payload)

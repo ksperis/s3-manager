@@ -235,7 +235,6 @@ export default function GeneralSettingsPage() {
                 allow_login_access_keys: prev.general.allow_login_access_keys,
                 allow_login_endpoint_list: prev.general.allow_login_endpoint_list,
                 allow_login_custom_endpoint: prev.general.allow_login_custom_endpoint,
-                allow_user_private_connections: prev.general.allow_user_private_connections,
               },
               quota_notifications: defaults.quota_notifications,
               branding: defaults.branding,

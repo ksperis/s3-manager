@@ -95,6 +95,9 @@ class ResolvedUserAccess:
     s3_connection_ids: list[int]
     can_access_ceph_admin: bool
     can_access_storage_ops: bool
+    can_create_manual_private_connections: bool
+    can_provision_managed_private_connections: bool
+    has_owned_private_connections: bool
     manager_tool_access: ManagerToolAccess
     browser_advanced_features_enabled: bool
 
@@ -228,6 +231,24 @@ class EffectiveAccessService:
         browser_advanced = bool(user.browser_advanced_features_enabled) or any(
             bool(group.browser_advanced_features_enabled) for group in groups
         )
+        can_create_manual_private_connections = role_supports_tools and (
+            bool(user.can_create_manual_private_connections)
+            or any(bool(group.can_create_manual_private_connections) for group in groups)
+        )
+        can_provision_managed_private_connections = role_supports_tools and (
+            bool(user.can_provision_managed_private_connections)
+            or any(bool(group.can_provision_managed_private_connections) for group in groups)
+        )
+        has_owned_private_connections = (
+            self.db.query(S3Connection.id)
+            .filter(
+                S3Connection.created_by_user_id == user.id,
+                S3Connection.is_shared.is_(False),
+                S3Connection.is_temporary.is_(False),
+            )
+            .first()
+            is not None
+        )
 
         return ResolvedUserAccess(
             group_ids=group_ids,
@@ -240,6 +261,9 @@ class EffectiveAccessService:
             s3_connection_ids=sorted(shared_connection_ids),
             can_access_ceph_admin=can_access_ceph_admin,
             can_access_storage_ops=can_access_storage_ops,
+            can_create_manual_private_connections=can_create_manual_private_connections,
+            can_provision_managed_private_connections=can_provision_managed_private_connections,
+            has_owned_private_connections=has_owned_private_connections,
             manager_tool_access=manager_tool_access,
             browser_advanced_features_enabled=browser_advanced,
         )
@@ -291,17 +315,6 @@ class EffectiveAccessService:
             candidate.id == connection.id
             for candidate in self.list_workspace_connections(user, workspace=workspace, resolved=resolved)
         )
-
-    @staticmethod
-    def private_connections_allowed(user: User) -> bool:
-        """Return the canonical permission to own private S3 credentials."""
-        if is_admin_ui_role(user.role):
-            return True
-        if user.role != UserRole.UI_USER.value:
-            return False
-        from app.services.app_settings_service import load_app_settings
-
-        return bool(load_app_settings().general.allow_user_private_connections)
 
     @staticmethod
     def portal_account_is_compatible(account: object) -> bool:
@@ -390,6 +403,9 @@ class EffectiveAccessService:
         return EffectiveUserAccess(
             can_access_ceph_admin=resolved.can_access_ceph_admin,
             can_access_storage_ops=resolved.can_access_storage_ops,
+            can_create_manual_private_connections=resolved.can_create_manual_private_connections,
+            can_provision_managed_private_connections=resolved.can_provision_managed_private_connections,
+            has_owned_private_connections=resolved.has_owned_private_connections,
             manager_tool_access=resolved.manager_tool_access,
             browser_advanced_features_enabled=resolved.browser_advanced_features_enabled,
             accounts=resolved.account_ids,

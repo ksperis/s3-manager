@@ -39,6 +39,7 @@ import {
   type CompactAssociationCategory,
 } from "./AssociationSummary";
 import {
+  AdminAccessToggleSection,
   BrowserAccessSection,
   ManagerToolAccessSection,
   WorkspaceAccessSection,
@@ -89,7 +90,7 @@ import {
 } from "./AdminAssociationPicker";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
-type UserModalTab = "general" | "associations" | "groups" | "access" | "browser" | "manager_tools";
+type UserModalTab = "general" | "associations" | "groups" | "access" | "connections" | "browser" | "manager";
 type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 type AccountSelection = {
@@ -654,6 +655,9 @@ export default function UsersPage() {
     role: "ui_user",
     can_access_ceph_admin: false,
     can_access_storage_ops: false,
+    can_create_manual_private_connections: false,
+    can_provision_managed_private_connections: false,
+    manager_tool_access: { ...DEFAULT_MANAGER_TOOL_ACCESS },
     browser_advanced_features_enabled: false,
   });
   const [form, setForm] = useState<CreateUserPayload>(() => createFormTemplate());
@@ -860,6 +864,7 @@ export default function UsersPage() {
   const editTargetSupportsStorageOps =
     editRoleValue === "ui_user" || editRoleValue === "ui_admin" || editRoleValue === "ui_superadmin";
   const editTargetSupportsManagerTools = editTargetSupportsStorageOps;
+  const createTargetSupportsManagerTools = createTargetSupportsStorageOps;
   const createCanGrantCephAdmin = currentIsSuperAdmin && createTargetSupportsCephAdmin;
   const createCanGrantStorageOps = currentIsAdminLike && createTargetSupportsStorageOps;
   const editCanGrantCephAdmin = currentIsSuperAdmin && editTargetSupportsCephAdmin;
@@ -1442,6 +1447,15 @@ export default function UsersPage() {
         currentIsAdminLike && (role === "ui_user" || role === "ui_admin" || role === "ui_superadmin")
           ? Boolean(form.can_access_storage_ops)
           : false,
+      can_create_manual_private_connections: createTargetSupportsManagerTools
+        ? Boolean(form.can_create_manual_private_connections)
+        : false,
+      can_provision_managed_private_connections: createTargetSupportsManagerTools
+        ? Boolean(form.can_provision_managed_private_connections)
+        : false,
+      manager_tool_access: createTargetSupportsManagerTools
+        ? normalizeManagerToolAccess(form.manager_tool_access)
+        : { ...DEFAULT_MANAGER_TOOL_ACCESS },
       browser_advanced_features_enabled: Boolean(form.browser_advanced_features_enabled),
       group_ids: createSelectedGroups,
     };
@@ -1495,6 +1509,14 @@ export default function UsersPage() {
       can_access_storage_ops:
         role === "ui_user" || role === "ui_admin" || role === "ui_superadmin"
           ? Boolean(user.can_access_storage_ops)
+          : false,
+      can_create_manual_private_connections:
+        role === "ui_user" || role === "ui_admin" || role === "ui_superadmin"
+          ? Boolean(user.can_create_manual_private_connections)
+          : false,
+      can_provision_managed_private_connections:
+        role === "ui_user" || role === "ui_admin" || role === "ui_superadmin"
+          ? Boolean(user.can_provision_managed_private_connections)
           : false,
       manager_tool_access: normalizeManagerToolAccess(user.manager_tool_access),
       browser_advanced_features_enabled: Boolean(user.browser_advanced_features_enabled),
@@ -1602,6 +1624,20 @@ export default function UsersPage() {
         currentIsAdminLike && (nextRole === "ui_user" || nextRole === "ui_admin" || nextRole === "ui_superadmin")
           ? Boolean(editForm.can_access_storage_ops ?? editingUser.can_access_storage_ops)
           : false;
+      const nextRoleSupportsConnectionPermissions =
+        nextRole === "ui_user" || nextRole === "ui_admin" || nextRole === "ui_superadmin";
+      payload.can_create_manual_private_connections = nextRoleSupportsConnectionPermissions
+        ? Boolean(
+            editForm.can_create_manual_private_connections ??
+              editingUser.can_create_manual_private_connections
+          )
+        : false;
+      payload.can_provision_managed_private_connections = nextRoleSupportsConnectionPermissions
+        ? Boolean(
+            editForm.can_provision_managed_private_connections ??
+              editingUser.can_provision_managed_private_connections
+          )
+        : false;
       payload.manager_tool_access =
         nextRole === "ui_user" || nextRole === "ui_admin" || nextRole === "ui_superadmin"
           ? normalizeManagerToolAccess(editForm.manager_tool_access ?? editingUser.manager_tool_access)
@@ -1795,7 +1831,9 @@ export default function UsersPage() {
                 { id: "associations", label: "Associations" },
                 { id: "groups", label: "Groups" },
                 { id: "access", label: "Workspaces" },
+                { id: "connections", label: "Connections" },
                 { id: "browser", label: "Browser" },
+                { id: "manager", label: "Manager" },
               ]}
             >
 
@@ -1843,6 +1881,12 @@ export default function UsersPage() {
                           currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
                         can_access_storage_ops:
                           currentIsAdminLike && supportsStorageOps ? Boolean(f.can_access_storage_ops) : false,
+                        can_create_manual_private_connections: supportsStorageOps
+                          ? Boolean(f.can_create_manual_private_connections)
+                          : false,
+                        can_provision_managed_private_connections: supportsStorageOps
+                          ? Boolean(f.can_provision_managed_private_connections)
+                          : false,
                       }));
                     }}
                   >
@@ -1900,6 +1944,87 @@ export default function UsersPage() {
                   }))
                 }
               />
+            )}
+
+            {createModalTab === "connections" && (
+              <AdminAccessToggleSection
+                title="Connections"
+                description="Private S3 connection permissions for this UI user. Groups can also grant this permission."
+                items={[
+                  {
+                    title: "Create manual private connections",
+                    description: "Allow credentials supplied by the user on a registered endpoint or a custom URL.",
+                    checked: createTargetSupportsManagerTools && Boolean(form.can_create_manual_private_connections),
+                    disabled: !createTargetSupportsManagerTools,
+                    onChange: (value) =>
+                      setForm((current) => ({
+                        ...current,
+                        can_create_manual_private_connections: value,
+                      })),
+                    ariaLabel: "Allow manual private connection creation",
+                  },
+                ]}
+              />
+            )}
+
+            {createModalTab === "manager" && (
+              <div className="space-y-4">
+                {!createTargetSupportsManagerTools && (
+                  <PageBanner tone="warning">
+                    Manager access requires the target role to be User, Admin, or Superadmin.
+                  </PageBanner>
+                )}
+                <AdminAccessToggleSection
+                  title="Managed private access"
+                  description="Server-side provisioning permissions for this UI user."
+                  items={[
+                    {
+                      title: "Provision managed private connections",
+                      description: "Allow server-side IAM or RGW credential provisioning without revealing generated secrets.",
+                      checked: createTargetSupportsManagerTools && Boolean(form.can_provision_managed_private_connections),
+                      disabled: !createTargetSupportsManagerTools,
+                      onChange: (value) =>
+                        setForm((current) => ({
+                          ...current,
+                          can_provision_managed_private_connections: value,
+                        })),
+                      ariaLabel: "Allow managed private connection provisioning",
+                    },
+                  ]}
+                />
+                <ManagerToolAccessSection
+                  title="Bucket tools"
+                  description="Manager permissions for advanced operations."
+                  tools={managerToolDefinitions.filter((tool) => tool.key !== "ceph_s3_user_keys" && tool.key !== "bucket_quota")}
+                  access={form.manager_tool_access}
+                  isToolDisabled={(tool) => !createTargetSupportsManagerTools || !tool.enabled}
+                  onChange={(key: ManagerToolKey, value) =>
+                    setForm((current) => ({
+                      ...current,
+                      manager_tool_access: {
+                        ...normalizeManagerToolAccess(current.manager_tool_access),
+                        [key]: value,
+                      },
+                    }))
+                  }
+                />
+                <ManagerToolAccessSection
+                  title="Privileged Ceph access"
+                  description="Ceph admin-API actions exposed outside the Ceph Admin workspace."
+                  tools={managerToolDefinitions.filter((tool) => tool.key === "ceph_s3_user_keys" || tool.key === "bucket_quota")}
+                  access={form.manager_tool_access}
+                  isToolDisabled={(tool) => !createTargetSupportsManagerTools || !tool.enabled}
+                  onChange={(key: ManagerToolKey, value) =>
+                    setForm((current) => ({
+                      ...current,
+                      manager_tool_access: {
+                        ...normalizeManagerToolAccess(current.manager_tool_access),
+                        [key]: value,
+                      },
+                    }))
+                  }
+                />
+              </div>
             )}
 
             {createModalTab === "associations" && (
@@ -2054,7 +2179,7 @@ export default function UsersPage() {
       {editingUser && showEditModal && (
         <WorkflowPage
           title="Edit user"
-          description="Manage direct access, inherited associations, workspace permissions, and Manager tools for this UI user."
+          description="Manage direct access, inherited associations, workspace permissions, and Manager permissions for this UI user."
           breadcrumbs={adminPageBreadcrumbs("users", { label: "Edit" })}
           backLabel="Back to users"
           onBack={editCloseGuard.requestClose}
@@ -2083,8 +2208,9 @@ export default function UsersPage() {
                 { id: "groups", label: "Groups" },
                 { id: "associations", label: "Associations" },
                 { id: "access", label: "Workspaces" },
+                { id: "connections", label: "Connections" },
                 { id: "browser", label: "Browser" },
-                { id: "manager_tools", label: "Manager tools" },
+                { id: "manager", label: "Manager" },
               ]}
             >
 
@@ -2129,6 +2255,12 @@ export default function UsersPage() {
                           currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
                         can_access_storage_ops:
                           currentIsAdminLike && supportsStorageOps ? Boolean(f.can_access_storage_ops) : false,
+                        can_create_manual_private_connections: supportsStorageOps
+                          ? Boolean(f.can_create_manual_private_connections)
+                          : false,
+                        can_provision_managed_private_connections: supportsStorageOps
+                          ? Boolean(f.can_provision_managed_private_connections)
+                          : false,
                       }));
                     }}
                   >
@@ -2188,16 +2320,55 @@ export default function UsersPage() {
               />
             )}
 
-            {editModalTab === "manager_tools" && (
+            {editModalTab === "connections" && (
+              <AdminAccessToggleSection
+                title="Connections"
+                description="Private S3 connection permissions for this UI user. Groups can also grant this permission."
+                items={[
+                  {
+                    title: "Create manual private connections",
+                    description: "Allow credentials supplied by the user on a registered endpoint or a custom URL.",
+                    checked: editTargetSupportsManagerTools && Boolean(editForm.can_create_manual_private_connections),
+                    disabled: !editTargetSupportsManagerTools,
+                    onChange: (value) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        can_create_manual_private_connections: value,
+                      })),
+                    ariaLabel: "Allow manual private connection creation",
+                  },
+                ]}
+              />
+            )}
+
+            {editModalTab === "manager" && (
               <div className="space-y-4">
-                {!editTargetSupportsManagerTools && (
-                  <PageBanner tone="warning">
-                    Manager tool access requires the target role to be User, Admin, or Superadmin.
-                  </PageBanner>
-                )}
+                  {!editTargetSupportsManagerTools && (
+                    <PageBanner tone="warning">
+                      Manager access requires the target role to be User, Admin, or Superadmin.
+                    </PageBanner>
+                  )}
+                <AdminAccessToggleSection
+                  title="Managed private access"
+                  description="Server-side provisioning permissions for this UI user."
+                  items={[
+                    {
+                      title: "Provision managed private connections",
+                      description: "Allow server-side IAM or RGW credential provisioning without revealing generated secrets.",
+                      checked: editTargetSupportsManagerTools && Boolean(editForm.can_provision_managed_private_connections),
+                      disabled: !editTargetSupportsManagerTools,
+                      onChange: (value) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          can_provision_managed_private_connections: value,
+                        })),
+                      ariaLabel: "Allow managed private connection provisioning",
+                    },
+                  ]}
+                />
                 <ManagerToolAccessSection
                   title="Bucket tools"
-                  description="Manager tools for bucket-level operations."
+                  description="Manager permissions for advanced operations."
                   tools={managerToolDefinitions.filter((tool) => tool.key !== "ceph_s3_user_keys" && tool.key !== "bucket_quota")}
                   access={editForm.manager_tool_access ?? editingUser.manager_tool_access}
                   isToolDisabled={(tool) => !editTargetSupportsManagerTools || !tool.enabled}

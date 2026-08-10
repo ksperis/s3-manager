@@ -10,10 +10,7 @@ const listStorageEndpointsMock = vi.fn();
 
 vi.mock("../../api/connections", () => ({
   createConnection: (payload: unknown) => createConnectionMock(payload),
-}));
-
-vi.mock("../../api/storageEndpoints", () => ({
-  listStorageEndpoints: () => listStorageEndpointsMock(),
+  listPrivateConnectionStorageEndpoints: () => listStorageEndpointsMock(),
 }));
 
 describe("AddS3ConnectionFromKeyModal", () => {

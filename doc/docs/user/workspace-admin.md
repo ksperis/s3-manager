@@ -86,7 +86,8 @@ image up to 1 MiB. Group images never use Gravatar or an OIDC profile image.
     - `ui_superadmin` role assignment/promotion is restricted to superadmin users.
     - `can_access_ceph_admin` can be granted only by superadmin users, and only for `ui_admin` or `ui_superadmin`.
     - `can_access_storage_ops` can be granted by `ui_admin` or `ui_superadmin` for `ui_user`, `ui_admin`, or `ui_superadmin`.
-    - Manager tool access can be configured by `ui_admin` or `ui_superadmin` from the **Manager tools** tab. Each tool also requires its matching global Manager setting to be enabled.
+    - Manager access can be configured by `ui_admin` or `ui_superadmin` from the **Manager** tab. Each tool also requires its matching global Manager setting to be enabled.
+    - Manual private S3 connection creation is configured from the **Connections** tab. Managed IAM/RGW provisioning is configured from the **Manager** tab. Both rights are direct or inherited from UI groups.
     - Entitlements are automatically disabled when the target role does not support them.
 
 !!! note

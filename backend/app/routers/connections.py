@@ -14,6 +14,7 @@ from app.models.s3_connection import (
     S3ConnectionCredentialsValidationResult,
     S3ConnectionUpdate,
 )
+from app.models.storage_endpoint import StorageEndpointPublic
 from app.models.tagging import TagDefinitionListResponse
 from app.routers.dependencies import get_current_account_user
 from app.services.audit_service import AuditService
@@ -24,6 +25,7 @@ from app.services.managed_private_access_service import (
     ManagedPrivateAccessService,
 )
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
+from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.utils.tagging import TAG_DOMAIN_PRIVATE_CONNECTION_USER
 from app.core.sensitive_data import sanitize_error_detail
@@ -31,12 +33,28 @@ from app.core.sensitive_data import sanitize_error_detail
 router = APIRouter(prefix="/connections", tags=["connections"])
 
 
-def _ensure_private_connections_allowed(user: User) -> None:
-    if EffectiveAccessService.private_connections_allowed(user):
+_SENSITIVE_UPDATE_FIELDS = frozenset(
+    {
+        "provider_hint",
+        "storage_endpoint_id",
+        "credential_owner_type",
+        "credential_owner_identifier",
+        "endpoint_url",
+        "region",
+        "access_key_id",
+        "secret_access_key",
+        "force_path_style",
+        "verify_tls",
+    }
+)
+
+
+def _ensure_manual_private_connection_creation_allowed(db: Session, user: User) -> None:
+    if EffectiveAccessService(db).resolve_user(user).can_create_manual_private_connections:
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Private S3 connections are not allowed for this user",
+        detail="Manual private S3 connection creation is not allowed for this user",
     )
 
 
@@ -45,9 +63,25 @@ def list_connections(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_account_user),
 ):
-    _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
     return service.list_owned_private(user.id)
+
+
+@router.get("/storage-endpoints", response_model=list[StorageEndpointPublic])
+def list_private_connection_storage_endpoints(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_account_user),
+) -> list[StorageEndpointPublic]:
+    _ensure_manual_private_connection_creation_allowed(db, user)
+    return [
+        StorageEndpointPublic(
+            id=endpoint.id,
+            name=endpoint.name,
+            endpoint_url=endpoint.endpoint_url,
+            is_default=endpoint.is_default,
+        )
+        for endpoint in get_storage_endpoints_service(db).list_endpoints()
+    ]
 
 
 @router.get("/tag-definitions", response_model=TagDefinitionListResponse)
@@ -55,7 +89,6 @@ def list_private_connection_tag_definitions(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_account_user),
 ) -> TagDefinitionListResponse:
-    _ensure_private_connections_allowed(user)
     service = TagsService(db)
     return TagDefinitionListResponse(
         items=service.list_definitions(
@@ -71,7 +104,7 @@ def validate_connection_credentials(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_account_user),
 ):
-    _ensure_private_connections_allowed(user)
+    _ensure_manual_private_connection_creation_allowed(db, user)
     service = S3ConnectionValidationService(db)
     try:
         return service.validate_credentials(payload, enforce_manual_endpoint_policy=True)
@@ -88,7 +121,7 @@ def create_connection(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_account_user),
 ):
-    _ensure_private_connections_allowed(user)
+    _ensure_manual_private_connection_creation_allowed(db, user)
     if payload.storage_endpoint_id is None and not (payload.endpoint_url or "").strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Endpoint URL is required for manual connections")
     service = S3ConnectionsService(db)
@@ -132,11 +165,13 @@ def update_connection(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_account_user),
 ):
-    _ensure_private_connections_allowed(user)
     payload_data = payload.model_dump(exclude_unset=True)
     service = S3ConnectionsService(db)
     audit = AuditService(db)
     try:
+        service.get_owned(user.id, connection_id)
+        if _SENSITIVE_UPDATE_FIELDS.intersection(payload.model_fields_set):
+            _ensure_manual_private_connection_creation_allowed(db, user)
         if "storage_endpoint_id" in payload_data and payload.storage_endpoint_id is None and payload.endpoint_url is None:
             from app.utils.s3_connection_endpoint import resolve_connection_details
 
@@ -176,8 +211,12 @@ def rotate_connection_credentials(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_account_user),
 ):
-    _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
+    try:
+        service.get_owned(user.id, connection_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found") from exc
+    _ensure_manual_private_connection_creation_allowed(db, user)
     audit = AuditService(db)
     try:
         updated = service.update_credentials(
@@ -212,7 +251,6 @@ def delete_connection(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_account_user),
 ):
-    _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
     audit = AuditService(db)
     try:
@@ -258,7 +296,6 @@ def get_connection_capabilities(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_account_user),
 ):
-    _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
     try:
         return service.get_capabilities(user.id, connection_id)

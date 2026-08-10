@@ -8,7 +8,7 @@ Use this guide to migrate buckets between contexts with verification and operato
 
 - Access to `/manager/migrations`.
 - `bucket_migration_enabled` enabled.
-- A UI user with **Manager tools > Bucket migration** access enabled.
+- A UI user with **Manager > Bucket migration** access enabled.
 
 ## Before you start
 

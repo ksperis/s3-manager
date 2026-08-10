@@ -122,6 +122,8 @@ class User(BaseModel):
     is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
+    can_create_manual_private_connections: bool = False
+    can_provision_managed_private_connections: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
     browser_advanced_features_enabled: bool = False
     ui_language: Optional[UiLanguage] = None
@@ -140,6 +142,8 @@ class UserCreate(BaseModel):
     is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
+    can_create_manual_private_connections: bool = False
+    can_provision_managed_private_connections: bool = False
     manager_tool_access: Optional[ManagerToolAccess] = None
     browser_advanced_features_enabled: bool = False
     group_ids: Optional[list[int]] = None
@@ -153,6 +157,8 @@ class UserUpdate(BaseModel):
     is_root: Optional[bool] = None
     can_access_ceph_admin: Optional[bool] = None
     can_access_storage_ops: Optional[bool] = None
+    can_create_manual_private_connections: Optional[bool] = None
+    can_provision_managed_private_connections: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None
     browser_advanced_features_enabled: Optional[bool] = None
     account_links: Optional[list[AccountMembership]] = None
@@ -182,6 +188,9 @@ class UserAssignS3Account(BaseModel):
 class EffectiveUserAccess(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
+    can_create_manual_private_connections: bool = False
+    can_provision_managed_private_connections: bool = False
+    has_owned_private_connections: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
     browser_advanced_features_enabled: bool = False
     accounts: list[int] = []
@@ -205,6 +214,8 @@ class UserOut(BaseModel):
     is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
+    can_create_manual_private_connections: bool = False
+    can_provision_managed_private_connections: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
     browser_advanced_features_enabled: bool = False
     ui_language: Optional[UiLanguage] = None

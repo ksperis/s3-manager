@@ -36,10 +36,11 @@ import {
   createConnection,
   deleteConnection,
   listConnections,
+  listPrivateConnectionStorageEndpoints,
+  type PrivateConnectionStorageEndpoint,
   updateConnection,
   validateConnectionCredentials,
 } from "../../api/connections";
-import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { retryManagedPrivateAccessCleanup } from "../../api/managedPrivateAccess";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
@@ -49,6 +50,8 @@ import { removeClientStorage, writeClientStorage } from "../../utils/clientStora
 import { updateStoredUserProfile } from "./profileStoredUser";
 import {
   WORKSPACE_STORAGE_KEY,
+  canAccessPrivateConnectionsSection,
+  canCreateManualPrivateConnections,
   isAdminLikeRole,
   type SessionUser,
   type WorkspaceId,
@@ -267,7 +270,7 @@ export default function ProfilePage({
   const [editConnectionInitialSignature, setEditConnectionInitialSignature] = useState(() =>
     buildEditConnectionSignature(buildConnectionDraft({ id: 0 } as S3Connection), { access_key_id: "", secret_access_key: "" }, "custom", "")
   );
-  const [availableStorageEndpoints, setAvailableStorageEndpoints] = useState<StorageEndpoint[]>([]);
+  const [availableStorageEndpoints, setAvailableStorageEndpoints] = useState<PrivateConnectionStorageEndpoint[]>([]);
   const [loadingStorageEndpoints, setLoadingStorageEndpoints] = useState(false);
   const [storageEndpointsError, setStorageEndpointsError] = useState<string | null>(null);
   const [connectionDrafts, setConnectionDrafts] = useState<Record<number, ConnectionDraft>>({});
@@ -297,10 +300,10 @@ export default function ProfilePage({
     })
   );
   const canConfigureGlobalQuotaWatch = isAdminLikeRole(storedUser?.role);
-  const canManagePrivateConnections =
-    !isS3Session &&
-    (isAdminLikeRole(storedUser?.role) ||
-      (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
+  const canCreateManualConnections =
+    !isS3Session && canCreateManualPrivateConnections(storedUser);
+  const canAccessConnectionsSection =
+    !isS3Session && canAccessPrivateConnectionsSection(storedUser);
 
   const profileCurrentSignature = useMemo(() => stableSignature({ fullName }), [fullName]);
   const preferencesCurrentSignature = useMemo(
@@ -379,7 +382,7 @@ export default function ProfilePage({
   );
 
   const createConnectionValidation = useLiveS3CredentialsValidation({
-    enabled: showCreateConnectionModal && canManagePrivateConnections,
+    enabled: showCreateConnectionModal && canCreateManualConnections,
     payload: createConnectionValidationPayload,
     validate: validatePrivateCreateCredentials,
     debounceMs: 450,
@@ -577,7 +580,7 @@ export default function ProfilePage({
   }, [isS3Session, setLanguagePreference, showSettingsCards]);
 
   useEffect(() => {
-    if (!showConnectionsSection || !canManagePrivateConnections) {
+    if (!showConnectionsSection || !canAccessConnectionsSection) {
       setConnections([]);
       setConnectionDrafts({});
       setConnectionCredentialDrafts({});
@@ -625,10 +628,10 @@ export default function ProfilePage({
     return () => {
       cancelled = true;
     };
-  }, [canManagePrivateConnections, showConnectionsSection]);
+  }, [canAccessConnectionsSection, showConnectionsSection]);
 
   useEffect(() => {
-    if (!showConnectionsSection || !canManagePrivateConnections) {
+    if (!showConnectionsSection || !canCreateManualConnections) {
       setAvailableStorageEndpoints([]);
       setStorageEndpointsError(null);
       setLoadingStorageEndpoints(false);
@@ -637,7 +640,7 @@ export default function ProfilePage({
     let cancelled = false;
     setLoadingStorageEndpoints(true);
     setStorageEndpointsError(null);
-    listStorageEndpoints()
+    listPrivateConnectionStorageEndpoints()
       .then((items) => {
         if (cancelled) return;
         setAvailableStorageEndpoints(items);
@@ -655,7 +658,7 @@ export default function ProfilePage({
     return () => {
       cancelled = true;
     };
-  }, [canManagePrivateConnections, showConnectionsSection]);
+  }, [canCreateManualConnections, showConnectionsSection]);
 
   useEffect(() => {
     if (!showConnectionsSection) return;
@@ -710,6 +713,7 @@ export default function ProfilePage({
 
   useEffect(() => {
     if (!editingConnection) return;
+    if (!canCreateManualConnections || editingConnection.server_managed) return;
     if (editConnectionEndpointMode !== "preset") return;
     if (availableStorageEndpoints.length === 0) {
       setEditConnectionEndpointMode("custom");
@@ -726,13 +730,14 @@ export default function ProfilePage({
     setEditConnectionEndpointId(String(preferred.id));
   }, [
     availableStorageEndpoints,
+    canCreateManualConnections,
     editConnectionEndpointId,
     editConnectionEndpointMode,
     editingConnection,
   ]);
 
   const refreshConnections = async () => {
-    if (!showConnectionsSection || !canManagePrivateConnections) return;
+    if (!showConnectionsSection || !canAccessConnectionsSection) return;
     setConnectionsLoading(true);
     setConnectionsError(null);
     try {
@@ -759,6 +764,7 @@ export default function ProfilePage({
   };
 
   const openCreateConnectionModal = () => {
+    if (!canCreateManualConnections) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
     const nextForm: CreateConnectionForm = { ...defaultCreateConnectionForm, tags: [] };
@@ -961,7 +967,7 @@ export default function ProfilePage({
 
   const handleCreatePrivateConnection = async (event: FormEvent) => {
     event.preventDefault();
-    if (!canManagePrivateConnections) return;
+    if (!canCreateManualConnections) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
     if (!createConnectionForm.name.trim()) {
@@ -1050,7 +1056,7 @@ export default function ProfilePage({
   };
 
   const handleUpdatePrivateConnection = async (connectionId: number): Promise<boolean> => {
-    if (!canManagePrivateConnections) return false;
+    if (!canAccessConnectionsSection) return false;
     const draft = connectionDrafts[connectionId];
     if (!draft) return false;
     const credentialDraft = connectionCredentialDrafts[connectionId] ?? { access_key_id: "", secret_access_key: "" };
@@ -1065,11 +1071,11 @@ export default function ProfilePage({
       setConnectionsError("Connection name is required.");
       return false;
     }
-    if (!serverManaged && usePresetEndpoint && !editConnectionEndpointId) {
+    if (canCreateManualConnections && !serverManaged && usePresetEndpoint && !editConnectionEndpointId) {
       setConnectionsError("Select a configured endpoint.");
       return false;
     }
-    if (!serverManaged && !usePresetEndpoint && !draft.endpoint_url.trim()) {
+    if (canCreateManualConnections && !serverManaged && !usePresetEndpoint && !draft.endpoint_url.trim()) {
       setConnectionsError("Endpoint URL is required.");
       return false;
     }
@@ -1077,13 +1083,13 @@ export default function ProfilePage({
       setConnectionsError("Enable access to manager and/or browser.");
       return false;
     }
-    if (!serverManaged && ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey))) {
+    if (canCreateManualConnections && !serverManaged && ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey))) {
       setConnectionsError("Provide both access key ID and secret access key to update credentials.");
       return false;
     }
     setSavingConnectionBusyId(connectionId);
     try {
-      const endpointPayload = serverManaged
+      const endpointPayload = serverManaged || !canCreateManualConnections
         ? {}
         : usePresetEndpoint
         ? {
@@ -1103,7 +1109,7 @@ export default function ProfilePage({
         access_manager: draft.access_manager,
         access_browser: draft.access_browser,
         ...endpointPayload,
-        ...(!serverManaged && accessKeyId && secretAccessKey
+        ...(canCreateManualConnections && !serverManaged && accessKeyId && secretAccessKey
           ? {
               access_key_id: accessKeyId,
               secret_access_key: secretAccessKey,
@@ -1161,14 +1167,14 @@ export default function ProfilePage({
   ]);
 
   const editConnectionValidation = useLiveS3CredentialsValidation({
-    enabled: Boolean(editingConnection) && !editingConnection?.server_managed && canManagePrivateConnections,
+    enabled: Boolean(editingConnection) && !editingConnection?.server_managed && canCreateManualConnections,
     payload: editConnectionValidationPayload,
     validate: validatePrivateCreateCredentials,
     debounceMs: 450,
   });
 
   const handleDeletePrivateConnection = async (connectionId: number) => {
-    if (!canManagePrivateConnections) return;
+    if (!canAccessConnectionsSection) return;
     if (!window.confirm("Delete this private S3 connection?")) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
@@ -1218,7 +1224,7 @@ export default function ProfilePage({
   };
 
   const handleBulkActivatePrivateConnections = async () => {
-    if (!canManagePrivateConnections || selectedFilteredConnectionIds.length === 0) return;
+    if (!canAccessConnectionsSection || selectedFilteredConnectionIds.length === 0) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
     setBulkActivatingConnections(true);
@@ -1243,7 +1249,7 @@ export default function ProfilePage({
   };
 
   const handleTogglePrivateConnectionStatus = async (connection: S3Connection) => {
-    if (!canManagePrivateConnections) return;
+    if (!canAccessConnectionsSection) return;
     const nextIsActive = connection.is_active !== false ? false : true;
     setConnectionsError(null);
     setConnectionsMessage(null);
@@ -1262,7 +1268,7 @@ export default function ProfilePage({
   };
 
   const handleBulkDisablePrivateConnections = async () => {
-    if (!canManagePrivateConnections || selectedFilteredConnectionIds.length === 0) return;
+    if (!canAccessConnectionsSection || selectedFilteredConnectionIds.length === 0) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
     setBulkDisablingConnections(true);
@@ -1287,7 +1293,7 @@ export default function ProfilePage({
   };
 
   const handleBulkDeletePrivateConnections = async () => {
-    if (!canManagePrivateConnections || selectedFilteredConnectionIds.length === 0) return;
+    if (!canAccessConnectionsSection || selectedFilteredConnectionIds.length === 0) return;
     const count = selectedFilteredConnectionIds.length;
     if (!window.confirm(`Delete ${count} selected private S3 connection${count > 1 ? "s" : ""}?`)) return;
     setConnectionsError(null);
@@ -1608,7 +1614,7 @@ export default function ProfilePage({
             <h2 className={sectionHeadingClasses}>Private S3 connections</h2>
             <p className={sectionDescriptionClasses}>List your connections and manage credentials.</p>
           </div>
-          {canManagePrivateConnections && (
+          {canCreateManualConnections && (
             <UiButton size="sm" onClick={openCreateConnectionModal}>
               Add connection
             </UiButton>
@@ -1616,13 +1622,11 @@ export default function ProfilePage({
         </div>
 
         <div className="space-y-4 px-5 py-5">
-          {!canManagePrivateConnections ? (
+          {!canCreateManualConnections && (
             <PageBanner tone="info">
-              {storedUser?.role === "ui_user"
-                ? "Private S3 connection management is disabled for UI users on this instance."
-                : "This session cannot manage private S3 connections."}
+              Creation, endpoint changes, identity changes, and credential replacement are disabled. Existing connections remain available for metadata, workspace access, activation, cleanup, and deletion.
             </PageBanner>
-          ) : (
+          )}
             <>
               {connectionsError && <PageBanner tone="error">{connectionsError}</PageBanner>}
               {connectionsMessage && <PageBanner tone="success">{connectionsMessage}</PageBanner>}
@@ -1873,11 +1877,10 @@ export default function ProfilePage({
                 )}
               </div>
             </>
-          )}
         </div>
       </section>}
 
-      {showConnectionsSection && showCreateConnectionModal && (
+      {showConnectionsSection && canCreateManualConnections && showCreateConnectionModal && (
         <WorkflowPage
           title="Add private S3 connection"
           description="Configure endpoint access, credentials, and workspace availability for this private connection."
@@ -2035,7 +2038,7 @@ export default function ProfilePage({
                         </div>
                       </div>
 
-                      {!editingConnection.server_managed && <S3ConnectionEndpointFields
+                      {canCreateManualConnections && !editingConnection.server_managed && <S3ConnectionEndpointFields
                         mode={editConnectionEndpointMode}
                         onModeChange={setEditConnectionEndpointMode}
                         modeInputName={`edit-connection-endpoint-mode-${editingConnection.id}`}
@@ -2055,6 +2058,10 @@ export default function ProfilePage({
                       {editingConnection.server_managed ? (
                         <PageBanner tone="info">
                           This connection is server managed. Its source context, endpoint, remote principal, access key, and secret are immutable here.
+                        </PageBanner>
+                      ) : !canCreateManualConnections ? (
+                        <PageBanner tone="info">
+                          Endpoint, identity, and credentials are locked because manual private connection creation is not granted. You can still edit the name, tags, and workspace access.
                         </PageBanner>
                       ) : <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
                         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

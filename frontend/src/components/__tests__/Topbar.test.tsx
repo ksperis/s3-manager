@@ -16,7 +16,6 @@ vi.mock("../ThemeToggle", () => ({
 vi.mock("../GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
     generalSettings: {
-      allow_user_private_connections: false,
     },
   }),
 }));
@@ -44,6 +43,7 @@ describe("Topbar account menu", () => {
       JSON.stringify({
         role: "ui_admin",
         authType: "password",
+        can_create_manual_private_connections: true,
       })
     );
   });

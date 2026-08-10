@@ -33,6 +33,13 @@ export type S3Connection = {
   last_used_at?: string | null;
 };
 
+export type PrivateConnectionStorageEndpoint = {
+  id: number;
+  name: string;
+  endpoint_url: string;
+  is_default: boolean;
+};
+
 type CreateConnectionPayload = {
   name: string;
   provider_hint?: string | null;
@@ -88,6 +95,11 @@ type ConnectionCredentialsValidationResult = {
 
 export async function listConnections(): Promise<S3Connection[]> {
   const { data } = await client.get<S3Connection[]>("/connections");
+  return data;
+}
+
+export async function listPrivateConnectionStorageEndpoints(): Promise<PrivateConnectionStorageEndpoint[]> {
+  const { data } = await client.get<PrivateConnectionStorageEndpoint[]>("/connections/storage-endpoints");
   return data;
 }
 

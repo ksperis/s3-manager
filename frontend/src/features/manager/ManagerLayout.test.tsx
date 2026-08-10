@@ -129,7 +129,6 @@ function buildGeneralSettings(overrides?: Record<string, unknown>) {
     allow_login_access_keys: false,
     allow_login_endpoint_list: false,
     allow_login_custom_endpoint: false,
-    allow_user_private_connections: false,
     ...overrides,
   };
 }
@@ -196,6 +195,33 @@ describe("ManagerLayout", () => {
 
     const labels = capturedNavSections.map((section) => section.label);
     expect(labels).not.toContain("Ceph");
+  });
+
+  it("shows Ceph provisioning navigation without Ceph key inventory access", () => {
+    setStoredManagerUser({
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        bucket_purge: false,
+        feature_rules: false,
+        bucket_quota: false,
+        ceph_s3_user_keys: false,
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(
+      buildContext({ managerCephKeysEnabled: false, managerPrivateAccessEnabled: true })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const cephSection = capturedNavSections.find((section) => section.label === "Ceph");
+    expect(cephSection?.links.map((link) => link.label)).toEqual(["Access keys"]);
   });
 
   it("shows Feature rules and Integrity tools when bucket integrity flag is enabled", () => {

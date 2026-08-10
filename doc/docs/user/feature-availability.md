@@ -24,8 +24,8 @@ s3-manager shows an action only when all required conditions are true:
 | IAM | Manager | Endpoint IAM capability and effective Manager access. |
 | Ceph S3 User access keys | Manager > Ceph | S3 User context, `manager_ceph_s3_user_keys_enabled`, Manager tool access, S3 User allow flag, Ceph endpoint, and Admin Ops credentials. |
 | SNS topics and bucket notifications | Manager, Ceph Admin, Storage Ops | Endpoint SNS capability and feature-specific action rights. |
-| Bucket compare, integrity, purge, migration | Manager tools | Global Manager setting plus per-user or inherited Manager tool access. |
-| Feature rule inventory | Manager tools | Per-user or inherited Manager tool access and selected context capability. |
+| Bucket compare, integrity, purge, migration | Manager | Global Manager setting plus per-user or inherited Manager access. |
+| Feature rule inventory | Manager | Per-user or inherited Manager access and selected context capability. |
 | Usage, quota, traffic, and billing | Admin, Manager, Portal | Collection jobs, endpoint capabilities, and feature flags. |
 | Key rotation | Admin settings | `ui_superadmin` access and eligible managed endpoint credentials. |
 | Portal governance activity, access logs, and settings | Portal | Portal account link, visible Storage Space scope, Portal Manager permission for access logs, and Portal feature flags. |

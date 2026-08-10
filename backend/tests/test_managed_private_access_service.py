@@ -18,11 +18,13 @@ from app.db import (
     S3User,
     StorageEndpoint,
     StorageProvider,
+    UiGroup,
     User,
     UserRole,
     UserS3Account,
     UserS3Connection,
     UserS3User,
+    UserUiGroup,
 )
 from app.models.iam import AccessKey, IAMGroup, IAMUser
 from app.models.managed_private_access import (
@@ -98,13 +100,14 @@ class FakeIAM:
         self.deleted_users.append(username)
 
 
-def _user(db_session, *, email="owner@example.test", ceph_keys=False):
+def _user(db_session, *, email="owner@example.test", ceph_keys=False, managed=True):
     row = User(
         email=email,
         hashed_password="x",
         role=UserRole.UI_SUPERADMIN.value,
         is_active=True,
         can_access_manager_ceph_s3_user_keys=ceph_keys,
+        can_provision_managed_private_connections=managed,
     )
     db_session.add(row)
     db_session.commit()
@@ -209,6 +212,7 @@ def test_iam_provisioning_never_serializes_or_audits_secret_and_is_idempotent(db
     audits = db_session.query(AuditLog).all()
     assert audits
     assert all("NEVER-IN-RESPONSE" not in (audit.metadata_json or "") for audit in audits)
+    assert all("AK-MANAGED" not in (audit.metadata_json or "") for audit in audits)
 
     repeated = service.provision_iam(user=user, account=account, payload=_payload())
     assert repeated.connection.id == result.connection.id
@@ -302,11 +306,10 @@ def test_iam_connection_source_requires_assignment_manager_execution_and_iam_cap
         )
 
 
-def test_private_connection_permission_is_required_before_remote_calls(db_session, monkeypatch):
-    user = _user(db_session, email="private-disabled@example.test")
+def test_managed_connection_permission_is_required_before_remote_calls(db_session, monkeypatch):
+    user = _user(db_session, email="private-disabled@example.test", managed=False)
     account = _account(db_session, user, _endpoint(db_session))
     service = ManagedPrivateAccessService(db_session)
-    monkeypatch.setattr(service.access, "private_connections_allowed", lambda _user: False)
     monkeypatch.setattr(
         service,
         "_iam_service_for_account",
@@ -315,6 +318,42 @@ def test_private_connection_permission_is_required_before_remote_calls(db_sessio
 
     with pytest.raises(ManagedPrivateAccessForbidden, match="not allowed"):
         service.provision_iam(user=user, account=account, payload=_payload())
+
+
+def test_managed_connection_permission_is_inherited_from_group_and_revoked_before_remote_calls(
+    db_session,
+    monkeypatch,
+):
+    user = _user(db_session, email="private-group@example.test", managed=False)
+    group = UiGroup(
+        name="private-provisioners",
+        can_provision_managed_private_connections=True,
+    )
+    db_session.add(group)
+    db_session.flush()
+    membership = UserUiGroup(user_id=user.id, group_id=group.id)
+    db_session.add(membership)
+    db_session.commit()
+    account = _account(db_session, user, _endpoint(db_session))
+    fake = FakeIAM()
+    service = ManagedPrivateAccessService(db_session)
+    monkeypatch.setattr(service, "_iam_service_for_account", lambda _account: fake)
+    _disable_capability_probe(monkeypatch)
+
+    result = service.provision_iam(user=user, account=account, payload=_payload("Group private access"))
+    assert result.status == "active"
+    assert fake.created_keys == [f"s3m-private-u{user.id}-acc{account.id}"]
+
+    db_session.delete(membership)
+    db_session.commit()
+    monkeypatch.setattr(
+        service,
+        "_iam_service_for_account",
+        lambda _account: (_ for _ in ()).throw(AssertionError("IAM must not be contacted")),
+    )
+
+    with pytest.raises(ManagedPrivateAccessForbidden, match="not allowed"):
+        service.provision_iam(user=user, account=account, payload=_payload("Group private access"))
 
 
 def test_custom_connection_destination_must_pass_private_tls_rules(db_session, monkeypatch):
@@ -481,8 +520,8 @@ def test_failed_compensation_is_durable_cleanup_pending(db_session, monkeypatch)
     assert "NEVER-IN-RESPONSE" not in (retry_audit.message or "")
 
 
-def test_rgw_user_provisioning_uses_distinct_key_and_endpoint(db_session, monkeypatch):
-    user = _user(db_session, email="rgw@example.test", ceph_keys=True)
+def test_rgw_user_provisioning_uses_managed_permission_without_ceph_key_inventory_right(db_session, monkeypatch):
+    user = _user(db_session, email="rgw@example.test", ceph_keys=False)
     endpoint = _endpoint(db_session, iam=False, admin=True)
     s3_user = S3User(
         name="RGW user",
@@ -525,8 +564,8 @@ def test_rgw_user_provisioning_uses_distinct_key_and_endpoint(db_session, monkey
     assert "PERSONAL-SK" not in result.model_dump_json()
 
 
-def test_rgw_user_provisioning_requires_key_management_permission(db_session):
-    user = _user(db_session, email="rgw-denied@example.test", ceph_keys=False)
+def test_rgw_user_provisioning_requires_managed_connection_permission(db_session):
+    user = _user(db_session, email="rgw-denied@example.test", ceph_keys=True, managed=False)
     endpoint = _endpoint(db_session, iam=False, admin=True)
     s3_user = S3User(
         name="RGW denied",
@@ -554,6 +593,39 @@ def test_rgw_user_provisioning_requires_key_management_permission(db_session):
         )
 
 
+def test_rgw_user_provisioning_requires_resource_opt_in_before_remote_calls(db_session, monkeypatch):
+    user = _user(db_session, email="rgw-no-opt-in@example.test", ceph_keys=False, managed=True)
+    endpoint = _endpoint(db_session, iam=False, admin=True)
+    s3_user = S3User(
+        name="RGW no opt-in",
+        rgw_user_uid="rgw-no-opt-in",
+        rgw_access_key="TECHNICAL-AK",
+        rgw_secret_key="TECHNICAL-SK",
+        storage_endpoint_id=endpoint.id,
+        allow_manager_ceph_s3_user_keys=False,
+    )
+    db_session.add(s3_user)
+    db_session.flush()
+    db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
+    db_session.commit()
+    context = S3ExecutionContext.from_legacy_user(s3_user)
+    monkeypatch.setattr(
+        "app.services.managed_private_access_service.S3UsersService.create_access_key_entry",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("RGW must not be contacted")),
+    )
+
+    with pytest.raises(ManagedPrivateAccessForbidden, match="not allowed"):
+        ManagedPrivateAccessService(db_session).provision_rgw_user(
+            user=user,
+            account=context,
+            payload=ManagedRGWUserPrivateAccessRequest(
+                connection_name="RGW private",
+                access_browser=True,
+                access_manager=False,
+            ),
+        )
+
+
 def test_managed_iam_connection_delete_cleans_remote_resources_before_local_rows(db_session, monkeypatch):
     user = _user(db_session, email="delete-managed@example.test")
     account = _account(db_session, user, _endpoint(db_session))
@@ -562,6 +634,9 @@ def test_managed_iam_connection_delete_cleans_remote_resources_before_local_rows
     monkeypatch.setattr(service, "_iam_service_for_account", lambda _account: fake)
     _disable_capability_probe(monkeypatch)
     result = service.provision_iam(user=user, account=account, payload=_payload())
+
+    user.can_provision_managed_private_connections = False
+    db_session.commit()
 
     deleted = service.delete_owned_connection(user=user, connection_id=result.connection.id)
 

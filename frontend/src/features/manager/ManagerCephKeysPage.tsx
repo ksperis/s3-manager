@@ -63,6 +63,9 @@ export default function ManagerCephKeysPage() {
 
   const isS3UserContext = selectedS3AccountType === "s3_user";
   const canManageCephKeys = Boolean(hasS3AccountContext && isS3UserContext && managerCephKeysEnabled);
+  const canProvisionManagedPrivateAccess = Boolean(
+    hasS3AccountContext && isS3UserContext && managerPrivateAccessEnabled
+  );
 
   const loadKeys = useCallback(async () => {
     if (!canManageCephKeys) {
@@ -152,27 +155,29 @@ export default function ManagerCephKeysPage() {
 
   return (
     <PageShell
-      title="Ceph access keys"
-      description="Manage Ceph RGW access keys for this S3 User context."
+      title="Ceph"
+      description="Manage Ceph RGW access keys and provision private access for this S3 User context."
       breadcrumbs={managerPageBreadcrumbs("ceph-keys")}
-      actions={
-        canManageCephKeys
+      actions={[
+        ...(canManageCephKeys
           ? [
               {
                 label: busy === "create" ? "Creating..." : "New key",
                 onClick: handleCreateKey,
-                variant: "primary",
+                variant: "primary" as const,
               },
-              ...(managerPrivateAccessEnabled
-                ? [{
-                    label: "Create my private access",
-                    onClick: () => setShowPrivateAccessModal(true),
-                    variant: "secondary" as const,
-                  }]
-                : []),
             ]
-          : []
-      }
+          : []),
+        ...(canProvisionManagedPrivateAccess
+          ? [
+              {
+                label: "Create my private access",
+                onClick: () => setShowPrivateAccessModal(true),
+                variant: canManageCephKeys ? ("secondary" as const) : ("primary" as const),
+              },
+            ]
+          : []),
+      ]}
     >
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
@@ -207,25 +212,29 @@ export default function ManagerCephKeysPage() {
         <PageBanner tone="info">Loading context capabilities…</PageBanner>
       ) : !managerCephKeysEnabled ? (
         <PageEmptyState
-          title="Ceph key management is unavailable for this context"
-          description="The selected context does not expose RGW access-key management. Check the user tool access, feature toggle, endpoint provider, admin feature, and Ceph admin credentials."
+          title="Ceph key inventory is unavailable for this context"
+          description={
+            canProvisionManagedPrivateAccess
+              ? "Manual RGW key management is unavailable. Managed private access remains available from the page action."
+              : "The selected context does not expose RGW access-key management. Check the user tool access, feature toggle, endpoint provider, admin feature, and Ceph admin credentials."
+          }
           primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
           tone="warning"
         />
       ) : (
         <ListPageSection
-            title="Keys"
-            description="S3-Manager interface keys and managed private-access keys are locked; delete a managed key through its private connection."
-            countLabel={`${filteredKeys.length} result(s)`}
-            search={
-              <input
-                type="text"
-                value={keyFilter}
-                onChange={(event) => setKeyFilter(event.target.value)}
-                placeholder="Search by access key or status"
-                className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            }
+          title="Keys"
+          description="S3-Manager interface keys and managed private-access keys are locked; delete a managed key through its private connection."
+          countLabel={`${filteredKeys.length} result(s)`}
+          search={
+            <input
+              type="text"
+              value={keyFilter}
+              onChange={(event) => setKeyFilter(event.target.value)}
+              placeholder="Search by access key or status"
+              className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+          }
         >
           <ManagerTable
             responsiveCards
@@ -293,7 +302,7 @@ export default function ManagerCephKeysPage() {
           </ManagerTable>
         </ListPageSection>
       )}
-      {showPrivateAccessModal && (
+      {canProvisionManagedPrivateAccess && showPrivateAccessModal && (
         <CreateManagedPrivateAccessModal
           variant="rgw_user"
           accountId={accountIdForApi}

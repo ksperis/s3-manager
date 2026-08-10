@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import AccountProfilePage from "./AccountProfilePage";
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
-  useGeneralSettings: () => ({ generalSettings: { allow_user_private_connections: false } }),
+  useGeneralSettings: () => ({ generalSettings: {} }),
 }));
 
 vi.mock("./ProfilePage", () => ({
@@ -39,7 +39,15 @@ function renderPage(initialEntry = "/profile") {
 
 describe("AccountProfilePage", () => {
   beforeEach(() => {
-    window.localStorage.setItem("user", JSON.stringify({ role: "ui_superadmin", authType: "password" }));
+    window.localStorage.setItem("user", JSON.stringify({
+      role: "ui_superadmin",
+      authType: "password",
+      effective_access: {
+        can_create_manual_private_connections: true,
+        can_provision_managed_private_connections: false,
+        has_owned_private_connections: false,
+      },
+    }));
   });
 
   afterEach(() => {
@@ -67,6 +75,22 @@ describe("AccountProfilePage", () => {
     expect(screen.queryByRole("button", { name: "Private S3 connections" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "API tokens" })).not.toBeInTheDocument();
     expect(await screen.findByText("/profile?tab=profile")).toBeInTheDocument();
+  });
+
+  it("keeps the connections tab after permission revocation when a connection is owned", () => {
+    window.localStorage.setItem("user", JSON.stringify({
+      role: "ui_user",
+      authType: "password",
+      effective_access: {
+        can_create_manual_private_connections: false,
+        can_provision_managed_private_connections: false,
+        has_owned_private_connections: true,
+      },
+    }));
+
+    renderPage();
+
+    expect(screen.getByRole("tab", { name: "Private S3 connections" })).toBeInTheDocument();
   });
 
   it("protects dirty content before changing tabs", async () => {

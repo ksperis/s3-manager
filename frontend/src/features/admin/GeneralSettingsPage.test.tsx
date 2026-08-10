@@ -67,7 +67,6 @@ function buildSettings(): AppSettings {
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,
-      allow_user_private_connections: false,
     },
     manager: {
       allow_manager_user_usage_stats: true,
@@ -200,12 +199,10 @@ describe("GeneralSettingsPage branding", () => {
     initialSettings.general.allow_login_access_keys = true;
     initialSettings.general.allow_login_endpoint_list = true;
     initialSettings.general.allow_login_custom_endpoint = true;
-    initialSettings.general.allow_user_private_connections = true;
     const defaultSettings = buildSettings();
     defaultSettings.general.allow_login_access_keys = false;
     defaultSettings.general.allow_login_endpoint_list = false;
     defaultSettings.general.allow_login_custom_endpoint = false;
-    defaultSettings.general.allow_user_private_connections = false;
     fetchAppSettingsMock.mockResolvedValueOnce(initialSettings);
     fetchDefaultAppSettingsMock.mockResolvedValueOnce(defaultSettings);
 
@@ -225,7 +222,7 @@ describe("GeneralSettingsPage branding", () => {
     expect(payload.general.allow_login_access_keys).toBe(true);
     expect(payload.general.allow_login_endpoint_list).toBe(true);
     expect(payload.general.allow_login_custom_endpoint).toBe(true);
-    expect(payload.general.allow_user_private_connections).toBe(true);
+    expect(payload.general).not.toHaveProperty("allow_user_private_connections");
   });
 
   it("shows backend detail when initial settings load fails with detail", async () => {

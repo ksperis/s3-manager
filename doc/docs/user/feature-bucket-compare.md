@@ -8,7 +8,7 @@ Use this guide when you need to compare bucket states before migration or remedi
 
 - Access to `/manager/bucket-compare`.
 - `bucket_compare_enabled` set to true.
-- A UI user with **Manager tools > Bucket compare** access enabled.
+- A UI user with **Manager > Bucket compare** access enabled.
 - Context with bucket management capability.
 
 ## Before you start

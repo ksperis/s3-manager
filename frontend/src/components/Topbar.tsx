@@ -8,15 +8,14 @@ import {
   markUserNotificationsRead,
   type UserNotification,
 } from "../api/userNotifications";
-import type { UiRole, UserAvatarDescriptor } from "../api/users";
+import type { EffectiveUserAccess, UiRole, UserAvatarDescriptor } from "../api/users";
 import {
-  isAdminLikeRole,
+  canAccessPrivateConnectionsSection,
   isSuperAdminRole,
   readStoredUser,
   SESSION_USER_UPDATED_EVENT,
 } from "../utils/workspaces";
 import type { WorkspaceSwitcherModel } from "./EnvironmentSwitcher";
-import { useGeneralSettings } from "./GeneralSettingsContext";
 import ThemeToggle from "./ThemeToggle";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
@@ -48,6 +47,14 @@ type StoredTopbarUser = {
   display_name?: string | null;
   avatar?: UserAvatarDescriptor | null;
   role?: UiRole | null;
+  can_create_manual_private_connections?: boolean | null;
+  can_provision_managed_private_connections?: boolean | null;
+  effective_access?: Pick<
+    EffectiveUserAccess,
+    | "can_create_manual_private_connections"
+    | "can_provision_managed_private_connections"
+    | "has_owned_private_connections"
+  > | null;
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   account_links?: StoredAccountLink[] | null;
 };
@@ -119,15 +126,12 @@ export default function Topbar({
   workspaceSwitcher,
   profilePath = "/profile",
 }: TopbarProps) {
-  const { generalSettings } = useGeneralSettings();
   const [storedUser, setStoredUser] = useState<StoredTopbarUser | null>(
     () => readStoredUser() as StoredTopbarUser | null,
   );
   const isS3Session = storedUser?.authType === "s3_session";
-  const canManagePrivateConnections =
-    !isS3Session &&
-    (isAdminLikeRole(storedUser?.role) ||
-      (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
+  const canAccessPrivateConnections =
+    !isS3Session && canAccessPrivateConnectionsSection(storedUser);
   const canManageApiTokens = !isS3Session && isSuperAdminRole(storedUser?.role);
   const uiRoleLabel = useMemo(() => resolveUiRoleLabel(storedUser), [storedUser]);
 
@@ -892,7 +896,7 @@ export default function Topbar({
                       </span>
                     </a>
 
-                    {canManagePrivateConnections && (
+                    {canAccessPrivateConnections && (
                       <a
                         href={`${profilePath}?tab=connections`}
                         role="menuitem"

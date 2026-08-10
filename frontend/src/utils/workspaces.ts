@@ -46,6 +46,8 @@ export type SessionUser = {
   ui_preferences?: UiPreferences | null;
   can_access_ceph_admin?: boolean | null;
   can_access_storage_ops?: boolean | null;
+  can_create_manual_private_connections?: boolean | null;
+  can_provision_managed_private_connections?: boolean | null;
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean | null;
   effective_access?: EffectiveUserAccess | null;
@@ -71,6 +73,17 @@ export type SessionUser = {
   };
 };
 
+type PrivateConnectionAccessUser = {
+  can_create_manual_private_connections?: boolean | null;
+  can_provision_managed_private_connections?: boolean | null;
+  effective_access?: Pick<
+    EffectiveUserAccess,
+    | "can_create_manual_private_connections"
+    | "can_provision_managed_private_connections"
+    | "has_owned_private_connections"
+  > | null;
+};
+
 const ALL_WORKSPACES: WorkspaceOption[] = [
   { id: "admin", label: "Admin (platform)", path: "/admin" },
   { id: "ceph-admin", label: "Ceph Admin (RGW)", path: "/ceph-admin" },
@@ -90,6 +103,28 @@ export function isAdminLikeRole(role?: UiRole | null): boolean {
 
 export function getManagerToolAccess(user: SessionUser | null): ManagerToolAccess | null {
   return user?.effective_access?.manager_tool_access ?? user?.manager_tool_access ?? null;
+}
+
+export function canCreateManualPrivateConnections(user: PrivateConnectionAccessUser | null): boolean {
+  return Boolean(
+    user?.effective_access?.can_create_manual_private_connections ??
+      user?.can_create_manual_private_connections
+  );
+}
+
+export function canProvisionManagedPrivateConnections(user: PrivateConnectionAccessUser | null): boolean {
+  return Boolean(
+    user?.effective_access?.can_provision_managed_private_connections ??
+      user?.can_provision_managed_private_connections
+  );
+}
+
+export function hasOwnedPrivateConnections(user: PrivateConnectionAccessUser | null): boolean {
+  return Boolean(user?.effective_access?.has_owned_private_connections);
+}
+
+export function canAccessPrivateConnectionsSection(user: PrivateConnectionAccessUser | null): boolean {
+  return canCreateManualPrivateConnections(user) || hasOwnedPrivateConnections(user);
 }
 
 export function readStoredUser(): SessionUser | null {

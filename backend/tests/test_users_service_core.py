@@ -109,6 +109,8 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     assert admin.can_access_manager_feature_rules is False
     assert admin.can_access_manager_bucket_quota is False
     assert admin.can_access_manager_ceph_s3_user_keys is False
+    assert admin.can_create_manual_private_connections is False
+    assert admin.can_provision_managed_private_connections is False
 
     with pytest.raises(ValueError, match="User already exists"):
         service.create_super_admin(
@@ -140,6 +142,8 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
             role=UserRole.UI_ADMIN.value,
             can_access_ceph_admin=True,
             can_access_storage_ops=True,
+            can_create_manual_private_connections=True,
+            can_provision_managed_private_connections=True,
             manager_tool_access={
                 "bucket_compare": True,
                 "bucket_integrity_check": True,
@@ -159,6 +163,8 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     assert created.can_access_manager_feature_rules is True
     assert created.can_access_manager_bucket_quota is True
     assert created.can_access_manager_ceph_s3_user_keys is True
+    assert created.can_create_manual_private_connections is True
+    assert created.can_provision_managed_private_connections is True
 
     assert service.authenticate("ui-admin@example.com", "wrong-password") is None
     authenticated = service.authenticate("ui-admin@example.com", "verylongpass123")
@@ -196,6 +202,8 @@ def test_update_user_and_link_validations(db_session):
             is_root=True,
             can_access_ceph_admin=True,
             can_access_storage_ops=True,
+            can_create_manual_private_connections=True,
+            can_provision_managed_private_connections=True,
             manager_tool_access={
                 "bucket_compare": True,
                 "bucket_integrity_check": False,
@@ -219,6 +227,8 @@ def test_update_user_and_link_validations(db_session):
     assert updated.can_access_manager_feature_rules is True
     assert updated.can_access_manager_bucket_quota is False
     assert updated.can_access_manager_ceph_s3_user_keys is False
+    assert updated.can_create_manual_private_connections is True
+    assert updated.can_provision_managed_private_connections is True
     assert updated.quota_alerts_global_watch is False
     assert updated.is_active is False
     assert updated.is_root is True
@@ -295,6 +305,8 @@ def test_update_user_clears_manager_tools_for_no_access_role(db_session):
         user.id,
         UserUpdate(
             role=UserRole.UI_NONE.value,
+            can_create_manual_private_connections=True,
+            can_provision_managed_private_connections=True,
             manager_tool_access={
                 "bucket_compare": True,
                 "bucket_integrity_check": True,
@@ -313,6 +325,8 @@ def test_update_user_clears_manager_tools_for_no_access_role(db_session):
     assert updated.can_access_manager_feature_rules is False
     assert updated.can_access_manager_bucket_quota is False
     assert updated.can_access_manager_ceph_s3_user_keys is False
+    assert updated.can_create_manual_private_connections is False
+    assert updated.can_provision_managed_private_connections is False
 
 
 def test_update_user_allows_storage_ops_for_admin_like_role(db_session):

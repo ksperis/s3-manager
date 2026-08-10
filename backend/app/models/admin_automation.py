@@ -71,6 +71,8 @@ class UiUserSpec(BaseModel):
     role: Optional[UiRole] = None
     is_active: Optional[bool] = None
     is_root: Optional[bool] = None
+    can_create_manual_private_connections: Optional[bool] = None
+    can_provision_managed_private_connections: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None

@@ -21,6 +21,7 @@ from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import get_s3_users_service
 from app.services.effective_access_service import EffectiveAccessService
+from app.services.managed_private_access_service import ManagedPrivateAccessService
 from app.services.rgw_supervision import has_supervision_credentials
 from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags
@@ -126,14 +127,18 @@ def get_manager_context(
         else False
     )
     manager_private_access_enabled = False
-    if isinstance(actor, User) and EffectiveAccessService.private_connections_allowed(actor):
+    if isinstance(actor, User):
+        resolved_access = EffectiveAccessService(db).resolve_user(actor)
         if s3_user_id is not None:
-            manager_private_access_enabled = manager_ceph_keys_enabled
+            manager_private_access_enabled = ManagedPrivateAccessService(
+                db
+            ).rgw_user_provisioning_available(actor, account)
         else:
             capabilities = getattr(account, "manager_capabilities", None)
             endpoint = getattr(account, "storage_endpoint", None)
             manager_private_access_enabled = bool(
-                capabilities
+                resolved_access.can_provision_managed_private_connections
+                and capabilities
                 and capabilities.can_manage_iam
                 and (endpoint is None or resolve_feature_flags(endpoint).iam_enabled)
             )

@@ -217,7 +217,6 @@ const GENERAL_SETTINGS = {
   allow_login_access_keys: false,
   allow_login_endpoint_list: true,
   allow_login_custom_endpoint: false,
-  allow_user_private_connections: true,
 };
 
 const LOGIN_SETTINGS = {

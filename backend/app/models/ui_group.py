@@ -39,6 +39,8 @@ class UiGroupCreate(BaseModel):
     avatar_icon: Optional[UiGroupAvatarIcon] = None
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
+    can_create_manual_private_connections: bool = False
+    can_provision_managed_private_connections: bool = False
     manager_tool_access: Optional[ManagerToolAccess] = None
     browser_advanced_features_enabled: bool = False
     user_ids: list[int] = Field(default_factory=list)
@@ -54,6 +56,8 @@ class UiGroupUpdate(BaseModel):
     avatar_icon: Optional[UiGroupAvatarIcon] = None
     can_access_ceph_admin: Optional[bool] = None
     can_access_storage_ops: Optional[bool] = None
+    can_create_manual_private_connections: Optional[bool] = None
+    can_provision_managed_private_connections: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None
     browser_advanced_features_enabled: Optional[bool] = None
     user_ids: Optional[list[int]] = None
@@ -75,6 +79,8 @@ class UiGroupOut(BaseModel):
     avatar: UiGroupAvatar
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
+    can_create_manual_private_connections: bool = False
+    can_provision_managed_private_connections: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
     browser_advanced_features_enabled: bool = False
     user_ids: list[int] = Field(default_factory=list)

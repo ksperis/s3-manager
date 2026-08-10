@@ -55,6 +55,9 @@ export type UserAvatarDescriptor = {
 export type EffectiveUserAccess = {
   can_access_ceph_admin: boolean;
   can_access_storage_ops: boolean;
+  can_create_manual_private_connections: boolean;
+  can_provision_managed_private_connections: boolean;
+  has_owned_private_connections: boolean;
   manager_tool_access: ManagerToolAccess;
   browser_advanced_features_enabled: boolean;
   accounts: number[];
@@ -78,6 +81,8 @@ export type User = {
   role: UiRole;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
+  can_create_manual_private_connections?: boolean;
+  can_provision_managed_private_connections?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean;
   ui_language?: "en" | "fr" | "de" | null;
@@ -117,6 +122,8 @@ export type CreateUserPayload = {
   role?: UiRole;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
+  can_create_manual_private_connections?: boolean;
+  can_provision_managed_private_connections?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean;
   group_ids?: number[] | null;
@@ -128,6 +135,8 @@ export type UpdateUserPayload = {
   role?: UiRole;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
+  can_create_manual_private_connections?: boolean;
+  can_provision_managed_private_connections?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean;
   is_active?: boolean;

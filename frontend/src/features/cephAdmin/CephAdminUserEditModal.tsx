@@ -35,6 +35,7 @@ import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
+import { canCreateManualPrivateConnections, readStoredUser } from "../../utils/workspaces";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
 import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
@@ -116,6 +117,10 @@ export default function CephAdminUserEditModal({
   onClose,
   onSaved,
 }: Props) {
+  const canAddAsS3Connection = useMemo(
+    () => canCreateManualPrivateConnections(readStoredUser()),
+    []
+  );
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [detail, setDetail] = useState<CephAdminRgwUserDetail | null>(null);
   const [keys, setKeys] = useState<CephAdminRgwAccessKey[]>([]);
@@ -652,7 +657,7 @@ export default function CephAdminUserEditModal({
             { label: "Access key", value: createdKey.access_key, copyLabel: "Copy" },
             { label: "Secret key", value: createdKey.secret_key, copyLabel: "Copy" },
           ]}
-          actions={
+          actions={canAddAsS3Connection ? (
             <UiButton
               type="button"
               onClick={() => setShowAddConnectionModal(true)}
@@ -661,7 +666,7 @@ export default function CephAdminUserEditModal({
             >
               Add as S3 Connection
             </UiButton>
-          }
+          ) : undefined}
         />
       )}
 
@@ -867,7 +872,7 @@ export default function CephAdminUserEditModal({
         ariaLabel="User configuration sections"
         idPrefix="ceph-admin-user-editor"
       />
-      {showAddConnectionModal && createdKey && addConnectionDefaults && (
+      {canAddAsS3Connection && showAddConnectionModal && createdKey && addConnectionDefaults && (
         <AddS3ConnectionFromKeyModal
           isOpen={showAddConnectionModal}
           title="Add this key as S3 Connection"

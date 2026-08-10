@@ -17,6 +17,10 @@ const fetchUserAvatarImageMock = vi.fn();
 const setThemeMock = vi.fn();
 const setLanguagePreferenceMock = vi.fn();
 const listPrivateConnectionTagDefinitionsMock = vi.fn();
+const connectionPermissionsMock = vi.hoisted(() => ({
+  canAccess: true,
+  canCreateManual: true,
+}));
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
@@ -36,7 +40,6 @@ function getWorkflowPage(title: string): HTMLElement {
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
     generalSettings: {
-      allow_user_private_connections: true,
     },
   }),
 }));
@@ -68,14 +71,11 @@ vi.mock("../../api/avatarImages", () => ({
 
 vi.mock("../../api/connections", () => ({
   listConnections: () => listConnectionsMock(),
+  listPrivateConnectionStorageEndpoints: () => listStorageEndpointsMock(),
   createConnection: (payload: unknown) => createConnectionMock(payload),
   updateConnection: (id: number, payload: unknown) => updateConnectionMock(id, payload),
   deleteConnection: (id: number) => deleteConnectionMock(id),
   validateConnectionCredentials: (payload: unknown) => validateConnectionCredentialsMock(payload),
-}));
-
-vi.mock("../../api/storageEndpoints", () => ({
-  listStorageEndpoints: () => listStorageEndpointsMock(),
 }));
 
 vi.mock("../../api/tags", () => ({
@@ -85,6 +85,8 @@ vi.mock("../../api/tags", () => ({
 
 vi.mock("../../utils/workspaces", () => ({
   WORKSPACE_STORAGE_KEY: "workspace",
+  canAccessPrivateConnectionsSection: () => connectionPermissionsMock.canAccess,
+  canCreateManualPrivateConnections: () => connectionPermissionsMock.canCreateManual,
   isAdminLikeRole: () => true,
   readStoredUser: () => ({
     role: "ui_admin",
@@ -119,6 +121,8 @@ describe("ProfilePage live validation", () => {
   });
 
   beforeEach(() => {
+    connectionPermissionsMock.canAccess = true;
+    connectionPermissionsMock.canCreateManual = true;
     listConnectionsMock.mockResolvedValue([]);
     listStorageEndpointsMock.mockResolvedValue([]);
     fetchCurrentUserMock.mockResolvedValue({
@@ -271,6 +275,50 @@ describe("ProfilePage live validation", () => {
 
     await screen.findByText("managed-connection");
     expect(screen.queryByRole("button", { name: "Credentials" })).not.toBeInTheDocument();
+  });
+
+  it("keeps lifecycle and metadata editing after revocation while hiding sensitive controls", async () => {
+    connectionPermissionsMock.canCreateManual = false;
+    listConnectionsMock.mockResolvedValue([makeConnection()]);
+    updateConnectionMock.mockResolvedValue(makeConnection({ name: "renamed" }));
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+
+    await screen.findByText("managed-connection");
+    expect(screen.queryByRole("button", { name: "Add connection" })).not.toBeInTheDocument();
+    expect(listStorageEndpointsMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Deactivate" }));
+    await waitFor(() => {
+      expect(updateConnectionMock).toHaveBeenCalledWith(42, { is_active: false });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = getWorkflowPage("Edit connection - managed-connection");
+    expect(within(dialog).queryByText("Endpoint")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Access key ID")).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/Endpoint, identity, and credentials are locked/)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("heading", { name: "Discard changes?" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const reopenedDialog = getWorkflowPage("Edit connection - managed-connection");
+
+    fireEvent.change(within(reopenedDialog).getByLabelText("Name"), { target: { value: "renamed" } });
+    fireEvent.click(within(reopenedDialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateConnectionMock).toHaveBeenCalledTimes(2));
+    const [, payload] = updateConnectionMock.mock.calls[1] as [number, Record<string, unknown>];
+    expect(payload).toMatchObject({
+      name: "renamed",
+      access_manager: false,
+      access_browser: true,
+    });
+    expect(payload).not.toHaveProperty("storage_endpoint_id");
+    expect(payload).not.toHaveProperty("endpoint_url");
+    expect(payload).not.toHaveProperty("access_key_id");
+    expect(payload).not.toHaveProperty("secret_access_key");
   });
 
   it("edits a managed connection by changing endpoint preset", async () => {

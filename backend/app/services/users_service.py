@@ -133,6 +133,12 @@ class UsersService:
             is_root=is_root,
             can_access_ceph_admin=can_access_ceph_admin,
             can_access_storage_ops=can_access_storage_ops,
+            can_create_manual_private_connections=(
+                bool(payload.can_create_manual_private_connections) if manager_tools_supported else False
+            ),
+            can_provision_managed_private_connections=(
+                bool(payload.can_provision_managed_private_connections) if manager_tools_supported else False
+            ),
             can_access_manager_bucket_compare=(
                 bool(manager_tool_access.bucket_compare) if manager_tools_supported else False
             ),
@@ -202,6 +208,22 @@ class UsersService:
             )
         elif next_role not in MANAGER_TOOL_ROLES:
             user.can_access_storage_ops = False
+        if payload.can_create_manual_private_connections is not None:
+            user.can_create_manual_private_connections = (
+                bool(payload.can_create_manual_private_connections)
+                if next_role in MANAGER_TOOL_ROLES
+                else False
+            )
+        elif next_role not in MANAGER_TOOL_ROLES:
+            user.can_create_manual_private_connections = False
+        if payload.can_provision_managed_private_connections is not None:
+            user.can_provision_managed_private_connections = (
+                bool(payload.can_provision_managed_private_connections)
+                if next_role in MANAGER_TOOL_ROLES
+                else False
+            )
+        elif next_role not in MANAGER_TOOL_ROLES:
+            user.can_provision_managed_private_connections = False
         if payload.manager_tool_access is not None:
             manager_tool_access = payload.manager_tool_access
             if next_role in MANAGER_TOOL_ROLES:
@@ -714,6 +736,8 @@ class UsersService:
             is_root=user.is_root,
             can_access_ceph_admin=bool(user.can_access_ceph_admin),
             can_access_storage_ops=bool(user.can_access_storage_ops),
+            can_create_manual_private_connections=bool(user.can_create_manual_private_connections),
+            can_provision_managed_private_connections=bool(user.can_provision_managed_private_connections),
             manager_tool_access=ManagerToolAccess(
                 bucket_compare=bool(user.can_access_manager_bucket_compare),
                 bucket_integrity_check=bool(user.can_access_manager_bucket_integrity_check),

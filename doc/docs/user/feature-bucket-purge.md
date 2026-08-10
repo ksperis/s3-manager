@@ -9,7 +9,7 @@ configuration.
 
 - `bucket_purge_enabled` enabled in **Admin > Settings > Manager**.
 - For Manager: access to `/manager/bucket-purge` and a UI user with
-  **Manager tools > Bucket purge** access enabled.
+  **Manager > Bucket purge** access enabled.
 - For Ceph Admin or Storage Ops: access to the corresponding bucket workbench.
 - Effective storage permissions for deleting current objects, object versions,
   and delete markers.

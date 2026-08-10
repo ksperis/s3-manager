@@ -81,7 +81,6 @@ function buildSettings(): AppSettings {
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,
-      allow_user_private_connections: false,
     },
     manager: {
       allow_manager_user_usage_stats: true,
@@ -289,7 +288,7 @@ describe("AuthenticationSettingsPage", () => {
     expect(screen.getByLabelText("Access-key login")).toBeInTheDocument();
     expect(screen.getByLabelText("Access-key endpoint list")).toBeInTheDocument();
     expect(screen.getByLabelText("Custom login endpoint")).toBeInTheDocument();
-    expect(screen.getByLabelText("Private S3 connections for UI users")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Private S3 connections for UI users")).not.toBeInTheDocument();
   });
 
   it("saves authentication changes and refreshes general settings context", async () => {
@@ -297,7 +296,6 @@ describe("AuthenticationSettingsPage", () => {
     render(<AuthenticationSettingsPage />);
 
     await user.click(await screen.findByLabelText("Access-key login"));
-    await user.click(screen.getByLabelText("Private S3 connections for UI users"));
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => {
@@ -305,7 +303,7 @@ describe("AuthenticationSettingsPage", () => {
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
     expect(payload.general.allow_login_access_keys).toBe(true);
-    expect(payload.general.allow_user_private_connections).toBe(true);
+    expect(payload.general).not.toHaveProperty("allow_user_private_connections");
     expect(setGeneralSettingsMock).toHaveBeenLastCalledWith(payload.general);
   });
 
@@ -328,7 +326,6 @@ describe("AuthenticationSettingsPage", () => {
     defaultSettings.general.allow_login_access_keys = true;
     defaultSettings.general.allow_login_endpoint_list = true;
     defaultSettings.general.allow_login_custom_endpoint = true;
-    defaultSettings.general.allow_user_private_connections = true;
     defaultSettings.general.manager_enabled = true;
     defaultSettings.branding.primary_color = "#dc2626";
     fetchAppSettingsMock.mockResolvedValueOnce(initialSettings);
@@ -350,7 +347,6 @@ describe("AuthenticationSettingsPage", () => {
     expect(payload.general.allow_login_access_keys).toBe(true);
     expect(payload.general.allow_login_endpoint_list).toBe(true);
     expect(payload.general.allow_login_custom_endpoint).toBe(true);
-    expect(payload.general.allow_user_private_connections).toBe(true);
     expect(payload.general.manager_enabled).toBe(false);
     expect(payload.branding.primary_color).toBe("#2563eb");
   });

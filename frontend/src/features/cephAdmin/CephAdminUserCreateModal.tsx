@@ -21,6 +21,7 @@ import UiTextarea from "../../components/ui/UiTextarea";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
+import { canCreateManualPrivateConnections, readStoredUser } from "../../utils/workspaces";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
 import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
 import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
@@ -74,6 +75,10 @@ const capsTextToValues = (value: string): string[] =>
   );
 
 export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onClose, onCreated }: Props) {
+  const canAddAsS3Connection = useMemo(
+    () => canCreateManualPrivateConnections(readStoredUser()),
+    []
+  );
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [accountsError, setAccountsError] = useState<string | null>(null);
@@ -291,7 +296,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
               { label: "Access key", value: generatedKey.access_key, copyLabel: "Copy" },
               { label: "Secret key", value: generatedKey.secret_key, copyLabel: "Copy" },
             ]}
-            actions={
+            actions={canAddAsS3Connection ? (
               <UiButton
                 type="button"
                 onClick={() => setShowAddConnectionModal(true)}
@@ -300,7 +305,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
               >
                 Add as S3 Connection
               </UiButton>
-            }
+            ) : undefined}
           />
         )}
 
@@ -462,7 +467,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
         </div>
       </div>
 
-      {showAddConnectionModal && generatedKey && addConnectionDefaults && (
+      {canAddAsS3Connection && showAddConnectionModal && generatedKey && addConnectionDefaults && (
         <AddS3ConnectionFromKeyModal
           isOpen={showAddConnectionModal}
           title="Add this key as S3 Connection"

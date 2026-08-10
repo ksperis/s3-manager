@@ -45,8 +45,7 @@ const CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE =
 type AuthenticationToggleField =
   | "allow_login_access_keys"
   | "allow_login_endpoint_list"
-  | "allow_login_custom_endpoint"
-  | "allow_user_private_connections";
+  | "allow_login_custom_endpoint";
 
 type OidcProviderFormMode = "create" | "edit" | "view";
 type LdapProviderFormMode = "create" | "edit" | "view";
@@ -364,7 +363,6 @@ export default function AuthenticationSettingsPage() {
                 allow_login_access_keys: defaults.general.allow_login_access_keys,
                 allow_login_endpoint_list: defaults.general.allow_login_endpoint_list,
                 allow_login_custom_endpoint: defaults.general.allow_login_custom_endpoint,
-                allow_user_private_connections: defaults.general.allow_user_private_connections,
               },
             }
           : defaults
@@ -624,17 +622,6 @@ export default function AuthenticationSettingsPage() {
                 </p>
               )}
             </SettingsItem>
-            <SettingsItem
-              title="Private S3 connections for UI users"
-              description="Allow standard UI users to create and manage their own private S3 connections."
-              action={
-                <SettingsToggleAction
-                  checked={Boolean(settings.general.allow_user_private_connections)}
-                  onChange={(value) => handleToggle("allow_user_private_connections", value)}
-                  ariaLabel="Private S3 connections for UI users"
-                />
-              }
-            />
           </SettingsSection>
         </SettingsFormCard>
       )}

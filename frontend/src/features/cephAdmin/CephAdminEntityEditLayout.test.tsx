@@ -7,6 +7,8 @@ import CephAdminUserEditModal from "./CephAdminUserEditModal";
 
 const getCephAdminAccountDetailMock = vi.fn();
 const getCephAdminUserDetailMock = vi.fn();
+const createCephAdminUserKeyMock = vi.fn();
+const listCephAdminUserKeysMock = vi.fn();
 
 vi.mock("../../api/cephAdmin", async () => {
   const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
@@ -14,6 +16,8 @@ vi.mock("../../api/cephAdmin", async () => {
     ...actual,
     getCephAdminAccountDetail: (...args: unknown[]) => getCephAdminAccountDetailMock(...args),
     getCephAdminUserDetail: (...args: unknown[]) => getCephAdminUserDetailMock(...args),
+    createCephAdminUserKey: (...args: unknown[]) => createCephAdminUserKeyMock(...args),
+    listCephAdminUserKeys: (...args: unknown[]) => listCephAdminUserKeysMock(...args),
   };
 });
 
@@ -21,6 +25,14 @@ describe("Ceph Admin entity editor layout", () => {
   beforeEach(() => {
     getCephAdminAccountDetailMock.mockReset();
     getCephAdminUserDetailMock.mockReset();
+    createCephAdminUserKeyMock.mockReset();
+    listCephAdminUserKeysMock.mockReset();
+    localStorage.clear();
+    listCephAdminUserKeysMock.mockResolvedValue([]);
+    createCephAdminUserKeyMock.mockResolvedValue({
+      access_key: "AKIA-EDIT",
+      secret_key: "SECRET-EDIT",
+    });
     getCephAdminAccountDetailMock.mockResolvedValue({
       account_id: "RGW12345678901234567",
       account_name: "Analytics",
@@ -100,5 +112,33 @@ describe("Ceph Admin entity editor layout", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Ceph Admin" }));
     expect(screen.getByRole("tabpanel")).toHaveTextContent("Display name");
     expect(screen.queryByRole("heading", { name: "Admin Ops configuration" })).not.toBeInTheDocument();
+  });
+
+  it("hides Add as S3 Connection in RGW user key management without manual permission", async () => {
+    localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_superadmin",
+        effective_access: { can_create_manual_private_connections: false },
+      })
+    );
+    render(
+      <MemoryRouter>
+        <CephAdminUserEditModal
+          endpointId={7}
+          uid="analytics-user"
+          canViewMetrics={false}
+          onClose={() => undefined}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("analytics-user@example.com")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Key Management" }));
+    fireEvent.click(screen.getByRole("button", { name: "New key" }));
+
+    expect(await screen.findByText("Key created")).toBeInTheDocument();
+    expect(screen.getByText("SECRET-EDIT")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add as S3 Connection" })).not.toBeInTheDocument();
   });
 });

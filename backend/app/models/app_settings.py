@@ -79,7 +79,6 @@ class GeneralSettings(BaseModel):
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False
-    allow_user_private_connections: bool = False
 
 
 class GeneralFeatureLock(BaseModel):

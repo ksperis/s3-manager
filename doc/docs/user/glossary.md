@@ -13,7 +13,7 @@ Use this page when a term in the UI or documentation is unclear.
 | Execution context | The selected identity and scope used to execute an action. It can be an account, connection, legacy S3 user, or authorized Ceph Admin endpoint context. |
 | Storage Space | The Portal name for an assigned storage area. It can map to a bucket internally, but Portal keeps the user-facing language simple. |
 | Portal role | Owner for a private space, Viewer or Editor for a team space, and Manager for project-wide administration. These roles translate into storage-side permissions. |
-| Manager tool access | Per-user or inherited access to advanced Manager tools such as Bucket compare, integrity, purge, migration, and feature rules. |
+| Manager access | Per-user or inherited access to advanced Manager tools and managed private-connection provisioning. |
 | Feature flag | A setting that enables or disables a workspace or feature globally or for a surface. |
 | Endpoint capability | A backend capability reported or configured for an endpoint, such as IAM, SNS, metrics, usage, SSE, replication, or static website support. |
 | UI tags | Local console metadata used to organize working sets. UI tags are not backend S3 object or bucket tags unless a feature explicitly updates S3 tags. |

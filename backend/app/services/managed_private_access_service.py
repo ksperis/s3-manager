@@ -22,6 +22,7 @@ from app.services.effective_access_service import EffectiveAccessService
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import S3ConnectionsService
+from app.services.mappers.s3_connection import mask_access_key_id
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.s3_users_service import S3UsersService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
@@ -100,7 +101,7 @@ class ManagedPrivateAccessService:
         account: S3ExecutionTarget,
         payload: ManagedIAMPrivateAccessRequest,
     ) -> ManagedPrivateAccessResult:
-        self._ensure_private_connections_allowed(user)
+        self._ensure_managed_private_connection_provisioning_allowed(user)
         source = self._resolve_iam_source(user, account)
         destination = self._derive_destination(source)
         iam = self._iam_service_for_account(account)
@@ -201,7 +202,7 @@ class ManagedPrivateAccessService:
         account: S3ExecutionTarget,
         payload: ManagedRGWUserPrivateAccessRequest,
     ) -> ManagedPrivateAccessResult:
-        self._ensure_private_connections_allowed(user)
+        self._ensure_managed_private_connection_provisioning_allowed(user)
         source = self._resolve_rgw_user_source(user, account)
         destination = self._derive_destination(source)
         existing = self._active_for_source(user.id, source)
@@ -388,9 +389,26 @@ class ManagedPrivateAccessService:
             return "account", account_id
         return None
 
-    def _ensure_private_connections_allowed(self, user: User) -> None:
-        if not self.access.private_connections_allowed(user):
-            raise ManagedPrivateAccessForbidden("Private S3 connections are not allowed for this user")
+    def managed_provisioning_allowed(self, user: User) -> bool:
+        return self.access.resolve_user(user).can_provision_managed_private_connections
+
+    def rgw_user_provisioning_available(
+        self,
+        user: User,
+        account: S3ExecutionTarget,
+    ) -> bool:
+        try:
+            self._ensure_managed_private_connection_provisioning_allowed(user)
+            self._resolve_rgw_user_source(user, account)
+        except ManagedPrivateAccessError:
+            return False
+        return True
+
+    def _ensure_managed_private_connection_provisioning_allowed(self, user: User) -> None:
+        if not self.managed_provisioning_allowed(user):
+            raise ManagedPrivateAccessForbidden(
+                "Managed private S3 connection provisioning is not allowed for this user"
+            )
 
     def _resolve_iam_source(self, user: User, account: S3ExecutionTarget) -> _Source:
         effective = self.access.resolve_user(user)
@@ -442,8 +460,7 @@ class ManagedPrivateAccessService:
             raise ManagedPrivateAccessError("RGW User not found")
         endpoint = s3_user.storage_endpoint
         if (
-            not resolved.manager_tool_access.ceph_s3_user_keys
-            or not s3_user.allow_manager_ceph_s3_user_keys
+            not s3_user.allow_manager_ceph_s3_user_keys
             or endpoint is None
             or str(endpoint.provider) != StorageProvider.CEPH.value
             or not resolve_feature_flags(endpoint).admin_enabled
@@ -451,7 +468,7 @@ class ManagedPrivateAccessService:
             or not (endpoint.admin_access_key or "").strip()
             or not (endpoint.admin_secret_key or "").strip()
         ):
-            raise ManagedPrivateAccessForbidden("Ceph access-key management is not allowed for this context")
+            raise ManagedPrivateAccessForbidden("Managed Ceph private access is not allowed for this context")
         return _Source(
             "s3_user",
             s3_user.id,
@@ -822,7 +839,7 @@ class ManagedPrivateAccessService:
                 "remote_principal_type": provisioning.remote_principal_type,
                 "remote_principal_identifier": provisioning.remote_principal_identifier,
                 "iam_username": provisioning.iam_username,
-                "access_key_id": provisioning.access_key_id,
+                "access_key_id": mask_access_key_id(provisioning.access_key_id),
                 "connection_id": connection_id or provisioning.s3_connection_id,
                 "provisioning_state": provisioning.state,
             },

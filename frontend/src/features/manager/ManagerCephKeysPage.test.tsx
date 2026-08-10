@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ManagerCephKeysPage from "./ManagerCephKeysPage";
@@ -79,7 +80,11 @@ describe("ManagerCephKeysPage", () => {
   });
 
   it("renders keys and locks actions for the portal key", async () => {
-    render(<ManagerCephKeysPage />);
+    render(
+      <MemoryRouter>
+        <ManagerCephKeysPage />
+      </MemoryRouter>
+    );
 
     expect(await screen.findByText("AK-PORTAL")).toBeInTheDocument();
     expect(screen.getByText("S3M")).toBeInTheDocument();
@@ -112,6 +117,27 @@ describe("ManagerCephKeysPage", () => {
     expect(screen.getByLabelText("Connection name")).toBeInTheDocument();
     expect(screen.queryByText("IAM groups")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/secret/i)).not.toBeInTheDocument();
+  });
+
+  it("allows managed provisioning without exposing the Ceph key inventory", async () => {
+    const user = userEvent.setup();
+    useS3AccountContextMock.mockReturnValue(
+      buildContext({ managerCephKeysEnabled: false, managerPrivateAccessEnabled: true })
+    );
+
+    render(
+      <MemoryRouter>
+        <ManagerCephKeysPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Ceph key inventory is unavailable for this context")).toBeInTheDocument();
+    expect(screen.getByText(/Managed private access remains available/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New key" })).not.toBeInTheDocument();
+    expect(listManagerCephAccessKeysMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Create my private access" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("supports create, enable and delete for non-locked keys", async () => {

@@ -7,7 +7,7 @@ Use this guide when creating, updating, or inspecting bucket configuration.
 ## Prerequisites
 
 - Access to **Manager** or **Ceph Admin** bucket pages.
-- **Manager tools > Feature rule inventory** access when using `/manager/feature-rules`.
+- **Manager > Feature rule inventory** access when using `/manager/feature-rules`.
 - Effective storage permissions on target buckets.
 
 ## Before you start
@@ -49,7 +49,7 @@ Confirm the workspace and execution context first. Bucket names can repeat acros
 ## Expected result
 
 Bucket configuration is applied as native backend settings and visible in detail pages.
-Read-only rule inventories can be reviewed from Manager tools without editing
+Read-only rule inventories can be reviewed from Manager without editing
 bucket configuration.
 Usage snapshots are loaded from the database so bucket detail pages can display
 the latest successful calculation quickly.

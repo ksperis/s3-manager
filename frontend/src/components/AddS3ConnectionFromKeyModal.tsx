@@ -3,8 +3,12 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { createConnection, type CredentialOwnerType } from "../api/connections";
-import { listStorageEndpoints, StorageEndpoint } from "../api/storageEndpoints";
+import {
+  createConnection,
+  listPrivateConnectionStorageEndpoints,
+  type CredentialOwnerType,
+  type PrivateConnectionStorageEndpoint,
+} from "../api/connections";
 import { notifyExecutionContextsRefresh } from "../utils/executionContextRefresh";
 import { extractApiError } from "../utils/apiError";
 import { stableSignature } from "../utils/stableSignature";
@@ -78,7 +82,7 @@ export default function AddS3ConnectionFromKeyModal({
   const [endpointMode, setEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [selectedEndpointId, setSelectedEndpointId] = useState("");
 
-  const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
+  const [endpoints, setEndpoints] = useState<PrivateConnectionStorageEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
   const [endpointLoadError, setEndpointLoadError] = useState<string | null>(null);
 
@@ -139,7 +143,7 @@ export default function AddS3ConnectionFromKeyModal({
       setLoadingEndpoints(true);
       setEndpointLoadError(null);
       try {
-        const data = await listStorageEndpoints();
+        const data = await listPrivateConnectionStorageEndpoints();
         if (cancelled) return;
         setEndpoints(data);
       } catch (err) {

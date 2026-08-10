@@ -60,6 +60,8 @@ class UiGroupsService:
             description=normalize_optional_string(payload.description),
             can_access_ceph_admin=bool(payload.can_access_ceph_admin),
             can_access_storage_ops=bool(payload.can_access_storage_ops),
+            can_create_manual_private_connections=bool(payload.can_create_manual_private_connections),
+            can_provision_managed_private_connections=bool(payload.can_provision_managed_private_connections),
             can_access_manager_bucket_compare=bool(manager_tool_access.bucket_compare),
             can_access_manager_bucket_integrity_check=bool(manager_tool_access.bucket_integrity_check),
             can_access_manager_bucket_migration=bool(manager_tool_access.bucket_migration),
@@ -127,6 +129,10 @@ class UiGroupsService:
             group.can_access_ceph_admin = bool(payload.can_access_ceph_admin)
         if payload.can_access_storage_ops is not None:
             group.can_access_storage_ops = bool(payload.can_access_storage_ops)
+        if payload.can_create_manual_private_connections is not None:
+            group.can_create_manual_private_connections = bool(payload.can_create_manual_private_connections)
+        if payload.can_provision_managed_private_connections is not None:
+            group.can_provision_managed_private_connections = bool(payload.can_provision_managed_private_connections)
         if payload.manager_tool_access is not None:
             group.can_access_manager_bucket_compare = bool(payload.manager_tool_access.bucket_compare)
             group.can_access_manager_bucket_integrity_check = bool(payload.manager_tool_access.bucket_integrity_check)
@@ -308,6 +314,8 @@ class UiGroupsService:
             avatar=UiGroupAvatarService(self.db).descriptor(group),
             can_access_ceph_admin=bool(group.can_access_ceph_admin),
             can_access_storage_ops=bool(group.can_access_storage_ops),
+            can_create_manual_private_connections=bool(group.can_create_manual_private_connections),
+            can_provision_managed_private_connections=bool(group.can_provision_managed_private_connections),
             manager_tool_access=ManagerToolAccess(
                 bucket_compare=bool(group.can_access_manager_bucket_compare),
                 bucket_integrity_check=bool(group.can_access_manager_bucket_integrity_check),

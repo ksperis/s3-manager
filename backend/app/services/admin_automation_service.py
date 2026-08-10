@@ -284,6 +284,12 @@ class AdminAutomationService:
                         full_name=spec.full_name,
                         role=spec.role,
                         is_root=bool(spec.is_root),
+                        can_create_manual_private_connections=bool(
+                            spec.can_create_manual_private_connections
+                        ),
+                        can_provision_managed_private_connections=bool(
+                            spec.can_provision_managed_private_connections
+                        ),
                         manager_tool_access=spec.manager_tool_access,
                     )
                 )
@@ -796,6 +802,26 @@ class AdminAutomationService:
         if "is_root" in fields_set and spec.is_root is not None:
             if bool(spec.is_root) != bool(user.is_root):
                 diff["is_root"] = {"from": bool(user.is_root), "to": bool(spec.is_root)}
+        if (
+            "can_create_manual_private_connections" in fields_set
+            and spec.can_create_manual_private_connections is not None
+            and bool(spec.can_create_manual_private_connections)
+            != bool(user.can_create_manual_private_connections)
+        ):
+            diff["can_create_manual_private_connections"] = {
+                "from": bool(user.can_create_manual_private_connections),
+                "to": bool(spec.can_create_manual_private_connections),
+            }
+        if (
+            "can_provision_managed_private_connections" in fields_set
+            and spec.can_provision_managed_private_connections is not None
+            and bool(spec.can_provision_managed_private_connections)
+            != bool(user.can_provision_managed_private_connections)
+        ):
+            diff["can_provision_managed_private_connections"] = {
+                "from": bool(user.can_provision_managed_private_connections),
+                "to": bool(spec.can_provision_managed_private_connections),
+            }
         if "manager_tool_access" in fields_set and spec.manager_tool_access is not None:
             current_access = {
                 "bucket_compare": bool(user.can_access_manager_bucket_compare),

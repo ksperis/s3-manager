@@ -27,6 +27,8 @@ type LoginResponse = {
     is_root?: boolean;
     can_access_ceph_admin?: boolean;
     can_access_storage_ops?: boolean;
+    can_create_manual_private_connections?: boolean;
+    can_provision_managed_private_connections?: boolean;
     manager_tool_access?: ManagerToolAccess | null;
     browser_advanced_features_enabled?: boolean;
     ui_language?: "en" | "fr" | "de" | null;

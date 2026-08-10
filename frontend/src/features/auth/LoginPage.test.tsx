@@ -57,7 +57,6 @@ const generalSettings = {
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
-  allow_user_private_connections: false,
 };
 
 function renderLoginPage() {

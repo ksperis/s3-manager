@@ -34,7 +34,6 @@ const generalSettingsState = {
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
-  allow_user_private_connections: false,
 };
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
@@ -157,7 +156,7 @@ describe("UsersPage modal tabs", () => {
     expect(await screen.findByRole("heading", { name: "Edit user" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Manage direct access, inherited associations, workspace permissions, and Manager tools for this UI user."
+        "Manage direct access, inherited associations, workspace permissions, and Manager permissions for this UI user."
       )
     ).toBeInTheDocument();
     expect(screen.getAllByText("linked.user@example.com")).toHaveLength(2);
@@ -541,8 +540,9 @@ describe("UsersPage modal tabs", () => {
       "Groups",
       "Associations",
       "Workspaces",
+      "Connections",
       "Browser",
-      "Manager tools",
+      "Manager",
     ]);
     expect(screen.getByRole("tab", { name: "General" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Associations" })).toBeInTheDocument();
@@ -557,7 +557,7 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getByText("Storage Ops access")).toBeInTheDocument();
   });
 
-  it("shows Manager tools only in edit modal and submits per-tool access", async () => {
+  it("shows Connections and Manager in create/edit and submits their permissions", async () => {
     listUsersMock.mockResolvedValue({
       items: [
         {
@@ -588,11 +588,15 @@ describe("UsersPage modal tabs", () => {
 
     render(<UsersPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
-    expect(screen.queryByRole("tab", { name: "Manager tools" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Connections" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Manager" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Manager tools" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Connections" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow manual private connection creation" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Manager" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow managed private connection provisioning" }));
 
     expect(screen.getByText("Bucket tools")).toBeInTheDocument();
     expect(screen.getByText("Privileged Ceph access")).toBeInTheDocument();
@@ -617,6 +621,8 @@ describe("UsersPage modal tabs", () => {
     expect(updateUserMock).toHaveBeenCalledWith(
       10,
       expect.objectContaining({
+        can_create_manual_private_connections: true,
+        can_provision_managed_private_connections: true,
         manager_tool_access: {
           bucket_compare: true,
           bucket_integrity_check: true,

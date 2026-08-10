@@ -48,6 +48,7 @@ function ManagerShell() {
     managerStatsMessage,
     managerBrowserEnabled,
     managerCephKeysEnabled,
+    managerPrivateAccessEnabled,
   } = useS3AccountContext();
   const { generalSettings } = useGeneralSettings();
   const navigate = useNavigate();
@@ -232,7 +233,7 @@ function ManagerShell() {
     });
   }
 
-  if (managerCephKeysEnabled) {
+  if (managerCephKeysEnabled || managerPrivateAccessEnabled) {
     navSections.push({
       label: "Ceph",
       links: [workspacePageLink(MANAGER_PAGE_CONTRACTS["ceph-keys"])],

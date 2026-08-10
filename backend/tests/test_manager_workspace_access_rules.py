@@ -104,6 +104,8 @@ def _build_linked_s3_user_context(
     endpoint: StorageEndpoint,
     email: str = "manager-ceph-keys-s3u@example.com",
     ceph_keys_access: bool = False,
+    managed_private_access: bool = False,
+    resource_opt_in: bool | None = None,
 ):
     user = User(
         email=email,
@@ -111,6 +113,7 @@ def _build_linked_s3_user_context(
         is_active=True,
         role=UserRole.UI_USER.value,
         can_access_manager_ceph_s3_user_keys=ceph_keys_access,
+        can_provision_managed_private_connections=managed_private_access,
     )
     s3_user = S3User(
         name="managed-s3-user",
@@ -118,7 +121,9 @@ def _build_linked_s3_user_context(
         rgw_access_key="AK-S3U",
         rgw_secret_key="SK-S3U",
         storage_endpoint=endpoint,
-        allow_manager_ceph_s3_user_keys=ceph_keys_access,
+        allow_manager_ceph_s3_user_keys=(
+            ceph_keys_access if resource_opt_in is None else resource_opt_in
+        ),
     )
     db_session.add_all([user, endpoint, s3_user])
     db_session.commit()
@@ -965,6 +970,53 @@ def test_manager_context_s3_user_disables_ceph_keys_without_user_tool_access(db_
     payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
     assert payload.access_mode == "s3_user"
     assert payload.manager_ceph_keys_enabled is False
+
+
+def test_manager_context_exposes_managed_private_access_without_ceph_key_inventory(
+    db_session,
+    monkeypatch,
+):
+    settings = AppSettings()
+    settings.general.manager_ceph_s3_user_keys_enabled = True
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
+
+    endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-managed-only")
+    user, account = _build_linked_s3_user_context(
+        db_session,
+        endpoint=endpoint,
+        email="manager-managed-only@example.com",
+        ceph_keys_access=False,
+        managed_private_access=True,
+        resource_opt_in=True,
+    )
+
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.manager_ceph_keys_enabled is False
+    assert payload.manager_private_access_enabled is True
+
+
+def test_manager_context_does_not_infer_managed_private_access_from_ceph_key_inventory(
+    db_session,
+    monkeypatch,
+):
+    settings = AppSettings()
+    settings.general.manager_ceph_s3_user_keys_enabled = True
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
+
+    endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-inventory-only")
+    user, account = _build_linked_s3_user_context(
+        db_session,
+        endpoint=endpoint,
+        email="manager-inventory-only@example.com",
+        ceph_keys_access=True,
+        managed_private_access=False,
+    )
+
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.manager_ceph_keys_enabled is True
+    assert payload.manager_private_access_enabled is False
 
 
 @pytest.mark.parametrize(

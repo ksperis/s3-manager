@@ -3,18 +3,12 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from types import SimpleNamespace
-
 from botocore.exceptions import ClientError
 from fastapi.testclient import TestClient
 
 from app.db import StorageEndpoint, User, UserRole
 from app.main import app
 from app.routers import dependencies
-
-
-def _settings(allowed: bool):
-    return SimpleNamespace(general=SimpleNamespace(allow_user_private_connections=allowed))
 
 
 def _client_error(code: str, message: str = "boom") -> ClientError:
@@ -32,7 +26,7 @@ class _FakeS3Client:
 
 
 @contextmanager
-def _build_client(db_session):
+def _build_client(db_session, *, manual_permission: bool = True):
     superadmin = User(
         email="superadmin-validate@example.com",
         full_name="Super Admin",
@@ -46,6 +40,7 @@ def _build_client(db_session):
         hashed_password="x",
         is_active=True,
         role=UserRole.UI_USER.value,
+        can_create_manual_private_connections=manual_permission,
     )
     db_session.add(superadmin)
     db_session.add(ui_user)
@@ -98,7 +93,6 @@ def test_validate_credentials_success_admin_custom_endpoint(db_session, monkeypa
 
 def test_validate_credentials_access_denied_is_warning_user_route(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
         endpoint = StorageEndpoint(
             name="endpoint-a",
             endpoint_url="https://s3-endpoint-a.example.test",
@@ -134,7 +128,6 @@ def test_validate_credentials_access_denied_is_warning_user_route(db_session, mo
 
 def test_validate_credentials_invalid_credentials_error(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
         monkeypatch.setattr(
             "app.services.s3_connection_validation_service.validate_user_supplied_s3_endpoint",
             lambda value, field_name="Endpoint URL": value.rstrip("/"),
@@ -163,7 +156,6 @@ def test_validate_credentials_invalid_credentials_error(db_session, monkeypatch)
 
 def test_validate_credentials_rejects_manual_private_endpoint(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
         monkeypatch.setattr(
             "app.services.s3_connection_validation_service.validate_user_supplied_s3_endpoint",
             lambda *args, **kwargs: (_ for _ in ()).throw(
@@ -186,7 +178,6 @@ def test_validate_credentials_rejects_manual_private_endpoint(db_session, monkey
 
 def test_validate_credentials_rejects_verify_tls_false_for_manual_user_route(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
 
         response = client.post(
             "/api/connections/validate-credentials",
@@ -204,7 +195,6 @@ def test_validate_credentials_rejects_verify_tls_false_for_manual_user_route(db_
 
 def test_validate_credentials_storage_endpoint_not_found(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
 
         response = client.post(
             "/api/connections/validate-credentials",
@@ -219,9 +209,8 @@ def test_validate_credentials_storage_endpoint_not_found(db_session, monkeypatch
     assert response.json()["detail"] == "Storage endpoint not found"
 
 
-def test_validate_credentials_forbidden_when_private_connections_disabled(db_session, monkeypatch):
-    with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(False))
+def test_validate_credentials_forbidden_without_manual_connection_permission(db_session):
+    with _build_client(db_session, manual_permission=False) as (client, _):
 
         response = client.post(
             "/api/connections/validate-credentials",

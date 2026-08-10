@@ -39,7 +39,7 @@ type S3ConnectionEndpointFieldsProps = {
   modeInputName: string;
   endpointId: string;
   onEndpointIdChange: (endpointId: string) => void;
-  endpoints: StorageEndpoint[];
+  endpoints: Array<Pick<StorageEndpoint, "id" | "name" | "endpoint_url" | "is_default">>;
   loadingEndpoints: boolean;
   form: S3ConnectionEndpointDraft;
   onFormChange: <K extends keyof S3ConnectionEndpointDraft>(field: K, value: S3ConnectionEndpointDraft[K]) => void;
