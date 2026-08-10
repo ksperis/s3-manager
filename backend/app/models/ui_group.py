@@ -88,7 +88,6 @@ class UiGroupOut(BaseModel):
     can_provision_managed_private_connections: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
     browser_advanced_features_enabled: bool = False
-    user_ids: list[int] = Field(default_factory=list)
     user_details: list[UserSummary] = Field(default_factory=list)
     account_details: list[LinkedS3Account] = Field(default_factory=list)
     account_links: list[AccountMembership] = Field(default_factory=list)

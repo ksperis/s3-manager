@@ -157,7 +157,8 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
         "bucket_purge": False,
         "feature_rules": False,
     }
-    assert payload["user_ids"] == [user.id]
+    assert "user_ids" not in payload
+    assert [details["id"] for details in payload["user_details"]] == [user.id]
     assert "accounts" not in payload
     assert payload["account_links"] == [
         {

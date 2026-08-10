@@ -1563,10 +1563,7 @@ export default function UsersPage() {
       allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
     }));
     const nextSelectedS3Connections = (user.s3_connection_details ?? []).map((connection) => Number(connection.id));
-    const nextSelectedGroups =
-      user.group_ids && user.group_ids.length > 0
-        ? user.group_ids.map((id) => Number(id))
-        : (user.group_details ?? []).map((group) => Number(group.id));
+    const nextSelectedGroups = (user.group_details ?? []).map((group) => Number(group.id));
     setEditSelectedS3Users(nextSelectedS3Users);
     setEditSelectedS3Connections(nextSelectedS3Connections);
     setEditSelectedGroups(nextSelectedGroups);

@@ -783,7 +783,6 @@ class UsersService:
             quota_alerts_global_watch=bool(user.quota_alerts_global_watch),
             ui_preferences=_parse_ui_preferences(user.ui_preferences_json),
             account_links=account_links,
-            group_ids=group_ids,
             group_details=group_details,
             s3_user_links=s3_user_links,
             s3_user_details=s3_user_details,

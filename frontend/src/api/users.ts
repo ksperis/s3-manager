@@ -92,7 +92,6 @@ export type User = {
   quota_alerts_global_watch?: boolean;
   ui_preferences?: UiPreferences | null;
   account_links?: AccountMembership[];
-  group_ids?: number[];
   group_details?: { id: number; name: string }[];
   s3_user_links?: S3UserMembership[];
   s3_user_details?: { id: number; name: string }[];

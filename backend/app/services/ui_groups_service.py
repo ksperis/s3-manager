@@ -321,7 +321,6 @@ class UiGroupsService:
                 bucket_purge=bool(group.can_access_manager_bucket_purge),
             ),
             browser_advanced_features_enabled=bool(group.browser_advanced_features_enabled),
-            user_ids=[row.id for row in user_rows],
             user_details=[
                 UserSummary(
                     id=row.id,

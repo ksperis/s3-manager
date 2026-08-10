@@ -45,7 +45,6 @@ export type UiGroup = {
   can_provision_managed_private_connections?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean;
-  user_ids?: number[];
   user_details?: UiGroupUserDetail[];
   account_details?: { id: number; name: string; rgw_account_id?: string | null }[];
   account_links?: AccountMembership[];

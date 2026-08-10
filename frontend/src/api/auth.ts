@@ -37,7 +37,6 @@ type LoginResponse = {
       account_id: number;
       role: AccountAccessRole;
     }[] | null;
-    group_ids?: number[] | null;
     group_details?: { id: number; name: string }[] | null;
     s3_user_details?: { id: number; name: string }[] | null;
     s3_connection_details?: {

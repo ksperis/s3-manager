@@ -474,8 +474,10 @@ association details needed by the frontend. The duplicate `accounts`,
 Admin user or group responses; consume `account_links`, `s3_user_links`, and
 `s3_connection_details` instead. The nested `effective_access` projection also
 stops duplicating canonical links and details through `accounts`, `s3_users`,
-`s3_connections`, and `manager_browser_s3_users`. Deploy the backend and
-frontend together.
+`s3_connections`, and `manager_browser_s3_users`. Admin user responses expose
+group membership only through `group_details`, and group responses expose
+members only through `user_details`; the duplicate `group_ids` and `user_ids`
+response fields are removed. Deploy the backend and frontend together.
 
 ## 2026-03 compatibility cleanup
 

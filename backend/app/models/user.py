@@ -237,7 +237,6 @@ class UserOut(BaseModel):
     quota_alerts_global_watch: bool = False
     ui_preferences: UiPreferences = Field(default_factory=UiPreferences)
     account_links: list[AccountMembershipDetail] = []
-    group_ids: list[int] = []
     group_details: list[LinkedUiGroup] = []
     s3_user_links: list[S3UserMembership] = []
     s3_user_details: list[LinkedS3User] = []

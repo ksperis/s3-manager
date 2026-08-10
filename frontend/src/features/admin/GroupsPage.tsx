@@ -349,7 +349,7 @@ export default function GroupsPage() {
       can_provision_managed_private_connections: Boolean(group.can_provision_managed_private_connections),
       browser_advanced_features_enabled: Boolean(group.browser_advanced_features_enabled),
       manager_tool_access: normalizeManagerToolAccess(group.manager_tool_access),
-      user_ids: group.user_ids ?? [],
+      user_ids: (group.user_details ?? []).map((user) => Number(user.id)),
       account_links:
         group.account_links?.map((link) => ({
           account_id: Number(link.account_id),
@@ -979,19 +979,15 @@ export default function GroupsPage() {
   };
 
   const renderGroupMembers = (group: UiGroup) => {
-    const detailsById = new Map((group.user_details ?? []).map((user) => [Number(user.id), user]));
-    const memberIds = group.user_ids && group.user_ids.length > 0
-      ? group.user_ids.map(Number)
-      : (group.user_details ?? []).map((user) => Number(user.id));
-    const memberItems: AssociationPrincipalItem[] = memberIds.map((id) => {
-      const user = detailsById.get(id);
+    const memberItems: AssociationPrincipalItem[] = (group.user_details ?? []).map((user) => {
+      const id = Number(user.id);
       return {
         id,
         kind: "user",
-        label: user?.display_name || user?.full_name || user?.email || `User #${id}`,
-        email: user?.email,
-        avatar: user?.avatar,
-        role_labels: [uiPrincipalRoleLabel(user?.role)],
+        label: user.display_name || user.full_name || user.email || `User #${id}`,
+        email: user.email,
+        avatar: user.avatar,
+        role_labels: [uiPrincipalRoleLabel(user.role)],
       };
     });
     return <AssociationPrincipalStack items={memberItems} maxVisible={5} />;

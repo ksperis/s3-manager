@@ -35,6 +35,7 @@ def test_assign_user_to_account_api(client: TestClient, seed_user_account):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert "accounts" not in data
+    assert "group_ids" not in data
     assert acc.id in [link["account_id"] for link in data["account_links"]]
 
 
