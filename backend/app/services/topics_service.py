@@ -154,13 +154,10 @@ class TopicsService:
         attributes: dict,
         *,
         name: Optional[str] = None,
-        is_ceph: bool = False,
     ) -> Topic:
         return Topic(
             name=name or self._topic_name_from_arn(arn),
             arn=arn,
-            owner=attributes.get("Owner"),
-            is_ceph=is_ceph,
             configuration=self._parse_configurable_attributes(attributes),
         )
 
@@ -235,7 +232,6 @@ class TopicsService:
                     arn,
                     attrs,
                     name=topic_names.get(arn),
-                    is_ceph=True,
                 )
             )
         return items

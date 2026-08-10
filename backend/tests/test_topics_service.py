@@ -46,6 +46,21 @@ def test_topic_contracts_reject_removed_subscriptions_field(model, payload):
         model.model_validate(payload)
 
 
+@pytest.mark.parametrize(
+    ("removed_field", "value"),
+    [("owner", "tenant"), ("is_ceph", True)],
+)
+def test_topic_contract_rejects_removed_metadata(removed_field, value):
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        Topic.model_validate(
+            {
+                "name": "topic",
+                "arn": "arn:aws:sns:lab:tenant:topic",
+                removed_field: value,
+            }
+        )
+
+
 def test_set_topic_configuration_skips_noop(monkeypatch):
     service = TopicsService()
     arn = "arn:aws:sns:lab:tenant:topic"
@@ -249,8 +264,8 @@ def test_list_topics_deduplicates_ceph_entries_and_loads_topic_attributes(monkey
     topic = topics[0]
     assert topic.name == "topic-generic_test_unistra_preprod2"
     assert topic.arn == arn
-    assert topic.is_ceph is True
-    assert topic.owner == "tenant"
+    assert "is_ceph" not in topic.model_dump()
+    assert "owner" not in topic.model_dump()
     assert "subscriptions_confirmed" not in topic.model_dump()
     assert "subscriptions_pending" not in topic.model_dump()
     assert attributes_calls == [arn]
@@ -287,7 +302,6 @@ def test_list_topics_ignores_ceph_notification_entries_as_topic_names_without_pr
     topics = service.list_topics(_ceph_account())
 
     assert len(topics) == 1
-    assert topics[0].is_ceph is True
     assert topics[0].name == "topic-from-arn"
 
 
@@ -309,5 +323,3 @@ def test_list_topics_keeps_standard_sns_behavior(monkeypatch):
 
     assert len(topics) == 1
     assert topics[0].name == "standard-topic"
-    assert topics[0].is_ceph is False
-    assert topics[0].owner == "123456789012"

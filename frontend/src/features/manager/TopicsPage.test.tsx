@@ -159,12 +159,10 @@ describe("TopicsPage", () => {
       {
         name: "ceph-topic-main",
         arn: topicArn,
-        is_ceph: true,
       },
       {
         name: "secondary-topic",
         arn: "arn:aws:sns:default:tenant:secondary-topic",
-        is_ceph: true,
       },
     ]);
 

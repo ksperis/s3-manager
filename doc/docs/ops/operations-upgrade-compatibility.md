@@ -1,5 +1,12 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 minimal Topic contract
+
+Manager Topic responses no longer expose the unused `owner` and `is_ceph`
+properties. Provider-specific listing remains an internal backend concern;
+clients receive only the canonical topic name, ARN, and configurable
+attributes. Deploy the backend and frontend together.
+
 ## 2026-08 minimal Portal state contract
 
 `GET /api/portal/state` now returns only effective Portal role, permissions,
