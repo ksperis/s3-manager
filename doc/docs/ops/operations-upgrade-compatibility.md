@@ -502,7 +502,10 @@ UI-group associations only through `user_links` and `group_links`. The duplicate
 `user_ids` and `group_ids` response fields are removed. Updates also accept only
 the structured link fields, which require an explicit role for every principal;
 sending `user_ids`, `group_ids`, or a null link list returns `422`. Send an empty
-list to clear an association set. Deploy the backend and frontend together.
+list to clear an association set. The obsolete `is_s3_user` discriminator is
+also removed because these endpoints return RGW accounts exclusively. Consumers
+that operate on mixed execution contexts must use the canonical `kind` field.
+Deploy the backend and frontend together.
 
 ## 2026-03 compatibility cleanup
 

@@ -36,6 +36,7 @@ def test_admin_accounts_default_sort_is_name_case_insensitive(client, db_session
     payload = response.json()
 
     assert [item["name"] for item in payload["items"]] == ["alpha", "Beta", "Zulu"]
+    assert all("is_s3_user" not in item for item in payload["items"])
 
 
 def test_admin_accounts_sort_by_name_desc_is_case_insensitive(client, db_session):
@@ -76,6 +77,7 @@ def test_admin_accounts_minimal_is_sorted_case_insensitive(client, db_session):
     payload = response.json()
 
     assert [item["name"] for item in payload] == ["alpha", "Beta", "Zulu"]
+    assert all("is_s3_user" not in item for item in payload)
 
 
 def test_admin_accounts_search_matches_tag_labels(client, db_session):

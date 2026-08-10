@@ -273,10 +273,6 @@ export default function S3AccountsPage() {
     [cephEndpoints]
   );
 
-  const resolveS3AccountType = (
-    account: Pick<S3Account, "is_s3_user">
-  ): "tenant" | "rgw_user" => account.is_s3_user ? "rgw_user" : "tenant";
-
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
     if (quotaGb == null) {
       return { value: "", unit: "GiB" as const };
@@ -285,20 +281,6 @@ export default function S3AccountsPage() {
       return { value: String(Math.round(quotaGb * 1024)), unit: "MiB" as const };
     }
     return { value: String(quotaGb), unit: "GiB" as const };
-  };
-
-  const renderS3AccountTypeBadge = (account: S3Account) => {
-    if (resolveS3AccountType(account) !== "rgw_user") {
-      return null;
-    }
-    return (
-      <span
-        className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-700 shadow-sm dark:bg-amber-900/40 dark:text-amber-100"
-        title="Standalone RGW user"
-      >
-        👤
-      </span>
-    );
   };
 
   const extractError = useCallback((err: unknown) => extractApiError(err, "Unexpected error"), []);
@@ -714,7 +696,6 @@ export default function S3AccountsPage() {
               ) : (
                 <span className="min-w-0 truncate">{account.name}</span>
               )}
-              {renderS3AccountTypeBadge(account)}
             </div>
             {tagItems.length > 0 && (
               <UiTagBadgeList

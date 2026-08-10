@@ -33,7 +33,6 @@ function account(overrides: Partial<S3Account>): S3Account {
     id: "1",
     name: "Primary",
     tags: [],
-    is_s3_user: false,
     storage_endpoint_id: 1,
     storage_endpoint_name: "Default endpoint",
     storage_endpoint_url: "https://s3.example.test",
@@ -88,19 +87,15 @@ describe("formatAccountLabel", () => {
     ).toBe("Primary · S3 user (Ceph)");
   });
 
-  it("uses the canonical account flag instead of an ID prefix", () => {
-    expect(
-      formatAccountLabel(account({ id: "s3u-misleading", is_s3_user: false })),
-    ).toBe("Primary");
+  it("does not infer a stored account kind from its ID", () => {
     expect(
       formatAccountLabel(
         account({
-          is_s3_user: true,
+          id: "s3u-misleading",
           storage_endpoint_id: 2,
           storage_endpoint_name: "Ceph",
           storage_endpoint_is_default: false,
         }),
-        false,
       ),
     ).toBe("Primary (Ceph)");
   });

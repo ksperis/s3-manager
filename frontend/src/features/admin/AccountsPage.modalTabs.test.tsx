@@ -207,46 +207,6 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.queryByText("No accounts yet.")).not.toBeInTheDocument();
   });
 
-  it("uses is_s3_user as the only account identity discriminator", async () => {
-    listS3AccountsMock.mockResolvedValueOnce({
-      items: [
-        {
-          id: "tenant-with-user-uid",
-          db_id: 1,
-          name: "tenant-account",
-          tags: [],
-          rgw_user_uid: "misleading-user-uid",
-          is_s3_user: false,
-          user_links: [],
-          group_links: [],
-        },
-        {
-          id: "user-with-account-id",
-          db_id: 2,
-          name: "standalone-user",
-          tags: [],
-          rgw_account_id: "misleading-account-id",
-          is_s3_user: true,
-          user_links: [],
-          group_links: [],
-        },
-      ],
-      total: 2,
-      page: 1,
-      page_size: 25,
-      has_next: false,
-    });
-
-    render(<AccountsPage />);
-
-    const tenantRow = (await screen.findByRole("button", { name: "tenant-account" })).closest("tr");
-    const userRow = screen.getByRole("button", { name: "standalone-user" }).closest("tr");
-    expect(tenantRow).not.toBeNull();
-    expect(userRow).not.toBeNull();
-    expect(within(tenantRow as HTMLElement).queryByTitle("Standalone RGW user")).not.toBeInTheDocument();
-    expect(within(userRow as HTMLElement).getByTitle("Standalone RGW user")).toBeInTheDocument();
-  });
-
   it("presents account identity and quotas in consistent General sections", async () => {
     render(<AccountsPage />);
 

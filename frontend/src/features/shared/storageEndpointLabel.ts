@@ -6,7 +6,6 @@ import { ExecutionContext } from "../../api/executionContexts";
 
 type StoredAccount = {
   name: string;
-  is_s3_user?: boolean;
   storage_endpoint_name: string;
   storage_endpoint_is_default: boolean;
 };
@@ -38,9 +37,7 @@ export function formatAccountLabel(
   context: AccountLike,
   includeContextBadge = true
 ): string {
-  const isS3User = isExecutionContext(context)
-    ? context.kind === "s3_user"
-    : Boolean(context.is_s3_user);
+  const isS3User = isExecutionContext(context) && context.kind === "s3_user";
   const isConnection = isExecutionContext(context) && context.kind === "connection";
   const badge = includeContextBadge
     ? isConnection
