@@ -1,5 +1,12 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 Clipboard API requirement
+
+Frontend copy actions now rely exclusively on the browser Clipboard API. The
+deprecated `document.execCommand("copy")` fallback has been removed. Serve the
+application from a context where `navigator.clipboard.writeText` is available;
+otherwise copy actions report that the clipboard is unavailable.
+
 ## 2026-08 minimal Topic contract
 
 Manager Topic responses no longer expose the unused `owner` and `is_ceph`

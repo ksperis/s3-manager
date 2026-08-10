@@ -7,35 +7,13 @@ export async function copyTextToClipboard(value: string): Promise<void> {
   if (!value) throw new Error("Nothing to copy.");
 
   const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : null;
-  if (clipboard?.writeText) {
-    try {
-      await clipboard.writeText(value);
-      return;
-    } catch {
-      // Fall back to the legacy copy path for local HTTP contexts.
-    }
-  }
-
-  if (typeof document === "undefined" || typeof document.execCommand !== "function") {
+  if (!clipboard?.writeText) {
     throw new Error("Clipboard is unavailable.");
   }
 
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  textarea.style.left = "-9999px";
-  textarea.style.opacity = "0";
-  textarea.style.position = "fixed";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  let copied = false;
   try {
-    textarea.focus();
-    textarea.select();
-    textarea.setSelectionRange(0, value.length);
-    copied = document.execCommand("copy");
-  } finally {
-    textarea.remove();
+    await clipboard.writeText(value);
+  } catch {
+    throw new Error("Clipboard copy failed.");
   }
-  if (!copied) throw new Error("Clipboard copy failed.");
 }

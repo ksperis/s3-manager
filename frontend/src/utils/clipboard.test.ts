@@ -8,73 +8,59 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { copyTextToClipboard } from "./clipboard";
 
 const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
-const originalExecCommandDescriptor = Object.getOwnPropertyDescriptor(document, "execCommand");
 
 afterEach(() => {
   vi.restoreAllMocks();
-  document.body.replaceChildren();
   if (originalClipboardDescriptor) {
     Object.defineProperty(navigator, "clipboard", originalClipboardDescriptor);
   } else {
     Reflect.deleteProperty(navigator, "clipboard");
-  }
-  if (originalExecCommandDescriptor) {
-    Object.defineProperty(document, "execCommand", originalExecCommandDescriptor);
-  } else {
-    Reflect.deleteProperty(document, "execCommand");
   }
 });
 
 describe("copyTextToClipboard", () => {
   it("uses the Clipboard API when available", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
-    const execCommand = vi.fn();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText },
-    });
-    Object.defineProperty(document, "execCommand", {
-      configurable: true,
-      value: execCommand,
     });
 
     await copyTextToClipboard("secret");
 
     expect(writeText).toHaveBeenCalledWith("secret");
-    expect(execCommand).not.toHaveBeenCalled();
   });
 
-  it("falls back and removes the temporary textarea", async () => {
+  it("reports Clipboard API failures without a legacy fallback", async () => {
     const writeText = vi.fn().mockRejectedValue(new Error("blocked"));
-    const execCommand = vi.fn().mockReturnValue(true);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText },
     });
-    Object.defineProperty(document, "execCommand", {
-      configurable: true,
-      value: execCommand,
-    });
 
-    await copyTextToClipboard("fallback");
+    await expect(copyTextToClipboard("blocked")).rejects.toThrow("Clipboard copy failed.");
 
-    expect(execCommand).toHaveBeenCalledWith("copy");
-    expect(document.querySelector("textarea")).toBeNull();
+    expect(writeText).toHaveBeenCalledWith("blocked");
   });
 
-  it("removes the temporary textarea when fallback copy fails", async () => {
+  it("reports when the Clipboard API is unavailable", async () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: undefined,
     });
-    Object.defineProperty(document, "execCommand", {
+
+    await expect(copyTextToClipboard("unavailable")).rejects.toThrow("Clipboard is unavailable.");
+  });
+
+  it("rejects empty values before accessing the Clipboard API", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      value: vi.fn(() => {
-        throw new Error("copy failed");
-      }),
+      value: { writeText },
     });
 
-    await expect(copyTextToClipboard("fallback")).rejects.toThrow("copy failed");
-    expect(document.querySelector("textarea")).toBeNull();
+    await expect(copyTextToClipboard("")).rejects.toThrow("Nothing to copy.");
+
+    expect(writeText).not.toHaveBeenCalled();
   });
 });
