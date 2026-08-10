@@ -89,7 +89,7 @@ def create_group(
                 "name": group.name,
                 "user_ids": payload.user_ids,
                 "account_ids": [link.account_id for link in payload.account_links],
-                "s3_user_ids": payload.s3_user_ids,
+                "s3_user_ids": [link.s3_user_id for link in payload.s3_user_links],
                 "s3_connection_ids": payload.s3_connection_ids,
                 "can_access_ceph_admin": bool(group.can_access_ceph_admin),
                 "can_access_storage_ops": bool(group.can_access_storage_ops),

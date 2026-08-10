@@ -76,7 +76,6 @@ export type UiGroupPayload = {
   user_ids?: number[];
   account_links?: AccountMembership[];
   s3_user_links?: S3UserMembership[];
-  s3_user_ids?: number[];
   s3_connection_ids?: number[];
 };
 

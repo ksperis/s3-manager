@@ -19,7 +19,7 @@ from app.db import (
     UserS3Connection,
 )
 from app.models.admin_automation import UiUserSpec
-from app.models.user import PASSWORD_POLICY_ERROR, UserCreate, UserUpdate
+from app.models.user import PASSWORD_POLICY_ERROR, S3UserMembership, UserCreate, UserUpdate
 from app.services.users_service import UsersService
 from tests.s3_account_factory import make_s3_account
 
@@ -181,7 +181,10 @@ def test_update_user_and_link_validations(db_session):
         service.update_user(user.id, UserUpdate(email="already-used@example.com"))
 
     with pytest.raises(ValueError, match="S3 users not found"):
-        service.update_user(user.id, UserUpdate(s3_user_ids=[99999]))
+        service.update_user(
+            user.id,
+            UserUpdate(s3_user_links=[S3UserMembership(s3_user_id=99999)]),
+        )
 
     with pytest.raises(ValueError, match="Only shared S3 connections can be linked"):
         service.update_user(user.id, UserUpdate(s3_connection_ids=[private_conn.id]))
@@ -204,7 +207,7 @@ def test_update_user_and_link_validations(db_session):
                 "bucket_migration": True,
                 "feature_rules": True,
             },
-            s3_user_ids=[s3_user.id],
+            s3_user_links=[S3UserMembership(s3_user_id=s3_user.id)],
             s3_connection_ids=[shared_conn.id],
         ),
     )
@@ -385,7 +388,7 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
         account_root=False,
         role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
     )
-    service._set_s3_user_ids(user, [s3_user.id])
+    service._set_s3_user_links(user, [S3UserMembership(s3_user_id=s3_user.id)])
     service._set_s3_connection_links(user, [shared_conn.id])
     db_session.commit()
 

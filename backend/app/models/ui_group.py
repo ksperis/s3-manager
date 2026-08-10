@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.pagination import PaginatedResponse
 from app.models.user import (
@@ -34,6 +34,8 @@ class LinkedS3Account(BaseModel):
 
 
 class UiGroupCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     description: Optional[str] = None
     avatar_source: UiGroupAvatarSource = "initials"
@@ -46,18 +48,13 @@ class UiGroupCreate(BaseModel):
     browser_advanced_features_enabled: bool = False
     user_ids: list[int] = Field(default_factory=list)
     account_links: list[AccountMembership] = Field(default_factory=list)
-    s3_user_links: Optional[list[S3UserMembership]] = None
-    s3_user_ids: Optional[list[int]] = None
+    s3_user_links: list[S3UserMembership] = Field(default_factory=list)
     s3_connection_ids: list[int] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def reject_ambiguous_s3_user_links(self) -> "UiGroupCreate":
-        if self.s3_user_links is not None and self.s3_user_ids is not None:
-            raise ValueError("s3_user_links and s3_user_ids cannot be provided together")
-        return self
 
 
 class UiGroupUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = None
     description: Optional[str] = None
     avatar_source: Optional[UiGroupAvatarSource] = None
@@ -71,14 +68,7 @@ class UiGroupUpdate(BaseModel):
     user_ids: Optional[list[int]] = None
     account_links: Optional[list[AccountMembership]] = None
     s3_user_links: Optional[list[S3UserMembership]] = None
-    s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
-
-    @model_validator(mode="after")
-    def reject_ambiguous_s3_user_links(self) -> "UiGroupUpdate":
-        if self.s3_user_links is not None and self.s3_user_ids is not None:
-            raise ValueError("s3_user_links and s3_user_ids cannot be provided together")
-        return self
 
 
 class UiGroupSummary(BaseModel):

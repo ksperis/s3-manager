@@ -248,8 +248,6 @@ class UsersService:
             self._set_account_links(user, payload.account_links)
         if payload.s3_user_links is not None:
             self._set_s3_user_links(user, payload.s3_user_links)
-        elif payload.s3_user_ids is not None:
-            self._set_s3_user_ids(user, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
             self._set_s3_connection_links(user, payload.s3_connection_ids)
         if payload.group_ids is not None:
@@ -807,22 +805,6 @@ class UsersService:
         self.db.commit()
         self.db.refresh(user)
         return user
-
-    def _set_s3_user_ids(self, user: User, target_ids: list[int]) -> None:
-        existing = {
-            int(link.s3_user_id): bool(link.allow_manager_browser_data_access)
-            for link in self.db.query(UserS3User).filter(UserS3User.user_id == user.id).all()
-        }
-        self._set_s3_user_links(
-            user,
-            [
-                S3UserMembership(
-                    s3_user_id=int(s3_id),
-                    allow_manager_browser_data_access=existing.get(int(s3_id), False),
-                )
-                for s3_id in target_ids
-            ],
-        )
 
     def _set_s3_user_links(self, user: User, links: list[S3UserMembership]) -> None:
         cleaned = {int(link.s3_user_id): link for link in links}

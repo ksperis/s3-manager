@@ -77,10 +77,7 @@ class UiGroupsService:
         UiGroupAvatarService(self.db).set_choice(group, payload.avatar_source, payload.avatar_icon)
         self._set_user_links(group, payload.user_ids)
         self._set_account_links(group, payload.account_links)
-        if payload.s3_user_links is not None:
-            self._set_s3_user_links(group, payload.s3_user_links)
-        else:
-            self._set_s3_user_ids(group, payload.s3_user_ids or [])
+        self._set_s3_user_links(group, payload.s3_user_links)
         self._set_s3_connection_links(group, payload.s3_connection_ids)
         self.db.flush()
         portal_roles_after = capture_effective_portal_roles(
@@ -149,8 +146,6 @@ class UiGroupsService:
             self._set_account_links(group, payload.account_links)
         if payload.s3_user_links is not None:
             self._set_s3_user_links(group, payload.s3_user_links)
-        elif payload.s3_user_ids is not None:
-            self._set_s3_user_ids(group, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
             self._set_s3_connection_links(group, payload.s3_connection_ids)
         group.updated_at = utcnow()
@@ -429,22 +424,6 @@ class UiGroupsService:
             )
             row.updated_at = utcnow()
             self.db.add(row)
-
-    def _set_s3_user_ids(self, group: UiGroup, target_ids: list[int]) -> None:
-        existing = {
-            int(link.s3_user_id): bool(link.allow_manager_browser_data_access)
-            for link in self.db.query(UiGroupS3User).filter(UiGroupS3User.group_id == group.id).all()
-        }
-        self._set_s3_user_links(
-            group,
-            [
-                S3UserMembership(
-                    s3_user_id=int(s3_user_id),
-                    allow_manager_browser_data_access=existing.get(int(s3_user_id), False),
-                )
-                for s3_user_id in target_ids
-            ],
-        )
 
     def _set_s3_user_links(self, group: UiGroup, links: list[S3UserMembership]) -> None:
         cleaned = {int(link.s3_user_id): link for link in links}

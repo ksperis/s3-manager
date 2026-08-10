@@ -463,6 +463,15 @@ backend and frontend; no runtime alias is retained. Context identifiers remain
 `s3u-<id>`, so persisted bucket migrations and workspace selections do not
 require a database migration. Deploy the backend and frontend together.
 
+## 2026-08 canonical S3 user association payloads
+
+Admin user and group writes now accept only structured `s3_user_links` entries.
+The obsolete `s3_user_ids` request field is rejected with `422`; every link
+must state its `s3_user_id` and may explicitly enable
+`allow_manager_browser_data_access`. Responses continue to expose the
+association details needed by the frontend. Deploy the backend and frontend
+together.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

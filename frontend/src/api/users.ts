@@ -149,7 +149,6 @@ export type UpdateUserPayload = {
   is_active?: boolean;
   account_links?: AccountMembership[] | null;
   s3_user_links?: S3UserMembership[] | null;
-  s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;
   group_ids?: number[] | null;
 };

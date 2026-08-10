@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from app.models.pagination import PaginatedResponse
 from app.utils.account_roles import CanonicalAccountRole
 
@@ -165,6 +165,8 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: Optional[EmailStr] = None
     password: Optional[str] = None
     role: Optional[UiRole] = None
@@ -178,15 +180,8 @@ class UserUpdate(BaseModel):
     browser_advanced_features_enabled: Optional[bool] = None
     account_links: Optional[list[AccountMembership]] = None
     s3_user_links: Optional[list[S3UserMembership]] = None
-    s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
     group_ids: Optional[list[int]] = None
-
-    @model_validator(mode="after")
-    def reject_ambiguous_s3_user_links(self) -> "UserUpdate":
-        if self.s3_user_links is not None and self.s3_user_ids is not None:
-            raise ValueError("s3_user_links and s3_user_ids cannot be provided together")
-        return self
 
 
 class UserSelfUpdate(BaseModel):

@@ -185,19 +185,11 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
         }
     ]
 
-    ambiguous_links = client.put(
+    removed_ids_contract = client.put(
         f"/api/admin/groups/{payload['id']}",
-        json={
-            "s3_user_ids": [s3_user.id],
-            "s3_user_links": [
-                {
-                    "s3_user_id": s3_user.id,
-                    "allow_manager_browser_data_access": False,
-                }
-            ],
-        },
+        json={"s3_user_ids": [s3_user.id]},
     )
-    assert ambiguous_links.status_code == 422
+    assert removed_ids_contract.status_code == 422
 
     reject_resp = client.put(
         f"/api/admin/groups/{payload['id']}",
@@ -336,7 +328,7 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
                     "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 }
             ],
-            "s3_user_ids": [s3_user.id],
+            "s3_user_links": [{"s3_user_id": s3_user.id}],
             "s3_connection_ids": [connection.id],
         },
     )

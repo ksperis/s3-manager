@@ -162,22 +162,14 @@ def test_update_user_replaces_account_links_atomically(client: TestClient, db_se
     assert first_account.id not in payload["accounts"]
 
 
-def test_update_user_rejects_ambiguous_s3_user_link_contract(
+def test_update_user_rejects_removed_s3_user_ids_contract(
     client: TestClient,
     seed_user_account,
 ):
     user, _ = seed_user_account
     response = client.put(
         f"/api/admin/users/{user.id}",
-        json={
-            "s3_user_ids": [99999],
-            "s3_user_links": [
-                {
-                    "s3_user_id": 99999,
-                    "allow_manager_browser_data_access": True,
-                }
-            ],
-        },
+        json={"s3_user_ids": [99999]},
     )
     assert response.status_code == 422
 
