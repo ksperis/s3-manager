@@ -28,10 +28,14 @@ export async function copyTextToClipboard(value: string): Promise<void> {
   textarea.style.position = "fixed";
   textarea.style.top = "0";
   document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  textarea.setSelectionRange(0, value.length);
-  const copied = document.execCommand("copy");
-  document.body.removeChild(textarea);
+  let copied = false;
+  try {
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, value.length);
+    copied = document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
   if (!copied) throw new Error("Clipboard copy failed.");
 }

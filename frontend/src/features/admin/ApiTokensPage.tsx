@@ -23,6 +23,7 @@ import { tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactToggleClasses } from "../../components/toolbarControlClasses";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import { confirmAction } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 
@@ -55,22 +56,6 @@ function resolveTokenStatus(token: ApiTokenInfo): TokenStatus {
   const expiry = new Date(token.expires_at);
   if (!Number.isNaN(expiry.getTime()) && expiry.getTime() <= Date.now()) return "expired";
   return "active";
-}
-
-async function copyToClipboard(value: string): Promise<void> {
-  if (navigator?.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
 }
 
 function StatusBadge({ status }: { status: TokenStatus }) {
@@ -240,7 +225,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
 
   const copyAndNotify = async (value: string, message: string) => {
     try {
-      await copyToClipboard(value);
+      await copyTextToClipboard(value);
       setCopyMessage(message);
       window.setTimeout(() => setCopyMessage(null), 2500);
     } catch (copyError) {
