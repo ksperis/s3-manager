@@ -158,7 +158,7 @@ def test_admin_s3_connections_search_matches_direct_group_links(client, db_sessi
     payload = response.json()
 
     assert [item["name"] for item in payload["items"]] == ["group-linked-connection"]
-    assert payload["items"][0]["group_ids"] == [group.id]
+    assert "group_ids" not in payload["items"][0]
     assert payload["items"][0]["group_details"][0]["id"] == group.id
     assert payload["items"][0]["group_details"][0]["name"] == "Connection Operators"
     assert payload["items"][0]["group_details"][0]["avatar"]["initials"] == "CO"
@@ -181,6 +181,7 @@ def test_admin_s3_connections_search_matches_linked_ui_user_email(client, db_ses
     assert response.status_code == 200, response.text
     items = response.json()["items"]
     assert [item["name"] for item in items] == ["email-linked-connection"]
+    assert "user_ids" not in items[0]
     assert items[0]["user_details"][0]["id"] == user.id
     assert items[0]["user_details"][0]["email"] == "connection.member@example.test"
     assert items[0]["user_details"][0]["avatar"]["initials"] == "CM"
@@ -199,7 +200,7 @@ def test_admin_s3_connections_update_replaces_direct_group_links(client, db_sess
     assert response.status_code == 200, response.text
     payload = response.json()
 
-    assert payload["group_ids"] == [new_group.id]
+    assert "group_ids" not in payload
     assert payload["group_details"][0]["id"] == new_group.id
     assert payload["group_details"][0]["name"] == "New Connection Group"
     assert payload["group_details"][0]["avatar"]["initials"] == "NG"

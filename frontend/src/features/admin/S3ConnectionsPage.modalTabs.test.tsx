@@ -77,7 +77,7 @@ const makeConnection = (id: number, overrides?: Partial<Record<string, unknown>>
   created_by_user_id: 99,
   created_by_email: "owner@example.com",
   user_count: 1,
-  user_ids: [11],
+  user_details: [{ id: 11, email: "u11@example.com", role: "ui_user" }],
   ...overrides,
 });
 
@@ -132,8 +132,7 @@ describe("S3ConnectionsPage modal tabs", () => {
     listAdminS3ConnectionsMock.mockResolvedValueOnce({
       items: [
         makeConnection(1, {
-          user_ids: [11],
-          group_ids: [31],
+          user_details: [{ id: 11, email: "u11@example.com", role: "ui_user" }],
           group_details: [{ id: 31, name: "Storage Operators" }],
         }),
       ],

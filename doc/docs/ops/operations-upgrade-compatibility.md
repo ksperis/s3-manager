@@ -487,6 +487,14 @@ through `user_links` and `group_links`. The duplicate `user_ids`, `user_details`
 only the structured link fields; sending `user_ids` or `group_ids` returns `422`.
 Deploy the backend and frontend together.
 
+## 2026-08 canonical S3 connection principal details
+
+Admin S3 connection responses no longer duplicate `user_details` and
+`group_details` through `user_ids` and `group_ids`. The structured details are
+the only response representation. The `group_ids` update field remains the
+canonical write contract for replacing group links. Deploy the backend and
+frontend together.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

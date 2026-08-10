@@ -71,9 +71,9 @@ def _get_admin_shared_connection(db: Session, connection_id: int) -> S3Connectio
 def _linked_user_details_by_connection(
     db: Session,
     connection_ids: list[int],
-) -> tuple[dict[int, list[int]], dict[int, list[UserAssociationDetail]]]:
+) -> dict[int, list[UserAssociationDetail]]:
     if not connection_ids:
-        return {}, {}
+        return {}
     rows = (
         db.query(UserS3Connection.s3_connection_id, User)
         .join(User, User.id == UserS3Connection.user_id)
@@ -81,13 +81,11 @@ def _linked_user_details_by_connection(
         .order_by(UserS3Connection.s3_connection_id.asc(), User.email.asc(), User.id.asc())
         .all()
     )
-    user_ids_by_connection: dict[int, list[int]] = {}
     user_details_by_connection: dict[int, list[UserAssociationDetail]] = {}
     avatar_service = UserAvatarService(db)
     for connection_id, user in rows:
         normalized_connection_id = int(connection_id)
         normalized_user_id = int(user.id)
-        user_ids_by_connection.setdefault(normalized_connection_id, []).append(normalized_user_id)
         user_details_by_connection.setdefault(normalized_connection_id, []).append(
             UserAssociationDetail(
                 id=normalized_user_id,
@@ -97,20 +95,19 @@ def _linked_user_details_by_connection(
                 avatar=avatar_service.descriptor(user),
             )
         )
-    return user_ids_by_connection, user_details_by_connection
+    return user_details_by_connection
 
 
-def _linked_user_details(db: Session, connection_id: int) -> tuple[list[int], list[UserAssociationDetail]]:
-    user_ids_by_connection, user_details_by_connection = _linked_user_details_by_connection(db, [connection_id])
-    return user_ids_by_connection.get(connection_id, []), user_details_by_connection.get(connection_id, [])
+def _linked_user_details(db: Session, connection_id: int) -> list[UserAssociationDetail]:
+    return _linked_user_details_by_connection(db, [connection_id]).get(connection_id, [])
 
 
 def _linked_group_details_by_connection(
     db: Session,
     connection_ids: list[int],
-) -> tuple[dict[int, list[int]], dict[int, list[S3ConnectionGroupDetail]]]:
+) -> dict[int, list[S3ConnectionGroupDetail]]:
     if not connection_ids:
-        return {}, {}
+        return {}
     rows = (
         db.query(UiGroupS3Connection.s3_connection_id, UiGroup)
         .join(UiGroup, UiGroup.id == UiGroupS3Connection.group_id)
@@ -118,13 +115,11 @@ def _linked_group_details_by_connection(
         .order_by(UiGroupS3Connection.s3_connection_id.asc(), UiGroup.name.asc(), UiGroup.id.asc())
         .all()
     )
-    group_ids_by_connection: dict[int, list[int]] = {}
     group_details_by_connection: dict[int, list[S3ConnectionGroupDetail]] = {}
     avatar_service = UiGroupAvatarService(db)
     for connection_id, group in rows:
         normalized_connection_id = int(connection_id)
         normalized_group_id = int(group.id)
-        group_ids_by_connection.setdefault(normalized_connection_id, []).append(normalized_group_id)
         group_details_by_connection.setdefault(normalized_connection_id, []).append(
             S3ConnectionGroupDetail(
                 id=normalized_group_id,
@@ -132,12 +127,11 @@ def _linked_group_details_by_connection(
                 avatar=avatar_service.descriptor(group),
             )
         )
-    return group_ids_by_connection, group_details_by_connection
+    return group_details_by_connection
 
 
-def _linked_group_details(db: Session, connection_id: int) -> tuple[list[int], list[S3ConnectionGroupDetail]]:
-    group_ids_by_connection, group_details_by_connection = _linked_group_details_by_connection(db, [connection_id])
-    return group_ids_by_connection.get(connection_id, []), group_details_by_connection.get(connection_id, [])
+def _linked_group_details(db: Session, connection_id: int) -> list[S3ConnectionGroupDetail]:
+    return _linked_group_details_by_connection(db, [connection_id]).get(connection_id, [])
 
 
 def _sync_group_links(db: Session, conn: S3Connection, group_ids: list[int]) -> None:
@@ -166,9 +160,7 @@ def _to_admin_item(
     created_by_email: Optional[str],
     created_by_user: Optional[User],
     user_count: int,
-    user_ids: list[int],
     user_details: list[UserAssociationDetail],
-    group_ids: list[int],
     group_details: list[S3ConnectionGroupDetail],
     tags_service: TagsService,
 ) -> S3ConnectionAdminItem:
@@ -193,9 +185,7 @@ def _to_admin_item(
         created_by_full_name=(created_by_user.display_name or created_by_user.full_name) if created_by_user else None,
         created_by_avatar=UserAvatarService(tags_service.db).descriptor(created_by_user) if created_by_user else None,
         user_count=int(user_count),
-        user_ids=sorted(user_ids),
         user_details=user_details,
-        group_ids=sorted(group_ids),
         group_details=group_details,
         tags=tags_service.get_connection_tags(conn),
         last_used_at=conn.last_used_at,
@@ -289,8 +279,8 @@ def list_s3_connections(
         int(creator.id): creator
         for creator in db.query(User).filter(User.id.in_(creator_ids)).all()
     } if creator_ids else {}
-    user_ids_by_connection, user_details_by_connection = _linked_user_details_by_connection(db, connection_ids)
-    group_ids_by_connection, group_details_by_connection = _linked_group_details_by_connection(db, connection_ids)
+    user_details_by_connection = _linked_user_details_by_connection(db, connection_ids)
+    group_details_by_connection = _linked_group_details_by_connection(db, connection_ids)
     items: list[S3ConnectionAdminItem] = []
     for conn, user_count, created_by_email in rows:
         items.append(
@@ -299,9 +289,7 @@ def list_s3_connections(
                 created_by_email=created_by_email,
                 created_by_user=creators_by_id.get(int(conn.created_by_user_id)),
                 user_count=int(user_count or 0),
-                user_ids=user_ids_by_connection.get(conn.id, []),
                 user_details=user_details_by_connection.get(conn.id, []),
-                group_ids=group_ids_by_connection.get(conn.id, []),
                 group_details=group_details_by_connection.get(conn.id, []),
                 tags_service=tags_service,
             )
@@ -438,9 +426,7 @@ def create_s3_connection(
         created_by_email=current_user.email,
         created_by_user=current_user,
         user_count=0,
-        user_ids=[],
         user_details=[],
-        group_ids=[],
         group_details=[],
         tags_service=tags_service,
     )
@@ -545,16 +531,14 @@ def update_s3_connection(
     created_by_user = db.query(User).filter(User.id == conn.created_by_user_id).first()
     created_by_email = created_by_user.email if created_by_user else None
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
-    user_ids, user_details = _linked_user_details(db, conn.id)
-    group_ids, group_details = _linked_group_details(db, conn.id)
+    user_details = _linked_user_details(db, conn.id)
+    group_details = _linked_group_details(db, conn.id)
     return _to_admin_item(
         conn,
         created_by_email=created_by_email,
         created_by_user=created_by_user,
         user_count=int(user_count),
-        user_ids=user_ids,
         user_details=user_details,
-        group_ids=group_ids,
         group_details=group_details,
         tags_service=tags_service,
     )
@@ -588,16 +572,14 @@ def remediate_s3_connection(
         metadata={"action": payload.action},
     )
     created_by_user = db.query(User).filter(User.id == conn.created_by_user_id).first()
-    user_ids, user_details = _linked_user_details(db, conn.id)
-    group_ids, group_details = _linked_group_details(db, conn.id)
+    user_details = _linked_user_details(db, conn.id)
+    group_details = _linked_group_details(db, conn.id)
     return _to_admin_item(
         conn,
         created_by_email=created_by_user.email if created_by_user else None,
         created_by_user=created_by_user,
-        user_count=len(user_ids),
-        user_ids=user_ids,
+        user_count=len(user_details),
         user_details=user_details,
-        group_ids=group_ids,
         group_details=group_details,
         tags_service=TagsService(db),
     )
@@ -635,16 +617,14 @@ def rotate_s3_connection_credentials(
     created_by_user = db.query(User).filter(User.id == conn.created_by_user_id).first()
     created_by_email = created_by_user.email if created_by_user else None
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
-    user_ids, user_details = _linked_user_details(db, conn.id)
-    group_ids, group_details = _linked_group_details(db, conn.id)
+    user_details = _linked_user_details(db, conn.id)
+    group_details = _linked_group_details(db, conn.id)
     return _to_admin_item(
         conn,
         created_by_email=created_by_email,
         created_by_user=created_by_user,
         user_count=int(user_count),
-        user_ids=user_ids,
         user_details=user_details,
-        group_ids=group_ids,
         group_details=group_details,
         tags_service=tags_service,
     )

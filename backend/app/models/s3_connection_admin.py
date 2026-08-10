@@ -42,9 +42,7 @@ class S3ConnectionAdminItem(BaseModel):
     created_by_full_name: Optional[str] = None
     created_by_avatar: Optional[UserAvatar] = None
     user_count: int = 0
-    user_ids: list[int] = Field(default_factory=list)
     user_details: list[UserAssociationDetail] = Field(default_factory=list)
-    group_ids: list[int] = Field(default_factory=list)
     group_details: list[S3ConnectionGroupDetail] = Field(default_factory=list)
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
     last_used_at: Optional[datetime] = None

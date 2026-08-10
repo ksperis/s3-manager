@@ -81,10 +81,6 @@ const credentialOwnerTypeOptions = [
 ];
 type EditTab = "general" | "users" | "groups";
 
-function missingUserSummary(id: number): UserSummary {
-  return { id, email: `User #${id}`, role: "ui_none" };
-}
-
 function getConnectionSearchCandidates(connection: S3ConnectionAdminItem): Array<string | number | null | undefined> {
   return [
     connection.name,
@@ -408,21 +404,13 @@ export default function S3ConnectionsPage() {
     portalUsers.forEach((user) => map.set(user.id, user.email));
     return map;
   }, [portalUsers]);
-  const portalUsersById = useMemo(() => new Map(portalUsers.map((user) => [user.id, user])), [portalUsers]);
   const groupLabelById = useMemo(() => {
     const map = new Map<number, string>();
     uiGroups.forEach((group) => map.set(group.id, group.name));
     return map;
   }, [uiGroups]);
-  const groupsById = useMemo(() => new Map(uiGroups.map((group) => [group.id, group])), [uiGroups]);
   const renderConnectionAssociations = (connection: S3ConnectionAdminItem) => {
-    const userItems: AssociationPrincipalItem[] = (
-      connection.user_details && connection.user_details.length > 0
-        ? connection.user_details
-        : (connection.user_ids ?? []).map(
-            (id) => portalUsersById.get(id) ?? missingUserSummary(id),
-          )
-    ).map((user) => {
+    const userItems: AssociationPrincipalItem[] = (connection.user_details ?? []).map((user) => {
       return {
         id: user.id,
         kind: "user",
@@ -431,19 +419,12 @@ export default function S3ConnectionsPage() {
         avatar: user.avatar,
       };
     });
-    const groupItems: AssociationPrincipalItem[] = (connection.group_details && connection.group_details.length > 0
-      ? connection.group_details.map((group) => ({
-          id: group.id,
-          kind: "group" as const,
-          label: group.name,
-          avatar: group.avatar || groupsById.get(group.id)?.avatar,
-        }))
-      : (connection.group_ids ?? []).map((id) => ({
-          id,
-          kind: "group" as const,
-          label: groupsById.get(id)?.name || `Group #${id}`,
-          avatar: groupsById.get(id)?.avatar,
-        })));
+    const groupItems: AssociationPrincipalItem[] = (connection.group_details ?? []).map((group) => ({
+      id: group.id,
+      kind: "group" as const,
+      label: group.name,
+      avatar: group.avatar,
+    }));
     return <AssociationPrincipalStack items={[...userItems, ...groupItems]} />;
   };
   const linkedEditUsers = useMemo(
@@ -677,8 +658,8 @@ export default function S3ConnectionsPage() {
       force_path_style: Boolean(conn.force_path_style),
       verify_tls: conn.verify_tls !== false,
     };
-    const nextLinkedUserIds = normalizeLinkedUserIds(conn.user_ids);
-    const nextLinkedGroupIds = normalizeLinkedUserIds(conn.group_ids);
+    const nextLinkedUserIds = normalizeLinkedUserIds(conn.user_details?.map((user) => user.id));
+    const nextLinkedGroupIds = normalizeLinkedUserIds(conn.group_details?.map((group) => group.id));
     setEditing(conn);
     setEditEndpointMode(nextEndpointMode);
     setEditEndpointPresetId(nextEndpointPresetId);

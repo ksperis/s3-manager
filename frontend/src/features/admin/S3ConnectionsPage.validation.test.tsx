@@ -51,7 +51,6 @@ const makeConnection = (id: number, overrides?: Partial<Record<string, unknown>>
   created_by_user_id: 1,
   created_by_email: "owner@example.test",
   user_count: 0,
-  user_ids: [],
   ...overrides,
 });
 
