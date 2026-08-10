@@ -144,6 +144,23 @@ Deploy the migration and backend together. Saga replay and cleanup now reject
 any remaining malformed or non-string IAM state instead of coercing or dropping
 values at runtime. The data cleanup is not reversed on downgrade.
 
+## 2026-08 legacy Portal application settings
+
+Migration `0099_migrate_legacy_portal_app_settings` updates every database-backed
+application settings payload that still uses the former Portal contract. It
+renames `allow_portal_user_bucket_create` to
+`allow_private_storage_space_create` without overwriting an existing current
+value, and removes the obsolete `bucket_access_policy`,
+`iam_group_manager_policy`, and `iam_group_user_policy` fields. Deployments that
+already applied the equivalent manual repair are left unchanged.
+
+The migration validates all rows before writing any update. It stops explicitly
+when a payload or its `portal` section is not a JSON object, or when the legacy
+create setting is not a boolean. Restore or correct that source value before
+retrying the upgrade. The optional `APP_SETTINGS_PATH` bootstrap file is outside
+Alembic's database scope and must already use the current field names. Removed
+policy values and renamed settings are not reconstructed on downgrade.
+
 ## 2026-08 canonical UI-managed OIDC scopes
 
 Migration `0083_canonical_oidc_provider_scopes` rewrites every UI-managed OIDC
