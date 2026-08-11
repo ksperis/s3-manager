@@ -59,7 +59,12 @@ from app.services.bucket_listing_cache import (
 )
 from app.services.bucket_listing_shared import parse_includes
 from app.routers.browser_common import require_replication_feature, require_sse_feature
-from app.utils.http_errors import raise_bad_gateway_from_runtime
+from app.services.manager_bucket_compare_service import (
+    InvalidManagerBucketComparisonError,
+    compare_manager_buckets,
+    remediate_manager_bucket_comparison,
+)
+from app.utils.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.routers.manager.access import require_bucket_management_context
 from app.routers.dependencies import (
     get_account_context,
@@ -192,57 +197,17 @@ def compare_bucket_pair(
         db=db,
     )
 
-    source_context_id = source_account.context_id
-    target_context_id = target_account.context_id
-    same_context = bool(source_context_id and target_context_id and source_context_id == target_context_id)
-    if same_context and payload.source_bucket == payload.target_bucket:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="When source and target contexts are the same, source_bucket and target_bucket must differ.",
-        )
-
-    content_diff = None
-    config_diff = None
     try:
-        if payload.include_content:
-            content_diff = service.compare_bucket_content(
-                payload.source_bucket,
-                source_account,
-                payload.target_bucket,
-                target_account,
-                ignore_modified_after=payload.ignore_modified_after,
-            )
-        if payload.include_config:
-            config_diff = service.compare_bucket_configuration(
-                payload.source_bucket,
-                source_account,
-                payload.target_bucket,
-                target_account,
-                include_sections=set(payload.config_features) if payload.config_features is not None else None,
-            )
+        return compare_manager_buckets(
+            service=service,
+            payload=payload,
+            source_account=source_account,
+            target_account=target_account,
+        )
+    except InvalidManagerBucketComparisonError as exc:
+        raise_bad_request_from_value_error(exc)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
-
-    has_differences = bool(
-        (
-            content_diff is not None
-            and (
-                content_diff.different_count > 0
-                or content_diff.only_source_count > 0
-                or content_diff.only_target_count > 0
-            )
-        )
-        or (config_diff.changed if config_diff else False)
-    )
-    return ManagerBucketCompareResult(
-        source_context_id=source_context_id,
-        target_context_id=target_context_id,
-        source_bucket=payload.source_bucket,
-        target_bucket=payload.target_bucket,
-        has_differences=has_differences,
-        content_diff=content_diff,
-        config_diff=config_diff,
-    )
 
 
 @router.post("/compare/action", response_model=ManagerBucketCompareActionResult)
@@ -263,25 +228,15 @@ def run_compare_bucket_action(
         db=db,
     )
 
-    source_context_id = source_account.context_id
-    target_context_id = target_account.context_id
-    same_context = bool(source_context_id and target_context_id and source_context_id == target_context_id)
-    if same_context and payload.source_bucket == payload.target_bucket:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="When source and target contexts are the same, source_bucket and target_bucket must differ.",
-        )
-
     try:
-        action_result = service.run_compare_content_remediation(
-            payload.source_bucket,
-            source_account,
-            payload.target_bucket,
-            target_account,
-            action=payload.action,
-            object_keys=payload.object_keys,
-            parallelism=payload.parallelism,
+        outcome = remediate_manager_bucket_comparison(
+            service=service,
+            payload=payload,
+            source_account=source_account,
+            target_account=target_account,
         )
+    except InvalidManagerBucketComparisonError as exc:
+        raise_bad_request_from_value_error(exc)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
@@ -294,48 +249,9 @@ def run_compare_bucket_action(
         entity_type="bucket",
         entity_id=payload.target_bucket,
         account=source_account,
-        metadata={
-            "compare_action": payload.action,
-            "source_context_id": source_context_id,
-            "target_context_id": target_context_id,
-            "source_bucket": payload.source_bucket,
-            "target_bucket": payload.target_bucket,
-            "object_keys_count": len(payload.object_keys),
-            "object_keys_sample": payload.object_keys[:50],
-            "planned_count": action_result.planned_count,
-            "succeeded_count": action_result.succeeded_count,
-            "failed_count": action_result.failed_count,
-            "failed_keys_sample": action_result.failed_keys_sample,
-        },
+        metadata=outcome.audit_metadata,
     )
-
-    if action_result.planned_count == 0:
-        message = "No object matched this remediation action."
-    elif action_result.failed_count <= 0:
-        message = (
-            f"Action '{payload.action}' completed successfully: "
-            f"{action_result.succeeded_count}/{action_result.planned_count} object(s) processed."
-        )
-    elif action_result.succeeded_count <= 0:
-        message = f"Action '{payload.action}' failed for all {action_result.planned_count} object(s)."
-    else:
-        message = (
-            f"Action '{payload.action}' partially succeeded: {action_result.succeeded_count}/"
-            f"{action_result.planned_count} object(s) processed, {action_result.failed_count} failed."
-        )
-
-    return ManagerBucketCompareActionResult(
-        action=action_result.action,
-        source_context_id=source_context_id,
-        target_context_id=target_context_id,
-        source_bucket=payload.source_bucket,
-        target_bucket=payload.target_bucket,
-        planned_count=action_result.planned_count,
-        succeeded_count=action_result.succeeded_count,
-        failed_count=action_result.failed_count,
-        failed_keys_sample=action_result.failed_keys_sample,
-        message=message,
-    )
+    return outcome.result
 
 
 @router.get("/{bucket_name}/properties", response_model=BucketProperties)
