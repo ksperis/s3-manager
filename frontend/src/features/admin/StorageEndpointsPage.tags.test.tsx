@@ -220,6 +220,9 @@ describe("StorageEndpointsPage tags", () => {
     renderPage("/admin/storage-endpoints/7");
 
     expect(await screen.findByRole("heading", { name: "Storage endpoint · Ceph Endpoint" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText("Loading existing endpoint tags...")).not.toBeInTheDocument();
+    });
     expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByLabelText("Endpoint name")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("Endpoint name")).toBeEnabled();
