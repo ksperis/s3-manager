@@ -207,15 +207,15 @@ export default function BrowserObjectDetailsModal({
   const tagIdRef = useRef(0);
   const metadataIdRef = useRef(0);
 
-  const nextTagId = () => {
+  const nextTagId = useCallback(() => {
     tagIdRef.current += 1;
     return `tag-${tagIdRef.current}`;
-  };
+  }, []);
 
-  const nextMetadataId = () => {
+  const nextMetadataId = useCallback(() => {
     metadataIdRef.current += 1;
     return `meta-${metadataIdRef.current}`;
-  };
+  }, []);
 
   const versionRows = useMemo(
     () => buildVersionRows(versions, deleteMarkers),
@@ -253,58 +253,60 @@ export default function BrowserObjectDetailsModal({
     setActionTone(tone);
   };
 
-  const resetPropertiesDrafts = (
-    nextMetadata: ObjectMetadata | null,
-    baseItem: BrowserItem = itemSnapshot,
-  ) => {
-    if (!nextMetadata) {
+  const resetPropertiesDrafts = useCallback(
+    (nextMetadata: ObjectMetadata | null, baseItem: BrowserItem) => {
+      if (!nextMetadata) {
+        setMetadataDraft({
+          contentType: "",
+          cacheControl: "",
+          contentDisposition: "",
+          contentEncoding: "",
+          contentLanguage: "",
+          expires: "",
+        });
+        setMetadataItems([]);
+        setStorageClass(baseItem.storageClass ?? "");
+        return;
+      }
       setMetadataDraft({
-        contentType: "",
-        cacheControl: "",
-        contentDisposition: "",
-        contentEncoding: "",
-        contentLanguage: "",
-        expires: "",
+        contentType: nextMetadata.content_type ?? "",
+        cacheControl: nextMetadata.cache_control ?? "",
+        contentDisposition: nextMetadata.content_disposition ?? "",
+        contentEncoding: nextMetadata.content_encoding ?? "",
+        contentLanguage: nextMetadata.content_language ?? "",
+        expires: formatLocalDateTime(nextMetadata.expires),
       });
-      setMetadataItems([]);
-      setStorageClass(baseItem.storageClass ?? "");
-      return;
-    }
-    setMetadataDraft({
-      contentType: nextMetadata.content_type ?? "",
-      cacheControl: nextMetadata.cache_control ?? "",
-      contentDisposition: nextMetadata.content_disposition ?? "",
-      contentEncoding: nextMetadata.content_encoding ?? "",
-      contentLanguage: nextMetadata.content_language ?? "",
-      expires: formatLocalDateTime(nextMetadata.expires),
-    });
-    setMetadataItems(
-      Object.entries(nextMetadata.metadata || {}).map(([key, value]) => ({
-        id: nextMetadataId(),
-        key,
-        value,
-      })),
-    );
-    setStorageClass(nextMetadata.storage_class ?? baseItem.storageClass ?? "");
-  };
+      setMetadataItems(
+        Object.entries(nextMetadata.metadata || {}).map(([key, value]) => ({
+          id: nextMetadataId(),
+          key,
+          value,
+        })),
+      );
+      setStorageClass(nextMetadata.storage_class ?? baseItem.storageClass ?? "");
+    },
+    [nextMetadataId],
+  );
 
-  const resetTagsDraft = (nextTags: ObjectTag[]) => {
-    setTagsDraft(
-      nextTags.map((tag) => ({
-        id: nextTagId(),
-        key: tag.key,
-        value: tag.value,
-      })),
-    );
-  };
+  const resetTagsDraft = useCallback(
+    (nextTags: ObjectTag[]) => {
+      setTagsDraft(
+        nextTags.map((tag) => ({
+          id: nextTagId(),
+          key: tag.key,
+          value: tag.value,
+        })),
+      );
+    },
+    [nextTagId],
+  );
 
-  const loadProperties = async (force = false) => {
+  const performLoadProperties = useCallback(async (force = false) => {
     if (
       !bucketName ||
       !accountId ||
       itemSnapshot.type !== "file" ||
-      isDeletedCurrent ||
-      (!force && (metadataLoading || metadataLoaded))
+      isDeletedCurrent
     ) {
       return;
     }
@@ -337,70 +339,99 @@ export default function BrowserObjectDetailsModal({
     } finally {
       setMetadataLoading(false);
     }
-  };
+  }, [
+    accountId,
+    bucketName,
+    isDeletedCurrent,
+    itemSnapshot,
+    requestOptions,
+    resetPropertiesDrafts,
+    resetTagsDraft,
+    sseCustomerKeyBase64,
+  ]);
 
-  const loadVersions = async (options?: {
-    append?: boolean;
-    keyMarker?: string | null;
-    versionIdMarker?: string | null;
-    force?: boolean;
-  }) => {
-    if (
-      !bucketName ||
-      !accountId ||
-      !versioningEnabled ||
-      itemSnapshot.type !== "file" ||
-      (versionsLoading && !options?.force)
-    ) {
-      return;
-    }
-    const append = Boolean(options?.append);
-    if (!append) {
-      setVersionsError(null);
-    }
-    setVersionsLoading(true);
-    try {
-      const data = await listObjectVersions(accountId, bucketName, {
-        key: itemSnapshot.key,
-        keyMarker: append ? options?.keyMarker ?? versionKeyMarker : null,
-        versionIdMarker: append ? options?.versionIdMarker ?? versionIdMarker : null,
-        maxKeys: undefined,
-        requestOptions,
-      });
-      setVersions((prev) =>
-        append ? [...prev, ...(data.versions ?? [])] : data.versions ?? [],
-      );
-      setDeleteMarkers((prev) =>
-        append
-          ? [...prev, ...(data.delete_markers ?? [])]
-          : data.delete_markers ?? [],
-      );
-      setVersionKeyMarker(data.next_key_marker ?? null);
-      setVersionIdMarker(data.next_version_id_marker ?? null);
-      setVersionsLoaded(true);
-    } catch (err) {
-      setVersionsError(extractApiError(err, "Unable to load versions."));
+  const loadProperties = useCallback(
+    async (force = false) => {
+      if (!force && (metadataLoading || metadataLoaded)) return;
+      await performLoadProperties(force);
+    },
+    [metadataLoaded, metadataLoading, performLoadProperties],
+  );
+
+  const performLoadVersions = useCallback(
+    async (options?: {
+      append?: boolean;
+      keyMarker?: string | null;
+      versionIdMarker?: string | null;
+    }) => {
+      if (!bucketName || !accountId || !versioningEnabled || itemSnapshot.type !== "file") return;
+      const append = Boolean(options?.append);
       if (!append) {
-        setVersions([]);
-        setDeleteMarkers([]);
-        setVersionKeyMarker(null);
-        setVersionIdMarker(null);
+        setVersionsError(null);
       }
-    } finally {
-      setVersionsLoading(false);
-    }
-  };
+      setVersionsLoading(true);
+      try {
+        const data = await listObjectVersions(accountId, bucketName, {
+          key: itemSnapshot.key,
+          keyMarker: append ? options?.keyMarker ?? versionKeyMarker : null,
+          versionIdMarker: append ? options?.versionIdMarker ?? versionIdMarker : null,
+          maxKeys: undefined,
+          requestOptions,
+        });
+        setVersions((prev) =>
+          append ? [...prev, ...(data.versions ?? [])] : data.versions ?? [],
+        );
+        setDeleteMarkers((prev) =>
+          append
+            ? [...prev, ...(data.delete_markers ?? [])]
+            : data.delete_markers ?? [],
+        );
+        setVersionKeyMarker(data.next_key_marker ?? null);
+        setVersionIdMarker(data.next_version_id_marker ?? null);
+        setVersionsLoaded(true);
+      } catch (err) {
+        setVersionsError(extractApiError(err, "Unable to load versions."));
+        if (!append) {
+          setVersions([]);
+          setDeleteMarkers([]);
+          setVersionKeyMarker(null);
+          setVersionIdMarker(null);
+        }
+      } finally {
+        setVersionsLoading(false);
+      }
+    },
+    [
+      accountId,
+      bucketName,
+      itemSnapshot.key,
+      itemSnapshot.type,
+      requestOptions,
+      versionIdMarker,
+      versionKeyMarker,
+      versioningEnabled,
+    ],
+  );
 
-  const loadProtection = async (force = false) => {
+  const loadVersions = useCallback(
+    async (options?: {
+      append?: boolean;
+      keyMarker?: string | null;
+      versionIdMarker?: string | null;
+      force?: boolean;
+    }) => {
+      if (versionsLoading && !options?.force) return;
+      await performLoadVersions(options);
+    },
+    [performLoadVersions, versionsLoading],
+  );
+
+  const performLoadProtection = useCallback(async (force = false) => {
     if (
       !bucketName ||
       !accountId ||
       itemSnapshot.type !== "file" ||
-      isDeletedCurrent ||
-      (!force &&
-        ((legalHoldLoaded && retentionLoaded) ||
-          legalHoldLoading ||
-          retentionLoading))
+      isDeletedCurrent
     ) {
       return;
     }
@@ -479,7 +510,34 @@ export default function BrowserObjectDetailsModal({
         setRetentionError(null);
       }
     }
-  };
+  }, [
+    accountId,
+    bucketName,
+    isDeletedCurrent,
+    itemSnapshot.key,
+    itemSnapshot.type,
+    requestOptions,
+    versionId,
+  ]);
+
+  const loadProtection = useCallback(
+    async (force = false) => {
+      if (
+        !force &&
+        ((legalHoldLoaded && retentionLoaded) || legalHoldLoading || retentionLoading)
+      ) {
+        return;
+      }
+      await performLoadProtection(force);
+    },
+    [
+      legalHoldLoaded,
+      legalHoldLoading,
+      performLoadProtection,
+      retentionLoaded,
+      retentionLoading,
+    ],
+  );
 
   const loadObjectPreview = useCallback(
     async (signal: AbortSignal): Promise<ObjectPreviewLoadResult> => {
@@ -608,9 +666,7 @@ export default function BrowserObjectDetailsModal({
     setPresignHeaders(null);
     setPresignError(null);
     setSavingVersionAction(false);
-    // Draft reset is intentionally tied to modal target changes, not helper identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialTab, item]);
+  }, [initialTab, item, resetPropertiesDrafts, resetTagsDraft]);
 
   useEffect(() => {
     if (!versioningEnabled && activeTab === "versions") {
@@ -627,25 +683,26 @@ export default function BrowserObjectDetailsModal({
 
   useEffect(() => {
     if (activeTab === "versions" && versioningEnabled && !versionsLoaded) {
-      void loadVersions();
+      void performLoadVersions();
     }
     if (
       (activeTab === "properties" || activeTab === "archive") &&
       !metadataLoaded &&
       !isDeletedCurrent
     ) {
-      void loadProperties();
+      void performLoadProperties();
     }
     if (activeTab === "protection" && !isDeletedCurrent) {
-      void loadProtection();
+      void performLoadProtection();
     }
     return undefined;
-    // Lazy loading is driven by tab transitions and modal state, not helper identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeTab,
     isDeletedCurrent,
     metadataLoaded,
+    performLoadProperties,
+    performLoadProtection,
+    performLoadVersions,
     versioningEnabled,
     versionsLoaded,
   ]);
