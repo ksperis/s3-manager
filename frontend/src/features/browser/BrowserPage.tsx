@@ -22,8 +22,6 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router-dom";
-import JSZip from "jszip";
-import { ZipWriter } from "@zip.js/zip.js";
 import axios, { type AxiosProgressEvent } from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -150,6 +148,11 @@ import {
   readBrowserTransferBlob,
   readBrowserTransferStream,
 } from "./browserFetchTransferResponse";
+import {
+  buildBrowserFolderDownloadPlan,
+  downloadBrowserFolderArchive,
+  resolveBrowserFolderArchiveLabel,
+} from "./browserFolderDownload";
 import {
   BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES,
   buildBucketInspectorFeatures,
@@ -8198,9 +8201,10 @@ export default function BrowserPage({
     showOperationsBar();
     setWarningMessage(null);
     const folderPrefix = normalizePrefix(folderItem.key);
-    const rawLabel =
-      folderItem.name || folderPrefix.replace(/\/$/, "") || "folder";
-    const folderLabel = rawLabel.replace(/[\\/]/g, "-") || "folder";
+    const folderLabel = resolveBrowserFolderArchiveLabel(
+      folderItem.name,
+      folderPrefix,
+    );
     const operationId = startOperation(
       "downloading",
       "Preparing download",
@@ -8217,46 +8221,25 @@ export default function BrowserPage({
         setStatusMessage(`Download cancelled for ${folderLabel}`);
         return;
       }
-      const downloadTargets = objects
-        .map((obj) => {
-          const relativeKey = obj.key.startsWith(folderPrefix)
-            ? obj.key.slice(folderPrefix.length)
-            : obj.key;
-          if (!relativeKey) return null;
-          if (relativeKey.endsWith("/") && (obj.size ?? 0) === 0) return null;
-          return {
-            obj,
-            relativeKey,
-            detailId: makeId(),
-          };
-        })
-        .filter(
-          (
-            entry,
-          ): entry is {
-            obj: BrowserObject;
-            relativeKey: string;
-            detailId: string;
-          } => Boolean(entry),
-        );
-      if (downloadTargets.length === 0) {
+      const plan = buildBrowserFolderDownloadPlan(
+        objects,
+        folderPrefix,
+        makeId,
+      );
+      if (plan.targets.length === 0) {
         setStatusMessage("Folder is empty.");
         return;
       }
       setDownloadDetails((prev) => ({
         ...prev,
-        [operationId]: downloadTargets.map((target) => ({
+        [operationId]: plan.targets.map((target) => ({
           id: target.detailId,
-          key: target.obj.key,
+          key: target.key,
           label: target.relativeKey,
           status: "queued",
-          sizeBytes: target.obj.size,
+          sizeBytes: target.sizeBytes,
         })),
       }));
-      const totalBytes = downloadTargets.reduce(
-        (sum, target) => sum + (target.obj.size ?? 0),
-        0,
-      );
       const streamingZipThresholdBytes =
         Math.max(
           0,
@@ -8265,232 +8248,48 @@ export default function BrowserPage({
         ) *
         1024 *
         1024;
-      const totalCount = downloadTargets.length;
-      let downloadedBytes = 0;
-      let completed = 0;
-      let aborted = false;
-      const errors: string[] = [];
-
-      const updateProgress = () => {
-        const base =
-          totalBytes > 0
-            ? downloadedBytes / totalBytes
-            : completed / totalCount;
-        const percent = Math.min(80, Math.round(base * 80));
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === operationId ? { ...op, progress: percent } : op,
+      const archiveResult = await downloadBrowserFolderArchive({
+        controller,
+        downloadBlob: downloadObjectBlob,
+        downloadStream: downloadObjectStream,
+        folderLabel,
+        onDetailChange: (detailId, status, errorMessage) =>
+          updateDownloadDetail(
+            operationId,
+            detailId,
+            status,
+            errorMessage,
           ),
-        );
-      };
-
-      const saveFilePicker =
-        typeof window !== "undefined"
-          ? (
-              window as Window & {
-                showSaveFilePicker?: (options?: unknown) => Promise<unknown>;
-              }
-            ).showSaveFilePicker
-          : undefined;
-      const supportsStreamingZip = Boolean(
-        saveFilePicker &&
-        typeof ReadableStream !== "undefined" &&
-        typeof WritableStream !== "undefined" &&
-        typeof TransformStream !== "undefined",
-      );
-      const shouldStreamZip =
-        supportsStreamingZip && totalBytes >= streamingZipThresholdBytes;
-
-      if (shouldStreamZip && saveFilePicker) {
-        let fileStream:
-          | (WritableStream<Uint8Array> & { abort?: () => Promise<void> })
-          | null = null;
-        let zipWriter: ZipWriter<Uint8Array> | null = null;
-        try {
-          const handle = (await saveFilePicker({
-            suggestedName: `${folderLabel}.zip`,
-            types: [
-              {
-                description: "ZIP archive",
-                accept: { "application/zip": [".zip"] },
-              },
-            ],
-          })) as { createWritable: () => Promise<WritableStream<Uint8Array>> };
-          fileStream =
-            (await handle.createWritable()) as WritableStream<Uint8Array> & {
-              abort?: () => Promise<void>;
-            };
-          zipWriter = new ZipWriter(fileStream);
-        } catch (err) {
-          if (isAbortError(err)) {
-            completionStatus = "cancelled";
-            setStatusMessage(`Download cancelled for ${folderLabel}`);
-            cancelDownloadDetails(operationId);
-            return;
-          }
-          throw err;
-        }
-
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === operationId ? { ...op, label: "Streaming zip" } : op,
+        onPhaseChange: (label) =>
+          setOperations((prev) =>
+            prev.map((operation) =>
+              operation.id === operationId
+                ? { ...operation, label }
+                : operation,
+            ),
           ),
-        );
-
-        for (const target of downloadTargets) {
-          if (controller.signal.aborted) {
-            aborted = true;
-            break;
-          }
-          updateDownloadDetail(operationId, target.detailId, "downloading");
-          try {
-            const stream = await downloadObjectStream(
-              target.obj.key,
-              controller.signal,
-            );
-            const counter = new TransformStream<Uint8Array, Uint8Array>({
-              transform(chunk, streamController) {
-                downloadedBytes += chunk.byteLength;
-                updateProgress();
-                streamController.enqueue(chunk);
-              },
-            });
-            await zipWriter.add(
-              `${folderLabel}/${target.relativeKey}`,
-              stream.pipeThrough(counter),
-            );
-            updateDownloadDetail(operationId, target.detailId, "done");
-          } catch (err) {
-            if (isAbortError(err) || controller.signal.aborted) {
-              updateDownloadDetail(operationId, target.detailId, "cancelled");
-              aborted = true;
-              controller.abort();
-              break;
-            }
-            console.error(err);
-            updateDownloadDetail(
-              operationId,
-              target.detailId,
-              "failed",
-              formatOperationError(err, "Download failed."),
-            );
-            errors.push(target.obj.key);
-          } finally {
-            completed += 1;
-            if (totalBytes <= 0) {
-              updateProgress();
-            }
-          }
-        }
-
-        if (aborted || controller.signal.aborted) {
-          completionStatus = "cancelled";
-          setStatusMessage(`Download cancelled for ${folderLabel}`);
-          cancelDownloadDetails(operationId);
-          if (fileStream?.abort) {
-            await fileStream.abort();
-          }
-          return;
-        }
-
-        if (zipWriter) {
-          await zipWriter.close();
-        }
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === operationId ? { ...op, progress: 100 } : op,
+        onProgress: (progress) =>
+          setOperations((prev) =>
+            prev.map((operation) =>
+              operation.id === operationId
+                ? { ...operation, progress }
+                : operation,
+            ),
           ),
-        );
-      } else {
-        const zip = new JSZip();
-        const queue = [...downloadTargets];
-        const workerCount = Math.max(
-          1,
-          Math.min(downloadParallelismRef.current, queue.length),
-        );
-        const workers = Array.from({ length: workerCount }, async () => {
-          while (queue.length > 0 && !aborted) {
-            if (controller.signal.aborted) {
-              aborted = true;
-              return;
-            }
-            const obj = queue.shift();
-            if (!obj) return;
-            updateDownloadDetail(operationId, obj.detailId, "downloading");
-            try {
-              const blob = await downloadObjectBlob(
-                obj.obj.key,
-                controller.signal,
-              );
-              zip.file(`${folderLabel}/${obj.relativeKey}`, blob);
-              updateDownloadDetail(operationId, obj.detailId, "done");
-            } catch (err) {
-              if (isAbortError(err) || controller.signal.aborted) {
-                updateDownloadDetail(operationId, obj.detailId, "cancelled");
-                aborted = true;
-                controller.abort();
-                return;
-              }
-              console.error(err);
-              updateDownloadDetail(
-                operationId,
-                obj.detailId,
-                "failed",
-                formatOperationError(err, "Download failed."),
-              );
-              errors.push(obj.obj.key);
-            } finally {
-              completed += 1;
-              downloadedBytes += obj.obj.size ?? 0;
-              updateProgress();
-            }
-          }
-        });
-        await Promise.all(workers);
-
-        if (aborted || controller.signal.aborted) {
-          completionStatus = "cancelled";
-          setStatusMessage(`Download cancelled for ${folderLabel}`);
-          cancelDownloadDetails(operationId);
-          return;
-        }
-
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === operationId ? { ...op, label: "Packaging zip" } : op,
-          ),
-        );
-        const zipBlob = await zip.generateAsync(
-          { type: "blob" },
-          (metadata) => {
-            const percent = Math.min(
-              99,
-              80 + Math.round(metadata.percent * 0.2),
-            );
-            setOperations((prev) =>
-              prev.map((op) =>
-                op.id === operationId ? { ...op, progress: percent } : op,
-              ),
-            );
-          },
-        );
-        if (controller.signal.aborted) {
-          setStatusMessage(`Download cancelled for ${folderLabel}`);
-          cancelDownloadDetails(operationId);
-          return;
-        }
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === operationId ? { ...op, progress: 100 } : op,
-          ),
-        );
-
-        triggerBlobDownload(`${folderLabel}.zip`, zipBlob);
+        parallelism: downloadParallelismRef.current,
+        streamingThresholdBytes: streamingZipThresholdBytes,
+        targets: plan.targets,
+        totalBytes: plan.totalBytes,
+      });
+      if (archiveResult.cancelled) {
+        completionStatus = "cancelled";
+        setStatusMessage(`Download cancelled for ${folderLabel}`);
+        cancelDownloadDetails(operationId);
+        return;
       }
-
-      if (errors.length > 0) {
+      if (archiveResult.failedKeys.length > 0) {
         completionStatus = "failed";
-        completionError = `Downloaded ${folderLabel} with ${errors.length} failed file(s).`;
+        completionError = `Downloaded ${folderLabel} with ${archiveResult.failedKeys.length} failed file(s).`;
         setStatusMessage(completionError);
       } else {
         setStatusMessage(`Downloaded ${folderLabel}`);
