@@ -47,7 +47,7 @@ settings = get_settings()
 
 
 class EnvStorageEndpoint(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     endpoint_url: str

@@ -471,6 +471,28 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
     assert calls["count"] == 0
 
 
+def test_environment_storage_endpoint_rejects_unknown_fields(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.settings.env_storage_endpoints",
+        json.dumps(
+            [
+                {
+                    "name": "ceph-env",
+                    "endpoint_url": "https://ceph-env.example.test",
+                    "obsolete_field": True,
+                }
+            ]
+        ),
+        raising=False,
+    )
+
+    with pytest.raises(ValueError, match="Invalid ENV_STORAGE_ENDPOINTS entry at index 0") as exc_info:
+        StorageEndpointsService(db_session).sync_env_endpoints()
+
+    assert isinstance(exc_info.value.__cause__, ValidationError)
+    assert "obsolete_field" in str(exc_info.value.__cause__)
+
+
 def test_sync_env_endpoints_retries_after_concurrent_unique_conflict(db_session, monkeypatch):
     monkeypatch.setattr(
         "app.services.storage_endpoints_service.settings.env_storage_endpoints",

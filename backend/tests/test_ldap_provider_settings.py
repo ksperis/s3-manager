@@ -5,8 +5,10 @@ from __future__ import annotations
 from importlib import util
 from pathlib import Path
 
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from pydantic import ValidationError
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text
 
@@ -31,6 +33,14 @@ def _provider_settings(*, enabled: bool = True, display_name: str = "Corporate L
         user_base_dn="ou=people,dc=example,dc=test",
         enabled=enabled,
     )
+
+
+def test_environment_ldap_provider_rejects_unknown_fields():
+    payload = _provider_settings().model_dump()
+    payload["obsolete_field"] = True
+
+    with pytest.raises(ValidationError, match="obsolete_field"):
+        Settings(ldap_providers={"corp": payload})
 
 
 def _ui_provider(provider_id: str, *, enabled: bool = True, display_name: str | None = None) -> LdapProvider:

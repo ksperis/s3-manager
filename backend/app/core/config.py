@@ -20,7 +20,7 @@ from app.utils.ldap_validation import (
 
 
 class OIDCProviderSettings(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     display_name: str
     discovery_url: str
@@ -51,7 +51,7 @@ class OIDCProviderSettings(BaseModel):
 
 
 class LDAPProviderSettings(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     display_name: str
     url: str

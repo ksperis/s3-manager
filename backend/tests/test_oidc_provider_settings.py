@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from pydantic import ValidationError
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text
 
@@ -34,6 +35,14 @@ def _provider_settings(*, enabled: bool = True, display_name: str = "Google") ->
         scopes=["openid", "email", "profile"],
         enabled=enabled,
     )
+
+
+def test_environment_oidc_provider_rejects_unknown_fields():
+    payload = _provider_settings().model_dump()
+    payload["obsolete_field"] = True
+
+    with pytest.raises(ValidationError, match="obsolete_field"):
+        Settings(oidc_providers={"google": payload})
 
 
 def _ui_provider(provider_id: str, *, enabled: bool = True, display_name: str | None = None) -> OidcProvider:

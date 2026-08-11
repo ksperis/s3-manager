@@ -1,5 +1,13 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 strict environment-managed provider configuration
+
+Entries nested under `OIDC_PROVIDERS`, `LDAP_PROVIDERS`, and
+`ENV_STORAGE_ENDPOINTS` now reject unknown fields instead of silently ignoring
+them. Before deploying, remove obsolete fields and correct misspelled names in
+those environment values. Valid configurations and the top-level handling of
+unrelated process environment variables are unchanged.
+
 ## 2026-08 Clipboard API requirement
 
 Frontend copy actions now rely exclusively on the browser Clipboard API. The
