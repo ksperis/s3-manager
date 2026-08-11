@@ -41,6 +41,7 @@ import {
 } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
+import { runWithConcurrency } from "../../utils/concurrency";
 import { triggerBlobDownload } from "../../utils/download";
 import {
   CLIENT_STORAGE_KEYS,
@@ -7241,11 +7242,10 @@ export default function BrowserPage({
       );
       uploadId = init.upload_id;
       let hasError = false;
-      const workerCount = Math.min(MULTIPART_CONCURRENCY, partsQueue.length);
-      const workers = Array.from({ length: workerCount }, async () => {
-        while (partsQueue.length > 0 && !hasError) {
-          const part = partsQueue.shift();
-          if (!part) return;
+      await runWithConcurrency(
+        partsQueue,
+        MULTIPART_CONCURRENCY,
+        async (part) => {
           try {
             await uploadPart(part);
           } catch (err) {
@@ -7253,9 +7253,9 @@ export default function BrowserPage({
             controller.abort();
             throw err;
           }
-        }
-      });
-      await Promise.all(workers);
+        },
+        () => hasError,
+      );
       setOperations((prev) =>
         prev.map((op) =>
           op.id === operationId ? { ...op, progress: 95 } : op,
@@ -7984,19 +7984,14 @@ export default function BrowserPage({
     const chunks = chunkItems(uniqueKeys, 1000);
     let deletedCount = 0;
     let hasError: unknown = null;
-    const queue = [...chunks];
-    const workerCount = Math.max(
-      1,
-      Math.min(otherOperationsParallelismRef.current, queue.length),
-    );
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (queue.length > 0 && !hasError) {
+    await runWithConcurrency(
+      chunks,
+      otherOperationsParallelismRef.current,
+      async (chunk) => {
         if (signal?.aborted) {
           hasError = new DOMException("Aborted", "AbortError");
           return;
         }
-        const chunk = queue.shift();
-        if (!chunk) return;
         try {
           if (detailOperationId) {
             updateDeleteDetailsStatus(detailOperationId, chunk, "deleting");
@@ -8038,9 +8033,9 @@ export default function BrowserPage({
           }
           hasError = err;
         }
-      }
-    });
-    await Promise.all(workers);
+      },
+      () => Boolean(hasError),
+    );
     if (hasError) {
       throw hasError;
     }
@@ -8369,19 +8364,14 @@ export default function BrowserPage({
     };
 
     try {
-      const queue = [...downloadTargets];
-      const workerCount = Math.max(
-        1,
-        Math.min(downloadParallelismRef.current, queue.length),
-      );
-      const workers = Array.from({ length: workerCount }, async () => {
-        while (queue.length > 0 && !aborted) {
+      await runWithConcurrency(
+        downloadTargets,
+        downloadParallelismRef.current,
+        async (target) => {
           if (controller.signal.aborted) {
             aborted = true;
             return;
           }
-          const target = queue.shift();
-          if (!target) return;
           updateDownloadDetail(operationId, target.detailId, "downloading");
           const reportedTransferId = startReportedTransfer({
             direction: "Download",
@@ -8421,9 +8411,9 @@ export default function BrowserPage({
             downloadedBytes += target.item.sizeBytes ?? 0;
             updateProgress();
           }
-        }
-      });
-      await Promise.all(workers);
+        },
+        () => aborted,
+      );
       if (aborted || controller.signal.aborted) {
         completionStatus = "cancelled";
         setStatusMessage("Download cancelled.");
@@ -8895,19 +8885,14 @@ export default function BrowserPage({
         }
       };
 
-      const queue = [...keys];
-      const workerCount = Math.max(
-        1,
-        Math.min(otherOperationsParallelismRef.current, queue.length),
-      );
-      const workers = Array.from({ length: workerCount }, async () => {
-        while (queue.length > 0 && !cancelled) {
+      await runWithConcurrency(
+        keys,
+        otherOperationsParallelismRef.current,
+        async (key) => {
           if (controller?.signal.aborted) {
             cancelled = true;
             return;
           }
-          const key = queue.shift();
-          if (!key) return;
           try {
             await applyForKey(key);
             succeeded += 1;
@@ -8921,9 +8906,9 @@ export default function BrowserPage({
             completed += 1;
             updateProgress();
           }
-        }
-      });
-      await Promise.all(workers);
+        },
+        () => cancelled,
+      );
       if (cancelled || controller?.signal.aborted) {
         const summary = `Update cancelled after ${succeeded} of ${total} item(s).`;
         completeOperation(operationId, "cancelled");
@@ -9061,19 +9046,14 @@ export default function BrowserPage({
       };
 
       if (restoreList.length > 0) {
-        const queue = [...restoreList];
-        const workerCount = Math.max(
-          1,
-          Math.min(otherOperationsParallelismRef.current, queue.length),
-        );
-        const workers = Array.from({ length: workerCount }, async () => {
-          while (queue.length > 0 && !cancelled) {
+        await runWithConcurrency(
+          restoreList,
+          otherOperationsParallelismRef.current,
+          async (item) => {
             if (controller?.signal.aborted) {
               cancelled = true;
               return;
             }
-            const item = queue.shift();
-            if (!item) return;
             try {
               await copyObject(accountIdForApi, bucketName, {
                 source_key: item.key,
@@ -9093,9 +9073,9 @@ export default function BrowserPage({
               completed += 1;
               updateProgress(completed);
             }
-          }
-        });
-        await Promise.all(workers);
+          },
+          () => cancelled,
+        );
       }
 
       if (!cancelled && deleteList.length > 0) {
@@ -9419,7 +9399,6 @@ export default function BrowserPage({
     };
 
     try {
-      const queue = [...copyTasks];
       const transferModeCache = new Map<
         string,
         Promise<ClipboardTransferMode>
@@ -9437,18 +9416,14 @@ export default function BrowserPage({
         transferModeCache.set(cacheKey, request);
         return request;
       };
-      const workerCount = Math.max(
-        1,
-        Math.min(otherOperationsParallelismRef.current, queue.length),
-      );
-      const workers = Array.from({ length: workerCount }, async () => {
-        while (queue.length > 0 && !cancelled) {
+      await runWithConcurrency(
+        copyTasks,
+        otherOperationsParallelismRef.current,
+        async (task) => {
           if (controller.signal.aborted) {
             cancelled = true;
             return;
           }
-          const task = queue.shift();
-          if (!task) return;
           try {
             updateCopyDetailStatus(operationId, task.detailId, "copying");
             if (useServerSideCopy) {
@@ -9544,9 +9519,9 @@ export default function BrowserPage({
             completed += 1;
             updateProgress();
           }
-        }
-      });
-      await Promise.all(workers);
+        },
+        () => cancelled,
+      );
 
       if (cancelled || controller.signal.aborted) {
         cancelCopyDetails(operationId);

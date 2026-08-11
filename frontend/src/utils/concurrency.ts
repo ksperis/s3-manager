@@ -8,6 +8,28 @@ const normalizeConcurrencyLimit = (limit: number): number => {
   return Math.max(1, Math.floor(limit));
 };
 
+export const runWithConcurrency = async <T>(
+  items: readonly T[],
+  limit: number,
+  handler: (item: T, index: number) => Promise<void>,
+  shouldStop: () => boolean = () => false,
+): Promise<void> => {
+  let cursor = 0;
+  const workerCount = Math.min(
+    normalizeConcurrencyLimit(limit),
+    items.length,
+  );
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (!shouldStop()) {
+      const index = cursor;
+      if (index >= items.length) return;
+      cursor += 1;
+      await handler(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+};
+
 export const runWithConcurrencySettled = async <T, R>(
   items: readonly T[],
   limit: number,

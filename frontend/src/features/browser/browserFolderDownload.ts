@@ -6,6 +6,7 @@ import { ZipWriter } from "@zip.js/zip.js";
 import JSZip from "jszip";
 
 import type { BrowserObject } from "../../api/browser";
+import { runWithConcurrency } from "../../utils/concurrency";
 import { triggerBlobDownload } from "../../utils/download";
 import { formatBrowserOperationError } from "./browserOperationErrors";
 import type { DownloadDetailStatus } from "./browserTypes";
@@ -209,22 +210,14 @@ export const downloadBrowserFolderArchive = async ({
   }
 
   const zip = new JSZip();
-  const queue = [...targets];
-  const normalizedParallelism = Number.isFinite(parallelism)
-    ? Math.max(1, Math.floor(parallelism))
-    : 1;
-  const workerCount = Math.max(
-    1,
-    Math.min(normalizedParallelism, queue.length),
-  );
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (queue.length > 0 && !aborted) {
+  await runWithConcurrency(
+    targets,
+    parallelism,
+    async (target) => {
       if (controller.signal.aborted) {
         aborted = true;
         return;
       }
-      const target = queue.shift();
-      if (!target) return;
       onDetailChange(target.detailId, "downloading");
       try {
         const blob = await downloadBlob(target.key, controller.signal);
@@ -249,9 +242,9 @@ export const downloadBrowserFolderArchive = async ({
         downloadedBytes += target.sizeBytes;
         updateTransferProgress();
       }
-    }
-  });
-  await Promise.all(workers);
+    },
+    () => aborted,
+  );
 
   if (aborted || controller.signal.aborted) {
     return { cancelled: true, failedKeys };
