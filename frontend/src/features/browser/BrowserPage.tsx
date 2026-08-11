@@ -53,10 +53,7 @@ import {
 } from "../../utils/s3BucketName";
 import { stableSignature } from "../../utils/stableSignature";
 import { readStoredUser } from "../../utils/workspaces";
-import {
-  withS3AccountParam,
-  type S3AccountSelector,
-} from "../../api/accountParams";
+import type { S3AccountSelector } from "../../api/accountParams";
 import type { ExecutionContextKind } from "../../api/executionContexts";
 import {
   BrowserBucket,
@@ -72,7 +69,6 @@ import {
   PresignRequest,
   StsCredentials,
   StsStatus,
-  buildBrowserFetchHeaders,
   copyObject,
   cleanupObjectVersions,
   createFolder,
@@ -98,13 +94,11 @@ import {
   fetchBrowserSettings,
   presignPart,
   presignObject,
-  proxyDownload,
   proxyUpload,
   completeMultipartUpload,
   createBrowserBucket,
   abortMultipartUpload,
 } from "../../api/browser";
-import { buildApiUrl } from "../../api/client";
 import { useBrowserContext } from "./BrowserContext";
 import {
   useBrowserSidebarSlot,
@@ -144,11 +138,6 @@ import {
 } from "./BrowserBucketDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
 import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
-import {
-  ensureSuccessfulBrowserTransferResponse,
-  readBrowserTransferBlob,
-  readBrowserTransferStream,
-} from "./browserFetchTransferResponse";
 import {
   buildBrowserFolderDownloadPlan,
   downloadBrowserFolderArchive,
@@ -352,6 +341,11 @@ import {
 import { resolveBrowserWorkspaceContext } from "./browserPageContextModel";
 import { buildBulkRestorePlan } from "./browserBulkRestorePlan";
 import { uploadBrowserFile } from "./browserFileUpload";
+import {
+  downloadBrowserTransferBlob,
+  downloadBrowserTransferStream,
+  uploadBrowserTransferBlob,
+} from "./browserObjectTransferTransport";
 import {
   uploadBrowserFileMultipart,
   uploadBrowserStreamMultipart,
@@ -7362,26 +7356,16 @@ export default function BrowserPage({
     if (!bucketName || !hasS3AccountContext) {
       throw new Error("Missing bucket context.");
     }
-    if (useProxyTransfers) {
-      return proxyDownload(
-        accountIdForApi,
-        bucketName,
-        key,
-        signal,
-        sseCustomerKeyBase64,
-        browserRequestOptions,
-      );
-    }
-    const presign = await presignObjectRequest(bucketName, {
+    return downloadBrowserTransferBlob({
+      selector: accountIdForApi,
+      bucket: bucketName,
       key,
-      operation: "get_object",
-      expires_in: 900,
-    });
-    const response = await fetch(presign.url, {
-      headers: presign.headers || undefined,
+      mode: useProxyTransfers ? "proxy" : "direct",
       signal,
+      sseCustomerKeyBase64,
+      options: browserRequestOptions,
+      directPresign: (payload) => presignObjectRequest(bucketName, payload),
     });
-    return readBrowserTransferBlob(response, `Download failed for ${key}`);
   }
 
   const downloadObjectStream = async (
@@ -7391,32 +7375,16 @@ export default function BrowserPage({
     if (!bucketName || !hasS3AccountContext) {
       throw new Error("Missing bucket context.");
     }
-    if (useProxyTransfers) {
-      const params = withS3AccountParam({ key }, accountIdForApi);
-      const url = buildApiUrl(
-        `/browser/buckets/${encodeURIComponent(bucketName)}/download`,
-        params ?? undefined,
-      );
-      const response = await fetch(url, {
-        headers: buildBrowserFetchHeaders(
-          browserRequestOptions,
-          sseCustomerKeyBase64,
-        ),
-        credentials: "include",
-        signal,
-      });
-      return readBrowserTransferStream(response, `Download failed for ${key}`);
-    }
-    const presign = await presignObjectRequest(bucketName, {
+    return downloadBrowserTransferStream({
+      selector: accountIdForApi,
+      bucket: bucketName,
       key,
-      operation: "get_object",
-      expires_in: 900,
-    });
-    const response = await fetch(presign.url, {
-      headers: presign.headers || undefined,
+      mode: useProxyTransfers ? "proxy" : "direct",
       signal,
+      sseCustomerKeyBase64,
+      options: browserRequestOptions,
+      directPresign: (payload) => presignObjectRequest(bucketName, payload),
     });
-    return readBrowserTransferStream(response, `Download failed for ${key}`);
   };
 
   const resolveClipboardTransferMode = useCallback(
@@ -7467,27 +7435,16 @@ export default function BrowserPage({
       mode: ClipboardTransferMode;
       sseCustomerKeyBase64?: string | null;
       signal?: AbortSignal;
-    }) => {
-      if (mode === "proxy") {
-        return proxyDownload(selector, bucket, key, signal, sseKeyBase64, browserRequestOptions);
-      }
-      const presign = await presignObject(
+    }) =>
+      downloadBrowserTransferBlob({
         selector,
         bucket,
-        {
-          key,
-          operation: "get_object",
-          expires_in: 900,
-        },
-        sseKeyBase64,
-        browserRequestOptions,
-      );
-      const response = await fetch(presign.url, {
-        headers: presign.headers || undefined,
+        key,
+        mode,
         signal,
-      });
-      return readBrowserTransferBlob(response, `Download failed for ${key}`);
-    },
+        sseCustomerKeyBase64: sseKeyBase64,
+        options: browserRequestOptions,
+      }),
     [browserRequestOptions],
   );
 
@@ -7506,40 +7463,16 @@ export default function BrowserPage({
       mode: ClipboardTransferMode;
       sseCustomerKeyBase64?: string | null;
       signal?: AbortSignal;
-    }): Promise<ReadableStream<Uint8Array>> => {
-      if (mode === "proxy") {
-        const params = withS3AccountParam({ key }, selector);
-        const url = buildApiUrl(
-          `/browser/buckets/${encodeURIComponent(bucket)}/download`,
-          params ?? undefined,
-        );
-        const response = await fetch(url, {
-          headers: buildBrowserFetchHeaders(
-            browserRequestOptions,
-            sseKeyBase64,
-          ),
-          credentials: "include",
-          signal,
-        });
-        return readBrowserTransferStream(response, `Download failed for ${key}`);
-      }
-      const presign = await presignObject(
+    }): Promise<ReadableStream<Uint8Array>> =>
+      downloadBrowserTransferStream({
         selector,
         bucket,
-        {
-          key,
-          operation: "get_object",
-          expires_in: 900,
-        },
-        sseKeyBase64,
-        browserRequestOptions,
-      );
-      const response = await fetch(presign.url, {
-        headers: presign.headers || undefined,
+        key,
+        mode,
         signal,
-      });
-      return readBrowserTransferStream(response, `Download failed for ${key}`);
-    },
+        sseCustomerKeyBase64: sseKeyBase64,
+        options: browserRequestOptions,
+      }),
     [browserRequestOptions],
   );
 
@@ -7562,48 +7495,18 @@ export default function BrowserPage({
       contentType?: string | null;
       sseCustomerKeyBase64?: string | null;
       signal?: AbortSignal;
-    }) => {
-      if (mode === "proxy") {
-        await proxyUpload(
-          selector,
-          bucket,
-          key,
-          blob,
-          undefined,
-          signal,
-          sseKeyBase64,
-          key.split("/").pop() || "upload.bin",
-          browserRequestOptions,
-        );
-        return;
-      }
-      const presign = await presignObject(
+    }) =>
+      uploadBrowserTransferBlob({
         selector,
         bucket,
-        {
-          key,
-          operation: "put_object",
-          content_type: contentType ?? undefined,
-          content_length: blob.size,
-          expires_in: 1800,
-        },
-        sseKeyBase64,
-        browserRequestOptions,
-      );
-      const response = await fetch(presign.url, {
-        method: (presign.method || "PUT").toUpperCase(),
-        headers: {
-          ...(presign.headers || {}),
-          ...(contentType ? { "Content-Type": contentType } : {}),
-        },
-        body: blob,
+        key,
+        mode,
+        blob,
+        contentType,
         signal,
-      });
-      await ensureSuccessfulBrowserTransferResponse(
-        response,
-        `Upload failed for ${key}`,
-      );
-    },
+        sseCustomerKeyBase64: sseKeyBase64,
+        options: browserRequestOptions,
+      }),
     [browserRequestOptions],
   );
 
@@ -8339,14 +8242,7 @@ export default function BrowserPage({
           : null;
         if (useProxyTransfers) {
           try {
-            const blob = await proxyDownload(
-              accountIdForApi,
-              bucketName,
-              item.key,
-              undefined,
-              sseCustomerKeyBase64,
-              browserRequestOptions,
-            );
+            const blob = await downloadObjectBlob(item.key);
             triggerBlobDownload(item.name || "download", blob);
             completeReportedTransfer(reportedTransferId, item.name || "download");
           } catch (err) {
