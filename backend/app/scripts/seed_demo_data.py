@@ -487,7 +487,7 @@ def create_account_data(
         logger.error("No endpoint configured for account %s", plan.name)
         return
     logger.info("Account ready: %s (rgw_id=%s)", account.name, account.rgw_account_id)
-    iam_keys: dict[str, IAMAccessKey] = {}
+    iam_keys: dict[str, IAMAccessKey | None] = {}
 
     def _client_for(user_name: str):
         key = iam_keys.get(user_name)
@@ -498,7 +498,7 @@ def create_account_data(
                 logger.info("  IAM user ready: %s", user_name)
             except Exception as exc:
                 logger.warning("  unable to provision IAM user %s: %s", user_name, exc)
-                iam_keys[user_name] = None  # type: ignore
+                iam_keys[user_name] = None
                 return None, None
         if not key or not key.access_key_id or not key.secret_access_key:
             return None, None

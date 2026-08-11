@@ -15,6 +15,7 @@ from app.models.portal import (
     PortalDeletedPrefixRestoreFailure,
     PortalDeletedPrefixRestoreProgress,
     PortalDeletedPrefixRestoreResult,
+    PortalDeletedPrefixRestoreStage,
 )
 from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.object_listing_temp_store import TemporarySqliteStore
@@ -96,7 +97,7 @@ class PortalDeletedPrefixRestoreMixin:
                 cancel_check()
 
         def emit(
-            stage: str,
+            stage: PortalDeletedPrefixRestoreStage,
             message: str,
             *,
             total_candidates_final: bool = False,
@@ -105,7 +106,7 @@ class PortalDeletedPrefixRestoreMixin:
             if progress_callback:
                 progress_callback(
                     PortalDeletedPrefixRestoreProgress(
-                        stage=stage,  # type: ignore[arg-type]
+                        stage=stage,
                         storage_space_id=target.storage_space_id,
                         storage_space_name=target.storage_space_name,
                         prefix=target.prefix,

@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 
+load_dotenv: Callable[..., Any] | None
 try:
-    from dotenv import load_dotenv
+    from dotenv import load_dotenv as _load_dotenv
 except ModuleNotFoundError:  # pragma: no cover - optional dependency guard
-    load_dotenv = None  # type: ignore[assignment]
+    load_dotenv = None
+else:
+    load_dotenv = _load_dotenv
 
 
 def _load_local_env_files() -> None:

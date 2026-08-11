@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import TYPE_CHECKING, Any, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional, Tuple, TypeGuard
 
 from sqlalchemy.exc import IntegrityError
 
@@ -167,8 +167,8 @@ class PortalIamMixin:
         self,
         metadata: PortalStorageSpaceMetadata | None,
     ) -> PortalStorageSpaceVisibility:
-        if metadata and metadata.visibility in {"private", "shared"}:
-            return metadata.visibility  # type: ignore[return-value]
+        if metadata and metadata.visibility == "shared":
+            return "shared"
         return "private"
 
     def _metadata_share_scope(
@@ -187,11 +187,14 @@ class PortalIamMixin:
     ) -> Optional[PortalStorageSpaceRole]:
         if self._metadata_share_scope(metadata) != "account":
             return None
-        if metadata and metadata.account_member_role in {"Viewer", "Editor"}:
-            return metadata.account_member_role  # type: ignore[return-value]
+        if metadata and metadata.account_member_role == "Viewer":
+            return "Viewer"
         return "Editor"
 
-    def _storage_space_role_is_valid(self, role: Optional[str]) -> bool:
+    def _storage_space_role_is_valid(
+        self,
+        role: Optional[str],
+    ) -> TypeGuard[PortalStorageSpaceRole]:
         return role in {"Viewer", "Editor", "Owner", "Manager"}
 
     def _best_storage_space_role(self, *roles: Optional[str]) -> Optional[PortalStorageSpaceRole]:
@@ -199,9 +202,8 @@ class PortalIamMixin:
         for role in roles:
             if not self._storage_space_role_is_valid(role):
                 continue
-            typed_role = role  # type: ignore[assignment]
-            if best is None or self._role_precedence(typed_role) > self._role_precedence(best):
-                best = typed_role
+            if best is None or self._role_precedence(role) > self._role_precedence(best):
+                best = role
         return best
 
     def _normalize_storage_space_sharing(

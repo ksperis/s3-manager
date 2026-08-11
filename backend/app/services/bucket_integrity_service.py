@@ -18,6 +18,8 @@ from app.models.bucket_integrity import (
     BucketIntegrityCheckResult,
     BucketIntegrityFailure,
     BucketIntegrityFailureStage,
+    BucketIntegrityProgressStage,
+    BucketIntegrityStatus,
 )
 from app.services.long_running_s3_client import LongRunningS3ClientService
 from app.utils.s3_errors import format_s3_error
@@ -346,7 +348,12 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
             if len(failures) < _FAILURE_SAMPLE_LIMIT:
                 failures.append(failure)
 
-        def emit(stage: str, *, force: bool = False, message: str | None = None) -> None:
+        def emit(
+            stage: BucketIntegrityProgressStage,
+            *,
+            force: bool = False,
+            message: str | None = None,
+        ) -> None:
             nonlocal last_progress_at
             now = monotonic()
             if not force and checked_count % _PROGRESS_EVERY_CHECKED != 0 and (now - last_progress_at) < _PROGRESS_MIN_INTERVAL_SECONDS:
@@ -354,7 +361,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
             last_progress_at = now
             progress_callback(
                 BucketIntegrityCheckProgress(
-                    stage=stage,  # type: ignore[arg-type]
+                    stage=stage,
                     bucket_name=target.bucket_name,
                     context_id=target.context_id,
                     context_name=target.context_name,
@@ -442,7 +449,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
                     message=format_s3_error(exc, include_operation=True),
                 )
             )
-            status = "failed"
+            status: BucketIntegrityStatus = "failed"
         else:
             status = "passed" if failed_count == 0 else "completed_with_errors"
 
@@ -450,7 +457,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
             bucket_name=target.bucket_name,
             context_id=target.context_id,
             context_name=target.context_name,
-            status=status,  # type: ignore[arg-type]
+            status=status,
             listed_count=listed_count,
             checked_count=checked_count,
             failed_count=failed_count,

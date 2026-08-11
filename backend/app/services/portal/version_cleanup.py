@@ -10,6 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import User
 from app.models.portal import (
+    PortalStorageSpaceVersionCleanupStage,
     PortalStorageSpaceVersionCleanupProgress,
     PortalStorageSpaceVersionCleanupResult,
     portal_storage_space_version_cleanup_confirmation_phrase,
@@ -83,7 +84,7 @@ class PortalStorageSpaceVersionCleanupMixin:
                 cancel_check()
 
         def emit(
-            stage: str,
+            stage: PortalStorageSpaceVersionCleanupStage,
             message: str | None = None,
             *,
             total_candidates_final: bool = False,
@@ -91,7 +92,7 @@ class PortalStorageSpaceVersionCleanupMixin:
             if progress_callback:
                 progress_callback(
                     PortalStorageSpaceVersionCleanupProgress(
-                        stage=stage,  # type: ignore[arg-type]
+                        stage=stage,
                         storage_space_id=target.storage_space_id,
                         storage_space_name=target.storage_space_name,
                         scanned_versions=scanned_versions,

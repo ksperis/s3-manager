@@ -17,6 +17,7 @@ from app.models.bucket_operation import (
 BucketIntegrityStatus = Literal["passed", "completed_with_errors", "failed", "canceled"]
 BucketIntegrityCheckMode = Literal["head", "get"]
 BucketIntegrityFailureStage = Literal["list", "head", "get"]
+BucketIntegrityProgressStage = Literal["prepare", "list", "verify", "completed"]
 
 
 class BucketIntegrityTarget(BucketOperationTarget):
@@ -54,7 +55,7 @@ class BucketIntegrityBucketResult(ApiModel):
 
 class BucketIntegrityCheckProgress(ApiModel):
     request_id: Optional[str] = None
-    stage: Literal["prepare", "list", "verify", "completed"] = "prepare"
+    stage: BucketIntegrityProgressStage = "prepare"
     bucket_name: Optional[str] = None
     context_id: Optional[str] = None
     context_name: Optional[str] = None

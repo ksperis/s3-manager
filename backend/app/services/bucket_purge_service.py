@@ -16,6 +16,8 @@ from app.models.bucket_purge import (
     BucketPurgeFailure,
     BucketPurgeProgress,
     BucketPurgeResult,
+    BucketPurgeStage,
+    BucketPurgeStatus,
 )
 from app.services import s3_client
 from app.services.buckets_service import BucketsService
@@ -28,6 +30,18 @@ from app.core.sensitive_data import sanitized_error_log_detail
 logger = logging.getLogger(__name__)
 ProgressCallback = Callable[[BucketPurgeProgress], None]
 CancelCheck = Callable[[], None]
+
+
+def _normalize_progress_stage(stage: str) -> BucketPurgeStage:
+    if stage == "list":
+        return "list"
+    if stage == "versions":
+        return "versions"
+    if stage == "delete_bucket":
+        return "delete_bucket"
+    if stage == "completed":
+        return "completed"
+    return "delete"
 
 
 class BucketPurgeCancelled(RuntimeError):
@@ -198,7 +212,7 @@ class BucketPurgeService(LongRunningS3ClientService):
                 )
             )
 
-        status = "completed"
+        status: BucketPurgeStatus = "completed"
         if bucket_results and all(item.status == "failed" for item in bucket_results):
             status = "failed"
         elif total_failed > 0 or any(item.status != "completed" for item in bucket_results):
@@ -206,7 +220,7 @@ class BucketPurgeService(LongRunningS3ClientService):
 
         finished_at = datetime.now(timezone.utc)
         return BucketPurgeResult(
-            status=status,  # type: ignore[arg-type]
+            status=status,
             total_buckets=len(targets),
             completed_buckets=len(bucket_results),
             listed_objects=total_listed_objects,
@@ -256,10 +270,12 @@ class BucketPurgeService(LongRunningS3ClientService):
             progress_callback=emit,
             cancel_check=cancel_check,
         )
-        status = "completed" if bucket_result.bucket_deleted and bucket_result.failed_count == 0 else "failed"
+        status: BucketPurgeStatus = (
+            "completed" if bucket_result.bucket_deleted and bucket_result.failed_count == 0 else "failed"
+        )
         finished_at = datetime.now(timezone.utc)
         return BucketPurgeResult(
-            status=status,  # type: ignore[arg-type]
+            status=status,
             total_buckets=1,
             completed_buckets=1 if bucket_result.bucket_deleted else 0,
             listed_objects=bucket_result.listed_objects,
@@ -293,18 +309,14 @@ class BucketPurgeService(LongRunningS3ClientService):
         started = monotonic()
 
         def low_progress(progress: s3_client.BucketContentPurgeProgress) -> None:
-            stage = (
-                progress.stage
-                if progress.stage in {"list", "delete", "versions", "delete_bucket", "completed"}
-                else "delete"
-            )
+            stage = _normalize_progress_stage(progress.stage)
             listed_objects = base_listed_objects + progress.listed_objects
             listed_versions = base_listed_versions + progress.listed_versions
             deleted_objects = base_deleted_objects + progress.deleted_objects
             deleted_versions = base_deleted_versions + progress.deleted_versions
             progress_callback(
                 BucketPurgeProgress(
-                    stage=stage,  # type: ignore[arg-type]
+                    stage=stage,
                     bucket_name=target.bucket_name,
                     context_id=target.context_id,
                     context_name=target.context_name,
@@ -340,7 +352,7 @@ class BucketPurgeService(LongRunningS3ClientService):
                 progress_callback=low_progress,
                 cancel_check=cancel_check,
             )
-            status = "completed" if result.failed_count == 0 else "completed_with_errors"
+            status: BucketPurgeStatus = "completed" if result.failed_count == 0 else "completed_with_errors"
             failures = [
                 BucketPurgeFailure(
                     bucket_name=target.bucket_name,
@@ -356,7 +368,7 @@ class BucketPurgeService(LongRunningS3ClientService):
                 bucket_name=target.bucket_name,
                 context_id=target.context_id,
                 context_name=target.context_name,
-                status=status,  # type: ignore[arg-type]
+                status=status,
                 listed_objects=result.listed_objects,
                 listed_versions=result.listed_versions,
                 deleted_objects=result.deleted_objects,
@@ -402,11 +414,7 @@ class BucketPurgeService(LongRunningS3ClientService):
         deleted_versions = 0
 
         def low_progress(progress: s3_client.BucketContentPurgeProgress) -> None:
-            stage = (
-                progress.stage
-                if progress.stage in {"list", "delete", "versions", "delete_bucket", "completed"}
-                else "delete"
-            )
+            stage = _normalize_progress_stage(progress.stage)
             next_total_entries_estimate = self._progress_total_entries_estimate(
                 total_entries_estimate,
                 listed_objects=progress.listed_objects,
@@ -417,7 +425,7 @@ class BucketPurgeService(LongRunningS3ClientService):
             )
             progress_callback(
                 BucketPurgeProgress(
-                    stage=stage,  # type: ignore[arg-type]
+                    stage=stage,
                     bucket_name=target.bucket_name,
                     context_id=target.context_id,
                     context_name=target.context_name,

@@ -53,7 +53,7 @@ _MANAGER_TOOL_ROLES = {
 }
 
 def _ensure_manager_capabilities(account: S3ExecutionTarget, require_iam: bool = False, require_usage: bool = False) -> None:
-    caps: Optional[AccountCapabilities] = getattr(account, "manager_capabilities", None)  # type: ignore[attr-defined]
+    caps: Optional[AccountCapabilities] = getattr(account, "manager_capabilities", None)
     if not caps:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account context unavailable")
     if require_iam and not caps.can_manage_iam:
@@ -78,7 +78,7 @@ def _require_supervision_access(
             detail="RGW traffic and usage metrics are disabled",
         )
 
-    caps: Optional[AccountCapabilities] = getattr(account, "manager_capabilities", None)  # type: ignore[attr-defined]
+    caps: Optional[AccountCapabilities] = getattr(account, "manager_capabilities", None)
     endpoint = getattr(account, "storage_endpoint", None)
 
     connection_id = getattr(account, "s3_connection_id", None)
