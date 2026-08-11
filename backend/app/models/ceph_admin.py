@@ -3,13 +3,14 @@
 from datetime import datetime
 from typing import Any, Optional, Literal, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
 
+from app.models.base import ApiModel
 from app.models.bucket import BucketFeatureStatus, BucketTag
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionSummary
 
-class CephAdminEndpoint(BaseModel):
+class CephAdminEndpoint(ApiModel):
     id: int
     name: str
     endpoint_url: str
@@ -20,7 +21,7 @@ class CephAdminEndpoint(BaseModel):
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
-class CephAdminEndpointAccess(BaseModel):
+class CephAdminEndpointAccess(ApiModel):
     endpoint_id: int
     can_admin: bool = False
     can_accounts: bool = False
@@ -33,7 +34,7 @@ class CephAdminEndpointAccess(BaseModel):
     availability_checked_at: Optional[str] = None
 
 
-class CephAdminAdminOpsResult(BaseModel):
+class CephAdminAdminOpsResult(ApiModel):
     operation: str
     success: bool
     rgw_status_code: Optional[int] = None
@@ -42,7 +43,7 @@ class CephAdminAdminOpsResult(BaseModel):
     result: Any = None
 
 
-class CephAdminAdminOpsConfirmation(BaseModel):
+class CephAdminAdminOpsConfirmation(ApiModel):
     confirmation: str = Field(min_length=1, max_length=512)
 
 
@@ -74,7 +75,7 @@ class CephAdminBucketLinkRequest(CephAdminAdminOpsConfirmation):
     target_id: str = Field(min_length=1, max_length=255)
 
 
-class CephAdminBucketIndexCheckRequest(BaseModel):
+class CephAdminBucketIndexCheckRequest(ApiModel):
     fix: bool = False
     check_objects: bool = False
     confirmation: Optional[str] = Field(default=None, max_length=512)
@@ -88,7 +89,7 @@ class CephAdminBucketIndexCheckRequest(BaseModel):
         return self
 
 
-class CephAdminBucketIndexCheckTarget(BaseModel):
+class CephAdminBucketIndexCheckTarget(ApiModel):
     name: str = Field(min_length=1, max_length=255)
     tenant: Optional[str] = Field(default=None, max_length=255)
 
@@ -101,7 +102,7 @@ class CephAdminBucketIndexCheckTarget(BaseModel):
         return self
 
 
-class CephAdminBucketIndexCheckBatchRequest(BaseModel):
+class CephAdminBucketIndexCheckBatchRequest(ApiModel):
     targets: list[CephAdminBucketIndexCheckTarget] = Field(min_length=1, max_length=200)
     parallelism: int = Field(default=4, ge=1, le=16)
 
@@ -122,7 +123,7 @@ class CephAdminBucketIndexCheckBatchRequest(BaseModel):
 CephAdminBucketIndexCheckBatchStatus = Literal["completed", "completed_with_errors", "failed", "canceled"]
 
 
-class CephAdminBucketIndexCheckBatchBucketResult(BaseModel):
+class CephAdminBucketIndexCheckBatchBucketResult(ApiModel):
     name: str
     tenant: Optional[str] = None
     status: Literal["completed", "failed"]
@@ -134,7 +135,7 @@ class CephAdminBucketIndexCheckBatchBucketResult(BaseModel):
     result: Any = None
 
 
-class CephAdminBucketIndexCheckBatchProgress(BaseModel):
+class CephAdminBucketIndexCheckBatchProgress(ApiModel):
     request_id: Optional[str] = None
     stage: Literal["prepare", "completed"] = "prepare"
     bucket_name: Optional[str] = None
@@ -145,7 +146,7 @@ class CephAdminBucketIndexCheckBatchProgress(BaseModel):
     message: Optional[str] = None
 
 
-class CephAdminBucketIndexCheckBatchResult(BaseModel):
+class CephAdminBucketIndexCheckBatchResult(ApiModel):
     status: CephAdminBucketIndexCheckBatchStatus
     total_buckets: int = 0
     completed_buckets: int = 0
@@ -155,7 +156,7 @@ class CephAdminBucketIndexCheckBatchResult(BaseModel):
     buckets: list[CephAdminBucketIndexCheckBatchBucketResult] = Field(default_factory=list)
 
 
-class CephAdminRgwAccountSummary(BaseModel):
+class CephAdminRgwAccountSummary(ApiModel):
     account_id: str
     account_name: Optional[str] = None
     email: Optional[str] = None
@@ -169,7 +170,7 @@ class CephAdminRgwAccountSummary(BaseModel):
     user_count: Optional[int] = None
 
 
-class CephAdminRgwUserSummary(BaseModel):
+class CephAdminRgwUserSummary(ApiModel):
     uid: str
     tenant: Optional[str] = None
     account_id: Optional[str] = None
@@ -184,7 +185,7 @@ class CephAdminRgwUserSummary(BaseModel):
     object_count: Optional[int] = None
 
 
-class CephAdminBucketSummary(BaseModel):
+class CephAdminBucketSummary(ApiModel):
     name: str
     tenant: Optional[str] = None
     owner: Optional[str] = None
@@ -209,7 +210,7 @@ class PaginatedCephAdminBucketsResponse(PaginatedResponse):
     stats_warning: Optional[str] = None
 
 
-class CephAdminBucketListingRequest(BaseModel):
+class CephAdminBucketListingRequest(ApiModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=25, ge=1, le=200)
     filter: Optional[str] = None
@@ -228,13 +229,13 @@ class PaginatedCephAdminUsersResponse(PaginatedResponse):
     items: list[CephAdminRgwUserSummary]
 
 
-class CephAdminRgwQuotaConfig(BaseModel):
+class CephAdminRgwQuotaConfig(ApiModel):
     enabled: Optional[bool] = None
     max_size_bytes: Optional[int] = None
     max_objects: Optional[int] = None
 
 
-class CephAdminRgwAccessKey(BaseModel):
+class CephAdminRgwAccessKey(ApiModel):
     access_key: str
     secret_key: Optional[str] = None
     status: Optional[str] = None
@@ -246,16 +247,16 @@ class CephAdminRgwAccessKey(BaseModel):
     managed_connection_id: Optional[int] = None
 
 
-class CephAdminRgwGeneratedAccessKey(BaseModel):
+class CephAdminRgwGeneratedAccessKey(ApiModel):
     access_key: str
     secret_key: str
 
 
-class CephAdminRgwAccessKeyStatusChange(BaseModel):
+class CephAdminRgwAccessKeyStatusChange(ApiModel):
     active: bool
 
 
-class CephAdminRgwAccountDetail(BaseModel):
+class CephAdminRgwAccountDetail(ApiModel):
     account_id: str
     account_name: Optional[str] = None
     email: Optional[str] = None
@@ -270,7 +271,7 @@ class CephAdminRgwAccountDetail(BaseModel):
     bucket_quota: Optional[CephAdminRgwQuotaConfig] = None
 
 
-class CephAdminRgwUserDetail(BaseModel):
+class CephAdminRgwUserDetail(ApiModel):
     uid: str
     tenant: Optional[str] = None
     display_name: Optional[str] = None
@@ -290,12 +291,12 @@ class CephAdminRgwUserDetail(BaseModel):
     keys: list[CephAdminRgwAccessKey] = Field(default_factory=list)
 
 
-class CephAdminRgwUserCapsUpdate(BaseModel):
+class CephAdminRgwUserCapsUpdate(ApiModel):
     mode: Literal["replace", "add", "remove"] = "replace"
     values: list[str] = Field(default_factory=list)
 
 
-class CephAdminRgwAccountCreate(BaseModel):
+class CephAdminRgwAccountCreate(ApiModel):
     account_id: Optional[str] = None
     account_name: str
     email: Optional[str] = None
@@ -321,11 +322,11 @@ class CephAdminRgwAccountCreate(BaseModel):
         return self
 
 
-class CephAdminRgwAccountCreateResponse(BaseModel):
+class CephAdminRgwAccountCreateResponse(ApiModel):
     account: CephAdminRgwAccountDetail
 
 
-class CephAdminRgwUserCreate(BaseModel):
+class CephAdminRgwUserCreate(ApiModel):
     uid: str
     tenant: Optional[str] = None
     account_id: Optional[str] = None
@@ -351,17 +352,17 @@ class CephAdminRgwUserCreate(BaseModel):
         return self
 
 
-class CephAdminRgwUserCreateResponse(BaseModel):
+class CephAdminRgwUserCreateResponse(ApiModel):
     detail: CephAdminRgwUserDetail
     generated_key: Optional[CephAdminRgwGeneratedAccessKey] = None
 
 
-class CephAdminRgwPlacementTarget(BaseModel):
+class CephAdminRgwPlacementTarget(ApiModel):
     name: str
     storage_classes: list[str] = Field(default_factory=list)
 
 
-class CephAdminRgwInfoSummary(BaseModel):
+class CephAdminRgwInfoSummary(ApiModel):
     default_placement: Optional[str] = None
     zonegroup: Optional[str] = None
     realm: Optional[str] = None
@@ -369,7 +370,7 @@ class CephAdminRgwInfoSummary(BaseModel):
     storage_classes: list[str] = Field(default_factory=list)
 
 
-class CephAdminRgwAccountConfigUpdate(BaseModel):
+class CephAdminRgwAccountConfigUpdate(ApiModel):
     account_name: Optional[str] = None
     email: Optional[str] = None
     max_users: Optional[int] = Field(default=None, ge=0)
@@ -386,7 +387,7 @@ class CephAdminRgwAccountConfigUpdate(BaseModel):
     extra_params: dict[str, Any] = Field(default_factory=dict)
 
 
-class CephAdminRgwUserConfigUpdate(BaseModel):
+class CephAdminRgwUserConfigUpdate(ApiModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
     suspended: Optional[bool] = None
@@ -402,13 +403,13 @@ class CephAdminRgwUserConfigUpdate(BaseModel):
     extra_params: dict[str, Any] = Field(default_factory=dict)
 
 
-class CephAdminBucketUsagePoint(BaseModel):
+class CephAdminBucketUsagePoint(ApiModel):
     name: str
     used_bytes: Optional[int] = None
     object_count: Optional[int] = None
 
 
-class CephAdminEntityMetrics(BaseModel):
+class CephAdminEntityMetrics(ApiModel):
     total_bytes: Optional[int] = None
     total_objects: Optional[int] = None
     bucket_count: int = 0
@@ -534,7 +535,7 @@ BucketCompareConfigFeature = Literal[
 ]
 
 
-class CephAdminBucketFilterRule(BaseModel):
+class CephAdminBucketFilterRule(ApiModel):
     field: Optional[BucketFilterField] = None
     op: Optional[BucketFilterOp] = None
     value: Optional[Union[str, int, float, bool, list[str], list[int], list[float], list[bool]]] = None
@@ -628,12 +629,12 @@ class CephAdminBucketFilterRule(BaseModel):
         return self
 
 
-class CephAdminBucketFilterQuery(BaseModel):
+class CephAdminBucketFilterQuery(ApiModel):
     match: Literal["all", "any"] = "all"
     rules: list[CephAdminBucketFilterRule] = Field(default_factory=list)
 
 
-class CephAdminBucketCompareRequest(BaseModel):
+class CephAdminBucketCompareRequest(ApiModel):
     target_endpoint_id: int = Field(..., ge=1)
     source_bucket: str
     target_bucket: str
@@ -659,7 +660,7 @@ class CephAdminBucketCompareRequest(BaseModel):
         return self
 
 
-class CephAdminBucketObjectDetail(BaseModel):
+class CephAdminBucketObjectDetail(ApiModel):
     key: str
     size: Optional[int] = None
     etag: Optional[str] = None
@@ -667,7 +668,7 @@ class CephAdminBucketObjectDetail(BaseModel):
     storage_class: Optional[str] = None
 
 
-class CephAdminBucketObjectDiffEntry(BaseModel):
+class CephAdminBucketObjectDiffEntry(ApiModel):
     key: str
     source_size: Optional[int] = None
     target_size: Optional[int] = None
@@ -680,7 +681,7 @@ class CephAdminBucketObjectDiffEntry(BaseModel):
     compare_by: Literal["md5", "size"]
 
 
-class CephAdminBucketContentDiff(BaseModel):
+class CephAdminBucketContentDiff(ApiModel):
     source_count: int = 0
     target_count: int = 0
     matched_count: int = 0
@@ -699,7 +700,7 @@ class CephAdminBucketContentDiff(BaseModel):
     different_sample: list[CephAdminBucketObjectDiffEntry] = Field(default_factory=list)
 
 
-class CephAdminBucketConfigDiffSection(BaseModel):
+class CephAdminBucketConfigDiffSection(ApiModel):
     key: str
     label: str
     source: Any = None
@@ -707,12 +708,12 @@ class CephAdminBucketConfigDiffSection(BaseModel):
     changed: bool = False
 
 
-class CephAdminBucketConfigDiff(BaseModel):
+class CephAdminBucketConfigDiff(ApiModel):
     changed: bool = False
     sections: list[CephAdminBucketConfigDiffSection] = Field(default_factory=list)
 
 
-class CephAdminBucketCompareResult(BaseModel):
+class CephAdminBucketCompareResult(ApiModel):
     source_endpoint_id: int
     target_endpoint_id: int
     source_bucket: str
@@ -753,7 +754,7 @@ UserFilterOp = Literal[
 ]
 
 
-class CephAdminUserFilterRule(BaseModel):
+class CephAdminUserFilterRule(ApiModel):
     field: UserFilterField
     op: UserFilterOp
     value: Optional[Union[str, int, float, bool, list[str], list[int], list[float], list[bool]]] = None
@@ -765,7 +766,7 @@ class CephAdminUserFilterRule(BaseModel):
         return self
 
 
-class CephAdminUserFilterQuery(BaseModel):
+class CephAdminUserFilterQuery(ApiModel):
     match: Literal["all", "any"] = "all"
     rules: list[CephAdminUserFilterRule] = Field(default_factory=list)
 
@@ -800,7 +801,7 @@ AccountFilterOp = Literal[
 ]
 
 
-class CephAdminAccountFilterRule(BaseModel):
+class CephAdminAccountFilterRule(ApiModel):
     field: AccountFilterField
     op: AccountFilterOp
     value: Optional[Union[str, int, float, bool, list[str], list[int], list[float], list[bool]]] = None
@@ -812,6 +813,6 @@ class CephAdminAccountFilterRule(BaseModel):
         return self
 
 
-class CephAdminAccountFilterQuery(BaseModel):
+class CephAdminAccountFilterQuery(ApiModel):
     match: Literal["all", "any"] = "all"
     rules: list[CephAdminAccountFilterRule] = Field(default_factory=list)

@@ -3,7 +3,9 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator
+
+from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
 from app.utils.account_roles import CanonicalAccountRole
 
@@ -22,24 +24,22 @@ def validate_password_policy(password: str) -> None:
         raise ValueError(PASSWORD_POLICY_ERROR)
 
 
-class LinkedS3User(BaseModel):
+class LinkedS3User(ApiModel):
     id: int
     name: str
 
 
-class LinkedS3Connection(BaseModel):
+class LinkedS3Connection(ApiModel):
     id: int
     name: str
 
 
-class LinkedUiGroup(BaseModel):
+class LinkedUiGroup(ApiModel):
     id: int
     name: str
 
 
-class AccountMembership(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class AccountMembership(ApiModel):
     account_id: int
     role: CanonicalAccountRole
     allow_manager_browser_data_access: bool = False
@@ -49,14 +49,12 @@ class AccountMembershipDetail(AccountMembership):
     is_root: bool = False
 
 
-class S3UserMembership(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class S3UserMembership(ApiModel):
     s3_user_id: int
     allow_manager_browser_data_access: bool = False
 
 
-class EffectiveAccountGroupSource(BaseModel):
+class EffectiveAccountGroupSource(ApiModel):
     group_id: int
     group_name: str
     role: str
@@ -64,7 +62,7 @@ class EffectiveAccountGroupSource(BaseModel):
     allow_manager_browser_data_access: bool = False
 
 
-class EffectiveAccountRoleProvenance(BaseModel):
+class EffectiveAccountRoleProvenance(ApiModel):
     direct_role: Optional[str] = None
     direct_determines_effective_role: bool = False
     direct_allow_manager_browser_data_access: bool = False
@@ -75,9 +73,7 @@ class EffectiveAccountMembership(AccountMembership):
     provenance: EffectiveAccountRoleProvenance
 
 
-class ManagerToolAccess(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class ManagerToolAccess(ApiModel):
     bucket_compare: bool = False
     bucket_integrity_check: bool = False
     bucket_migration: bool = False
@@ -85,7 +81,7 @@ class ManagerToolAccess(BaseModel):
     bucket_purge: bool = False
 
 
-class UiPreferences(BaseModel):
+class UiPreferences(ApiModel):
     theme: Optional[UiThemePreference] = None
     selected_portal_account_id: Optional[str] = None
 
@@ -98,7 +94,7 @@ class UiPreferences(BaseModel):
         return cleaned or None
 
 
-class UserAvatar(BaseModel):
+class UserAvatar(ApiModel):
     preference: UserAvatarPreference = "auto"
     source: UserAvatarSource = "initials"
     url: Optional[str] = None
@@ -106,7 +102,7 @@ class UserAvatar(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-class UserSummary(BaseModel):
+class UserSummary(ApiModel):
     id: int
     email: EmailStr
     full_name: Optional[str] = None
@@ -116,7 +112,7 @@ class UserSummary(BaseModel):
     iam_username: Optional[str] = None
 
 
-class UserAssociationDetail(BaseModel):
+class UserAssociationDetail(ApiModel):
     id: int
     email: str
     full_name: Optional[str] = None
@@ -125,7 +121,7 @@ class UserAssociationDetail(BaseModel):
     allow_manager_browser_data_access: bool = False
 
 
-class User(BaseModel):
+class User(ApiModel):
     id: int
     email: EmailStr
     full_name: Optional[str] = None
@@ -149,7 +145,7 @@ class User(BaseModel):
     last_login_at: Optional[datetime] = None
 
 
-class UserCreate(BaseModel):
+class UserCreate(ApiModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
@@ -164,9 +160,7 @@ class UserCreate(BaseModel):
     group_ids: Optional[list[int]] = None
 
 
-class UserUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class UserUpdate(ApiModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
     role: Optional[UiRole] = None
@@ -184,7 +178,7 @@ class UserUpdate(BaseModel):
     group_ids: Optional[list[int]] = None
 
 
-class UserSelfUpdate(BaseModel):
+class UserSelfUpdate(ApiModel):
     full_name: Optional[str] = None
     avatar_preference: Optional[UserAvatarPreference] = None
     ui_language: Optional[UiLanguage] = None
@@ -195,14 +189,12 @@ class UserSelfUpdate(BaseModel):
     new_password: Optional[str] = None
 
 
-class UserAssignS3Account(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class UserAssignS3Account(ApiModel):
     account_id: int
     role: CanonicalAccountRole
 
 
-class EffectiveUserAccess(BaseModel):
+class EffectiveUserAccess(ApiModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     can_create_manual_private_connections: bool = False
@@ -215,7 +207,7 @@ class EffectiveUserAccess(BaseModel):
     s3_connection_details: list[LinkedS3Connection] = Field(default_factory=list)
 
 
-class UserOut(BaseModel):
+class UserOut(ApiModel):
     id: int
     email: str
     full_name: Optional[str] = None

@@ -8,21 +8,22 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
+from app.models.base import ApiModel
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 from app.models.s3_connection import CredentialOwnerType
 from app.models.ui_group import UiGroupAvatar
 from app.models.user import UserAssociationDetail, UserAvatar
 
 
-class S3ConnectionGroupDetail(BaseModel):
+class S3ConnectionGroupDetail(ApiModel):
     id: int
     name: str
     avatar: Optional[UiGroupAvatar] = None
 
 
-class S3ConnectionAdminItem(BaseModel):
+class S3ConnectionAdminItem(ApiModel):
     id: int
     name: str
     storage_endpoint_id: Optional[int] = None
@@ -50,7 +51,7 @@ class S3ConnectionAdminItem(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-class S3ConnectionSummary(BaseModel):
+class S3ConnectionSummary(ApiModel):
     id: int
     name: str
     created_by_user_id: int
@@ -58,9 +59,7 @@ class S3ConnectionSummary(BaseModel):
     execution_status: Literal["ready", "remediation_required"] = "ready"
 
 
-class S3ConnectionAdminCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class S3ConnectionAdminCreate(ApiModel):
     name: str
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
@@ -80,9 +79,7 @@ class S3ConnectionAdminCreate(BaseModel):
         return validate_tag_definition_list(value, allow_none=False) or []
 
 
-class S3ConnectionAdminUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class S3ConnectionAdminUpdate(ApiModel):
     name: Optional[str] = None
     group_ids: Optional[list[int]] = None
     provider_hint: Optional[str] = None
@@ -102,7 +99,7 @@ class S3ConnectionAdminUpdate(BaseModel):
         return validate_tag_definition_list(value, allow_none=True)
 
 
-class PaginatedS3ConnectionsResponse(BaseModel):
+class PaginatedS3ConnectionsResponse(ApiModel):
     items: list[S3ConnectionAdminItem]
     total: int
     page: int
@@ -110,7 +107,7 @@ class PaginatedS3ConnectionsResponse(BaseModel):
     has_next: bool
 
 
-class S3ConnectionUserLink(BaseModel):
+class S3ConnectionUserLink(ApiModel):
     user_id: int
     email: Optional[str] = None
     full_name: Optional[str] = None
@@ -118,9 +115,9 @@ class S3ConnectionUserLink(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-class S3ConnectionUserLinkUpsert(BaseModel):
+class S3ConnectionUserLinkUpsert(ApiModel):
     user_id: int
 
 
-class S3ConnectionRemediationAction(BaseModel):
+class S3ConnectionRemediationAction(ApiModel):
     action: Literal["activate_manager"]

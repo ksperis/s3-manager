@@ -3,17 +3,17 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from app.models.base import ApiModel
 
 
-class S3Object(BaseModel):
+class S3Object(ApiModel):
     key: str
     size: int
     last_modified: Optional[datetime] = None
     storage_class: Optional[str] = None
 
 
-class ListObjectsResponse(BaseModel):
+class ListObjectsResponse(ApiModel):
     prefix: str
     objects: List[S3Object]
     prefixes: List[str]

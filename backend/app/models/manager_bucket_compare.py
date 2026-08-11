@@ -3,8 +3,9 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
 
+from app.models.base import ApiModel
 from app.models.ceph_admin import (
     BucketCompareConfigFeature,
     CephAdminBucketConfigDiff,
@@ -14,7 +15,7 @@ from app.models.ceph_admin import (
 ManagerBucketCompareAction = Literal["sync_source_only", "sync_different", "delete_target_only"]
 
 
-class ManagerBucketCompareRequest(BaseModel):
+class ManagerBucketCompareRequest(ApiModel):
     target_context_id: str
     source_bucket: str
     target_bucket: str
@@ -43,7 +44,7 @@ class ManagerBucketCompareRequest(BaseModel):
         return self
 
 
-class ManagerBucketCompareResult(BaseModel):
+class ManagerBucketCompareResult(ApiModel):
     source_context_id: str
     target_context_id: str
     source_bucket: str
@@ -53,7 +54,7 @@ class ManagerBucketCompareResult(BaseModel):
     config_diff: Optional[CephAdminBucketConfigDiff] = None
 
 
-class ManagerBucketCompareActionRequest(BaseModel):
+class ManagerBucketCompareActionRequest(ApiModel):
     target_context_id: str
     source_bucket: str
     target_bucket: str
@@ -86,7 +87,7 @@ class ManagerBucketCompareActionRequest(BaseModel):
         return self
 
 
-class ManagerBucketCompareActionResult(BaseModel):
+class ManagerBucketCompareActionResult(ApiModel):
     action: ManagerBucketCompareAction
     source_context_id: str
     target_context_id: str

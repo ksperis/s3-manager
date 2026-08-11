@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from app.models.base import ApiModel
 from app.models.bucket_operation import (
     BucketOperationTarget,
     ExclusiveBucketOperationRequest,
@@ -25,7 +26,7 @@ class BucketUsageStatsRequest(ExclusiveBucketOperationRequest):
     targets: list[BucketUsageStatsTarget] = Field(default_factory=list, max_length=200)
     parallelism: int = Field(default=8, ge=1, le=32)
 
-class BucketUsageStatsDistributionEntry(BaseModel):
+class BucketUsageStatsDistributionEntry(ApiModel):
     key: str
     label: str
     count: int = 0
@@ -34,7 +35,7 @@ class BucketUsageStatsDistributionEntry(BaseModel):
     ratio_bytes: float = 0
 
 
-class BucketUsageStatsSnapshot(BaseModel):
+class BucketUsageStatsSnapshot(ApiModel):
     scope_kind: str
     scope_id: str
     scope_name: Optional[str] = None
@@ -57,11 +58,11 @@ class BucketUsageStatsSnapshot(BaseModel):
     calculated_at: datetime
 
 
-class BucketUsageStatsLatestResponse(BaseModel):
+class BucketUsageStatsLatestResponse(ApiModel):
     snapshot: Optional[BucketUsageStatsSnapshot] = None
 
 
-class BucketUsageStatsAggregate(BaseModel):
+class BucketUsageStatsAggregate(ApiModel):
     scope_kind: str
     scope_id: str
     scope_name: Optional[str] = None
@@ -89,15 +90,15 @@ class BucketUsageStatsAggregate(BaseModel):
     newest_snapshot_at: Optional[datetime] = None
 
 
-class BucketUsageStatsAggregateResponse(BaseModel):
+class BucketUsageStatsAggregateResponse(ApiModel):
     aggregate: BucketUsageStatsAggregate
 
 
-class BucketUsageStatsScopeRequest(BaseModel):
+class BucketUsageStatsScopeRequest(ApiModel):
     parallelism: int = Field(default=8, ge=1, le=32)
 
 
-class BucketUsageStatsBucketResult(BaseModel):
+class BucketUsageStatsBucketResult(ApiModel):
     bucket_name: str
     context_id: Optional[str] = None
     context_name: Optional[str] = None
@@ -107,7 +108,7 @@ class BucketUsageStatsBucketResult(BaseModel):
     message: Optional[str] = None
 
 
-class BucketUsageStatsProgress(BaseModel):
+class BucketUsageStatsProgress(ApiModel):
     request_id: Optional[str] = None
     stage: Literal["prepare", "list", "persist", "completed"] = "prepare"
     bucket_name: Optional[str] = None
@@ -121,7 +122,7 @@ class BucketUsageStatsProgress(BaseModel):
     message: Optional[str] = None
 
 
-class BucketUsageStatsResult(BaseModel):
+class BucketUsageStatsResult(ApiModel):
     status: BucketUsageStatsStatus
     total_buckets: int = 0
     completed_buckets: int = 0

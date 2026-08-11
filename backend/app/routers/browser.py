@@ -19,13 +19,13 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import S3User as S3UserModel, User
 from app.models.access_context import ManagerActor
 from app.models.app_settings import BrowserSettings
+from app.models.base import ApiModel
 from app.models.bucket import (
     Bucket,
     BucketAcl,
@@ -120,7 +120,7 @@ router = APIRouter(
 )
 
 
-class CreateBucketPayload(BaseModel):
+class CreateBucketPayload(ApiModel):
     name: str
     versioning: bool = False
 

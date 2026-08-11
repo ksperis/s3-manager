@@ -2,14 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+
+from app.models.base import ApiModel
 
 
-class _StrictTopicModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class Topic(_StrictTopicModel):
+class Topic(ApiModel):
     name: str
     arn: str
     configuration: Optional[dict] = Field(
@@ -18,14 +16,14 @@ class Topic(_StrictTopicModel):
     )
 
 
-class TopicCreate(_StrictTopicModel):
+class TopicCreate(ApiModel):
     name: str = Field(..., min_length=1)
     configuration: Optional[dict] = None
 
 
-class TopicPolicy(_StrictTopicModel):
+class TopicPolicy(ApiModel):
     policy: dict = Field(default_factory=dict)
 
 
-class TopicConfiguration(_StrictTopicModel):
+class TopicConfiguration(ApiModel):
     configuration: dict = Field(default_factory=dict)

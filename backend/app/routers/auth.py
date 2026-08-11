@@ -5,7 +5,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -13,6 +12,7 @@ from app.core.database import get_db
 from app.core.security import create_access_token
 from app.db import User
 from app.models.api_token import ApiTokenCreateRequest, ApiTokenCreateResponse, ApiTokenInfo
+from app.models.base import ApiModel
 from app.models.session import S3KeyLogin, SessionDescriptor
 from app.models.oidc import (
     OIDCCallbackRequest,
@@ -111,7 +111,7 @@ def _is_login_rate_limited(audit_service: AuditService, username: str, ip_addres
     return failures >= settings.login_rate_limit_max_attempts
 
 
-class Token(BaseModel):
+class Token(ApiModel):
     access_token: str
     token_type: str = "bearer"
 

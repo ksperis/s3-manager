@@ -3,9 +3,10 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from app.models.access_context import ManagerActor
+from app.models.base import ApiModel
 from app.services.s3_execution_context import S3ExecutionContext
 from app.models.object import ListObjectsResponse
 from app.routers.dependencies import get_account_context, get_current_account_admin
@@ -15,20 +16,20 @@ from app.core.sensitive_data import sanitize_error_detail
 router = APIRouter(prefix="/manager/buckets/{bucket_name}/objects", tags=["manager-objects"])
 
 
-class CreateFolderPayload(BaseModel):
+class CreateFolderPayload(ApiModel):
     prefix: str = Field(..., description="Folder prefix, trailing slash optional")
 
 
-class DeleteObjectsPayload(BaseModel):
+class DeleteObjectsPayload(ApiModel):
     keys: list[str]
 
 
-class UploadResponse(BaseModel):
+class UploadResponse(ApiModel):
     key: str
     message: str
 
 
-class DownloadResponse(BaseModel):
+class DownloadResponse(ApiModel):
     url: str
     expires_in: int
 

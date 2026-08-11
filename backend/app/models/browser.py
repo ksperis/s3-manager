@@ -3,12 +3,13 @@
 from datetime import datetime
 from typing import Optional, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from app.models.base import ApiModel
 from app.models.portal import PortalStorageSpaceIcon
 
 
-class BrowserBucket(BaseModel):
+class BrowserBucket(ApiModel):
     name: str
     creation_date: Optional[datetime] = None
     display_name: Optional[str] = None
@@ -24,7 +25,7 @@ class BrowserBucket(BaseModel):
     icon: Optional[PortalStorageSpaceIcon] = None
 
 
-class BrowserObject(BaseModel):
+class BrowserObject(ApiModel):
     key: str
     size: int
     last_modified: Optional[datetime] = None
@@ -44,7 +45,7 @@ BrowserObjectLazyColumn = Literal[
 ]
 
 
-class ListBrowserObjectsResponse(BaseModel):
+class ListBrowserObjectsResponse(ApiModel):
     prefix: str
     objects: list[BrowserObject]
     prefixes: list[str]
@@ -52,12 +53,12 @@ class ListBrowserObjectsResponse(BaseModel):
     next_continuation_token: Optional[str] = None
 
 
-class ObjectColumnsRequest(BaseModel):
+class ObjectColumnsRequest(ApiModel):
     keys: list[str] = Field(default_factory=list, min_length=1, max_length=200)
     columns: list[BrowserObjectLazyColumn] = Field(default_factory=list, min_length=1, max_length=6)
 
 
-class ObjectColumnValues(BaseModel):
+class ObjectColumnValues(ApiModel):
     key: str
     content_type: Optional[str] = None
     tags_count: Optional[int] = None
@@ -69,11 +70,11 @@ class ObjectColumnValues(BaseModel):
     tags_status: Literal["ready", "error"] = "ready"
 
 
-class ObjectColumnsResponse(BaseModel):
+class ObjectColumnsResponse(ApiModel):
     items: list[ObjectColumnValues] = Field(default_factory=list)
 
 
-class PaginatedBrowserBucketsResponse(BaseModel):
+class PaginatedBrowserBucketsResponse(ApiModel):
     items: list[BrowserBucket] = Field(default_factory=list)
     total: int = 0
     page: int = 1
@@ -81,7 +82,7 @@ class PaginatedBrowserBucketsResponse(BaseModel):
     has_next: bool = False
 
 
-class BrowserUsageSummary(BaseModel):
+class BrowserUsageSummary(ApiModel):
     available: bool = False
     source: Optional[Literal["account", "s3_user", "portal", "connection"]] = None
     label: Optional[str] = None
@@ -91,7 +92,7 @@ class BrowserUsageSummary(BaseModel):
     quota_max_objects: Optional[int] = None
 
 
-class BrowserObjectVersion(BaseModel):
+class BrowserObjectVersion(ApiModel):
     key: str
     version_id: Optional[str] = None
     is_latest: bool = False
@@ -102,7 +103,7 @@ class BrowserObjectVersion(BaseModel):
     storage_class: Optional[str] = None
 
 
-class ListObjectVersionsResponse(BaseModel):
+class ListObjectVersionsResponse(ApiModel):
     prefix: Optional[str] = None
     common_prefixes: list[str] = Field(default_factory=list)
     versions: list[BrowserObjectVersion] = Field(default_factory=list)
@@ -114,7 +115,7 @@ class ListObjectVersionsResponse(BaseModel):
     next_version_id_marker: Optional[str] = None
 
 
-class ObjectMetadata(BaseModel):
+class ObjectMetadata(ApiModel):
     key: str
     size: int
     etag: Optional[str] = None
@@ -131,18 +132,18 @@ class ObjectMetadata(BaseModel):
     version_id: Optional[str] = None
 
 
-class ObjectTag(BaseModel):
+class ObjectTag(ApiModel):
     key: str
     value: str
 
 
-class ObjectTags(BaseModel):
+class ObjectTags(ApiModel):
     key: str
     tags: list[ObjectTag] = Field(default_factory=list)
     version_id: Optional[str] = None
 
 
-class ObjectMetadataUpdate(BaseModel):
+class ObjectMetadataUpdate(ApiModel):
     key: str
     version_id: Optional[str] = None
     content_type: Optional[str] = None
@@ -155,19 +156,19 @@ class ObjectMetadataUpdate(BaseModel):
     storage_class: Optional[str] = None
 
 
-class ObjectAcl(BaseModel):
+class ObjectAcl(ApiModel):
     key: str
     acl: str
     version_id: Optional[str] = None
 
 
-class ObjectLegalHold(BaseModel):
+class ObjectLegalHold(ApiModel):
     key: str
     status: Optional[Literal["ON", "OFF"]] = None
     version_id: Optional[str] = None
 
 
-class ObjectRetention(BaseModel):
+class ObjectRetention(ApiModel):
     key: str
     mode: Optional[Literal["GOVERNANCE", "COMPLIANCE"]] = None
     retain_until: Optional[datetime] = None
@@ -175,14 +176,14 @@ class ObjectRetention(BaseModel):
     version_id: Optional[str] = None
 
 
-class ObjectRestoreRequest(BaseModel):
+class ObjectRestoreRequest(ApiModel):
     key: str
     days: int = Field(default=1, ge=1, le=3650)
     tier: Optional[Literal["Standard", "Bulk", "Expedited"]] = None
     version_id: Optional[str] = None
 
 
-class PresignRequest(BaseModel):
+class PresignRequest(ApiModel):
     key: str
     operation: Literal["get_object", "put_object", "delete_object", "post_object"]
     expires_in: int = Field(default=900, ge=60, le=43200)
@@ -192,7 +193,7 @@ class PresignRequest(BaseModel):
     version_id: Optional[str] = None
 
 
-class PresignedUrl(BaseModel):
+class PresignedUrl(ApiModel):
     url: str
     method: str = "GET"
     expires_in: int
@@ -200,13 +201,13 @@ class PresignedUrl(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
 
 
-class SseCustomerContext(BaseModel):
+class SseCustomerContext(ApiModel):
     algorithm: Literal["AES256"] = "AES256"
     key: str
     key_md5: str
 
 
-class MultipartUploadInitRequest(BaseModel):
+class MultipartUploadInitRequest(ApiModel):
     key: str
     content_type: Optional[str] = None
     metadata: dict[str, str] = Field(default_factory=dict)
@@ -214,12 +215,12 @@ class MultipartUploadInitRequest(BaseModel):
     acl: Optional[str] = None
 
 
-class MultipartUploadInitResponse(BaseModel):
+class MultipartUploadInitResponse(ApiModel):
     key: str
     upload_id: str
 
 
-class MultipartUploadItem(BaseModel):
+class MultipartUploadItem(ApiModel):
     key: str
     upload_id: str
     initiated: Optional[datetime] = None
@@ -227,50 +228,50 @@ class MultipartUploadItem(BaseModel):
     owner: Optional[str] = None
 
 
-class ListMultipartUploadsResponse(BaseModel):
+class ListMultipartUploadsResponse(ApiModel):
     uploads: list[MultipartUploadItem] = Field(default_factory=list)
     is_truncated: bool = False
     next_key: Optional[str] = None
     next_upload_id: Optional[str] = None
 
 
-class MultipartPart(BaseModel):
+class MultipartPart(ApiModel):
     part_number: int
     etag: str
     size: int
     last_modified: Optional[datetime] = None
 
 
-class ListPartsResponse(BaseModel):
+class ListPartsResponse(ApiModel):
     parts: list[MultipartPart] = Field(default_factory=list)
     is_truncated: bool = False
     next_part_number: Optional[int] = None
 
 
-class PresignPartRequest(BaseModel):
+class PresignPartRequest(ApiModel):
     key: str
     upload_id: Optional[str] = None
     part_number: int
     expires_in: int = Field(default=900, ge=60, le=43200)
 
 
-class PresignPartResponse(BaseModel):
+class PresignPartResponse(ApiModel):
     url: str
     method: str = "PUT"
     expires_in: int
     headers: dict[str, str] = Field(default_factory=dict)
 
 
-class CompletedPart(BaseModel):
+class CompletedPart(ApiModel):
     part_number: int
     etag: str
 
 
-class CompleteMultipartUploadRequest(BaseModel):
+class CompleteMultipartUploadRequest(ApiModel):
     parts: list[CompletedPart]
 
 
-class CopyObjectPayload(BaseModel):
+class CopyObjectPayload(ApiModel):
     source_bucket: Optional[str] = None
     source_key: str
     destination_key: str
@@ -283,23 +284,23 @@ class CopyObjectPayload(BaseModel):
     move: bool = False
 
 
-class DeleteObjectEntry(BaseModel):
+class DeleteObjectEntry(ApiModel):
     key: str
     version_id: Optional[str] = None
 
 
-class DeleteObjectsPayload(BaseModel):
+class DeleteObjectsPayload(ApiModel):
     objects: list[DeleteObjectEntry]
 
 
-class CleanupObjectVersionsPayload(BaseModel):
+class CleanupObjectVersionsPayload(ApiModel):
     prefix: Optional[str] = None
     keep_last_n: Optional[int] = Field(default=None, ge=1)
     older_than_days: Optional[int] = Field(default=None, ge=1)
     delete_orphan_markers: bool = False
 
 
-class CleanupObjectVersionsResponse(BaseModel):
+class CleanupObjectVersionsResponse(ApiModel):
     prefix: Optional[str] = None
     deleted_versions: int = 0
     deleted_delete_markers: int = 0
@@ -307,7 +308,7 @@ class CleanupObjectVersionsResponse(BaseModel):
     scanned_delete_markers: int = 0
 
 
-class BucketCorsRule(BaseModel):
+class BucketCorsRule(ApiModel):
     allowed_origins: list[str] = Field(default_factory=list)
     allowed_methods: list[str] = Field(default_factory=list)
     allowed_headers: list[str] = Field(default_factory=list)
@@ -315,18 +316,18 @@ class BucketCorsRule(BaseModel):
     max_age_seconds: Optional[int] = None
 
 
-class BucketCorsStatus(BaseModel):
+class BucketCorsStatus(ApiModel):
     enabled: bool
     rules: list[BucketCorsRule] = Field(default_factory=list)
     error: Optional[str] = None
 
 
-class StsStatus(BaseModel):
+class StsStatus(ApiModel):
     available: bool
     error: Optional[str] = None
 
 
-class BrowserStsCredentials(BaseModel):
+class BrowserStsCredentials(ApiModel):
     access_key_id: str
     secret_access_key: str
     session_token: str

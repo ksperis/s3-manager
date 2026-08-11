@@ -3,12 +3,12 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import S3Account, S3Connection, S3User, User
 from app.models.access_context import ManagerActor
+from app.models.base import ApiModel
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import (
     get_account_context,
@@ -29,7 +29,7 @@ from app.utils.storage_endpoint_features import resolve_feature_flags
 router = APIRouter(prefix="/manager", tags=["manager-context"])
 
 
-class ManagerContext(BaseModel):
+class ManagerContext(ApiModel):
     access_mode: str
     context_kind: str = "account"
     iam_identity: Optional[str] = None

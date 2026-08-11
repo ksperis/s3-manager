@@ -3,17 +3,16 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
+from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 from app.models.ui_group import UiGroupAvatar
 from app.models.user import UserAvatar
 
 
-class _S3UserAssociationLink(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class _S3UserAssociationLink(ApiModel):
     allow_manager_browser_data_access: bool = False
 
 
@@ -31,7 +30,7 @@ class S3UserGroupLink(_S3UserAssociationLink):
     group_avatar: Optional[UiGroupAvatar] = None
 
 
-class S3User(BaseModel):
+class S3User(ApiModel):
     id: int
     name: str
     rgw_user_uid: str
@@ -50,7 +49,7 @@ class S3User(BaseModel):
     allow_managed_private_connection_provisioning: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
-class S3UserCreate(BaseModel):
+class S3UserCreate(ApiModel):
     name: str
     uid: Optional[str] = None
     email: Optional[str] = None
@@ -66,16 +65,14 @@ class S3UserCreate(BaseModel):
         return validate_tag_definition_list(value, allow_none=False) or []
 
 
-class S3UserImport(BaseModel):
+class S3UserImport(ApiModel):
     uid: str
     name: Optional[str] = None
     email: Optional[str] = None
     storage_endpoint_id: int
 
 
-class S3UserUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class S3UserUpdate(ApiModel):
     name: Optional[str] = None
     email: Optional[str] = None
     user_links: Optional[list[S3UserUserLink]] = None
@@ -93,7 +90,7 @@ class S3UserUpdate(BaseModel):
     def normalize_optional_tags(cls, value: object) -> Optional[list[dict[str, str]]]:
         return validate_tag_definition_list(value, allow_none=True)
 
-class S3UserAccessKey(BaseModel):
+class S3UserAccessKey(ApiModel):
     access_key_id: str
     status: Optional[str] = None
     created_at: Optional[datetime] = None
@@ -103,17 +100,17 @@ class S3UserAccessKey(BaseModel):
     managed_connection_id: Optional[int] = None
 
 
-class S3UserGeneratedKey(BaseModel):
+class S3UserGeneratedKey(ApiModel):
     access_key_id: str
     secret_access_key: str
     created_at: Optional[datetime] = None
 
 
-class S3UserAccessKeyStatusChange(BaseModel):
+class S3UserAccessKeyStatusChange(ApiModel):
     active: bool
 
 
-class S3UserSummary(BaseModel):
+class S3UserSummary(ApiModel):
     id: int
     name: str
     rgw_user_uid: str

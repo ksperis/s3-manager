@@ -4,8 +4,9 @@ import re
 from typing import Optional
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
+from app.models.base import ApiModel
 from app.core.config import get_settings
 from app.models.storage_endpoint import StorageEndpointPublic
 
@@ -22,9 +23,7 @@ def _default_bucket_migration_max_active_per_endpoint() -> int:
     return get_settings().bucket_migration_max_active_per_endpoint
 
 
-class PortalBucketDefaultsOverride(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class PortalBucketDefaultsOverride(ApiModel):
     versioning: Optional[bool] = None
     enable_cors: Optional[bool] = None
     enable_lifecycle: Optional[bool] = None
@@ -32,9 +31,7 @@ class PortalBucketDefaultsOverride(BaseModel):
     cors_allowed_origins: Optional[list[str]] = None
 
 
-class PortalSettingsOverride(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class PortalSettingsOverride(ApiModel):
     browser_access_enabled: Optional[bool] = None
     allow_private_storage_space_create: Optional[bool] = None
     allow_portal_named_bucket_create: Optional[bool] = None
@@ -48,7 +45,7 @@ class PortalSettingsAdminUpdate(PortalSettingsOverride):
     delegated_to_portal_managers: Optional[bool] = None
 
 
-class PortalBucketDefaults(BaseModel):
+class PortalBucketDefaults(ApiModel):
     versioning: bool = True
     enable_cors: bool = True
     enable_lifecycle: bool = True
@@ -56,7 +53,7 @@ class PortalBucketDefaults(BaseModel):
     cors_allowed_origins: list[str] = Field(default_factory=_default_portal_cors_origins)
 
 
-class GeneralSettings(BaseModel):
+class GeneralSettings(ApiModel):
     manager_enabled: bool = True
     ceph_admin_enabled: bool = False
     storage_ops_enabled: bool = False
@@ -82,13 +79,13 @@ class GeneralSettings(BaseModel):
     allow_login_custom_endpoint: bool = False
 
 
-class GeneralFeatureLock(BaseModel):
+class GeneralFeatureLock(ApiModel):
     forced: bool = False
     value: Optional[bool] = None
     source: Optional[str] = None
 
 
-class GeneralFeatureLocks(BaseModel):
+class GeneralFeatureLocks(ApiModel):
     manager_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
     ceph_admin_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
     storage_ops_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
@@ -98,7 +95,7 @@ class GeneralFeatureLocks(BaseModel):
     endpoint_status_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
 
 
-class BrandingSettings(BaseModel):
+class BrandingSettings(ApiModel):
     primary_color: str = "#0ea5e9"
     login_logo_url: Optional[str] = None
 
@@ -136,7 +133,7 @@ class BrandingSettings(BaseModel):
         raise ValueError("login_logo_url must be http(s), root-relative (/...), or data:image/... URL")
 
 
-class LoginSettings(BaseModel):
+class LoginSettings(ApiModel):
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False
@@ -148,9 +145,7 @@ class LoginSettings(BaseModel):
     seed_login_password: Optional[str] = None
 
 
-class PortalSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class PortalSettings(ApiModel):
     browser_access_enabled: bool = False
     allow_private_storage_space_create: bool = True
     allow_portal_named_bucket_create: bool = False
@@ -162,7 +157,7 @@ class PortalSettings(BaseModel):
     bucket_defaults: PortalBucketDefaults = Field(default_factory=PortalBucketDefaults)
 
 
-class ManagerSettings(BaseModel):
+class ManagerSettings(ApiModel):
     manager_rgw_usage_metrics_enabled: bool = True
     bucket_migration_parallelism_default: int = Field(
         default_factory=_default_bucket_migration_parallelism_max,
@@ -187,7 +182,7 @@ class ManagerSettings(BaseModel):
         return self
 
 
-class QuotaNotificationSettings(BaseModel):
+class QuotaNotificationSettings(ApiModel):
     threshold_percent: int = Field(default=85, ge=1, le=100)
     include_subject_contact_email: bool = False
     smtp_host: Optional[str] = None
@@ -209,7 +204,7 @@ class QuotaNotificationSettings(BaseModel):
         return normalized or None
 
 
-class BrowserSettings(BaseModel):
+class BrowserSettings(ApiModel):
     allow_proxy_transfers: bool = True
     direct_upload_parallelism: int = Field(default=5, ge=1, le=20)
     proxy_upload_parallelism: int = Field(default=2, ge=1, le=20)
@@ -219,11 +214,11 @@ class BrowserSettings(BaseModel):
     streaming_zip_threshold_mb: int = Field(default=200, ge=0, le=10240)
 
 
-class OnboardingSettings(BaseModel):
+class OnboardingSettings(ApiModel):
     dismissed: bool = False
 
 
-class AppSettings(BaseModel):
+class AppSettings(ApiModel):
     general: GeneralSettings = Field(default_factory=GeneralSettings)
     portal: PortalSettings = Field(default_factory=PortalSettings)
     manager: ManagerSettings = Field(default_factory=ManagerSettings)

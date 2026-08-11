@@ -5,14 +5,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
+from app.models.base import ApiModel
 from app.models.s3_connection import S3Connection
 
 
-class ManagedInlinePolicy(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class ManagedInlinePolicy(ApiModel):
     name: str = Field(min_length=1, max_length=128)
     document: dict[str, Any]
 
@@ -25,9 +24,7 @@ class ManagedInlinePolicy(BaseModel):
         return normalized
 
 
-class _ManagedPrivateAccessRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class _ManagedPrivateAccessRequest(ApiModel):
     connection_name: str = Field(min_length=1, max_length=255)
     access_browser: bool
     access_manager: bool
@@ -69,7 +66,7 @@ class ManagedRGWUserPrivateAccessRequest(_ManagedPrivateAccessRequest):
     pass
 
 
-class ManagedPrivateAccessResult(BaseModel):
+class ManagedPrivateAccessResult(ApiModel):
     provisioning_id: int
     status: Literal["active", "cleanup_pending"]
     connection: S3Connection

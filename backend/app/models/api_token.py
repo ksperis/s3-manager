@@ -3,10 +3,12 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+
+from app.models.base import ApiModel
 
 
-class ApiTokenCreateRequest(BaseModel):
+class ApiTokenCreateRequest(ApiModel):
     name: str = Field(min_length=1, max_length=128)
     expires_in_days: Optional[int] = Field(default=None, ge=1)
 
@@ -19,7 +21,7 @@ class ApiTokenCreateRequest(BaseModel):
         return normalized
 
 
-class ApiTokenInfo(BaseModel):
+class ApiTokenInfo(ApiModel):
     id: str
     name: str
     created_at: datetime
@@ -28,7 +30,7 @@ class ApiTokenInfo(BaseModel):
     revoked_at: Optional[datetime] = None
 
 
-class ApiTokenCreateResponse(BaseModel):
+class ApiTokenCreateResponse(ApiModel):
     access_token: str
     token_type: str = "bearer"
     api_token: ApiTokenInfo

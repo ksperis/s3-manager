@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from app.models.base import ApiModel
 
 
 UsageTrendWindow = Literal["month", "week", "day"]
 
 
-class ManagerUsageTrendBaseline(BaseModel):
+class ManagerUsageTrendBaseline(ApiModel):
     window: UsageTrendWindow
     label: str
     period_start: str
@@ -20,7 +20,7 @@ class ManagerUsageTrendBaseline(BaseModel):
     collected_at: Optional[str] = None
 
 
-class ManagerUsageTrendsResponse(BaseModel):
+class ManagerUsageTrendsResponse(ApiModel):
     storage: Optional[ManagerUsageTrendBaseline] = None
     objects: Optional[ManagerUsageTrendBaseline] = None
     buckets: Optional[ManagerUsageTrendBaseline] = None

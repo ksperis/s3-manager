@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from app.models.base import ApiModel
 from app.models.bucket_operation import (
     BucketOperationRequest,
     BucketOperationTarget,
@@ -31,7 +32,7 @@ def bucket_purge_confirmation_phrase(target_count: int) -> str:
     return f"PURGE {target_count} BUCKETS"
 
 
-class BucketDeleteWithPurgeRequest(BaseModel):
+class BucketDeleteWithPurgeRequest(ApiModel):
     parallelism: int = Field(default=10, ge=1, le=64)
     confirmation: str = ""
 
@@ -40,7 +41,7 @@ def bucket_delete_with_purge_confirmation_phrase(bucket_name: str) -> str:
     return f"DELETE BUCKET {bucket_name}"
 
 
-class BucketPurgeFailure(BaseModel):
+class BucketPurgeFailure(ApiModel):
     bucket_name: str
     stage: str
     message: str
@@ -49,7 +50,7 @@ class BucketPurgeFailure(BaseModel):
     count: int = 0
 
 
-class BucketPurgeBucketResult(BaseModel):
+class BucketPurgeBucketResult(ApiModel):
     bucket_name: str
     context_id: Optional[str] = None
     context_name: Optional[str] = None
@@ -64,7 +65,7 @@ class BucketPurgeBucketResult(BaseModel):
     failures_sample: list[BucketPurgeFailure] = Field(default_factory=list)
 
 
-class BucketPurgeProgress(BaseModel):
+class BucketPurgeProgress(ApiModel):
     request_id: Optional[str] = None
     stage: BucketPurgeStage = "prepare"
     bucket_name: Optional[str] = None
@@ -83,7 +84,7 @@ class BucketPurgeProgress(BaseModel):
     message: Optional[str] = None
 
 
-class BucketPurgeResult(BaseModel):
+class BucketPurgeResult(ApiModel):
     status: BucketPurgeStatus
     total_buckets: int = 0
     completed_buckets: int = 0

@@ -2,8 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
+from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 from app.models.ui_group import UiGroupAvatar
@@ -11,9 +12,7 @@ from app.models.user import UserAvatar
 from app.utils.account_roles import CanonicalAccountRole
 
 
-class _CanonicalAccountLink(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class _CanonicalAccountLink(ApiModel):
     role: CanonicalAccountRole
     allow_manager_browser_data_access: bool = False
 
@@ -31,11 +30,7 @@ class AccountGroupLink(_CanonicalAccountLink):
     group_avatar: Optional[UiGroupAvatar] = None
 
 
-class _StrictS3AccountModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class S3Account(_StrictS3AccountModel):
+class S3Account(ApiModel):
     id: int
     name: str
     rgw_account_id: str
@@ -60,7 +55,7 @@ class S3Account(_StrictS3AccountModel):
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
-class S3AccountCreate(_StrictS3AccountModel):
+class S3AccountCreate(ApiModel):
     name: str
     email: Optional[str] = None
     quota_max_size_gb: Optional[float] = None
@@ -75,14 +70,14 @@ class S3AccountCreate(_StrictS3AccountModel):
         return validate_tag_definition_list(value, allow_none=False) or []
 
 
-class S3AccountImport(_StrictS3AccountModel):
+class S3AccountImport(ApiModel):
     rgw_account_id: str
     name: Optional[str] = None
     email: Optional[str] = None
     storage_endpoint_id: int
 
 
-class S3AccountUpdate(_StrictS3AccountModel):
+class S3AccountUpdate(ApiModel):
     quota_max_size_gb: Optional[float] = None
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
@@ -114,7 +109,7 @@ class S3AccountUpdate(_StrictS3AccountModel):
         return value
 
 
-class S3AccountSummary(_StrictS3AccountModel):
+class S3AccountSummary(ApiModel):
     id: int
     name: str
     rgw_account_id: str

@@ -5,7 +5,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+
+from app.models.base import ApiModel
 
 
 class KeyRotationType(str, Enum):
@@ -16,7 +18,7 @@ class KeyRotationType(str, Enum):
     CEPH_ADMIN = "ceph_admin"
 
 
-class KeyRotationRequest(BaseModel):
+class KeyRotationRequest(ApiModel):
     endpoint_ids: list[int] = Field(default_factory=list, min_length=1)
     key_types: list[KeyRotationType] = Field(default_factory=list, min_length=1)
     deactivate_only: bool = False
@@ -43,7 +45,7 @@ class KeyRotationRequest(BaseModel):
         return normalized
 
 
-class KeyRotationResultItem(BaseModel):
+class KeyRotationResultItem(ApiModel):
     endpoint_id: int
     endpoint_name: str
     key_type: KeyRotationType
@@ -56,7 +58,7 @@ class KeyRotationResultItem(BaseModel):
     new_access_key: Optional[str] = None
 
 
-class KeyRotationSummary(BaseModel):
+class KeyRotationSummary(ApiModel):
     total: int = 0
     rotated: int = 0
     failed: int = 0
@@ -65,7 +67,7 @@ class KeyRotationSummary(BaseModel):
     disabled_old_keys: int = 0
 
 
-class KeyRotationResponse(BaseModel):
+class KeyRotationResponse(ApiModel):
     mode: Literal["delete_old_keys", "deactivate_old_keys"]
     summary: KeyRotationSummary
     results: list[KeyRotationResultItem] = Field(default_factory=list)

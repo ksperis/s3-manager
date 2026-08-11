@@ -1,5 +1,13 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 strict API object contracts
+
+All backend application request and response objects now reject unknown
+properties. Canonical frontend requests are unchanged, but an API request that
+still sends a removed field now receives `422` instead of silently discarding
+it. Deploy the backend and frontend together, and remove obsolete properties
+from any local scripts before upgrading.
+
 ## 2026-08 strict environment-managed provider configuration
 
 Entries nested under `OIDC_PROVIDERS`, `LDAP_PROVIDERS`, and

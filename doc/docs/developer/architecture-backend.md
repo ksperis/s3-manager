@@ -24,6 +24,13 @@ Router dependencies enforce global feature enablement (`require_*_enabled`).
 
 Backend preserves storage/API denial semantics and logs server-side details.
 
+## API models
+
+All application request and response DTOs inherit from
+`app.models.base.ApiModel`. This boundary rejects unknown properties; do not
+inherit directly from Pydantic's `BaseModel` for an application API schema.
+FastAPI-generated form and multipart schemas are the only exceptions.
+
 ## Service boundaries
 
 - Routers validate the HTTP boundary and call services.

@@ -3,8 +3,9 @@
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
+from app.models.base import ApiModel
 from app.utils.ldap_validation import (
     LDAP_PROVIDER_DEFAULT_USER_FILTER,
     LDAP_PROVIDER_ID_PATTERN,
@@ -18,12 +19,12 @@ LDAP_USERNAME_MAX_LENGTH = 256
 LDAP_PASSWORD_MAX_LENGTH = 1024
 
 
-class LDAPProviderInfo(BaseModel):
+class LDAPProviderInfo(ApiModel):
     id: str
     display_name: str
 
 
-class LDAPLoginRequest(BaseModel):
+class LDAPLoginRequest(ApiModel):
     username: str = Field(min_length=1, max_length=LDAP_USERNAME_MAX_LENGTH)
     password: str = Field(min_length=1, max_length=LDAP_PASSWORD_MAX_LENGTH)
 
@@ -38,12 +39,12 @@ class LDAPLoginRequest(BaseModel):
         return normalized
 
 
-class LDAPProviderFieldLock(BaseModel):
+class LDAPProviderFieldLock(ApiModel):
     forced: bool = False
     source: Optional[str] = None
 
 
-class LDAPProviderAdminItem(BaseModel):
+class LDAPProviderAdminItem(ApiModel):
     provider_id: str
     display_name: str
     url: str
@@ -67,7 +68,7 @@ class LDAPProviderAdminItem(BaseModel):
     has_bind_password: bool = False
 
 
-class LDAPProviderAdminPayload(BaseModel):
+class LDAPProviderAdminPayload(ApiModel):
     provider_id: str
     display_name: str
     url: str

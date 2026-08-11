@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from app.models.base import ApiModel
 
 
-class ManagerActivityEntry(BaseModel):
+class ManagerActivityEntry(ApiModel):
     id: int
     created_at: datetime
     action: str

@@ -2,17 +2,19 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.models.base import ApiModel
 from app.models.tagging import TagDefinitionSummary
 
 
-class ExecutionContextCapabilities(BaseModel):
+class ExecutionContextCapabilities(ApiModel):
     can_manage_iam: bool
     sts_capable: bool
     admin_api_capable: bool
 
 
-class ExecutionContext(BaseModel):
+class ExecutionContext(ApiModel):
     kind: Literal["account", "connection", "s3_user", "portal_account"]
     id: str
     display_name: str
@@ -36,12 +38,12 @@ class ExecutionContext(BaseModel):
     capabilities: ExecutionContextCapabilities
 
 
-class WorkspaceAvailability(BaseModel):
+class WorkspaceAvailability(ApiModel):
     available: bool = False
     context_count: int = 0
 
 
-class WorkspaceAccess(BaseModel):
+class WorkspaceAccess(ApiModel):
     admin: WorkspaceAvailability
     ceph_admin: WorkspaceAvailability
     storage_ops: WorkspaceAvailability

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from app.models.base import ApiModel
 from app.db import HealthCheckStatus
 
 
-class EndpointHealthSummary(BaseModel):
+class EndpointHealthSummary(ApiModel):
     endpoint_id: int
     name: str
     endpoint_url: str
@@ -22,12 +23,12 @@ class EndpointHealthSummary(BaseModel):
     check_target_url: Optional[str] = None
 
 
-class EndpointHealthSummaryResponse(BaseModel):
+class EndpointHealthSummaryResponse(ApiModel):
     generated_at: str
     endpoints: list[EndpointHealthSummary]
 
 
-class EndpointHealthPoint(BaseModel):
+class EndpointHealthPoint(ApiModel):
     timestamp: str
     status: HealthCheckStatus
     latency_ms: Optional[int] = None
@@ -37,7 +38,7 @@ class EndpointHealthPoint(BaseModel):
     scope: str = "endpoint"
 
 
-class EndpointHealthDailyPoint(BaseModel):
+class EndpointHealthDailyPoint(ApiModel):
     day: str
     ok_count: int = 0
     degraded_count: int = 0
@@ -46,7 +47,7 @@ class EndpointHealthDailyPoint(BaseModel):
     p95_latency_ms: Optional[int] = None
 
 
-class EndpointHealthSeries(BaseModel):
+class EndpointHealthSeries(ApiModel):
     endpoint_id: int
     window: str
     start: str
@@ -61,7 +62,7 @@ class EndpointHealthSeries(BaseModel):
     daily: list[EndpointHealthDailyPoint]
 
 
-class EndpointHealthIncident(BaseModel):
+class EndpointHealthIncident(ApiModel):
     start: str
     end: Optional[str] = None
     duration_minutes: Optional[int] = None
@@ -71,7 +72,7 @@ class EndpointHealthIncident(BaseModel):
     scope: str = "endpoint"
 
 
-class EndpointHealthIncidentsResponse(BaseModel):
+class EndpointHealthIncidentsResponse(ApiModel):
     endpoint_id: int
     window: str
     check_mode: str = "http"
@@ -80,7 +81,7 @@ class EndpointHealthIncidentsResponse(BaseModel):
     incidents: list[EndpointHealthIncident]
 
 
-class EndpointHealthRawCheck(BaseModel):
+class EndpointHealthRawCheck(ApiModel):
     checked_at: str
     status: HealthCheckStatus
     latency_ms: Optional[int] = None
@@ -89,7 +90,7 @@ class EndpointHealthRawCheck(BaseModel):
     check_mode: str = "http"
 
 
-class EndpointHealthRawChecksResponse(BaseModel):
+class EndpointHealthRawChecksResponse(ApiModel):
     endpoint_id: int
     window: str
     start: str
@@ -100,7 +101,7 @@ class EndpointHealthRawChecksResponse(BaseModel):
     checks: list[EndpointHealthRawCheck]
 
 
-class EndpointHealthTimelinePoint(BaseModel):
+class EndpointHealthTimelinePoint(ApiModel):
     timestamp: str
     end_timestamp: Optional[str] = None
     status: HealthCheckStatus
@@ -108,7 +109,7 @@ class EndpointHealthTimelinePoint(BaseModel):
     reason: Optional[str] = None
 
 
-class EndpointHealthOverviewEndpoint(BaseModel):
+class EndpointHealthOverviewEndpoint(ApiModel):
     endpoint_id: int
     name: str
     endpoint_url: str
@@ -122,7 +123,7 @@ class EndpointHealthOverviewEndpoint(BaseModel):
     timeline: list[EndpointHealthTimelinePoint] = Field(default_factory=list)
 
 
-class EndpointHealthOverviewResponse(BaseModel):
+class EndpointHealthOverviewResponse(ApiModel):
     generated_at: str
     window: str
     start: str
@@ -130,7 +131,7 @@ class EndpointHealthOverviewResponse(BaseModel):
     endpoints: list[EndpointHealthOverviewEndpoint]
 
 
-class EndpointHealthLatencyOverviewEndpoint(BaseModel):
+class EndpointHealthLatencyOverviewEndpoint(ApiModel):
     endpoint_id: int
     name: str
     endpoint_url: str
@@ -147,7 +148,7 @@ class EndpointHealthLatencyOverviewEndpoint(BaseModel):
     scope: str = "endpoint"
 
 
-class EndpointHealthLatencyOverviewResponse(BaseModel):
+class EndpointHealthLatencyOverviewResponse(ApiModel):
     generated_at: str
     window: str
     start: str
@@ -155,7 +156,7 @@ class EndpointHealthLatencyOverviewResponse(BaseModel):
     endpoints: list[EndpointHealthLatencyOverviewEndpoint]
 
 
-class EndpointHealthGlobalIncident(BaseModel):
+class EndpointHealthGlobalIncident(ApiModel):
     endpoint_id: int
     endpoint_name: str
     endpoint_url: Optional[str] = None
@@ -168,7 +169,7 @@ class EndpointHealthGlobalIncident(BaseModel):
     scope: str = "endpoint"
 
 
-class EndpointHealthGlobalIncidentsResponse(BaseModel):
+class EndpointHealthGlobalIncidentsResponse(ApiModel):
     window: str
     start: str
     end: str
@@ -176,7 +177,7 @@ class EndpointHealthGlobalIncidentsResponse(BaseModel):
     incidents: list[EndpointHealthGlobalIncident]
 
 
-class WorkspaceEndpointHealthEntry(BaseModel):
+class WorkspaceEndpointHealthEntry(ApiModel):
     endpoint_id: int
     name: str
     endpoint_url: str
@@ -188,7 +189,7 @@ class WorkspaceEndpointHealthEntry(BaseModel):
     is_stale: bool = False
 
 
-class WorkspaceEndpointIncidentEntry(BaseModel):
+class WorkspaceEndpointIncidentEntry(ApiModel):
     endpoint_id: int
     endpoint_name: str
     endpoint_url: Optional[str] = None
@@ -201,7 +202,7 @@ class WorkspaceEndpointIncidentEntry(BaseModel):
     recent: bool = False
 
 
-class WorkspaceEndpointHealthOverviewResponse(BaseModel):
+class WorkspaceEndpointHealthOverviewResponse(ApiModel):
     generated_at: str
     stale_after_seconds: int
     incident_highlight_minutes: int

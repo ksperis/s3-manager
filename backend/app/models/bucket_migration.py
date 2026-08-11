@@ -6,7 +6,9 @@ from datetime import datetime
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
+
+from app.models.base import ApiModel
 
 
 BucketMigrationMode = Literal["one_shot", "pre_sync"]
@@ -38,7 +40,7 @@ BucketMigrationItemStatus = Literal[
 ]
 
 
-class BucketMigrationBucketMapping(BaseModel):
+class BucketMigrationBucketMapping(ApiModel):
     source_bucket: str
     target_bucket: Optional[str] = None
 
@@ -53,7 +55,7 @@ class BucketMigrationBucketMapping(BaseModel):
         return self
 
 
-class BucketMigrationCreateRequest(BaseModel):
+class BucketMigrationCreateRequest(ApiModel):
     source_context_id: str
     target_context_id: str
     buckets: list[BucketMigrationBucketMapping] = Field(default_factory=list, min_length=1)
@@ -95,7 +97,7 @@ class BucketMigrationCreateRequest(BaseModel):
         return self
 
 
-class BucketMigrationItemView(BaseModel):
+class BucketMigrationItemView(ApiModel):
     id: int
     source_bucket: str
     target_bucket: str
@@ -124,7 +126,7 @@ class BucketMigrationItemView(BaseModel):
     updated_at: datetime
 
 
-class BucketMigrationEventView(BaseModel):
+class BucketMigrationEventView(ApiModel):
     id: int
     item_id: Optional[int] = None
     level: str
@@ -133,7 +135,7 @@ class BucketMigrationEventView(BaseModel):
     created_at: datetime
 
 
-class BucketMigrationView(BaseModel):
+class BucketMigrationView(ApiModel):
     id: int
     created_by_user_id: Optional[int] = None
 
@@ -179,11 +181,11 @@ class BucketMigrationDetail(BucketMigrationView):
     recent_events: list[BucketMigrationEventView] = Field(default_factory=list)
 
 
-class BucketMigrationListResponse(BaseModel):
+class BucketMigrationListResponse(ApiModel):
     items: list[BucketMigrationView] = Field(default_factory=list)
 
 
-class BucketMigrationActionResponse(BaseModel):
+class BucketMigrationActionResponse(ApiModel):
     id: int
     status: BucketMigrationStatus
     message: str

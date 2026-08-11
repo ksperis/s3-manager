@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal, Optional, Union
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator
+
+from app.models.base import ApiModel
 
 
 PortalAdminRequestType = Literal["portal_user_access", "portal_user_removal", "account_quota_change"]
@@ -21,7 +23,7 @@ def _normalize_optional_request_text(value: Optional[str]) -> Optional[str]:
     return cleaned or None
 
 
-class PortalUserAccessRequestCreate(BaseModel):
+class PortalUserAccessRequestCreate(ApiModel):
     request_type: Literal["portal_user_access"]
     target_name: str = Field(min_length=1, max_length=120)
     target_email: EmailStr
@@ -38,7 +40,7 @@ class PortalUserAccessRequestCreate(BaseModel):
     _normalize_reason = field_validator("reason")(_normalize_optional_request_text)
 
 
-class PortalUserRemovalRequestCreate(BaseModel):
+class PortalUserRemovalRequestCreate(ApiModel):
     request_type: Literal["portal_user_removal"]
     target_email: EmailStr
     target_name: Optional[str] = Field(default=None, max_length=120)
@@ -47,7 +49,7 @@ class PortalUserRemovalRequestCreate(BaseModel):
     _normalize_optional_text = field_validator("target_name", "reason")(_normalize_optional_request_text)
 
 
-class PortalAccountQuotaChangeRequestCreate(BaseModel):
+class PortalAccountQuotaChangeRequestCreate(ApiModel):
     request_type: Literal["account_quota_change"]
     direction: PortalQuotaDirection
     target_quota_value: float = Field(gt=0)
@@ -63,7 +65,7 @@ PortalAdminRequestCreate = Annotated[
 ]
 
 
-class PortalAdminRequestMessageCreate(BaseModel):
+class PortalAdminRequestMessageCreate(ApiModel):
     message: str = Field(min_length=1, max_length=2000)
 
     @field_validator("message")
@@ -75,13 +77,13 @@ class PortalAdminRequestMessageCreate(BaseModel):
         return cleaned
 
 
-class PortalAdminRequestDecision(BaseModel):
+class PortalAdminRequestDecision(ApiModel):
     message: Optional[str] = Field(default=None, max_length=2000)
 
     _normalize_optional_message = field_validator("message")(_normalize_optional_request_text)
 
 
-class PortalAdminRequestMessageOut(BaseModel):
+class PortalAdminRequestMessageOut(ApiModel):
     id: int
     author_user_id: Optional[int] = None
     author_email: str
@@ -90,7 +92,7 @@ class PortalAdminRequestMessageOut(BaseModel):
     created_at: datetime
 
 
-class PortalAdminRequestOut(BaseModel):
+class PortalAdminRequestOut(ApiModel):
     id: int
     account_id: int
     account_name: Optional[str] = None

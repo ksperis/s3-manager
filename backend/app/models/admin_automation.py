@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import EmailStr, Field, model_validator
 
+from app.models.base import ApiModel
 from app.db import StorageProvider
 from app.models.s3_connection import CredentialOwnerType
 from app.models.user import ManagerToolAccess, UiRole
@@ -15,7 +16,7 @@ from app.utils.account_roles import CanonicalAccountRole
 ApplyState = Literal["present", "absent"]
 
 
-class StorageEndpointMatch(BaseModel):
+class StorageEndpointMatch(ApiModel):
     id: Optional[int] = None
     name: Optional[str] = None
     endpoint_url: Optional[str] = None
@@ -27,7 +28,7 @@ class StorageEndpointMatch(BaseModel):
         return self
 
 
-class StorageEndpointSpec(BaseModel):
+class StorageEndpointSpec(ApiModel):
     name: Optional[str] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
@@ -46,14 +47,14 @@ class StorageEndpointSpec(BaseModel):
     set_default: Optional[bool] = None
 
 
-class StorageEndpointApply(BaseModel):
+class StorageEndpointApply(ApiModel):
     state: ApplyState = "present"
     match: StorageEndpointMatch
     spec: Optional[StorageEndpointSpec] = None
     update_secrets: bool = False
 
 
-class UiUserMatch(BaseModel):
+class UiUserMatch(ApiModel):
     id: Optional[int] = None
     email: Optional[EmailStr] = None
 
@@ -64,7 +65,7 @@ class UiUserMatch(BaseModel):
         return self
 
 
-class UiUserSpec(BaseModel):
+class UiUserSpec(ApiModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
     full_name: Optional[str] = None
@@ -78,14 +79,14 @@ class UiUserSpec(BaseModel):
     s3_connection_ids: Optional[list[int]] = None
 
 
-class UiUserApply(BaseModel):
+class UiUserApply(ApiModel):
     state: ApplyState = "present"
     match: UiUserMatch
     spec: Optional[UiUserSpec] = None
     set_password: bool = False
 
 
-class S3AccountMatch(BaseModel):
+class S3AccountMatch(ApiModel):
     id: Optional[int] = None
     name: Optional[str] = None
     rgw_account_id: Optional[str] = None
@@ -97,7 +98,7 @@ class S3AccountMatch(BaseModel):
         return self
 
 
-class S3AccountSpec(BaseModel):
+class S3AccountSpec(ApiModel):
     name: Optional[str] = None
     email: Optional[str] = None
     rgw_account_id: Optional[str] = None
@@ -112,14 +113,14 @@ class S3AccountSpec(BaseModel):
     storage_endpoint_url: Optional[str] = None
 
 
-class S3AccountApply(BaseModel):
+class S3AccountApply(ApiModel):
     state: ApplyState = "present"
     action: Literal["create", "register"] = "create"
     match: S3AccountMatch
     spec: Optional[S3AccountSpec] = None
 
 
-class S3UserMatch(BaseModel):
+class S3UserMatch(ApiModel):
     id: Optional[int] = None
     uid: Optional[str] = None
 
@@ -130,7 +131,7 @@ class S3UserMatch(BaseModel):
         return self
 
 
-class S3UserSpec(BaseModel):
+class S3UserSpec(ApiModel):
     name: Optional[str] = None
     uid: Optional[str] = None
     email: Optional[str] = None
@@ -145,14 +146,14 @@ class S3UserSpec(BaseModel):
     user_ids: Optional[list[int]] = None
 
 
-class S3UserApply(BaseModel):
+class S3UserApply(ApiModel):
     state: ApplyState = "present"
     action: Literal["create", "register"] = "create"
     match: S3UserMatch
     spec: Optional[S3UserSpec] = None
 
 
-class S3ConnectionMatch(BaseModel):
+class S3ConnectionMatch(ApiModel):
     id: Optional[int] = None
     name: Optional[str] = None
 
@@ -163,9 +164,7 @@ class S3ConnectionMatch(BaseModel):
         return self
 
 
-class S3ConnectionSpec(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class S3ConnectionSpec(ApiModel):
     name: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     endpoint_url: Optional[str] = None
@@ -180,14 +179,14 @@ class S3ConnectionSpec(BaseModel):
     secret_access_key: Optional[str] = None
 
 
-class S3ConnectionApply(BaseModel):
+class S3ConnectionApply(ApiModel):
     state: ApplyState = "present"
     match: S3ConnectionMatch
     spec: Optional[S3ConnectionSpec] = None
     update_credentials: bool = False
 
 
-class AccountLinkUserRef(BaseModel):
+class AccountLinkUserRef(ApiModel):
     id: Optional[int] = None
     email: Optional[EmailStr] = None
 
@@ -198,7 +197,7 @@ class AccountLinkUserRef(BaseModel):
         return self
 
 
-class AccountLinkAccountRef(BaseModel):
+class AccountLinkAccountRef(ApiModel):
     id: Optional[int] = None
     name: Optional[str] = None
     rgw_account_id: Optional[str] = None
@@ -210,9 +209,7 @@ class AccountLinkAccountRef(BaseModel):
         return self
 
 
-class AccountLinkApply(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class AccountLinkApply(ApiModel):
     state: ApplyState = "present"
     user: AccountLinkUserRef
     account: AccountLinkAccountRef
@@ -225,7 +222,7 @@ class AccountLinkApply(BaseModel):
         return self
 
 
-class AdminAutomationApplyRequest(BaseModel):
+class AdminAutomationApplyRequest(ApiModel):
     dry_run: bool = False
     continue_on_error: bool = False
     storage_endpoints: list[StorageEndpointApply] = Field(default_factory=list)
@@ -236,7 +233,7 @@ class AdminAutomationApplyRequest(BaseModel):
     account_links: list[AccountLinkApply] = Field(default_factory=list)
 
 
-class AdminAutomationItemResult(BaseModel):
+class AdminAutomationItemResult(ApiModel):
     resource: str
     key: str
     action: Literal["created", "updated", "deleted", "skipped", "failed"]
@@ -248,7 +245,7 @@ class AdminAutomationItemResult(BaseModel):
     dry_run: bool = False
 
 
-class AdminAutomationSummary(BaseModel):
+class AdminAutomationSummary(ApiModel):
     created: int = 0
     updated: int = 0
     deleted: int = 0
@@ -256,14 +253,14 @@ class AdminAutomationSummary(BaseModel):
     failed: int = 0
 
 
-class AdminAutomationApplyResponse(BaseModel):
+class AdminAutomationApplyResponse(ApiModel):
     changed: bool
     success: bool
     summary: AdminAutomationSummary
     results: list[AdminAutomationItemResult]
 
 
-class _AdminAutomationSingleRequest(BaseModel):
+class _AdminAutomationSingleRequest(ApiModel):
     dry_run: bool = False
     continue_on_error: bool = False
 

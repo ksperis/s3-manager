@@ -1,10 +1,10 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
-from pydantic import BaseModel
+from app.models.base import ApiModel
 
 
-class Policy(BaseModel):
+class Policy(ApiModel):
     name: str
     arn: str
     path: Optional[str] = None
@@ -12,11 +12,11 @@ class Policy(BaseModel):
     document: Optional[dict] = None
 
 
-class PolicyCreate(BaseModel):
+class PolicyCreate(ApiModel):
     name: str
     document: dict
 
 
-class InlinePolicy(BaseModel):
+class InlinePolicy(ApiModel):
     name: str
     document: dict

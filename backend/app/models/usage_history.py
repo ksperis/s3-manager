@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.models.base import ApiModel
 
 
 UsageHistoryGranularity = Literal["daily", "hourly"]
@@ -12,14 +14,14 @@ UsageHistorySubjectType = Literal["all", "account", "s3_user"]
 UsageHistoryTrendWindow = Literal["day", "week", "month"]
 
 
-class UsageHistorySummary(BaseModel):
+class UsageHistorySummary(ApiModel):
     total_records: int = 0
     subjects_count: int = 0
     latest_collected_at: Optional[str] = None
     max_usage_ratio_pct: Optional[float] = None
 
 
-class UsageHistoryRecord(BaseModel):
+class UsageHistoryRecord(ApiModel):
     id: int
     granularity: UsageHistoryGranularity
     period_start: str
@@ -39,7 +41,7 @@ class UsageHistoryRecord(BaseModel):
     collected_at: str
 
 
-class UsageHistoryResponse(BaseModel):
+class UsageHistoryResponse(ApiModel):
     items: list[UsageHistoryRecord] = Field(default_factory=list)
     total: int = 0
     page: int = 1
@@ -48,7 +50,7 @@ class UsageHistoryResponse(BaseModel):
     summary: UsageHistorySummary = Field(default_factory=UsageHistorySummary)
 
 
-class UsageHistoryTrendPoint(BaseModel):
+class UsageHistoryTrendPoint(ApiModel):
     period_start: str
     used_bytes: int = 0
     used_objects: int = 0
@@ -59,7 +61,7 @@ class UsageHistoryTrendPoint(BaseModel):
     collected_at: Optional[str] = None
 
 
-class UsageHistoryTrendSummary(BaseModel):
+class UsageHistoryTrendSummary(ApiModel):
     total_records: int = 0
     points_count: int = 0
     subjects_count: int = 0
@@ -70,7 +72,7 @@ class UsageHistoryTrendSummary(BaseModel):
     max_usage_ratio_pct: Optional[float] = None
 
 
-class UsageHistoryTrendResponse(BaseModel):
+class UsageHistoryTrendResponse(ApiModel):
     window: UsageHistoryTrendWindow
     granularity: UsageHistoryGranularity
     available: bool = True

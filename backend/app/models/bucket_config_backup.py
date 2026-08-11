@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
+
+from app.models.base import ApiModel
 
 
 BucketConfigBackupFeature = Literal[
@@ -21,7 +23,7 @@ BucketConfigBackupFeature = Literal[
 ]
 
 
-class BucketConfigBackupRequest(BaseModel):
+class BucketConfigBackupRequest(ApiModel):
     buckets: list[str] = Field(..., min_length=1)
     features: list[BucketConfigBackupFeature] = Field(..., min_length=1)
 
@@ -56,19 +58,19 @@ class BucketConfigBackupRequest(BaseModel):
         return self
 
 
-class BucketConfigBackupSource(BaseModel):
+class BucketConfigBackupSource(ApiModel):
     surface: str
     endpoint_id: int | None = None
     endpoint_name: str | None = None
 
 
-class BucketConfigBackupBucket(BaseModel):
+class BucketConfigBackupBucket(ApiModel):
     name: str
     configuration: dict[str, Any] = Field(default_factory=dict)
     errors: dict[str, str] = Field(default_factory=dict)
 
 
-class BucketConfigBackupResponse(BaseModel):
+class BucketConfigBackupResponse(ApiModel):
     kind: str = "ceph-admin.bucket-config-backup"
     version: int = 1
     generated_at: datetime

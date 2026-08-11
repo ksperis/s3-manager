@@ -3,40 +3,42 @@
 import re
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+
+from app.models.base import ApiModel
 
 
 OIDC_PROVIDER_ID_PATTERN = re.compile(r"^[a-z0-9_-]+$")
 OIDC_PROVIDER_DEFAULT_SCOPES = ["openid", "email", "profile"]
 
 
-class OIDCProviderInfo(BaseModel):
+class OIDCProviderInfo(ApiModel):
     id: str
     display_name: str
     icon_url: Optional[str] = None
 
 
-class OIDCStartRequest(BaseModel):
+class OIDCStartRequest(ApiModel):
     redirect_path: Optional[str] = None
 
 
-class OIDCStartResponse(BaseModel):
+class OIDCStartResponse(ApiModel):
     provider: str
     authorization_url: str
     state: str
 
 
-class OIDCCallbackRequest(BaseModel):
+class OIDCCallbackRequest(ApiModel):
     code: str
     state: str
 
 
-class OIDCProviderFieldLock(BaseModel):
+class OIDCProviderFieldLock(ApiModel):
     forced: bool = False
     source: Optional[str] = None
 
 
-class OIDCProviderAdminItem(BaseModel):
+class OIDCProviderAdminItem(ApiModel):
     provider_id: str
     display_name: str
     discovery_url: str
@@ -54,7 +56,7 @@ class OIDCProviderAdminItem(BaseModel):
     has_client_secret: bool = False
 
 
-class OIDCProviderAdminPayload(BaseModel):
+class OIDCProviderAdminPayload(ApiModel):
     provider_id: str
     display_name: str
     discovery_url: str

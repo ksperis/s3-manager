@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import ValidationError, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,7 @@ from app.models.storage_endpoint import (
     StorageEndpointTagsUpdate,
     StorageEndpointUpdate,
 )
+from app.models.base import ApiModel
 from app.services.mappers.storage_endpoint import storage_endpoint_from_db
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
@@ -46,9 +47,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class EnvStorageEndpoint(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class EnvStorageEndpoint(ApiModel):
     name: str
     endpoint_url: str
     region: Optional[str] = None

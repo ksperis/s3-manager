@@ -5,22 +5,22 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel
 
+from app.models.base import ApiModel
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.storage_endpoint_features import resolve_feature_flags
 
 
-class CreateFolderPayload(BaseModel):
+class CreateFolderPayload(ApiModel):
     prefix: str
 
 
-class ProxyUploadResponse(BaseModel):
+class ProxyUploadResponse(ApiModel):
     message: str
     key: str
 
 
-class EnsureCorsPayload(BaseModel):
+class EnsureCorsPayload(ApiModel):
     origin: Optional[str] = None
 
 
@@ -42,4 +42,3 @@ def require_replication_feature(account: S3ExecutionTarget) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Bucket replication is disabled for this endpoint",
         )
-

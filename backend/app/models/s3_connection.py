@@ -4,15 +4,16 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
+from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 CredentialOwnerType = Literal["iam_user", "account_user", "s3_user"]
 
 
-class S3Connection(BaseModel):
+class S3Connection(ApiModel):
     id: int
     name: str
     provider_hint: Optional[str] = None
@@ -38,9 +39,7 @@ class S3Connection(BaseModel):
     last_used_at: Optional[datetime] = None
 
 
-class S3ConnectionCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class S3ConnectionCreate(ApiModel):
     name: str
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
@@ -62,9 +61,7 @@ class S3ConnectionCreate(BaseModel):
         return validate_tag_definition_list(value, allow_none=False) or []
 
 
-class S3ConnectionUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class S3ConnectionUpdate(ApiModel):
     name: Optional[str] = None
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
@@ -87,19 +84,18 @@ class S3ConnectionUpdate(BaseModel):
         return validate_tag_definition_list(value, allow_none=True)
 
 
-class S3ConnectionCredentialsUpdate(BaseModel):
+class S3ConnectionCredentialsUpdate(ApiModel):
     """Write-only credential rotation payload.
 
     The API never returns secrets back to the client.
     """
 
-    model_config = ConfigDict(extra="forbid")
 
     access_key_id: str
     secret_access_key: str
 
 
-class S3ConnectionCredentialsValidationRequest(BaseModel):
+class S3ConnectionCredentialsValidationRequest(ApiModel):
     storage_endpoint_id: Optional[int] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
@@ -109,7 +105,7 @@ class S3ConnectionCredentialsValidationRequest(BaseModel):
     verify_tls: bool = True
 
 
-class S3ConnectionCredentialsValidationResult(BaseModel):
+class S3ConnectionCredentialsValidationResult(ApiModel):
     ok: bool
     severity: Literal["success", "warning", "error"]
     code: Optional[str] = None

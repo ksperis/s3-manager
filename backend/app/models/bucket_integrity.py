@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from app.models.base import ApiModel
 from app.models.bucket_operation import (
     BucketOperationTarget,
     ExclusiveBucketOperationRequest,
@@ -30,7 +31,7 @@ class BucketIntegrityCheckRequest(ExclusiveBucketOperationRequest):
     since: Optional[datetime] = None
     max_mb_per_object: Optional[float] = Field(default=None, gt=0, le=10240)
 
-class BucketIntegrityFailure(BaseModel):
+class BucketIntegrityFailure(ApiModel):
     bucket_name: str
     stage: BucketIntegrityFailureStage
     message: str
@@ -38,7 +39,7 @@ class BucketIntegrityFailure(BaseModel):
     version_id: Optional[str] = None
 
 
-class BucketIntegrityBucketResult(BaseModel):
+class BucketIntegrityBucketResult(ApiModel):
     bucket_name: str
     context_id: Optional[str] = None
     context_name: Optional[str] = None
@@ -51,7 +52,7 @@ class BucketIntegrityBucketResult(BaseModel):
     failures_sample: list[BucketIntegrityFailure] = Field(default_factory=list)
 
 
-class BucketIntegrityCheckProgress(BaseModel):
+class BucketIntegrityCheckProgress(ApiModel):
     request_id: Optional[str] = None
     stage: Literal["prepare", "list", "verify", "completed"] = "prepare"
     bucket_name: Optional[str] = None
@@ -66,7 +67,7 @@ class BucketIntegrityCheckProgress(BaseModel):
     message: Optional[str] = None
 
 
-class BucketIntegrityCheckResult(BaseModel):
+class BucketIntegrityCheckResult(ApiModel):
     status: BucketIntegrityStatus
     total_buckets: int = 0
     completed_buckets: int = 0

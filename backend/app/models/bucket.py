@@ -3,20 +3,22 @@
 from datetime import datetime
 from typing import Any, Optional, List, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
+
+from app.models.base import ApiModel
 
 
-class BucketTag(BaseModel):
+class BucketTag(ApiModel):
     key: str
     value: str
 
 
-class BucketFeatureStatus(BaseModel):
+class BucketFeatureStatus(ApiModel):
     state: str
     tone: Literal["active", "inactive", "unknown"]
 
 
-class Bucket(BaseModel):
+class Bucket(ApiModel):
     name: str
     creation_date: Optional[datetime] = None
     used_bytes: Optional[int] = None
@@ -27,14 +29,14 @@ class Bucket(BaseModel):
     features: Optional[dict[str, BucketFeatureStatus]] = None
 
 
-class BucketPublicAccessBlock(BaseModel):
+class BucketPublicAccessBlock(ApiModel):
     block_public_acls: Optional[bool] = None
     ignore_public_acls: Optional[bool] = None
     block_public_policy: Optional[bool] = None
     restrict_public_buckets: Optional[bool] = None
 
 
-class BucketCreate(BaseModel):
+class BucketCreate(ApiModel):
     name: str
     versioning: Optional[bool] = None
     location_constraint: Optional[str] = None
@@ -48,45 +50,45 @@ class BucketCreate(BaseModel):
         return normalized or None
 
 
-class BucketVersioningUpdate(BaseModel):
+class BucketVersioningUpdate(ApiModel):
     enabled: bool
 
 
-class BucketVersioningStatus(BaseModel):
+class BucketVersioningStatus(ApiModel):
     status: Optional[str] = None
     enabled: bool = False
 
 
-class BucketPolicyIn(BaseModel):
+class BucketPolicyIn(ApiModel):
     policy: dict
 
 
-class BucketPolicyOut(BaseModel):
+class BucketPolicyOut(ApiModel):
     policy: Optional[dict] = None
 
 
-class LifecycleRule(BaseModel):
+class LifecycleRule(ApiModel):
     id: Optional[str] = None
     status: Optional[str] = None
     prefix: Optional[str] = None
 
 
-class BucketLifecycleConfig(BaseModel):
+class BucketLifecycleConfig(ApiModel):
     rules: List[dict] = Field(default_factory=list)
 
 
-class BucketTagsUpdate(BaseModel):
+class BucketTagsUpdate(ApiModel):
     tags: List[BucketTag] = Field(default_factory=list)
 
 
-class BucketObjectLock(BaseModel):
+class BucketObjectLock(ApiModel):
     enabled: Optional[bool] = None
     mode: Optional[str] = None
     days: Optional[int] = None
     years: Optional[int] = None
 
 
-class BucketObjectLockUpdate(BaseModel):
+class BucketObjectLockUpdate(ApiModel):
     enabled: Optional[bool] = None
     mode: Optional[str] = None
     days: Optional[int] = None
@@ -111,7 +113,7 @@ class BucketObjectLockUpdate(BaseModel):
         return self
 
 
-class BucketProperties(BaseModel):
+class BucketProperties(ApiModel):
     versioning_status: Optional[str] = None
     object_lock_enabled: Optional[bool] = None
     object_lock: Optional[BucketObjectLock] = None
@@ -120,42 +122,42 @@ class BucketProperties(BaseModel):
     cors_rules: Optional[list[dict]] = None
 
 
-class BucketAclGrantee(BaseModel):
+class BucketAclGrantee(ApiModel):
     type: str
     id: Optional[str] = None
     display_name: Optional[str] = None
     uri: Optional[str] = None
 
 
-class BucketAclGrant(BaseModel):
+class BucketAclGrant(ApiModel):
     grantee: BucketAclGrantee
     permission: str
 
 
-class BucketAcl(BaseModel):
+class BucketAcl(ApiModel):
     owner: Optional[str] = None
     grants: List[BucketAclGrant] = Field(default_factory=list)
 
 
-class BucketAclUpdate(BaseModel):
+class BucketAclUpdate(ApiModel):
     acl: str
 
 
-class BucketQuotaUpdate(BaseModel):
+class BucketQuotaUpdate(ApiModel):
     max_size_gb: Optional[float] = None
     max_size_unit: Optional[str] = None
     max_objects: Optional[int] = None
 
 
-class BucketCorsUpdate(BaseModel):
+class BucketCorsUpdate(ApiModel):
     rules: list[dict]
 
 
-class BucketEncryptionConfiguration(BaseModel):
+class BucketEncryptionConfiguration(ApiModel):
     rules: list[dict] = Field(default_factory=list)
 
 
-class BucketNotificationConfiguration(BaseModel):
+class BucketNotificationConfiguration(ApiModel):
     configuration: dict = Field(default_factory=dict)
 
 
@@ -163,7 +165,7 @@ FeatureRuleInventoryFeature = Literal["lifecycle", "policy", "cors", "notificati
 FeatureRuleInventoryStatus = Literal["configured", "empty", "unavailable"]
 
 
-class FeatureRuleInventoryRule(BaseModel):
+class FeatureRuleInventoryRule(ApiModel):
     id: str
     type: str
     title: str
@@ -172,7 +174,7 @@ class FeatureRuleInventoryRule(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
-class FeatureRuleInventoryBucket(BaseModel):
+class FeatureRuleInventoryBucket(ApiModel):
     bucket_name: str
     feature: FeatureRuleInventoryFeature
     status: FeatureRuleInventoryStatus
@@ -180,22 +182,22 @@ class FeatureRuleInventoryBucket(BaseModel):
     error: Optional[str] = None
 
 
-class BucketReplicationConfiguration(BaseModel):
+class BucketReplicationConfiguration(ApiModel):
     configuration: dict = Field(default_factory=dict)
 
 
-class BucketLoggingConfiguration(BaseModel):
+class BucketLoggingConfiguration(ApiModel):
     enabled: Optional[bool] = None
     target_bucket: Optional[str] = None
     target_prefix: Optional[str] = None
 
 
-class BucketWebsiteRedirectAllRequestsTo(BaseModel):
+class BucketWebsiteRedirectAllRequestsTo(ApiModel):
     host_name: str
     protocol: Optional[str] = None
 
 
-class BucketWebsiteConfiguration(BaseModel):
+class BucketWebsiteConfiguration(ApiModel):
     index_document: Optional[str] = None
     error_document: Optional[str] = None
     redirect_all_requests_to: Optional[BucketWebsiteRedirectAllRequestsTo] = None

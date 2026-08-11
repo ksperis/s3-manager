@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.models.base import ApiModel
 
 
-class BillingCoverage(BaseModel):
+class BillingCoverage(ApiModel):
     days_collected: int
     days_in_month: int
     coverage_ratio: float = Field(..., ge=0, le=1)
@@ -15,7 +17,7 @@ class BillingCoverage(BaseModel):
     usage_days_collected: Optional[int] = None
 
 
-class BillingCost(BaseModel):
+class BillingCost(ApiModel):
     currency: Optional[str] = None
     storage_cost: Optional[float] = None
     egress_cost: Optional[float] = None
@@ -25,20 +27,20 @@ class BillingCost(BaseModel):
     rate_card_name: Optional[str] = None
 
 
-class BillingUsageTotals(BaseModel):
+class BillingUsageTotals(ApiModel):
     bytes_in: int = 0
     bytes_out: int = 0
     ops_total: int = 0
     ops_breakdown: Optional[dict[str, int]] = None
 
 
-class BillingStorageTotals(BaseModel):
+class BillingStorageTotals(ApiModel):
     avg_bytes: Optional[int] = None
     avg_gb_month: Optional[float] = None
     total_objects: Optional[int] = None
 
 
-class BillingSummary(BaseModel):
+class BillingSummary(ApiModel):
     month: str
     storage_endpoint_id: Optional[int] = None
     usage: BillingUsageTotals
@@ -47,7 +49,7 @@ class BillingSummary(BaseModel):
     cost: Optional[BillingCost] = None
 
 
-class BillingSubjectSummary(BaseModel):
+class BillingSubjectSummary(ApiModel):
     subject_type: str
     subject_id: int
     name: str
@@ -57,7 +59,7 @@ class BillingSubjectSummary(BaseModel):
     cost: Optional[BillingCost] = None
 
 
-class BillingSubjectsResponse(BaseModel):
+class BillingSubjectsResponse(ApiModel):
     items: list[BillingSubjectSummary]
     total: int
     page: int
@@ -65,7 +67,7 @@ class BillingSubjectsResponse(BaseModel):
     has_next: bool
 
 
-class BillingDailySeriesPoint(BaseModel):
+class BillingDailySeriesPoint(ApiModel):
     day: str
     storage_bytes: Optional[int] = None
     bytes_in: Optional[int] = None
@@ -73,7 +75,7 @@ class BillingDailySeriesPoint(BaseModel):
     ops_total: Optional[int] = None
 
 
-class BillingSubjectDetail(BaseModel):
+class BillingSubjectDetail(ApiModel):
     month: str
     subject_type: str
     subject_id: int

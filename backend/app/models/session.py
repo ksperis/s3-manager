@@ -5,13 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 
+from app.models.base import ApiModel
 from app.db import UserRole
 from app.utils.s3_endpoint import normalize_s3_endpoint
 
 
-class S3KeyLogin(BaseModel):
+class S3KeyLogin(ApiModel):
     access_key: str = Field(min_length=1)
     secret_key: str = Field(min_length=1)
     endpoint_url: Optional[str] = None
@@ -22,7 +23,7 @@ class S3KeyLogin(BaseModel):
         return normalize_s3_endpoint(value)
 
 
-class SessionCapabilities(BaseModel):
+class SessionCapabilities(ApiModel):
     can_manage_iam: bool = False
     can_manage_buckets: bool = True
     can_view_traffic: bool = False
@@ -35,7 +36,7 @@ class SessionCapabilities(BaseModel):
         return normalize_s3_endpoint(value)
 
 
-class SessionDescriptor(BaseModel):
+class SessionDescriptor(ApiModel):
     session_id: str
     actor_type: str
     account_id: Optional[str] = None

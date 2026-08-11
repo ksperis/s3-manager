@@ -4,24 +4,25 @@ import math
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field, field_validator
 
+from app.models.base import ApiModel
 from app.db import StorageProvider
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 
-class StorageEndpointFeature(BaseModel):
+class StorageEndpointFeature(ApiModel):
     enabled: bool = False
     endpoint: Optional[str] = None
 
 
-class StorageEndpointHealthcheckFeature(BaseModel):
+class StorageEndpointHealthcheckFeature(ApiModel):
     enabled: bool = True
     mode: Literal["http", "s3"] = "http"
     url: Optional[str] = None
 
 
-class StorageEndpointFeatures(BaseModel):
+class StorageEndpointFeatures(ApiModel):
     admin: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     account: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     sts: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
@@ -35,14 +36,14 @@ class StorageEndpointFeatures(BaseModel):
     healthcheck: StorageEndpointHealthcheckFeature = Field(default_factory=StorageEndpointHealthcheckFeature)
 
 
-class StorageEndpointAdminOpsPermissions(BaseModel):
+class StorageEndpointAdminOpsPermissions(ApiModel):
     users_read: bool = False
     users_write: bool = False
     accounts_read: bool = False
     accounts_write: bool = False
 
 
-class StorageEndpointBase(BaseModel):
+class StorageEndpointBase(ApiModel):
     name: str
     endpoint_url: str
     admin_endpoint: Optional[str] = None
@@ -90,7 +91,7 @@ class StorageEndpointCreate(StorageEndpointBase):
     pass
 
 
-class StorageEndpointUpdate(BaseModel):
+class StorageEndpointUpdate(ApiModel):
     name: Optional[str] = None
     endpoint_url: Optional[str] = None
     admin_endpoint: Optional[str] = None
@@ -126,7 +127,7 @@ class StorageEndpointUpdate(BaseModel):
         return StorageEndpointBase.validate_longitude(value)
 
 
-class StorageEndpointTagsUpdate(BaseModel):
+class StorageEndpointTagsUpdate(ApiModel):
     tags: list[TagDefinitionInput] = Field(default_factory=list)
 
     @field_validator("tags", mode="before")
@@ -160,18 +161,18 @@ class StorageEndpoint(StorageEndpointBase):
     ceph_admin_secret_key: Optional[str] = Field(default=None, exclude=True)
 
 
-class StorageEndpointPublic(BaseModel):
+class StorageEndpointPublic(ApiModel):
     id: int
     name: str
     endpoint_url: str
     is_default: bool = False
 
 
-class StorageEndpointMeta(BaseModel):
+class StorageEndpointMeta(ApiModel):
     managed_by_env: bool = False
 
 
-class StorageEndpointFeatureDetectionRequest(BaseModel):
+class StorageEndpointFeatureDetectionRequest(ApiModel):
     endpoint_id: Optional[int] = None
     endpoint_url: str
     admin_endpoint: Optional[str] = None
@@ -199,7 +200,7 @@ class StorageEndpointFeatureDetectionRequest(BaseModel):
         return value or None
 
 
-class StorageEndpointFeatureDetectionResult(BaseModel):
+class StorageEndpointFeatureDetectionResult(ApiModel):
     admin: bool = False
     account: bool = False
     usage: bool = False

@@ -3,8 +3,9 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
+from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
 from app.models.user import (
     AccountMembership,
@@ -19,7 +20,7 @@ UiGroupAvatarSource = Literal["initials", "preset", "uploaded"]
 UiGroupAvatarIcon = Literal["users", "building", "shield", "briefcase", "academic"]
 
 
-class UiGroupAvatar(BaseModel):
+class UiGroupAvatar(ApiModel):
     source: UiGroupAvatarSource = "initials"
     initials: str
     icon: Optional[UiGroupAvatarIcon] = None
@@ -27,15 +28,13 @@ class UiGroupAvatar(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-class LinkedS3Account(BaseModel):
+class LinkedS3Account(ApiModel):
     id: int
     name: str
     rgw_account_id: str
 
 
-class UiGroupCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class UiGroupCreate(ApiModel):
     name: str
     description: Optional[str] = None
     avatar_source: UiGroupAvatarSource = "initials"
@@ -52,9 +51,7 @@ class UiGroupCreate(BaseModel):
     s3_connection_ids: list[int] = Field(default_factory=list)
 
 
-class UiGroupUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class UiGroupUpdate(ApiModel):
     name: Optional[str] = None
     description: Optional[str] = None
     avatar_source: Optional[UiGroupAvatarSource] = None
@@ -71,13 +68,13 @@ class UiGroupUpdate(BaseModel):
     s3_connection_ids: Optional[list[int]] = None
 
 
-class UiGroupSummary(BaseModel):
+class UiGroupSummary(ApiModel):
     id: int
     name: str
     avatar: UiGroupAvatar
 
 
-class UiGroupOut(BaseModel):
+class UiGroupOut(ApiModel):
     id: int
     name: str
     description: Optional[str] = None

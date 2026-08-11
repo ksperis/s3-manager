@@ -1,9 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from pydantic import BaseModel
+from app.models.base import ApiModel
 
 
-class PaginatedResponse(BaseModel):
+class PaginatedResponse(ApiModel):
     items: list
     total: int
     page: int

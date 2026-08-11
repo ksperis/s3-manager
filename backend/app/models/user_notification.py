@@ -5,12 +5,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
+
+from app.models.base import ApiModel
 
 NotificationSeverity = Literal["info", "warning", "error"]
 
 
-class UserNotificationOut(BaseModel):
+class UserNotificationOut(ApiModel):
     id: int
     type: str
     severity: NotificationSeverity
@@ -25,12 +27,12 @@ class UserNotificationOut(BaseModel):
     read_at: Optional[datetime] = None
 
 
-class UserNotificationsResponse(BaseModel):
+class UserNotificationsResponse(ApiModel):
     items: list[UserNotificationOut]
     unread_count: int = 0
 
 
-class MarkUserNotificationsReadRequest(BaseModel):
+class MarkUserNotificationsReadRequest(ApiModel):
     notification_ids: Optional[list[int]] = None
     all: bool = False
 
@@ -56,6 +58,6 @@ class MarkUserNotificationsReadRequest(BaseModel):
         return self
 
 
-class MarkUserNotificationsReadResponse(BaseModel):
+class MarkUserNotificationsReadResponse(ApiModel):
     updated_count: int = 0
     unread_count: int = 0

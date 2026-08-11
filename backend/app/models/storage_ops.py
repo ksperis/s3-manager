@@ -2,8 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Literal, Optional
 
-from pydantic import BaseModel
-
+from app.models.base import ApiModel
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.models.pagination import PaginatedResponse
 
@@ -25,7 +24,7 @@ class PaginatedStorageOpsBucketsResponse(PaginatedResponse):
     items: list[StorageOpsBucketSummary]
 
 
-class StorageOpsSummary(BaseModel):
+class StorageOpsSummary(ApiModel):
     total_contexts: int
     total_accounts: int
     total_s3_users: int

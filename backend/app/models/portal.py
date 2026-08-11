@@ -3,16 +3,15 @@
 from datetime import datetime
 from typing import Literal, Optional, Union
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 
+from app.models.base import ApiModel
 from app.models.app_settings import PortalSettings, PortalSettingsOverride
 from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsScanMode
 from app.models.user import UserAvatar
 
 
-class PortalAccount(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class PortalAccount(ApiModel):
     id: int
     name: str
     rgw_account_id: str
@@ -23,7 +22,7 @@ class PortalAccount(BaseModel):
     storage_endpoint_capabilities: dict[str, bool]
 
 
-class PortalAccessKey(BaseModel):
+class PortalAccessKey(ApiModel):
     access_key_id: str
     status: Optional[str] = None
     created_at: Optional[str] = None
@@ -40,7 +39,7 @@ class PortalAccessKey(BaseModel):
     permission: Optional[Literal["read_only", "read_write"]] = None
 
 
-class PortalAccessKeyCreate(BaseModel):
+class PortalAccessKeyCreate(ApiModel):
     target_type: Literal["self", "external"] = "self"
     storage_space_id: Optional[str] = Field(default=None, min_length=1, max_length=1024)
     external_email: Optional[str] = Field(default=None, max_length=254)
@@ -67,20 +66,18 @@ class PortalAccessKeyCreate(BaseModel):
         return cleaned
 
 
-class PortalAccessKeyStatusChange(BaseModel):
+class PortalAccessKeyStatusChange(ApiModel):
     active: bool
 
 
-class PortalIAMUser(BaseModel):
+class PortalIAMUser(ApiModel):
     iam_user_id: Optional[str] = None
     iam_username: Optional[str] = None
     arn: Optional[str] = None
     created_at: Optional[datetime] = None
 
 
-class PortalState(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class PortalState(ApiModel):
     account_role: Optional[str] = None
     can_manage_buckets: bool = False
     can_create_private_storage_spaces: bool = False
@@ -91,7 +88,7 @@ class PortalState(BaseModel):
     storage_space_version_cleanup_enabled: bool = True
 
 
-class PortalAccessKeysState(BaseModel):
+class PortalAccessKeysState(ApiModel):
     iam_user: PortalIAMUser
     s3_endpoint: Optional[str] = None
     force_path_style: bool = False
@@ -100,7 +97,7 @@ class PortalAccessKeysState(BaseModel):
     max_access_keys: int = Field(default=2, ge=1)
 
 
-class PortalUsageStorageSpace(BaseModel):
+class PortalUsageStorageSpace(ApiModel):
     id: str
     name: str
     used_bytes: Optional[int] = None
@@ -109,7 +106,7 @@ class PortalUsageStorageSpace(BaseModel):
     quota_max_objects: Optional[int] = None
 
 
-class PortalUsage(BaseModel):
+class PortalUsage(ApiModel):
     used_bytes: Optional[int] = None
     used_objects: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None
@@ -119,7 +116,7 @@ class PortalUsage(BaseModel):
     other_storage_space: Optional[PortalUsageStorageSpace] = None
 
 
-class PortalStorageSpaceUsageStatsSnapshot(BaseModel):
+class PortalStorageSpaceUsageStatsSnapshot(ApiModel):
     scan_mode: BucketUsageStatsScanMode
     version_listing_available: bool = True
     object_version_count: int = 0
@@ -137,7 +134,7 @@ class PortalStorageSpaceUsageStatsSnapshot(BaseModel):
     calculated_at: datetime
 
 
-class PortalStorageSpaceUsageStatsResponse(BaseModel):
+class PortalStorageSpaceUsageStatsResponse(ApiModel):
     snapshot: Optional[PortalStorageSpaceUsageStatsSnapshot] = None
 
 
@@ -156,7 +153,7 @@ PortalAlertTone = Literal["info", "warning", "danger"]
 PortalStorageObjectPreviewType = Literal["text", "image", "unavailable"]
 
 
-class PortalStorageSpaceCollaboratorPreview(BaseModel):
+class PortalStorageSpaceCollaboratorPreview(ApiModel):
     user_id: int
     email: str
     display_name: Optional[str] = None
@@ -164,19 +161,19 @@ class PortalStorageSpaceCollaboratorPreview(BaseModel):
     avatar: UserAvatar
 
 
-class PortalStorageSpaceIcon(BaseModel):
+class PortalStorageSpaceIcon(ApiModel):
     source: PortalStorageSpaceIconSource = "preset"
     preset: Optional[PortalStorageSpaceIconPreset] = "bucket"
     url: Optional[str] = None
     updated_at: Optional[datetime] = None
 
 
-class PortalStorageSpaceIconChoice(BaseModel):
+class PortalStorageSpaceIconChoice(ApiModel):
     source: PortalStorageSpaceIconSource
     preset: Optional[PortalStorageSpaceIconPreset] = None
 
 
-class PortalStorageSpaceSummary(BaseModel):
+class PortalStorageSpaceSummary(ApiModel):
     id: str
     name: str
     role: PortalStorageSpaceRole
@@ -211,12 +208,12 @@ class PortalStorageSpace(PortalStorageSpaceSummary):
     pass
 
 
-class PortalStorageSpaceInitialShare(BaseModel):
+class PortalStorageSpaceInitialShare(ApiModel):
     user_id: int
     role: PortalStorageSpaceGrantRole
 
 
-class PortalStorageSpaceCreate(BaseModel):
+class PortalStorageSpaceCreate(ApiModel):
     name: str = Field(min_length=1, max_length=120)
     naming_mode: PortalStorageSpaceNamingMode = "generic_uuid"
     description: Optional[str] = Field(default=None, max_length=2000)
@@ -236,7 +233,7 @@ class PortalStorageSpaceCreate(BaseModel):
         return cleaned
 
 
-class PortalStorageSpaceImport(BaseModel):
+class PortalStorageSpaceImport(ApiModel):
     bucket_name: str = Field(min_length=1, max_length=63)
     description: Optional[str] = Field(default=None, max_length=2000)
     visibility: PortalStorageSpaceVisibility = "private"
@@ -255,7 +252,7 @@ class PortalStorageSpaceImport(BaseModel):
         return cleaned
 
 
-class PortalStorageSpaceUpdate(BaseModel):
+class PortalStorageSpaceUpdate(ApiModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     description: Optional[str] = Field(default=None, max_length=2000)
     visibility: Optional[PortalStorageSpaceVisibility] = None
@@ -281,7 +278,7 @@ PortalStorageSpaceVersionCleanupStage = Literal["prepare", "list", "delete", "co
 PortalStorageSpaceVersioningStatus = Literal["Enabled", "Suspended", "Disabled"]
 
 
-class PortalStorageSpaceSettings(BaseModel):
+class PortalStorageSpaceSettings(ApiModel):
     versioning_enabled: bool
     versioning_status: PortalStorageSpaceVersioningStatus
     lifecycle_enabled: bool
@@ -289,13 +286,13 @@ class PortalStorageSpaceSettings(BaseModel):
     can_update: bool = False
 
 
-class PortalStorageSpaceSettingsUpdate(BaseModel):
+class PortalStorageSpaceSettingsUpdate(ApiModel):
     versioning_enabled: bool
     lifecycle_enabled: bool
     version_history_retention_days: int = Field(ge=1)
 
 
-class PortalStorageSpaceVersionCleanupRequest(BaseModel):
+class PortalStorageSpaceVersionCleanupRequest(ApiModel):
     confirmation: str = ""
 
 
@@ -303,7 +300,7 @@ def portal_storage_space_version_cleanup_confirmation_phrase(space_name: str) ->
     return f"CLEAN HISTORY {space_name.upper()}"
 
 
-class PortalStorageSpaceVersionCleanupProgress(BaseModel):
+class PortalStorageSpaceVersionCleanupProgress(ApiModel):
     request_id: Optional[str] = None
     stage: PortalStorageSpaceVersionCleanupStage = "prepare"
     storage_space_id: str
@@ -318,7 +315,7 @@ class PortalStorageSpaceVersionCleanupProgress(BaseModel):
     message: Optional[str] = None
 
 
-class PortalStorageSpaceVersionCleanupResult(BaseModel):
+class PortalStorageSpaceVersionCleanupResult(ApiModel):
     status: PortalStorageSpaceVersionCleanupStatus
     storage_space_id: str
     storage_space_name: str
@@ -331,12 +328,12 @@ class PortalStorageSpaceVersionCleanupResult(BaseModel):
     finished_at: datetime
 
 
-class PortalStorageObjectDeleteResponse(BaseModel):
+class PortalStorageObjectDeleteResponse(ApiModel):
     key: str
     message: str
 
 
-class PortalStorageObjectDetail(BaseModel):
+class PortalStorageObjectDetail(ApiModel):
     key: str
     name: str
     size: Optional[int] = None
@@ -349,7 +346,7 @@ class PortalStorageObjectDetail(BaseModel):
     preview_unavailable_reason: Optional[str] = None
 
 
-class PortalStorageObjectVersion(BaseModel):
+class PortalStorageObjectVersion(ApiModel):
     key: str
     version_id: str
     is_latest: bool = False
@@ -358,7 +355,7 @@ class PortalStorageObjectVersion(BaseModel):
     size: Optional[int] = None
 
 
-class PortalStorageObjectVersionsResponse(BaseModel):
+class PortalStorageObjectVersionsResponse(ApiModel):
     key: str
     versioning_status: PortalStorageSpaceVersioningStatus
     can_restore: bool = False
@@ -368,7 +365,7 @@ class PortalStorageObjectVersionsResponse(BaseModel):
     next_version_id_marker: Optional[str] = None
 
 
-class PortalTrashItem(BaseModel):
+class PortalTrashItem(ApiModel):
     key: str
     name: str
     deleted_at: Optional[datetime] = None
@@ -378,7 +375,7 @@ class PortalTrashItem(BaseModel):
     size: Optional[int] = None
 
 
-class PortalTrashResponse(BaseModel):
+class PortalTrashResponse(ApiModel):
     versioning_status: PortalStorageSpaceVersioningStatus
     can_restore: bool = False
     items: list[PortalTrashItem] = Field(default_factory=list)
@@ -387,12 +384,12 @@ class PortalTrashResponse(BaseModel):
     next_version_id_marker: Optional[str] = None
 
 
-class PortalStorageObjectRestoreRequest(BaseModel):
+class PortalStorageObjectRestoreRequest(ApiModel):
     key: str = Field(min_length=1)
     version_id: Optional[str] = Field(default=None, min_length=1)
 
 
-class PortalStorageObjectRestoreResponse(BaseModel):
+class PortalStorageObjectRestoreResponse(ApiModel):
     key: str
     restored_from_version_id: str
     message: str = "Restored"
@@ -402,16 +399,16 @@ PortalDeletedPrefixRestoreStatus = Literal["completed", "partial", "canceled"]
 PortalDeletedPrefixRestoreStage = Literal["prepare", "list", "restore", "completed"]
 
 
-class PortalDeletedPrefixRestoreRequest(BaseModel):
+class PortalDeletedPrefixRestoreRequest(ApiModel):
     prefix: str = Field(min_length=1, max_length=1024)
 
 
-class PortalDeletedPrefixRestoreFailure(BaseModel):
+class PortalDeletedPrefixRestoreFailure(ApiModel):
     key: str
     detail: str
 
 
-class PortalDeletedPrefixRestoreProgress(BaseModel):
+class PortalDeletedPrefixRestoreProgress(ApiModel):
     request_id: Optional[str] = None
     stage: PortalDeletedPrefixRestoreStage = "prepare"
     storage_space_id: str
@@ -427,7 +424,7 @@ class PortalDeletedPrefixRestoreProgress(BaseModel):
     message: Optional[str] = None
 
 
-class PortalDeletedPrefixRestoreResult(BaseModel):
+class PortalDeletedPrefixRestoreResult(ApiModel):
     status: PortalDeletedPrefixRestoreStatus
     storage_space_id: str
     storage_space_name: str
@@ -443,7 +440,7 @@ class PortalDeletedPrefixRestoreResult(BaseModel):
     finished_at: datetime
 
 
-class PortalStorageSpaceShare(BaseModel):
+class PortalStorageSpaceShare(ApiModel):
     id: str
     storage_space_id: str
     storage_space_name: str
@@ -454,7 +451,7 @@ class PortalStorageSpaceShare(BaseModel):
     activity_label: str = "Active"
 
 
-class PortalStorageSpaceAccessPerson(BaseModel):
+class PortalStorageSpaceAccessPerson(ApiModel):
     user_id: Optional[int] = None
     email: str
     display_name: Optional[str] = None
@@ -464,7 +461,7 @@ class PortalStorageSpaceAccessPerson(BaseModel):
     avatar: Optional[UserAvatar] = None
 
 
-class PortalStorageSpaceAccessSummary(BaseModel):
+class PortalStorageSpaceAccessSummary(ApiModel):
     mode: Literal["private", "all", "restricted"]
     default_account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
     owner: Optional[PortalStorageSpaceAccessPerson] = None
@@ -475,7 +472,7 @@ class PortalStorageSpaceAccessSummary(BaseModel):
     can_create_public_links: bool = False
 
 
-class PortalStorageSpaceShareCandidate(BaseModel):
+class PortalStorageSpaceShareCandidate(ApiModel):
     user_id: int
     email: str
     display_name: Optional[str] = None
@@ -485,7 +482,7 @@ class PortalStorageSpaceShareCandidate(BaseModel):
     avatar: Optional[UserAvatar] = None
 
 
-class PortalCollaborator(BaseModel):
+class PortalCollaborator(ApiModel):
     user_id: int
     email: str
     display_name: Optional[str] = None
@@ -504,7 +501,7 @@ PortalCollaboratorStorageSpaceAccessSource = Literal[
 ]
 
 
-class PortalCollaboratorStorageSpaceAccess(BaseModel):
+class PortalCollaboratorStorageSpaceAccess(ApiModel):
     storage_space_id: str
     storage_space_name: str
     role: PortalStorageSpaceRole
@@ -512,41 +509,41 @@ class PortalCollaboratorStorageSpaceAccess(BaseModel):
     can_revoke: bool = False
 
 
-class PortalCollaboratorAccessReview(BaseModel):
+class PortalCollaboratorAccessReview(ApiModel):
     collaborator: PortalCollaborator
     can_request_project_removal: bool = False
     space_accesses: list[PortalCollaboratorStorageSpaceAccess] = Field(default_factory=list)
 
 
-class PortalCollaboratorTrend(BaseModel):
+class PortalCollaboratorTrend(ApiModel):
     window: Literal["month", "week", "day"]
     label: str
     period_start: str
     collaborator_count: int = 0
 
 
-class PortalCollaboratorSummary(BaseModel):
+class PortalCollaboratorSummary(ApiModel):
     collaborator_count: int = 0
     external_access_key_count: int = 0
     trend: Optional[PortalCollaboratorTrend] = None
 
 
-class PortalCollaboratorsResponse(BaseModel):
+class PortalCollaboratorsResponse(ApiModel):
     summary: PortalCollaboratorSummary
     collaborators: list[PortalCollaborator] = Field(default_factory=list)
 
 
-class PortalStorageSpaceSharePayload(BaseModel):
+class PortalStorageSpaceSharePayload(ApiModel):
     email: Optional[str] = None
     user_id: Optional[int] = None
     role: PortalStorageSpaceGrantRole
 
 
-class PortalStorageSpaceShareUpdate(BaseModel):
+class PortalStorageSpaceShareUpdate(ApiModel):
     role: PortalStorageSpaceGrantRole
 
 
-class PortalPublicLink(BaseModel):
+class PortalPublicLink(ApiModel):
     id: int
     storage_space_id: str
     storage_space_name: str
@@ -561,13 +558,13 @@ class PortalPublicLink(BaseModel):
     status: str
 
 
-class PortalPublicLinkCreate(BaseModel):
+class PortalPublicLinkCreate(ApiModel):
     object_key: str = Field(min_length=1)
     label: Optional[str] = Field(default=None, max_length=120)
     expires_at: Optional[AwareDatetime] = None
 
 
-class PortalActivityItem(BaseModel):
+class PortalActivityItem(ApiModel):
     id: int
     created_at: datetime
     actor: str
@@ -579,7 +576,7 @@ class PortalActivityItem(BaseModel):
     status: str = "success"
 
 
-class PortalServerAccessRequesterIdentity(BaseModel):
+class PortalServerAccessRequesterIdentity(ApiModel):
     label: str
     kind: Literal["portal_user", "external_access", "rgw_user", "rgw_account", "unknown"]
     detail: Optional[str] = None
@@ -604,7 +601,7 @@ PortalServerAccessLogFilterOp = Literal[
 ]
 
 
-class PortalServerAccessLogFilterRule(BaseModel):
+class PortalServerAccessLogFilterRule(ApiModel):
     field: PortalServerAccessLogFilterField
     op: PortalServerAccessLogFilterOp
     value: Optional[Union[str, int, float, bool, list[str], list[int], list[float], list[bool]]] = None
@@ -616,12 +613,12 @@ class PortalServerAccessLogFilterRule(BaseModel):
         return self
 
 
-class PortalServerAccessLogFilterQuery(BaseModel):
+class PortalServerAccessLogFilterQuery(ApiModel):
     match: Literal["all", "any"] = "all"
     rules: list[PortalServerAccessLogFilterRule] = Field(default_factory=list)
 
 
-class PortalServerAccessLogEntry(BaseModel):
+class PortalServerAccessLogEntry(ApiModel):
     id: str
     source: Literal["server_access_logging"] = "server_access_logging"
     timestamp: datetime
@@ -647,14 +644,14 @@ class PortalServerAccessLogEntry(BaseModel):
     log_object_key: str
 
 
-class PortalServerAccessLogPage(BaseModel):
+class PortalServerAccessLogPage(ApiModel):
     entries: list[PortalServerAccessLogEntry]
     total: int
     limit: int
     offset: int
 
 
-class PortalAlert(BaseModel):
+class PortalAlert(ApiModel):
     id: str
     tone: PortalAlertTone
     title: str
@@ -664,19 +661,19 @@ class PortalAlert(BaseModel):
     created_at: Optional[datetime] = None
 
 
-class PortalAccountSettings(BaseModel):
+class PortalAccountSettings(ApiModel):
     effective: PortalSettings
     admin_override: PortalSettingsOverride
     delegated_to_portal_managers: bool = False
 
 
-class PortalProjectSettings(BaseModel):
+class PortalProjectSettings(ApiModel):
     effective: PortalSettings
     project_override: PortalSettingsOverride
     delegated_to_portal_managers: bool = False
     can_update: bool = False
 
 
-class PortalEligibility(BaseModel):
+class PortalEligibility(ApiModel):
     eligible: bool
     reasons: list[str] = Field(default_factory=list)

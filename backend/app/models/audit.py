@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from app.models.base import ApiModel
 
 
-class AuditLogEntry(BaseModel):
+class AuditLogEntry(ApiModel):
     id: int
     created_at: datetime
     user_email: str
@@ -24,6 +24,6 @@ class AuditLogEntry(BaseModel):
     metadata: Optional[dict[str, Any]] = None
 
 
-class AuditLogListResponse(BaseModel):
+class AuditLogListResponse(ApiModel):
     logs: list[AuditLogEntry]
     next_cursor: Optional[int] = None

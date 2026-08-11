@@ -5,10 +5,12 @@ from __future__ import annotations
 
 from typing import TypeVar
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
+
+from app.models.base import ApiModel
 
 
-class BucketOperationTarget(BaseModel):
+class BucketOperationTarget(ApiModel):
     context_id: str
     bucket_name: str
 
@@ -48,7 +50,7 @@ def deduplicate_bucket_targets(targets: list[_TargetT]) -> list[_TargetT]:
     return deduplicated
 
 
-class BucketOperationRequest(BaseModel):
+class BucketOperationRequest(ApiModel):
     buckets: list[str] = Field(default_factory=list, max_length=200)
     targets: list[BucketOperationTarget] = Field(default_factory=list, max_length=200)
 
