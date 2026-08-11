@@ -3,18 +3,32 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalUsagePage from "./PortalUsagePage";
+import type { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
-const mocks = vi.hoisted(() => ({
-  billingMock: vi.fn(),
-  usageHistoryMock: vi.fn(),
-  usageStatsMock: vi.fn(),
-  generalSettings: {
-    billing_enabled: true,
-    bucket_usage_stats_enabled: true,
-    usage_history_enabled: true,
-  },
-  hookArgs: [] as unknown[],
-  hookResult: {
+type PortalUsageWorkspaceData = Pick<
+  ReturnType<typeof usePortalWorkspaceData>,
+  | "workspace"
+  | "state"
+  | "storageSpaces"
+  | "usage"
+  | "usageLoading"
+  | "usageError"
+  | "traffic"
+  | "trafficLoading"
+  | "trafficError"
+  | "health"
+  | "healthLoading"
+  | "loading"
+  | "error"
+  | "accountError"
+  | "accountLoading"
+  | "hasAccountContext"
+  | "accountIdForApi"
+  | "selectedAccount"
+>;
+
+const mocks = vi.hoisted(() => {
+  const hookResult: PortalUsageWorkspaceData = {
     workspace: {
       accountName: "Research Project",
       spaces: [
@@ -49,6 +63,7 @@ const mocks = vi.hoisted(() => ({
     },
     usageLoading: false,
     usageError: null,
+    state: { quota_max_size_bytes: 1024 },
     traffic: {
       window: "week",
       start: "2026-05-20T00:00:00Z",
@@ -101,8 +116,20 @@ const mocks = vi.hoisted(() => ({
       rgw_account_id: "RGW40703637082424546",
       tags: [],
     },
-  } as any,
-}));
+  };
+  return {
+    billingMock: vi.fn(),
+    usageHistoryMock: vi.fn(),
+    usageStatsMock: vi.fn(),
+    generalSettings: {
+      billing_enabled: true,
+      bucket_usage_stats_enabled: true,
+      usage_history_enabled: true,
+    },
+    hookArgs: [] as unknown[],
+    hookResult,
+  };
+});
 
 vi.mock("../../api/billing", () => ({
   getPortalBillingMe: (...args: unknown[]) => mocks.billingMock(...args),
