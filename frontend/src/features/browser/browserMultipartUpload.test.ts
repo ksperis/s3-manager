@@ -1,0 +1,127 @@
+import axios, {
+  type AxiosProgressEvent,
+  type AxiosResponse,
+} from "axios";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  uploadBrowserFileMultipart,
+  uploadBrowserStreamMultipart,
+  type BrowserMultipartUploadLifecycle,
+} from "./browserMultipartUpload";
+
+vi.mock("axios", () => ({
+  default: {
+    put: vi.fn(),
+  },
+}));
+
+const putMock = vi.mocked(axios.put);
+
+const createLifecycle = (): BrowserMultipartUploadLifecycle => ({
+  initiate: vi.fn().mockResolvedValue("upload-1"),
+  presignPart: vi
+    .fn()
+    .mockImplementation(async (_uploadId: string, partNumber: number) => ({
+      url: `https://upload.test/part-${partNumber}`,
+      headers: { "X-Part": String(partNumber) },
+    })),
+  complete: vi.fn().mockResolvedValue(undefined),
+  abort: vi.fn().mockResolvedValue(undefined),
+});
+
+describe("browser multipart uploads", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("uploads file parts with bounded orchestration and completes them in order", async () => {
+    const lifecycle = createLifecycle();
+    const uploadedSizes: number[] = [];
+    const progress: number[] = [];
+    putMock.mockImplementation(async (_url, body, config) => {
+      const blob = body as Blob;
+      uploadedSizes.push(blob.size);
+      config?.onUploadProgress?.({ loaded: blob.size } as AxiosProgressEvent);
+      return {
+        headers: { ETag: `"etag-${uploadedSizes.length}"` },
+      } as AxiosResponse;
+    });
+
+    await uploadBrowserFileMultipart({
+      file: new File([new Uint8Array(20)], "large.bin"),
+      partSize: 8,
+      concurrency: 2,
+      controller: new AbortController(),
+      lifecycle,
+      onProgress: (percent) => progress.push(percent),
+    });
+
+    expect(uploadedSizes).toEqual([8, 8, 4]);
+    expect(lifecycle.presignPart).toHaveBeenCalledTimes(3);
+    expect(lifecycle.complete).toHaveBeenCalledWith("upload-1", [
+      { part_number: 1, etag: "etag-1" },
+      { part_number: 2, etag: "etag-2" },
+      { part_number: 3, etag: "etag-3" },
+    ]);
+    expect(progress).toContain(95);
+    expect(progress.at(-1)).toBe(100);
+    expect(lifecycle.abort).not.toHaveBeenCalled();
+  });
+
+  it("aborts the remote upload when a part response has no ETag", async () => {
+    const lifecycle = createLifecycle();
+    const controller = new AbortController();
+    putMock.mockResolvedValue({ headers: {} } as AxiosResponse);
+
+    await expect(
+      uploadBrowserFileMultipart({
+        file: new File([new Uint8Array(8)], "broken.bin"),
+        partSize: 8,
+        concurrency: 1,
+        controller,
+        lifecycle,
+        onProgress: vi.fn(),
+      }),
+    ).rejects.toThrow("Missing ETag from multipart upload.");
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(lifecycle.abort).toHaveBeenCalledWith("upload-1");
+    expect(lifecycle.complete).not.toHaveBeenCalled();
+  });
+
+  it("reassembles stream chunks into fixed-size multipart uploads", async () => {
+    const lifecycle = createLifecycle();
+    const uploadedSizes: number[] = [];
+    putMock.mockImplementation(async (_url, body) => {
+      const blob = body as Blob;
+      uploadedSizes.push(blob.size);
+      return {
+        headers: { etag: `etag-${uploadedSizes.length}` },
+      } as AxiosResponse;
+    });
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+        controller.enqueue(new Uint8Array([4, 5, 6, 7, 8, 9, 10]));
+        controller.close();
+      },
+    });
+
+    await uploadBrowserStreamMultipart({
+      stream,
+      sizeBytes: 10,
+      contentType: "application/octet-stream",
+      partSize: 4,
+      lifecycle,
+    });
+
+    expect(uploadedSizes).toEqual([4, 4, 2]);
+    expect(lifecycle.complete).toHaveBeenCalledWith("upload-1", [
+      { part_number: 1, etag: "etag-1" },
+      { part_number: 2, etag: "etag-2" },
+      { part_number: 3, etag: "etag-3" },
+    ]);
+    expect(lifecycle.abort).not.toHaveBeenCalled();
+    expect(stream.locked).toBe(false);
+  });
+});

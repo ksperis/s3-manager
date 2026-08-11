@@ -267,7 +267,6 @@ import {
   isLikelyCorsError,
   isImageFile,
   makeId,
-  normalizeEtag,
   normalizePrefix,
   normalizeUploadPath,
   parseKeyValueLines,
@@ -355,6 +354,10 @@ import {
 } from "./browserListingState";
 import { resolveBrowserWorkspaceContext } from "./browserPageContextModel";
 import { buildBulkRestorePlan } from "./browserBulkRestorePlan";
+import {
+  uploadBrowserFileMultipart,
+  uploadBrowserStreamMultipart,
+} from "./browserMultipartUpload";
 import type {
   BrowserItem,
   BulkMetadataDraft,
@@ -7152,139 +7155,62 @@ export default function BrowserPage({
     operationId: string,
     controller: AbortController,
   ) => {
-    let uploadId: string | null = null;
-    const totalParts = Math.ceil(file.size / PART_SIZE);
-    const partProgress = new Map<number, number>();
-
-    const updateProgress = () => {
-      const loaded = Array.from(partProgress.values()).reduce(
-        (sum, value) => sum + value,
-        0,
-      );
-      const percent = file.size
-        ? Math.min(99, Math.round((loaded / file.size) * 100))
-        : 0;
-      setOperations((prev) =>
-        prev.map((op) =>
-          op.id === operationId ? { ...op, progress: percent } : op,
-        ),
-      );
-    };
-
-    const recordProgress = (
-      partNumber: number,
-      loadedBytes: number,
-      partSize: number,
-    ) => {
-      partProgress.set(partNumber, Math.min(loadedBytes, partSize));
-      updateProgress();
-    };
-
-    const partsQueue = Array.from({ length: totalParts }, (_, index) => {
-      const partNumber = index + 1;
-      const start = index * PART_SIZE;
-      const end = Math.min(start + PART_SIZE, file.size);
-      return { partNumber, start, end, size: end - start };
+    setOperations((prev) =>
+      prev.map((op) =>
+        op.id === operationId ? { ...op, label: "Multipart upload" } : op,
+      ),
+    );
+    await uploadBrowserFileMultipart({
+      file,
+      partSize: PART_SIZE,
+      concurrency: MULTIPART_CONCURRENCY,
+      controller,
+      lifecycle: {
+        initiate: async () => {
+          const result = await initiateMultipartUpload(
+            accountId,
+            bucket,
+            {
+              key,
+              content_type: file.type || undefined,
+            },
+            sseCustomerKeyBase64,
+            browserRequestOptions,
+          );
+          return result.upload_id;
+        },
+        presignPart: (uploadId, partNumber) =>
+          presignPartRequest(bucket, uploadId, {
+            key,
+            part_number: partNumber,
+            expires_in: 1800,
+          }),
+        complete: (uploadId, parts) =>
+          completeMultipartUpload(
+            accountId,
+            bucket,
+            uploadId,
+            key,
+            { parts },
+            browserRequestOptions,
+          ),
+        abort: (uploadId) =>
+          abortMultipartUpload(
+            accountId,
+            bucket,
+            uploadId,
+            key,
+            browserRequestOptions,
+          ),
+      },
+      onProgress: (progress) => {
+        setOperations((prev) =>
+          prev.map((op) =>
+            op.id === operationId ? { ...op, progress } : op,
+          ),
+        );
+      },
     });
-
-    const uploadedParts: { part_number: number; etag: string }[] = [];
-
-    const uploadPart = async (part: {
-      partNumber: number;
-      start: number;
-      end: number;
-      size: number;
-    }) => {
-      if (!uploadId) {
-        throw new Error("Missing multipart upload ID.");
-      }
-      const blob = file.slice(part.start, part.end);
-      const presignedPart = await presignPartRequest(bucket, uploadId, {
-        key,
-        part_number: part.partNumber,
-        expires_in: 1800,
-      });
-      const response = await axios.put(presignedPart.url, blob, {
-        headers: presignedPart.headers || {},
-        signal: controller.signal,
-        onUploadProgress: (event) => {
-          const loaded = event.loaded ?? 0;
-          recordProgress(part.partNumber, loaded, part.size);
-        },
-      });
-      const etag = normalizeEtag(
-        response.headers?.etag ||
-          response.headers?.ETag ||
-          response.headers?.ETAG,
-      );
-      if (!etag) {
-        throw new Error("Missing ETag from multipart upload.");
-      }
-      uploadedParts.push({ part_number: part.partNumber, etag });
-      recordProgress(part.partNumber, part.size, part.size);
-    };
-
-    try {
-      setOperations((prev) =>
-        prev.map((op) =>
-          op.id === operationId ? { ...op, label: "Multipart upload" } : op,
-        ),
-      );
-      const init = await initiateMultipartUpload(
-        accountId,
-        bucket,
-        {
-          key,
-          content_type: file.type || undefined,
-        },
-        sseCustomerKeyBase64,
-        browserRequestOptions,
-      );
-      uploadId = init.upload_id;
-      let hasError = false;
-      await runWithConcurrency(
-        partsQueue,
-        MULTIPART_CONCURRENCY,
-        async (part) => {
-          try {
-            await uploadPart(part);
-          } catch (err) {
-            hasError = true;
-            controller.abort();
-            throw err;
-          }
-        },
-        () => hasError,
-      );
-      setOperations((prev) =>
-        prev.map((op) =>
-          op.id === operationId ? { ...op, progress: 95 } : op,
-        ),
-      );
-      uploadedParts.sort((a, b) => a.part_number - b.part_number);
-      await completeMultipartUpload(
-        accountId,
-        bucket,
-        uploadId,
-        key,
-        { parts: uploadedParts },
-        browserRequestOptions,
-      );
-      setOperations((prev) =>
-        prev.map((op) =>
-          op.id === operationId ? { ...op, progress: 100 } : op,
-        ),
-      );
-    } catch (err) {
-      if (uploadId) {
-        try {
-          await abortMultipartUpload(accountId, bucket, uploadId, key, browserRequestOptions);
-        } catch {
-          // ignore abort failures
-        }
-      }
-      throw err;
-    }
   };
 
   const startQueuedUpload = async (item: UploadQueueItem) => {
@@ -7726,109 +7652,58 @@ export default function BrowserPage({
       sseCustomerKeyBase64?: string | null;
       signal?: AbortSignal;
     }) => {
-      let uploadId: string | null = null;
-      const completedParts: { part_number: number; etag: string }[] = [];
-      const reader = stream.getReader();
-      let pending = new Uint8Array(0);
-      let partNumber = 1;
-
-      const uploadPartBlob = async (blob: Blob, currentPartNumber: number) => {
-        if (!uploadId) {
-          throw new Error("Missing multipart upload ID.");
-        }
-        const presignedPart = await presignPart(
-          selector,
-          bucket,
-          uploadId,
-          {
-            key,
-            part_number: currentPartNumber,
-            expires_in: 1800,
+      await uploadBrowserStreamMultipart({
+        stream,
+        sizeBytes,
+        contentType,
+        partSize: PART_SIZE,
+        signal,
+        lifecycle: {
+          initiate: async () => {
+            const result = await initiateMultipartUpload(
+              selector,
+              bucket,
+              {
+                key,
+                content_type: contentType ?? undefined,
+              },
+              sseKeyBase64,
+              browserRequestOptions,
+            );
+            return result.upload_id;
           },
-          sseKeyBase64,
-          browserRequestOptions,
-        );
-        const response = await axios.put(presignedPart.url, blob, {
-          headers: presignedPart.headers || {},
-          signal,
-        });
-        const etag = normalizeEtag(
-          response.headers?.etag ||
-            response.headers?.ETag ||
-            response.headers?.ETAG,
-        );
-        if (!etag) {
-          throw new Error("Missing ETag from multipart upload.");
-        }
-        completedParts.push({ part_number: currentPartNumber, etag });
-      };
-
-      const flushPart = async (partBytes: Uint8Array) => {
-        const partBuffer = new Uint8Array(partBytes).buffer;
-        await uploadPartBlob(
-          new Blob([partBuffer], {
-            type: contentType || "application/octet-stream",
-          }),
-          partNumber,
-        );
-        partNumber += 1;
-      };
-
-      try {
-        const init = await initiateMultipartUpload(
-          selector,
-          bucket,
-          {
-            key,
-            content_type: contentType ?? undefined,
-          },
-          sseKeyBase64,
-          browserRequestOptions,
-        );
-        uploadId = init.upload_id;
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (!value || value.byteLength === 0) {
-            continue;
-          }
-          const combined = new Uint8Array(pending.byteLength + value.byteLength);
-          combined.set(pending, 0);
-          combined.set(value, pending.byteLength);
-          pending = combined;
-
-          while (pending.byteLength >= PART_SIZE) {
-            await flushPart(pending.slice(0, PART_SIZE));
-            pending = pending.slice(PART_SIZE);
-          }
-        }
-
-        if (pending.byteLength > 0 || sizeBytes === 0) {
-          await flushPart(pending);
-        }
-
-        completedParts.sort((a, b) => a.part_number - b.part_number);
-        await completeMultipartUpload(
-          selector,
-          bucket,
-          uploadId,
-          key,
-          { parts: completedParts },
-          browserRequestOptions,
-        );
-      } catch (err) {
-        if (uploadId) {
-          try {
-            await abortMultipartUpload(selector, bucket, uploadId, key, browserRequestOptions);
-          } catch {
-            // ignore cleanup failures
-          }
-        }
-        throw err;
-      } finally {
-        reader.releaseLock();
-      }
+          presignPart: (uploadId, partNumber) =>
+            presignPart(
+              selector,
+              bucket,
+              uploadId,
+              {
+                key,
+                part_number: partNumber,
+                expires_in: 1800,
+              },
+              sseKeyBase64,
+              browserRequestOptions,
+            ),
+          complete: (uploadId, parts) =>
+            completeMultipartUpload(
+              selector,
+              bucket,
+              uploadId,
+              key,
+              { parts },
+              browserRequestOptions,
+            ),
+          abort: (uploadId) =>
+            abortMultipartUpload(
+              selector,
+              bucket,
+              uploadId,
+              key,
+              browserRequestOptions,
+            ),
+        },
+      });
     },
     [browserRequestOptions],
   );
