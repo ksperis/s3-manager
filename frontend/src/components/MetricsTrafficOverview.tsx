@@ -31,6 +31,7 @@ import PageBanner from "./PageBanner";
 import TrafficBytesChart from "./TrafficBytesChart";
 import UiSegmentedControl from "./ui/UiSegmentedControl";
 import { cx, uiMenuClass } from "./ui/styles";
+import { formatChartTooltipTimestamp, type ChartTooltipProps } from "./chartTooltip";
 
 const WINDOW_OPTIONS: { label: string; value: TrafficWindow; helper: string }[] = [
   { label: "24h", value: "day", helper: "Last 24 hours" },
@@ -340,35 +341,21 @@ function formatOpsAxisTimestamp(value: string | number, window: TrafficWindow) {
   return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-const opsTooltipFormatterHourly = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+type OpsTooltipProps = ChartTooltipProps & { window: TrafficWindow };
 
-const opsTooltipFormatterDaily = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-});
-
-function OpsTooltip({ payload, label, window }: any) {
-  if (!payload || payload.length === 0) return null;
-  const date = new Date(label);
-  const formatted = Number.isNaN(date.getTime())
-    ? label
-    : window === "week" || window === "month"
-      ? opsTooltipFormatterDaily.format(date)
-      : opsTooltipFormatterHourly.format(date);
-  const entry = payload[0];
+function OpsTooltip({ payload, label, window }: OpsTooltipProps) {
+  const entry = payload?.[0];
+  if (!entry) return null;
+  const formatted = formatChartTooltipTimestamp(
+    label,
+    window === "week" || window === "month" ? "daily" : "hourly",
+  );
   return (
     <div className={cx(uiMenuClass, "px-3 py-2 ui-body")}>
       <p className="font-semibold">{formatted}</p>
       <p className="ui-caption">
         <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-        {formatCompactNumber(entry.value)} ops
+        {formatCompactNumber(Number(entry.value) || 0)} ops
       </p>
     </div>
   );

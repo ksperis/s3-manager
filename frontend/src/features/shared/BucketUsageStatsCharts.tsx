@@ -18,6 +18,7 @@ import {
 
 import type { BucketUsageStatsDistributionEntry } from "../../api/bucketUsageStats";
 import { MetricsChartPanel, MetricsEmptyState } from "../../components/MetricsCard";
+import type { ChartTooltipProps } from "../../components/chartTooltip";
 import { cx } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 
@@ -73,9 +74,17 @@ export function UsageStatsChartShell({
   );
 }
 
-export function UsageStatsDistributionTooltip({ active, payload, bytesAxis = true }: any & { bytesAxis?: boolean }) {
+type UsageStatsDistributionTooltipProps = ChartTooltipProps<BucketUsageStatsDistributionEntry> & {
+  bytesAxis?: boolean;
+};
+
+export function UsageStatsDistributionTooltip({
+  active,
+  payload,
+  bytesAxis = true,
+}: UsageStatsDistributionTooltipProps) {
   if (!active || !payload?.length) return null;
-  const item = payload[0]?.payload as BucketUsageStatsDistributionEntry | undefined;
+  const item = payload[0]?.payload;
   if (!item) return null;
   const primaryValue = bytesAxis
     ? `${formatBytes(item.bytes)} · ${formatPercentage(item.ratio_bytes * 100)}`

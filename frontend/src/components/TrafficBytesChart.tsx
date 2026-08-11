@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { TrafficSeriesPoint, TrafficWindow } from "../api/stats";
 import { formatBytes } from "../utils/format";
+import { formatChartTooltipTimestamp, type ChartTooltipProps } from "./chartTooltip";
 
 type ChartPoint = TrafficSeriesPoint & { timestampMs: number };
 
@@ -139,35 +140,21 @@ function formatXAxisTimestamp(value: string | number, window: TrafficWindow) {
   return new Intl.DateTimeFormat(undefined, options).format(date);
 }
 
-const tooltipFormatterHourly = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+type TrafficTooltipProps = ChartTooltipProps & { window: TrafficWindow };
 
-const tooltipFormatterDaily = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-});
-
-function TrafficTooltip({ payload, label, window }: any) {
-  if (!payload || payload.length === 0) {
-    return null;
-  }
-  const date =
-    window === "week" || window === "month"
-      ? tooltipFormatterDaily.format(new Date(label))
-      : tooltipFormatterHourly.format(new Date(label));
+function TrafficTooltip({ payload, label, window }: TrafficTooltipProps) {
+  if (!payload?.length) return null;
+  const formatted = formatChartTooltipTimestamp(
+    label,
+    window === "week" || window === "month" ? "daily" : "hourly",
+  );
   return (
     <div className="rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-      <p className="font-semibold">{date}</p>
-      {payload.map((entry: any) => (
-        <p key={entry.name} className="ui-caption">
+      <p className="font-semibold">{formatted}</p>
+      {payload.map((entry, index) => (
+        <p key={entry.dataKey ?? entry.name ?? index} className="ui-caption">
           <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-          {entry.name}: {formatBytes(entry.value)}
+          {String(entry.name ?? "")}: {formatBytes(Number(entry.value) || 0)}
         </p>
       ))}
     </div>

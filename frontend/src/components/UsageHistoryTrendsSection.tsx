@@ -21,6 +21,7 @@ import { MetricsCard, MetricsChartPanel } from "./MetricsCard";
 import MetricsUnavailableCard from "./MetricsUnavailableCard";
 import { MetricsSnapshotCard } from "./MetricsTrafficOverview";
 import UiSegmentedControl from "./ui/UiSegmentedControl";
+import { formatChartTooltipTimestamp, type ChartTooltipProps } from "./chartTooltip";
 import {
   cx,
   uiMenuClass,
@@ -254,35 +255,21 @@ function formatAxisTimestamp(value: string | number, window: UsageHistoryTrendWi
   return new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short" }).format(date);
 }
 
-const tooltipFormatterHourly = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+type UsageHistoryTooltipProps = ChartTooltipProps & {
+  window: UsageHistoryTrendWindow;
+  metric: "storage" | "inventory";
+};
 
-const tooltipFormatterDaily = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-});
-
-function UsageHistoryTooltip({ payload, label, window, metric }: any) {
-  if (!payload || payload.length === 0) return null;
-  const date = new Date(label);
-  const formatted = Number.isNaN(date.getTime())
-    ? label
-    : window === "day"
-      ? tooltipFormatterHourly.format(date)
-      : tooltipFormatterDaily.format(date);
+function UsageHistoryTooltip({ payload, label, window, metric }: UsageHistoryTooltipProps) {
+  if (!payload?.length) return null;
+  const formatted = formatChartTooltipTimestamp(label, window === "day" ? "hourly" : "daily");
   return (
     <div className={cx(uiMenuClass, "px-3 py-2 ui-body")}>
       <p className="font-semibold">{formatted}</p>
-      {payload.map((entry: any) => (
-        <p key={entry.name} className="ui-caption">
+      {payload.map((entry, index) => (
+        <p key={entry.dataKey ?? entry.name ?? index} className="ui-caption">
           <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-          {entry.name}: {formatTooltipValue(entry.name, entry.value, metric)}
+          {String(entry.name ?? "")}: {formatTooltipValue(String(entry.name ?? ""), entry.value, metric)}
         </p>
       ))}
     </div>
