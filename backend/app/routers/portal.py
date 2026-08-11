@@ -1,7 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
-import asyncio
 import logging
 import threading
 from typing import Optional
@@ -76,9 +75,9 @@ from app.routers.dependencies import (
     require_portal_manager,
 )
 from app.routers.sse_worker import (
-    SSE_KEEPALIVE_INTERVAL_SECONDS,
+    SseMessageSender,
     format_sse_event,
-    wait_for_cancellable_worker,
+    stream_cancellable_worker,
 )
 from app.utils.http_errors import (
     raise_bad_gateway_from_runtime,
@@ -205,15 +204,14 @@ def _stream_portal_storage_space_version_cleanup(
     target,
 ) -> StreamingResponse:
     request_id = uuid.uuid4().hex
+    audit_metadata = {
+        "request_id": request_id,
+        "storage_space_id": target.storage_space_id,
+        "storage_space_name": target.storage_space_name,
+        "bucket_name": target.bucket_name,
+    }
 
-    async def event_generator():
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
-        cancel_event = threading.Event()
-
-        def push_message(payload: str | None) -> None:
-            loop.call_soon_threadsafe(queue.put_nowait, payload)
-
+    def worker(push_message: SseMessageSender, cancel_event: threading.Event) -> None:
         def progress_callback(progress: PortalStorageSpaceVersionCleanupProgress) -> None:
             payload = progress.model_copy(update={"request_id": request_id}).model_dump(mode="json")
             push_message(format_sse_event("progress", payload))
@@ -222,111 +220,73 @@ def _stream_portal_storage_space_version_cleanup(
             if cancel_event.is_set():
                 raise BucketPurgeCancelled()
 
-        audit_metadata = {
-            "request_id": request_id,
-            "storage_space_id": target.storage_space_id,
-            "storage_space_name": target.storage_space_name,
-            "bucket_name": target.bucket_name,
-        }
-
-        def worker() -> None:
-            try:
-                audit_service.record_action(
-                    user=actor,
-                    scope="portal",
-                    action="start_storage_space_history_cleanup",
-                    entity_type="storage_space",
-                    entity_id=target.storage_space_id,
-                    account=access.account,
-                    metadata=audit_metadata,
-                )
-                result = service.run_storage_space_version_cleanup(
-                    target,
-                    progress_callback=progress_callback,
-                    cancel_check=cancel_check,
-                )
-                audit_service.record_action(
-                    user=actor,
-                    scope="portal",
-                    action="finish_storage_space_history_cleanup",
-                    entity_type="storage_space",
-                    entity_id=target.storage_space_id,
-                    account=access.account,
-                    metadata={
-                        **audit_metadata,
-                        "deleted_versions": result.deleted_versions,
-                        "deleted_delete_markers": result.deleted_delete_markers,
-                        "bytes_freed": result.bytes_freed,
-                    },
-                )
-                push_message(format_sse_event("result", result.model_dump(mode="json")))
-                push_message(format_sse_event("done", {"request_id": request_id, "status": result.status}))
-            except BucketPurgeCancelled:
-                audit_service.record_action(
-                    user=actor,
-                    scope="portal",
-                    action="cancel_storage_space_history_cleanup",
-                    entity_type="storage_space",
-                    entity_id=target.storage_space_id,
-                    account=access.account,
-                    metadata=audit_metadata,
-                    status="canceled",
-                    message="Storage Space history cleanup canceled",
-                )
-                push_message(format_sse_event("done", {"request_id": request_id, "status": "canceled"}))
-            except Exception as exc:  # pragma: no cover - defensive streaming boundary.
-                logger.exception("Portal Storage Space history cleanup failed: %s", exc)
-                safe_message = sanitized_error_log_detail(exc)
-                audit_service.record_action(
-                    user=actor,
-                    scope="portal",
-                    action="fail_storage_space_history_cleanup",
-                    entity_type="storage_space",
-                    entity_id=target.storage_space_id,
-                    account=access.account,
-                    metadata=audit_metadata,
-                    status="failed",
-                    message=safe_message,
-                )
-                push_message(format_sse_event("error", {"request_id": request_id, "detail": safe_message}))
-                push_message(format_sse_event("done", {"request_id": request_id, "status": "failed"}))
-            finally:
-                push_message(None)
-
-        worker_task = asyncio.create_task(asyncio.to_thread(worker))
         try:
-            while True:
-                if await request.is_disconnected():
-                    cancel_event.set()
-                    break
-                try:
-                    message = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_INTERVAL_SECONDS)
-                except asyncio.TimeoutError:
-                    if await request.is_disconnected():
-                        cancel_event.set()
-                        break
-                    yield ": keepalive\n\n"
-                    continue
-                if message is None:
-                    break
-                yield message
-        finally:
-            await wait_for_cancellable_worker(
-                worker_task,
-                cancel_event,
-                logger=logger,
-                operation="portal_storage_space_history_cleanup",
-                request_id=request_id,
+            audit_service.record_action(
+                user=actor,
+                scope="portal",
+                action="start_storage_space_history_cleanup",
+                entity_type="storage_space",
+                entity_id=target.storage_space_id,
+                account=access.account,
+                metadata=audit_metadata,
             )
+            result = service.run_storage_space_version_cleanup(
+                target,
+                progress_callback=progress_callback,
+                cancel_check=cancel_check,
+            )
+            audit_service.record_action(
+                user=actor,
+                scope="portal",
+                action="finish_storage_space_history_cleanup",
+                entity_type="storage_space",
+                entity_id=target.storage_space_id,
+                account=access.account,
+                metadata={
+                    **audit_metadata,
+                    "deleted_versions": result.deleted_versions,
+                    "deleted_delete_markers": result.deleted_delete_markers,
+                    "bytes_freed": result.bytes_freed,
+                },
+            )
+            push_message(format_sse_event("result", result.model_dump(mode="json")))
+            push_message(format_sse_event("done", {"request_id": request_id, "status": result.status}))
+        except BucketPurgeCancelled:
+            audit_service.record_action(
+                user=actor,
+                scope="portal",
+                action="cancel_storage_space_history_cleanup",
+                entity_type="storage_space",
+                entity_id=target.storage_space_id,
+                account=access.account,
+                metadata=audit_metadata,
+                status="canceled",
+                message="Storage Space history cleanup canceled",
+            )
+            push_message(format_sse_event("done", {"request_id": request_id, "status": "canceled"}))
+        except Exception as exc:  # pragma: no cover - defensive streaming boundary.
+            logger.exception("Portal Storage Space history cleanup failed: %s", exc)
+            safe_message = sanitized_error_log_detail(exc)
+            audit_service.record_action(
+                user=actor,
+                scope="portal",
+                action="fail_storage_space_history_cleanup",
+                entity_type="storage_space",
+                entity_id=target.storage_space_id,
+                account=access.account,
+                metadata=audit_metadata,
+                status="failed",
+                message=safe_message,
+            )
+            push_message(format_sse_event("error", {"request_id": request_id, "detail": safe_message}))
+            push_message(format_sse_event("done", {"request_id": request_id, "status": "failed"}))
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    return stream_cancellable_worker(
+        request,
+        worker=worker,
+        logger=logger,
+        operation="portal_storage_space_history_cleanup",
+        request_id=request_id,
     )
 
 
@@ -340,15 +300,15 @@ def _stream_portal_deleted_prefix_restore(
     target,
 ) -> StreamingResponse:
     request_id = uuid.uuid4().hex
+    audit_metadata = {
+        "request_id": request_id,
+        "storage_space_id": target.storage_space_id,
+        "storage_space_name": target.storage_space_name,
+        "bucket_name": target.bucket_name,
+        "prefix": target.prefix,
+    }
 
-    async def event_generator():
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
-        cancel_event = threading.Event()
-
-        def push_message(payload: str | None) -> None:
-            loop.call_soon_threadsafe(queue.put_nowait, payload)
-
+    def worker(push_message: SseMessageSender, cancel_event: threading.Event) -> None:
         def progress_callback(progress: PortalDeletedPrefixRestoreProgress) -> None:
             payload = progress.model_copy(
                 update={"request_id": request_id}
@@ -359,136 +319,94 @@ def _stream_portal_deleted_prefix_restore(
             if cancel_event.is_set():
                 raise BucketPurgeCancelled()
 
-        audit_metadata = {
-            "request_id": request_id,
-            "storage_space_id": target.storage_space_id,
-            "storage_space_name": target.storage_space_name,
-            "bucket_name": target.bucket_name,
-            "prefix": target.prefix,
-        }
-
-        def worker() -> None:
-            try:
-                audit_service.record_action(
-                    user=actor,
-                    scope="portal",
-                    action="start_restore_deleted_prefix",
-                    entity_type="storage_space",
-                    entity_id=target.storage_space_id,
-                    account=access.account,
-                    metadata=audit_metadata,
-                )
-                result = service.run_deleted_prefix_restore(
-                    target,
-                    progress_callback=progress_callback,
-                    cancel_check=cancel_check,
-                )
-                audit_service.record_action(
-                    user=actor,
-                    scope="portal",
-                    action="finish_restore_deleted_prefix",
-                    entity_type="storage_space",
-                    entity_id=target.storage_space_id,
-                    account=access.account,
-                    metadata={
-                        **audit_metadata,
-                        "restore_candidates": result.restore_candidates,
-                        "restored_objects": result.restored_objects,
-                        "failed_objects": result.failed_objects,
-                    },
-                    status="success" if result.status == "completed" else "partial",
-                )
-                push_message(format_sse_event("result", result.model_dump(mode="json")))
-                push_message(
-                    format_sse_event(
-                        "done",
-                        {"request_id": request_id, "status": result.status},
-                    )
-                )
-            except BucketPurgeCancelled:
-                audit_service.record_action(
-                    user=actor,
-                    scope="portal",
-                    action="cancel_restore_deleted_prefix",
-                    entity_type="storage_space",
-                    entity_id=target.storage_space_id,
-                    account=access.account,
-                    metadata=audit_metadata,
-                    status="canceled",
-                    message="Deleted prefix restoration canceled",
-                )
-                push_message(
-                    format_sse_event(
-                        "done",
-                        {"request_id": request_id, "status": "canceled"},
-                    )
-                )
-            except Exception as exc:  # pragma: no cover - defensive streaming boundary.
-                logger.exception("Portal deleted prefix restoration failed: %s", exc)
-                safe_message = sanitized_error_log_detail(exc)
-                audit_service.record_action(
-                    user=actor,
-                    scope="portal",
-                    action="fail_restore_deleted_prefix",
-                    entity_type="storage_space",
-                    entity_id=target.storage_space_id,
-                    account=access.account,
-                    metadata=audit_metadata,
-                    status="failed",
-                    message=safe_message,
-                )
-                push_message(
-                    format_sse_event(
-                        "error",
-                        {"request_id": request_id, "detail": safe_message},
-                    )
-                )
-                push_message(
-                    format_sse_event(
-                        "done",
-                        {"request_id": request_id, "status": "failed"},
-                    )
-                )
-            finally:
-                push_message(None)
-
-        worker_task = asyncio.create_task(asyncio.to_thread(worker))
         try:
-            while True:
-                if await request.is_disconnected():
-                    cancel_event.set()
-                    break
-                try:
-                    message = await asyncio.wait_for(
-                        queue.get(),
-                        timeout=SSE_KEEPALIVE_INTERVAL_SECONDS,
-                    )
-                except asyncio.TimeoutError:
-                    if await request.is_disconnected():
-                        cancel_event.set()
-                        break
-                    yield ": keepalive\n\n"
-                    continue
-                if message is None:
-                    break
-                yield message
-        finally:
-            await wait_for_cancellable_worker(
-                worker_task,
-                cancel_event,
-                logger=logger,
-                operation="portal_deleted_prefix_restore",
-                request_id=request_id,
+            audit_service.record_action(
+                user=actor,
+                scope="portal",
+                action="start_restore_deleted_prefix",
+                entity_type="storage_space",
+                entity_id=target.storage_space_id,
+                account=access.account,
+                metadata=audit_metadata,
+            )
+            result = service.run_deleted_prefix_restore(
+                target,
+                progress_callback=progress_callback,
+                cancel_check=cancel_check,
+            )
+            audit_service.record_action(
+                user=actor,
+                scope="portal",
+                action="finish_restore_deleted_prefix",
+                entity_type="storage_space",
+                entity_id=target.storage_space_id,
+                account=access.account,
+                metadata={
+                    **audit_metadata,
+                    "restore_candidates": result.restore_candidates,
+                    "restored_objects": result.restored_objects,
+                    "failed_objects": result.failed_objects,
+                },
+                status="success" if result.status == "completed" else "partial",
+            )
+            push_message(format_sse_event("result", result.model_dump(mode="json")))
+            push_message(
+                format_sse_event(
+                    "done",
+                    {"request_id": request_id, "status": result.status},
+                )
+            )
+        except BucketPurgeCancelled:
+            audit_service.record_action(
+                user=actor,
+                scope="portal",
+                action="cancel_restore_deleted_prefix",
+                entity_type="storage_space",
+                entity_id=target.storage_space_id,
+                account=access.account,
+                metadata=audit_metadata,
+                status="canceled",
+                message="Deleted prefix restoration canceled",
+            )
+            push_message(
+                format_sse_event(
+                    "done",
+                    {"request_id": request_id, "status": "canceled"},
+                )
+            )
+        except Exception as exc:  # pragma: no cover - defensive streaming boundary.
+            logger.exception("Portal deleted prefix restoration failed: %s", exc)
+            safe_message = sanitized_error_log_detail(exc)
+            audit_service.record_action(
+                user=actor,
+                scope="portal",
+                action="fail_restore_deleted_prefix",
+                entity_type="storage_space",
+                entity_id=target.storage_space_id,
+                account=access.account,
+                metadata=audit_metadata,
+                status="failed",
+                message=safe_message,
+            )
+            push_message(
+                format_sse_event(
+                    "error",
+                    {"request_id": request_id, "detail": safe_message},
+                )
+            )
+            push_message(
+                format_sse_event(
+                    "done",
+                    {"request_id": request_id, "status": "failed"},
+                )
             )
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    return stream_cancellable_worker(
+        request,
+        worker=worker,
+        logger=logger,
+        operation="portal_deleted_prefix_restore",
+        request_id=request_id,
     )
 
 

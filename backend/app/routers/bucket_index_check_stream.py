@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import asyncio
 import logging
 import threading
 import uuid
@@ -14,9 +13,9 @@ from fastapi.responses import StreamingResponse
 from app.models.ceph_admin import CephAdminBucketIndexCheckBatchProgress, CephAdminBucketIndexCheckBatchResult
 from app.routers.ceph_admin.listing_common import normalize_http_error_detail
 from app.routers.sse_worker import (
-    SSE_KEEPALIVE_INTERVAL_SECONDS,
+    SseMessageSender,
     format_sse_event,
-    wait_for_cancellable_worker,
+    stream_cancellable_worker,
 )
 from app.services.bucket_index_check_service import BucketIndexCheckCancelled
 
@@ -31,14 +30,7 @@ def stream_bucket_index_checks(
 ) -> StreamingResponse:
     request_id = uuid.uuid4().hex
 
-    async def event_generator():
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
-        cancel_event = threading.Event()
-
-        def push_message(payload: str | None) -> None:
-            loop.call_soon_threadsafe(queue.put_nowait, payload)
-
+    def worker(push_message: SseMessageSender, cancel_event: threading.Event) -> None:
         def progress_callback(progress: CephAdminBucketIndexCheckBatchProgress) -> None:
             payload = progress.model_copy(update={"request_id": request_id}).model_dump(mode="json")
             push_message(format_sse_event("progress", payload))
@@ -47,69 +39,38 @@ def stream_bucket_index_checks(
             if cancel_event.is_set():
                 raise BucketIndexCheckCancelled()
 
-        def worker() -> None:
-            try:
-                result = run_check(progress_callback, cancel_check)
-                push_message(format_sse_event("result", result.model_dump(mode="json")))
-                push_message(format_sse_event("done", {"request_id": request_id, "status": result.status}))
-            except BucketIndexCheckCancelled:
-                push_message(format_sse_event("done", {"request_id": request_id, "status": "canceled"}))
-            except HTTPException as exc:
-                push_message(
-                    format_sse_event(
-                        "error",
-                        {
-                            "request_id": request_id,
-                            "detail": normalize_http_error_detail(exc.detail),
-                            "status_code": exc.status_code,
-                        },
-                    )
-                )
-                push_message(format_sse_event("done", {"request_id": request_id, "status": "failed"}))
-            except Exception:  # pragma: no cover
-                logger.exception("Ceph Admin bucket index checks failed.")
-                push_message(
-                    format_sse_event(
-                        "error",
-                        {"request_id": request_id, "detail": "Ceph Admin bucket index checks failed."},
-                    )
-                )
-                push_message(format_sse_event("done", {"request_id": request_id, "status": "failed"}))
-            finally:
-                push_message(None)
-
-        worker_task = asyncio.create_task(asyncio.to_thread(worker))
         try:
-            while True:
-                if await request.is_disconnected():
-                    cancel_event.set()
-                    break
-                try:
-                    message = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_INTERVAL_SECONDS)
-                except asyncio.TimeoutError:
-                    if await request.is_disconnected():
-                        cancel_event.set()
-                        break
-                    yield ": keepalive\n\n"
-                    continue
-                if message is None:
-                    break
-                yield message
-        finally:
-            await wait_for_cancellable_worker(
-                worker_task,
-                cancel_event,
-                logger=logger,
-                operation="bucket_index_check",
-                request_id=request_id,
+            result = run_check(progress_callback, cancel_check)
+            push_message(format_sse_event("result", result.model_dump(mode="json")))
+            push_message(format_sse_event("done", {"request_id": request_id, "status": result.status}))
+        except BucketIndexCheckCancelled:
+            push_message(format_sse_event("done", {"request_id": request_id, "status": "canceled"}))
+        except HTTPException as exc:
+            push_message(
+                format_sse_event(
+                    "error",
+                    {
+                        "request_id": request_id,
+                        "detail": normalize_http_error_detail(exc.detail),
+                        "status_code": exc.status_code,
+                    },
+                )
             )
+            push_message(format_sse_event("done", {"request_id": request_id, "status": "failed"}))
+        except Exception:  # pragma: no cover
+            logger.exception("Ceph Admin bucket index checks failed.")
+            push_message(
+                format_sse_event(
+                    "error",
+                    {"request_id": request_id, "detail": "Ceph Admin bucket index checks failed."},
+                )
+            )
+            push_message(format_sse_event("done", {"request_id": request_id, "status": "failed"}))
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    return stream_cancellable_worker(
+        request,
+        worker=worker,
+        logger=logger,
+        operation="bucket_index_check",
+        request_id=request_id,
     )
