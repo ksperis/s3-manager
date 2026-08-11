@@ -145,10 +145,12 @@ import {
   BrowserSseCustomerKeyModal,
 } from "./BrowserBucketDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
+import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
 import {
-  extractBrowserErrorDetails as extractErrorDetails,
-  formatBrowserOperationError as formatOperationError,
-} from "./browserOperationErrors";
+  ensureSuccessfulBrowserTransferResponse,
+  readBrowserTransferBlob,
+  readBrowserTransferStream,
+} from "./browserFetchTransferResponse";
 import {
   BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES,
   buildBucketInspectorFeatures,
@@ -7477,25 +7479,7 @@ export default function BrowserPage({
       headers: presign.headers || undefined,
       signal,
     });
-    if (!response.ok) {
-      let detail: string | undefined;
-      let code: string | undefined;
-      try {
-        const text = await response.text();
-        const parsed = extractErrorDetails(text);
-        code = parsed?.code;
-        detail = parsed?.message;
-      } catch {
-        // ignore body parsing failures
-      }
-      const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
-      const detailLabel =
-        code && detail ? `${code}: ${detail}` : detail || code;
-      const parts = [statusLabel, detailLabel].filter(Boolean);
-      const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
-      throw new Error(`Download failed for ${key}${suffix}`);
-    }
-    return response.blob();
+    return readBrowserTransferBlob(response, `Download failed for ${key}`);
   }
 
   const buildAuthHeaders = useCallback((sseKeyBase64?: string | null) => {
@@ -7557,28 +7541,7 @@ export default function BrowserPage({
         credentials: "include",
         signal,
       });
-      if (!response.ok) {
-        let detail: string | undefined;
-        let code: string | undefined;
-        try {
-          const text = await response.text();
-          const parsed = extractErrorDetails(text);
-          code = parsed?.code;
-          detail = parsed?.message;
-        } catch {
-          // ignore body parsing failures
-        }
-        const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
-        const detailLabel =
-          code && detail ? `${code}: ${detail}` : detail || code;
-        const parts = [statusLabel, detailLabel].filter(Boolean);
-        const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
-        throw new Error(`Download failed for ${key}${suffix}`);
-      }
-      if (!response.body) {
-        throw new Error("Streaming download is not supported in this browser.");
-      }
-      return response.body;
+      return readBrowserTransferStream(response, `Download failed for ${key}`);
     }
     const presign = await presignObjectRequest(bucketName, {
       key,
@@ -7589,50 +7552,8 @@ export default function BrowserPage({
       headers: presign.headers || undefined,
       signal,
     });
-    if (!response.ok) {
-      let detail: string | undefined;
-      let code: string | undefined;
-      try {
-        const text = await response.text();
-        const parsed = extractErrorDetails(text);
-        code = parsed?.code;
-        detail = parsed?.message;
-      } catch {
-        // ignore body parsing failures
-      }
-      const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
-      const detailLabel =
-        code && detail ? `${code}: ${detail}` : detail || code;
-      const parts = [statusLabel, detailLabel].filter(Boolean);
-      const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
-      throw new Error(`Download failed for ${key}${suffix}`);
-    }
-    if (!response.body) {
-      throw new Error("Streaming download is not supported in this browser.");
-    }
-    return response.body;
+    return readBrowserTransferStream(response, `Download failed for ${key}`);
   };
-
-  const formatFetchTransferError = useCallback(
-    async (response: Response, fallback: string) => {
-      let detail: string | undefined;
-      let code: string | undefined;
-      try {
-        const text = await response.text();
-        const parsed = extractErrorDetails(text);
-        code = parsed?.code;
-        detail = parsed?.message;
-      } catch {
-        // ignore body parsing failures
-      }
-      const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
-      const detailLabel = code && detail ? `${code}: ${detail}` : detail || code;
-      const parts = [statusLabel, detailLabel].filter(Boolean);
-      const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
-      return `${fallback}${suffix}`;
-    },
-    [],
-  );
 
   const resolveClipboardTransferMode = useCallback(
     async (
@@ -7701,14 +7622,9 @@ export default function BrowserPage({
         headers: presign.headers || undefined,
         signal,
       });
-      if (!response.ok) {
-        throw new Error(
-          await formatFetchTransferError(response, `Download failed for ${key}`),
-        );
-      }
-      return response.blob();
+      return readBrowserTransferBlob(response, `Download failed for ${key}`);
     },
-    [browserRequestOptions, formatFetchTransferError],
+    [browserRequestOptions],
   );
 
   const downloadObjectStreamForTransfer = useCallback(
@@ -7738,20 +7654,7 @@ export default function BrowserPage({
           credentials: "include",
           signal,
         });
-        if (!response.ok) {
-          throw new Error(
-            await formatFetchTransferError(
-              response,
-              `Download failed for ${key}`,
-            ),
-          );
-        }
-        if (!response.body) {
-          throw new Error(
-            "Streaming download is not supported in this browser.",
-          );
-        }
-        return response.body;
+        return readBrowserTransferStream(response, `Download failed for ${key}`);
       }
       const presign = await presignObject(
         selector,
@@ -7768,17 +7671,9 @@ export default function BrowserPage({
         headers: presign.headers || undefined,
         signal,
       });
-      if (!response.ok) {
-        throw new Error(
-          await formatFetchTransferError(response, `Download failed for ${key}`),
-        );
-      }
-      if (!response.body) {
-        throw new Error("Streaming download is not supported in this browser.");
-      }
-      return response.body;
+      return readBrowserTransferStream(response, `Download failed for ${key}`);
     },
-    [browserRequestOptions, buildApiUrl, buildAuthHeaders, formatFetchTransferError],
+    [browserRequestOptions, buildApiUrl, buildAuthHeaders],
   );
 
   const uploadBlobForTransfer = useCallback(
@@ -7837,13 +7732,12 @@ export default function BrowserPage({
         body: blob,
         signal,
       });
-      if (!response.ok) {
-        throw new Error(
-          await formatFetchTransferError(response, `Upload failed for ${key}`),
-        );
-      }
+      await ensureSuccessfulBrowserTransferResponse(
+        response,
+        `Upload failed for ${key}`,
+      );
     },
-    [browserRequestOptions, formatFetchTransferError],
+    [browserRequestOptions],
   );
 
   const uploadMultipartStreamForTransfer = useCallback(
