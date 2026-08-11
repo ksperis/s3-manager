@@ -3,21 +3,24 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
-from app.core.database import SessionLocal
 from app.db import User
-from app.models.bucket_purge import BucketPurgeRequest, BucketPurgeResult, bucket_purge_confirmation_phrase
-from app.routers.bucket_purge_stream import stream_bucket_purge
+from app.models.bucket_purge import BucketPurgeRequest, bucket_purge_confirmation_phrase
+from app.routers.bucket_purge_stream import (
+    BucketPurgeAuditLifecycle,
+    record_bucket_purge_audit,
+    stream_bucket_purge,
+)
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
     build_ceph_admin_s3_context,
     get_ceph_admin_context,
 )
 from app.routers.dependencies import get_current_ceph_admin, require_bucket_purge_global_enabled
-from app.services.audit_service import AuditService
 from app.services.bucket_purge_service import BucketPurgeOptions, BucketPurgeResolvedTarget, BucketPurgeService
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets/purge", tags=["ceph-admin-bucket-purge"])
@@ -33,39 +36,6 @@ def _require_buckets_payload(payload: BucketPurgeRequest) -> list[str]:
     if (payload.confirmation or "").strip() != expected:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Confirmation must be exactly '{expected}'.")
     return payload.buckets
-
-
-def _record_audit(
-    *,
-    user_id: int,
-    user_email: str,
-    user_role: str,
-    request_id: str,
-    endpoint_name: str | None,
-    action: str,
-    status: str = "success",
-    message: str | None = None,
-    metadata: dict | None = None,
-) -> None:
-    db = SessionLocal()
-    try:
-        user = db.get(User, user_id)
-        AuditService(db).record_action(
-            user=user,
-            user_email=user_email,
-            user_role=user_role,
-            scope="ceph_admin",
-            action=action,
-            entity_type="bucket_purge",
-            entity_id=request_id,
-            account_name=endpoint_name,
-            status=status,
-            message=message,
-            metadata=metadata,
-            request_id=request_id,
-        )
-    finally:
-        db.close()
 
 
 @router.post("/stream")
@@ -103,58 +73,17 @@ def stream_ceph_admin_bucket_purge(
         "endpoint_id": ctx.endpoint.id,
         "endpoint_name": ctx.endpoint.name,
     }
-    actor = {
-        "user_id": int(user.id),
-        "user_email": str(user.email),
-        "user_role": str(user.role),
-    }
-
-    def on_start(request_id: str) -> None:
-        _record_audit(
-            **actor,
-            request_id=request_id,
-            endpoint_name=ctx.endpoint.name,
-            action="start_bucket_purge",
-            metadata=base_metadata,
-        )
-
-    def on_result(request_id: str, result: BucketPurgeResult) -> None:
-        _record_audit(
-            **actor,
-            request_id=request_id,
-            endpoint_name=ctx.endpoint.name,
-            action="finish_bucket_purge",
-            status="success" if result.status == "completed" else "failure",
-            metadata={
-                **base_metadata,
-                "result_status": result.status,
-                "deleted_objects": result.deleted_objects,
-                "deleted_versions": result.deleted_versions,
-                "failed_count": result.failed_count,
-            },
-        )
-
-    def on_cancel(request_id: str) -> None:
-        _record_audit(
-            **actor,
-            request_id=request_id,
-            endpoint_name=ctx.endpoint.name,
-            action="cancel_bucket_purge",
-            status="failure",
-            message="Bucket purge canceled",
-            metadata=base_metadata,
-        )
-
-    def on_error(request_id: str, detail: str) -> None:
-        _record_audit(
-            **actor,
-            request_id=request_id,
-            endpoint_name=ctx.endpoint.name,
-            action="fail_bucket_purge",
-            status="failure",
-            message=detail,
-            metadata=base_metadata,
-        )
+    audit = BucketPurgeAuditLifecycle(
+        record=partial(
+            record_bucket_purge_audit,
+            user_id=int(user.id),
+            user_email=str(user.email),
+            user_role=str(user.role),
+            scope="ceph_admin",
+            account_name=ctx.endpoint.name,
+        ),
+        base_metadata=base_metadata,
+    )
 
     return stream_bucket_purge(
         request,
@@ -166,8 +95,8 @@ def stream_ceph_admin_bucket_purge(
         ),
         logger=logger,
         failure_message="Ceph Admin bucket purge failed.",
-        on_start=on_start,
-        on_result=on_result,
-        on_cancel=on_cancel,
-        on_error=on_error,
+        on_start=audit.on_start,
+        on_result=audit.on_result,
+        on_cancel=audit.on_cancel,
+        on_error=audit.on_error,
     )

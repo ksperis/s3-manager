@@ -15,6 +15,7 @@ from app.main import app
 from app.models.app_settings import AppSettings
 from app.models.bucket_purge import BucketPurgeProgress, BucketPurgeRequest, BucketPurgeResult
 from app.routers import dependencies as dependencies_router
+from app.routers.bucket_purge_stream import BucketPurgeAuditLifecycle
 from app.services import app_settings_service
 from app.routers.ceph_admin import purge as ceph_purge
 from app.routers.ceph_admin.dependencies import CephAdminContext
@@ -133,6 +134,7 @@ def test_manager_delete_with_purge_route_rejects_wrong_confirmation_with_400():
 
 def test_manager_purge_route_streams_progress_and_result(monkeypatch):
     captured: dict[str, object] = {}
+    audit_calls: list[dict] = []
 
     class FakeService:
         def run(self, targets, options, *, progress_callback=None, cancel_check=None):
@@ -163,7 +165,7 @@ def test_manager_purge_route_streams_progress_and_result(monkeypatch):
     )
     app.dependency_overrides[manager_purge.get_current_account_admin] = lambda: SimpleNamespace(id=1)
     monkeypatch.setattr(manager_purge, "BucketPurgeService", FakeService)
-    monkeypatch.setattr(manager_purge, "_record_audit", lambda **kwargs: None)
+    monkeypatch.setattr(manager_purge, "record_bucket_purge_audit", lambda **kwargs: audit_calls.append(kwargs))
     try:
         with TestClient(app) as client:
             response = client.post(
@@ -190,10 +192,14 @@ def test_manager_purge_route_streams_progress_and_result(monkeypatch):
     assert captured["options"].parallelism == 4
     assert captured["options"].include_versions is True
     assert captured["options"].individual_deletes is False
+    assert [call["action"] for call in audit_calls] == ["start_bucket_purge", "finish_bucket_purge"]
+    assert audit_calls[1]["status"] == "success"
+    assert audit_calls[1]["metadata"]["deleted_objects"] == 2
 
 
 def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch):
     captured: dict[str, object] = {}
+    audit_calls: list[dict] = []
 
     class FakeService:
         def run_delete_bucket_with_purge(self, target, options, *, progress_callback=None, cancel_check=None):
@@ -225,7 +231,7 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
     )
     app.dependency_overrides[manager_buckets.get_current_account_admin] = lambda: SimpleNamespace(id=1)
     monkeypatch.setattr(manager_buckets, "BucketPurgeService", FakeService)
-    monkeypatch.setattr(manager_buckets, "_record_bucket_delete_with_purge_audit", lambda **kwargs: None)
+    monkeypatch.setattr(manager_buckets, "record_bucket_purge_audit", lambda **kwargs: audit_calls.append(kwargs))
     monkeypatch.setattr(manager_buckets, "_invalidate_bucket_listing_for_account", lambda account: None)
     try:
         with TestClient(app) as client:
@@ -251,6 +257,41 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
     assert captured["options"].parallelism == 4
     assert captured["options"].individual_deletes is False
     assert "entry_limit" not in captured
+    assert [call["action"] for call in audit_calls] == [
+        "start_bucket_delete_with_purge",
+        "finish_bucket_delete_with_purge",
+    ]
+    assert audit_calls[1]["status"] == "success"
+    assert audit_calls[1]["metadata"]["bucket_deleted"] is True
+
+
+def test_bucket_purge_audit_lifecycle_records_cancel_error_and_failed_result():
+    audit_calls: list[dict] = []
+    after_results: list[BucketPurgeResult] = []
+    lifecycle = BucketPurgeAuditLifecycle(
+        record=lambda **kwargs: audit_calls.append(kwargs),
+        base_metadata={"target_count": 1},
+        result_failure_action="fail_custom_purge",
+        result_succeeded=lambda result: result.status == "completed" and result.bucket_deleted,
+        result_metadata=lambda result: {"bucket_deleted": result.bucket_deleted},
+        after_result=after_results.append,
+    )
+    failed_result = _result(status="failed").model_copy(update={"bucket_deleted": False})
+
+    lifecycle.on_result("request-1", failed_result)
+    lifecycle.on_cancel("request-2")
+    lifecycle.on_error("request-3", "upstream failed")
+
+    assert after_results == [failed_result]
+    assert [call["action"] for call in audit_calls] == [
+        "fail_custom_purge",
+        "cancel_bucket_purge",
+        "fail_bucket_purge",
+    ]
+    assert all(call["status"] == "failure" for call in audit_calls)
+    assert audit_calls[0]["metadata"] == {"target_count": 1, "bucket_deleted": False}
+    assert audit_calls[1]["message"] == "Bucket purge canceled"
+    assert audit_calls[2]["message"] == "upstream failed"
 
 
 def test_ceph_admin_purge_route_uses_dedicated_endpoint_credentials(monkeypatch):
