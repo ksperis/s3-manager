@@ -22,7 +22,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router-dom";
-import axios, { type AxiosProgressEvent } from "axios";
+import type { AxiosProgressEvent } from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import {
@@ -183,10 +183,7 @@ import {
   writeBrowserRootUiPanelWidths,
 } from "./browserRootUiState";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
-import {
-  resolveSimpleUploadOperation,
-  shouldUseStsPresigner,
-} from "./sseBrowserLogic";
+import { shouldUseStsPresigner } from "./sseBrowserLogic";
 import {
   activateSseCustomerKeyForScope,
   copySseCustomerKeyWithFallback,
@@ -354,6 +351,7 @@ import {
 } from "./browserListingState";
 import { resolveBrowserWorkspaceContext } from "./browserPageContextModel";
 import { buildBulkRestorePlan } from "./browserBulkRestorePlan";
+import { uploadBrowserFile } from "./browserFileUpload";
 import {
   uploadBrowserFileMultipart,
   uploadBrowserStreamMultipart,
@@ -7097,53 +7095,30 @@ export default function BrowserPage({
     onProgress: (event: AxiosProgressEvent) => void,
     controller?: AbortController,
   ) => {
-    if (useProxyTransfers) {
-      await proxyUpload(
-        accountId,
-        bucket,
-        key,
-        file,
-        onProgress,
-        controller?.signal,
-        sseCustomerKeyBase64,
-        undefined,
-        browserRequestOptions,
-      );
-      return;
-    }
-    const operation = resolveSimpleUploadOperation();
-    const presign = await presignObjectRequest(bucket, {
-      key,
-      operation,
-      content_type: file.type || undefined,
-      expires_in: 1800,
-    });
-    const method = (presign.method || "").toUpperCase();
-    const hasPostFields = Boolean(
-      presign.fields && Object.keys(presign.fields).length > 0,
-    );
-    if (operation === "post_object" || (method === "POST" && hasPostFields)) {
-      if (!presign.fields) {
-        throw new Error("Missing presigned POST fields.");
-      }
-      const formData = new FormData();
-      Object.entries(presign.fields).forEach(([field, value]) => {
-        formData.append(field, value);
-      });
-      formData.append("file", file);
-      await axios.post(presign.url, formData, {
-        onUploadProgress: onProgress,
-        signal: controller?.signal,
-      });
-      return;
-    }
-    await axios.put(presign.url, file, {
-      headers: {
-        ...(presign.headers || {}),
-        "Content-Type": file.type || "application/octet-stream",
-      },
-      onUploadProgress: onProgress,
+    await uploadBrowserFile({
+      file,
+      mode: useProxyTransfers ? "proxy" : "direct",
       signal: controller?.signal,
+      onProgress,
+      uploadProxy: () =>
+        proxyUpload(
+          accountId,
+          bucket,
+          key,
+          file,
+          onProgress,
+          controller?.signal,
+          sseCustomerKeyBase64,
+          undefined,
+          browserRequestOptions,
+        ),
+      presign: () =>
+        presignObjectRequest(bucket, {
+          key,
+          operation: "put_object",
+          content_type: file.type || undefined,
+          expires_in: 1800,
+        }),
     });
   };
 
