@@ -46,8 +46,6 @@ import { extractApiError } from "../../utils/apiError";
 import { triggerBlobDownload } from "../../utils/download";
 import {
   CLIENT_STORAGE_KEYS,
-  readClientJson,
-  readClientStorage,
   writeClientStorage,
 } from "../../utils/clientStorage";
 import {
@@ -75,7 +73,7 @@ import {
   PresignRequest,
   StsCredentials,
   StsStatus,
-  buildSseCustomerBackendHeaders,
+  buildBrowserFetchHeaders,
   copyObject,
   cleanupObjectVersions,
   createFolder,
@@ -107,6 +105,7 @@ import {
   createBrowserBucket,
   abortMultipartUpload,
 } from "../../api/browser";
+import { buildApiUrl } from "../../api/client";
 import { useBrowserContext } from "./BrowserContext";
 import {
   useBrowserSidebarSlot,
@@ -503,7 +502,6 @@ type BrowserCopyDialogState = {
   successMessage?: string;
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 const PATH_SUGGESTIONS_DEBOUNCE_MS = 200;
 const PATH_SUGGESTIONS_API_LIMIT = 50;
@@ -7482,47 +7480,6 @@ export default function BrowserPage({
     return readBrowserTransferBlob(response, `Download failed for ${key}`);
   }
 
-  const buildAuthHeaders = useCallback((sseKeyBase64?: string | null) => {
-    const headers: Record<string, string> = {};
-    if (typeof window === "undefined") return headers;
-    const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    const parsed = readClientJson<{ authType?: string }>(CLIENT_STORAGE_KEYS.sessionUser);
-    if (parsed?.authType === "s3_session") {
-      const endpoint = readClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
-      if (endpoint) {
-        headers["X-S3-Endpoint"] = endpoint;
-      }
-    }
-    if (workspaceSurface === "portal") {
-      headers["X-S3-Workspace"] = "portal";
-    } else if (workspaceSurface === "manager") {
-      headers["X-S3-Workspace"] = "manager-browser";
-    }
-    Object.assign(headers, buildSseCustomerBackendHeaders(sseKeyBase64));
-    return headers;
-  }, [workspaceSurface]);
-
-  const buildApiUrl = useCallback(
-    (path: string, params?: Record<string, unknown>) => {
-      const base = API_BASE_URL.endsWith("/")
-        ? API_BASE_URL.slice(0, -1)
-        : API_BASE_URL;
-      const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
-      const url = new URL(`${base}/${normalizedPath}`);
-      if (params) {
-        Object.entries(params).forEach(([key, value]) => {
-          if (value === undefined || value === null) return;
-          url.searchParams.set(key, String(value));
-        });
-      }
-      return url.toString();
-    },
-    [],
-  );
-
   const downloadObjectStream = async (
     key: string,
     signal?: AbortSignal,
@@ -7537,7 +7494,10 @@ export default function BrowserPage({
         params ?? undefined,
       );
       const response = await fetch(url, {
-        headers: buildAuthHeaders(sseCustomerKeyBase64),
+        headers: buildBrowserFetchHeaders(
+          browserRequestOptions,
+          sseCustomerKeyBase64,
+        ),
         credentials: "include",
         signal,
       });
@@ -7650,7 +7610,10 @@ export default function BrowserPage({
           params ?? undefined,
         );
         const response = await fetch(url, {
-          headers: buildAuthHeaders(sseKeyBase64),
+          headers: buildBrowserFetchHeaders(
+            browserRequestOptions,
+            sseKeyBase64,
+          ),
           credentials: "include",
           signal,
         });
@@ -7673,7 +7636,7 @@ export default function BrowserPage({
       });
       return readBrowserTransferStream(response, `Download failed for ${key}`);
     },
-    [browserRequestOptions, buildApiUrl, buildAuthHeaders],
+    [browserRequestOptions],
   );
 
   const uploadBlobForTransfer = useCallback(

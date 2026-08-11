@@ -14,6 +14,41 @@ export const INTERACTIVE_REQUEST_TIMEOUT_MS = 15_000;
 export const AUTH_REFRESH_TIMEOUT_MS = 8_000;
 export const LONG_RUNNING_REQUEST_TIMEOUT_MS = 0;
 
+export function buildApiUrl(
+  path: string,
+  params?: Record<string, unknown>,
+): string {
+  const base = API_BASE_URL.replace(/\/+$/, "");
+  const normalizedPath = path.replace(/^\/+/, "");
+  const origin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+  const url = new URL(`${base}/${normalizedPath}`, origin);
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      url.searchParams.set(key, String(value));
+    });
+  }
+  return url.toString();
+}
+
+export function buildApiFetchHeaders(
+  additionalHeaders?: Record<string, string>,
+): Record<string, string> {
+  const headers: Record<string, string> = { ...additionalHeaders };
+  const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const parsed = readClientJson<{ authType?: string }>(CLIENT_STORAGE_KEYS.sessionUser);
+  if (parsed?.authType === "s3_session") {
+    const endpoint = readClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
+    if (endpoint) {
+      headers["X-S3-Endpoint"] = endpoint;
+    }
+  }
+  return headers;
+}
+
 export function timeoutForRequestProfile(profile: ApiRequestProfile): number {
   return profile === "interactive" ? INTERACTIVE_REQUEST_TIMEOUT_MS : LONG_RUNNING_REQUEST_TIMEOUT_MS;
 }
@@ -83,18 +118,10 @@ async function refreshAccessToken(observedToken: string | null): Promise<string>
 }
 
 client.interceptors.request.use((config) => {
-  const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
-  if (token) {
+  const fetchHeaders = buildApiFetchHeaders();
+  if (Object.keys(fetchHeaders).length > 0) {
     config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  const parsed = readClientJson<{ authType?: string }>(CLIENT_STORAGE_KEYS.sessionUser);
-  if (parsed?.authType === "s3_session") {
-    const endpoint = readClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
-    if (endpoint) {
-      config.headers = config.headers ?? {};
-      config.headers["X-S3-Endpoint"] = endpoint;
-    }
+    Object.assign(config.headers, fetchHeaders);
   }
   return config;
 });

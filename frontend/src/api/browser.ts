@@ -2,7 +2,10 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS } from "./client";
+import client, {
+  buildApiFetchHeaders,
+  LONG_RUNNING_REQUEST_TIMEOUT_MS,
+} from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import type { AxiosProgressEvent } from "axios";
 import type { StorageSpaceIconDescriptor } from "./storageSpaceIcons";
@@ -310,6 +313,16 @@ function buildBrowserWorkspaceHeaders(options?: BrowserRequestOptions): Record<s
     return { "X-S3-Workspace": "manager-browser" };
   }
   return {};
+}
+
+export function buildBrowserFetchHeaders(
+  options?: BrowserRequestOptions,
+  sseCustomerKeyBase64?: string | null,
+): Record<string, string> {
+  return buildApiFetchHeaders({
+    ...buildBrowserWorkspaceHeaders(options),
+    ...buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+  });
 }
 
 function mergeBrowserHeaders(
