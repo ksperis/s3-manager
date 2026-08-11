@@ -220,6 +220,32 @@ def test_iam_provisioning_never_serializes_or_audits_secret_and_is_idempotent(db
     assert fake.created_keys == [f"s3m-private-u{user.id}-acc{account.id}"]
 
 
+def test_iam_provisioning_accepts_builtin_full_access_when_catalog_omits_it(db_session, monkeypatch):
+    user = _user(db_session, email="full-access-default@example.test")
+    account = _account(db_session, user, _endpoint(db_session))
+    fake = FakeIAM()
+    service = ManagedPrivateAccessService(db_session)
+    monkeypatch.setattr(service, "_iam_service_for_account", lambda _account: fake)
+    _disable_capability_probe(monkeypatch)
+    policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+
+    result = service.provision_iam(
+        user=user,
+        account=account,
+        payload=ManagedIAMPrivateAccessRequest(
+            connection_name="Browser full access",
+            access_browser=True,
+            access_manager=False,
+            groups=[],
+            managed_policies=[policy_arn],
+            inline_policies=[],
+        ),
+    )
+
+    assert result.status == "active"
+    assert fake.attached == [(f"s3m-private-u{user.id}-acc{account.id}", policy_arn)]
+
+
 @pytest.mark.parametrize("shared", [False, True])
 def test_iam_provisioning_accepts_authorized_private_or_shared_connection_source(db_session, monkeypatch, shared):
     user = _user(db_session, email=f"source-{shared}@example.test")

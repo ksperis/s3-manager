@@ -39,6 +39,7 @@ from app.utils.time import utcnow
 
 
 ACTIVE_STATES = ("provisioning", "active", "deleting", "cleanup_pending")
+AMAZON_S3_FULL_ACCESS_POLICY_ARN = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
 RemotePrincipalType = Literal["iam_user", "rgw_user"]
 
 
@@ -528,7 +529,9 @@ class ManagedPrivateAccessService:
         invalid_groups = sorted(set(payload.groups) - available_groups)
         if invalid_groups:
             raise ManagedPrivateAccessError(f"Unknown IAM groups: {', '.join(invalid_groups)}")
-        available_policies = {policy.arn for policy in iam.list_policies()}
+        available_policies = {AMAZON_S3_FULL_ACCESS_POLICY_ARN} | {
+            policy.arn for policy in iam.list_policies()
+        }
         invalid_policies = sorted(set(payload.managed_policies) - available_policies)
         if invalid_policies:
             raise ManagedPrivateAccessError(f"Unknown IAM policies: {', '.join(invalid_policies)}")

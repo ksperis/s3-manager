@@ -24,10 +24,12 @@ instead.
 3. Attach/detach policies to users, groups, or roles.
 4. Manage IAM access keys from user key pages.
 5. To create a personal private S3 connection without handling its secret,
-   select **Create my private access** on the Users page. Choose the connection
-   name, IAM groups and policies, then Browser, Manager, or both. S3-Manager
-   creates a dedicated IAM identity and key on the server; it never displays
-   the generated secret in this flow.
+   select **Create my private access** on the Users page. The default creates a
+   dedicated IAM identity with `AmazonS3FullAccess` and a Browser-enabled
+   private connection. Open **Advanced configuration** to replace that policy,
+   attach IAM groups or inline policies, or change Browser/Manager availability.
+   S3-Manager creates the key on the server and never displays its generated
+   secret in this flow.
 6. Verify resulting access with your standard IAM validation process.
 
 ## Expected result

@@ -41,8 +41,9 @@ This is different from:
    browser. This separate workflow requires the UI right
    `can_provision_managed_private_connections` and the S3 User opt-in
    `allow_managed_private_connection_provisioning`; it does not use
-   `allow_access_key_management`. Choose the connection name and its
-   Browser/Manager availability.
+   `allow_access_key_management`. The resulting private connection is available
+   in Browser by default. Open **Advanced configuration** only when you need to
+   change its Browser/Manager availability.
 6. Disable a key before deleting it when you need a reversible validation step.
 7. Delete unused keys only after confirming no external workflow still depends
    on them.
