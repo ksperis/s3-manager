@@ -13,6 +13,7 @@ import PageHeader from "../../components/PageHeader";
 import { workflowPageHostClass } from "../../components/WorkflowPage";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { runWithConcurrencySettled } from "../../utils/concurrency";
 import {
   toolbarCompactButtonClasses,
   toolbarCompactInputClasses,
@@ -243,7 +244,6 @@ import {
   normalizeQuotaLimit,
   parseQuotaInput,
   persistBulkConfigClipboard,
-  runWithConcurrencySettled,
   type BulkAccessLoggingSnapshot,
   type BulkConfigClipboard,
   type BulkCopyFeatureKey,

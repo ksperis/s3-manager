@@ -8,7 +8,6 @@ import {
   normalizePublicAccessBlockState,
   parseQuotaInput,
   persistBulkConfigClipboard,
-  runWithConcurrencySettled,
 } from "./bucketBulkOperationsModel";
 
 beforeEach(() => sessionStorage.clear());
@@ -197,35 +196,4 @@ describe("bucketBulkOperationsModel", () => {
     expect(loadBulkConfigClipboard("future")).toBeNull();
   });
 
-  it("settles work with bounded concurrency while preserving result order", async () => {
-    let inFlight = 0;
-    let maxInFlight = 0;
-    const settledIndexes: number[] = [];
-
-    const results = await runWithConcurrencySettled(
-      [1, 2, 3, 4, 5],
-      2,
-      async (value) => {
-        inFlight += 1;
-        maxInFlight = Math.max(maxInFlight, inFlight);
-        await Promise.resolve();
-        inFlight -= 1;
-        if (value === 3) throw new Error("failed");
-        return value * 10;
-      },
-      (_result, index) => settledIndexes.push(index),
-    );
-
-    expect(maxInFlight).toBe(2);
-    expect(results.map(({ status }) => status)).toEqual([
-      "fulfilled",
-      "fulfilled",
-      "rejected",
-      "fulfilled",
-      "fulfilled",
-    ]);
-    expect(results[0]).toEqual({ status: "fulfilled", value: 10 });
-    expect(results[2]).toMatchObject({ status: "rejected" });
-    expect(settledIndexes).toHaveLength(5);
-  });
 });

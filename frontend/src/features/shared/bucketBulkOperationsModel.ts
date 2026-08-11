@@ -460,36 +460,3 @@ export const persistBulkConfigClipboard = (
   }
   writeSessionJsonToKey(storageKey, value);
 };
-
-export const runWithConcurrencySettled = async <T, R>(
-  items: T[],
-  limit: number,
-  handler: (item: T, index: number) => Promise<R>,
-  onSettled?: (result: PromiseSettledResult<R>, index: number) => void,
-): Promise<PromiseSettledResult<R>[]> => {
-  const results: PromiseSettledResult<R>[] = new Array(items.length);
-  let cursor = 0;
-  const workerCount = Math.min(limit, items.length);
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (true) {
-      const index = cursor;
-      if (index >= items.length) return;
-      cursor += 1;
-      try {
-        const value = await handler(items[index], index);
-        const result: PromiseSettledResult<R> = { status: "fulfilled", value };
-        results[index] = result;
-        onSettled?.(result, index);
-      } catch (err) {
-        const result: PromiseSettledResult<R> = {
-          status: "rejected",
-          reason: err,
-        };
-        results[index] = result;
-        onSettled?.(result, index);
-      }
-    }
-  });
-  await Promise.all(workers);
-  return results;
-};

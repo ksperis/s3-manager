@@ -14,6 +14,7 @@ import UiProgressBar from "../../components/ui/UiProgressBar";
 import UiSelect from "../../components/ui/UiSelect";
 import { UiTone, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { proxyDownload } from "../../api/browser";
+import { runWithConcurrencySettled } from "../../utils/concurrency";
 import {
   compareManagerBucketPair,
   listBuckets,
@@ -50,7 +51,6 @@ import {
   parseRawMappingText,
   renderCompareObjectDetails,
   renderDiffLines,
-  runWithConcurrencySettled,
 } from "../shared/bucketCompareShared";
 import {
   triggerBlobDownload,
