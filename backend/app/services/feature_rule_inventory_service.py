@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.models.bucket import (
+    Bucket,
     BucketTag,
     FeatureRuleInventoryBucket,
     FeatureRuleInventoryFeature,
@@ -453,7 +454,7 @@ class FeatureRuleInventoryService:
                 for bucket in buckets
             ]
 
-        def load_bucket_rules(bucket) -> FeatureRuleInventoryBucket:  # noqa: ANN001
+        def load_bucket_rules(bucket: Bucket) -> FeatureRuleInventoryBucket:
             try:
                 if feature == "lifecycle":
                     lifecycle = self.buckets_service.get_lifecycle(bucket.name, account)

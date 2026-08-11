@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import DatabaseError
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import ConnectionPoolEntry
 
 from .config import get_settings
 
@@ -35,7 +37,10 @@ def is_sqlite_malformed_database_error(exc: BaseException) -> bool:
     return False
 
 
-def _configure_sqlite_connection(dbapi_connection, _connection_record) -> None:  # noqa: ANN001
+def _configure_sqlite_connection(
+    dbapi_connection: DBAPIConnection,
+    _connection_record: ConnectionPoolEntry,
+) -> None:
     cursor = dbapi_connection.cursor()
     try:
         cursor.execute("PRAGMA foreign_keys = ON")
