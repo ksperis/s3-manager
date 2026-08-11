@@ -22,6 +22,7 @@ import {
   type PortalServerAccessRequesterIdentity,
 } from "../../api/portal";
 import { extractApiError } from "../../utils/apiError";
+import { triggerBlobDownload } from "../../utils/download";
 import { formatBytes } from "../../utils/format";
 import { resolvePortalWorkspacePageState } from "./portalUi";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
@@ -598,14 +599,7 @@ export default function PortalHistoryPage() {
         spaceId: rawLogsSpaceId || undefined,
         timezoneOffsetMinutes: new Date().getTimezoneOffset(),
       });
-      const url = URL.createObjectURL(result.blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = result.filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      triggerBlobDownload(result.filename, result.blob);
       setRawLogsModalOpen(false);
     } catch (err) {
       console.error(err);

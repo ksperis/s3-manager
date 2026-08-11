@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { PortalAccessKey, PortalStorageSpaceSummary } from "../../api/portal";
+import { triggerDownload } from "../../utils/download";
 
 export type PortalExternalToolEndpoint = {
   original: string;
@@ -146,14 +147,5 @@ export function buildGenericConnectionSheet(
 }
 
 export function triggerPortalExternalToolDownload(filename: string, content: string, mimeType: string): void {
-  if (typeof window === "undefined") return;
-  const blob = new Blob([content], { type: mimeType });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+  triggerDownload(filename, content, mimeType);
 }

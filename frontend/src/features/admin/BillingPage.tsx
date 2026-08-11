@@ -33,6 +33,7 @@ import {
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
+import { triggerBlobDownload } from "../../utils/download";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import { DownloadIcon, RefreshIcon } from "../browser/browserIcons";
@@ -392,14 +393,10 @@ export default function BillingPage() {
     setPageError(null);
     try {
       const blob = await downloadBillingCsv(month, selectedEndpointId);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `billing-${month}-endpoint-${selectedEndpointId}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      triggerBlobDownload(
+        `billing-${month}-endpoint-${selectedEndpointId}.csv`,
+        blob,
+      );
     } catch (err) {
       setPageError(extractApiError(err, "Unable to export CSV."));
     }

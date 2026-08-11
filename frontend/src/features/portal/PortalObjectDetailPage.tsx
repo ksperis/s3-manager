@@ -32,6 +32,7 @@ import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
+import { triggerBlobDownload } from "../../utils/download";
 import { formatBytes } from "../../utils/format";
 import ObjectPreview, {
   type ObjectPreviewLoadResult,
@@ -456,14 +457,7 @@ export default function PortalObjectDetailPage() {
     setDownloadMessage(null);
     try {
       const result = await downloadPortalStorageSpaceObject(accountIdForApi, space.id, object.path);
-      const href = URL.createObjectURL(result.blob);
-      const link = document.createElement("a");
-      link.href = href;
-      link.download = result.filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(href);
+      triggerBlobDownload(result.filename, result.blob);
       setDownloadMessage(t({ en: `${result.filename} downloaded.`, fr: `${result.filename} téléchargé.`, de: `${result.filename} heruntergeladen.` }));
     } catch (err) {
       console.error(err);

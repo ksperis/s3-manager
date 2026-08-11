@@ -43,6 +43,7 @@ import {
 } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
+import { triggerBlobDownload } from "../../utils/download";
 import {
   CLIENT_STORAGE_KEYS,
   readClientJson,
@@ -8627,15 +8628,7 @@ export default function BrowserPage({
           ),
         );
 
-        const downloadName = `${folderLabel}.zip`;
-        const url = window.URL.createObjectURL(zipBlob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = downloadName;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
+        triggerBlobDownload(`${folderLabel}.zip`, zipBlob);
       }
 
       if (errors.length > 0) {
@@ -8746,14 +8739,7 @@ export default function BrowserPage({
               target.item.key,
               controller.signal,
             );
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = target.item.name || "download";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
+            triggerBlobDownload(target.item.name || "download", blob);
             updateDownloadDetail(operationId, target.detailId, "done");
             completeReportedTransfer(reportedTransferId, target.item.name || "download");
           } catch (err) {
@@ -8865,14 +8851,7 @@ export default function BrowserPage({
               sseCustomerKeyBase64,
               browserRequestOptions,
             );
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = item.name || "download";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
+            triggerBlobDownload(item.name || "download", blob);
             completeReportedTransfer(reportedTransferId, item.name || "download");
           } catch (err) {
             failReportedTransfer(reportedTransferId, formatOperationError(err, "Unable to download object."));
@@ -8882,14 +8861,7 @@ export default function BrowserPage({
           if (sseActive) {
             try {
               const blob = await downloadObjectBlob(item.key);
-              const url = window.URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = item.name || "download";
-              document.body.appendChild(link);
-              link.click();
-              link.remove();
-              window.URL.revokeObjectURL(url);
+              triggerBlobDownload(item.name || "download", blob);
               completeReportedTransfer(reportedTransferId, item.name || "download");
             } catch (err) {
               failReportedTransfer(reportedTransferId, formatOperationError(err, "Unable to download object."));
@@ -11153,17 +11125,12 @@ export default function BrowserPage({
       return;
     }
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
-    });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${baseName}-${timestamp}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    triggerBlobDownload(
+      `${baseName}-${timestamp}.json`,
+      new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      }),
+    );
   };
   const clearFinishedOperations = () => {
     const finishedIds = new Set(
