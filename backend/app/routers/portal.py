@@ -1,10 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.utils.time import utcnow
-import logging
-import threading
 from typing import Optional
-import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -24,9 +20,7 @@ from app.models.portal import (
     PortalAlert,
     PortalCollaboratorsResponse,
     PortalCollaboratorAccessReview,
-    PortalDeletedPrefixRestoreProgress,
     PortalDeletedPrefixRestoreRequest,
-    PortalDeletedPrefixRestoreResult,
     PortalEligibility,
     PortalProjectSettings,
     PortalPublicLink,
@@ -48,9 +42,7 @@ from app.models.portal import (
     PortalStorageSpaceIconChoice,
     PortalStorageSpaceSettings,
     PortalStorageSpaceSettingsUpdate,
-    PortalStorageSpaceVersionCleanupProgress,
     PortalStorageSpaceVersionCleanupRequest,
-    PortalStorageSpaceVersionCleanupResult,
     PortalStorageSpaceShare,
     PortalStorageSpaceShareCandidate,
     PortalStorageSpaceSharePayload,
@@ -74,16 +66,15 @@ from app.routers.dependencies import (
     get_portal_account_access,
     require_portal_manager,
 )
-from app.routers.sse_worker import (
-    SseMessageSender,
-    format_sse_event,
-    stream_cancellable_worker,
+from app.routers.portal_streams import (
+    stream_portal_deleted_prefix_restore,
+    stream_portal_storage_space_version_cleanup,
 )
 from app.utils.http_errors import (
     raise_bad_gateway_from_runtime,
     raise_http_exception_from_exception,
 )
-from app.core.sensitive_data import sanitize_error_detail, sanitized_error_log_detail
+from app.core.sensitive_data import sanitize_error_detail
 from app.services.audit_service import AuditService
 from app.services.avatar_image_service import MAX_AVATAR_BYTES
 from app.services.portal.exceptions import (
@@ -109,32 +100,32 @@ from app.services.usage_trends_service import account_usage_trend_filters, build
 from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
 from app.services.billing_service import BillingService
-from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.bucket_usage_stats_service import BucketUsageStatsAggregateTarget, BucketUsageStatsService
 from app.services.app_settings_service import load_app_settings
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.usage_history_service import UsageHistoryService
 from app.models.billing import BillingSubjectDetail
 from app.utils.http_headers import build_attachment_content_disposition
+from app.utils.time import utcnow
 router = APIRouter(prefix="/portal", tags=["portal"])
-logger = logging.getLogger(__name__)
 
 
 def _parse_server_access_log_filter(raw: Optional[str]) -> Optional[PortalServerAccessLogFilterQuery]:
     return parse_advanced_filter_query(raw, query_cls=PortalServerAccessLogFilterQuery)
+
+
 settings = get_settings()
 
 
 def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
     detail = sanitize_error_detail(str(exc))
-    safe_detail = sanitize_error_detail(detail)
     lowered = detail.lower()
     if "not found or not allowed" in lowered:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
     if "not found" in lowered:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
     if "storage space is archived" in lowered:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
     if (
         "not allowed" in lowered
         or "not provisioned" in lowered
@@ -146,26 +137,25 @@ def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
         or "already own" in lowered
         or "cannot be changed" in lowered
     ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
     raise_bad_gateway_from_runtime(exc)
 
 
 def _raise_portal_access_key_runtime(exc: RuntimeError) -> None:
     detail = sanitize_error_detail(str(exc))
-    safe_detail = sanitize_error_detail(detail)
     lowered = detail.lower()
     if isinstance(exc, PortalAccessKeyManagementDisabled):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
     if isinstance(exc, PortalAccessKeyLimitExceeded):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
     if isinstance(exc, PortalAccessKeyProtected):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     if "is required" in lowered:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     if "not found" in lowered or "introuvable" in lowered:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
     if "not allowed" in lowered or "not provisioned" in lowered or "owner content role required" in lowered or "archived" in lowered:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
     raise_bad_gateway_from_runtime(exc)
 
 
@@ -192,222 +182,6 @@ def _portal_usage_stats_source_scope_id(account: S3Account) -> str:
 def _ensure_portal_bucket_usage_stats_enabled() -> None:
     if not bool(load_app_settings().general.bucket_usage_stats_enabled):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket usage stats feature is disabled")
-
-
-def _stream_portal_storage_space_version_cleanup(
-    request: Request,
-    *,
-    actor: User,
-    access: AccountAccess,
-    service: PortalService,
-    audit_service: AuditService,
-    target,
-) -> StreamingResponse:
-    request_id = uuid.uuid4().hex
-    audit_metadata = {
-        "request_id": request_id,
-        "storage_space_id": target.storage_space_id,
-        "storage_space_name": target.storage_space_name,
-        "bucket_name": target.bucket_name,
-    }
-
-    def worker(push_message: SseMessageSender, cancel_event: threading.Event) -> None:
-        def progress_callback(progress: PortalStorageSpaceVersionCleanupProgress) -> None:
-            payload = progress.model_copy(update={"request_id": request_id}).model_dump(mode="json")
-            push_message(format_sse_event("progress", payload))
-
-        def cancel_check() -> None:
-            if cancel_event.is_set():
-                raise BucketPurgeCancelled()
-
-        try:
-            audit_service.record_action(
-                user=actor,
-                scope="portal",
-                action="start_storage_space_history_cleanup",
-                entity_type="storage_space",
-                entity_id=target.storage_space_id,
-                account=access.account,
-                metadata=audit_metadata,
-            )
-            result = service.run_storage_space_version_cleanup(
-                target,
-                progress_callback=progress_callback,
-                cancel_check=cancel_check,
-            )
-            audit_service.record_action(
-                user=actor,
-                scope="portal",
-                action="finish_storage_space_history_cleanup",
-                entity_type="storage_space",
-                entity_id=target.storage_space_id,
-                account=access.account,
-                metadata={
-                    **audit_metadata,
-                    "deleted_versions": result.deleted_versions,
-                    "deleted_delete_markers": result.deleted_delete_markers,
-                    "bytes_freed": result.bytes_freed,
-                },
-            )
-            push_message(format_sse_event("result", result.model_dump(mode="json")))
-            push_message(format_sse_event("done", {"request_id": request_id, "status": result.status}))
-        except BucketPurgeCancelled:
-            audit_service.record_action(
-                user=actor,
-                scope="portal",
-                action="cancel_storage_space_history_cleanup",
-                entity_type="storage_space",
-                entity_id=target.storage_space_id,
-                account=access.account,
-                metadata=audit_metadata,
-                status="canceled",
-                message="Storage Space history cleanup canceled",
-            )
-            push_message(format_sse_event("done", {"request_id": request_id, "status": "canceled"}))
-        except Exception as exc:  # pragma: no cover - defensive streaming boundary.
-            logger.exception("Portal Storage Space history cleanup failed: %s", exc)
-            safe_message = sanitized_error_log_detail(exc)
-            audit_service.record_action(
-                user=actor,
-                scope="portal",
-                action="fail_storage_space_history_cleanup",
-                entity_type="storage_space",
-                entity_id=target.storage_space_id,
-                account=access.account,
-                metadata=audit_metadata,
-                status="failed",
-                message=safe_message,
-            )
-            push_message(format_sse_event("error", {"request_id": request_id, "detail": safe_message}))
-            push_message(format_sse_event("done", {"request_id": request_id, "status": "failed"}))
-
-    return stream_cancellable_worker(
-        request,
-        worker=worker,
-        logger=logger,
-        operation="portal_storage_space_history_cleanup",
-        request_id=request_id,
-    )
-
-
-def _stream_portal_deleted_prefix_restore(
-    request: Request,
-    *,
-    actor: User,
-    access: AccountAccess,
-    service: PortalService,
-    audit_service: AuditService,
-    target,
-) -> StreamingResponse:
-    request_id = uuid.uuid4().hex
-    audit_metadata = {
-        "request_id": request_id,
-        "storage_space_id": target.storage_space_id,
-        "storage_space_name": target.storage_space_name,
-        "bucket_name": target.bucket_name,
-        "prefix": target.prefix,
-    }
-
-    def worker(push_message: SseMessageSender, cancel_event: threading.Event) -> None:
-        def progress_callback(progress: PortalDeletedPrefixRestoreProgress) -> None:
-            payload = progress.model_copy(
-                update={"request_id": request_id}
-            ).model_dump(mode="json")
-            push_message(format_sse_event("progress", payload))
-
-        def cancel_check() -> None:
-            if cancel_event.is_set():
-                raise BucketPurgeCancelled()
-
-        try:
-            audit_service.record_action(
-                user=actor,
-                scope="portal",
-                action="start_restore_deleted_prefix",
-                entity_type="storage_space",
-                entity_id=target.storage_space_id,
-                account=access.account,
-                metadata=audit_metadata,
-            )
-            result = service.run_deleted_prefix_restore(
-                target,
-                progress_callback=progress_callback,
-                cancel_check=cancel_check,
-            )
-            audit_service.record_action(
-                user=actor,
-                scope="portal",
-                action="finish_restore_deleted_prefix",
-                entity_type="storage_space",
-                entity_id=target.storage_space_id,
-                account=access.account,
-                metadata={
-                    **audit_metadata,
-                    "restore_candidates": result.restore_candidates,
-                    "restored_objects": result.restored_objects,
-                    "failed_objects": result.failed_objects,
-                },
-                status="success" if result.status == "completed" else "partial",
-            )
-            push_message(format_sse_event("result", result.model_dump(mode="json")))
-            push_message(
-                format_sse_event(
-                    "done",
-                    {"request_id": request_id, "status": result.status},
-                )
-            )
-        except BucketPurgeCancelled:
-            audit_service.record_action(
-                user=actor,
-                scope="portal",
-                action="cancel_restore_deleted_prefix",
-                entity_type="storage_space",
-                entity_id=target.storage_space_id,
-                account=access.account,
-                metadata=audit_metadata,
-                status="canceled",
-                message="Deleted prefix restoration canceled",
-            )
-            push_message(
-                format_sse_event(
-                    "done",
-                    {"request_id": request_id, "status": "canceled"},
-                )
-            )
-        except Exception as exc:  # pragma: no cover - defensive streaming boundary.
-            logger.exception("Portal deleted prefix restoration failed: %s", exc)
-            safe_message = sanitized_error_log_detail(exc)
-            audit_service.record_action(
-                user=actor,
-                scope="portal",
-                action="fail_restore_deleted_prefix",
-                entity_type="storage_space",
-                entity_id=target.storage_space_id,
-                account=access.account,
-                metadata=audit_metadata,
-                status="failed",
-                message=safe_message,
-            )
-            push_message(
-                format_sse_event(
-                    "error",
-                    {"request_id": request_id, "detail": safe_message},
-                )
-            )
-            push_message(
-                format_sse_event(
-                    "done",
-                    {"request_id": request_id, "status": "failed"},
-                )
-            )
-
-    return stream_cancellable_worker(
-        request,
-        worker=worker,
-        logger=logger,
-        operation="portal_deleted_prefix_restore",
-        request_id=request_id,
-    )
 
 
 @router.get("/accounts", response_model=list[PortalAccount])
@@ -1368,7 +1142,7 @@ def portal_storage_space_version_cleanup_stream(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
-    return _stream_portal_storage_space_version_cleanup(
+    return stream_portal_storage_space_version_cleanup(
         request,
         actor=actor,
         access=access,
@@ -1503,7 +1277,7 @@ def portal_restore_deleted_prefix_stream(
         ) from exc
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
-    return _stream_portal_deleted_prefix_restore(
+    return stream_portal_deleted_prefix_restore(
         request,
         actor=actor,
         access=access,

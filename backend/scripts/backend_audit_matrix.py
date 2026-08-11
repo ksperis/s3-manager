@@ -31,8 +31,8 @@ SIGNAL_FIELDS = {
     "delegated_portal_request_message_audit": "service.add_admin_message(",
     "delegated_private_access_audit": "ManagedPrivateAccessService(db).",
     "delegated_ceph_admin_execute_audit": "return _execute(",
-    "delegated_portal_deleted_restore_audit": "_stream_portal_deleted_prefix_restore(",
-    "delegated_portal_version_cleanup_audit": "_stream_portal_storage_space_version_cleanup(",
+    "delegated_portal_deleted_restore_audit": "stream_portal_deleted_prefix_restore(",
+    "delegated_portal_version_cleanup_audit": "stream_portal_storage_space_version_cleanup(",
 }
 DELEGATED_AUDIT_SIGNALS = frozenset(
     {

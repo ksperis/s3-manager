@@ -78,6 +78,18 @@ def test_backend_audit_matrix_allowlist_entries_exist_without_audit_signals():
         assert row.allowlist_reason(backend_root) == reason
 
 
+def test_backend_audit_matrix_tracks_portal_stream_delegation():
+    backend_root = Path(__file__).resolve().parents[1]
+    rows_by_function = {row.function: row for row in collect_rows(backend_root)}
+
+    assert rows_by_function["portal_restore_deleted_prefix_stream"].signals[
+        "delegated_portal_deleted_restore_audit"
+    ]
+    assert rows_by_function["portal_storage_space_version_cleanup_stream"].signals[
+        "delegated_portal_version_cleanup_audit"
+    ]
+
+
 def test_backend_audit_matrix_classifies_every_mutating_route():
     backend_root = Path(__file__).resolve().parents[1]
 
