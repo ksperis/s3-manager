@@ -140,6 +140,11 @@ import BrowserContextMenu from "./BrowserContextMenu";
 import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
 import { buildBrowserOperationDetailsExport } from "./browserOperationDetailsExport";
 import {
+  cancelPendingOperationDetails,
+  updateOperationDetailById,
+  updateOperationDetailsByKey,
+} from "./browserOperationDetailState";
+import {
   buildCopyOperationGroups,
   buildDeleteOperationGroups,
   buildDownloadOperationGroups,
@@ -6971,42 +6976,36 @@ export default function BrowserPage({
   };
 
   const cancelDownloadDetails = (operationId: string) => {
-    setDownloadDetails((prev) => {
-      const items = prev[operationId];
-      if (!items) return prev;
-      const nextItems = items.map((item) =>
-        item.status === "queued" || item.status === "downloading"
-          ? { ...item, status: "cancelled" as const, errorMessage: undefined }
-          : item,
-      );
-      return { ...prev, [operationId]: nextItems };
-    });
+    setDownloadDetails((prev) =>
+      cancelPendingOperationDetails(
+        prev,
+        operationId,
+        "downloading",
+        "cancelled",
+      ),
+    );
   };
 
   const cancelCopyDetails = useCallback((operationId: string) => {
-    setCopyDetails((prev) => {
-      const items = prev[operationId];
-      if (!items) return prev;
-      const nextItems = items.map((item) =>
-        item.status === "queued" || item.status === "copying"
-          ? { ...item, status: "cancelled" as const, errorMessage: undefined }
-          : item,
-      );
-      return { ...prev, [operationId]: nextItems };
-    });
+    setCopyDetails((prev) =>
+      cancelPendingOperationDetails(
+        prev,
+        operationId,
+        "copying",
+        "cancelled",
+      ),
+    );
   }, []);
 
   const cancelDeleteDetails = useCallback((operationId: string) => {
-    setDeleteDetails((prev) => {
-      const items = prev[operationId];
-      if (!items) return prev;
-      const nextItems = items.map((item) =>
-        item.status === "queued" || item.status === "deleting"
-          ? { ...item, status: "cancelled" as const, errorMessage: undefined }
-          : item,
-      );
-      return { ...prev, [operationId]: nextItems };
-    });
+    setDeleteDetails((prev) =>
+      cancelPendingOperationDetails(
+        prev,
+        operationId,
+        "deleting",
+        "cancelled",
+      ),
+    );
   }, []);
 
   const cancelOperation = (operationId: string) => {
@@ -7720,23 +7719,15 @@ export default function BrowserPage({
     status: DeleteDetailStatus,
     errorMessage?: string,
   ) => {
-    setDeleteDetails((prev) => {
-      const items = prev[operationId];
-      if (!items) return prev;
-      const keySet = new Set(keys);
-      const nextItems = items.map((item) => {
-        if (!keySet.has(item.key)) return item;
-        return {
-          ...item,
-          status,
-          errorMessage:
-            status === "failed"
-              ? (errorMessage ?? item.errorMessage)
-              : undefined,
-        };
-      });
-      return { ...prev, [operationId]: nextItems };
-    });
+    setDeleteDetails((prev) =>
+      updateOperationDetailsByKey(
+        prev,
+        operationId,
+        keys,
+        status,
+        errorMessage,
+      ),
+    );
   };
 
   const deleteObjectsInBatches = async (
@@ -7910,23 +7901,15 @@ export default function BrowserPage({
     status: DownloadDetailStatus,
     errorMessage?: string,
   ) => {
-    setDownloadDetails((prev) => {
-      const items = prev[operationId];
-      if (!items) return prev;
-      const nextItems = items.map((item) =>
-        item.id === detailId
-          ? {
-              ...item,
-              status,
-              errorMessage:
-                status === "failed"
-                  ? (errorMessage ?? item.errorMessage)
-                  : undefined,
-            }
-          : item,
-      );
-      return { ...prev, [operationId]: nextItems };
-    });
+    setDownloadDetails((prev) =>
+      updateOperationDetailById(
+        prev,
+        operationId,
+        detailId,
+        status,
+        errorMessage,
+      ),
+    );
   };
 
   const updateCopyDetailStatus = useCallback(
@@ -7936,23 +7919,15 @@ export default function BrowserPage({
       status: CopyDetailStatus,
       errorMessage?: string,
     ) => {
-      setCopyDetails((prev) => {
-        const items = prev[operationId];
-        if (!items) return prev;
-        const nextItems = items.map((item) =>
-          item.id === detailId
-            ? {
-                ...item,
-                status,
-                errorMessage:
-                  status === "failed"
-                    ? (errorMessage ?? item.errorMessage)
-                    : undefined,
-              }
-            : item,
-        );
-        return { ...prev, [operationId]: nextItems };
-      });
+      setCopyDetails((prev) =>
+        updateOperationDetailById(
+          prev,
+          operationId,
+          detailId,
+          status,
+          errorMessage,
+        ),
+      );
     },
     [],
   );
