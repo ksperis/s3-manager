@@ -6,7 +6,7 @@ from inspect import signature
 
 import pytest
 
-from app.routers import browser, portal
+from app.routers import browser, browser_transfers, portal
 from app.routers.manager import objects as manager_objects
 
 
@@ -21,11 +21,11 @@ from app.routers.manager import objects as manager_objects
         browser.delete_objects,
         browser.copy_object,
         browser.create_folder,
-        browser.upload_via_proxy,
-        browser.download_object,
-        browser.multipart_init,
-        browser.complete_multipart_upload,
-        browser.abort_multipart_upload,
+        browser_transfers.upload_via_proxy,
+        browser_transfers.download_object,
+        browser_transfers.multipart_init,
+        browser_transfers.complete_multipart_upload,
+        browser_transfers.abort_multipart_upload,
         browser.restore_object,
         browser.cleanup_object_versions,
         portal.portal_restore_storage_space_object,
