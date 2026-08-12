@@ -7,7 +7,7 @@ from typing import Optional, TYPE_CHECKING
 
 from app.db import AccountRole, S3Account, User
 from app.models.portal import PortalStorageSpaceSettings, PortalStorageSpaceSettingsUpdate
-from app.services import s3_client
+from app.services import s3_bucket_metadata, s3_client
 
 if TYPE_CHECKING:
     from app.models.access_context import AccountAccess
@@ -69,7 +69,7 @@ class PortalStorageSpaceSettingsMixin:
             secret_key=secret_key,
             **kwargs,
         )
-        rules = s3_client.get_bucket_lifecycle(
+        rules = s3_bucket_metadata.get_bucket_lifecycle(
             bucket_name,
             access_key=access_key,
             secret_key=secret_key,
@@ -138,7 +138,7 @@ class PortalStorageSpaceSettingsMixin:
             secret_key=secret_key,
             **kwargs,
         )
-        previous_rules = s3_client.get_bucket_lifecycle(
+        previous_rules = s3_bucket_metadata.get_bucket_lifecycle(
             bucket_name,
             access_key=access_key,
             secret_key=secret_key,
@@ -159,7 +159,7 @@ class PortalStorageSpaceSettingsMixin:
         try:
             if lifecycle_changed:
                 if target_rules:
-                    s3_client.put_bucket_lifecycle(
+                    s3_bucket_metadata.put_bucket_lifecycle(
                         bucket_name,
                         rules=target_rules,
                         access_key=access_key,
@@ -167,7 +167,7 @@ class PortalStorageSpaceSettingsMixin:
                         **kwargs,
                     )
                 else:
-                    s3_client.delete_bucket_lifecycle(
+                    s3_bucket_metadata.delete_bucket_lifecycle(
                         bucket_name,
                         access_key=access_key,
                         secret_key=secret_key,
@@ -188,7 +188,7 @@ class PortalStorageSpaceSettingsMixin:
             if lifecycle_changed:
                 try:
                     if previous_rules:
-                        s3_client.put_bucket_lifecycle(
+                        s3_bucket_metadata.put_bucket_lifecycle(
                             bucket_name,
                             rules=previous_rules,
                             access_key=access_key,
@@ -196,7 +196,7 @@ class PortalStorageSpaceSettingsMixin:
                             **kwargs,
                         )
                     else:
-                        s3_client.delete_bucket_lifecycle(
+                        s3_bucket_metadata.delete_bucket_lifecycle(
                             bucket_name,
                             access_key=access_key,
                             secret_key=secret_key,

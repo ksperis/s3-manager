@@ -62,7 +62,7 @@ from app.routers import portal_monitoring as portal_monitoring_router
 from app.routers import portal_objects as portal_objects_router
 from app.routers import portal_storage_spaces as portal_storage_spaces_router
 from app.routers import portal_usage as portal_usage_router
-from app.services import app_settings_service, s3_bucket_access, s3_client, s3_deletion
+from app.services import app_settings_service, s3_bucket_access, s3_bucket_metadata, s3_client, s3_deletion
 from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
@@ -340,7 +340,7 @@ def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(m
         ),
     )
     monkeypatch.setattr(
-        s3_client,
+        s3_bucket_metadata,
         "put_bucket_lifecycle",
         lambda *args, **kwargs: lifecycle_calls.append((args, kwargs)),
     )
@@ -427,7 +427,7 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
         lambda *args, **kwargs: versioning_calls.append((args, kwargs)),
     )
     monkeypatch.setattr(
-        s3_client,
+        s3_bucket_metadata,
         "put_bucket_lifecycle",
         lambda *args, **kwargs: lifecycle_calls.append((args, kwargs)),
     )
@@ -2942,7 +2942,7 @@ def test_portal_account_override_uses_canonical_payload(monkeypatch, db_session)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_portal_settings", lambda: base)
     monkeypatch.setattr(
-        s3_client,
+        s3_bucket_metadata,
         "put_bucket_lifecycle",
         lambda *args, **kwargs: pytest.fail("Account overrides must not update existing bucket lifecycles"),
     )
@@ -3106,7 +3106,7 @@ def test_portal_server_access_log_bucket_creation_sets_retention_lifecycle(monke
         lambda name, **kwargs: created_buckets.append((name, kwargs)),
     )
     monkeypatch.setattr(
-        s3_client,
+        s3_bucket_metadata,
         "put_bucket_lifecycle",
         lambda name, **kwargs: lifecycle_calls.append((name, kwargs)),
     )
@@ -3176,7 +3176,7 @@ def test_portal_server_access_log_existing_bucket_keeps_retention_unchanged(monk
         lambda *args, **kwargs: pytest.fail("Bucket should already exist"),
     )
     monkeypatch.setattr(
-        s3_client,
+        s3_bucket_metadata,
         "put_bucket_lifecycle",
         lambda *args, **kwargs: pytest.fail("Existing access log buckets should not be migrated"),
     )

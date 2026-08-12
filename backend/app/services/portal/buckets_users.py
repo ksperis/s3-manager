@@ -7,7 +7,7 @@ from typing import Optional, TYPE_CHECKING
 from app.db import AccountIAMUser, AccountRole, S3Account, User
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
-from app.services import s3_bucket_access, s3_client, s3_deletion
+from app.services import s3_bucket_access, s3_bucket_metadata, s3_client, s3_deletion
 from app.services.rgw_iam import RGWIAMService
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ class PortalBucketsUsersMixin:
                 **self._s3_client_kwargs(account),
             )
         if portal_defaults.bucket_defaults.enable_lifecycle:
-            s3_client.put_bucket_lifecycle(
+            s3_bucket_metadata.put_bucket_lifecycle(
                 bucket_name,
                 rules=self._portal_bucket_lifecycle_rules(
                     portal_defaults.bucket_defaults.noncurrent_version_expiration_days

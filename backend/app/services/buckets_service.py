@@ -13,7 +13,14 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.object_diff_common import compare_object_entries
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services import s3_bucket_access, s3_bucket_replication, s3_bucket_security, s3_client, s3_deletion
+from app.services import (
+    s3_bucket_access,
+    s3_bucket_metadata,
+    s3_bucket_replication,
+    s3_bucket_security,
+    s3_client,
+    s3_deletion,
+)
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
@@ -822,7 +829,7 @@ class BucketsService:
 
     def get_bucket_tags(self, name: str, account: S3ExecutionTarget) -> list[BucketTag]:
         access_key, secret_key = self._account_credentials(account)
-        tags_raw = s3_client.get_bucket_tags(
+        tags_raw = s3_bucket_metadata.get_bucket_tags(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -928,7 +935,7 @@ class BucketsService:
             if isinstance(public_access_block_raw, dict)
             else None
         )
-        lifecycle_rules_raw = s3_client.get_bucket_lifecycle(
+        lifecycle_rules_raw = s3_bucket_metadata.get_bucket_lifecycle(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
         lifecycle_rules: list[LifecycleRule] = []
@@ -1515,7 +1522,7 @@ class BucketsService:
 
     def get_lifecycle(self, name: str, account: S3ExecutionTarget) -> BucketLifecycleConfig:
         access_key, secret_key = self._account_credentials(account)
-        rules = s3_client.get_bucket_lifecycle(
+        rules = s3_bucket_metadata.get_bucket_lifecycle(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1529,7 +1536,7 @@ class BucketsService:
             return BucketLifecycleConfig(rules=[])
         access_key, secret_key = self._account_credentials(account)
         try:
-            s3_client.put_bucket_lifecycle(
+            s3_bucket_metadata.put_bucket_lifecycle(
                 name,
                 rules=rules,
                 access_key=access_key,
@@ -1542,12 +1549,12 @@ class BucketsService:
 
     def delete_lifecycle(self, name: str, account: S3ExecutionTarget) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.delete_bucket_lifecycle(
+        s3_bucket_metadata.delete_bucket_lifecycle(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
         # Some RGW backends may return 204 but keep lifecycle rules.
         # Double-check and overwrite with an empty configuration to purge if needed.
-        remaining = s3_client.get_bucket_lifecycle(
+        remaining = s3_bucket_metadata.get_bucket_lifecycle(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1555,7 +1562,7 @@ class BucketsService:
         )
         if remaining:
             try:
-                s3_client.put_bucket_lifecycle(
+                s3_bucket_metadata.put_bucket_lifecycle(
                     name,
                     rules=[],
                     access_key=access_key,
@@ -1567,19 +1574,19 @@ class BucketsService:
 
     def set_bucket_tags(self, name: str, account: S3ExecutionTarget, tags: list[dict]) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_tags(
+        s3_bucket_metadata.put_bucket_tags(
             name, tags=tags, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
     def delete_bucket_tags(self, name: str, account: S3ExecutionTarget) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.delete_bucket_tags(
+        s3_bucket_metadata.delete_bucket_tags(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
     def get_bucket_notifications(self, name: str, account: S3ExecutionTarget) -> BucketNotificationConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        config = s3_client.get_bucket_notifications(
+        config = s3_bucket_metadata.get_bucket_notifications(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1644,7 +1651,7 @@ class BucketsService:
         configuration: dict,
     ) -> BucketNotificationConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_notifications(
+        s3_bucket_metadata.put_bucket_notifications(
             name,
             config=configuration or {},
             access_key=access_key,
@@ -1655,7 +1662,7 @@ class BucketsService:
 
     def delete_bucket_notifications(self, name: str, account: S3ExecutionTarget) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_notifications(
+        s3_bucket_metadata.put_bucket_notifications(
             name,
             config={},
             access_key=access_key,
@@ -1665,7 +1672,7 @@ class BucketsService:
 
     def get_bucket_logging(self, name: str, account: S3ExecutionTarget) -> BucketLoggingConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        config = s3_client.get_bucket_logging(
+        config = s3_bucket_metadata.get_bucket_logging(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1687,7 +1694,7 @@ class BucketsService:
     ) -> BucketLoggingConfiguration:
         access_key, secret_key = self._account_credentials(account)
         if not payload.enabled:
-            s3_client.put_bucket_logging(
+            s3_bucket_metadata.put_bucket_logging(
                 name,
                 logging_config=None,
                 access_key=access_key,
@@ -1701,7 +1708,7 @@ class BucketsService:
         logging_config = {"TargetBucket": target_bucket}
         target_prefix = (payload.target_prefix or "").strip()
         logging_config["TargetPrefix"] = target_prefix
-        s3_client.put_bucket_logging(
+        s3_bucket_metadata.put_bucket_logging(
             name,
             logging_config=logging_config,
             access_key=access_key,
@@ -1712,7 +1719,7 @@ class BucketsService:
 
     def delete_bucket_logging(self, name: str, account: S3ExecutionTarget) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_logging(
+        s3_bucket_metadata.put_bucket_logging(
             name,
             logging_config=None,
             access_key=access_key,

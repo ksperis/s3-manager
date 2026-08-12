@@ -8,7 +8,7 @@ from app.db import AccountRole, PortalStorageSpaceMetadata, S3Account, User
 from app.models.portal import PortalStorageSpaceSettingsUpdate
 from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
-from app.services import s3_client
+from app.services import s3_bucket_metadata, s3_client
 from app.services.portal_service import PortalService
 from tests.s3_account_factory import make_s3_account
 
@@ -66,7 +66,7 @@ def _install_s3_state(monkeypatch, *, versioning, rules):
     state = {"versioning": versioning, "rules": list(rules)}
 
     monkeypatch.setattr(s3_client, "get_bucket_versioning", lambda *_args, **_kwargs: state["versioning"])
-    monkeypatch.setattr(s3_client, "get_bucket_lifecycle", lambda *_args, **_kwargs: list(state["rules"]))
+    monkeypatch.setattr(s3_bucket_metadata, "get_bucket_lifecycle", lambda *_args, **_kwargs: list(state["rules"]))
 
     def put_lifecycle(_bucket_name, *, rules, **_kwargs):
         state["rules"] = list(rules)
@@ -77,8 +77,8 @@ def _install_s3_state(monkeypatch, *, versioning, rules):
     def set_versioning(_bucket_name, *, enabled, **_kwargs):
         state["versioning"] = "Enabled" if enabled else "Suspended"
 
-    monkeypatch.setattr(s3_client, "put_bucket_lifecycle", put_lifecycle)
-    monkeypatch.setattr(s3_client, "delete_bucket_lifecycle", delete_lifecycle)
+    monkeypatch.setattr(s3_bucket_metadata, "put_bucket_lifecycle", put_lifecycle)
+    monkeypatch.setattr(s3_bucket_metadata, "delete_bucket_lifecycle", delete_lifecycle)
     monkeypatch.setattr(s3_client, "set_bucket_versioning", set_versioning)
     return state
 
@@ -219,7 +219,7 @@ def test_versioning_failure_restores_previous_lifecycle(monkeypatch, db_session)
         lifecycle_writes.append(list(rules))
         state["rules"] = list(rules)
 
-    monkeypatch.setattr(s3_client, "put_bucket_lifecycle", put_lifecycle)
+    monkeypatch.setattr(s3_bucket_metadata, "put_bucket_lifecycle", put_lifecycle)
     monkeypatch.setattr(
         s3_client,
         "set_bucket_versioning",

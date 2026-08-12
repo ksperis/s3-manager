@@ -33,7 +33,7 @@ from app.models.portal import (
     PortalServerAccessRequesterIdentity,
     PortalStorageSpaceSummary,
 )
-from app.services import s3_bucket_access, s3_client
+from app.services import s3_bucket_access, s3_bucket_metadata, s3_client
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
 from app.services.s3_client import get_s3_client
 from app.utils.aws_errors import aws_error_code
@@ -184,7 +184,7 @@ class PortalServerAccessLoggingMixin:
         portal_settings: PortalSettings,
     ) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_lifecycle(
+        s3_bucket_metadata.put_bucket_lifecycle(
             log_bucket,
             rules=self._portal_server_access_log_lifecycle_rules(portal_settings),
             access_key=access_key,
@@ -310,7 +310,7 @@ class PortalServerAccessLoggingMixin:
         if source_bucket == log_bucket:
             return
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_logging(
+        s3_bucket_metadata.put_bucket_logging(
             source_bucket,
             logging_config={
                 "TargetBucket": log_bucket,
@@ -325,7 +325,7 @@ class PortalServerAccessLoggingMixin:
         access_key, secret_key = self._account_credentials(account)
         kwargs = self._s3_client_kwargs(account)
         log_bucket = self._portal_server_access_log_bucket_name(account)
-        current = s3_client.get_bucket_logging(
+        current = s3_bucket_metadata.get_bucket_logging(
             source_bucket,
             access_key=access_key,
             secret_key=secret_key,
@@ -343,7 +343,7 @@ class PortalServerAccessLoggingMixin:
                 target_prefix,
             )
             return False
-        s3_client.put_bucket_logging(
+        s3_bucket_metadata.put_bucket_logging(
             source_bucket,
             logging_config=None,
             access_key=access_key,

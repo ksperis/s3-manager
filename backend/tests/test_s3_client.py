@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.services import (
     s3_bucket_access,
+    s3_bucket_metadata,
     s3_bucket_replication,
     s3_bucket_security,
     s3_client,
@@ -59,6 +60,15 @@ def test_s3_bucket_access_owns_access_contracts_without_legacy_exports():
     assert not hasattr(s3_client, "get_bucket_cors")
     assert not hasattr(s3_client, "get_bucket_website")
     assert not hasattr(s3_client, "get_bucket_policy")
+
+
+def test_s3_bucket_metadata_owns_metadata_contracts_without_legacy_exports():
+    assert s3_bucket_metadata.get_bucket_tags.__module__ == "app.services.s3_bucket_metadata"
+    assert s3_bucket_metadata.get_bucket_logging.__module__ == "app.services.s3_bucket_metadata"
+    assert s3_bucket_metadata.get_bucket_lifecycle.__module__ == "app.services.s3_bucket_metadata"
+    assert not hasattr(s3_client, "get_bucket_tags")
+    assert not hasattr(s3_client, "get_bucket_logging")
+    assert not hasattr(s3_client, "get_bucket_lifecycle")
 
 
 class FakeS3EncryptionClient:
