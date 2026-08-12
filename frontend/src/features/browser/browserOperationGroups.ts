@@ -330,3 +330,34 @@ export function buildOperationGroupSortIndexes(
     fallback: operations.length + uploadQueue.length + 1000,
   };
 }
+
+export function collectFinishedOperationIds(
+  operations: OperationItem[],
+): Set<string> {
+  return new Set(
+    operations
+      .filter((operation) => Boolean(operation.completedAt))
+      .map((operation) => operation.id),
+  );
+}
+
+export function omitOperationRecords<T>(
+  records: Record<string, T>,
+  operationIds: ReadonlySet<string>,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(records).filter(([operationId]) => !operationIds.has(operationId)),
+  );
+}
+
+export function omitOperationSectionRecords<T>(
+  records: Record<string, T>,
+  operationIds: ReadonlySet<string>,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(records).filter(([key]) => {
+      const [operationId] = key.split(":", 1);
+      return !operationIds.has(operationId);
+    }),
+  );
+}

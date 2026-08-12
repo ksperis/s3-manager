@@ -145,8 +145,11 @@ import {
   buildDownloadOperationGroups,
   buildOperationGroupSortIndexes,
   buildUploadOperationGroups,
+  collectFinishedOperationIds,
   filterDetailOperationGroups,
   filterUploadOperationGroups,
+  omitOperationRecords,
+  omitOperationSectionRecords,
   summarizeDetailOperationGroups,
 } from "./browserOperationGroups";
 import {
@@ -10042,61 +10045,21 @@ export default function BrowserPage({
     );
   };
   const clearFinishedOperations = () => {
-    const finishedIds = new Set(
-      operations
-        .filter(
-          (op) =>
-            op.completedAt &&
-            (!op.completionStatus ||
-              op.completionStatus === "done" ||
-              op.completionStatus === "failed" ||
-              op.completionStatus === "cancelled"),
-        )
-        .map((op) => op.id),
-    );
+    const finishedIds = collectFinishedOperationIds(operations);
     if (finishedIds.size === 0 && completedOperations.length === 0) {
       return;
     }
     setOperations((prev) => prev.filter((op) => !finishedIds.has(op.id)));
     if (finishedIds.size > 0) {
-      setDownloadDetails((prev) => {
-        const next = { ...prev };
-        finishedIds.forEach((id) => {
-          delete next[id];
-        });
-        return next;
-      });
-      setDeleteDetails((prev) => {
-        const next = { ...prev };
-        finishedIds.forEach((id) => {
-          delete next[id];
-        });
-        return next;
-      });
-      setCopyDetails((prev) => {
-        const next = { ...prev };
-        finishedIds.forEach((id) => {
-          delete next[id];
-        });
-        return next;
-      });
-      setExpandedOperationGroups((prev) => {
-        const next = { ...prev };
-        finishedIds.forEach((id) => {
-          delete next[id];
-        });
-        return next;
-      });
-      setQueuedVisibleCountByGroup((prev) => {
-        const next: Record<string, number> = {};
-        Object.entries(prev).forEach(([key, value]) => {
-          const groupId = key.split(":")[0];
-          if (!finishedIds.has(groupId)) {
-            next[key] = value;
-          }
-        });
-        return next;
-      });
+      setDownloadDetails((prev) => omitOperationRecords(prev, finishedIds));
+      setDeleteDetails((prev) => omitOperationRecords(prev, finishedIds));
+      setCopyDetails((prev) => omitOperationRecords(prev, finishedIds));
+      setExpandedOperationGroups((prev) =>
+        omitOperationRecords(prev, finishedIds),
+      );
+      setQueuedVisibleCountByGroup((prev) =>
+        omitOperationSectionRecords(prev, finishedIds),
+      );
     }
     setCompletedOperations([]);
   };

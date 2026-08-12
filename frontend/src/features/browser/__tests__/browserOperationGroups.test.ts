@@ -4,8 +4,11 @@ import {
   buildOperationGroupSortIndexes,
   buildDownloadOperationGroups,
   buildUploadOperationGroups,
+  collectFinishedOperationIds,
   filterDetailOperationGroups,
   filterUploadOperationGroups,
+  omitOperationRecords,
+  omitOperationSectionRecords,
   summarizeDetailOperationGroups,
 } from "../browserOperationGroups";
 import type {
@@ -247,5 +250,39 @@ describe("browserOperationGroups", () => {
       "queued-group": 2,
     });
     expect(indexes.fallback).toBe(1004);
+  });
+
+  it("removes finished operations from detail and section records", () => {
+    const finishedIds = collectFinishedOperationIds([
+      operation({ id: "active" }),
+      operation({
+        id: "done",
+        completedAt: "2026-08-12T08:00:00Z",
+        completionStatus: "done",
+      }),
+      operation({
+        id: "failed",
+        completedAt: "2026-08-12T08:01:00Z",
+        completionStatus: "failed",
+      }),
+    ]);
+
+    expect(finishedIds).toEqual(new Set(["done", "failed"]));
+    expect(
+      omitOperationRecords(
+        { active: 1, done: 2, failed: 3 },
+        finishedIds,
+      ),
+    ).toEqual({ active: 1 });
+    expect(
+      omitOperationSectionRecords(
+        {
+          "active:queued": 1,
+          "done:completed": 2,
+          "failed:failed": 3,
+        },
+        finishedIds,
+      ),
+    ).toEqual({ "active:queued": 1 });
   });
 });
