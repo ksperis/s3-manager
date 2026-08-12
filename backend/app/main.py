@@ -40,6 +40,7 @@ from app.routers.admin import healthchecks as admin_healthchecks
 from app.routers.admin import portal_requests as admin_portal_requests
 from app.routers.ceph_admin import endpoints as ceph_admin_endpoints
 from app.routers.ceph_admin import accounts as ceph_admin_accounts
+from app.routers.ceph_admin import account_profiles as ceph_admin_account_profiles
 from app.routers.ceph_admin import users as ceph_admin_users
 from app.routers.ceph_admin import user_profiles as ceph_admin_user_profiles
 from app.routers.ceph_admin import buckets as ceph_admin_buckets
@@ -178,6 +179,11 @@ app.include_router(admin_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_portal_requests.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_portal_enabled)])
 app.include_router(ceph_admin_endpoints.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(
+    ceph_admin_account_profiles.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_ceph_admin_enabled)],
+)
 app.include_router(ceph_admin_users.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(
     ceph_admin_user_profiles.router,

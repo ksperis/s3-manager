@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.routers.ceph_admin import account_listing_cache
 from app.routers.ceph_admin import accounts as accounts_router
+from app.routers.ceph_admin.account_common import build_account_detail
 
 
 class FakeRGWAdmin:
@@ -572,7 +573,7 @@ def test_build_account_detail_ignores_legacy_kebab_case_limit_fields():
         },
     }
 
-    detail = accounts_router._build_account_detail(payload, account_id_fallback="RGW01")
+    detail = build_account_detail(payload, account_id_fallback="RGW01")
 
     assert detail.max_buckets is None
     assert detail.max_users is None

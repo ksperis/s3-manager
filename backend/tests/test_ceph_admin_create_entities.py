@@ -12,6 +12,7 @@ from app.models.ceph_admin import (
     CephAdminRgwUserConfigUpdate,
 )
 from app.routers.ceph_admin import account_listing_cache
+from app.routers.ceph_admin import account_profiles as account_profiles_router
 from app.routers.ceph_admin import accounts as accounts_router
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import endpoints as endpoints_router
@@ -135,7 +136,7 @@ def test_create_rgw_account_supports_quota():
         quota_max_objects=400,
     )
 
-    response = accounts_router.create_rgw_account(payload=payload, ctx=ctx)
+    response = account_profiles_router.create_rgw_account(payload=payload, ctx=ctx)
 
     assert response.account.account_id == "RGW12345678901234567"
 
@@ -149,7 +150,7 @@ def test_update_rgw_account_quota_omits_unset_object_limit():
     fake_rgw = FakeAccountsAdmin()
     ctx = SimpleNamespace(endpoint=SimpleNamespace(id=901), rgw_admin=fake_rgw)
 
-    accounts_router.update_rgw_account_config(
+    account_profiles_router.update_rgw_account_config(
         "RGW12345678901234567",
         CephAdminRgwAccountConfigUpdate(
             quota_enabled=True,
@@ -171,7 +172,7 @@ def test_update_rgw_account_quota_clears_object_limit_with_explicit_null():
     fake_rgw = FakeAccountsAdmin()
     ctx = SimpleNamespace(endpoint=SimpleNamespace(id=901), rgw_admin=fake_rgw)
 
-    accounts_router.update_rgw_account_config(
+    account_profiles_router.update_rgw_account_config(
         "RGW12345678901234567",
         CephAdminRgwAccountConfigUpdate(quota_max_objects=None),
         ctx=ctx,
@@ -190,7 +191,7 @@ def test_update_rgw_bucket_quota_omits_unset_object_limit():
     fake_rgw = FakeAccountsAdmin()
     ctx = SimpleNamespace(endpoint=SimpleNamespace(id=901), rgw_admin=fake_rgw)
 
-    accounts_router.update_rgw_account_config(
+    account_profiles_router.update_rgw_account_config(
         "RGW12345678901234567",
         CephAdminRgwAccountConfigUpdate(
             bucket_quota_enabled=True,
@@ -212,7 +213,7 @@ def test_update_rgw_bucket_quota_clears_object_limit_with_explicit_null():
     fake_rgw = FakeAccountsAdmin()
     ctx = SimpleNamespace(endpoint=SimpleNamespace(id=901), rgw_admin=fake_rgw)
 
-    accounts_router.update_rgw_account_config(
+    account_profiles_router.update_rgw_account_config(
         "RGW12345678901234567",
         CephAdminRgwAccountConfigUpdate(bucket_quota_max_objects=None),
         ctx=ctx,

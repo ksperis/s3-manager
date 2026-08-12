@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
 from typing import Any, Callable, Optional
 
@@ -12,12 +11,6 @@ from fastapi.responses import StreamingResponse
 from app.models.ceph_admin import (
     CephAdminAccountFilterQuery,
     CephAdminAccountFilterRule,
-    CephAdminEntityMetrics,
-    CephAdminRgwAccountCreate,
-    CephAdminRgwAccountCreateResponse,
-    CephAdminRgwAccountConfigUpdate,
-    CephAdminRgwAccountDetail,
-    CephAdminRgwQuotaConfig,
     CephAdminRgwAccountSummary,
     PaginatedCephAdminAccountsResponse,
 )
@@ -27,9 +20,7 @@ from app.routers.ceph_admin.listing_common import (
     apply_simple_search,
     coerce_number,
     collect_filter_fields,
-    fields_set,
     paginate,
-    parse_bool,
     parse_filter_query,
     parse_includes,
     parse_int,
@@ -37,12 +28,11 @@ from app.routers.ceph_admin.listing_common import (
     sort_value,
     stream_listing_response,
 )
-from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.account_listing_cache import (
     get_cached_accounts_listing,
     get_cached_rgw_accounts_payload,
-    invalidate_accounts_listing_cache,
 )
+from app.routers.ceph_admin.account_common import extract_bucket_count, extract_user_count
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
@@ -56,7 +46,6 @@ from app.services.listing_progress import (
 from app.utils.normalize import normalize_optional_scalar, normalize_text
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw_payloads import extract_bucket_list
-from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/accounts", tags=["ceph-admin-accounts"])
@@ -182,98 +171,6 @@ def _account_profile_needs_enrichment(account: CephAdminRgwAccountSummary) -> bo
     return _account_field_needs_enrichment(account, "account_name") or account.email is None
 
 
-def _extract_count(data: dict[str, Any], keys: tuple[str, ...]) -> Optional[int]:
-    for key in keys:
-        parsed = parse_int(data.get(key))
-        if parsed is not None:
-            return parsed
-    return None
-
-
-def _extract_bucket_count(payload: dict[str, Any]) -> Optional[int]:
-    direct = _extract_count(payload, ("bucket_count", "num_buckets", "buckets_count"))
-    if direct is not None:
-        return direct
-    stats = payload.get("stats")
-    if isinstance(stats, dict):
-        from_stats = _extract_count(stats, ("bucket_count", "num_buckets", "buckets_count"))
-        if from_stats is not None:
-            return from_stats
-    buckets = payload.get("bucket_list") or payload.get("buckets")
-    if isinstance(buckets, list):
-        return len(buckets)
-    return None
-
-
-def _extract_user_count(payload: dict[str, Any]) -> Optional[int]:
-    direct = _extract_count(payload, ("user_count", "users_count", "num_users", "users"))
-    if direct is not None:
-        return direct
-    stats = payload.get("stats")
-    if isinstance(stats, dict):
-        from_stats = _extract_count(stats, ("user_count", "users_count", "num_users"))
-        if from_stats is not None:
-            return from_stats
-    users = payload.get("user_list")
-    if isinstance(users, list):
-        return len(users)
-    return None
-
-
-def _extract_quota_enabled(payload: dict[str, Any], keys: tuple[str, ...] = ("quota", "account_quota")) -> Optional[bool]:
-    for key in keys:
-        value = payload.get(key)
-        if isinstance(value, dict):
-            parsed = parse_bool(value.get("enabled"))
-            if parsed is not None:
-                return parsed
-    return None
-
-
-def _build_account_detail(payload: dict[str, Any], account_id_fallback: str) -> CephAdminRgwAccountDetail:
-    account_id = normalize_optional_scalar(payload.get("id") or payload.get("account_id")) or account_id_fallback
-    account_name = normalize_optional_scalar(payload.get("name") or payload.get("account_name") or payload.get("display_name"))
-    email = normalize_optional_scalar(payload.get("email") or payload.get("mail"))
-    limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
-    max_users = parse_int(payload.get("max_users") or limits_payload.get("max_users"))
-    max_buckets = parse_int(payload.get("max_buckets") or limits_payload.get("max_buckets"))
-    max_roles = parse_int(payload.get("max_roles") or limits_payload.get("max_roles"))
-    max_groups = parse_int(payload.get("max_groups") or limits_payload.get("max_groups"))
-    max_access_keys = parse_int(payload.get("max_access_keys") or limits_payload.get("max_access_keys"))
-    quota_size, quota_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
-    quota_enabled = _extract_quota_enabled(payload, keys=("quota", "account_quota"))
-    quota = None
-    if quota_enabled is not None or quota_size is not None or quota_objects is not None:
-        quota = CephAdminRgwQuotaConfig(
-            enabled=quota_enabled,
-            max_size_bytes=quota_size,
-            max_objects=quota_objects,
-        )
-    bucket_quota_size, bucket_quota_objects = extract_quota_limits(payload, keys=("bucket_quota",))
-    bucket_quota_enabled = _extract_quota_enabled(payload, keys=("bucket_quota",))
-    bucket_quota = None
-    if bucket_quota_enabled is not None or bucket_quota_size is not None or bucket_quota_objects is not None:
-        bucket_quota = CephAdminRgwQuotaConfig(
-            enabled=bucket_quota_enabled,
-            max_size_bytes=bucket_quota_size,
-            max_objects=bucket_quota_objects,
-        )
-    return CephAdminRgwAccountDetail(
-        account_id=account_id,
-        account_name=account_name,
-        email=email,
-        max_users=max_users,
-        max_buckets=max_buckets,
-        max_roles=max_roles,
-        max_groups=max_groups,
-        max_access_keys=max_access_keys,
-        bucket_count=_extract_bucket_count(payload),
-        user_count=_extract_user_count(payload),
-        quota=quota,
-        bucket_quota=bucket_quota,
-    )
-
-
 def _enrich_accounts(
     accounts: list[CephAdminRgwAccountSummary],
     requested: set[str],
@@ -313,8 +210,8 @@ def _enrich_accounts(
                 account.quota_max_size_bytes = quota_size
                 account.quota_max_objects = quota_objects
             if "stats" in requested:
-                account.bucket_count = _extract_bucket_count(payload)
-                account.user_count = _extract_user_count(payload)
+                account.bucket_count = extract_bucket_count(payload)
+                account.user_count = extract_user_count(payload)
             if "usage" in requested:
                 try:
                     buckets_payload = ctx.rgw_admin.get_all_buckets(account_id=account.account_id, with_stats=True)
@@ -396,8 +293,8 @@ def _compute_accounts_listing(
                 max_users = parse_int(entry.get("max_users") or limits_payload.get("max_users"))
                 max_buckets = parse_int(entry.get("max_buckets") or limits_payload.get("max_buckets"))
                 quota_max_size_bytes, quota_max_objects = extract_quota_limits(entry, keys=("quota", "account_quota"))
-                bucket_count = _extract_bucket_count(entry)
-                user_count = _extract_user_count(entry)
+                bucket_count = extract_bucket_count(entry)
+                user_count = extract_user_count(entry)
             else:
                 account_id_value = entry
             account_id = str(account_id_value or "").strip()
@@ -665,308 +562,3 @@ async def stream_rgw_accounts(
         logger=logger,
         failure_message="RGW accounts streaming search failed",
     )
-
-
-def _load_account_payload(account_id: str, ctx: CephAdminContext) -> dict[str, Any]:
-    normalized_account_id = account_id.strip()
-    if not normalized_account_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account_id is required")
-    try:
-        payload = ctx.rgw_admin.get_account(normalized_account_id, allow_not_found=True)
-    except RGWAdminError as exc:
-        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-    if not payload or (isinstance(payload, dict) and payload.get("not_found")):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="RGW account not found")
-    if not isinstance(payload, dict):
-        return {"payload": payload}
-    return payload
-
-
-@router.post("", response_model=CephAdminRgwAccountCreateResponse, status_code=status.HTTP_201_CREATED)
-def create_rgw_account(
-    payload: CephAdminRgwAccountCreate,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-) -> CephAdminRgwAccountCreateResponse:
-    requested_account_id = payload.account_id.strip() if isinstance(payload.account_id, str) else None
-    requested_account_id = requested_account_id or None
-    account_name = payload.account_name.strip()
-    if not account_name:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account_name is required")
-    try:
-        create_result = ctx.rgw_admin.create_account(
-            account_id=requested_account_id,
-            account_name=account_name,
-            email=payload.email,
-            max_users=payload.max_users,
-            max_buckets=payload.max_buckets,
-            max_roles=payload.max_roles,
-            max_groups=payload.max_groups,
-            max_access_keys=payload.max_access_keys,
-            extra_params=payload.extra_params or None,
-        )
-    except RGWAdminError as exc:
-        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-    if isinstance(create_result, dict):
-        if create_result.get("conflict"):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="RGW account already exists")
-        if create_result.get("not_found") or create_result.get("not_implemented"):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="RGW account creation is not supported on this cluster",
-            )
-
-    account_id = requested_account_id
-    if isinstance(create_result, dict):
-        account_id = (
-            normalize_optional_scalar(create_result.get("id"))
-            or normalize_optional_scalar(create_result.get("account_id"))
-            or account_id
-        )
-        account_payload = create_result.get("account")
-        if not account_id and isinstance(account_payload, dict):
-            account_id = (
-                normalize_optional_scalar(account_payload.get("id"))
-                or normalize_optional_scalar(account_payload.get("account_id"))
-            )
-    if not account_id:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Unable to determine created account id from RGW response",
-        )
-
-    if payload.quota_enabled is not None or payload.quota_max_size_bytes is not None or payload.quota_max_objects is not None:
-        try:
-            quota_result = ctx.rgw_admin.set_account_quota(
-                account_id,
-                max_size_bytes=payload.quota_max_size_bytes,
-                max_objects=payload.quota_max_objects,
-                quota_type="account",
-                enabled=bool(payload.quota_enabled) if payload.quota_enabled is not None else True,
-            )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-        if isinstance(quota_result, dict) and (quota_result.get("not_found") or quota_result.get("not_implemented")):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="RGW account quota update is not supported on this cluster",
-            )
-
-    if (
-        payload.bucket_quota_enabled is not None
-        or payload.bucket_quota_max_size_bytes is not None
-        or payload.bucket_quota_max_objects is not None
-    ):
-        try:
-            quota_result = ctx.rgw_admin.set_account_quota(
-                account_id,
-                max_size_bytes=payload.bucket_quota_max_size_bytes,
-                max_objects=payload.bucket_quota_max_objects,
-                quota_type="bucket",
-                enabled=bool(payload.bucket_quota_enabled) if payload.bucket_quota_enabled is not None else True,
-            )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-        if isinstance(quota_result, dict) and (quota_result.get("not_found") or quota_result.get("not_implemented")):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="RGW bucket quota update is not supported on this cluster",
-            )
-
-    invalidate_accounts_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
-    account_payload = _load_account_payload(account_id, ctx)
-    account_detail = _build_account_detail(account_payload, account_id_fallback=account_id)
-    record_ceph_admin_action(
-        ctx,
-        action="rgw_account.create",
-        entity_type="rgw_account",
-        entity_id=account_id,
-        metadata={
-            "requested_account_id": requested_account_id,
-            "quota_updated": payload.quota_enabled is not None
-            or payload.quota_max_size_bytes is not None
-            or payload.quota_max_objects is not None,
-            "bucket_quota_updated": payload.bucket_quota_enabled is not None
-            or payload.bucket_quota_max_size_bytes is not None
-            or payload.bucket_quota_max_objects is not None,
-        },
-    )
-    return CephAdminRgwAccountCreateResponse(account=account_detail)
-
-
-@router.get("/{account_id}/detail", response_model=CephAdminRgwAccountDetail)
-def get_rgw_account_detail(
-    account_id: str,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-) -> CephAdminRgwAccountDetail:
-    payload = _load_account_payload(account_id, ctx)
-    return _build_account_detail(payload, account_id_fallback=account_id.strip())
-
-
-@router.put("/{account_id}/config", response_model=CephAdminRgwAccountDetail)
-def update_rgw_account_config(
-    account_id: str,
-    update: CephAdminRgwAccountConfigUpdate,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-) -> CephAdminRgwAccountDetail:
-    normalized_account_id = account_id.strip()
-    if not normalized_account_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account_id is required")
-
-    field_set = fields_set(update)
-    should_update_account = bool(
-        {"account_name", "email", "max_users", "max_buckets", "max_roles", "max_groups", "max_access_keys"} & field_set
-    ) or bool(update.extra_params)
-    if should_update_account:
-        try:
-            update_result = ctx.rgw_admin.update_account(
-                normalized_account_id,
-                account_name=(
-                    update.account_name
-                    if "account_name" in field_set and update.account_name is not None
-                    else ("" if "account_name" in field_set else None)
-                ),
-                email=(
-                    update.email
-                    if "email" in field_set and update.email is not None
-                    else ("" if "email" in field_set else None)
-                ),
-                max_users=(
-                    update.max_users
-                    if "max_users" in field_set and update.max_users is not None
-                    else (0 if "max_users" in field_set else None)
-                ),
-                max_buckets=(
-                    update.max_buckets
-                    if "max_buckets" in field_set and update.max_buckets is not None
-                    else (0 if "max_buckets" in field_set else None)
-                ),
-                max_roles=(
-                    update.max_roles
-                    if "max_roles" in field_set and update.max_roles is not None
-                    else (0 if "max_roles" in field_set else None)
-                ),
-                max_groups=(
-                    update.max_groups
-                    if "max_groups" in field_set and update.max_groups is not None
-                    else (0 if "max_groups" in field_set else None)
-                ),
-                max_access_keys=(
-                    update.max_access_keys
-                    if "max_access_keys" in field_set and update.max_access_keys is not None
-                    else (0 if "max_access_keys" in field_set else None)
-                ),
-                extra_params=update.extra_params or None,
-            )
-            if isinstance(update_result, dict) and (update_result.get("not_found") or update_result.get("not_implemented")):
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="RGW account update is not supported on this cluster",
-                )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-
-    should_update_quota = bool(
-        {"quota_enabled", "quota_max_size_bytes", "quota_max_objects"} & field_set
-    )
-    if should_update_quota:
-        enabled = update.quota_enabled if "quota_enabled" in field_set else True
-        max_size_bytes = (
-            update.quota_max_size_bytes
-            if "quota_max_size_bytes" in field_set and update.quota_max_size_bytes is not None
-            else (0 if "quota_max_size_bytes" in field_set else None)
-        )
-        max_objects = (
-            update.quota_max_objects
-            if "quota_max_objects" in field_set and update.quota_max_objects is not None
-            else (0 if "quota_max_objects" in field_set else None)
-        )
-        try:
-            quota_result = ctx.rgw_admin.set_account_quota(
-                normalized_account_id,
-                max_size_bytes=max_size_bytes,
-                max_objects=max_objects,
-                enabled=bool(enabled) if enabled is not None else True,
-            )
-            if isinstance(quota_result, dict) and (quota_result.get("not_found") or quota_result.get("not_implemented")):
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="RGW account quota update is not supported on this cluster",
-                )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-
-    should_update_bucket_quota = bool(
-        {"bucket_quota_enabled", "bucket_quota_max_size_bytes", "bucket_quota_max_objects"} & field_set
-    )
-    if should_update_bucket_quota:
-        enabled = update.bucket_quota_enabled if "bucket_quota_enabled" in field_set else True
-        max_size_bytes = (
-            update.bucket_quota_max_size_bytes
-            if "bucket_quota_max_size_bytes" in field_set and update.bucket_quota_max_size_bytes is not None
-            else (0 if "bucket_quota_max_size_bytes" in field_set else None)
-        )
-        max_objects = (
-            update.bucket_quota_max_objects
-            if "bucket_quota_max_objects" in field_set and update.bucket_quota_max_objects is not None
-            else (0 if "bucket_quota_max_objects" in field_set else None)
-        )
-        try:
-            quota_result = ctx.rgw_admin.set_account_quota(
-                normalized_account_id,
-                max_size_bytes=max_size_bytes,
-                max_objects=max_objects,
-                quota_type="bucket",
-                enabled=bool(enabled) if enabled is not None else True,
-            )
-            if isinstance(quota_result, dict) and (quota_result.get("not_found") or quota_result.get("not_implemented")):
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="RGW bucket quota update is not supported on this cluster",
-                )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-
-    invalidate_accounts_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
-    payload = _load_account_payload(normalized_account_id, ctx)
-    record_ceph_admin_action(
-        ctx,
-        action="rgw_account.update",
-        entity_type="rgw_account",
-        entity_id=normalized_account_id,
-        metadata={"fields": sorted(field_set)},
-    )
-    return _build_account_detail(payload, account_id_fallback=normalized_account_id)
-
-
-@router.get("/{account_id}/metrics", response_model=CephAdminEntityMetrics)
-def get_rgw_account_metrics(
-    account_id: str,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-) -> CephAdminEntityMetrics:
-    if not resolve_feature_flags(ctx.endpoint).metrics_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage metrics are disabled for this endpoint")
-    normalized_account_id = account_id.strip()
-    if not normalized_account_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account_id is required")
-    try:
-        payload = ctx.rgw_admin.get_all_buckets(account_id=normalized_account_id, with_stats=True)
-    except RGWAdminError as exc:
-        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-
-    bucket_usage, total_bytes, total_objects, bucket_count = summarize_bucket_usage(extract_bucket_list(payload))
-    bucket_usage.sort(key=lambda item: item.get("used_bytes") or 0, reverse=True)
-    return CephAdminEntityMetrics(
-        total_bytes=total_bytes,
-        total_objects=total_objects,
-        bucket_count=bucket_count,
-        bucket_usage=bucket_usage,
-        generated_at=datetime.now(timezone.utc).replace(microsecond=0),
-    )
-
-
-@router.get("/{account_id}")
-def get_rgw_account(
-    account_id: str,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-) -> dict[str, Any]:
-    return _load_account_payload(account_id, ctx)

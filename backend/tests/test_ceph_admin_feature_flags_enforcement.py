@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.routers.ceph_admin import accounts as accounts_router
+from app.routers.ceph_admin import account_profiles as account_profiles_router
 from app.routers.ceph_admin import bucket_config as bucket_config_router
 from app.routers.ceph_admin import bucket_tools as bucket_tools_router
 from app.routers.ceph_admin import buckets as buckets_router
@@ -165,7 +166,7 @@ def test_ceph_admin_account_metrics_requires_metrics_feature():
     ctx, rgw_admin = _build_ctx(metrics_enabled=False)
 
     with pytest.raises(HTTPException) as exc:
-        accounts_router.get_rgw_account_metrics(account_id="RGW0001", ctx=ctx)
+        account_profiles_router.get_rgw_account_metrics(account_id="RGW0001", ctx=ctx)
 
     assert exc.value.status_code == 403
     assert rgw_admin.with_stats_calls == []
@@ -233,6 +234,19 @@ def test_ceph_admin_bucket_config_routes_are_owned_by_dedicated_router():
         for route in bucket_tools_router.router.routes
     )
     assert len(buckets_router.router.routes) == 44
+
+
+def test_ceph_admin_account_routes_have_dedicated_owners():
+    assert len(accounts_router.router.routes) == 2
+    assert all(
+        route.endpoint.__module__ == "app.routers.ceph_admin.accounts"
+        for route in accounts_router.router.routes
+    )
+    assert len(account_profiles_router.router.routes) == 5
+    assert all(
+        route.endpoint.__module__ == "app.routers.ceph_admin.account_profiles"
+        for route in account_profiles_router.router.routes
+    )
 
 
 def test_ceph_admin_user_key_routes_are_owned_by_dedicated_router():
