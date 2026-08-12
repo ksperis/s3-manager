@@ -56,6 +56,7 @@ from app.models.portal import (
 from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router
+from app.routers import portal_access_keys as portal_access_keys_router
 from app.services import app_settings_service, s3_client
 from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
@@ -6580,15 +6581,19 @@ def test_portal_access_key_routes_record_audit(db_session):
     audit_service = FakeAuditService()
     service = FakeService()
 
-    created = portal_router.create_portal_access_key(access=access, audit_service=audit_service, service=service)
-    updated = portal_router.update_portal_access_key_status(
+    created = portal_access_keys_router.create_portal_access_key(
+        access=access, audit_service=audit_service, service=service
+    )
+    updated = portal_access_keys_router.update_portal_access_key_status(
         "AK-NEW",
         PortalAccessKeyStatusChange(active=False),
         access=access,
         audit_service=audit_service,
         service=service,
     )
-    deleted = portal_router.delete_portal_access_key("AK-NEW", access=access, audit_service=audit_service, service=service)
+    deleted = portal_access_keys_router.delete_portal_access_key(
+        "AK-NEW", access=access, audit_service=audit_service, service=service
+    )
 
     assert created.access_key_id == "AK-NEW"
     assert created.secret_access_key == "SK-NEW"
@@ -6643,7 +6648,7 @@ def test_portal_access_key_route_audits_external_metadata_without_secret(db_sess
 
     audit_service = FakeAuditService()
 
-    created = portal_router.create_portal_access_key(
+    created = portal_access_keys_router.create_portal_access_key(
         payload=payload,
         access=access,
         audit_service=audit_service,
@@ -6676,7 +6681,7 @@ def test_portal_access_key_routes_translate_disabled_management(db_session):
             pytest.fail("disabled access-key creation should not be audited")
 
     with pytest.raises(HTTPException) as exc:
-        portal_router.create_portal_access_key(
+        portal_access_keys_router.create_portal_access_key(
             access=_portal_access(account, user),
             audit_service=FakeAuditService(),
             service=FakeService(),
@@ -6721,3 +6726,10 @@ def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
         ("DELETE", "/portal/access-keys/{access_key_id}"),
     }
     assert expected_routes.issubset(route_keys)
+    access_key_routes = {
+        (method, route.path): route.endpoint.__module__
+        for route in portal_router.router.routes
+        for method in getattr(route, "methods", set())
+        if (method, route.path) in expected_routes
+    }
+    assert set(access_key_routes.values()) == {"app.routers.portal_access_keys"}
