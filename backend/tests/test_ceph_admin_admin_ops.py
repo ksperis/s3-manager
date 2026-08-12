@@ -17,7 +17,7 @@ from app.models.ceph_admin import (
     CephAdminBucketUnlinkRequest,
     CephAdminUserDeleteRequest,
 )
-from app.routers.ceph_admin import admin_ops, bucket_index_ops
+from app.routers.ceph_admin import admin_ops, bucket_index_ops, identity_admin_ops
 from app.services.rgw_admin import RGWAdminError, RGWAdminOperationResponse
 
 
@@ -117,7 +117,7 @@ def test_account_delete_requires_exact_confirmation_and_does_not_audit_phrase():
     ctx, audit = _context()
 
     with pytest.raises(HTTPException) as raised:
-        admin_ops.delete_account(
+        identity_admin_ops.delete_account(
             "RGW12345678901234567",
             CephAdminAccountDeleteRequest(confirmation="DELETE ACCOUNT wrong"),
             ctx=ctx,
@@ -134,7 +134,7 @@ def test_user_delete_protects_active_ceph_admin_identity():
     ctx, audit = _context(admin)
 
     with pytest.raises(HTTPException) as raised:
-        admin_ops.delete_user(
+        identity_admin_ops.delete_user(
             "ceph-admin",
             CephAdminUserDeleteRequest(confirmation="DELETE USER tenant-a$ceph-admin"),
             tenant="tenant-a",
@@ -150,9 +150,9 @@ def test_user_purge_preserves_rgw_204_audits_and_invalidates(monkeypatch):
     admin = FakeAdmin()
     ctx, audit = _context(admin)
     invalidated: list[int] = []
-    monkeypatch.setattr(admin_ops, "_invalidate_all_admin_ops_caches", invalidated.append)
+    monkeypatch.setattr(identity_admin_ops, "invalidate_all_admin_ops_caches", invalidated.append)
 
-    response = admin_ops.delete_user(
+    response = identity_admin_ops.delete_user(
         "alice",
         CephAdminUserDeleteRequest(confirmation="PURGE USER tenant-a$alice", purge_data=True),
         tenant="tenant-a",
@@ -299,9 +299,14 @@ def test_index_check_rejects_check_objects_without_fix():
 
 def test_admin_ops_router_delegates_index_check_routes():
     assert len(admin_ops.router.routes) == 7
+    assert len(identity_admin_ops.router.routes) == 2
     assert len(bucket_index_ops.router.routes) == 2
-    assert {route.endpoint.__module__ for route in bucket_index_ops.router.routes} == {
-        "app.routers.ceph_admin.bucket_index_ops"
+    assert {
+        route.endpoint.__module__
+        for route in (*identity_admin_ops.router.routes, *bucket_index_ops.router.routes)
+    } == {
+        "app.routers.ceph_admin.identity_admin_ops",
+        "app.routers.ceph_admin.bucket_index_ops",
     }
 
 
@@ -314,7 +319,7 @@ def test_network_error_returns_structured_502_and_null_rgw_status():
     admin.delete_account_operation = fail
     ctx, audit = _context(admin)
 
-    response = admin_ops.delete_account(
+    response = identity_admin_ops.delete_account(
         "RGW12345678901234567",
         CephAdminAccountDeleteRequest(confirmation="DELETE ACCOUNT RGW12345678901234567"),
         ctx=ctx,
