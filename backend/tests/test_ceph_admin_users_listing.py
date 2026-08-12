@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from app.routers.ceph_admin import user_listing_cache
+from app.routers.ceph_admin import user_profiles as user_profiles_router
 from app.routers.ceph_admin import users as users_router
 
 
@@ -58,15 +60,15 @@ class FakeRGWAdmin:
 
 @pytest.fixture(autouse=True)
 def clear_users_listing_cache():
-    with users_router._USERS_LIST_CACHE_LOCK:
-        users_router._USERS_LIST_CACHE.clear()
-    with users_router._RGW_USERS_PAYLOAD_CACHE_LOCK:
-        users_router._RGW_USERS_PAYLOAD_CACHE.clear()
+    with user_listing_cache.USERS_LIST_CACHE_LOCK:
+        user_listing_cache.USERS_LIST_CACHE.clear()
+    with user_listing_cache.RGW_USERS_PAYLOAD_CACHE_LOCK:
+        user_listing_cache.RGW_USERS_PAYLOAD_CACHE.clear()
     yield
-    with users_router._USERS_LIST_CACHE_LOCK:
-        users_router._USERS_LIST_CACHE.clear()
-    with users_router._RGW_USERS_PAYLOAD_CACHE_LOCK:
-        users_router._RGW_USERS_PAYLOAD_CACHE.clear()
+    with user_listing_cache.USERS_LIST_CACHE_LOCK:
+        user_listing_cache.USERS_LIST_CACHE.clear()
+    with user_listing_cache.RGW_USERS_PAYLOAD_CACHE_LOCK:
+        user_listing_cache.RGW_USERS_PAYLOAD_CACHE.clear()
 
 
 def _build_ctx(
@@ -472,7 +474,7 @@ def test_ceph_admin_user_detail_preserves_payload_account_name_when_account_api_
     )
     ctx, rgw_admin = _build_ctx(endpoint_id=17, users_payload=users_payload, user_details=user_details, endpoint=endpoint)
 
-    detail = users_router.get_rgw_user_detail("alpha", tenant=None, ctx=ctx)
+    detail = user_profiles_router.get_rgw_user_detail("alpha", tenant=None, ctx=ctx)
 
     assert detail.account_id == "RGW-1"
     assert detail.account_name == "Inline Account"
@@ -485,7 +487,7 @@ def test_build_user_detail_reads_default_placement_and_storage_class():
     payload["user"]["default_placement"] = "hot-placement"
     payload["user"]["default_storage_class"] = "STANDARD"
 
-    detail = users_router._build_user_detail(
+    detail = user_profiles_router._build_user_detail(
         payload,
         uid_fallback="alice",
         tenant_fallback=None,
@@ -502,7 +504,7 @@ def test_build_user_detail_ignores_legacy_kebab_case_default_fields():
     payload["user"]["default-placement"] = "legacy-placement"
     payload["user"]["default-storage-class"] = "LEGACY"
 
-    detail = users_router._build_user_detail(
+    detail = user_profiles_router._build_user_detail(
         payload,
         uid_fallback="alice",
         tenant_fallback=None,

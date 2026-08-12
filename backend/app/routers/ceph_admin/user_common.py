@@ -12,6 +12,51 @@ from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.services.rgw_admin import RGWAdminError
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.utils.normalize import normalize_optional_scalar
+from app.utils.storage_endpoint_features import resolve_feature_flags
+
+
+def split_tenant_uid(value: str) -> tuple[Optional[str], str]:
+    raw = value.strip()
+    if "$" in raw:
+        tenant, uid = raw.split("$", 1)
+        if tenant and uid:
+            return tenant, uid
+    return None, raw
+
+
+def optional_account_lookup_enabled(ctx: CephAdminContext) -> bool | None:
+    try:
+        return resolve_feature_flags(ctx.endpoint).account_enabled
+    except Exception:
+        return None
+
+
+def parse_suspended(raw: Any) -> Optional[bool]:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(raw)
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in {"true", "1", "yes", "suspended", "enabled"}:
+            return True
+        if normalized in {"false", "0", "no", "disabled", "active"}:
+            return False
+    return None
+
+
+def coerce_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on", "enabled", "suspended"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off", "disabled", "active"}:
+            return False
+    return None
 
 
 def extract_access_key(payload: dict) -> tuple[Optional[str], Optional[str]]:

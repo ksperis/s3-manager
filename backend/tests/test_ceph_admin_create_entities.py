@@ -14,7 +14,8 @@ from app.models.ceph_admin import (
 from app.routers.ceph_admin import accounts as accounts_router
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import endpoints as endpoints_router
-from app.routers.ceph_admin import users as users_router
+from app.routers.ceph_admin import user_listing_cache
+from app.routers.ceph_admin import user_profiles as user_profiles_router
 
 
 @pytest.fixture(autouse=True)
@@ -23,10 +24,10 @@ def clear_ceph_admin_caches():
         accounts_router._ACCOUNTS_LIST_CACHE.clear()
     with accounts_router._RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK:
         accounts_router._RGW_ACCOUNTS_PAYLOAD_CACHE.clear()
-    with users_router._USERS_LIST_CACHE_LOCK:
-        users_router._USERS_LIST_CACHE.clear()
-    with users_router._RGW_USERS_PAYLOAD_CACHE_LOCK:
-        users_router._RGW_USERS_PAYLOAD_CACHE.clear()
+    with user_listing_cache.USERS_LIST_CACHE_LOCK:
+        user_listing_cache.USERS_LIST_CACHE.clear()
+    with user_listing_cache.RGW_USERS_PAYLOAD_CACHE_LOCK:
+        user_listing_cache.RGW_USERS_PAYLOAD_CACHE.clear()
     with buckets_router._BUCKET_LIST_CACHE_LOCK:
         buckets_router._BUCKET_LIST_CACHE.clear()
         buckets_router._BUCKET_LIST_INFLIGHT.clear()
@@ -37,10 +38,10 @@ def clear_ceph_admin_caches():
         accounts_router._ACCOUNTS_LIST_CACHE.clear()
     with accounts_router._RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK:
         accounts_router._RGW_ACCOUNTS_PAYLOAD_CACHE.clear()
-    with users_router._USERS_LIST_CACHE_LOCK:
-        users_router._USERS_LIST_CACHE.clear()
-    with users_router._RGW_USERS_PAYLOAD_CACHE_LOCK:
-        users_router._RGW_USERS_PAYLOAD_CACHE.clear()
+    with user_listing_cache.USERS_LIST_CACHE_LOCK:
+        user_listing_cache.USERS_LIST_CACHE.clear()
+    with user_listing_cache.RGW_USERS_PAYLOAD_CACHE_LOCK:
+        user_listing_cache.RGW_USERS_PAYLOAD_CACHE.clear()
     with buckets_router._BUCKET_LIST_CACHE_LOCK:
         buckets_router._BUCKET_LIST_CACHE.clear()
         buckets_router._BUCKET_LIST_INFLIGHT.clear()
@@ -350,7 +351,7 @@ def test_create_rgw_user_with_account_scope_returns_generated_key():
         quota_max_objects=100,
     )
 
-    response = users_router.create_rgw_user(payload=payload, ctx=ctx)
+    response = user_profiles_router.create_rgw_user(payload=payload, ctx=ctx)
 
     assert response.detail.uid == "billing-user"
     assert response.detail.account_id == "RGW99999999999999999"
@@ -371,7 +372,7 @@ def test_update_rgw_user_quota_omits_unset_object_limit():
     fake_rgw = FakeUsersAdmin()
     ctx = SimpleNamespace(endpoint=SimpleNamespace(id=902), rgw_admin=fake_rgw)
 
-    users_router.update_rgw_user_config(
+    user_profiles_router.update_rgw_user_config(
         "billing-user",
         CephAdminRgwUserConfigUpdate(
             quota_enabled=True,
@@ -393,7 +394,7 @@ def test_update_rgw_user_quota_clears_object_limit_with_explicit_null():
     fake_rgw = FakeUsersAdmin()
     ctx = SimpleNamespace(endpoint=SimpleNamespace(id=902), rgw_admin=fake_rgw)
 
-    users_router.update_rgw_user_config(
+    user_profiles_router.update_rgw_user_config(
         "billing-user",
         CephAdminRgwUserConfigUpdate(quota_max_objects=None),
         ctx=ctx,

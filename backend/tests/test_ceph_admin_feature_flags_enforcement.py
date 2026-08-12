@@ -10,6 +10,7 @@ from app.routers.ceph_admin import bucket_config as bucket_config_router
 from app.routers.ceph_admin import bucket_tools as bucket_tools_router
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import user_keys as user_keys_router
+from app.routers.ceph_admin import user_profiles as user_profiles_router
 from app.routers.ceph_admin import users as users_router
 
 
@@ -174,7 +175,7 @@ def test_ceph_admin_user_metrics_requires_metrics_feature():
     ctx, rgw_admin = _build_ctx(metrics_enabled=False)
 
     with pytest.raises(HTTPException) as exc:
-        users_router.get_rgw_user_metrics(user_id="user-a", tenant=None, ctx=ctx)
+        user_profiles_router.get_rgw_user_metrics(user_id="user-a", tenant=None, ctx=ctx)
 
     assert exc.value.status_code == 403
     assert rgw_admin.with_stats_calls == []
@@ -242,8 +243,15 @@ def test_ceph_admin_user_key_routes_are_owned_by_dedicated_router():
     )
     included_key_routes = [
         route
-        for route in users_router.router.routes
+        for route in user_profiles_router.router.routes
         if route.endpoint.__module__ == "app.routers.ceph_admin.user_keys"
     ]
     assert len(included_key_routes) == 4
-    assert len(users_router.router.routes) == 11
+    profile_routes = [
+        route
+        for route in user_profiles_router.router.routes
+        if route.endpoint.__module__ == "app.routers.ceph_admin.user_profiles"
+    ]
+    assert len(profile_routes) == 5
+    assert len(user_profiles_router.router.routes) == 9
+    assert len(users_router.router.routes) == 2
