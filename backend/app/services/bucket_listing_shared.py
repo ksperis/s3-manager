@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from pydantic import ValidationError
+from pydantic import BaseModel
 
 from app.models.ceph_admin import CephAdminBucketFilterQuery
 from app.core.sensitive_data import sanitize_error_detail
@@ -24,6 +25,13 @@ def parse_includes(include: list[str]) -> set[str]:
             if normalized:
                 include_set.add(normalized)
     return include_set
+
+
+def serialize_filter(query: BaseModel | None) -> str | None:
+    if not query:
+        return None
+    payload = query.model_dump(mode="json")
+    return json.dumps(payload, separators=(",", ":"), sort_keys=True)
 
 
 def is_advanced_filter_stream_payload(raw_advanced_filter: str | None) -> bool:

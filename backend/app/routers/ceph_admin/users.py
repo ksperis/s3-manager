@@ -24,10 +24,10 @@ from app.routers.ceph_admin.listing_common import (
     parse_filter_query,
     parse_includes,
     parse_int,
-    serialize_filter,
     sort_value,
     stream_listing_response,
 )
+from app.services.bucket_listing_shared import serialize_filter
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.ceph_admin.user_common import (
     coerce_bool,

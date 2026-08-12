@@ -54,7 +54,6 @@ from app.services.bucket_listing_enrichment import (
 )
 from app.services import rgw_bucket_metadata
 from app.routers.ceph_admin.listing_common import (
-    serialize_filter,
     stream_listing_response,
 )
 from app.utils.http_errors import raise_bad_gateway_from_runtime
@@ -63,6 +62,7 @@ from app.services.bucket_listing_shared import (
     is_advanced_filter_stream_payload,
     parse_filter,
     parse_includes,
+    serialize_filter,
 )
 from app.services.listing_progress import (
     ListingProgressEmitter,

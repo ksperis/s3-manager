@@ -169,13 +169,6 @@ def fields_set(model: BaseModel) -> set[str]:
     return set(model.model_fields_set)
 
 
-def serialize_filter(query: BaseModel | None) -> str | None:
-    if not query:
-        return None
-    payload = query.model_dump(mode="json")
-    return json.dumps(payload, separators=(",", ":"), sort_keys=True)
-
-
 def parse_filter_query(
     raw: str | None,
     *,
