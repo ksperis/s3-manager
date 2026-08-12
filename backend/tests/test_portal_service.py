@@ -5968,6 +5968,25 @@ def test_portal_context_routes_are_owned_by_dedicated_router():
     assert set(route_modules.values()) == {"app.routers.portal_context"}
 
 
+def test_portal_sharing_routes_are_owned_by_dedicated_router():
+    expected_paths = {
+        "/portal/storage-spaces/{space_id}/public-links",
+        "/portal/public-links/{token}/download",
+        "/portal/storage-spaces/{space_id}/shares",
+        "/portal/share-candidates",
+        "/portal/storage-spaces/{space_id}/share-candidates",
+        "/portal/storage-spaces/{space_id}/shares/{user_id}",
+    }
+    route_modules = {
+        route.path: route.endpoint.__module__
+        for route in portal_router.router.routes
+        if route.path in expected_paths
+    }
+
+    assert set(route_modules) == expected_paths
+    assert set(route_modules.values()) == {"app.routers.portal_sharing"}
+
+
 def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch, db_session):
     account = make_s3_account(db_session, name="portal-alert-empty", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     other_account = make_s3_account(db_session, name="portal-alert-other", rgw_access_key="ROOT-AK2", rgw_secret_key="ROOT-SK2")
