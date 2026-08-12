@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.routers.ceph_admin import accounts as accounts_router
+from app.routers.ceph_admin import bucket_config as bucket_config_router
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import users as users_router
 
@@ -184,12 +185,12 @@ def test_ceph_admin_bucket_encryption_requires_sse_feature(monkeypatch):
     class _FakeBucketsService:
         def get_bucket_encryption(self, bucket_name, account):
             calls["get"] += 1
-            return buckets_router.BucketEncryptionConfiguration(rules=[])
+            return bucket_config_router.BucketEncryptionConfiguration(rules=[])
 
-    monkeypatch.setattr(buckets_router, "BucketsService", lambda: _FakeBucketsService())
+    monkeypatch.setattr(bucket_config_router, "BucketsService", lambda: _FakeBucketsService())
 
     with pytest.raises(HTTPException) as exc:
-        buckets_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
+        bucket_config_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
 
     assert exc.value.status_code == 403
     assert calls["get"] == 0
@@ -200,12 +201,27 @@ def test_ceph_admin_bucket_encryption_allows_when_sse_feature_enabled(monkeypatc
 
     class _FakeBucketsService:
         def get_bucket_encryption(self, bucket_name, account):
-            return buckets_router.BucketEncryptionConfiguration(
+            return bucket_config_router.BucketEncryptionConfiguration(
                 rules=[{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
             )
 
-    monkeypatch.setattr(buckets_router, "BucketsService", lambda: _FakeBucketsService())
+    monkeypatch.setattr(bucket_config_router, "BucketsService", lambda: _FakeBucketsService())
 
-    payload = buckets_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
+    payload = bucket_config_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
 
     assert payload.rules == [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
+
+
+def test_ceph_admin_bucket_config_routes_are_owned_by_dedicated_router():
+    assert len(bucket_config_router.router.routes) == 37
+    assert all(
+        route.endpoint.__module__ == "app.routers.ceph_admin.bucket_config"
+        for route in bucket_config_router.router.routes
+    )
+    included_config_routes = [
+        route
+        for route in buckets_router.router.routes
+        if route.endpoint.__module__ == "app.routers.ceph_admin.bucket_config"
+    ]
+    assert len(included_config_routes) == 37
+    assert len(buckets_router.router.routes) == 44

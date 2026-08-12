@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.db import S3Account, StorageEndpoint
 from app.main import app
 from app.models.bucket import BucketReplicationConfiguration
-from app.routers.ceph_admin import buckets as ceph_admin_buckets_router
+from app.routers.ceph_admin import bucket_config as ceph_admin_buckets_router
 from app.routers.manager import buckets as manager_buckets_router
 from app.services.buckets_service import BucketsService
 
