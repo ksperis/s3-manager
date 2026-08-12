@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 
-from fastapi import HTTPException, status
 from pydantic import ValidationError
 
 from app.models.ceph_admin import CephAdminBucketFilterQuery
 from app.core.sensitive_data import sanitize_error_detail
+
+
+class BucketListingFilterError(ValueError):
+    pass
 
 
 def parse_includes(include: list[str]) -> set[str]:
@@ -53,7 +56,7 @@ def parse_filter(raw: str | None) -> tuple[str | None, CephAdminBucketFilterQuer
             try:
                 return None, CephAdminBucketFilterQuery.model_validate(parsed)
             except ValidationError as exc:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+                raise BucketListingFilterError(str(sanitize_error_detail(str(exc)))) from exc
     return text, None
 
 

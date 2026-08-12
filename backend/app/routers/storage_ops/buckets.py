@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketListingRequest
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary, StorageOpsContextKind
@@ -24,6 +25,7 @@ from app.services.bucket_listing_enrichment import (
     match_bucket_field_rule,
 )
 from app.services.bucket_listing_shared import (
+    BucketListingFilterError,
     filter_requires_stats,
     is_advanced_filter_stream_payload,
     parse_filter,
@@ -607,10 +609,13 @@ def _compute_storage_ops_listing(
 
     simple_filter: str | None = None
     parsed_filter: CephAdminBucketFilterQuery | None = None
-    if advanced_filter:
-        simple_filter, parsed_filter = parse_filter(advanced_filter)
-    elif filter:
-        simple_filter, parsed_filter = parse_filter(filter)
+    try:
+        if advanced_filter:
+            simple_filter, parsed_filter = parse_filter(advanced_filter)
+        elif filter:
+            simple_filter, parsed_filter = parse_filter(filter)
+    except BucketListingFilterError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     include_set = parse_includes(include)
     filter_fields = _collect_filter_fields(parsed_filter)
     wants_owner_name = "owner_name" in include_set

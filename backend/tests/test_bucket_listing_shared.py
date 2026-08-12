@@ -1,8 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from fastapi import HTTPException
-
-from app.services.bucket_listing_shared import parse_filter, parse_includes
+from app.services.bucket_listing_shared import BucketListingFilterError, parse_filter, parse_includes
 
 
 def test_parse_includes_trims_and_deduplicates_values():
@@ -27,7 +25,7 @@ def test_parse_filter_keeps_plain_text_as_simple_filter():
 def test_parse_filter_rejects_invalid_advanced_filter_shape():
     try:
         parse_filter('{"rules":"invalid"}')
-    except HTTPException as exc:
-        assert exc.status_code == 400
+    except BucketListingFilterError as exc:
+        assert str(exc)
     else:
-        raise AssertionError("Expected HTTPException")
+        raise AssertionError("Expected BucketListingFilterError")

@@ -6,6 +6,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
+from app.core.sensitive_data import sanitize_error_detail
 from app.models.ceph_admin import (
     CephAdminBucketFilterQuery,
     CephAdminBucketListingRequest,
@@ -58,6 +59,7 @@ from app.routers.ceph_admin.listing_common import (
 )
 from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.services.bucket_listing_shared import (
+    BucketListingFilterError,
     is_advanced_filter_stream_payload,
     parse_filter,
     parse_includes,
@@ -147,11 +149,14 @@ def _compute_bucket_listing(
     invoke_cancel_check(cancel_check)
     progress.emit(percent=5, stage="prepare", message="Preparing advanced search", force=True)
 
-    if advanced_filter:
-        simple_filter = filter.strip() if isinstance(filter, str) and filter.strip() else None
-        _, advanced_filter = parse_filter(advanced_filter)
-    else:
-        simple_filter, advanced_filter = parse_filter(filter)
+    try:
+        if advanced_filter:
+            simple_filter = filter.strip() if isinstance(filter, str) and filter.strip() else None
+            _, advanced_filter = parse_filter(advanced_filter)
+        else:
+            simple_filter, advanced_filter = parse_filter(filter)
+    except BucketListingFilterError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     simple_filter = simple_filter.strip() if isinstance(simple_filter, str) and simple_filter.strip() else None
     stats_required_for_request = _request_requires_bucket_stats(advanced_filter, sort_by)
     if stats_required_for_request:
