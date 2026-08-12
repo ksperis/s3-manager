@@ -87,7 +87,7 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/ceph_admin/bucket_tools.py", "refresh_bucket_listing_cache", "/cache/refresh"): "cache refresh",
     ("POST", "app/routers/ceph_admin/bucket_tools.py", "compare_bucket_pair", "/compare"): "read-only comparison",
     ("POST", "app/routers/ceph_admin/buckets.py", "query_buckets", "/query"): "read-only query",
-    ("POST", "app/routers/ceph_admin/admin_ops.py", "stream_bucket_index_check_batch", "/bucket-index-check/stream"): "operational index check excluded by audit policy",
+    ("POST", "app/routers/ceph_admin/bucket_index_ops.py", "stream_bucket_index_check_batch", "/bucket-index-check/stream"): "operational index check excluded by audit policy",
     ("POST", "app/routers/ceph_admin/bucket_tools.py", "backup_bucket_configs", "/config-backup"): "read-only configuration export",
     ("POST", "app/routers/ceph_admin/usage_stats.py", "stream_ceph_admin_bucket_usage_stats", "/ceph-admin/endpoints/{endpoint_id}/bucket-usage-stats/stream"): "read-only stream",
     ("POST", "app/routers/ceph_admin/usage_stats.py", "stream_ceph_admin_bucket_usage_stats_for_bucket", "/ceph-admin/endpoints/{endpoint_id}/buckets/{bucket_name}/usage-stats/stream"): "read-only stream",

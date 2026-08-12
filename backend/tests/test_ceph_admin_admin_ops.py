@@ -17,7 +17,7 @@ from app.models.ceph_admin import (
     CephAdminBucketUnlinkRequest,
     CephAdminUserDeleteRequest,
 )
-from app.routers.ceph_admin import admin_ops
+from app.routers.ceph_admin import admin_ops, bucket_index_ops
 from app.services.rgw_admin import RGWAdminError, RGWAdminOperationResponse
 
 
@@ -263,15 +263,15 @@ def test_index_check_is_simple_without_fix_and_requires_phrase_with_fix(monkeypa
     admin = FakeAdmin()
     ctx, _ = _context(admin)
     invalidated: list[int] = []
-    monkeypatch.setattr(admin_ops, "_invalidate_bucket_admin_ops_caches", invalidated.append)
+    monkeypatch.setattr(bucket_index_ops, "invalidate_bucket_admin_ops_caches", invalidated.append)
 
-    simple = admin_ops.check_bucket_index(
+    simple = bucket_index_ops.check_bucket_index(
         "bucket-a",
         CephAdminBucketIndexCheckRequest(),
         tenant="tenant-a",
         ctx=ctx,
     )
-    fixed = admin_ops.check_bucket_index(
+    fixed = bucket_index_ops.check_bucket_index(
         "bucket-a",
         CephAdminBucketIndexCheckRequest(
             fix=True,
@@ -295,6 +295,14 @@ def test_index_check_is_simple_without_fix_and_requires_phrase_with_fix(monkeypa
 def test_index_check_rejects_check_objects_without_fix():
     with pytest.raises(ValidationError, match="check_objects requires fix"):
         CephAdminBucketIndexCheckRequest(check_objects=True)
+
+
+def test_admin_ops_router_delegates_index_check_routes():
+    assert len(admin_ops.router.routes) == 7
+    assert len(bucket_index_ops.router.routes) == 2
+    assert {route.endpoint.__module__ for route in bucket_index_ops.router.routes} == {
+        "app.routers.ceph_admin.bucket_index_ops"
+    }
 
 
 def test_network_error_returns_structured_502_and_null_rgw_status():

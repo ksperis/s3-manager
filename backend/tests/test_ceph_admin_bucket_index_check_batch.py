@@ -15,7 +15,7 @@ from app.models.ceph_admin import (
     CephAdminBucketIndexCheckTarget,
 )
 from app.routers import dependencies
-from app.routers.ceph_admin import admin_ops
+from app.routers.ceph_admin import bucket_index_ops
 from app.services.bucket_index_check_service import BucketIndexCheckCancelled, BucketIndexCheckService
 from app.services.rgw_admin import RGWAdminOperationResponse
 
@@ -125,11 +125,11 @@ def test_batch_route_builds_stream_runner_and_invalidates_once(client: TestClien
         return JSONResponse({"status": result.status})
 
     invalidated: list[int] = []
-    monkeypatch.setattr(admin_ops, "BucketIndexCheckService", FakeService)
-    monkeypatch.setattr(admin_ops, "stream_bucket_index_checks", fake_stream)
-    monkeypatch.setattr(admin_ops, "_invalidate_bucket_admin_ops_caches", invalidated.append)
+    monkeypatch.setattr(bucket_index_ops, "BucketIndexCheckService", FakeService)
+    monkeypatch.setattr(bucket_index_ops, "stream_bucket_index_checks", fake_stream)
+    monkeypatch.setattr(bucket_index_ops, "invalidate_bucket_admin_ops_caches", invalidated.append)
     app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
-    app.dependency_overrides[admin_ops.get_ceph_admin_context] = lambda: ctx
+    app.dependency_overrides[bucket_index_ops.get_ceph_admin_context] = lambda: ctx
 
     try:
         response = client.post(
@@ -144,7 +144,7 @@ def test_batch_route_builds_stream_runner_and_invalidates_once(client: TestClien
         )
     finally:
         app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
-        app.dependency_overrides.pop(admin_ops.get_ceph_admin_context, None)
+        app.dependency_overrides.pop(bucket_index_ops.get_ceph_admin_context, None)
 
     assert response.status_code == 200, response.text
     assert response.json() == {"status": "completed"}
