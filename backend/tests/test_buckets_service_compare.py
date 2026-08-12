@@ -16,7 +16,9 @@ from app.models.bucket import (
     LifecycleRule,
 )
 from app.services import object_listing_temp_store
-from app.services.buckets_service import BucketsService, _BucketCompareObjectEntry
+from app.services import buckets_service as buckets_service_module
+from app.services.bucket_content_comparison import BucketCompareObjectEntry
+from app.services.buckets_service import BucketsService
 
 
 def _build_account(name: str) -> S3Account:
@@ -32,13 +34,18 @@ def _payload_entries(payload: dict[str, dict[str, object]]):
     for key, entry in payload.items():
         last_modified = entry.get("last_modified")
         storage_class = entry.get("storage_class")
-        yield _BucketCompareObjectEntry(
+        yield BucketCompareObjectEntry(
             key=key,
             size=int(entry.get("size") or 0),
             etag=entry.get("etag") if isinstance(entry.get("etag"), str) else None,
             last_modified=last_modified if isinstance(last_modified, datetime) else None,
             storage_class=storage_class if isinstance(storage_class, str) else None,
         )
+
+
+def test_bucket_compare_types_are_owned_by_dedicated_module():
+    assert not hasattr(buckets_service_module, "_BucketCompareObjectEntry")
+    assert not hasattr(buckets_service_module, "_BucketCompareObjectIndex")
 
 
 def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
@@ -169,15 +176,15 @@ def test_compare_bucket_content_limits_display_rows_but_keeps_totals(monkeypatch
     def large_listing(bucket_name, _account):
         if bucket_name == "source-bucket":
             for index in range(1005):
-                yield _BucketCompareObjectEntry(key=f"source-only-{index:04d}", size=index)
+                yield BucketCompareObjectEntry(key=f"source-only-{index:04d}", size=index)
             for index in range(1007):
-                yield _BucketCompareObjectEntry(key=f"different-{index:04d}", size=index)
+                yield BucketCompareObjectEntry(key=f"different-{index:04d}", size=index)
             return
 
         for index in range(1003):
-            yield _BucketCompareObjectEntry(key=f"target-only-{index:04d}", size=index)
+            yield BucketCompareObjectEntry(key=f"target-only-{index:04d}", size=index)
         for index in range(1007):
-            yield _BucketCompareObjectEntry(key=f"different-{index:04d}", size=index + 1)
+            yield BucketCompareObjectEntry(key=f"different-{index:04d}", size=index + 1)
 
     monkeypatch.setattr(
         service,
@@ -289,7 +296,7 @@ def test_compare_bucket_content_cleans_temp_store_when_listing_fails(monkeypatch
 
     def list_or_fail(bucket_name, _account):
         if bucket_name == "source-bucket":
-            yield _BucketCompareObjectEntry(key="source-only", size=1)
+            yield BucketCompareObjectEntry(key="source-only", size=1)
             return
         raise RuntimeError("target listing failed")
 
