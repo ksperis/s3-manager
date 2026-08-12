@@ -94,6 +94,9 @@ def test_backend_audit_matrix_tracks_browser_bucket_config_mutation_delegation()
     backend_root = Path(__file__).resolve().parents[1]
     rows_by_function = {row.function: row for row in collect_rows(backend_root)}
 
+    assert rows_by_function["update_bucket_versioning_config"].file.relative_to(backend_root) == Path(
+        "app/routers/browser_bucket_config.py"
+    )
     assert rows_by_function["update_bucket_versioning_config"].signals[
         "delegated_browser_bucket_config_mutation_audit"
     ]

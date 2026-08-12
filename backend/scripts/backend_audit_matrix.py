@@ -83,7 +83,7 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/browser.py", "get_object_columns", "/buckets/{bucket_name}/objects/columns"): "object metadata probe",
     ("POST", "app/routers/browser_transfers.py", "presign", "/buckets/{bucket_name}/presign"): "presigned URL generation",
     ("POST", "app/routers/browser_transfers.py", "presign_part_for_upload", "/buckets/{bucket_name}/multipart/{upload_id}/presign"): "presigned multipart URL generation",
-    ("PUT", "app/routers/browser.py", "deny_bucket_quota_update", "/buckets/config/{bucket_name}/quota"): "authorization tombstone",
+    ("PUT", "app/routers/browser_bucket_config.py", "deny_bucket_quota_update", "/buckets/config/{bucket_name}/quota"): "authorization tombstone",
     ("POST", "app/routers/ceph_admin/buckets.py", "refresh_bucket_listing_cache", "/cache/refresh"): "cache refresh",
     ("POST", "app/routers/ceph_admin/buckets.py", "compare_bucket_pair", "/compare"): "read-only comparison",
     ("POST", "app/routers/ceph_admin/buckets.py", "query_buckets", "/query"): "read-only query",
