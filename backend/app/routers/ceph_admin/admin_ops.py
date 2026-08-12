@@ -21,7 +21,7 @@ from app.models.ceph_admin import (
     CephAdminUserDeleteRequest,
 )
 from app.routers.bucket_index_check_stream import stream_bucket_index_checks
-from app.routers.ceph_admin.accounts import invalidate_accounts_listing_cache
+from app.routers.ceph_admin.account_listing_cache import invalidate_accounts_listing_cache
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.bucket_listing_cache import invalidate_bucket_listing_cache
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context

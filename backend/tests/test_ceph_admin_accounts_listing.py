@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from app.routers.ceph_admin import account_listing_cache
 from app.routers.ceph_admin import accounts as accounts_router
 
 
@@ -59,15 +60,15 @@ class FakeRGWAdminMetadataIds(FakeRGWAdmin):
 
 @pytest.fixture(autouse=True)
 def clear_accounts_listing_cache():
-    with accounts_router._ACCOUNTS_LIST_CACHE_LOCK:
-        accounts_router._ACCOUNTS_LIST_CACHE.clear()
-    with accounts_router._RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK:
-        accounts_router._RGW_ACCOUNTS_PAYLOAD_CACHE.clear()
+    with account_listing_cache.ACCOUNTS_LIST_CACHE_LOCK:
+        account_listing_cache.ACCOUNTS_LIST_CACHE.clear()
+    with account_listing_cache.RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK:
+        account_listing_cache.RGW_ACCOUNTS_PAYLOAD_CACHE.clear()
     yield
-    with accounts_router._ACCOUNTS_LIST_CACHE_LOCK:
-        accounts_router._ACCOUNTS_LIST_CACHE.clear()
-    with accounts_router._RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK:
-        accounts_router._RGW_ACCOUNTS_PAYLOAD_CACHE.clear()
+    with account_listing_cache.ACCOUNTS_LIST_CACHE_LOCK:
+        account_listing_cache.ACCOUNTS_LIST_CACHE.clear()
+    with account_listing_cache.RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK:
+        account_listing_cache.RGW_ACCOUNTS_PAYLOAD_CACHE.clear()
 
 
 def _build_ctx(

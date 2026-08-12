@@ -2,10 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from collections import OrderedDict
 from datetime import datetime, timezone
 import logging
-from threading import Lock
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -24,16 +22,12 @@ from app.models.ceph_admin import (
     PaginatedCephAdminAccountsResponse,
 )
 from app.routers.ceph_admin.listing_common import (
-    EndpointCacheEntry,
     EndpointListCacheKey,
-    EndpointPayloadCacheKey,
     apply_advanced_filter,
     apply_simple_search,
     coerce_number,
     collect_filter_fields,
     fields_set,
-    get_or_set_cache,
-    invalidate_cache,
     paginate,
     parse_bool,
     parse_filter_query,
@@ -44,6 +38,11 @@ from app.routers.ceph_admin.listing_common import (
     stream_listing_response,
 )
 from app.routers.ceph_admin.audit import record_ceph_admin_action
+from app.routers.ceph_admin.account_listing_cache import (
+    get_cached_accounts_listing,
+    get_cached_rgw_accounts_payload,
+    invalidate_accounts_listing_cache,
+)
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
@@ -62,16 +61,6 @@ from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/accounts", tags=["ceph-admin-accounts"])
 logger = logging.getLogger(__name__)
-
-ACCOUNTS_LIST_CACHE_TTL_SECONDS = 30.0
-ACCOUNTS_LIST_CACHE_MAX_ENTRIES = 64
-RGW_ACCOUNTS_PAYLOAD_CACHE_MAX_ENTRIES = 16
-
-_ACCOUNTS_LIST_CACHE: OrderedDict[EndpointListCacheKey, EndpointCacheEntry] = OrderedDict()
-_ACCOUNTS_LIST_CACHE_LOCK = Lock()
-_RGW_ACCOUNTS_PAYLOAD_CACHE: OrderedDict[EndpointPayloadCacheKey, EndpointCacheEntry] = OrderedDict()
-_RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK = Lock()
-
 
 def _clone_account(account: CephAdminRgwAccountSummary) -> CephAdminRgwAccountSummary:
     return account.model_copy(deep=True)
@@ -285,11 +274,6 @@ def _build_account_detail(payload: dict[str, Any], account_id_fallback: str) -> 
     )
 
 
-def invalidate_accounts_listing_cache(endpoint_id: int | None = None) -> None:
-    invalidate_cache(_ACCOUNTS_LIST_CACHE, _ACCOUNTS_LIST_CACHE_LOCK, endpoint_id=endpoint_id)
-    invalidate_cache(_RGW_ACCOUNTS_PAYLOAD_CACHE, _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK, endpoint_id=endpoint_id)
-
-
 def _enrich_accounts(
     accounts: list[CephAdminRgwAccountSummary],
     requested: set[str],
@@ -359,43 +343,6 @@ def _enrich_accounts(
     return enriched
 
 
-def _get_cached_rgw_accounts_payload(ctx: CephAdminContext) -> list[Any]:
-    key = EndpointPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0))
-
-    def _fetch_payload() -> list[Any]:
-        try:
-            try:
-                payload = ctx.rgw_admin.list_accounts(include_details=False)
-            except TypeError:
-                payload = ctx.rgw_admin.list_accounts()
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-        return payload or []
-
-    return get_or_set_cache(
-        _RGW_ACCOUNTS_PAYLOAD_CACHE,
-        _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK,
-        key,
-        ttl_seconds=ACCOUNTS_LIST_CACHE_TTL_SECONDS,
-        max_entries=RGW_ACCOUNTS_PAYLOAD_CACHE_MAX_ENTRIES,
-        builder=_fetch_payload,
-    )
-
-
-def _get_cached_accounts_listing(
-    key: EndpointListCacheKey,
-    builder: Callable[[], list[CephAdminRgwAccountSummary]],
-) -> list[CephAdminRgwAccountSummary]:
-    return get_or_set_cache(
-        _ACCOUNTS_LIST_CACHE,
-        _ACCOUNTS_LIST_CACHE_LOCK,
-        key,
-        ttl_seconds=ACCOUNTS_LIST_CACHE_TTL_SECONDS,
-        max_entries=ACCOUNTS_LIST_CACHE_MAX_ENTRIES,
-        builder=builder,
-    )
-
-
 def _compute_accounts_listing(
     *,
     page: int = Query(1, ge=1),
@@ -427,7 +374,7 @@ def _compute_accounts_listing(
     def build_listing() -> list[CephAdminRgwAccountSummary]:
         progress.emit(percent=10, stage="load_entries", message="Loading RGW accounts", force=True)
         invoke_cancel_check(cancel_check)
-        payload = _get_cached_rgw_accounts_payload(ctx)
+        payload = get_cached_rgw_accounts_payload(ctx)
         results: list[CephAdminRgwAccountSummary] = []
         for entry in payload or []:
             account_id_value = None
@@ -545,7 +492,7 @@ def _compute_accounts_listing(
         results.sort(key=sort_key, reverse=sort_dir == "desc")
         return results
 
-    results = _get_cached_accounts_listing(cache_key, build_listing)
+    results = get_cached_accounts_listing(cache_key, build_listing)
     progress.emit(
         percent=75,
         stage="listing_ready",
