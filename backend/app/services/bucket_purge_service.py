@@ -19,7 +19,7 @@ from app.models.bucket_purge import (
     BucketPurgeStage,
     BucketPurgeStatus,
 )
-from app.services import s3_client
+from app.services import s3_deletion
 from app.services.buckets_service import BucketsService
 from app.services.long_running_s3_client import LongRunningS3ClientService
 from app.utils.aws_errors import aws_error_code
@@ -308,7 +308,7 @@ class BucketPurgeService(LongRunningS3ClientService):
     ) -> BucketPurgeBucketResult:
         started = monotonic()
 
-        def low_progress(progress: s3_client.BucketContentPurgeProgress) -> None:
+        def low_progress(progress: s3_deletion.BucketContentPurgeProgress) -> None:
             stage = _normalize_progress_stage(progress.stage)
             listed_objects = base_listed_objects + progress.listed_objects
             listed_versions = base_listed_versions + progress.listed_versions
@@ -343,7 +343,7 @@ class BucketPurgeService(LongRunningS3ClientService):
 
         try:
             client = self._build_client(target.account)
-            result = s3_client.purge_bucket_contents(
+            result = s3_deletion.purge_bucket_contents(
                 client,
                 target.bucket_name,
                 parallelism=options.parallelism,
@@ -413,7 +413,7 @@ class BucketPurgeService(LongRunningS3ClientService):
         deleted_objects = 0
         deleted_versions = 0
 
-        def low_progress(progress: s3_client.BucketContentPurgeProgress) -> None:
+        def low_progress(progress: s3_deletion.BucketContentPurgeProgress) -> None:
             stage = _normalize_progress_stage(progress.stage)
             next_total_entries_estimate = self._progress_total_entries_estimate(
                 total_entries_estimate,
@@ -477,7 +477,7 @@ class BucketPurgeService(LongRunningS3ClientService):
 
         try:
             client = self._build_client(target.account)
-            purge_result = s3_client.purge_bucket_contents(
+            purge_result = s3_deletion.purge_bucket_contents(
                 client,
                 target.bucket_name,
                 parallelism=options.parallelism,

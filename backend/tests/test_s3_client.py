@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError, ParamValidationError
 from botocore.parsers import ResponseParserError
 from concurrent.futures import ThreadPoolExecutor
 
-from app.services import s3_client
+from app.services import s3_client, s3_deletion
 
 
 class FakeS3PublicAccessClient:
@@ -17,6 +17,15 @@ class FakeS3PublicAccessClient:
 
     def delete_public_access_block(self, **kwargs):
         self.delete_calls.append(kwargs)
+
+
+def test_s3_deletion_owns_destructive_contracts_without_legacy_exports():
+    assert s3_deletion.delete_bucket.__module__ == "app.services.s3_deletion"
+    assert s3_deletion.delete_objects.__module__ == "app.services.s3_deletion"
+    assert s3_deletion.purge_bucket_contents.__module__ == "app.services.s3_deletion"
+    assert not hasattr(s3_client, "delete_bucket")
+    assert not hasattr(s3_client, "delete_objects")
+    assert not hasattr(s3_client, "purge_bucket_contents")
 
 
 class FakeS3EncryptionClient:
@@ -200,7 +209,7 @@ def test_delete_objects_falls_back_to_individual_delete_on_invalid_xml_response(
 
     client = InvalidXmlDeleteClient()
 
-    deleted = s3_client._delete_objects_count(
+    deleted = s3_deletion.delete_objects_count(
         client,
         "bucket-delete",
         [
@@ -236,7 +245,7 @@ def test_delete_objects_fallback_tolerates_missing_version_after_ambiguous_batch
 
     client = PartialDeleteClient()
 
-    deleted = s3_client._delete_objects_count(
+    deleted = s3_deletion.delete_objects_count(
         client,
         "bucket-delete",
         [
@@ -291,11 +300,11 @@ def test_purge_bucket_contents_deletes_current_objects_versions_and_delete_marke
             self.delete_calls.append(objects)
             return {"Deleted": objects}
 
-    monkeypatch.setattr(s3_client, "ThreadPoolExecutor", RecordingExecutor)
+    monkeypatch.setattr(s3_deletion, "ThreadPoolExecutor", RecordingExecutor)
     client = PurgeClient()
     progress_events = []
 
-    result = s3_client.purge_bucket_contents(
+    result = s3_deletion.purge_bucket_contents(
         client,
         "bucket-purge",
         parallelism=999,
@@ -337,17 +346,17 @@ def test_purge_bucket_contents_can_delete_entries_individually_in_parallel(monke
             self.single_calls.append(kwargs)
             return {"ResponseMetadata": {"HTTPStatusCode": 204}}
 
-    original_delete_individually = s3_client._delete_objects_individually
+    original_delete_individually = s3_deletion._delete_objects_individually
     submitted_chunk_sizes: list[int] = []
 
     def recording_delete_individually(client, bucket_name, chunk, **kwargs):
         submitted_chunk_sizes.append(len(chunk))
         return original_delete_individually(client, bucket_name, chunk, **kwargs)
 
-    monkeypatch.setattr(s3_client, "_delete_objects_individually", recording_delete_individually)
+    monkeypatch.setattr(s3_deletion, "_delete_objects_individually", recording_delete_individually)
     client = PurgeClient()
 
-    result = s3_client.purge_bucket_contents(
+    result = s3_deletion.purge_bucket_contents(
         client,
         "bucket-purge",
         parallelism=3,
@@ -366,4 +375,3 @@ def test_purge_bucket_contents_can_delete_entries_individually_in_parallel(monke
         ("versioned", "v1"),
         ("versioned", "v2"),
     ]
-

@@ -32,7 +32,7 @@ from app.models.portal import (
     PortalStorageSpaceSummary,
     PortalStorageSpaceVisibility,
 )
-from app.services import s3_client
+from app.services import s3_client, s3_deletion
 from app.services.avatar_image_service import ALLOWED_AVATAR_CONTENT_TYPES, validate_avatar_image
 from app.services.portal.exceptions import PortalStorageSpaceNotEmpty
 from app.services.rgw_admin import RGWAdminError
@@ -814,7 +814,7 @@ class PortalStorageSpacesMixin:
             if bucket_exists:
                 try:
                     self.delete_bucket(user, access, bucket_name, force=False, use_root=True)
-                except s3_client.BucketNotEmptyError as exc:
+                except s3_deletion.BucketNotEmptyError as exc:
                     raise PortalStorageSpaceNotEmpty(
                         "Storage Space is not empty. Delete all current files and clean up its history before deleting it."
                     ) from exc

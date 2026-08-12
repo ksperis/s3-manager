@@ -9,7 +9,8 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.object import ListObjectsResponse, S3Object
 from app.services.aws_client_config import StorageRequestProfile
-from app.services.s3_client import delete_objects, get_s3_client
+from app.services.s3_client import get_s3_client
+from app.services.s3_deletion import delete_objects
 from app.utils.s3_endpoint import resolve_s3_client_options
 
 logger = logging.getLogger(__name__)

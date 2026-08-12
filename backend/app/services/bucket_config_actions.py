@@ -33,7 +33,7 @@ from app.models.bucket import (
 from app.utils.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.services.bucket_listing_shared import parse_includes
 from app.services.buckets_service import BucketsService
-from app.services.s3_client import BucketNotEmptyError
+from app.services.s3_deletion import BucketNotEmptyError
 
 _T = TypeVar("_T")
 

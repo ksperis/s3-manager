@@ -9,7 +9,7 @@ from typing import Optional
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.services.app_settings_service import load_app_settings
-from app.services.s3_client import purge_bucket_contents
+from app.services.s3_deletion import purge_bucket_contents
 from app.services.s3_execution_context import S3ExecutionTarget
 from ._shared import _ResolvedContext
 

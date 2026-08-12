@@ -181,12 +181,12 @@ def test_purge_service_forwards_individual_delete_strategy(monkeypatch):
         captured["client"] = client
         captured["bucket_name"] = bucket_name
         captured.update(kwargs)
-        return bucket_purge_service.s3_client.BucketContentPurgeResult(bucket_name=bucket_name)
+        return bucket_purge_service.s3_deletion.BucketContentPurgeResult(bucket_name=bucket_name)
 
     client = SimpleNamespace()
     monkeypatch.setattr(bucket_purge_service, "BucketsService", NoStatsBucketsService)
     monkeypatch.setattr(BucketPurgeService, "_build_client", lambda self, account: client)
-    monkeypatch.setattr(bucket_purge_service.s3_client, "purge_bucket_contents", fake_purge_bucket_contents)
+    monkeypatch.setattr(bucket_purge_service.s3_deletion, "purge_bucket_contents", fake_purge_bucket_contents)
 
     result = BucketPurgeService().run(
         [BucketPurgeResolvedTarget(account=SimpleNamespace(), bucket_name="bucket-a", context_id="ceph-admin-7")],

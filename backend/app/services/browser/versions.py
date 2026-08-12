@@ -10,7 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.models.browser import CleanupObjectVersionsPayload, CleanupObjectVersionsResponse
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services.s3_client import delete_objects
+from app.services.s3_deletion import delete_objects
 from app.services.s3_execution_context import S3ExecutionTarget
 
 logger = logging.getLogger(__name__)

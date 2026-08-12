@@ -62,7 +62,7 @@ from app.routers import portal_monitoring as portal_monitoring_router
 from app.routers import portal_objects as portal_objects_router
 from app.routers import portal_storage_spaces as portal_storage_spaces_router
 from app.routers import portal_usage as portal_usage_router
-from app.services import app_settings_service, s3_client
+from app.services import app_settings_service, s3_client, s3_deletion
 from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
@@ -1500,7 +1500,7 @@ def test_delete_storage_space_maps_delete_bucket_race_without_force(monkeypatch,
     def reject_delete(_user, _access, _bucket_name, *, force, use_root):
         assert force is False
         assert use_root is True
-        raise s3_client.BucketNotEmptyError("BucketNotEmpty")
+        raise s3_deletion.BucketNotEmptyError("BucketNotEmpty")
 
     monkeypatch.setattr(service, "delete_bucket", reject_delete)
     with pytest.raises(PortalStorageSpaceNotEmpty, match="not empty"):

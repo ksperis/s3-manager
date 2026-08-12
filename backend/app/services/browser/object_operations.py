@@ -23,7 +23,7 @@ from app.models.browser import (
     PresignedUrl,
     SseCustomerContext,
 )
-from app.services.s3_client import delete_objects
+from app.services.s3_deletion import delete_objects
 from app.services.s3_execution_context import S3ExecutionTarget
 
 

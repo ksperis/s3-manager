@@ -13,7 +13,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.object_diff_common import compare_object_entries
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services import s3_client
+from app.services import s3_client, s3_deletion
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
@@ -875,7 +875,7 @@ class BucketsService:
 
     def delete_bucket(self, name: str, account: S3ExecutionTarget, force: bool = False) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.delete_bucket(
+        s3_deletion.delete_bucket(
             name, force=force, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
         logger.debug("S3 execution context %s deleted bucket %s force=%s", account.rgw_account_id or account.id, name, force)

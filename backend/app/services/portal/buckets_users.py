@@ -7,7 +7,7 @@ from typing import Optional, TYPE_CHECKING
 from app.db import AccountIAMUser, AccountRole, S3Account, User
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
-from app.services import s3_client
+from app.services import s3_client, s3_deletion
 from app.services.rgw_iam import RGWIAMService
 
 if TYPE_CHECKING:
@@ -111,7 +111,7 @@ class PortalBucketsUsersMixin:
                 account=account,
             )
             access_key, secret_key = self._active_credentials(link, iam_service)
-        s3_client.delete_bucket(
+        s3_deletion.delete_bucket(
             bucket_name,
             force=force,
             access_key=access_key,

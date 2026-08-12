@@ -17,7 +17,7 @@ from app.models.portal import (
 )
 from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services import s3_client
+from app.services import s3_deletion
 
 if TYPE_CHECKING:
     from app.models.access_context import AccountAccess
@@ -116,7 +116,7 @@ class PortalStorageSpaceVersionCleanupMixin:
                 return
             check_cancel()
             items = [{"Key": key, "VersionId": version_id} for key, version_id, _size in batch]
-            s3_client._delete_objects_count(target.client, target.bucket_name, items)
+            s3_deletion.delete_objects_count(target.client, target.bucket_name, items)
             conn.executemany(
                 "DELETE FROM cleanup_versions WHERE key = ? AND version_id = ?",
                 [(key, version_id) for key, version_id, _size in batch],
@@ -132,7 +132,7 @@ class PortalStorageSpaceVersionCleanupMixin:
                 return
             check_cancel()
             items = [{"Key": key, "VersionId": version_id} for key, version_id in batch]
-            s3_client._delete_objects_count(target.client, target.bucket_name, items)
+            s3_deletion.delete_objects_count(target.client, target.bucket_name, items)
             deleted_delete_markers += len(batch)
             emit("delete", "Deleting orphan delete markers...", total_candidates_final=True)
 
