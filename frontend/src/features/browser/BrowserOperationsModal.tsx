@@ -17,45 +17,12 @@ import { DownloadIcon } from "./browserIcons";
 import { buildOperationStatusPill, operationCompletionLabel } from "./browserOperationStatus";
 import { formatBadgeCount } from "./browserUtils";
 import type {
-  CopyDetailItem,
-  CopyDetailStatus,
-  DeleteDetailItem,
-  DeleteDetailStatus,
-  DownloadDetailItem,
-  DownloadDetailStatus,
+  CopyOperationGroup,
+  DeleteOperationGroup,
+  DownloadOperationGroup,
   OperationItem,
-  UploadQueueItem,
+  UploadOperationGroup,
 } from "./browserTypes";
-
-type DownloadGroup = {
-  op: OperationItem;
-  items: DownloadDetailItem[];
-  counts: Record<DownloadDetailStatus | "total", number>;
-};
-
-type DeleteGroup = {
-  op: OperationItem;
-  items: DeleteDetailItem[];
-  counts: Record<DeleteDetailStatus | "total", number>;
-};
-
-type CopyGroup = {
-  op: OperationItem;
-  items: CopyDetailItem[];
-  counts: Record<CopyDetailStatus | "total", number>;
-};
-
-type UploadGroup = {
-  id: string;
-  label: string;
-  kind: "folder" | "files";
-  activeItems: OperationItem[];
-  completedItems: OperationItem[];
-  queuedItems: UploadQueueItem[];
-  cancelable: boolean;
-  progress: number;
-  totalBytes: number;
-};
 
 type OperationDetailsKind = "download" | "delete" | "copy" | "upload" | "other";
 
@@ -74,10 +41,10 @@ type BrowserOperationsModalProps = {
   onToggleQueued: () => void;
   onToggleCompleted: () => void;
   onToggleFailed: () => void;
-  visibleDownloadGroups: DownloadGroup[];
-  visibleDeleteGroups: DeleteGroup[];
-  visibleCopyGroups: CopyGroup[];
-  visibleUploadGroups: UploadGroup[];
+  visibleDownloadGroups: DownloadOperationGroup[];
+  visibleDeleteGroups: DeleteOperationGroup[];
+  visibleCopyGroups: CopyOperationGroup[];
+  visibleUploadGroups: UploadOperationGroup[];
   visibleOtherOperations: OperationItem[];
   operationSortIndexById: Record<string, number>;
   uploadGroupSortIndexById: Record<string, number>;
@@ -270,7 +237,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     visibleOtherOperations,
     visibleUploadGroups,
   ]);
-  const renderDownloadGroup = (group: DownloadGroup) => {
+  const renderDownloadGroup = (group: DownloadOperationGroup) => {
     const queuedItems = group.items.filter((item) => item.status === "queued");
     const activeItems = group.items.filter((item) => item.status === "downloading");
     const completedItems = group.items.filter((item) => item.status === "done" || item.status === "cancelled");
@@ -438,7 +405,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     );
   };
 
-  const renderDeleteGroup = (group: DeleteGroup) => {
+  const renderDeleteGroup = (group: DeleteOperationGroup) => {
     const queuedItems = group.items.filter((item) => item.status === "queued");
     const activeItems = group.items.filter((item) => item.status === "deleting");
     const completedItems = group.items.filter(
@@ -598,7 +565,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     );
   };
 
-  const renderCopyGroup = (group: CopyGroup) => {
+  const renderCopyGroup = (group: CopyOperationGroup) => {
     const queuedItems = group.items.filter((item) => item.status === "queued");
     const activeItems = group.items.filter((item) => item.status === "copying");
     const completedItems = group.items.filter(
@@ -768,7 +735,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     );
   };
 
-  const renderUploadGroup = (group: UploadGroup) => {
+  const renderUploadGroup = (group: UploadOperationGroup) => {
     const activeCount = group.activeItems.length;
     const queuedCount = group.queuedItems.length;
     const completedItems = group.completedItems.filter((item) => item.completionStatus !== "failed");

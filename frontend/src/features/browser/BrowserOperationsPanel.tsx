@@ -14,45 +14,12 @@ import { ChevronDownIcon, DownloadIcon, InfoIcon, XIcon } from "./browserIcons";
 import { buildOperationStatusPill, operationCompletionLabel } from "./browserOperationStatus";
 import { formatBadgeCount } from "./browserUtils";
 import type {
-  CopyDetailItem,
-  CopyDetailStatus,
-  DeleteDetailItem,
-  DeleteDetailStatus,
-  DownloadDetailItem,
-  DownloadDetailStatus,
+  CopyOperationGroup,
+  DeleteOperationGroup,
+  DownloadOperationGroup,
   OperationItem,
-  UploadQueueItem,
+  UploadOperationGroup,
 } from "./browserTypes";
-
-type DownloadGroup = {
-  op: OperationItem;
-  items: DownloadDetailItem[];
-  counts: Record<DownloadDetailStatus | "total", number>;
-};
-
-type DeleteGroup = {
-  op: OperationItem;
-  items: DeleteDetailItem[];
-  counts: Record<DeleteDetailStatus | "total", number>;
-};
-
-type CopyGroup = {
-  op: OperationItem;
-  items: CopyDetailItem[];
-  counts: Record<CopyDetailStatus | "total", number>;
-};
-
-type UploadGroup = {
-  id: string;
-  label: string;
-  kind: "folder" | "files";
-  activeItems: OperationItem[];
-  completedItems: OperationItem[];
-  queuedItems: UploadQueueItem[];
-  cancelable: boolean;
-  progress: number;
-  totalBytes: number;
-};
 
 type BrowserOperationsPanelProps = {
   open: boolean;
@@ -61,10 +28,10 @@ type BrowserOperationsPanelProps = {
   queuedOperationsCount: number;
   completedOperationsCount: number;
   failedOperationsCount: number;
-  downloadGroups: DownloadGroup[];
-  deleteGroups: DeleteGroup[];
-  copyGroups: CopyGroup[];
-  uploadGroups: UploadGroup[];
+  downloadGroups: DownloadOperationGroup[];
+  deleteGroups: DeleteOperationGroup[];
+  copyGroups: CopyOperationGroup[];
+  uploadGroups: UploadOperationGroup[];
   otherOperations: OperationItem[];
   operationSortIndexById: Record<string, number>;
   uploadGroupSortIndexById: Record<string, number>;
@@ -80,10 +47,10 @@ type BrowserOperationsPanelProps = {
 };
 
 type PanelEntry =
-  | { key: string; type: "download"; group: DownloadGroup }
-  | { key: string; type: "delete"; group: DeleteGroup }
-  | { key: string; type: "copy"; group: CopyGroup }
-  | { key: string; type: "upload"; group: UploadGroup }
+  | { key: string; type: "download"; group: DownloadOperationGroup }
+  | { key: string; type: "delete"; group: DeleteOperationGroup }
+  | { key: string; type: "copy"; group: CopyOperationGroup }
+  | { key: string; type: "upload"; group: UploadOperationGroup }
   | { key: string; type: "other"; op: OperationItem };
 
 type OperationRowProps = {

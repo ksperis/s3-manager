@@ -118,6 +118,36 @@ export type CopyDetailItem = {
   errorMessage?: string;
 };
 
+export type DownloadOperationGroup = {
+  op: OperationItem;
+  items: DownloadDetailItem[];
+  counts: Record<DownloadDetailStatus | "total", number>;
+};
+
+export type DeleteOperationGroup = {
+  op: OperationItem;
+  items: DeleteDetailItem[];
+  counts: Record<DeleteDetailStatus | "total", number>;
+};
+
+export type CopyOperationGroup = {
+  op: OperationItem;
+  items: CopyDetailItem[];
+  counts: Record<CopyDetailStatus | "total", number>;
+};
+
+export type UploadOperationGroup = {
+  id: string;
+  label: string;
+  kind: "folder" | "files";
+  activeItems: OperationItem[];
+  completedItems: OperationItem[];
+  queuedItems: UploadQueueItem[];
+  cancelable: boolean;
+  progress: number;
+  totalBytes: number;
+};
+
 export type BulkMetadataDraft = {
   contentType: string;
   cacheControl: string;

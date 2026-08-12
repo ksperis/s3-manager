@@ -139,6 +139,13 @@ import {
 import BrowserContextMenu from "./BrowserContextMenu";
 import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
 import {
+  buildCopyOperationGroups,
+  buildDeleteOperationGroups,
+  buildDownloadOperationGroups,
+  buildUploadOperationGroups,
+  summarizeDetailOperationGroups,
+} from "./browserOperationGroups";
+import {
   buildBrowserFolderDownloadPlan,
   downloadBrowserFolderArchive,
   resolveBrowserFolderArchiveLabel,
@@ -9765,176 +9772,32 @@ export default function BrowserPage({
     () => operations.filter((op) => !op.completedAt),
     [operations],
   );
-  const uploadGroups = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        id: string;
-        label: string;
-        kind: "folder" | "files";
-        activeItems: OperationItem[];
-        completedItems: OperationItem[];
-        queuedItems: UploadQueueItem[];
-        cancelable: boolean;
-        progress: number;
-        totalBytes: number;
-      }
-    >();
-    operations
-      .filter((op) => op.kind === "upload")
-      .forEach((op) => {
-        const groupId = op.groupId ?? op.id;
-        const label = op.groupLabel ?? "Files";
-        const kind = op.groupKind ?? "files";
-        const existing = groups.get(groupId);
-        const isCompleted = Boolean(op.completedAt);
-        if (existing) {
-          if (isCompleted) {
-            existing.completedItems.push(op);
-          } else {
-            existing.activeItems.push(op);
-          }
-          existing.cancelable = existing.cancelable || Boolean(op.cancelable);
-        } else {
-          groups.set(groupId, {
-            id: groupId,
-            label,
-            kind,
-            activeItems: isCompleted ? [] : [op],
-            completedItems: isCompleted ? [op] : [],
-            queuedItems: [],
-            cancelable: Boolean(op.cancelable),
-            progress: 0,
-            totalBytes: 0,
-          });
-        }
-      });
-    uploadQueue.forEach((item) => {
-      const existing = groups.get(item.groupId);
-      if (existing) {
-        existing.queuedItems.push(item);
-      } else {
-        groups.set(item.groupId, {
-          id: item.groupId,
-          label: item.groupLabel,
-          kind: item.groupKind,
-          activeItems: [],
-          completedItems: [],
-          queuedItems: [item],
-          cancelable: false,
-          progress: 0,
-          totalBytes: 0,
-        });
-      }
-    });
-    return Array.from(groups.values()).map((group) => {
-      const activeBytes = group.activeItems.reduce(
-        (sum, item) => sum + (item.sizeBytes ?? 0),
-        0,
-      );
-      const completedBytes = group.completedItems.reduce(
-        (sum, item) => sum + (item.sizeBytes ?? 0),
-        0,
-      );
-      const queuedBytes = group.queuedItems.reduce(
-        (sum, item) => sum + item.file.size,
-        0,
-      );
-      const totalBytes = activeBytes + completedBytes + queuedBytes;
-      const loadedBytes = group.activeItems.reduce((sum, item) => {
-        const size = item.sizeBytes ?? 0;
-        const progress = Math.min(100, Math.max(0, item.progress));
-        return sum + (size * progress) / 100;
-      }, 0);
-      const completedLoadedBytes = completedBytes;
-      const totalLoadedBytes = loadedBytes + completedLoadedBytes;
-      const progress =
-        totalBytes > 0 ? Math.round((totalLoadedBytes / totalBytes) * 100) : 0;
-      return { ...group, progress, totalBytes };
-    });
-  }, [operations, uploadQueue]);
-  const downloadGroups = useMemo(() => {
-    return operations
-      .filter((op) => op.kind === "download")
-      .map((op) => {
-        const items = downloadDetails[op.id] ?? [];
-        const counts = items.reduce(
-          (acc, item) => {
-            acc.total += 1;
-            acc[item.status] += 1;
-            return acc;
-          },
-          {
-            total: 0,
-            queued: 0,
-            downloading: 0,
-            done: 0,
-            failed: 0,
-            cancelled: 0,
-          } as Record<DownloadDetailStatus | "total", number>,
-        );
-        return { op, items, counts };
-      });
-  }, [downloadDetails, operations]);
-  const deleteGroups = useMemo(() => {
-    return operations
-      .filter((op) => op.kind === "delete")
-      .map((op) => {
-        const items = deleteDetails[op.id] ?? [];
-        const counts = items.reduce(
-          (acc, item) => {
-            acc.total += 1;
-            acc[item.status] += 1;
-            return acc;
-          },
-          {
-            total: 0,
-            queued: 0,
-            deleting: 0,
-            done: 0,
-            failed: 0,
-            cancelled: 0,
-          } as Record<DeleteDetailStatus | "total", number>,
-        );
-        return { op, items, counts };
-      });
-  }, [deleteDetails, operations]);
-  const copyGroups = useMemo(() => {
-    return operations
-      .filter((op) => op.kind === "copy")
-      .map((op) => {
-        const items = copyDetails[op.id] ?? [];
-        const counts = items.reduce(
-          (acc, item) => {
-            acc.total += 1;
-            acc[item.status] += 1;
-            return acc;
-          },
-          {
-            total: 0,
-            queued: 0,
-            copying: 0,
-            done: 0,
-            failed: 0,
-            cancelled: 0,
-          } as Record<
-            CopyDetailStatus | "total",
-            number
-          >,
-        );
-        return { op, items, counts };
-      });
-  }, [copyDetails, operations]);
-  const queuedDownloadCount = useMemo(
-    () => downloadGroups.reduce((sum, group) => sum + group.counts.queued, 0),
+  const uploadGroups = useMemo(
+    () => buildUploadOperationGroups(operations, uploadQueue),
+    [operations, uploadQueue],
+  );
+  const downloadGroups = useMemo(
+    () => buildDownloadOperationGroups(operations, downloadDetails),
+    [downloadDetails, operations],
+  );
+  const deleteGroups = useMemo(
+    () => buildDeleteOperationGroups(operations, deleteDetails),
+    [deleteDetails, operations],
+  );
+  const copyGroups = useMemo(
+    () => buildCopyOperationGroups(operations, copyDetails),
+    [copyDetails, operations],
+  );
+  const downloadSummary = useMemo(
+    () => summarizeDetailOperationGroups(downloadGroups),
     [downloadGroups],
   );
-  const queuedDeleteCount = useMemo(
-    () => deleteGroups.reduce((sum, group) => sum + group.counts.queued, 0),
+  const deleteSummary = useMemo(
+    () => summarizeDetailOperationGroups(deleteGroups),
     [deleteGroups],
   );
-  const queuedCopyCount = useMemo(
-    () => copyGroups.reduce((sum, group) => sum + group.counts.queued, 0),
+  const copySummary = useMemo(
+    () => summarizeDetailOperationGroups(copyGroups),
     [copyGroups],
   );
   const failedUploadCount = useMemo(
@@ -9943,42 +9806,6 @@ export default function BrowserPage({
         (op) => op.kind === "upload" && op.completionStatus === "failed",
       ).length,
     [operations],
-  );
-  const failedDownloadCount = useMemo(
-    () =>
-      downloadGroups.reduce((sum, group) => {
-        const failedItems = group.items.filter(
-          (item) => item.status === "failed",
-        ).length;
-        const fallback =
-          failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
-        return sum + failedItems + fallback;
-      }, 0),
-    [downloadGroups],
-  );
-  const failedDeleteCount = useMemo(
-    () =>
-      deleteGroups.reduce((sum, group) => {
-        const failedItems = group.items.filter(
-          (item) => item.status === "failed",
-        ).length;
-        const fallback =
-          failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
-        return sum + failedItems + fallback;
-      }, 0),
-    [deleteGroups],
-  );
-  const failedCopyCount = useMemo(
-    () =>
-      copyGroups.reduce((sum, group) => {
-        const failedItems = group.items.filter(
-          (item) => item.status === "failed",
-        ).length;
-        const fallback =
-          failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
-        return sum + failedItems + fallback;
-      }, 0),
-    [copyGroups],
   );
   const failedOtherOperations = useMemo(
     () =>
@@ -9995,9 +9822,9 @@ export default function BrowserPage({
   const totalOperationsCount =
     activeOperations.length +
     uploadQueue.length +
-    queuedDownloadCount +
-    queuedDeleteCount +
-    queuedCopyCount;
+    downloadSummary.queued +
+    deleteSummary.queued +
+    copySummary.queued;
   const hasPendingOperations = totalOperationsCount > 0;
   const leaveMessage =
     "Operations are in progress (upload, download, copy, delete). Leaving now may interrupt them. Continue?";
@@ -10014,54 +9841,6 @@ export default function BrowserPage({
           op.completionStatus !== "failed",
       ).length,
     [operations],
-  );
-  const completedDownloadCount = useMemo(
-    () =>
-      downloadGroups.reduce((sum, group) => {
-        const completedItems = group.items.filter(
-          (item) => item.status === "done" || item.status === "cancelled",
-        ).length;
-        const fallback =
-          completedItems === 0 &&
-          group.op.completedAt &&
-          group.op.completionStatus !== "failed"
-            ? 1
-            : 0;
-        return sum + completedItems + fallback;
-      }, 0),
-    [downloadGroups],
-  );
-  const completedDeleteCount = useMemo(
-    () =>
-      deleteGroups.reduce((sum, group) => {
-        const completedItems = group.items.filter(
-          (item) => item.status === "done" || item.status === "cancelled",
-        ).length;
-        const fallback =
-          completedItems === 0 &&
-          group.op.completedAt &&
-          group.op.completionStatus !== "failed"
-            ? 1
-            : 0;
-        return sum + completedItems + fallback;
-      }, 0),
-    [deleteGroups],
-  );
-  const completedCopyCount = useMemo(
-    () =>
-      copyGroups.reduce((sum, group) => {
-        const completedItems = group.items.filter(
-          (item) => item.status === "done" || item.status === "cancelled",
-        ).length;
-        const fallback =
-          completedItems === 0 &&
-          group.op.completedAt &&
-          group.op.completionStatus !== "failed"
-            ? 1
-            : 0;
-        return sum + completedItems + fallback;
-      }, 0),
-    [copyGroups],
   );
   const completedOtherOperations = useMemo(
     () =>
@@ -10089,15 +9868,15 @@ export default function BrowserPage({
   }, [hasPendingOperations, leaveMessage]);
   const failedOperationsCount =
     failedUploadCount +
-    failedDownloadCount +
-    failedDeleteCount +
-    failedCopyCount +
+    downloadSummary.failed +
+    deleteSummary.failed +
+    copySummary.failed +
     failedOtherOperations.length;
   const completedOperationsCount =
     completedUploadCount +
-    completedDownloadCount +
-    completedDeleteCount +
-    completedCopyCount +
+    downloadSummary.completed +
+    deleteSummary.completed +
+    copySummary.completed +
     completedOtherOperations.length;
   const operationsPanelTotalCount =
     totalOperationsCount + completedOperationsCount + failedOperationsCount;
@@ -13703,9 +13482,9 @@ export default function BrowserPage({
           activeOperationsCount={activeOperations.length}
           queuedOperationsCount={
             uploadQueue.length +
-            queuedDownloadCount +
-            queuedDeleteCount +
-            queuedCopyCount
+            downloadSummary.queued +
+            deleteSummary.queued +
+            copySummary.queued
           }
           completedOperationsCount={completedOperationsCount}
           failedOperationsCount={failedOperationsCount}
@@ -13737,9 +13516,9 @@ export default function BrowserPage({
           activeOperationsCount={activeOperations.length}
           queuedOperationsCount={
             uploadQueue.length +
-            queuedDownloadCount +
-            queuedDeleteCount +
-            queuedCopyCount
+            downloadSummary.queued +
+            deleteSummary.queued +
+            copySummary.queued
           }
           completedOperationsCount={completedOperationsCount}
           failedOperationsCount={failedOperationsCount}
