@@ -47,6 +47,8 @@ def test_bucket_compare_types_are_owned_by_dedicated_module():
     assert not hasattr(buckets_service_module, "_BucketCompareObjectEntry")
     assert not hasattr(buckets_service_module, "_BucketCompareObjectIndex")
     assert not hasattr(buckets_service_module, "BucketCompareRemediationResult")
+    assert not hasattr(buckets_service_module.BucketsService, "_stable_compare_value")
+    assert not hasattr(buckets_service_module.BucketsService, "_normalize_tags_for_compare")
 
 
 def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
