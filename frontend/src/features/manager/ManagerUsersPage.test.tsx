@@ -275,6 +275,7 @@ describe("ManagerUsersPage", () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [{ id: "acc-1", kind: "account", display_name: "Tenant account", endpoint_name: "Default" }],
       selectedS3AccountId: "acc-1",
+      selectedS3AccountName: "Tenant account",
       selectedS3AccountType: "tenant",
       accountIdForApi: "acc-1",
       requiresS3AccountSelection: true,
@@ -294,7 +295,7 @@ describe("ManagerUsersPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create my private access" }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByLabelText("Connection name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Connection name")).toHaveValue("Tenant account private access");
     expect(screen.queryByLabelText(/IAM user/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/secret/i)).not.toBeInTheDocument();
   });

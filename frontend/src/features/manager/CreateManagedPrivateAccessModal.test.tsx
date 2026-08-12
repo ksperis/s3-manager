@@ -45,6 +45,7 @@ describe("CreateManagedPrivateAccessModal", () => {
       <CreateManagedPrivateAccessModal
         variant="iam"
         accountId="acc-7"
+        contextName="account-test"
         groups={[{ name: "readers" }]}
         policies={[{ name: "ReadOnly", arn: "arn:policy:readonly" }]}
         onClose={onClose}
@@ -58,6 +59,7 @@ describe("CreateManagedPrivateAccessModal", () => {
     expect(screen.queryByLabelText(/IAM user/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/access key/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/secret/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Connection name")).toHaveValue("account-test private access");
     await waitFor(() => expect(screen.getByLabelText("Connection name")).toHaveFocus());
 
     await user.clear(screen.getByLabelText("Connection name"));
@@ -127,6 +129,7 @@ describe("CreateManagedPrivateAccessModal", () => {
       <CreateManagedPrivateAccessModal
         variant="rgw_user"
         accountId="s3u-9"
+        contextName="rgw-user-test"
         onClose={vi.fn()}
         onCreated={vi.fn()}
       />
@@ -137,6 +140,7 @@ describe("CreateManagedPrivateAccessModal", () => {
     expect(screen.queryByText("Inline policies")).not.toBeInTheDocument();
     expect(screen.getByText(/new access key for this RGW user/i)).toBeInTheDocument();
     expect(screen.getByText("Advanced configuration").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByLabelText("Connection name")).toHaveValue("rgw-user-test private access");
     await user.clear(screen.getByLabelText("Connection name"));
     await user.type(screen.getByLabelText("Connection name"), "Personal RGW");
     await user.click(screen.getByRole("button", { name: "Create my private access" }));

@@ -30,6 +30,7 @@ function buildContext(overrides?: Record<string, unknown>) {
   return {
     hasS3AccountContext: true,
     accountIdForApi: "s3u-11",
+    selectedS3AccountName: "RGW user test",
     selectedS3AccountType: "s3_user",
     managerCephKeysEnabled: true,
     accessMode: "s3_user",
@@ -114,7 +115,7 @@ describe("ManagerCephKeysPage", () => {
     expect(screen.getByText("Inactive")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create my private access" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByLabelText("Connection name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Connection name")).toHaveValue("RGW user test private access");
     expect(screen.queryByText("IAM groups")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/secret/i)).not.toBeInTheDocument();
   });

@@ -49,6 +49,7 @@ export default function ManagerUsersPage() {
 
   const {
     selectedS3AccountType,
+    selectedS3AccountName,
     accountIdForApi,
     requiresS3AccountSelection,
     accessMode,
@@ -806,6 +807,7 @@ export default function ManagerUsersPage() {
         <CreateManagedPrivateAccessModal
           variant="iam"
           accountId={accountIdForApi}
+          contextName={selectedS3AccountName}
           groups={groups}
           policies={policies}
           onClose={() => setShowPrivateAccessModal(false)}

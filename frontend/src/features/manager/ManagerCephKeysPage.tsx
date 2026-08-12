@@ -46,6 +46,7 @@ export default function ManagerCephKeysPage() {
   const {
     hasS3AccountContext,
     accountIdForApi,
+    selectedS3AccountName,
     selectedS3AccountType,
     managerCephKeysEnabled,
     managerPrivateAccessEnabled,
@@ -306,6 +307,7 @@ export default function ManagerCephKeysPage() {
         <CreateManagedPrivateAccessModal
           variant="rgw_user"
           accountId={accountIdForApi}
+          contextName={selectedS3AccountName}
           onClose={() => setShowPrivateAccessModal(false)}
           onCreated={(name) => {
             setActionMessage(`Private connection ${name} created without exposing its secret.`);

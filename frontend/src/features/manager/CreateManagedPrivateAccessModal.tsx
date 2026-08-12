@@ -27,6 +27,7 @@ const AMAZON_S3_FULL_ACCESS_POLICY_ARN = "arn:aws:iam::aws:policy/AmazonS3FullAc
 type Props = {
   variant: "iam" | "rgw_user";
   accountId: S3AccountSelector;
+  contextName?: string | null;
   groups?: IAMGroup[];
   policies?: IamPolicy[];
   onClose: () => void;
@@ -36,13 +37,17 @@ type Props = {
 export default function CreateManagedPrivateAccessModal({
   variant,
   accountId,
+  contextName,
   groups = [],
   policies = [],
   onClose,
   onCreated,
 }: Props) {
   const connectionNameRef = useRef<HTMLInputElement | null>(null);
-  const [connectionName, setConnectionName] = useState("My private access");
+  const [connectionName, setConnectionName] = useState(() => {
+    const normalizedContextName = contextName?.trim();
+    return normalizedContextName ? `${normalizedContextName} private access` : "My private access";
+  });
   const [accessBrowser, setAccessBrowser] = useState(true);
   const [accessManager, setAccessManager] = useState(false);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);

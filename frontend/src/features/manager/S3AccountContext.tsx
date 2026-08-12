@@ -21,6 +21,7 @@ type S3AccountContextType = {
   hasS3AccountContext: boolean;
   accountIdForApi: S3AccountSelector;
   sessionS3AccountName: string | null;
+  selectedS3AccountName: string | null;
   selectedS3AccountType: string | null;
   accessError?: string | null;
   iamIdentity: string | null;
@@ -42,6 +43,7 @@ const S3AccountContext = createContext<S3AccountContextType>({
   hasS3AccountContext: false,
   accountIdForApi: null,
   sessionS3AccountName: null,
+  selectedS3AccountName: null,
   selectedS3AccountType: null,
   accessError: null,
   iamIdentity: null,
@@ -201,6 +203,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
 
   const hasS3AccountContext = requiresS3AccountSelection ? selectedS3AccountId !== null && selectedS3Account !== undefined : true;
   const accountIdForApi: S3AccountSelector = requiresS3AccountSelection ? selectedS3AccountId : null;
+  const selectedS3AccountName = selectedS3Account?.display_name ?? sessionInfo.accountName;
   const selectedS3AccountType = deriveS3AccountType(selectedS3Account);
 
   useEffect(() => {
@@ -264,6 +267,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         hasS3AccountContext,
         accountIdForApi,
         sessionS3AccountName: sessionInfo.accountName,
+        selectedS3AccountName,
         selectedS3AccountType,
         accessError,
         iamIdentity,
