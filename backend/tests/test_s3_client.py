@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError, ParamValidationError
 from botocore.parsers import ResponseParserError
 from concurrent.futures import ThreadPoolExecutor
 
-from app.services import s3_client, s3_deletion
+from app.services import s3_bucket_replication, s3_client, s3_deletion
 
 
 class FakeS3PublicAccessClient:
@@ -26,6 +26,15 @@ def test_s3_deletion_owns_destructive_contracts_without_legacy_exports():
     assert not hasattr(s3_client, "delete_bucket")
     assert not hasattr(s3_client, "delete_objects")
     assert not hasattr(s3_client, "purge_bucket_contents")
+
+
+def test_s3_bucket_replication_owns_replication_contracts_without_legacy_exports():
+    assert s3_bucket_replication.get_bucket_replication.__module__ == "app.services.s3_bucket_replication"
+    assert s3_bucket_replication.put_bucket_replication.__module__ == "app.services.s3_bucket_replication"
+    assert s3_bucket_replication.delete_bucket_replication.__module__ == "app.services.s3_bucket_replication"
+    assert not hasattr(s3_client, "get_bucket_replication")
+    assert not hasattr(s3_client, "put_bucket_replication")
+    assert not hasattr(s3_client, "delete_bucket_replication")
 
 
 class FakeS3EncryptionClient:
@@ -120,9 +129,9 @@ def test_get_bucket_replication_returns_configuration(monkeypatch):
                 }
             }
 
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: FakeReplicationClient())
+    monkeypatch.setattr(s3_bucket_replication, "get_s3_client", lambda *args, **kwargs: FakeReplicationClient())
 
-    config = s3_client.get_bucket_replication("bucket-repl")
+    config = s3_bucket_replication.get_bucket_replication("bucket-repl")
 
     assert config == {
         "Role": "arn:aws:iam::123456789012:role/replication",
@@ -138,9 +147,9 @@ def test_get_bucket_replication_returns_empty_when_missing(monkeypatch):
                 "GetBucketReplication",
             )
 
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: MissingReplicationClient())
+    monkeypatch.setattr(s3_bucket_replication, "get_s3_client", lambda *args, **kwargs: MissingReplicationClient())
 
-    config = s3_client.get_bucket_replication("bucket-repl")
+    config = s3_bucket_replication.get_bucket_replication("bucket-repl")
 
     assert config == {}
 
@@ -154,13 +163,13 @@ def test_put_bucket_replication_sends_configuration(monkeypatch):
             self.calls.append(kwargs)
 
     fake_client = FakeReplicationClient()
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: fake_client)
+    monkeypatch.setattr(s3_bucket_replication, "get_s3_client", lambda *args, **kwargs: fake_client)
 
     configuration = {
         "Role": "arn:aws:iam::123456789012:role/replication",
         "Rules": [{"ID": "rule-1", "Status": "Enabled", "Destination": {"Bucket": "arn:aws:s3:::target"}}],
     }
-    s3_client.put_bucket_replication("bucket-repl", configuration=configuration)
+    s3_bucket_replication.put_bucket_replication("bucket-repl", configuration=configuration)
 
     assert fake_client.calls == [{"Bucket": "bucket-repl", "ReplicationConfiguration": configuration}]
 
@@ -170,10 +179,10 @@ def test_put_bucket_replication_maps_param_validation_to_value_error(monkeypatch
         def put_bucket_replication(self, **kwargs):
             raise ParamValidationError(report="bad payload")
 
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: InvalidReplicationClient())
+    monkeypatch.setattr(s3_bucket_replication, "get_s3_client", lambda *args, **kwargs: InvalidReplicationClient())
 
     try:
-        s3_client.put_bucket_replication("bucket-repl", configuration={"Rules": []})
+        s3_bucket_replication.put_bucket_replication("bucket-repl", configuration={"Rules": []})
     except ValueError as exc:
         assert "Invalid bucket replication configuration" in str(exc)
     else:
@@ -188,9 +197,9 @@ def test_delete_bucket_replication_is_idempotent_when_missing(monkeypatch):
                 "DeleteBucketReplication",
             )
 
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: MissingReplicationClient())
+    monkeypatch.setattr(s3_bucket_replication, "get_s3_client", lambda *args, **kwargs: MissingReplicationClient())
 
-    s3_client.delete_bucket_replication("bucket-repl")
+    s3_bucket_replication.delete_bucket_replication("bucket-repl")
 
 
 def test_delete_objects_falls_back_to_individual_delete_on_invalid_xml_response():

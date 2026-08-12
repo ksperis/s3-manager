@@ -13,7 +13,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.object_diff_common import compare_object_entries
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services import s3_client, s3_deletion
+from app.services import s3_bucket_replication, s3_client, s3_deletion
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
@@ -1589,7 +1589,7 @@ class BucketsService:
 
     def get_bucket_replication(self, name: str, account: S3ExecutionTarget) -> BucketReplicationConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        config = s3_client.get_bucket_replication(
+        config = s3_bucket_replication.get_bucket_replication(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1619,7 +1619,7 @@ class BucketsService:
     ) -> BucketReplicationConfiguration:
         configuration = self._validate_bucket_replication_configuration(payload.configuration)
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_replication(
+        s3_bucket_replication.put_bucket_replication(
             name,
             configuration=configuration,
             access_key=access_key,
@@ -1630,7 +1630,7 @@ class BucketsService:
 
     def delete_bucket_replication(self, name: str, account: S3ExecutionTarget) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.delete_bucket_replication(
+        s3_bucket_replication.delete_bucket_replication(
             name,
             access_key=access_key,
             secret_key=secret_key,
