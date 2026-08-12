@@ -1,7 +1,9 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { axe } from "jest-axe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import { LanguageProvider } from "../../components/language";
 import PortalAccessKeysPage from "./PortalAccessKeysPage";
 import type { PortalAccessKeysState } from "../../api/portal";
 
@@ -54,18 +56,20 @@ vi.mock("../../api/portal", () => ({
 
 function renderPage(initialEntry = "/portal/access-keys") {
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <PortalAccessKeysPage />
-    </MemoryRouter>
+    <LanguageProvider>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <PortalAccessKeysPage />
+      </MemoryRouter>
+    </LanguageProvider>
   );
 }
 
 async function openSetupDialog(user: ReturnType<typeof userEvent.setup>) {
-  if (!screen.queryByRole("button", { name: "Download setup" })) {
+  if (!screen.queryByRole("button", { name: "Configure a tool" })) {
     await user.click(screen.getByRole("tab", { name: "Connect tool" }));
   }
-  await user.click(await screen.findByRole("button", { name: "Download setup" }));
-  return screen.getByRole("dialog", { name: "Download setup details" });
+  await user.click(await screen.findByRole("button", { name: "Configure a tool" }));
+  return screen.getByRole("dialog", { name: "Connect a tool" });
 }
 
 function getCreateWorkflowPage(): HTMLElement {
@@ -134,15 +138,20 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(await screen.findByText("AK-USER")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Connect tool" }));
-    expect(screen.getByRole("heading", { name: "Connect an external S3 tool" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Before connecting a tool" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Connect a tool" })).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    expect(screen.getByText(/Use external-tool access only when someone cannot work through Portal sharing/i)).toBeInTheDocument();
-    expect(screen.getByText("1. Select access")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Download setup" })).toBeInTheDocument();
-    expect(screen.queryByText("Manual setup details")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Portal sharing/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("1. Select access")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configure a tool" })).toBeInTheDocument();
     const setupDialog = await openSetupDialog(user);
-    expect(within(setupDialog).getByText("Manual setup details")).toBeInTheDocument();
+    expect(within(setupDialog).getByRole("heading", { name: "Connection" })).toBeInTheDocument();
+    expect(within(setupDialog).getByRole("combobox", { name: "Access used" })).toHaveDisplayValue(
+      "Myself · created June 10 · …USER"
+    );
+    const advanced = within(setupDialog).getByText("Advanced tools and manual setup").closest("details");
+    expect(advanced).not.toHaveAttribute("open");
+    expect(await axe(setupDialog)).toHaveNoViolations();
+    await user.click(within(setupDialog).getByRole("button", { name: "Close modal" }));
 
     await user.click(screen.getByRole("tab", { name: "Tool access (1)" }));
     expect(await screen.findByText("AK-USER")).toBeInTheDocument();
@@ -150,9 +159,31 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.getByText("AK-USER").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(screen.getByRole("button", { name: "Disable" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
-    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+    const connectButton = screen.getByRole("button", { name: "Connect Myself · created June 10 · …USER" });
+    expect(connectButton).toBeEnabled();
+    await user.click(connectButton);
+    expect(screen.getByRole("dialog", { name: "Connect a tool" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Connect a tool" })).not.toBeInTheDocument();
+    expect(connectButton).toHaveFocus();
     expect(screen.getByRole("button", { name: "New tool access" })).toBeEnabled();
     expect(mocks.fetchPortalAccessKeysState).toHaveBeenCalledWith("101");
+  });
+
+  it.each([
+    { language: "fr", name: "Fermer la fenêtre", text: "Fermer" },
+    { language: "de", name: "Dialog schließen", text: "Schließen" },
+  ])("localizes the modal close action in $language", async ({ language, name, text }) => {
+    window.localStorage.setItem("user", JSON.stringify({ ui_language: language }));
+    renderPage();
+
+    const connectTabName = language === "fr" ? "Connecter un outil" : "Werkzeug verbinden";
+    const configureName = language === "fr" ? "Configurer un outil" : "Werkzeug konfigurieren";
+    await userEvent.click(await screen.findByRole("tab", { name: connectTabName }));
+    await userEvent.click(screen.getByRole("button", { name: configureName }));
+
+    const closeButton = screen.getByRole("button", { name });
+    expect(closeButton).toHaveTextContent(text);
   });
 
   it("uses the canonical activity flag instead of the status label", async () => {
@@ -170,53 +201,95 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByRole("button", { name: "Enable" })).toBeInTheDocument();
   });
 
-  it("shows the starter guide only before the first tool access and lets users dismiss it", async () => {
+  it("shows an actionable empty state when no active tool access exists", async () => {
     mocks.state = { ...mocks.state, access_keys: [] };
-    mocks.listPortalStorageSpaces.mockResolvedValue([]);
     const user = userEvent.setup();
     renderPage();
 
     await user.click(await screen.findByRole("tab", { name: "Connect tool" }));
-    expect(await screen.findByRole("heading", { name: "Before connecting a tool" })).toBeInTheDocument();
-    expect(screen.getByText("Use Portal sharing when a collaborator can sign in. Use tool access for apps, scripts, or partners that need a direct storage client.")).toBeInTheDocument();
-    expect(screen.getByText("1. Pick the space")).toBeInTheDocument();
+    const setupDialog = await openSetupDialog(user);
+    expect(within(setupDialog).getByRole("heading", { name: "Create an active tool access first" })).toBeInTheDocument();
+    await user.click(within(setupDialog).getByRole("button", { name: "Create tool access" }));
 
-    await user.click(screen.getByRole("button", { name: "Dismiss guide" }));
-
-    expect(screen.queryByRole("heading", { name: "Before connecting a tool" })).not.toBeInTheDocument();
-    expect(window.localStorage.getItem("portal.access-keys.start-guide.dismissed.101")).toBe("1");
+    const workflow = getCreateWorkflowPage();
+    expect(within(workflow).getByText(/prefer sharing the Space there/i)).toBeInTheDocument();
   });
 
-  it("does not repeat the starter guide once a space exists", async () => {
-    mocks.state = { ...mocks.state, access_keys: [] };
+  it("shows an actionable empty state when a personal access has no Space", async () => {
+    mocks.listPortalStorageSpaces.mockResolvedValue([]);
     renderPage();
 
-    await userEvent.click(await screen.findByRole("tab", { name: "Connect tool" }));
-    expect(await screen.findByRole("heading", { name: "Connect an external S3 tool" })).toBeInTheDocument();
-    await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
+    const setupDialog = await openSetupDialog(userEvent.setup());
+    expect(await within(setupDialog).findByRole("heading", { name: "Create a Space to continue" })).toBeInTheDocument();
+    const createSpaceLink = within(setupDialog).getByRole("link", { name: "Create a Space" });
 
-    expect(screen.queryByRole("heading", { name: "Before connecting a tool" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Download setup" })).toBeInTheDocument();
+    expect(createSpaceLink).toHaveAttribute("href", "/portal/storage-spaces?create=1");
   });
 
-  it("downloads generic and Cyberduck connection details without a secret", async () => {
+  it("shows Space loading and error states without presenting unusable application actions", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let rejectSpaces: ((reason: Error) => void) | undefined;
+    mocks.listPortalStorageSpaces.mockImplementation(
+      () => new Promise((_, reject) => { rejectSpaces = reject; })
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    const setupDialog = await openSetupDialog(user);
+    expect(within(setupDialog).getByRole("option", { name: "Loading..." })).toBeInTheDocument();
+    expect(within(setupDialog).queryByRole("heading", { name: "Choose your application" })).not.toBeInTheDocument();
+
+    await act(async () => rejectSpaces?.(new Error("Space service unavailable")));
+
+    expect(await within(setupDialog).findByText("Space service unavailable")).toBeInTheDocument();
+    expect(within(setupDialog).queryByRole("heading", { name: "Choose your application" })).not.toBeInTheDocument();
+  });
+
+  it("offers official links and downloads every supported configuration without a secret", async () => {
     const user = userEvent.setup();
     renderPage();
 
     await screen.findByRole("heading", { name: "External S3 tools" });
     await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
     const setupDialog = await openSetupDialog(user);
-    await user.click(within(setupDialog).getByRole("button", { name: "Connection details" }));
-    const details = await readDownloadedBlobText(downloadedBlobs.at(-1));
-    expect(details).toContain("Storage name for external tools: research-data-internal");
-    expect(details).toContain("Secret: Not included in this file");
+    const cyberduckLink = within(setupDialog).getByRole("link", { name: /Install Cyberduck from the official site/ });
+    const mountainDuckLink = within(setupDialog).getByRole("link", { name: /Install Mountain Duck from the official site/ });
+    const winScpLink = within(setupDialog).getByRole("link", { name: /Install WinSCP from the official site/ });
+    for (const link of [cyberduckLink, mountainDuckLink, winScpLink]) {
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noreferrer");
+    }
 
-    await user.click(within(setupDialog).getByRole("button", { name: "Cyberduck bookmark" }));
+    await user.click(within(setupDialog).getByRole("button", { name: /Download Cyberduck or Mountain Duck configuration.*Research Data/i }));
     const bookmark = await readDownloadedBlobText(downloadedBlobs.at(-1));
     expect(bookmark).toContain("<string>s3.example.test</string>");
     expect(bookmark).toContain("<string>AK-USER</string>");
     expect(bookmark).toContain("<string>/research-data-internal</string>");
     expect(bookmark).not.toContain("SK-NEW");
+
+    await user.click(within(setupDialog).getByRole("button", { name: /Download WinSCP profile.*Research Data/i }));
+    const winScpProfile = await readDownloadedBlobText(downloadedBlobs.at(-1));
+    expect(winScpProfile).toContain("FSProtocol=7");
+    expect(winScpProfile).toContain("RemoteDirectory=/research-data-internal");
+    expect(winScpProfile).not.toMatch(/password/i);
+
+    await user.click(within(setupDialog).getByText("Advanced tools and manual setup"));
+    const rcloneLink = within(setupDialog).getByRole("link", { name: /Install rclone from the official site/ });
+    expect(rcloneLink).toHaveAttribute("href", "https://rclone.org/downloads/");
+    expect(within(setupDialog).getByText("RCLONE_CONFIG_RESEARCH_DATA_RESEARCH_DATA_INTERNAL_SECRET_ACCESS_KEY")).toBeInTheDocument();
+    expect(within(setupDialog).getByText("rclone lsd research_data_research_data_internal:research-data-internal")).toBeInTheDocument();
+    expect(within(setupDialog).getByRole("button", { name: "Copy Access ID: AK-USER" })).toBeInTheDocument();
+    await user.click(within(setupDialog).getByRole("button", { name: /Download rclone configuration.*Research Data/i }));
+    const rcloneConfig = await readDownloadedBlobText(downloadedBlobs.at(-1));
+    expect(rcloneConfig).toContain("type = s3");
+    expect(rcloneConfig).toContain("provider = Ceph");
+    expect(rcloneConfig).not.toContain("SK-NEW");
+
+    await user.click(within(setupDialog).getByRole("button", { name: /Download connection details.*Research Data/i }));
+    const details = await readDownloadedBlobText(downloadedBlobs.at(-1));
+    expect(details).toContain("Storage name for external tools: research-data-internal");
+    expect(details).toContain("Access ID: AK-USER");
+    expect(details).toContain("Secret: Not included in this file");
   });
 
   it("configures Cyberduck for path-style addressing when required by the endpoint", async () => {
@@ -226,7 +299,7 @@ describe("PortalAccessKeysPage", () => {
 
     await screen.findByRole("heading", { name: "External S3 tools" });
     const setupDialog = await openSetupDialog(user);
-    await user.click(within(setupDialog).getByRole("button", { name: "Cyberduck bookmark" }));
+    await user.click(within(setupDialog).getByRole("button", { name: /Download Cyberduck or Mountain Duck configuration/i }));
     const bookmark = await readDownloadedBlobText(downloadedBlobs.at(-1));
 
     expect(bookmark).toContain("<key>Custom</key>");
@@ -234,15 +307,18 @@ describe("PortalAccessKeysPage", () => {
     expect(bookmark).toContain("<string>true</string>");
   });
 
-  it("keeps generic connection details available when Cyberduck cannot use the endpoint", async () => {
+  it("keeps manual connection details available when generated profiles cannot use the endpoint", async () => {
     mocks.state = { ...mocks.state, s3_endpoint: "mailto:user@example.test" };
     renderPage();
 
     await screen.findByRole("heading", { name: "External S3 tools" });
     const setupDialog = await openSetupDialog(userEvent.setup());
-    expect(within(setupDialog).getByRole("button", { name: "Cyberduck bookmark" })).toBeDisabled();
-    expect(within(setupDialog).getByRole("button", { name: "Connection details" })).toBeEnabled();
-    expect(within(setupDialog).getByText(/Cyberduck bookmark download is unavailable/i)).toBeInTheDocument();
+    expect(within(setupDialog).getByRole("button", { name: /Download Cyberduck or Mountain Duck configuration/i })).toBeDisabled();
+    expect(within(setupDialog).getByRole("button", { name: /Download WinSCP profile/i })).toBeDisabled();
+    expect(within(setupDialog).getByText(/Configuration downloads are unavailable/i)).toBeInTheDocument();
+    await userEvent.click(within(setupDialog).getByText("Advanced tools and manual setup"));
+    expect(within(setupDialog).getByRole("button", { name: /Download rclone configuration/i })).toBeDisabled();
+    expect(within(setupDialog).getByRole("button", { name: /Download connection details/i })).toBeEnabled();
   });
 
   it("creates a key and shows the secret only in the creation banner", async () => {
@@ -375,8 +451,13 @@ describe("PortalAccessKeysPage", () => {
     renderPage();
 
     const setupDialog = await openSetupDialog(userEvent.setup());
-    expect(await within(setupDialog).findByText("Not shown again")).toBeInTheDocument();
-    expect(within(setupDialog).queryByRole("button", { name: "Details with secret" })).not.toBeInTheDocument();
+    expect(within(setupDialog).getByRole("combobox", { name: "Access used" })).toHaveDisplayValue(
+      "partner@example.org · Research Data · Read only"
+    );
+    expect(within(setupDialog).getByText("Research Data — fixed when this access was created")).toBeInTheDocument();
+    expect(within(setupDialog).getAllByRole("combobox")).toHaveLength(1);
+    expect(within(setupDialog).queryByRole("button", { name: /secret/i })).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
     await userEvent.click(screen.getByRole("tab", { name: "Tool access (1)" }));
     expect(await screen.findByText("AK-EXT-OLD")).toBeInTheDocument();
   });

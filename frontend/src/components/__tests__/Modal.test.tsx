@@ -51,6 +51,21 @@ describe("Modal", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it("supports a localized close action", () => {
+    render(
+      <Modal
+        title="Fenêtre localisée"
+        onClose={() => undefined}
+        closeLabel="Fermer"
+        closeAriaLabel="Fermer la fenêtre"
+      >
+        <p>Contenu</p>
+      </Modal>
+    );
+
+    expect(screen.getByRole("button", { name: "Fermer la fenêtre" })).toHaveTextContent("Fermer");
+  });
+
   it("traps focus and restores focus on close", async () => {
     const user = userEvent.setup();
     render(<ModalHarness />);

@@ -115,6 +115,39 @@ const themes = ["light", "dark"] as const;
 
 const locales: PortalVisualLocale[] = ["en", "fr", "de"];
 
+const connectToolLabels = {
+  en: {
+    tab: "Connect tool",
+    configure: "Configure a tool",
+    dialog: "Connect a tool",
+    advanced: "Advanced tools and manual setup",
+    close: "Close modal",
+    manual: "Other S3-compatible application",
+    directConnect: "Connect Myself",
+  },
+  fr: {
+    tab: "Connecter un outil",
+    configure: "Configurer un outil",
+    dialog: "Connecter un outil",
+    advanced: "Outils avancés et configuration manuelle",
+    close: "Fermer la fenêtre",
+    manual: "Autre application compatible S3",
+    directConnect: "Connecter Moi-même",
+  },
+  de: {
+    tab: "Werkzeug verbinden",
+    configure: "Werkzeug konfigurieren",
+    dialog: "Werkzeug verbinden",
+    advanced: "Erweiterte Werkzeuge und manuelle Einrichtung",
+    close: "Dialog schließen",
+    manual: "Andere S3-kompatible Anwendung",
+    directConnect: "Verbinden Ich selbst",
+  },
+} satisfies Record<
+  PortalVisualLocale,
+  { tab: string; configure: string; dialog: string; advanced: string; close: string; manual: string; directConnect: string }
+>;
+
 function buildPortalUser(language: PortalVisualLocale) {
   return { ...portalUser, ui_language: language };
 }
@@ -206,6 +239,34 @@ test.describe("Portal visual QA", () => {
                 main.getByRole("button", { name: "Search options" }),
               ).toHaveCount(0);
             }
+            if (route.path === "/portal/access-keys") {
+              const labels = connectToolLabels[language];
+              const directConnectButton = main.getByRole("button", {
+                name: new RegExp(`^${labels.directConnect}`),
+              });
+              await directConnectButton.click();
+              const directDialog = page.getByRole("dialog", { name: labels.dialog });
+              await expect(directDialog).toBeVisible();
+              await page.keyboard.press("Escape");
+              await expect(directDialog).toBeHidden();
+              await expect(directConnectButton).toBeFocused();
+              await main.getByRole("tab", { name: labels.tab }).click();
+              await main.getByRole("button", { name: labels.configure }).click();
+              const dialog = page.getByRole("dialog", { name: labels.dialog });
+              await expect(dialog).toBeVisible();
+              await expect(dialog.getByText("Cyberduck / Mountain Duck", { exact: true })).toBeVisible();
+              await expect(dialog.getByText("WinSCP", { exact: true })).toBeVisible();
+              await expect(dialog.locator("details")).not.toHaveAttribute("open", "");
+              await expect(dialog.getByText(labels.advanced, { exact: true })).toBeVisible();
+              await expect(dialog.getByRole("button", { name: labels.close })).toBeVisible();
+              await dialog.getByText(labels.advanced, { exact: true }).click();
+              await expect(dialog.locator("details")).toHaveAttribute("open", "");
+              await expect(dialog.getByText("rclone", { exact: true })).toBeVisible();
+              await expect(dialog.getByRole("heading", { name: labels.manual })).toBeVisible();
+              await page.keyboard.press("Escape");
+              await expect(dialog).toBeHidden();
+              await expect(main.getByRole("button", { name: labels.configure })).toBeFocused();
+            }
 
             const horizontalOverflow = await page.evaluate(
               () =>
@@ -216,8 +277,7 @@ test.describe("Portal visual QA", () => {
             );
             expect(horizontalOverflow).toBeLessThanOrEqual(2);
 
-            await page.keyboard.press("Tab");
-            const activeElement = await page.evaluate(() => {
+            let activeElement = await page.evaluate(() => {
               const active = document.activeElement;
               return {
                 tag: active?.tagName ?? null,
@@ -225,6 +285,17 @@ test.describe("Portal visual QA", () => {
                 text: active?.textContent?.trim().slice(0, 80) ?? null,
               };
             });
+            if (activeElement.tag === "BODY") {
+              await page.keyboard.press("Tab");
+              activeElement = await page.evaluate(() => {
+                const active = document.activeElement;
+                return {
+                  tag: active?.tagName ?? null,
+                  ariaLabel: active?.getAttribute("aria-label") ?? null,
+                  text: active?.textContent?.trim().slice(0, 80) ?? null,
+                };
+              });
+            }
             expect(activeElement.tag).not.toBe("BODY");
 
             mockRegistry.assertNoUnmatched();

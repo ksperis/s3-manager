@@ -35,10 +35,14 @@ import { usePortalAccountContext } from "./PortalAccountContext";
 import {
   buildCyberduckBookmark,
   buildGenericConnectionSheet,
+  buildRcloneConfig,
+  buildWinScpProfile,
   bucketNameForPortalExternalTool,
   parsePortalExternalToolEndpoint,
   portalExternalToolBaseFilename,
   portalExternalToolPermissionLabel,
+  portalExternalToolRcloneRemoteName,
+  portalExternalToolRcloneSecretEnvironmentVariable,
   storageSpaceNameForPortalExternalTool,
   triggerPortalExternalToolDownload,
   type PortalExternalToolConnection,
@@ -72,6 +76,40 @@ function keyScopeLabel(key: PortalAccessKey, t: ReturnType<typeof useI18n>["t"])
   return t({ en: "Portal grants", fr: "Droits Portal", de: "Portal-Berechtigungen" });
 }
 
+function keyPermissionLabel(key: PortalAccessKey, t: ReturnType<typeof useI18n>["t"]): string {
+  if (key.permission === "read_write") {
+    return t({ en: "Read/write", fr: "Lecture/écriture", de: "Lesen/Schreiben" });
+  }
+  return t({ en: "Read only", fr: "Lecture seule", de: "Nur lesen" });
+}
+
+function keyCreatedDateLabel(createdAt: string | null | undefined, locale: string): string | null {
+  if (!createdAt) return null;
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long" }).format(date);
+}
+
+function keyConnectionLabel(
+  key: PortalAccessKey,
+  locale: string,
+  t: ReturnType<typeof useI18n>["t"]
+): string {
+  if (key.target_type === "external") {
+    return [
+      key.external_email || t({ en: "External user", fr: "Utilisateur externe", de: "Externer Benutzer" }),
+      key.storage_space_name,
+      keyPermissionLabel(key, t),
+    ].filter(Boolean).join(" · ");
+  }
+  const createdDate = keyCreatedDateLabel(key.created_at, locale);
+  const createdLabel = createdDate
+    ? t({ en: `created ${createdDate}`, fr: `créé le ${createdDate}`, de: `erstellt am ${createdDate}` })
+    : null;
+  const suffix = key.access_key_id.length > 4 ? `…${key.access_key_id.slice(-4)}` : key.access_key_id;
+  return [keyTargetLabel(key, t), createdLabel, suffix].filter(Boolean).join(" · ");
+}
+
 function isOwnerStorageSpace(space: PortalStorageSpaceSummary): boolean {
   return (space.role === "Owner" || space.role === "Manager") && !space.archived_at;
 }
@@ -88,7 +126,6 @@ export default function PortalAccessKeysPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAccessKeyAction | null>(null);
   const [activeTab, setActiveTab] = useState<AccessKeysTab>("access-list");
-  const [guideDismissed, setGuideDismissed] = useState(false);
   const [createWizardOpen, setCreateWizardOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [createTarget, setCreateTarget] = useState<CreateTarget>("self");
@@ -103,11 +140,11 @@ export default function PortalAccessKeysPage() {
   const [connectionSpacesError, setConnectionSpacesError] = useState<string | null>(null);
   const [connectionKeyId, setConnectionKeyId] = useState("");
   const [connectionSpaceId, setConnectionSpaceId] = useState("");
+  const [connectionCopyMessage, setConnectionCopyMessage] = useState<string | null>(null);
   const [queryCreateHandled, setQueryCreateHandled] = useState(false);
 
   const requestedSpaceId = searchParams.get("space_id") ?? "";
   const requestedCreateTarget = searchParams.get("create") ?? "";
-  const guideStorageKey = `portal.access-keys.start-guide.dismissed.${accountIdForApi ?? "default"}`;
 
   const loadKeys = useCallback(async () => {
     if (!hasAccountContext || !accountIdForApi) {
@@ -135,11 +172,6 @@ export default function PortalAccessKeysPage() {
     setActionMessage(null);
     void loadKeys();
   }, [loadKeys]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setGuideDismissed(window.localStorage.getItem(guideStorageKey) === "1");
-  }, [guideStorageKey]);
 
   const loadStorageSpacesForWizard = useCallback(async () => {
     if (!accountIdForApi) return;
@@ -256,19 +288,18 @@ export default function PortalAccessKeysPage() {
     createdKey?.secret_access_key && selectedConnectionKey?.access_key_id === createdKey.access_key_id
   );
   const showSecretConnectionDownload = selectedConnectionHasOneTimeSecret && Boolean(selectedConnection);
-  const connectionSpaceSelectValue = selectedConnectionKeyBucket
-    ? selectedConnectionSpace?.id || selectedConnectionKeyBucket
-    : connectionSpaceId;
   const connectionEndpointLabel = selectedConnection?.endpoint?.original || state?.s3_endpoint || t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" });
-  const cyberduckBookmarkUnavailable = Boolean(selectedConnection && !selectedConnection.endpoint);
-  const showStarterGuide =
-    Boolean(state) &&
-    hasAccountContext &&
+  const setupFileUnavailable = Boolean(selectedConnection && !selectedConnection.endpoint);
+  const selectedConnectionNeedsSpace = Boolean(selectedConnectionKey && !selectedConnectionKeyBucket);
+  const selectedConnectionHasNoSpace =
+    selectedConnectionNeedsSpace &&
     !connectionSpacesLoading &&
     !connectionSpacesError &&
-    visibleKeys.length === 0 &&
-    connectionSpaces.length === 0 &&
-    !guideDismissed;
+    connectionSpaces.length === 0;
+  const rcloneRemoteName = selectedConnection ? portalExternalToolRcloneRemoteName(selectedConnection) : "remote";
+  const rcloneSecretEnvironmentVariable = selectedConnection
+    ? portalExternalToolRcloneSecretEnvironmentVariable(selectedConnection)
+    : "RCLONE_CONFIG_REMOTE_SECRET_ACCESS_KEY";
 
   useEffect(() => {
     if (!selectedConnectionKey && activeKeys[0]) {
@@ -277,7 +308,15 @@ export default function PortalAccessKeysPage() {
   }, [activeKeys, selectedConnectionKey]);
 
   useEffect(() => {
-    if (!selectedConnectionKeyBucket) return;
+    if (!selectedConnectionKeyBucket) {
+      setConnectionSpaceId((current) => {
+        if (connectionSpaces.some((space) => space.id === current || space.internal_bucket_name === current)) {
+          return current;
+        }
+        return connectionSpaces[0]?.id || "";
+      });
+      return;
+    }
     const matchingSpace = connectionSpaces.find(
       (space) => space.id === selectedConnectionKeyBucket || space.internal_bucket_name === selectedConnectionKeyBucket
     );
@@ -336,10 +375,6 @@ export default function PortalAccessKeysPage() {
       const key = await createPortalAccessKey(accountIdForApi, payload);
       setCreatedKey(key);
       setActiveTab("connect");
-      setGuideDismissed(true);
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(guideStorageKey, "1");
-      }
       setConnectionKeyId(key.access_key_id);
       const createdBucket = bucketNameForPortalExternalTool(key, selectedSpace);
       if (createdBucket) {
@@ -426,6 +461,22 @@ export default function PortalAccessKeysPage() {
     setActionMessage(t({ en: "Cyberduck bookmark downloaded.", fr: "Favori Cyberduck téléchargé.", de: "Cyberduck-Bookmark heruntergeladen." }));
   };
 
+  const handleDownloadWinScpProfile = () => {
+    if (!selectedConnection?.endpoint) return;
+    const filename = `${portalExternalToolBaseFilename(selectedConnection)}-winscp.ini`;
+    triggerPortalExternalToolDownload(filename, buildWinScpProfile(selectedConnection), "text/plain;charset=utf-8");
+    setError(null);
+    setActionMessage(t({ en: "WinSCP profile downloaded.", fr: "Profil WinSCP téléchargé.", de: "WinSCP-Profil heruntergeladen." }));
+  };
+
+  const handleDownloadRcloneConfig = () => {
+    if (!selectedConnection?.endpoint) return;
+    const filename = `${portalExternalToolBaseFilename(selectedConnection)}-rclone.conf`;
+    triggerPortalExternalToolDownload(filename, buildRcloneConfig(selectedConnection), "text/plain;charset=utf-8");
+    setError(null);
+    setActionMessage(t({ en: "rclone configuration downloaded.", fr: "Configuration rclone téléchargée.", de: "rclone-Konfiguration heruntergeladen." }));
+  };
+
   const handleDownloadConnectionSheet = (includeSecret: boolean) => {
     if (!selectedConnection) return;
     const filename = `${portalExternalToolBaseFilename(selectedConnection)}${includeSecret ? "-with-secret" : ""}.txt`;
@@ -443,10 +494,23 @@ export default function PortalAccessKeysPage() {
     );
   };
 
-  const dismissGuide = () => {
-    setGuideDismissed(true);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(guideStorageKey, "1");
+  const closeConnectionDialog = () => {
+    setConnectionCopyMessage(null);
+    setConnectionDialogOpen(false);
+  };
+
+  const openConnectionDialog = (key?: PortalAccessKey) => {
+    if (key) setConnectionKeyId(key.access_key_id);
+    setConnectionCopyMessage(null);
+    setConnectionDialogOpen(true);
+  };
+
+  const handleCopyConnectionValue = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setConnectionCopyMessage(t({ en: "Value copied.", fr: "Valeur copiée.", de: "Wert kopiert." }));
+    } catch {
+      setConnectionCopyMessage(t({ en: "Unable to copy this value.", fr: "Impossible de copier cette valeur.", de: "Dieser Wert kann nicht kopiert werden." }));
     }
   };
 
@@ -501,12 +565,10 @@ export default function PortalAccessKeysPage() {
             {active ? (
               <button
                 type="button"
-                onClick={() => {
-                  setConnectionKeyId(key.access_key_id);
-                  setActiveTab("connect");
-                }}
+                onClick={() => openConnectionDialog(key)}
                 className={tableActionButtonClasses}
-                disabled={disabled}
+                disabled={Boolean(busy)}
+                aria-label={`${t({ en: "Connect", fr: "Connecter", de: "Verbinden" })} ${keyConnectionLabel(key, locale, t)}`}
               >
                 {t({ en: "Connect", fr: "Connecter", de: "Verbinden" })}
               </button>
@@ -565,15 +627,6 @@ export default function PortalAccessKeysPage() {
       {state && !canManageAccessKeys && (
         <PageBanner tone="warning">{t({ en: "External-tool access is disabled for this project.", fr: "L'accès aux outils externes est désactivé pour ce projet.", de: "Der Zugriff für externe Werkzeuge ist für dieses Projekt deaktiviert." })}</PageBanner>
       )}
-      {state && canManageAccessKeys && (
-        <PageBanner tone="info">
-          {t({
-            en: "Use external-tool access only when someone cannot work through Portal sharing. Each access can be paused or removed without changing the space itself.",
-            fr: "Utilisez l'accès aux outils externes uniquement lorsqu'une personne ne peut pas travailler via le partage Portal. Chaque accès peut être suspendu ou supprimé sans modifier l'espace lui-même.",
-            de: "Nutzen Sie Zugriff für externe Werkzeuge nur, wenn jemand nicht über Portal-Freigaben arbeiten kann. Jeder Zugriff kann pausiert oder entfernt werden, ohne den Bereich selbst zu ändern.",
-          })}
-        </PageBanner>
-      )}
       <PortalPageTabs
         tabs={[
           {
@@ -601,65 +654,6 @@ export default function PortalAccessKeysPage() {
 
       {activeTab === "connect" ? (
         <PortalTabPanel idPrefix="portal-tool-access" tabId="connect" className="space-y-4">
-          {showStarterGuide ? (
-            <section className="ui-surface-muted p-4" aria-labelledby="portal-external-tool-guide">
-          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-            <div className="min-w-0">
-              <h2 id="portal-external-tool-guide" className={cx("text-sm font-bold", uiTitleTextClass)}>
-                {t({ en: "Before connecting a tool", fr: "Avant de connecter un outil", de: "Vor dem Verbinden eines Werkzeugs" })}
-              </h2>
-              <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
-                {t({
-                  en: "Use Portal sharing when a collaborator can sign in. Use tool access for apps, scripts, or partners that need a direct storage client.",
-                  fr: "Utilisez le partage Portal lorsqu'un collaborateur peut se connecter. Utilisez l'accès outil pour les applications, scripts ou partenaires qui ont besoin d'un client de stockage direct.",
-                  de: "Nutzen Sie Portal-Freigaben, wenn Mitwirkende sich anmelden können. Werkzeugzugriff ist für Apps, Skripte oder Partner mit direktem Speicherclient gedacht.",
-                })}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <span className={cx("rounded-md px-2 py-1 ui-caption font-semibold", uiPanelMutedClass)}>
-                {t({ en: "Secrets are shown once", fr: "Secrets affichés une seule fois", de: "Secrets nur einmal sichtbar" })}
-              </span>
-              <UiButton type="button" size="xs" variant="ghost" onClick={dismissGuide}>
-                {t({ en: "Dismiss guide", fr: "Masquer le guide", de: "Anleitung ausblenden" })}
-              </UiButton>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="min-w-0">
-              <div className={uiLabelClass}>{t({ en: "1. Pick the space", fr: "1. Choisir l'espace", de: "1. Bereich wählen" })}</div>
-              <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                {t({
-                  en: "Start with the space that contains the files the tool should reach.",
-                  fr: "Commencez par l'espace qui contient les fichiers que l'outil doit atteindre.",
-                  de: "Beginnen Sie mit dem Bereich, dessen Dateien das Werkzeug erreichen soll.",
-                })}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <div className={uiLabelClass}>{t({ en: "2. Limit the access", fr: "2. Limiter l'accès", de: "2. Zugriff begrenzen" })}</div>
-              <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                {t({
-                  en: "Choose read only unless the tool really needs to upload or delete files.",
-                  fr: "Choisissez lecture seule sauf si l'outil doit vraiment ajouter ou supprimer des fichiers.",
-                  de: "Wählen Sie Nur lesen, außer das Werkzeug muss wirklich Dateien hochladen oder löschen.",
-                })}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <div className={uiLabelClass}>{t({ en: "3. Download setup details", fr: "3. Télécharger les détails", de: "3. Details herunterladen" })}</div>
-              <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                {t({
-                  en: "Download a ready-to-use setup file, then paste the one-time secret into the tool.",
-                  fr: "Téléchargez un fichier de configuration prêt à l'emploi, puis collez le secret à usage unique dans l'outil.",
-                  de: "Laden Sie eine fertige Einrichtungsdatei herunter und fügen Sie das einmalige Secret im Werkzeug ein.",
-                })}
-              </p>
-            </div>
-          </div>
-            </section>
-          ) : null}
-
           {createdKey?.secret_access_key && (
             <OneTimeSecretPanel
           title={
@@ -701,215 +695,349 @@ export default function PortalAccessKeysPage() {
           )}
 
           {state && hasAccountContext ? (
-            <section className="ui-surface-card space-y-4 p-4" aria-labelledby="portal-external-tool-access">
-          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-            <div>
+            <section className="ui-surface-card p-4" aria-labelledby="portal-external-tool-access">
               <h2 id="portal-external-tool-access" className={cx("text-sm font-bold", uiTitleTextClass)}>
-                {t({ en: "Connect an external S3 tool", fr: "Connecter un outil S3 externe", de: "Externes S3-Werkzeug verbinden" })}
+                {t({ en: "Connect a tool", fr: "Connecter un outil", de: "Werkzeug verbinden" })}
               </h2>
-              <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
+              <p className={cx("mt-1 max-w-2xl ui-caption", uiMutedTextClass)}>
                 {t({
-                  en: "Choose who the external app represents, pick the space it should reach, then download setup details for the app.",
-                  fr: "Choisissez qui l'application externe représente, l'espace qu'elle doit atteindre, puis téléchargez les détails de configuration.",
-                  de: "Wählen Sie, wen die externe App vertritt, welchen Bereich sie erreichen soll, und laden Sie dann die Einrichtungsdetails herunter.",
+                  en: "Choose the application you use and download its ready-to-import configuration.",
+                  fr: "Choisissez l'application que vous utilisez et téléchargez sa configuration prête à importer.",
+                  de: "Wählen Sie Ihre Anwendung und laden Sie die importfertige Konfiguration herunter.",
                 })}
               </p>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className={cx("min-w-0 p-3", uiPanelMutedClass)}>
-              <div className={uiLabelClass}>{t({ en: "1. Select access", fr: "1. Sélectionner l'accès", de: "1. Zugriff wählen" })}</div>
-              <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                {t({
-                  en: "Use your own access for personal apps, or create a limited access for a collaborator or partner.",
-                  fr: "Utilisez votre propre accès pour vos applications, ou créez un accès limité pour un collaborateur ou partenaire.",
-                  de: "Nutzen Sie Ihren eigenen Zugriff für persönliche Apps oder erstellen Sie begrenzten Zugriff für Mitwirkende oder Partner.",
-                })}
-              </p>
-            </div>
-            <div className={cx("min-w-0 p-3", uiPanelMutedClass)}>
-              <div className={uiLabelClass}>{t({ en: "2. Choose space", fr: "2. Choisir l'espace", de: "2. Bereich wählen" })}</div>
-              <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                {t({
-                  en: "Keep the app focused on the files it needs instead of exposing the whole project.",
-                  fr: "Gardez l'application centrée sur les fichiers nécessaires plutôt que d'exposer tout le projet.",
-                  de: "Beschränken Sie die App auf die benötigten Dateien, statt das ganze Projekt offenzulegen.",
-                })}
-              </p>
-            </div>
-            <div className={cx("min-w-0 p-3", uiPanelMutedClass)}>
-              <div className={uiLabelClass}>{t({ en: "3. Download setup", fr: "3. Télécharger la configuration", de: "3. Einrichtung laden" })}</div>
-              <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                {t({
-                  en: "Use the ready-made file when possible; open manual details only when the app asks for them.",
-                  fr: "Utilisez le fichier prêt à l'emploi si possible; ouvrez les détails manuels seulement si l'application les demande.",
-                  de: "Nutzen Sie möglichst die fertige Datei; öffnen Sie manuelle Details nur, wenn die App danach fragt.",
-                })}
-              </p>
-            </div>
-          </div>
-
-          <div className={cx("flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between", uiPanelMutedClass)}>
-            <div className="min-w-0">
-              <p className={cx("ui-body font-semibold", uiTitleTextClass)}>
-                {t({ en: "Ready to set up an app?", fr: "Prêt à configurer une application ?", de: "Bereit, eine App einzurichten?" })}
-              </p>
-              <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
-                {t({
-                  en: "Open a focused dialog to pick the access, choose the space, and download the setup file.",
-                  fr: "Ouvrez une fenêtre dédiée pour choisir l'accès, sélectionner l'espace et télécharger le fichier de configuration.",
-                  de: "Öffnen Sie einen fokussierten Dialog, um Zugriff und Bereich auszuwählen und die Einrichtung herunterzuladen.",
-                })}
-              </p>
-            </div>
-            <UiButton type="button" onClick={() => setConnectionDialogOpen(true)}>
-              {t({ en: "Download setup", fr: "Télécharger la configuration", de: "Einrichtung herunterladen" })}
-            </UiButton>
-          </div>
+              <UiButton type="button" className="mt-4" onClick={() => openConnectionDialog()}>
+                {t({ en: "Configure a tool", fr: "Configurer un outil", de: "Werkzeug konfigurieren" })}
+              </UiButton>
             </section>
           ) : null}
         </PortalTabPanel>
       ) : null}
 
-      {connectionDialogOpen && activeTab === "connect" && state && hasAccountContext ? (
+      {connectionDialogOpen && state && hasAccountContext ? (
         <Modal
-          title={t({ en: "Download setup details", fr: "Télécharger les détails de configuration", de: "Einrichtungsdetails herunterladen" })}
-          onClose={() => setConnectionDialogOpen(false)}
-          maxWidthClass="max-w-3xl"
+          title={t({ en: "Connect a tool", fr: "Connecter un outil", de: "Werkzeug verbinden" })}
+          onClose={closeConnectionDialog}
+          maxWidthClass="max-w-4xl"
+          closeLabel={t({ en: "Close", fr: "Fermer", de: "Schließen" })}
+          closeAriaLabel={t({ en: "Close modal", fr: "Fermer la fenêtre", de: "Dialog schließen" })}
         >
-          <div className="space-y-4">
-            <p className={cx("ui-caption", uiMutedTextClass)}>
-              {t({
-                en: "Choose who the external app represents, pick the space it should reach, then download the file or details the app needs.",
-                fr: "Choisissez qui l'application externe représente, l'espace qu'elle doit atteindre, puis téléchargez le fichier ou les détails nécessaires.",
-                de: "Wählen Sie, wen die externe App vertritt, welchen Bereich sie erreichen soll, und laden Sie die benötigten Dateien oder Details herunter.",
-              })}
-            </p>
-            {selectedConnectionKeyBucket ? (
-              <span className={cx("inline-flex rounded-md px-2 py-1 ui-caption font-semibold", uiPanelMutedClass)}>
-                {t({ en: "Space fixed for this access", fr: "Espace fixé pour cet accès", de: "Bereich für diesen Zugriff festgelegt" })}
-              </span>
-            ) : null}
-            {connectionSpacesError ? <PageBanner tone="warning">{connectionSpacesError}</PageBanner> : null}
-
-            <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)]">
-              <label className="space-y-1">
-                <span className={uiLabelClass}>{t({ en: "Tool access", fr: "Accès outil", de: "Werkzeugzugriff" })}</span>
-                <select
-                  className={uiInputClass}
-                  value={selectedConnectionKey?.access_key_id ?? ""}
-                  onChange={(event) => setConnectionKeyId(event.target.value)}
-                  aria-label={t({ en: "Connection tool access", fr: "Accès outil de connexion", de: "Werkzeugzugriff für Verbindung" })}
-                  disabled={activeKeys.length === 0}
-                >
-                  {activeKeys.length === 0 ? (
-                    <option value="">{t({ en: "No active access", fr: "Aucun accès actif", de: "Kein aktiver Zugriff" })}</option>
-                  ) : (
-                    activeKeys.map((key) => (
-                      <option key={key.access_key_id} value={key.access_key_id}>
-                        {key.access_key_id} - {keyScopeLabel(key, t)}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-              <label className="space-y-1">
-                <span className={uiLabelClass}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</span>
-                <select
-                  className={uiInputClass}
-                  value={connectionSpaceSelectValue}
-                  onChange={(event) => setConnectionSpaceId(event.target.value)}
-                  aria-label={t({ en: "Connection space", fr: "Espace de connexion", de: "Verbindungsbereich" })}
-                  disabled={connectionSpacesLoading || connectionSpaces.length === 0 || Boolean(selectedConnectionKeyBucket)}
-                >
-                  {connectionSpacesLoading ? (
-                    <option value="">{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</option>
-                  ) : selectedConnectionKeyBucket && !selectedConnectionSpace ? (
-                    <option value={selectedConnectionKeyBucket}>{selectedConnectionKey?.storage_space_name || selectedConnectionKeyBucket}</option>
-                  ) : connectionSpaces.length === 0 ? (
-                    <option value="">{t({ en: "No space", fr: "Aucun espace", de: "Kein Bereich" })}</option>
-                  ) : (
-                    connectionSpaces.map((space) => (
-                      <option key={space.id} value={space.id}>
-                        {space.name}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <UiButton
-                type="button"
-                variant="secondary"
-                onClick={handleDownloadCyberduckBookmark}
-                disabled={!selectedConnection || !selectedConnection.endpoint}
-              >
-                {t({ en: "Cyberduck bookmark", fr: "Favori Cyberduck", de: "Cyberduck-Bookmark" })}
-              </UiButton>
-              <UiButton
-                type="button"
-                variant="secondary"
-                onClick={() => handleDownloadConnectionSheet(false)}
-                disabled={!selectedConnection}
-              >
-                {t({ en: "Connection details", fr: "Détails de connexion", de: "Verbindungsdetails" })}
-              </UiButton>
-              {showSecretConnectionDownload ? (
-                <UiButton type="button" variant="warning" onClick={() => handleDownloadConnectionSheet(true)}>
-                  {t({ en: "Details with secret", fr: "Détails avec secret", de: "Details mit Secret" })}
-                </UiButton>
-              ) : null}
-            </div>
-
-            {cyberduckBookmarkUnavailable ? (
-              <PageBanner tone="info">
-                {t({
-                  en: "Cyberduck bookmark download is unavailable because this storage service does not expose a valid service address here. Generic connection details are still available.",
-                  fr: "Le téléchargement du favori Cyberduck est indisponible car ce service de stockage n'expose pas d'adresse de service valide ici. Les détails de connexion génériques restent disponibles.",
-                  de: "Der Cyberduck-Bookmark ist nicht verfügbar, weil hier keine gültige Serviceadresse bereitsteht. Allgemeine Verbindungsdetails sind weiterhin verfügbar.",
+          <div className="space-y-5">
+            {activeKeys.length === 0 ? (
+              <PageEmptyState
+                eyebrow={t({ en: "Access required", fr: "Accès requis", de: "Zugriff erforderlich" })}
+                title={t({ en: "Create an active tool access first", fr: "Créez d'abord un accès outil actif", de: "Erstellen Sie zuerst einen aktiven Werkzeugzugriff" })}
+                description={t({
+                  en: "The configuration identifies which permissions the application will use.",
+                  fr: "La configuration doit indiquer quels droits l'application utilisera.",
+                  de: "Die Konfiguration muss festlegen, welche Berechtigungen die Anwendung verwendet.",
                 })}
-              </PageBanner>
-            ) : null}
+                primaryAction={canManageAccessKeys ? {
+                  label: t({ en: "Create tool access", fr: "Créer un accès outil", de: "Werkzeugzugriff erstellen" }),
+                  onClick: () => {
+                    closeConnectionDialog();
+                    openCreateWizard();
+                  },
+                } : undefined}
+              />
+            ) : (
+              <>
+                <section className="space-y-3" aria-labelledby="portal-tool-connection-section">
+                  <h3 id="portal-tool-connection-section" className={cx("ui-body font-semibold", uiTitleTextClass)}>
+                    {t({ en: "Connection", fr: "Connexion", de: "Verbindung" })}
+                  </h3>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1">
+                      <span className={uiLabelClass}>{t({ en: "Access used", fr: "Accès utilisé", de: "Verwendeter Zugriff" })}</span>
+                      <select
+                        className={uiInputClass}
+                        value={selectedConnectionKey?.access_key_id ?? ""}
+                        onChange={(event) => setConnectionKeyId(event.target.value)}
+                      >
+                        {activeKeys.map((key) => (
+                          <option key={key.access_key_id} value={key.access_key_id}>
+                            {keyConnectionLabel(key, locale, t)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedConnectionKeyBucket ? (
+                      <div className="space-y-1">
+                        <span className={uiLabelClass}>{t({ en: "Space", fr: "Space", de: "Space" })}</span>
+                        <p className={cx("min-h-10 rounded-lg border px-3 py-2 ui-body", uiPanelMutedClass, uiTitleTextClass)}>
+                          {selectedConnectionKey?.storage_space_name || selectedConnection?.storageSpaceName || selectedConnectionKeyBucket}
+                          {" — "}
+                          {t({
+                            en: "fixed when this access was created",
+                            fr: "défini lors de la création de cet accès",
+                            de: "bei der Erstellung dieses Zugriffs festgelegt",
+                          })}
+                        </p>
+                      </div>
+                    ) : (
+                      <label className="space-y-1">
+                        <span className={uiLabelClass}>{t({ en: "Space", fr: "Space", de: "Space" })}</span>
+                        <select
+                          className={uiInputClass}
+                          value={connectionSpaceId}
+                          onChange={(event) => setConnectionSpaceId(event.target.value)}
+                          disabled={connectionSpacesLoading || connectionSpaces.length === 0}
+                        >
+                          {connectionSpacesLoading ? (
+                            <option value="">{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</option>
+                          ) : connectionSpaces.length === 0 ? (
+                            <option value="">{t({ en: "No Space", fr: "Aucun Space", de: "Kein Space" })}</option>
+                          ) : (
+                            connectionSpaces.map((space) => (
+                              <option key={space.id} value={space.id}>{space.name}</option>
+                            ))
+                          )}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                </section>
 
-            <details className={cx("group p-3", uiPanelMutedClass)}>
-              <summary className={cx("cursor-pointer ui-body font-semibold", uiTitleTextClass)}>
-                {t({ en: "Manual setup details", fr: "Détails de configuration manuelle", de: "Manuelle Einrichtungsdetails" })}
-              </summary>
-              <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
-                {t({
-                  en: "Open these only when an app asks for a service address, storage name, access ID, or secret.",
-                  fr: "Ouvrez-les uniquement lorsqu'une application demande une adresse de service, un nom de stockage, un ID d'accès ou un secret.",
-                  de: "Öffnen Sie dies nur, wenn eine App nach Serviceadresse, Speichername, Zugriffs-ID oder Secret fragt.",
-                })}
-              </p>
-              <dl className="mt-3 grid gap-3 ui-caption md:grid-cols-4">
-                <div>
-                  <dt className={uiMutedTextClass}>{t({ en: "S3 endpoint", fr: "Endpoint S3", de: "S3-Endpunkt" })}</dt>
-                  <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{connectionEndpointLabel}</dd>
-                </div>
-                <div>
-                  <dt className={uiMutedTextClass}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</dt>
-                  <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{selectedConnection?.storageSpaceName ?? "-"}</dd>
-                </div>
-                <div>
-                  <dt className={uiMutedTextClass}>{t({ en: "S3 bucket name", fr: "Nom du bucket S3", de: "S3-Bucket-Name" })}</dt>
-                  <dd className={cx("break-all font-mono font-semibold", uiTitleTextClass)}>{selectedConnection?.bucketName ?? "-"}</dd>
-                </div>
-                <div>
-                  <dt className={uiMutedTextClass}>{t({ en: "Secret", fr: "Secret", de: "Secret" })}</dt>
-                  <dd className={cx("font-semibold", uiTitleTextClass)}>
-                    {!selectedConnection
-                      ? t({ en: "Create or enable access first", fr: "Créez ou activez d'abord un accès", de: "Erstellen oder aktivieren Sie zuerst einen Zugriff" })
-                      : showSecretConnectionDownload
-                      ? t({ en: "Available once for this new access", fr: "Disponible une fois pour ce nouvel accès", de: "Einmalig für diesen neuen Zugriff verfügbar" })
-                      : t({ en: "Not shown again", fr: "Non réaffiché", de: "Wird nicht erneut angezeigt" })}
-                  </dd>
-                </div>
-              </dl>
-            </details>
+                {selectedConnectionNeedsSpace && connectionSpacesError ? (
+                  <PageBanner tone="warning">{connectionSpacesError}</PageBanner>
+                ) : null}
+                {selectedConnectionHasNoSpace ? (
+                  <PageEmptyState
+                    eyebrow={t({ en: "Space required", fr: "Space requis", de: "Space erforderlich" })}
+                    title={t({ en: "Create a Space to continue", fr: "Créez un Space pour continuer", de: "Erstellen Sie einen Space, um fortzufahren" })}
+                    description={t({
+                      en: "The application needs a Space to use as its initial folder.",
+                      fr: "L'application a besoin d'un Space comme dossier initial.",
+                      de: "Die Anwendung benötigt einen Space als Startordner.",
+                    })}
+                    primaryAction={{
+                      label: t({ en: "Create a Space", fr: "Créer un Space", de: "Space erstellen" }),
+                      to: "/portal/storage-spaces?create=1",
+                    }}
+                  />
+                ) : selectedConnection ? (
+                  <>
+                    <section className="space-y-3" aria-labelledby="portal-tool-application-section">
+                      <div>
+                        <h3 id="portal-tool-application-section" className={cx("ui-body font-semibold", uiTitleTextClass)}>
+                          {t({ en: "Choose your application", fr: "Choisissez votre application", de: "Wählen Sie Ihre Anwendung" })}
+                        </h3>
+                        <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
+                          {t({
+                            en: "Install the application first if you do not already have it, then import the downloaded file.",
+                            fr: "Installez d'abord l'application si nécessaire, puis importez le fichier téléchargé.",
+                            de: "Installieren Sie die Anwendung bei Bedarf zuerst und importieren Sie dann die heruntergeladene Datei.",
+                          })}
+                        </p>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <article className={cx("flex min-h-[220px] flex-col p-4", uiPanelMutedClass)}>
+                          <div>
+                            <h4 className={cx("ui-body font-semibold", uiTitleTextClass)}>Cyberduck / Mountain Duck</h4>
+                            <p className={cx("mt-1 ui-caption font-semibold", uiMutedTextClass)}>
+                              {t({ en: "macOS and Windows", fr: "macOS et Windows", de: "macOS und Windows" })}
+                            </p>
+                            <p className={cx("mt-2 ui-caption", uiMutedTextClass)}>
+                              {t({
+                                en: "Browse files or mount the Space like a disk.",
+                                fr: "Parcourez les fichiers ou montez le Space comme un disque.",
+                                de: "Durchsuchen Sie Dateien oder binden Sie den Space wie ein Laufwerk ein.",
+                              })}
+                            </p>
+                            <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 ui-caption">
+                              <a
+                                className="font-semibold text-primary hover:underline dark:text-primary-200"
+                                href="https://cyberduck.io/download/"
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={t({ en: "Install Cyberduck from the official site (opens in a new tab)", fr: "Installer Cyberduck depuis le site officiel (s'ouvre dans un nouvel onglet)", de: "Cyberduck von der offiziellen Website installieren (öffnet einen neuen Tab)" })}
+                              >
+                                {t({ en: "Install Cyberduck", fr: "Installer Cyberduck", de: "Cyberduck installieren" })}
+                              </a>
+                              <a
+                                className="font-semibold text-primary hover:underline dark:text-primary-200"
+                                href="https://mountainduck.io/"
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={t({ en: "Install Mountain Duck from the official site (opens in a new tab)", fr: "Installer Mountain Duck depuis le site officiel (s'ouvre dans un nouvel onglet)", de: "Mountain Duck von der offiziellen Website installieren (öffnet einen neuen Tab)" })}
+                              >
+                                {t({ en: "Install Mountain Duck", fr: "Installer Mountain Duck", de: "Mountain Duck installieren" })}
+                              </a>
+                            </p>
+                          </div>
+                          <UiButton
+                            type="button"
+                            className="mt-auto self-start"
+                            variant="secondary"
+                            onClick={handleDownloadCyberduckBookmark}
+                            disabled={setupFileUnavailable}
+                            aria-label={`${t({ en: "Download Cyberduck or Mountain Duck configuration (.duck) for", fr: "Télécharger la configuration Cyberduck ou Mountain Duck (.duck) pour", de: "Cyberduck- oder Mountain-Duck-Konfiguration (.duck) herunterladen für" })} ${selectedConnection.storageSpaceName}`}
+                          >
+                            {t({ en: "Download configuration (.duck)", fr: "Télécharger la configuration (.duck)", de: "Konfiguration herunterladen (.duck)" })}
+                          </UiButton>
+                        </article>
+                        <article className={cx("flex min-h-[220px] flex-col p-4", uiPanelMutedClass)}>
+                          <div>
+                            <h4 className={cx("ui-body font-semibold", uiTitleTextClass)}>WinSCP</h4>
+                            <p className={cx("mt-1 ui-caption font-semibold", uiMutedTextClass)}>Windows</p>
+                            <p className={cx("mt-2 ui-caption", uiMutedTextClass)}>
+                              {t({
+                                en: "Transfer files with a graphical interface.",
+                                fr: "Transférez des fichiers avec une interface graphique.",
+                                de: "Übertragen Sie Dateien mit einer grafischen Oberfläche.",
+                              })}
+                            </p>
+                            <p className="mt-3 ui-caption">
+                              <a
+                                className="font-semibold text-primary hover:underline dark:text-primary-200"
+                                href="https://winscp.net/eng/download.php"
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={t({ en: "Install WinSCP from the official site (opens in a new tab)", fr: "Installer WinSCP depuis le site officiel (s'ouvre dans un nouvel onglet)", de: "WinSCP von der offiziellen Website installieren (öffnet einen neuen Tab)" })}
+                              >
+                                {t({ en: "Install WinSCP", fr: "Installer WinSCP", de: "WinSCP installieren" })}
+                              </a>
+                            </p>
+                          </div>
+                          <UiButton
+                            type="button"
+                            className="mt-auto self-start"
+                            variant="secondary"
+                            onClick={handleDownloadWinScpProfile}
+                            disabled={setupFileUnavailable}
+                            aria-label={`${t({ en: "Download WinSCP profile (.ini) for", fr: "Télécharger le profil WinSCP (.ini) pour", de: "WinSCP-Profil (.ini) herunterladen für" })} ${selectedConnection.storageSpaceName}`}
+                          >
+                            {t({ en: "Download WinSCP profile (.ini)", fr: "Télécharger le profil WinSCP (.ini)", de: "WinSCP-Profil herunterladen (.ini)" })}
+                          </UiButton>
+                        </article>
+                      </div>
+                    </section>
+
+                    {setupFileUnavailable ? (
+                      <PageBanner tone="warning">
+                        {t({
+                          en: "Configuration downloads are unavailable because the storage service address is invalid. Check the manual values or contact an administrator.",
+                          fr: "Les téléchargements de configuration sont indisponibles car l'adresse du service de stockage est invalide. Vérifiez les valeurs manuelles ou contactez un administrateur.",
+                          de: "Konfigurationsdownloads sind nicht verfügbar, weil die Adresse des Speicherdienstes ungültig ist. Prüfen Sie die manuellen Werte oder wenden Sie sich an einen Administrator.",
+                        })}
+                      </PageBanner>
+                    ) : null}
+
+                    <details className={cx("group p-4", uiPanelMutedClass)}>
+                      <summary className={cx("cursor-pointer ui-body font-semibold", uiTitleTextClass)}>
+                        {t({ en: "Advanced tools and manual setup", fr: "Outils avancés et configuration manuelle", de: "Erweiterte Werkzeuge und manuelle Einrichtung" })}
+                      </summary>
+                      <div className="mt-4 space-y-5">
+                        <section className="space-y-3" aria-labelledby="portal-rclone-setup">
+                          <div>
+                            <h4 id="portal-rclone-setup" className={cx("ui-body font-semibold", uiTitleTextClass)}>rclone</h4>
+                            <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
+                              {t({ en: "Command line and automation.", fr: "Ligne de commande et automatisation.", de: "Kommandozeile und Automatisierung." })}
+                              {" "}
+                              <a
+                                className="font-semibold text-primary hover:underline dark:text-primary-200"
+                                href="https://rclone.org/downloads/"
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={t({ en: "Install rclone from the official site (opens in a new tab)", fr: "Installer rclone depuis le site officiel (s'ouvre dans un nouvel onglet)", de: "rclone von der offiziellen Website installieren (öffnet einen neuen Tab)" })}
+                              >
+                                {t({ en: "Install rclone", fr: "Installer rclone", de: "rclone installieren" })}
+                              </a>
+                            </p>
+                          </div>
+                          <div className="grid gap-2 ui-caption">
+                            <div>
+                              <span className={uiMutedTextClass}>{t({ en: "Secret environment variable", fr: "Variable d'environnement du secret", de: "Umgebungsvariable für das Secret" })}</span>
+                              <code className={cx("mt-1 block break-all rounded-md px-2 py-1", uiTitleTextClass)}>{rcloneSecretEnvironmentVariable}</code>
+                            </div>
+                            <div>
+                              <span className={uiMutedTextClass}>{t({ en: "Example command", fr: "Commande d'exemple", de: "Beispielbefehl" })}</span>
+                              <code className={cx("mt-1 block break-all rounded-md px-2 py-1", uiTitleTextClass)}>rclone lsd {rcloneRemoteName}:{selectedConnection.bucketName}</code>
+                            </div>
+                          </div>
+                          <UiButton
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={handleDownloadRcloneConfig}
+                            disabled={setupFileUnavailable}
+                            aria-label={`${t({ en: "Download rclone configuration (.conf) for", fr: "Télécharger la configuration rclone (.conf) pour", de: "rclone-Konfiguration (.conf) herunterladen für" })} ${selectedConnection.storageSpaceName}`}
+                          >
+                            {t({ en: "Download rclone configuration (.conf)", fr: "Télécharger la configuration rclone (.conf)", de: "rclone-Konfiguration herunterladen (.conf)" })}
+                          </UiButton>
+                        </section>
+
+                        <section className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-700" aria-labelledby="portal-manual-s3-setup">
+                          <div>
+                            <h4 id="portal-manual-s3-setup" className={cx("ui-body font-semibold", uiTitleTextClass)}>
+                              {t({ en: "Other S3-compatible application", fr: "Autre application compatible S3", de: "Andere S3-kompatible Anwendung" })}
+                            </h4>
+                            <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
+                              {t({
+                                en: "Enter the secret in the application when requested. It is never included in these downloads.",
+                                fr: "Saisissez le secret dans l'application lorsqu'il est demandé. Il n'est jamais inclus dans ces téléchargements.",
+                                de: "Geben Sie das Secret auf Nachfrage in der Anwendung ein. Es ist nie in diesen Downloads enthalten.",
+                              })}
+                            </p>
+                          </div>
+                          <dl className="grid gap-3 ui-caption sm:grid-cols-2">
+                            {[
+                              {
+                                label: t({ en: "S3 endpoint", fr: "Endpoint S3", de: "S3-Endpunkt" }),
+                                value: connectionEndpointLabel,
+                              },
+                              {
+                                label: t({ en: "Bucket", fr: "Bucket", de: "Bucket" }),
+                                value: selectedConnection.bucketName,
+                              },
+                              {
+                                label: t({ en: "Access ID", fr: "ID d'accès", de: "Zugriffs-ID" }),
+                                value: selectedConnection.key.access_key_id,
+                              },
+                            ].map((item) => (
+                              <div key={item.label}>
+                                <dt className={uiMutedTextClass}>{item.label}</dt>
+                                <dd className={cx("mt-1 break-all font-mono font-semibold", uiTitleTextClass)}>{item.value}</dd>
+                                <UiButton
+                                  type="button"
+                                  size="xs"
+                                  variant="ghost"
+                                  className="mt-1"
+                                  onClick={() => void handleCopyConnectionValue(item.value)}
+                                  aria-label={`${t({ en: "Copy", fr: "Copier", de: "Kopieren" })} ${item.label}: ${item.value}`}
+                                >
+                                  {t({ en: "Copy", fr: "Copier", de: "Kopieren" })}
+                                </UiButton>
+                              </div>
+                            ))}
+                            <div>
+                              <dt className={uiMutedTextClass}>{t({ en: "Addressing mode", fr: "Mode d'adressage", de: "Adressierungsmodus" })}</dt>
+                              <dd className={cx("mt-1 font-semibold", uiTitleTextClass)}>
+                                {selectedConnection.forcePathStyle
+                                  ? t({ en: "Path-style", fr: "Style chemin", de: "Pfadstil" })
+                                  : t({ en: "Virtual-hosted style", fr: "Style hôte virtuel", de: "Virtueller Hoststil" })}
+                              </dd>
+                            </div>
+                          </dl>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <UiButton
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleDownloadConnectionSheet(false)}
+                              aria-label={`${t({ en: "Download connection details (.txt) for", fr: "Télécharger les détails de connexion (.txt) pour", de: "Verbindungsdetails (.txt) herunterladen für" })} ${selectedConnection.storageSpaceName}`}
+                            >
+                              {t({ en: "Download connection details (.txt)", fr: "Télécharger les détails de connexion (.txt)", de: "Verbindungsdetails herunterladen (.txt)" })}
+                            </UiButton>
+                            <span className={cx("ui-caption", uiMutedTextClass)} aria-live="polite">{connectionCopyMessage}</span>
+                          </div>
+                        </section>
+                      </div>
+                    </details>
+                  </>
+                ) : null}
+              </>
+            )}
           </div>
         </Modal>
       ) : null}
@@ -977,6 +1105,13 @@ export default function PortalAccessKeysPage() {
           <div className="space-y-4">
             {error ? <PageBanner tone="error">{error}</PageBanner> : null}
             {storageSpacesError ? <PageBanner tone="warning">{storageSpacesError}</PageBanner> : null}
+            <PageBanner tone="info">
+              {t({
+                en: "If the recipient can sign in to Portal, prefer sharing the Space there. Create tool access for desktop applications, scripts, or direct S3 clients.",
+                fr: "Si le destinataire peut se connecter à Portal, préférez le partage du Space. Créez un accès outil pour une application de bureau, un script ou un client S3 direct.",
+                de: "Wenn sich der Empfänger bei Portal anmelden kann, geben Sie den Space bevorzugt dort frei. Werkzeugzugriff ist für Desktop-Anwendungen, Skripte oder direkte S3-Clients gedacht.",
+              })}
+            </PageBanner>
             {personalAccessLimitReached ? (
               <PageBanner tone="info">
                 {t({

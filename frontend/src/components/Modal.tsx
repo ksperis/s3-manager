@@ -29,6 +29,8 @@ type ModalProps = {
   ariaDescribedby?: string;
   closeOnEscape?: boolean;
   closeOnBackdropClick?: boolean;
+  closeLabel?: string;
+  closeAriaLabel?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
   returnFocusOnClose?: boolean;
   trapFocus?: boolean;
@@ -45,6 +47,8 @@ export default function Modal({
   ariaDescribedby,
   closeOnEscape = true,
   closeOnBackdropClick = true,
+  closeLabel = "Close",
+  closeAriaLabel = "Close modal",
   initialFocusRef,
   returnFocusOnClose = true,
   trapFocus = true,
@@ -145,8 +149,8 @@ export default function Modal({
           <h3 id={fallbackTitleId} className={cx("ui-subtitle", uiTitleTextClass)}>
             {title}
           </h3>
-          <UiButton variant="ghost" onClick={onClose} className="py-1" aria-label="Close modal">
-            Close
+          <UiButton variant="ghost" onClick={onClose} className="py-1" aria-label={closeAriaLabel}>
+            {closeLabel}
           </UiButton>
         </div>
         <div className={`${maxBodyHeightClass} overflow-y-auto px-6 py-4`}>{children}</div>

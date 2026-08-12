@@ -20,21 +20,28 @@ workflow.
 1. Open **Portal > External tools**. This page exposes the S3 endpoint, bucket
    name, access key, and other technical connection details required by S3
    clients.
-2. Read **Before connecting a tool** and confirm that Portal sharing is not a
-   better fit.
-3. Start **New tool access**.
-4. Choose **For myself** or **For an external user**.
-5. Choose the space the tool should reach.
-6. Select **Read only** unless the tool must upload, replace, or delete files.
+2. Start **New tool access**. The creation page explains when Portal sharing is
+   a better fit.
+3. Choose **For myself** or **For an external user**.
+4. Choose the space the tool should reach.
+5. Select **Read only** unless the tool must upload, replace, or delete files.
    Use **Read/write** only for tools that need those changes.
-7. Copy the secret immediately. It is shown only once.
-8. In **Connect an external tool**, choose the access entry and space.
-9. Download either:
-   - **Cyberduck bookmark** to open the space directly in Cyberduck;
-   - **Connection details** for another S3-compatible client.
-10. If you need a one-time file that also includes the secret, use the explicit
-   **Details with secret** action immediately after creating the access, then
-   delete the file after configuring the tool.
+6. Copy the secret immediately. It is shown only once.
+7. Select **Connect** on the access you want to use, or open **Connect tool**
+   and select **Configure a tool**.
+8. Choose the target space when the access is personal. An external access is
+   already fixed to the space selected when it was created.
+9. Choose the application and import its downloaded configuration:
+   - **Cyberduck / Mountain Duck** uses a `.duck` bookmark on macOS and
+     Windows;
+   - **WinSCP** uses an S3 session `.ini` on Windows;
+   - **rclone** is available under **Advanced tools and manual setup** and uses
+     a `.conf` remote for command-line work and automation;
+   - another S3-compatible application can use the endpoint, bucket, Access ID,
+     and addressing mode displayed in the same advanced section.
+10. If a one-time file must include the secret, use **Download with secret**
+    only in the secret panel shown immediately after creation. Delete that file
+    after configuring the tool.
 11. Disable or delete unused access when it is no longer needed.
 
 ## Important limits
@@ -54,10 +61,16 @@ workflow.
 - Tool access does not grant access outside the underlying storage policies.
 - The bucket name is shown only because some S3-compatible tools ask for it.
   Use the space name everywhere else in Portal.
-- Cyberduck bookmark files do not include the secret. Cyberduck asks for it
+- The `.duck`, WinSCP `.ini`, rclone `.conf`, and manual `.txt` files downloaded
+  from **Connect a tool** never include the secret. The application asks for it
   when connecting.
-- Cyberduck bookmarks automatically use path-style S3 addressing when the
-  selected storage endpoint requires it.
+- Cyberduck / Mountain Duck bookmarks, WinSCP sessions, and rclone remotes
+  automatically use path-style S3 addressing when the selected storage
+  endpoint requires it.
+- rclone reads the secret from the environment variable shown beside the
+  generated remote. Keep that value out of the `.conf` file.
+- If no active access or no space is available, **Connect a tool** provides the
+  next action instead of showing an unusable form.
 
 ## You are done when
 
@@ -79,6 +92,6 @@ unavailable, delete an unused personal S3 access key before creating another.
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-access-keys.light.png" alt="Portal External tools page with guidance for connecting a tool, one-time secret warning, and external access actions" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-access-keys.dark.png" alt="Portal External tools page with guidance for connecting a tool, one-time secret warning, and external access actions" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-access-keys.light.png" alt="Connect a tool dialog with human-readable access, Space selection, Cyberduck and WinSCP configuration cards" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-access-keys.dark.png" alt="Connect a tool dialog with human-readable access, Space selection, Cyberduck and WinSCP configuration cards" loading="lazy">
 </div>

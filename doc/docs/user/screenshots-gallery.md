@@ -209,10 +209,10 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
   <figure data-thumb-label="External tools">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-access-keys.light.png" alt="Portal External tools page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-access-keys.dark.png" alt="Portal External tools page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-access-keys.light.png" alt="Connect a tool dialog with human-readable access, Space selection, Cyberduck and WinSCP configuration cards" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-access-keys.dark.png" alt="Connect a tool dialog with human-readable access, Space selection, Cyberduck and WinSCP configuration cards" loading="lazy">
     </div>
-    <figcaption><strong>External tools.</strong> Portal users can create external S3 keys with clear endpoint guidance and safety copy.</figcaption>
+    <figcaption><strong>External tools.</strong> Portal users choose an application first and download a secret-free configuration tailored to it.</figcaption>
   </figure>
   <figure data-thumb-label="Settings">
     <div class="docs-themed-shot" data-docs-themed-shot>

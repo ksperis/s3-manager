@@ -4,9 +4,13 @@ import type { PortalAccessKey, PortalStorageSpaceSummary } from "../../api/porta
 import {
   buildCyberduckBookmark,
   buildGenericConnectionSheet,
+  buildRcloneConfig,
+  buildWinScpProfile,
   bucketNameForPortalExternalTool,
   parsePortalExternalToolEndpoint,
   portalExternalToolPermissionLabel,
+  portalExternalToolRcloneRemoteName,
+  portalExternalToolRcloneSecretEnvironmentVariable,
   type PortalExternalToolConnection,
 } from "./portalExternalToolAccess";
 
@@ -79,6 +83,74 @@ describe("portalExternalToolAccess", () => {
     expect(bookmark).toContain("<key>Custom</key>");
     expect(bookmark).toContain("<key>s3.bucket.virtualhost.disable</key>");
     expect(bookmark).toContain("<string>true</string>");
+  });
+
+  it("escapes Cyberduck XML values and supports HTTP endpoints", () => {
+    const bookmark = buildCyberduckBookmark(connection({
+      key: { ...externalKey, access_key_id: "AK&EXT" },
+      endpoint: parsePortalExternalToolEndpoint("http://localhost:9000")!,
+      storageSpaceName: "Research & Data",
+      bucketName: "research-data-bucket",
+    }));
+    const document = new DOMParser().parseFromString(bookmark, "application/xml");
+
+    expect(document.querySelector("parsererror")).toBeNull();
+    expect(bookmark).toContain("<string>AK&amp;EXT</string>");
+    expect(bookmark).toContain("<string>localhost</string>");
+    expect(bookmark).toContain("<string>9000</string>");
+  });
+
+  it.each([
+    { endpoint: "https://s3.example.test:9443", forcePathStyle: true, ftps: 1, urlStyle: 1 },
+    { endpoint: "http://s3.example.test:9000", forcePathStyle: false, ftps: 0, urlStyle: 0 },
+  ])("builds a secret-free WinSCP S3 session for $endpoint", ({ endpoint, forcePathStyle, ftps, urlStyle }) => {
+    const profile = buildWinScpProfile(connection({
+      endpoint: parsePortalExternalToolEndpoint(endpoint)!,
+      forcePathStyle,
+      storageSpaceName: "Research & Data",
+    }));
+
+    expect(profile).toContain("[Sessions\\research-data-research-data-bucket]");
+    expect(profile).toContain("FSProtocol=7");
+    expect(profile).toContain(`Ftps=${ftps}`);
+    expect(profile).toContain("PortNumber=");
+    expect(profile).toContain("UserName=AK-EXT");
+    expect(profile).toContain("RemoteDirectory=/research-data-bucket");
+    expect(profile).toContain(`S3UrlStyle=${urlStyle}`);
+    expect(profile).not.toMatch(/password/i);
+    expect(profile).not.toContain("SK-EXT");
+  });
+
+  it.each([
+    { endpoint: "https://s3.example.test:9443", forcePathStyle: true, expectedEndpoint: "https://s3.example.test:9443" },
+    { endpoint: "http://s3.example.test", forcePathStyle: false, expectedEndpoint: "http://s3.example.test" },
+  ])("builds a secret-free rclone Ceph remote for $endpoint", ({ endpoint, forcePathStyle, expectedEndpoint }) => {
+    const config = buildRcloneConfig(connection({
+      endpoint: parsePortalExternalToolEndpoint(endpoint)!,
+      forcePathStyle,
+      storageSpaceName: "Research & Data",
+    }));
+
+    expect(portalExternalToolRcloneRemoteName(connection())).toBe("research_data_research_data_bucket");
+    expect(portalExternalToolRcloneSecretEnvironmentVariable(connection())).toBe(
+      "RCLONE_CONFIG_RESEARCH_DATA_RESEARCH_DATA_BUCKET_SECRET_ACCESS_KEY"
+    );
+    expect(config).toContain("[research_data_research_data_bucket]");
+    expect(config).toContain("type = s3");
+    expect(config).toContain("provider = Ceph");
+    expect(config).toContain("access_key_id = AK-EXT");
+    expect(config).toContain(`endpoint = ${expectedEndpoint}`);
+    expect(config).toContain(`force_path_style = ${forcePathStyle}`);
+    expect(config).toContain("rclone lsd research_data_research_data_bucket:research-data-bucket");
+    expect(config).not.toContain("SK-EXT");
+  });
+
+  it("rejects every generated profile when the endpoint is invalid", () => {
+    const invalidConnection = connection({ endpoint: null });
+
+    expect(() => buildCyberduckBookmark(invalidConnection)).toThrow();
+    expect(() => buildWinScpProfile(invalidConnection)).toThrow();
+    expect(() => buildRcloneConfig(invalidConnection)).toThrow();
   });
 
   it("builds generic connection sheets with an explicit one-time secret option", () => {
