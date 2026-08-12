@@ -19,6 +19,7 @@ SIGNAL_FIELDS = {
     "account": "account=",
     "metadata": "metadata=",
     "delegated_browser_audit": "_common_record_browser_action(",
+    "delegated_browser_bucket_config_mutation_audit": "BrowserBucketConfigMutationService = Depends(",
     "delegated_ceph_admin_audit": "record_ceph_admin_action(",
     "delegated_ceph_admin_bucket_config_audit": "_record_bucket_config_mutation(",
     "delegated_ceph_admin_bucket_config_wrapper": "_run_bucket_config_",
@@ -37,6 +38,7 @@ SIGNAL_FIELDS = {
 DELEGATED_AUDIT_SIGNALS = frozenset(
     {
         "delegated_browser_audit",
+        "delegated_browser_bucket_config_mutation_audit",
         "delegated_ceph_admin_audit",
         "delegated_ceph_admin_bucket_config_audit",
         "delegated_ceph_admin_bucket_config_wrapper",
@@ -166,6 +168,9 @@ def collect_rows(backend_root: Path) -> list[RouteAuditRow]:
             end_lineno = getattr(node, "end_lineno", node.lineno)
             body = "\n".join(lines[node.lineno - 1 : end_lineno])
             signals = {name: marker in body for name, marker in SIGNAL_FIELDS.items()}
+            signals["delegated_browser_bucket_config_mutation_audit"] = signals[
+                "delegated_browser_bucket_config_mutation_audit"
+            ] and ("mutation.update(" in body or "mutation.delete(" in body)
             for method, path in routes:
                 rows.append(
                     RouteAuditRow(
