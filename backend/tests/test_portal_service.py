@@ -57,6 +57,7 @@ from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router
 from app.routers import portal_access_keys as portal_access_keys_router
+from app.routers import portal_traffic as portal_traffic_router
 from app.routers import portal_monitoring as portal_monitoring_router
 from app.routers import portal_objects as portal_objects_router
 from app.routers import portal_storage_spaces as portal_storage_spaces_router
@@ -717,9 +718,9 @@ def test_portal_traffic_aggregates_visible_buckets_for_portal_user(monkeypatch, 
                 "category_breakdown": [],
             }
 
-    monkeypatch.setattr(portal_router, "TrafficService", FakeTrafficService)
+    monkeypatch.setattr(portal_traffic_router, "TrafficService", FakeTrafficService)
 
-    result = portal_router.portal_traffic(
+    result = portal_traffic_router.portal_traffic(
         window=TrafficWindow.DAY,
         bucket=None,
         access=access,
@@ -754,9 +755,9 @@ def test_portal_traffic_filters_to_requested_visible_bucket(monkeypatch, db_sess
             captured["bucket_filters"] = bucket_filters
             return {"window": window.value}
 
-    monkeypatch.setattr(portal_router, "TrafficService", FakeTrafficService)
+    monkeypatch.setattr(portal_traffic_router, "TrafficService", FakeTrafficService)
 
-    portal_router.portal_traffic(
+    portal_traffic_router.portal_traffic(
         window=TrafficWindow.WEEK,
         bucket="bucket-a",
         access=_portal_access(account, user),
@@ -766,7 +767,7 @@ def test_portal_traffic_filters_to_requested_visible_bucket(monkeypatch, db_sess
     assert captured == {"bucket": "bucket-a", "bucket_filters": None}
 
     with pytest.raises(HTTPException) as excinfo:
-        portal_router.portal_traffic(
+        portal_traffic_router.portal_traffic(
             window=TrafficWindow.WEEK,
             bucket="bucket-b",
             access=_portal_access(account, user),
@@ -6029,6 +6030,24 @@ def test_portal_storage_space_routes_are_owned_by_dedicated_router():
 
     assert set(route_modules) == expected_paths
     assert set(route_modules.values()) == {"app.routers.portal_storage_spaces"}
+
+
+def test_portal_cross_cutting_routes_are_owned_by_domain_routers():
+    route_modules = {
+        route.path: route.endpoint.__module__
+        for route in portal_router.router.routes
+        if route.path in {"/portal/billing/me", "/portal/traffic"}
+    }
+
+    assert route_modules == {
+        "/portal/billing/me": "app.routers.portal_billing",
+        "/portal/traffic": "app.routers.portal_traffic",
+    }
+
+
+def test_portal_root_router_is_a_pure_aggregator():
+    assert portal_router.router.routes
+    assert all(route.endpoint.__module__ != "app.routers.portal" for route in portal_router.router.routes)
 
 
 def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch, db_session):
