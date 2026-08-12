@@ -57,6 +57,7 @@ from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router
 from app.routers import portal_access_keys as portal_access_keys_router
+from app.routers import portal_monitoring as portal_monitoring_router
 from app.services import app_settings_service, s3_client
 from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
@@ -5891,16 +5892,28 @@ def test_portal_endpoint_alerts_report_degraded_endpoint(monkeypatch, db_session
             assert endpoint_id == endpoint.id
             return {"down_count": 0, "degraded_count": 1}
 
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: FakeSettings())
-    monkeypatch.setattr(portal_router, "HealthCheckService", FakeHealthService)
+    monkeypatch.setattr(portal_monitoring_router, "load_app_settings", lambda: FakeSettings())
+    monkeypatch.setattr(portal_monitoring_router, "HealthCheckService", FakeHealthService)
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
-    alerts = portal_router._portal_endpoint_alerts(access, db_session)
+    alerts = portal_monitoring_router._portal_endpoint_alerts(access, db_session)
 
     assert [(alert.id, alert.tone, alert.severity_label) for alert in alerts] == [
         ("endpoint-degraded", "warning", "Warning")
     ]
+
+
+def test_portal_monitoring_routes_are_owned_by_dedicated_router():
+    expected_paths = {"/portal/endpoint-health", "/portal/alerts"}
+    route_modules = {
+        route.path: route.endpoint.__module__
+        for route in portal_router.router.routes
+        if route.path in expected_paths
+    }
+
+    assert set(route_modules) == expected_paths
+    assert set(route_modules.values()) == {"app.routers.portal_monitoring"}
 
 
 def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch, db_session):
