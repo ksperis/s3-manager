@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError, ParamValidationError
 from botocore.parsers import ResponseParserError
 from concurrent.futures import ThreadPoolExecutor
 
-from app.services import s3_bucket_replication, s3_client, s3_deletion
+from app.services import s3_bucket_replication, s3_bucket_security, s3_client, s3_deletion
 
 
 class FakeS3PublicAccessClient:
@@ -37,6 +37,15 @@ def test_s3_bucket_replication_owns_replication_contracts_without_legacy_exports
     assert not hasattr(s3_client, "delete_bucket_replication")
 
 
+def test_s3_bucket_security_owns_security_contracts_without_legacy_exports():
+    assert s3_bucket_security.get_bucket_public_access_block.__module__ == "app.services.s3_bucket_security"
+    assert s3_bucket_security.get_bucket_object_lock.__module__ == "app.services.s3_bucket_security"
+    assert s3_bucket_security.get_bucket_encryption.__module__ == "app.services.s3_bucket_security"
+    assert not hasattr(s3_client, "get_bucket_public_access_block")
+    assert not hasattr(s3_client, "get_bucket_object_lock")
+    assert not hasattr(s3_client, "get_bucket_encryption")
+
+
 class FakeS3EncryptionClient:
     def __init__(self):
         self.put_calls = []
@@ -58,9 +67,9 @@ class FakeS3EncryptionClient:
 
 def test_public_access_block_avoids_acl_flags(monkeypatch):
     fake_client = FakeS3PublicAccessClient()
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: fake_client)
+    monkeypatch.setattr(s3_bucket_security, "get_s3_client", lambda *args, **kwargs: fake_client)
 
-    s3_client.set_bucket_public_access_block("bucket-one", block=True)
+    s3_bucket_security.set_bucket_public_access_block("bucket-one", block=True)
 
     assert fake_client.put_calls, "Expected put_public_access_block to be called"
     call_args = fake_client.put_calls[0]
@@ -74,28 +83,28 @@ def test_public_access_block_avoids_acl_flags(monkeypatch):
 
 def test_public_access_block_disable(monkeypatch):
     fake_client = FakeS3PublicAccessClient()
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: fake_client)
+    monkeypatch.setattr(s3_bucket_security, "get_s3_client", lambda *args, **kwargs: fake_client)
 
-    s3_client.set_bucket_public_access_block("bucket-two", block=False)
+    s3_bucket_security.set_bucket_public_access_block("bucket-two", block=False)
 
     assert fake_client.delete_calls == [{"Bucket": "bucket-two"}]
 
 
 def test_get_bucket_encryption_returns_rules(monkeypatch):
     fake_client = FakeS3EncryptionClient()
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: fake_client)
+    monkeypatch.setattr(s3_bucket_security, "get_s3_client", lambda *args, **kwargs: fake_client)
 
-    rules = s3_client.get_bucket_encryption("bucket-enc")
+    rules = s3_bucket_security.get_bucket_encryption("bucket-enc")
 
     assert rules == [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
 
 
 def test_put_bucket_encryption_sends_rules(monkeypatch):
     fake_client = FakeS3EncryptionClient()
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: fake_client)
+    monkeypatch.setattr(s3_bucket_security, "get_s3_client", lambda *args, **kwargs: fake_client)
 
     payload = [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
-    s3_client.put_bucket_encryption("bucket-enc", payload)
+    s3_bucket_security.put_bucket_encryption("bucket-enc", payload)
 
     assert fake_client.put_calls == [
         {
@@ -113,9 +122,9 @@ def test_delete_bucket_encryption_ignores_missing_configuration(monkeypatch):
                 "DeleteBucketEncryption",
             )
 
-    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: MissingConfigClient())
+    monkeypatch.setattr(s3_bucket_security, "get_s3_client", lambda *args, **kwargs: MissingConfigClient())
 
-    s3_client.delete_bucket_encryption("bucket-enc")
+    s3_bucket_security.delete_bucket_encryption("bucket-enc")
 
 
 def test_get_bucket_replication_returns_configuration(monkeypatch):

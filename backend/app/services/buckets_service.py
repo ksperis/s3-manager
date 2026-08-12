@@ -13,7 +13,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.object_diff_common import compare_object_entries
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services import s3_bucket_replication, s3_client, s3_deletion
+from app.services import s3_bucket_replication, s3_bucket_security, s3_client, s3_deletion
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
@@ -896,13 +896,13 @@ class BucketsService:
         versioning_status = s3_client.get_bucket_versioning(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
-        public_access_block_raw = s3_client.get_bucket_public_access_block(
+        public_access_block_raw = s3_bucket_security.get_bucket_public_access_block(
             name,
             access_key=access_key,
             secret_key=secret_key,
             **self._client_kwargs(account),
         )
-        object_lock_raw = s3_client.get_bucket_object_lock(
+        object_lock_raw = s3_bucket_security.get_bucket_object_lock(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -960,7 +960,7 @@ class BucketsService:
 
     def get_bucket_object_lock(self, name: str, account: S3ExecutionTarget) -> BucketObjectLock | None:
         access_key, secret_key = self._account_credentials(account)
-        object_lock_raw = s3_client.get_bucket_object_lock(
+        object_lock_raw = s3_bucket_security.get_bucket_object_lock(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
         if not isinstance(object_lock_raw, dict):
@@ -980,7 +980,7 @@ class BucketsService:
 
     def get_bucket_encryption(self, name: str, account: S3ExecutionTarget) -> BucketEncryptionConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        rules = s3_client.get_bucket_encryption(
+        rules = s3_bucket_security.get_bucket_encryption(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -996,14 +996,14 @@ class BucketsService:
     ) -> BucketEncryptionConfiguration:
         access_key, secret_key = self._account_credentials(account)
         if not rules:
-            s3_client.delete_bucket_encryption(
+            s3_bucket_security.delete_bucket_encryption(
                 name,
                 access_key=access_key,
                 secret_key=secret_key,
                 **self._client_kwargs(account),
             )
             return BucketEncryptionConfiguration(rules=[])
-        s3_client.put_bucket_encryption(
+        s3_bucket_security.put_bucket_encryption(
             name,
             rules=rules,
             access_key=access_key,
@@ -1014,7 +1014,7 @@ class BucketsService:
 
     def delete_bucket_encryption(self, name: str, account: S3ExecutionTarget) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.delete_bucket_encryption(
+        s3_bucket_security.delete_bucket_encryption(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1401,7 +1401,7 @@ class BucketsService:
 
     def get_public_access_block(self, name: str, account: S3ExecutionTarget) -> BucketPublicAccessBlock:
         access_key, secret_key = self._account_credentials(account)
-        config = s3_client.get_bucket_public_access_block(
+        config = s3_bucket_security.get_bucket_public_access_block(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1431,14 +1431,14 @@ class BucketsService:
         }
         if not any(config.values()):
             config = {}
-        s3_client.set_bucket_public_access_block(
+        s3_bucket_security.set_bucket_public_access_block(
             name,
             configuration=config,
             access_key=access_key,
             secret_key=secret_key,
             **self._client_kwargs(account),
         )
-        updated = s3_client.get_bucket_public_access_block(
+        updated = s3_bucket_security.get_bucket_public_access_block(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1806,7 +1806,7 @@ class BucketsService:
 
     def get_bucket_acl(self, name: str, account: S3ExecutionTarget) -> BucketAcl:
         access_key, secret_key = self._account_credentials(account)
-        acl_raw = s3_client.get_bucket_acl(
+        acl_raw = s3_bucket_security.get_bucket_acl(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
         owner = acl_raw.get("Owner") or {}
@@ -1832,7 +1832,7 @@ class BucketsService:
 
     def set_bucket_acl(self, name: str, account: S3ExecutionTarget, payload: BucketAclUpdate) -> BucketAcl:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_acl(
+        s3_bucket_security.put_bucket_acl(
             name,
             acl=payload.acl,
             access_key=access_key,
@@ -1843,7 +1843,7 @@ class BucketsService:
 
     def get_object_lock(self, name: str, account: S3ExecutionTarget) -> BucketObjectLock:
         access_key, secret_key = self._account_credentials(account)
-        config = s3_client.get_bucket_object_lock(
+        config = s3_bucket_security.get_bucket_object_lock(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1860,7 +1860,7 @@ class BucketsService:
 
     def set_object_lock(self, name: str, account: S3ExecutionTarget, payload: BucketObjectLockUpdate) -> BucketObjectLock:
         access_key, secret_key = self._account_credentials(account)
-        current_config = s3_client.get_bucket_object_lock(
+        current_config = s3_bucket_security.get_bucket_object_lock(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1881,7 +1881,7 @@ class BucketsService:
             raise RuntimeError("Object Lock not available on this bucket.")
 
         try:
-            s3_client.put_bucket_object_lock(
+            s3_bucket_security.put_bucket_object_lock(
                 name,
                 access_key=access_key,
                 secret_key=secret_key,
