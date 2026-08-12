@@ -26,12 +26,18 @@ workflow.
 4. Choose the space the tool should reach.
 5. Select **Read only** unless the tool must upload, replace, or delete files.
    Use **Read/write** only for tools that need those changes.
-6. Copy the secret immediately. It is shown only once.
-7. Select **Connect** on the access you want to use, or open **Connect tool**
-   and select **Configure a tool**.
-8. Choose the target space when the access is personal. An external access is
+6. Copy the secret immediately. It is shown only once, then select **Configure
+   this access** to continue with the identity that was just created.
+7. For an existing access, select **Connect** on its row, or open **Connect
+   tool** and select **Configure a tool**.
+8. For an external recipient only, if you must transmit both values in one
+   file, expand **Advanced: prepare credentials for secure transfer** and use
+   **Export unencrypted credentials (.txt)**. Confirm the warning, use a
+   secure transfer channel, and delete every copy after the recipient has
+   configured the tool.
+9. Choose the target space when the access is personal. An external access is
    already fixed to the space selected when it was created.
-9. Choose the application and import its downloaded configuration:
+10. Choose the application and import its downloaded configuration:
    - **Cyberduck / Mountain Duck** uses a `.duck` bookmark on macOS and
      Windows;
    - **WinSCP** uses an S3 session `.ini` on Windows;
@@ -39,9 +45,6 @@ workflow.
      a `.conf` remote for command-line work and automation;
    - another S3-compatible application can use the endpoint, bucket, Access ID,
      and addressing mode displayed in the same advanced section.
-10. If a one-time file must include the secret, use **Download with secret**
-    only in the secret panel shown immediately after creation. Delete that file
-    after configuring the tool.
 11. Disable or delete unused access when it is no longer needed.
 
 ## Important limits
@@ -64,6 +67,9 @@ workflow.
 - The `.duck`, WinSCP `.ini`, rclone `.conf`, and manual `.txt` files downloaded
   from **Connect a tool** never include the secret. The application asks for it
   when connecting.
+- Personal access never offers a secret-inclusive download. The exceptional
+  unencrypted export is shown only immediately after creating an external
+  recipient's access and requires explicit confirmation.
 - Cyberduck / Mountain Duck bookmarks, WinSCP sessions, and rclone remotes
   automatically use path-style S3 addressing when the selected storage
   endpoint requires it.

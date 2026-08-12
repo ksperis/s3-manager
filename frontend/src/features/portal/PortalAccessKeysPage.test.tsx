@@ -8,6 +8,7 @@ import PortalAccessKeysPage from "./PortalAccessKeysPage";
 import type { PortalAccessKeysState } from "../../api/portal";
 
 let downloadedBlobs: Blob[] = [];
+let downloadedFilenames: string[] = [];
 
 function readDownloadedBlobText(blob: Blob | undefined): Promise<string> {
   if (!blob) throw new Error("Missing downloaded blob");
@@ -85,6 +86,7 @@ describe("PortalAccessKeysPage", () => {
 
   beforeEach(() => {
     downloadedBlobs = [];
+    downloadedFilenames = [];
     window.localStorage.clear();
     Object.defineProperty(window.URL, "createObjectURL", {
       configurable: true,
@@ -97,7 +99,9 @@ describe("PortalAccessKeysPage", () => {
       configurable: true,
       value: vi.fn(),
     });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      downloadedFilenames.push(this.download);
+    });
     vi.clearAllMocks();
     mocks.state = {
       iam_user: { iam_username: "portal-101-7" },
@@ -334,6 +338,14 @@ describe("PortalAccessKeysPage", () => {
     expect(await screen.findByText("The secret is shown only once.")).toBeInTheDocument();
     expect(screen.getAllByText("AK-NEW").length).toBeGreaterThan(0);
     expect(screen.getByText("SK-NEW")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy Access ID" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy secret key" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Download details/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Advanced: prepare credentials for secure transfer")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Configure this access" }));
+    const setupDialog = screen.getByRole("dialog", { name: "Connect a tool" });
+    expect(within(setupDialog).getByRole("combobox", { name: "Access used" })).toHaveValue("AK-NEW");
   });
 
   it("limits only the personal IAM user when the create workflow opens", async () => {
@@ -411,9 +423,22 @@ describe("PortalAccessKeysPage", () => {
     expect(await screen.findByText("The secret is shown only once and is limited to the selected space.")).toBeInTheDocument();
     expect(screen.getAllByText("AK-EXT").length).toBeGreaterThan(0);
     expect(screen.getByText("SK-EXT")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Download with secret" }).length).toBeGreaterThan(0);
-    await user.click(screen.getAllByRole("button", { name: "Download with secret" })[0]);
-    expect(await readDownloadedBlobText(downloadedBlobs.at(-1))).toContain("Secret: SK-EXT");
+    expect(screen.queryByRole("button", { name: /Download details/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Download with secret/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByText("Advanced: prepare credentials for secure transfer"));
+    await user.click(screen.getByRole("button", { name: "Export unencrypted credentials (.txt)" }));
+
+    const exportDialog = screen.getByRole("dialog", { name: "Export unencrypted credentials?" });
+    expect(within(exportDialog).getByText("partner@example.org")).toBeInTheDocument();
+    expect(within(exportDialog).getByText(/Anyone who obtains this file can use the access/i)).toBeInTheDocument();
+    expect(downloadedBlobs).toHaveLength(0);
+
+    await user.click(within(exportDialog).getByRole("button", { name: "Export credentials (.txt)" }));
+    const exportedCredentials = await readDownloadedBlobText(downloadedBlobs.at(-1));
+    expect(downloadedFilenames.at(-1)).toBe("research-data-research-data-internal-unencrypted-credentials.txt");
+    expect(exportedCredentials).toContain("This unencrypted file contains a one-time secret.");
+    expect(exportedCredentials).toContain("Secret: SK-EXT");
   });
 
   it("opens external key creation from a preselected space link", async () => {

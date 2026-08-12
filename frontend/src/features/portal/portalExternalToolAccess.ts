@@ -196,7 +196,7 @@ export function buildGenericConnectionSheet(
     "- Keep the secret in a password manager or your usual secure storage.",
   ];
   if (secret) {
-    lines.splice(1, 0, "This file contains a one-time secret. Delete it after configuring your tool.");
+    lines.splice(1, 0, "This unencrypted file contains a one-time secret. Transfer it securely and delete every copy after configuring the recipient's tool.");
   }
   return `${lines.join("\n")}\n`;
 }

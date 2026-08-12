@@ -160,7 +160,8 @@ describe("portalExternalToolAccess", () => {
     expect(withoutSecret).toContain("Storage name for external tools: research-data-bucket");
     expect(withoutSecret).toContain("Secret: Not included in this file");
     expect(withoutSecret).not.toContain("SK-EXT");
-    expect(withSecret).toContain("This file contains a one-time secret.");
+    expect(withSecret).toContain("This unencrypted file contains a one-time secret.");
+    expect(withSecret).toContain("Transfer it securely and delete every copy");
     expect(withSecret).toContain("Secret: SK-EXT");
   });
 });
