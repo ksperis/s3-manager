@@ -543,7 +543,7 @@ def test_ceph_admin_bucket_listing_cache_can_be_invalidated_per_endpoint():
         with_stats=False,
         ctx=ctx,
     )
-    buckets_router.invalidate_bucket_listing_cache(ctx.endpoint.id)
+    bucket_listing_cache.invalidate_bucket_listing_cache(ctx.endpoint.id)
     buckets_router.list_buckets(
         page=1,
         page_size=25,

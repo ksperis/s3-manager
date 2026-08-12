@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.routers.ceph_admin import accounts as accounts_router
 from app.routers.ceph_admin import bucket_config as bucket_config_router
+from app.routers.ceph_admin import bucket_tools as bucket_tools_router
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import users as users_router
 
@@ -80,7 +81,7 @@ def test_ceph_admin_bucket_objects_use_endpoint_credentials_without_browser_work
 
     service = FakeBrowserService()
 
-    response = buckets_router.list_bucket_objects(
+    response = bucket_tools_router.list_bucket_objects(
         bucket_name="archive",
         prefix="reports/",
         continuation_token=None,
@@ -224,4 +225,9 @@ def test_ceph_admin_bucket_config_routes_are_owned_by_dedicated_router():
         if route.endpoint.__module__ == "app.routers.ceph_admin.bucket_config"
     ]
     assert len(included_config_routes) == 37
+    assert len(bucket_tools_router.router.routes) == 4
+    assert all(
+        route.endpoint.__module__ == "app.routers.ceph_admin.bucket_tools"
+        for route in bucket_tools_router.router.routes
+    )
     assert len(buckets_router.router.routes) == 44

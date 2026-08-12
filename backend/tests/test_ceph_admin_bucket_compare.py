@@ -12,7 +12,7 @@ from app.models.ceph_admin import (
     CephAdminBucketConfigDiff,
     CephAdminBucketContentDiff,
 )
-from app.routers.ceph_admin import buckets as buckets_router
+from app.routers.ceph_admin import bucket_tools as buckets_router
 
 
 def _build_ctx(endpoint_id: int = 1):

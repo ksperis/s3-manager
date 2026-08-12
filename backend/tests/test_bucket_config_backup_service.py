@@ -15,7 +15,7 @@ from app.models.bucket_config_backup import (
     BucketConfigBackupRequest,
     BucketConfigBackupSource,
 )
-from app.routers.ceph_admin import buckets as buckets_router
+from app.routers.ceph_admin import bucket_tools as buckets_router
 from app.services.bucket_config_backup_service import BucketConfigBackupService
 from app.services.s3_execution_context import S3ExecutionContext
 
