@@ -139,7 +139,7 @@ _COLUMN_DETAIL_POLICY_KEYS = {"policy_statement_count", "policy_has_conditions"}
 _COLUMN_DETAIL_NOTIFICATION_KEYS = {"notification_topic_names"}
 _COLUMN_DETAIL_SSE_KEYS = {"sse_algorithms", "sse_kms_key_ids"}
 _COLUMN_DETAIL_PROPS_KEYS = _COLUMN_DETAIL_OBJECT_LOCK_KEYS | _COLUMN_DETAIL_BPA_KEYS | _COLUMN_DETAIL_CORS_KEYS
-_COLUMN_DETAIL_KEYS = (
+COLUMN_DETAIL_KEYS = (
     _COLUMN_DETAIL_LIFECYCLE_KEYS
     | _COLUMN_DETAIL_OBJECT_LOCK_KEYS
     | _COLUMN_DETAIL_BPA_KEYS
@@ -155,12 +155,12 @@ _NOTIFICATION_CONFIGURATION_SPECS = (
     ("queue", "QueueConfigurations", "QueueArn"),
     ("lambda", "LambdaFunctionConfigurations", "LambdaFunctionArn"),
 )
-_OWNER_QUOTA_FIELDS = {"owner_quota_max_size_bytes", "owner_quota_max_objects"}
-_OWNER_STATUS_FIELDS = {"owner_suspended"}
-_OWNER_USAGE_FIELDS = {"owner_used_bytes", "owner_object_count"}
-_OWNER_USAGE_PERCENT_FIELDS = {"owner_quota_usage_size_percent", "owner_quota_usage_object_percent"}
-_OWNER_ENRICHED_FIELDS = _OWNER_STATUS_FIELDS | _OWNER_QUOTA_FIELDS | _OWNER_USAGE_FIELDS | _OWNER_USAGE_PERCENT_FIELDS
-_EXPENSIVE_FIELD_RULES = {"owner_name", "tag"} | _OWNER_ENRICHED_FIELDS
+OWNER_QUOTA_FIELDS = {"owner_quota_max_size_bytes", "owner_quota_max_objects"}
+OWNER_STATUS_FIELDS = {"owner_suspended"}
+OWNER_USAGE_FIELDS = {"owner_used_bytes", "owner_object_count"}
+OWNER_USAGE_PERCENT_FIELDS = {"owner_quota_usage_size_percent", "owner_quota_usage_object_percent"}
+_OWNER_ENRICHED_FIELDS = OWNER_STATUS_FIELDS | OWNER_QUOTA_FIELDS | OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS
+EXPENSIVE_FIELD_RULES = {"owner_name", "tag"} | _OWNER_ENRICHED_FIELDS
 
 
 def _normalize_owner_kind(raw: object) -> Literal["account", "user"] | None:
@@ -174,7 +174,7 @@ def _normalize_owner_kind(raw: object) -> Literal["account", "user"] | None:
     return None
 
 
-def _determine_owner_name_lookup_scope(query: CephAdminBucketFilterQuery | None) -> Literal["any", "account", "user"]:
+def determine_owner_name_lookup_scope(query: CephAdminBucketFilterQuery | None) -> Literal["any", "account", "user"]:
     if not query or query.match != "all":
         return "any"
     allowed: set[Literal["account", "user"]] = {"account", "user"}
@@ -208,7 +208,7 @@ def _determine_owner_name_lookup_scope(query: CephAdminBucketFilterQuery | None)
     return "any"
 
 
-def _extract_name_candidates(query: CephAdminBucketFilterQuery | None) -> list[str] | None:
+def extract_name_candidates(query: CephAdminBucketFilterQuery | None) -> list[str] | None:
     if not query:
         return None
     candidates: set[str] | None = None
@@ -301,7 +301,7 @@ def _resolve_owner_name(
     return name
 
 
-def _resolve_owner_names_for_buckets(
+def resolve_owner_names_for_buckets(
     ctx: BucketListingAdminContext,
     buckets: list[CephAdminBucketSummary],
     owner_scope: Literal["any", "account", "user"] = "any",
@@ -348,7 +348,7 @@ def _coerce_number(value: object) -> float | None:
     return None
 
 
-def _apply_owner_enrichment(
+def apply_owner_enrichment(
     ctx: BucketListingAdminContext,
     buckets: list[CephAdminBucketSummary],
     *,
@@ -593,7 +593,7 @@ def match_bucket_feature_rule(bucket: CephAdminBucketSummary, rule: CephAdminBuc
     return False
 
 
-def _bucket_identity_key(bucket: CephAdminBucketSummary) -> str:
+def bucket_identity_key(bucket: CephAdminBucketSummary) -> str:
     return f"{bucket.tenant or ''}:{bucket.name}"
 
 
@@ -1538,11 +1538,11 @@ def load_bucket_feature_param_snapshots(
         return snapshots, set()
     required_sources = _required_feature_param_sources(rules)
     if not required_sources:
-        available = {_bucket_identity_key(bucket) for bucket in buckets}
+        available = {bucket_identity_key(bucket) for bucket in buckets}
         return snapshots, available
 
     def load_one(bucket: CephAdminBucketSummary) -> tuple[str, dict[str, object]]:
-        return _bucket_identity_key(bucket), _load_feature_param_snapshot_for_bucket(bucket, required_sources, service, account)
+        return bucket_identity_key(bucket), _load_feature_param_snapshot_for_bucket(bucket, required_sources, service, account)
 
     max_workers = min(BUCKET_ENRICH_MAX_WORKERS, len(buckets))
     total = len(buckets)
@@ -1597,22 +1597,22 @@ def _filter_requires_tenant_metadata(query: CephAdminBucketFilterQuery | None) -
             return True
     owner_detail_fields = {"owner_name"} | _OWNER_ENRICHED_FIELDS
     if any(rule.field in owner_detail_fields for rule in query.rules):
-        return _determine_owner_name_lookup_scope(query) != "account"
+        return determine_owner_name_lookup_scope(query) != "account"
     return False
 
 
-def _filter_requires_owner_usage(query: CephAdminBucketFilterQuery | None) -> bool:
+def filter_requires_owner_usage(query: CephAdminBucketFilterQuery | None) -> bool:
     if not query:
         return False
-    owner_usage_fields = _OWNER_USAGE_FIELDS | _OWNER_USAGE_PERCENT_FIELDS
+    owner_usage_fields = OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS
     return any(rule.field in owner_usage_fields for rule in query.rules)
 
 
-def _request_requires_bucket_stats(query: CephAdminBucketFilterQuery | None, sort_by: str) -> bool:
+def request_requires_bucket_stats(query: CephAdminBucketFilterQuery | None, sort_by: str) -> bool:
     return sort_by in {"used_bytes", "object_count"} or filter_requires_stats(query)
 
 
-def _request_requires_owner_metadata(
+def request_requires_owner_metadata(
     query: CephAdminBucketFilterQuery | None,
     sort_by: str,
     simple_filter: str | None,
@@ -1620,7 +1620,7 @@ def _request_requires_owner_metadata(
     return _filter_requires_owner_metadata(query) or sort_by in {"tenant", "owner"} or bool(simple_filter)
 
 
-def _request_requires_tenant_metadata(
+def request_requires_tenant_metadata(
     query: CephAdminBucketFilterQuery | None,
     sort_by: str,
     simple_filter: str | None,
@@ -1628,7 +1628,7 @@ def _request_requires_tenant_metadata(
     return _filter_requires_tenant_metadata(query) or sort_by == "tenant" or bool(simple_filter)
 
 
-def _backfill_bucket_owner_metadata(
+def backfill_bucket_owner_metadata(
     ctx: BucketListingAdminContext,
     buckets: list[CephAdminBucketSummary],
     *,

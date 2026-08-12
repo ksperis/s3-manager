@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from app.models.bucket import (
     BucketEncryptionConfiguration,
+    BucketFeatureStatus,
     BucketLifecycleConfig,
     BucketLoggingConfiguration,
     BucketNotificationConfiguration,
@@ -812,9 +813,9 @@ def test_ceph_admin_bucket_listing_any_mixed_filter_prefers_bulk_field_rules(mon
         for bucket in buckets:
             base = bucket.model_dump()
             if bucket.name == "bucket-b":
-                base["features"] = {"versioning": buckets_router._feature_status_active("Enabled")}
+                base["features"] = {"versioning": BucketFeatureStatus(state="Enabled", tone="active")}
             else:
-                base["features"] = {"versioning": buckets_router._feature_status_inactive("Disabled")}
+                base["features"] = {"versioning": BucketFeatureStatus(state="Disabled", tone="inactive")}
             enriched.append(CephAdminBucketSummary(**base))
         return enriched
 
