@@ -10,9 +10,6 @@ from app.core.database import get_db
 from app.db import AccountRole, S3Account, User
 from app.models.portal import (
     PortalAccount,
-    PortalActivityItem,
-    PortalCollaboratorsResponse,
-    PortalCollaboratorAccessReview,
     PortalDeletedPrefixRestoreRequest,
     PortalEligibility,
     PortalProjectSettings,
@@ -49,7 +46,13 @@ from app.routers.dependencies import (
     get_portal_account_access,
     require_portal_manager,
 )
-from app.routers import portal_access_keys, portal_access_logs, portal_monitoring, portal_usage
+from app.routers import (
+    portal_access_keys,
+    portal_access_logs,
+    portal_collaboration,
+    portal_monitoring,
+    portal_usage,
+)
 from app.routers.portal_common import raise_portal_storage_runtime
 from app.routers.portal_streams import (
     stream_portal_deleted_prefix_restore,
@@ -86,6 +89,7 @@ from app.utils.time import utcnow
 router = APIRouter(prefix="/portal", tags=["portal"])
 router.include_router(portal_access_keys.router)
 router.include_router(portal_access_logs.router)
+router.include_router(portal_collaboration.router)
 router.include_router(portal_monitoring.router)
 router.include_router(portal_usage.router)
 
@@ -201,52 +205,6 @@ def update_portal_project_settings(
         access.account,
         can_update=updated.delegated_to_portal_managers,
     )
-
-
-@router.get("/activity", response_model=list[PortalActivityItem])
-def portal_activity(
-    space_id: Optional[str] = Query(None),
-    limit: int = Query(100, ge=1, le=200),
-    access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> list[PortalActivityItem]:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        return service.list_portal_activity(actor, access, space_id=space_id, limit=limit)
-    except RuntimeError as exc:
-        raise_portal_storage_runtime(exc)
-
-
-@router.get("/collaborators", response_model=PortalCollaboratorsResponse)
-def portal_collaborators(
-    access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalCollaboratorsResponse:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        return service.list_portal_collaborators(actor, access)
-    except RuntimeError as exc:
-        raise_portal_storage_runtime(exc)
-
-
-@router.get("/collaborators/{user_id}/access", response_model=PortalCollaboratorAccessReview)
-def portal_collaborator_access_review(
-    user_id: int,
-    access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalCollaboratorAccessReview:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        return service.get_portal_collaborator_access_review(actor, access, user_id)
-    except RuntimeError as exc:
-        raise_portal_storage_runtime(exc)
-
 
 
 @router.get("/billing/me", response_model=BillingSubjectDetail)
