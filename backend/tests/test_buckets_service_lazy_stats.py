@@ -3,6 +3,7 @@
 from app.db import S3Account, StorageEndpoint
 from app.models.bucket import BucketNotificationConfiguration, BucketProperties, BucketQuotaUpdate
 from app.services import s3_client
+from app.services import buckets_service as buckets_service_module
 from app.services.buckets_service import BucketsService
 
 
@@ -13,6 +14,11 @@ def _build_account() -> S3Account:
         rgw_access_key="AKIA_TEST",
         rgw_secret_key="SECRET_TEST",
     )
+
+
+def test_bucket_feature_enrichment_is_owned_by_dedicated_module():
+    assert not hasattr(buckets_service_module, "account_sns_feature_enabled")
+    assert not hasattr(buckets_service_module, "is_bucket_notification_configuration_configured")
 
 
 def test_list_buckets_skips_admin_stats_when_disabled(monkeypatch):

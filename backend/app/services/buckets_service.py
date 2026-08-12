@@ -11,6 +11,7 @@ from app.services.object_listing_temp_store import TemporarySqliteStore
 from app.services import bucket_compare_remediation
 from app.services import bucket_configuration_comparison
 from app.services import bucket_content_comparison
+from app.services import bucket_feature_enrichment
 from app.services import (
     s3_bucket_access,
     s3_bucket_metadata,
@@ -18,10 +19,6 @@ from app.services import (
     s3_bucket_security,
     s3_client,
     s3_deletion,
-)
-from app.services.bucket_notification_state import (
-    account_sns_feature_enabled,
-    is_bucket_notification_configuration_configured,
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.models.bucket import (
@@ -31,7 +28,6 @@ from app.models.bucket import (
     BucketAclGrantee,
     BucketAclUpdate,
     BucketEncryptionConfiguration,
-    BucketFeatureStatus,
     BucketLifecycleConfig,
     BucketLoggingConfiguration,
     BucketNotificationConfiguration,
@@ -284,209 +280,7 @@ class BucketsService:
         if not include:
             return enriched
 
-        allowed = {
-            "tags",
-            "versioning",
-            "object_lock",
-            "block_public_access",
-            "lifecycle_rules",
-            "static_website",
-            "bucket_policy",
-            "cors",
-            "access_logging",
-            "notifications",
-        }
-        requested = {key for key in include if key in allowed}
-        if not requested:
-            return enriched
-
-        wants_tags = "tags" in requested
-        props_feature_keys = {"versioning", "object_lock", "block_public_access", "lifecycle_rules", "cors"}
-        requested_props_features = requested & props_feature_keys
-        use_props_bundle = len(requested_props_features) > 1
-        wants_website = "static_website" in requested
-        wants_policy = "bucket_policy" in requested
-        wants_logging = "access_logging" in requested
-        wants_notifications = "notifications" in requested
-        sns_feature_enabled = account_sns_feature_enabled(account)
-
-        def unavailable() -> BucketFeatureStatus:
-            return BucketFeatureStatus(state="Unavailable", tone="unknown")
-
-        def inactive(state: str) -> BucketFeatureStatus:
-            return BucketFeatureStatus(state=state, tone="inactive")
-
-        def active(state: str) -> BucketFeatureStatus:
-            return BucketFeatureStatus(state=state, tone="active")
-
-        result: list[Bucket] = []
-        for bucket in enriched:
-            tags: Optional[list[BucketTag]] = None
-            features: Optional[dict[str, BucketFeatureStatus]] = None
-            if wants_tags:
-                try:
-                    tags = self.get_bucket_tags(bucket.name, account)
-                except RuntimeError:
-                    tags = []
-
-            feature_map: dict[str, BucketFeatureStatus] = {}
-            props: Optional[BucketProperties] = None
-            props_error = False
-            if use_props_bundle:
-                try:
-                    props = self.get_bucket_properties(bucket.name, account)
-                except RuntimeError:
-                    props_error = True
-
-            if "versioning" in requested:
-                raw_versioning: Optional[str] = None
-                if use_props_bundle:
-                    if props_error:
-                        feature_map["versioning"] = unavailable()
-                    else:
-                        raw_versioning = props.versioning_status if props else None
-                else:
-                    try:
-                        raw_versioning = self.get_bucket_versioning_status(bucket.name, account)
-                    except RuntimeError:
-                        feature_map["versioning"] = unavailable()
-                if "versioning" not in feature_map:
-                    raw = raw_versioning or "Disabled"
-                    normalized = str(raw).strip().lower()
-                    if normalized == "enabled":
-                        feature_map["versioning"] = active(raw)
-                    elif normalized == "suspended":
-                        feature_map["versioning"] = BucketFeatureStatus(state=raw, tone="unknown")
-                    else:
-                        feature_map["versioning"] = inactive(raw)
-
-            if "object_lock" in requested:
-                if use_props_bundle:
-                    if props_error:
-                        feature_map["object_lock"] = unavailable()
-                    else:
-                        enabled = bool((props.object_lock_enabled if props else None) is True)
-                        feature_map["object_lock"] = active("Enabled") if enabled else inactive("Disabled")
-                else:
-                    try:
-                        object_lock = self.get_bucket_object_lock(bucket.name, account)
-                        enabled = bool(object_lock and object_lock.enabled is True)
-                        feature_map["object_lock"] = active("Enabled") if enabled else inactive("Disabled")
-                    except RuntimeError:
-                        feature_map["object_lock"] = unavailable()
-
-            if "block_public_access" in requested:
-                cfg = None
-                if use_props_bundle:
-                    if props_error:
-                        feature_map["block_public_access"] = unavailable()
-                    else:
-                        cfg = props.public_access_block if props else None
-                else:
-                    try:
-                        cfg = self.get_public_access_block(bucket.name, account)
-                    except RuntimeError:
-                        feature_map["block_public_access"] = unavailable()
-                if "block_public_access" not in feature_map:
-                    if not cfg:
-                        feature_map["block_public_access"] = inactive("Disabled")
-                    else:
-                        keys = [cfg.block_public_acls, cfg.ignore_public_acls, cfg.block_public_policy, cfg.restrict_public_buckets]
-                        fully_enabled = all(val is True for val in keys)
-                        partially_enabled = not fully_enabled and any(val is True for val in keys)
-                        if fully_enabled:
-                            feature_map["block_public_access"] = active("Enabled")
-                        elif partially_enabled:
-                            feature_map["block_public_access"] = active("Partial")
-                        else:
-                            feature_map["block_public_access"] = inactive("Disabled")
-
-            if "lifecycle_rules" in requested:
-                rules = None
-                if use_props_bundle:
-                    if props_error:
-                        feature_map["lifecycle_rules"] = unavailable()
-                    else:
-                        rules = props.lifecycle_rules if props else []
-                else:
-                    try:
-                        lifecycle = self.get_lifecycle(bucket.name, account)
-                        rules = lifecycle.rules
-                    except RuntimeError:
-                        feature_map["lifecycle_rules"] = unavailable()
-                if "lifecycle_rules" not in feature_map:
-                    has_rules = bool(rules and len(rules) > 0)
-                    feature_map["lifecycle_rules"] = active("Enabled") if has_rules else inactive("Disabled")
-
-            if "cors" in requested:
-                rules = None
-                if use_props_bundle:
-                    if props_error:
-                        feature_map["cors"] = unavailable()
-                    else:
-                        rules = props.cors_rules if props else []
-                else:
-                    try:
-                        rules = self.get_bucket_cors(bucket.name, account)
-                    except RuntimeError:
-                        feature_map["cors"] = unavailable()
-                if "cors" not in feature_map:
-                    has_rules = bool(rules and len(rules) > 0)
-                    feature_map["cors"] = active("Configured") if has_rules else inactive("Not set")
-
-            if wants_website and "static_website" in requested:
-                try:
-                    website = self.get_bucket_website(bucket.name, account)
-                    routing_rules = website.routing_rules or []
-                    configured = bool(
-                        (website.redirect_all_requests_to and (website.redirect_all_requests_to.host_name or "").strip())
-                        or (website.index_document or "").strip()
-                        or (isinstance(routing_rules, list) and len(routing_rules) > 0)
-                    )
-                    feature_map["static_website"] = active("Enabled") if configured else inactive("Disabled")
-                except RuntimeError:
-                    feature_map["static_website"] = unavailable()
-
-            if wants_policy and "bucket_policy" in requested:
-                try:
-                    policy = self.get_policy(bucket.name, account)
-                    configured = bool(policy and isinstance(policy, dict) and len(policy.keys()) > 0)
-                    feature_map["bucket_policy"] = active("Configured") if configured else inactive("Not set")
-                except RuntimeError:
-                    feature_map["bucket_policy"] = unavailable()
-
-            if wants_logging and "access_logging" in requested:
-                try:
-                    logging_config = self.get_bucket_logging(bucket.name, account)
-                    enabled = bool(logging_config.enabled and (logging_config.target_bucket or "").strip())
-                    feature_map["access_logging"] = active("Enabled") if enabled else inactive("Disabled")
-                except RuntimeError:
-                    feature_map["access_logging"] = unavailable()
-
-            if wants_notifications and "notifications" in requested:
-                if not sns_feature_enabled:
-                    feature_map["notifications"] = unavailable()
-                else:
-                    try:
-                        notifications = self.get_bucket_notifications(bucket.name, account)
-                        configured = is_bucket_notification_configuration_configured(notifications.configuration)
-                        feature_map["notifications"] = active("Configured") if configured else inactive("Not set")
-                    except RuntimeError:
-                        feature_map["notifications"] = unavailable()
-
-            if feature_map:
-                features = feature_map
-
-            base = bucket.model_dump(exclude={"tags", "features"})
-            result.append(
-                Bucket(
-                    **base,
-                    tags=tags,
-                    features=features,
-                )
-            )
-
-        return result
+        return bucket_feature_enrichment.enrich_bucket_features(self, enriched, account, include)
 
     def get_bucket_stats(
         self,
