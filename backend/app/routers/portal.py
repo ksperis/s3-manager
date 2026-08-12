@@ -21,9 +21,6 @@ from app.models.portal import (
     PortalProjectSettings,
     PortalPublicLink,
     PortalPublicLinkCreate,
-    PortalServerAccessLogEntry,
-    PortalServerAccessLogFilterQuery,
-    PortalServerAccessLogPage,
     PortalState,
     PortalStorageObjectDeleteResponse,
     PortalStorageObjectDetail,
@@ -53,7 +50,6 @@ from app.models.portal import (
 from app.models.access_context import AccountAccess
 from app.models.app_settings import PortalSettingsOverride
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
-from app.routers.ceph_admin.listing_common import parse_filter_query as parse_advanced_filter_query
 from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 from app.routers.dependencies import (
@@ -62,7 +58,8 @@ from app.routers.dependencies import (
     get_portal_account_access,
     require_portal_manager,
 )
-from app.routers import portal_access_keys
+from app.routers import portal_access_keys, portal_access_logs
+from app.routers.portal_common import raise_portal_storage_runtime
 from app.routers.portal_streams import (
     stream_portal_deleted_prefix_restore,
     stream_portal_storage_space_version_cleanup,
@@ -101,37 +98,10 @@ from app.utils.http_headers import build_attachment_content_disposition
 from app.utils.time import utcnow
 router = APIRouter(prefix="/portal", tags=["portal"])
 router.include_router(portal_access_keys.router)
-
-
-def _parse_server_access_log_filter(raw: Optional[str]) -> Optional[PortalServerAccessLogFilterQuery]:
-    return parse_advanced_filter_query(raw, query_cls=PortalServerAccessLogFilterQuery)
+router.include_router(portal_access_logs.router)
 
 
 settings = get_settings()
-
-
-def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
-    detail = sanitize_error_detail(str(exc))
-    lowered = detail.lower()
-    if "not found or not allowed" in lowered:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
-    if "not found" in lowered:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
-    if "storage space is archived" in lowered:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
-    if (
-        "not allowed" in lowered
-        or "not provisioned" in lowered
-        or "full management access required" in lowered
-        or "full content access required" in lowered
-        or "only project managers" in lowered
-        or "portal manager rights required" in lowered
-        or "ownership applies only" in lowered
-        or "already own" in lowered
-        or "cannot be changed" in lowered
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
-    raise_bad_gateway_from_runtime(exc)
 
 
 def _portal_usage_stats_source_scope_id(account: S3Account) -> str:
@@ -318,7 +288,7 @@ def portal_usage_stats_latest(
     try:
         spaces = portal_service.list_storage_spaces(actor, access)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     source_scope_id = _portal_usage_stats_source_scope_id(access.account)
     targets = [
         BucketUsageStatsAggregateTarget(
@@ -372,7 +342,7 @@ def portal_activity(
     try:
         return service.list_portal_activity(actor, access, space_id=space_id, limit=limit)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/collaborators", response_model=PortalCollaboratorsResponse)
@@ -386,7 +356,7 @@ def portal_collaborators(
     try:
         return service.list_portal_collaborators(actor, access)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/collaborators/{user_id}/access", response_model=PortalCollaboratorAccessReview)
@@ -401,108 +371,7 @@ def portal_collaborator_access_review(
     try:
         return service.get_portal_collaborator_access_review(actor, access, user_id)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
-
-
-@router.get("/access-logs", response_model=list[PortalServerAccessLogEntry])
-def portal_server_access_logs(
-    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    space_id: Optional[str] = Query(None),
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-    timezone_offset_minutes: int = Query(0, ge=-840, le=840),
-    advanced_filter: Optional[str] = Query(None),
-    access: AccountAccess = Depends(require_portal_manager),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> list[PortalServerAccessLogEntry]:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        parsed_filter = _parse_server_access_log_filter(advanced_filter)
-        return service.list_portal_server_access_logs(
-            actor,
-            access,
-            date=date,
-            space_id=space_id,
-            timezone_offset_minutes=timezone_offset_minutes,
-            limit=limit,
-            offset=offset,
-            advanced_filter=parsed_filter,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
-    except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
-
-
-@router.get("/access-logs/page", response_model=PortalServerAccessLogPage)
-def portal_server_access_logs_page(
-    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    space_id: Optional[str] = Query(None),
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-    timezone_offset_minutes: int = Query(0, ge=-840, le=840),
-    advanced_filter: Optional[str] = Query(None),
-    access: AccountAccess = Depends(require_portal_manager),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalServerAccessLogPage:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        parsed_filter = _parse_server_access_log_filter(advanced_filter)
-        return service.list_portal_server_access_log_page(
-            actor,
-            access,
-            date=date,
-            space_id=space_id,
-            timezone_offset_minutes=timezone_offset_minutes,
-            limit=limit,
-            offset=offset,
-            advanced_filter=parsed_filter,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
-    except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
-
-
-@router.get("/access-logs/raw")
-def portal_server_access_logs_raw(
-    date_from: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    date_to: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    space_id: Optional[str] = Query(None),
-    timezone_offset_minutes: int = Query(0, ge=-840, le=840),
-    access: AccountAccess = Depends(require_portal_manager),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> Response:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        content = service.get_portal_server_access_logs_raw(
-            actor,
-            access,
-            date_from=date_from,
-            date_to=date_to,
-            space_id=space_id,
-            timezone_offset_minutes=timezone_offset_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
-    except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
-    filename = (
-        f"portal-server-access-logs-{date_from}.log"
-        if date_from == date_to
-        else f"portal-server-access-logs-{date_from}-{date_to}.log"
-    )
-    return Response(
-        content=content,
-        media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": build_attachment_content_disposition(filename)},
-    )
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/endpoint-health", response_model=WorkspaceEndpointHealthOverviewResponse)
@@ -571,7 +440,7 @@ def portal_alerts(
         health_alerts = _portal_endpoint_alerts(access, db)
         return service.dedupe_portal_alerts([*health_alerts, *alerts])[:limit]
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/billing/me", response_model=BillingSubjectDetail)
@@ -665,7 +534,7 @@ def create_portal_storage_space(
         )
         return storage_space
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.post("/storage-spaces/import", response_model=PortalStorageSpace, status_code=status.HTTP_201_CREATED)
@@ -709,7 +578,7 @@ def import_portal_storage_space(
         )
         return storage_space
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.patch("/storage-spaces/{space_id}", response_model=PortalStorageSpace)
@@ -762,7 +631,7 @@ def update_portal_storage_space(
         )
         return storage_space
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.post("/storage-spaces/{space_id}/take-ownership", response_model=PortalStorageSpace)
@@ -793,7 +662,7 @@ def take_portal_storage_space_ownership(
         )
         return storage_space
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.put("/storage-spaces/{space_id}/icon", response_model=PortalStorageSpaceIcon)
@@ -818,7 +687,7 @@ def update_portal_storage_space_icon(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     audit_service.record_action(
         user=actor,
         scope="portal",
@@ -858,7 +727,7 @@ async def upload_portal_storage_space_icon(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     audit_service.record_action(
         user=actor,
         scope="portal",
@@ -888,7 +757,7 @@ def delete_portal_storage_space_icon(
     try:
         icon = service.remove_storage_space_icon_image(actor, access, space_id)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     audit_service.record_action(
         user=actor,
         scope="portal",
@@ -913,7 +782,7 @@ def read_portal_storage_space_icon(
     try:
         payload, content_type, version = service.storage_space_icon_image(actor, access, space_id)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     return Response(
         content=payload,
         media_type=content_type,
@@ -943,7 +812,7 @@ def delete_portal_storage_space(
             detail=sanitize_error_detail(str(exc)),
         ) from exc
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     audit_service.record_action(
         user=actor,
         scope="portal",
@@ -968,7 +837,7 @@ def portal_storage_space_access_summary(
     try:
         return service.get_storage_space_access_summary(actor, access, space_id)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.post("/storage-spaces/{space_id}/versions/cleanup/stream")
@@ -993,7 +862,7 @@ def portal_storage_space_version_cleanup_stream(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     return stream_portal_storage_space_version_cleanup(
         request,
         actor=actor,
@@ -1017,7 +886,7 @@ def portal_storage_space_object_detail(
     try:
         return service.get_storage_space_object_detail(actor, access, space_id, key)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get(
@@ -1047,7 +916,7 @@ def portal_storage_space_object_versions(
             max_keys=max_keys,
         )
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/storage-spaces/{space_id}/trash", response_model=PortalTrashResponse)
@@ -1072,7 +941,7 @@ def portal_storage_space_trash(
             max_keys=max_keys,
         )
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.post(
@@ -1097,7 +966,7 @@ def portal_restore_storage_space_object(
             version_id=payload.version_id,
         )
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.post("/storage-spaces/{space_id}/trash/restore-prefix/stream")
@@ -1128,7 +997,7 @@ def portal_restore_deleted_prefix_stream(
             detail=sanitize_error_detail(str(exc)),
         ) from exc
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     return stream_portal_deleted_prefix_restore(
         request,
         actor=actor,
@@ -1153,7 +1022,7 @@ def portal_delete_storage_space_object(
         deleted_key = service.delete_storage_space_object(actor, access, space_id, key)
         return PortalStorageObjectDeleteResponse(key=deleted_key, message="Deleted")
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/storage-spaces/{space_id}/objects/download")
@@ -1173,7 +1042,7 @@ def portal_download_storage_space_object(
             headers["Content-Disposition"] = build_attachment_content_disposition(filename)
         return StreamingResponse(stream, media_type=content_type or "application/octet-stream", headers=headers)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/storage-spaces/{space_id}/public-links", response_model=list[PortalPublicLink])
@@ -1196,7 +1065,7 @@ def portal_storage_space_public_links(
             include_revoked=include_revoked,
         )
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.post("/storage-spaces/{space_id}/public-links", response_model=PortalPublicLink, status_code=status.HTTP_201_CREATED)
@@ -1234,7 +1103,7 @@ def create_portal_storage_space_public_link(
         )
         return link
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.delete("/storage-spaces/{space_id}/public-links/{link_id}", response_model=list[PortalPublicLink])
@@ -1261,7 +1130,7 @@ def revoke_portal_storage_space_public_link(
         )
         return links
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/public-links/{token}/download")
@@ -1295,7 +1164,7 @@ def portal_storage_space_shares(
     try:
         return service.list_storage_space_shares(actor, access, space_id)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/share-candidates", response_model=list[PortalStorageSpaceShareCandidate])
@@ -1311,7 +1180,7 @@ def portal_share_candidates(
     try:
         return service.list_storage_space_share_candidates(actor, access)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/storage-spaces/{space_id}/share-candidates", response_model=list[PortalStorageSpaceShareCandidate])
@@ -1326,7 +1195,7 @@ def portal_storage_space_share_candidates(
     try:
         return service.list_storage_space_share_candidates(actor, access, space_id)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 def _resolve_share_target(payload: PortalStorageSpaceSharePayload, users_service: UsersService) -> User:
@@ -1366,7 +1235,7 @@ def grant_portal_storage_space_share(
         )
         return share
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.put("/storage-spaces/{space_id}/shares/{user_id}", response_model=PortalStorageSpaceShare)
@@ -1398,7 +1267,7 @@ def update_portal_storage_space_share(
         )
         return share
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.delete("/storage-spaces/{space_id}/shares/{user_id}", response_model=list[PortalStorageSpaceShare])
@@ -1429,7 +1298,7 @@ def revoke_portal_storage_space_share(
         )
         return shares
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.get("/storage-spaces/{space_id}/settings", response_model=PortalStorageSpaceSettings)
@@ -1444,7 +1313,7 @@ def get_portal_storage_space_settings(
     try:
         return service.get_storage_space_settings(actor, access, space_id)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
 
 
 @router.put("/storage-spaces/{space_id}/settings", response_model=PortalStorageSpaceSettings)
@@ -1461,7 +1330,7 @@ def update_portal_storage_space_settings(
     try:
         updated = service.update_storage_space_settings(actor, access, space_id, payload)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     audit_service.record_action(
         user=actor,
         scope="portal",
@@ -1518,7 +1387,7 @@ def portal_storage_space_usage_stats(
     try:
         spaces = portal_service.list_storage_spaces(actor, access, include_archived=True)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
+        raise_portal_storage_runtime(exc)
     storage_space = next((space for space in spaces if space.id == space_id), None)
     if storage_space is None or not storage_space.internal_bucket_name:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
