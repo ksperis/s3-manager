@@ -1,9 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, List, Literal, Optional, Set
+from typing import Any, List, Optional, Set
 import logging
 import json
 
@@ -11,6 +9,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.object_listing_temp_store import TemporarySqliteStore
+from app.services import bucket_compare_remediation
 from app.services import bucket_content_comparison
 from app.services import (
     s3_bucket_access,
@@ -60,7 +59,6 @@ from app.utils.rgw_identifiers import (
 )
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.jsonable import model_to_jsonable
-from app.utils.aws_errors import aws_error_code
 from app.utils.s3_errors import format_s3_error
 from app.utils.s3_etag import etag_md5
 from app.utils.s3_endpoint import resolve_s3_client_options
@@ -69,17 +67,6 @@ from app.utils.usage_stats import extract_usage_stats
 from app.utils.size_units import size_to_bytes
 
 logger = logging.getLogger(__name__)
-
-
-BucketCompareRemediationAction = Literal["sync_source_only", "sync_different", "delete_target_only"]
-
-@dataclass(frozen=True)
-class BucketCompareRemediationResult:
-    action: BucketCompareRemediationAction
-    planned_count: int
-    succeeded_count: int
-    failed_count: int
-    failed_keys_sample: list[str]
 
 
 class BucketsService:
@@ -840,15 +827,6 @@ class BucketsService:
             )
             return diff
 
-    def _account_client(self, account: S3ExecutionTarget):
-        access_key, secret_key = self._account_credentials(account)
-        return s3_client.get_s3_client(
-            access_key=access_key,
-            secret_key=secret_key,
-            request_profile="long_running",
-            **self._client_kwargs(account),
-        )
-
     def _accounts_share_storage_endpoint(self, source_account: S3ExecutionTarget, target_account: S3ExecutionTarget) -> bool:
         source_options = self._client_kwargs(source_account)
         target_options = self._client_kwargs(target_account)
@@ -859,99 +837,6 @@ class BucketsService:
             and bool(source_options.get("verify_tls")) == bool(target_options.get("verify_tls"))
         )
 
-    def _is_access_denied_error(self, exc: Exception) -> bool:
-        code = aws_error_code(exc, lowercase=True)
-        if code in {"accessdenied", "access_denied", "403", "unauthorized"}:
-            return True
-        text = str(exc).strip().lower()
-        return "accessdenied" in text or "access denied" in text or "403" in text
-
-    def _stream_copy_single_object_for_remediation(
-        self,
-        source_client: Any,
-        target_client: Any,
-        *,
-        source_bucket: str,
-        target_bucket: str,
-        key: str,
-    ) -> None:
-        body = None
-        try:
-            response = source_client.get_object(Bucket=source_bucket, Key=key)
-            body = response.get("Body")
-            target_client.upload_fileobj(body, target_bucket, key)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to copy object '{key}': {exc}") from exc
-        finally:
-            if body is not None:
-                try:
-                    body.close()
-                except Exception:  # noqa: BLE001
-                    pass
-
-    def _copy_single_object_for_remediation(
-        self,
-        source_client: Any,
-        target_client: Any,
-        *,
-        source_bucket: str,
-        target_bucket: str,
-        key: str,
-        same_endpoint: bool,
-    ) -> None:
-        if same_endpoint:
-            copy_source = {"Bucket": source_bucket, "Key": key}
-            try:
-                target_client.copy_object(Bucket=target_bucket, Key=key, CopySource=copy_source)
-                return
-            except (ClientError, BotoCoreError) as exc:
-                if not self._is_access_denied_error(exc):
-                    raise RuntimeError(f"Unable to copy object '{key}': {exc}") from exc
-                logger.warning(
-                    "CopyObject denied for '%s' (%s), falling back to stream copy.",
-                    key,
-                    exc,
-                )
-
-        self._stream_copy_single_object_for_remediation(
-            source_client,
-            target_client,
-            source_bucket=source_bucket,
-            target_bucket=target_bucket,
-            key=key,
-        )
-
-    def _delete_objects_for_remediation(
-        self,
-        client: Any,
-        *,
-        target_bucket: str,
-        keys: list[str],
-    ) -> tuple[int, list[str]]:
-        if not keys:
-            return 0, []
-
-        succeeded = 0
-        failed_keys: list[str] = []
-        for index in range(0, len(keys), 1000):
-            chunk = keys[index : index + 1000]
-            chunk_objects = [{"Key": key} for key in chunk]
-            try:
-                response = client.delete_objects(Bucket=target_bucket, Delete={"Objects": chunk_objects})
-            except (ClientError, BotoCoreError) as exc:
-                raise RuntimeError(f"Unable to delete objects in bucket '{target_bucket}': {exc}") from exc
-
-            errors = response.get("Errors", []) if isinstance(response, dict) else []
-            failed_in_chunk = {
-                str(entry.get("Key")).strip()
-                for entry in errors
-                if isinstance(entry, dict) and str(entry.get("Key", "")).strip()
-            }
-            succeeded += len(chunk) - len(failed_in_chunk)
-            if failed_in_chunk:
-                failed_keys.extend(sorted(failed_in_chunk))
-        return succeeded, failed_keys
-
     def run_compare_content_remediation(
         self,
         source_bucket: str,
@@ -959,66 +844,43 @@ class BucketsService:
         target_bucket: str,
         target_account: S3ExecutionTarget,
         *,
-        action: BucketCompareRemediationAction,
+        action: bucket_compare_remediation.BucketCompareRemediationAction,
         object_keys: list[str],
         parallelism: int = 4,
         failed_keys_sample_limit: int = 50,
-    ) -> BucketCompareRemediationResult:
-        selected_keys = list(object_keys)
-        planned_count = len(selected_keys)
-        if planned_count == 0:
-            return BucketCompareRemediationResult(
+    ) -> bucket_compare_remediation.BucketCompareRemediationResult:
+        if not object_keys:
+            return bucket_compare_remediation.remediate_bucket_content(
+                source_client=None,
+                target_client=None,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
                 action=action,
-                planned_count=0,
-                succeeded_count=0,
-                failed_count=0,
-                failed_keys_sample=[],
+                object_keys=[],
+                same_endpoint=False,
+                parallelism=parallelism,
+                failed_keys_sample_limit=failed_keys_sample_limit,
             )
-
-        safe_parallelism = max(1, min(32, int(parallelism or 1)))
-        failed_keys: list[str] = []
-        succeeded_count = 0
 
         if action == "delete_target_only":
-            target_client = self._account_client(target_account)
-            succeeded_count, failed_keys = self._delete_objects_for_remediation(
-                target_client,
-                target_bucket=target_bucket,
-                keys=selected_keys,
-            )
+            source_client = None
+            target_client = self._compare_client(target_account)
+            same_endpoint = False
         else:
-            source_client = self._account_client(source_account)
-            target_client = self._account_client(target_account)
+            source_client = self._compare_client(source_account)
+            target_client = self._compare_client(target_account)
             same_endpoint = self._accounts_share_storage_endpoint(source_account, target_account)
-            worker_count = max(1, min(safe_parallelism, planned_count))
-            with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-compare-remediate") as executor:
-                futures = {
-                    executor.submit(
-                        self._copy_single_object_for_remediation,
-                        source_client,
-                        target_client,
-                        source_bucket=source_bucket,
-                        target_bucket=target_bucket,
-                        key=key,
-                        same_endpoint=same_endpoint,
-                    ): key
-                    for key in selected_keys
-                }
-                for future in as_completed(futures):
-                    key = futures[future]
-                    try:
-                        future.result()
-                        succeeded_count += 1
-                    except Exception:  # noqa: BLE001
-                        failed_keys.append(key)
 
-        failed_count = len(failed_keys)
-        return BucketCompareRemediationResult(
+        return bucket_compare_remediation.remediate_bucket_content(
+            source_client=source_client,
+            target_client=target_client,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
             action=action,
-            planned_count=planned_count,
-            succeeded_count=succeeded_count,
-            failed_count=failed_count,
-            failed_keys_sample=sorted(failed_keys)[: max(1, failed_keys_sample_limit)],
+            object_keys=object_keys,
+            same_endpoint=same_endpoint,
+            parallelism=parallelism,
+            failed_keys_sample_limit=failed_keys_sample_limit,
         )
 
     def _normalize_tags_for_compare(self, tags: list[BucketTag]) -> list[dict[str, str]]:

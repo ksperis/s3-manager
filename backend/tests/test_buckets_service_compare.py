@@ -15,7 +15,7 @@ from app.models.bucket import (
     BucketPublicAccessBlock,
     LifecycleRule,
 )
-from app.services import object_listing_temp_store
+from app.services import bucket_compare_remediation, object_listing_temp_store
 from app.services import buckets_service as buckets_service_module
 from app.services.bucket_content_comparison import BucketCompareObjectEntry
 from app.services.buckets_service import BucketsService
@@ -46,6 +46,7 @@ def _payload_entries(payload: dict[str, dict[str, object]]):
 def test_bucket_compare_types_are_owned_by_dedicated_module():
     assert not hasattr(buckets_service_module, "_BucketCompareObjectEntry")
     assert not hasattr(buckets_service_module, "_BucketCompareObjectIndex")
+    assert not hasattr(buckets_service_module, "BucketCompareRemediationResult")
 
 
 def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
@@ -314,19 +315,26 @@ def test_compare_remediation_uses_requested_object_keys(monkeypatch):
     service = BucketsService()
     source = _build_account("source")
     target = _build_account("target")
-    copied_keys: list[str] = []
+    requested_keys: list[str] = []
     monkeypatch.setattr(
         service,
         "_list_bucket_objects_for_compare",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("remediation must not re-list objects")),
     )
-    monkeypatch.setattr(service, "_account_client", lambda _account: object())
+    monkeypatch.setattr(service, "_compare_client", lambda _account: object())
     monkeypatch.setattr(service, "_accounts_share_storage_endpoint", lambda _source, _target: True)
-    monkeypatch.setattr(
-        service,
-        "_copy_single_object_for_remediation",
-        lambda *_args, key, **_kwargs: copied_keys.append(key),
-    )
+
+    def fake_remediate(**kwargs):
+        requested_keys.extend(kwargs["object_keys"])
+        return bucket_compare_remediation.BucketCompareRemediationResult(
+            action=kwargs["action"],
+            planned_count=len(kwargs["object_keys"]),
+            succeeded_count=len(kwargs["object_keys"]),
+            failed_count=0,
+            failed_keys_sample=[],
+        )
+
+    monkeypatch.setattr(bucket_compare_remediation, "remediate_bucket_content", fake_remediate)
 
     result = service.run_compare_content_remediation(
         "source-bucket",
@@ -339,7 +347,33 @@ def test_compare_remediation_uses_requested_object_keys(monkeypatch):
 
     assert result.planned_count == 1
     assert result.succeeded_count == 1
-    assert copied_keys == ["old-only-source"]
+    assert requested_keys == ["old-only-source"]
+
+
+def test_bucket_compare_remediation_copies_requested_objects():
+    copied_keys: list[str] = []
+
+    class TargetClient:
+        def copy_object(self, *, Bucket, Key, CopySource):
+            assert Bucket == "target-bucket"
+            assert CopySource == {"Bucket": "source-bucket", "Key": Key}
+            copied_keys.append(Key)
+
+    result = bucket_compare_remediation.remediate_bucket_content(
+        source_client=object(),
+        target_client=TargetClient(),
+        source_bucket="source-bucket",
+        target_bucket="target-bucket",
+        action="sync_source_only",
+        object_keys=["object-b", "object-a"],
+        same_endpoint=True,
+        parallelism=1,
+    )
+
+    assert result.planned_count == 2
+    assert result.succeeded_count == 2
+    assert result.failed_count == 0
+    assert copied_keys == ["object-b", "object-a"]
 
 
 def test_compare_bucket_configuration_detects_changes(monkeypatch):
