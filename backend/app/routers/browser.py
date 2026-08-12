@@ -22,7 +22,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3User as S3UserModel, User
+from app.db import User
 from app.models.access_context import ManagerActor
 from app.models.app_settings import BrowserSettings
 from app.models.base import ApiModel
@@ -104,12 +104,13 @@ from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services import bucket_config_actions
 from app.services.browser_service import BrowserService, get_browser_service
+from app.services.browser_usage_summary_service import (
+    BrowserUsageSummaryService,
+    get_browser_usage_summary_service,
+)
 from app.services.buckets_service import BucketsService, get_buckets_service
-from app.services.s3_accounts_service import S3AccountsService
 from app.services.s3_execution_context import S3ExecutionContext
-from app.services.s3_users_service import S3UsersService
 from app.utils.http_headers import build_attachment_content_disposition
-from app.utils.size_units import size_to_bytes
 router = APIRouter(
     prefix="/browser",
     tags=["browser"],
@@ -141,110 +142,8 @@ def get_browser_settings(_: ManagerActor = Depends(get_current_account_admin)) -
     return load_app_settings().browser
 
 
-def _usage_summary_source(account: S3ExecutionContext) -> tuple[str, str]:
-    if getattr(account, "portal_browser_role", None):
-        return "portal", "Storage Spaces"
-    if getattr(account, "s3_connection_id", None) is not None:
-        return "connection", "Connection"
-    if getattr(account, "s3_user_id", None) is not None:
-        return "s3_user", "S3 User"
-    return "account", "Account"
-
-
-def _quota_gib_to_bytes(value: Optional[float]) -> Optional[int]:
-    if value is None:
-        return None
-    try:
-        return size_to_bytes(value, "gib")
-    except ValueError:
-        return None
-
-
-def _unavailable_usage_summary(*, source: str, label: str) -> BrowserUsageSummary:
-    return BrowserUsageSummary(available=False, source=source, label=label)
-
-
-def _available_usage_summary(
-    *,
-    source: str,
-    label: str,
-    used_bytes: Optional[int],
-    object_count: Optional[int],
-    quota_max_size_gb: Optional[float],
-    quota_max_objects: Optional[int],
-) -> BrowserUsageSummary:
-    if used_bytes is None:
-        return _unavailable_usage_summary(source=source, label=label)
-    return BrowserUsageSummary(
-        available=True,
-        source=source,
-        label=label,
-        used_bytes=used_bytes,
-        object_count=object_count,
-        quota_max_size_bytes=_quota_gib_to_bytes(quota_max_size_gb),
-        quota_max_objects=quota_max_objects,
-    )
-
-
-def _build_account_live_usage_summary(
-    *,
-    account: S3ExecutionContext,
-    db: Session,
-    source: str,
-    label: str,
-) -> BrowserUsageSummary:
-    service = S3AccountsService(db)
-    used_bytes, object_count, _bucket_count = service.get_account_usage(account)
-    if used_bytes is None:
-        return _unavailable_usage_summary(source=source, label=label)
-    quota_max_size_gb, quota_max_objects = service.get_account_quota(account)
-    return _available_usage_summary(
-        source=source,
-        label=label,
-        used_bytes=used_bytes,
-        object_count=object_count,
-        quota_max_size_gb=quota_max_size_gb,
-        quota_max_objects=quota_max_objects,
-    )
-
-
-def _build_s3_user_live_usage_summary(
-    *,
-    account: S3ExecutionContext,
-    db: Session,
-    source: str,
-    label: str,
-) -> BrowserUsageSummary:
-    s3_user_id = getattr(account, "s3_user_id", None)
-    if not isinstance(s3_user_id, int) or s3_user_id <= 0:
-        return _unavailable_usage_summary(source=source, label=label)
-    s3_user = db.query(S3UserModel).filter(S3UserModel.id == s3_user_id).first()
-    if not s3_user:
-        return _unavailable_usage_summary(source=source, label=label)
-    service = S3UsersService(db)
-    used_bytes, object_count, _bucket_count = service.get_user_usage(s3_user)
-    if used_bytes is None:
-        return _unavailable_usage_summary(source=source, label=label)
-    quota_max_size_gb, quota_max_objects = service.get_user_quota(s3_user)
-    return _available_usage_summary(
-        source=source,
-        label=label,
-        used_bytes=used_bytes,
-        object_count=object_count,
-        quota_max_size_gb=quota_max_size_gb,
-        quota_max_objects=quota_max_objects,
-    )
-
-
-def _build_browser_usage_summary(account: S3ExecutionContext, db: Session) -> BrowserUsageSummary:
-    source, label = _usage_summary_source(account)
-    if source == "connection":
-        return _unavailable_usage_summary(source=source, label=label)
-    if source == "s3_user":
-        return _build_s3_user_live_usage_summary(account=account, db=db, source=source, label=label)
-    if source in {"account", "portal"}:
-        return _build_account_live_usage_summary(account=account, db=db, source=source, label=label)
-    return _unavailable_usage_summary(source=source, label=label)
+def get_browser_usage_service(db: Session = Depends(get_db)) -> BrowserUsageSummaryService:
+    return get_browser_usage_summary_service(db)
 
 
 @router.get("/buckets", response_model=list[BrowserBucket], response_model_exclude_none=True)
@@ -292,10 +191,10 @@ def search_buckets(
 )
 def get_usage_summary(
     account: S3ExecutionContext = Depends(get_account_context),
-    db: Session = Depends(get_db),
+    service: BrowserUsageSummaryService = Depends(get_browser_usage_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BrowserUsageSummary:
-    return _build_browser_usage_summary(account, db)
+    return service.build(account)
 
 
 @router.post("/buckets", status_code=status.HTTP_201_CREATED)
