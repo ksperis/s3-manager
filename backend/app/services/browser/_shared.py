@@ -6,7 +6,7 @@ import json
 import logging
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from threading import Lock
 from time import monotonic
 from typing import Callable, Generic, Optional, TypeVar
@@ -27,9 +27,6 @@ from app.utils.s3_endpoint import resolve_s3_client_options
 
 logger = logging.getLogger(__name__)
 
-STS_SESSION_DURATION_SECONDS = 3600
-STS_CACHE_TTL_BUFFER = timedelta(minutes=5)
-STS_FAILURE_TTL = timedelta(seconds=60)
 BUCKET_LIST_CACHE_TTL_SECONDS = 30
 BUCKET_LIST_CACHE_MAX_ENTRIES = 64
 OBJECT_LIST_CACHE_TTL_SECONDS = 10
@@ -48,23 +45,6 @@ MISSING_OBJECT_LOCK_CONFIGURATION_CODES = {
 def _is_missing_object_lock_configuration(exc: ClientError) -> bool:
     return aws_error_code(exc, lowercase=True) in MISSING_OBJECT_LOCK_CONFIGURATION_CODES
 
-
-@dataclass(frozen=True)
-class CachedStsCredentials:
-    access_key_id: str
-    secret_access_key: str
-    session_token: str
-    expiration: datetime
-
-
-@dataclass
-class StsCacheEntry:
-    credentials: Optional[CachedStsCredentials] = None
-    failed_until: Optional[datetime] = None
-
-
-_STS_CACHE: dict[str, StsCacheEntry] = {}
-_STS_CACHE_LOCK = Lock()
 
 _CacheKey = TypeVar("_CacheKey")
 _CacheValue = TypeVar("_CacheValue")
@@ -251,10 +231,6 @@ def _resolve_endpoint(account: S3ExecutionTarget) -> str:
     return endpoint
 
 
-def _sts_cache_key(access_key: str, endpoint: str) -> str:
-    return f"{endpoint}::{access_key}"
-
-
 def _normalize_expiration(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
@@ -294,35 +270,3 @@ def _decode_sorted_cursor(token: Optional[str]) -> Optional[dict[str, object]]:
     if payload.get("mode") != "sorted" or payload.get("v") != 1:
         return None
     return payload
-
-
-def _get_cached_sts_credentials(cache_key: str) -> Optional[CachedStsCredentials]:
-    now = datetime.now(tz=timezone.utc)
-    with _STS_CACHE_LOCK:
-        entry = _STS_CACHE.get(cache_key)
-        if not entry:
-            return None
-        if entry.credentials:
-            expiration = _normalize_expiration(entry.credentials.expiration)
-            if expiration - STS_CACHE_TTL_BUFFER > now:
-                return entry.credentials
-            entry.credentials = None
-        if entry.failed_until and entry.failed_until > now:
-            return None
-        if entry.failed_until and entry.failed_until <= now:
-            entry.failed_until = None
-    return None
-
-
-def _store_sts_credentials(cache_key: str, credentials: CachedStsCredentials) -> None:
-    with _STS_CACHE_LOCK:
-        _STS_CACHE[cache_key] = StsCacheEntry(credentials=credentials, failed_until=None)
-
-
-def _record_sts_failure(cache_key: str) -> None:
-    now = datetime.now(tz=timezone.utc)
-    with _STS_CACHE_LOCK:
-        entry = _STS_CACHE.get(cache_key) or StsCacheEntry()
-        entry.credentials = None
-        entry.failed_until = now + STS_FAILURE_TTL
-        _STS_CACHE[cache_key] = entry

@@ -19,52 +19,37 @@ from app.models.browser import (
 from app.services.aws_client_config import StorageRequestProfile
 from app.services.s3_client import get_s3_client
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.services.sts_service import get_session_token
-from app.utils.s3_endpoint import resolve_s3_client_kwargs, resolve_s3_client_options
+from app.utils.s3_endpoint import resolve_s3_client_kwargs
 from app.utils.aws_errors import aws_error_code
-from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
 
 from ._shared import (
-    STS_SESSION_DURATION_SECONDS,
-    CachedStsCredentials,
     _BUCKET_LIST_CACHE,
     _OBJECT_LAZY_HEAD_CACHE,
     _OBJECT_LAZY_TAGS_CACHE,
     _OBJECT_LIST_CACHE,
     _OBJECT_SORT_SNAPSHOT_CACHE,
-    _get_cached_sts_credentials,
     _normalize_expiration,
-    _record_sts_failure,
     _resolve_endpoint,
-    _store_sts_credentials,
-    _sts_cache_key,
 )
+from .sts import browser_sts_enabled, request_browser_sts_session
 
 logger = logging.getLogger(__name__)
 
 
 class BrowserContextMixin:
-    def _sts_enabled(self, account: S3ExecutionTarget) -> bool:
-        if getattr(account, "s3_user_id", None) is not None:
-            return False
-        if getattr(account, "s3_connection_id", None) is not None:
-            return False
-        endpoint = getattr(account, "storage_endpoint", None)
-        if not endpoint:
-            return False
-        flags = resolve_feature_flags(endpoint)
-        return flags.sts_enabled
-
     def _resolve_s3_credentials(self, account: S3ExecutionTarget) -> tuple[str, str, Optional[str]]:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3 credentials missing for this account")
         session_token = account.session_token()
-        if not self._sts_enabled(account):
+        if not browser_sts_enabled(account):
             return access_key, secret_key, session_token
-        sts_credentials = self._get_sts_credentials(account, access_key, secret_key, session_token)
-        if sts_credentials:
-            return sts_credentials.access_key_id, sts_credentials.secret_access_key, sts_credentials.session_token
+        try:
+            credentials = request_browser_sts_session(account).credentials
+        except RuntimeError as exc:
+            logger.info("STS session token unavailable for account %s: %s", account.id or access_key, exc)
+        else:
+            return credentials.access_key_id, credentials.secret_access_key, credentials.session_token
         return access_key, secret_key, session_token
 
     def _s3_client_kwargs(self, account: S3ExecutionTarget) -> dict:
@@ -99,49 +84,6 @@ class BrowserContextMixin:
             "x-amz-server-side-encryption-customer-key": sse_customer.key,
             "x-amz-server-side-encryption-customer-key-MD5": sse_customer.key_md5,
         }
-
-    def _get_sts_credentials(
-        self,
-        account: S3ExecutionTarget,
-        access_key: str,
-        secret_key: str,
-        session_token: Optional[str],
-    ) -> Optional[CachedStsCredentials]:
-        if not self._sts_enabled(account):
-            return None
-        endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
-        if not endpoint:
-            return None
-        cache_key = _sts_cache_key(access_key, endpoint)
-        _, region, _, verify_tls = resolve_s3_client_options(account)
-        cached = _get_cached_sts_credentials(cache_key)
-        if cached:
-            return cached
-        try:
-            session_name = f"browser-{account.id or access_key[:8]}"
-            access, secret, token, expiration = get_session_token(
-                session_name,
-                STS_SESSION_DURATION_SECONDS,
-                access_key,
-                secret_key,
-                endpoint=endpoint,
-                session_token=session_token,
-                region=region,
-                verify_tls=verify_tls,
-            )
-        except RuntimeError as exc:
-            _record_sts_failure(cache_key)
-            logger.info("STS session token unavailable for account %s: %s", account.id or access_key, exc)
-            return None
-        normalized_expiration = _normalize_expiration(expiration)
-        credentials = CachedStsCredentials(
-            access_key_id=access,
-            secret_access_key=secret,
-            session_token=token,
-            expiration=normalized_expiration,
-        )
-        _store_sts_credentials(cache_key, credentials)
-        return credentials
 
     def _clean_etag(self, etag: Optional[str]) -> Optional[str]:
         if not etag:

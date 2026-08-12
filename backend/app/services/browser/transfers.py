@@ -12,116 +12,33 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.core.config import get_settings
 from app.models.browser import BrowserStsCredentials, SseCustomerContext, StsStatus
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.services.sts_service import get_session_token
-from app.utils.s3_endpoint import resolve_s3_client_options
-from app.utils.storage_endpoint_features import resolve_sts_endpoint
-from ._shared import (
-    STS_SESSION_DURATION_SECONDS,
-    CachedStsCredentials,
-    _get_cached_sts_credentials,
-    _normalize_expiration,
-    _record_sts_failure,
-    _resolve_endpoint,
-    _store_sts_credentials,
-    _sts_cache_key,
-)
+from ._shared import _resolve_endpoint
+from .sts import BrowserStsRequestError, request_browser_sts_session
 
 settings = get_settings()
 
 
 class BrowserTransfersMixin:
     def check_sts(self, account: S3ExecutionTarget) -> StsStatus:
-        if not self._sts_enabled(account):
-            return StsStatus(available=False, error="STS is disabled for this endpoint")
-        access_key, secret_key = account.effective_rgw_credentials()
-        if not access_key or not secret_key:
-            return StsStatus(available=False, error="S3 credentials missing for this account")
-        session_token = account.session_token()
-        _, region, _, verify_tls = resolve_s3_client_options(account)
-        endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
-        if not endpoint:
-            return StsStatus(available=False, error="STS endpoint is not configured for this account")
-        cache_key = _sts_cache_key(access_key, endpoint)
-        cached = _get_cached_sts_credentials(cache_key)
-        if cached:
-            return StsStatus(available=True)
         try:
-            session_name = f"browser-{account.id or access_key[:8]}"
-            access, secret, token, expiration = get_session_token(
-                session_name,
-                STS_SESSION_DURATION_SECONDS,
-                access_key,
-                secret_key,
-                endpoint=endpoint,
-                session_token=session_token,
-                region=region,
-                verify_tls=verify_tls,
-            )
+            request_browser_sts_session(account)
         except RuntimeError as exc:
-            _record_sts_failure(cache_key)
             return StsStatus(available=False, error=str(exc))
-        normalized_expiration = _normalize_expiration(expiration)
-        credentials = CachedStsCredentials(
-            access_key_id=access,
-            secret_access_key=secret,
-            session_token=token,
-            expiration=normalized_expiration,
-        )
-        _store_sts_credentials(cache_key, credentials)
         return StsStatus(available=True)
 
     def get_sts_credentials(self, account: S3ExecutionTarget) -> BrowserStsCredentials:
-        if not self._sts_enabled(account):
-            raise RuntimeError("STS is disabled for this endpoint")
-        access_key, secret_key = account.effective_rgw_credentials()
-        if not access_key or not secret_key:
-            raise RuntimeError("S3 credentials missing for this account")
-        session_token = account.session_token()
-        _, region, _, verify_tls = resolve_s3_client_options(account)
-        endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
-        if not endpoint:
-            raise RuntimeError("STS endpoint is not configured for this account")
-        cache_key = _sts_cache_key(access_key, endpoint)
-        cached = _get_cached_sts_credentials(cache_key)
-        if cached:
-            return BrowserStsCredentials(
-                access_key_id=cached.access_key_id,
-                secret_access_key=cached.secret_access_key,
-                session_token=cached.session_token,
-                expiration=_normalize_expiration(cached.expiration),
-                endpoint=_resolve_endpoint(account),
-                region=region or settings.seed_s3_region,
-            )
         try:
-            session_name = f"browser-{account.id or access_key[:8]}"
-            access, secret, token, expiration = get_session_token(
-                session_name,
-                STS_SESSION_DURATION_SECONDS,
-                access_key,
-                secret_key,
-                endpoint=endpoint,
-                session_token=session_token,
-                region=region,
-                verify_tls=verify_tls,
-            )
-        except RuntimeError as exc:
-            _record_sts_failure(cache_key)
+            session = request_browser_sts_session(account)
+        except BrowserStsRequestError as exc:
             raise RuntimeError(f"Unable to request STS credentials: {exc}") from exc
-        normalized_expiration = _normalize_expiration(expiration)
-        credentials = CachedStsCredentials(
-            access_key_id=access,
-            secret_access_key=secret,
-            session_token=token,
-            expiration=normalized_expiration,
-        )
-        _store_sts_credentials(cache_key, credentials)
+        credentials = session.credentials
         return BrowserStsCredentials(
-            access_key_id=access,
-            secret_access_key=secret,
-            session_token=token,
-            expiration=normalized_expiration,
+            access_key_id=credentials.access_key_id,
+            secret_access_key=credentials.secret_access_key,
+            session_token=credentials.session_token,
+            expiration=credentials.expiration,
             endpoint=_resolve_endpoint(account),
-            region=region or settings.seed_s3_region,
+            region=session.region or settings.seed_s3_region,
         )
 
     def proxy_upload(
