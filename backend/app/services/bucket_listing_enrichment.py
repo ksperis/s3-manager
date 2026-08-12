@@ -27,12 +27,16 @@ from app.services.bucket_notification_state import (
 )
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService, BucketOwnerUsage
 from app.services.buckets_service import BucketsService
+from app.services.rgw_bucket_metadata import (
+    extract_bucket_owner_scope,
+    owner_kind_from_owner,
+    split_tenant_uid,
+)
 from app.services.listing_progress import ListingProgressEmitter, interpolate_progress_percent, invoke_cancel_check
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.utils.normalize import normalize_optional_scalar, normalize_text
-from app.utils.rgw_identifiers import is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_feature_flags
-from app.utils.usage_stats import compute_usage_ratio_percent, extract_usage_stats
+from app.utils.usage_stats import compute_usage_ratio_percent
 
 BUCKET_ENRICH_MAX_WORKERS = 6
 BUCKET_OWNER_LOOKUP_MAX_WORKERS = 6
@@ -159,19 +163,6 @@ _OWNER_ENRICHED_FIELDS = _OWNER_STATUS_FIELDS | _OWNER_QUOTA_FIELDS | _OWNER_USA
 _EXPENSIVE_FIELD_RULES = {"owner_name", "tag"} | _OWNER_ENRICHED_FIELDS
 
 
-def _split_tenant_uid(value: str) -> tuple[str | None, str]:
-    if "$" in value:
-        tenant, uid = value.split("$", 1)
-        return (tenant.strip() or None), uid.strip()
-    return None, value.strip()
-
-
-def _owner_kind_from_owner(owner_id: str | None) -> Literal["account", "user"] | None:
-    if not owner_id:
-        return None
-    return "account" if is_rgw_account_id(owner_id) else "user"
-
-
 def _normalize_owner_kind(raw: object) -> Literal["account", "user"] | None:
     if not isinstance(raw, str):
         return None
@@ -215,78 +206,6 @@ def _determine_owner_name_lookup_scope(query: CephAdminBucketFilterQuery | None)
     if len(allowed) == 1:
         return next(iter(allowed))
     return "any"
-
-
-def _extract_bucket_owner_scope(entry: dict) -> tuple[str | None, str | None]:
-    if not isinstance(entry, dict):
-        return None, None
-    tenant = normalize_optional_scalar(entry.get("tenant"))
-    owner = normalize_optional_scalar(entry.get("owner"))
-    if owner and "$" in owner:
-        split_tenant, split_uid = _split_tenant_uid(owner)
-        if split_tenant:
-            tenant = split_tenant
-        owner = split_uid or None
-    return tenant, owner
-
-
-def _resolve_bucket_owner_identity(entry: dict) -> tuple[str | None, str | None]:
-    tenant, owner = _extract_bucket_owner_scope(entry)
-    if not owner:
-        return None, None
-    if is_rgw_account_id(owner):
-        return owner, None
-    if tenant:
-        return None, f"{tenant}${owner}"
-    return None, owner
-
-
-def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
-    if not isinstance(entry, dict):
-        return None
-    bucket_name = _extract_bucket_name(entry)
-    if not bucket_name:
-        return None
-    tenant = normalize_optional_scalar(entry.get("tenant"))
-    owner = normalize_optional_scalar(entry.get("owner"))
-    usage_bytes, objects = extract_usage_stats(entry.get("usage"))
-    quota_size = None
-    quota_objects = None
-    quota = entry.get("bucket_quota") or entry.get("quota")
-    if isinstance(quota, dict):
-        try:
-            # RGW may return both max_size (bytes) and max_size_kb (KiB).
-            # max_size has priority and must not be scaled again.
-            if quota.get("max_size") is not None:
-                quota_size = int(quota.get("max_size"))
-            elif quota.get("max_size_kb") is not None:
-                quota_size = int(quota.get("max_size_kb")) * 1024
-        except (TypeError, ValueError):
-            quota_size = None
-        try:
-            if quota.get("max_objects") is not None:
-                quota_objects = int(quota.get("max_objects"))
-        except (TypeError, ValueError):
-            quota_objects = None
-    return CephAdminBucketSummary(
-        name=bucket_name,
-        tenant=tenant,
-        owner=owner,
-        used_bytes=usage_bytes,
-        object_count=objects,
-        quota_max_size_bytes=quota_size,
-        quota_max_objects=quota_objects,
-    )
-
-
-def _extract_bucket_name(entry: dict) -> str | None:
-    if not isinstance(entry, dict):
-        return None
-    name = entry.get("name")
-    if not name and isinstance(entry.get("bucket"), str):
-        name = entry.get("bucket")
-    bucket_name = str(name or "").strip()
-    return bucket_name or None
 
 
 def _extract_name_candidates(query: CephAdminBucketFilterQuery | None) -> list[str] | None:
@@ -334,7 +253,7 @@ def _resolve_owner_name(
     if owner_key in cache:
         return cache[owner_key]
 
-    owner_kind = _owner_kind_from_owner(owner_id)
+    owner_kind = owner_kind_from_owner(owner_id)
     if owner_scope != "any" and owner_kind != owner_scope:
         cache[owner_key] = None
         return None
@@ -367,7 +286,7 @@ def _resolve_owner_name(
 
     tenant_hint = tenant
     uid = owner_id
-    split_tenant, split_uid = _split_tenant_uid(owner_id)
+    split_tenant, split_uid = split_tenant_uid(owner_id)
     if split_tenant:
         tenant_hint = split_tenant
         uid = split_uid
@@ -392,7 +311,7 @@ def _resolve_owner_names_for_buckets(
         if not bucket.owner:
             continue
         if owner_scope != "any":
-            bucket_owner_kind = _owner_kind_from_owner(bucket.owner)
+            bucket_owner_kind = owner_kind_from_owner(bucket.owner)
             if bucket_owner_kind != owner_scope:
                 continue
         owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
@@ -522,7 +441,7 @@ def match_bucket_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucke
     if field == "tag":
         return _match_tag_rule(bucket, rule)
     if field == "owner_kind":
-        value = _owner_kind_from_owner(bucket.owner)
+        value = owner_kind_from_owner(bucket.owner)
     elif field == "quota_usage_size_percent":
         value = compute_usage_ratio_percent(bucket.used_bytes, bucket.quota_max_size_bytes)
     elif field == "quota_usage_object_percent":
@@ -1728,7 +1647,7 @@ def _backfill_bucket_owner_metadata(
         bucket
         for bucket in buckets
         if not bucket.owner
-        or (include_tenant and bucket.tenant is None and _owner_kind_from_owner(bucket.owner) != "account")
+        or (include_tenant and bucket.tenant is None and owner_kind_from_owner(bucket.owner) != "account")
     ]
     if not pending:
         return buckets
@@ -1740,7 +1659,7 @@ def _backfill_bucket_owner_metadata(
             return bucket, None, None
         if not isinstance(payload, dict) or payload.get("not_found"):
             return bucket, None, None
-        tenant, owner = _extract_bucket_owner_scope(payload)
+        tenant, owner = extract_bucket_owner_scope(payload)
         return bucket, tenant, owner
 
     max_workers = min(BUCKET_OWNER_LOOKUP_MAX_WORKERS, len(pending))

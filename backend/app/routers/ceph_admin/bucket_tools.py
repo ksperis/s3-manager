@@ -25,7 +25,7 @@ from app.services.bucket_config_backup_service import (
     BucketConfigBackupService,
     quota_from_bucket_summary,
 )
-from app.services.bucket_listing_enrichment import _build_bucket_summary
+from app.services.rgw_bucket_metadata import build_bucket_summary
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.buckets_service import BucketsService
 from app.services.browser_service import BrowserService, get_browser_service
@@ -70,7 +70,7 @@ def backup_bucket_configs(
             raise RuntimeError(f"Unable to fetch bucket quota: {exc}") from exc
         if not isinstance(raw, dict):
             raise RuntimeError("Unable to fetch bucket quota: bucket not found")
-        summary = _build_bucket_summary(raw)
+        summary = build_bucket_summary(raw)
         return quota_from_bucket_summary(summary)
 
     return service.build_backup(
@@ -171,4 +171,3 @@ def list_bucket_objects(
         )
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
-

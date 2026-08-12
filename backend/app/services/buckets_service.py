@@ -47,10 +47,10 @@ from app.models.ceph_admin import (
     CephAdminBucketContentDiff,
 )
 from app.services.rgw_supervision import get_supervision_credentials
+from app.services.rgw_bucket_metadata import resolve_bucket_owner_identity
 from app.utils.rgw_identifiers import (
     resolve_account_scope,
     resolve_admin_uid,
-    is_rgw_account_id,
 )
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.s3_errors import format_s3_error
@@ -164,30 +164,6 @@ class BucketsService:
                 quota_objects = None
         return quota_size, quota_objects
 
-    def _split_tenant_uid(self, value: str) -> tuple[str | None, str]:
-        tenant, sep, uid = value.partition("$")
-        if sep:
-            return tenant or None, uid
-        return None, value
-
-    def _resolve_bucket_owner_identity(self, entry: dict) -> tuple[str | None, str | None]:
-        if not isinstance(entry, dict):
-            return None, None
-        tenant = str(entry.get("tenant") or "").strip() or None
-        owner = str(entry.get("owner") or "").strip() or None
-        if owner and "$" in owner:
-            split_tenant, split_uid = self._split_tenant_uid(owner)
-            if split_tenant:
-                tenant = split_tenant
-            owner = split_uid or None
-        if not owner:
-            return None, None
-        if is_rgw_account_id(owner):
-            return owner, None
-        if tenant:
-            return None, f"{tenant}${owner}"
-        return None, owner
-
     def _resolve_bucket_quota_scope(
         self,
         name: str,
@@ -207,7 +183,7 @@ class BucketsService:
         if not bucket_info:
             raise RuntimeError("Unable to set bucket quota: bucket not found")
 
-        owner_account_id, owner_uid = self._resolve_bucket_owner_identity(bucket_info)
+        owner_account_id, owner_uid = resolve_bucket_owner_identity(bucket_info)
         account_id, tenant = resolve_account_scope(owner_account_id)
         root_identifier = account_id or tenant
         root_uid = resolve_admin_uid(root_identifier, owner_uid)

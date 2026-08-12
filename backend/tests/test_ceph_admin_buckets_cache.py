@@ -27,8 +27,10 @@ from app.routers.ceph_admin import bucket_listing_cache
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.services.listing_progress import ListingCancelled, ListingProgressSnapshot
+from app.services import bucket_listing_enrichment
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.buckets_service import BucketsService
+from app.services import rgw_bucket_metadata
 
 
 class FakeRGWAdmin:
@@ -81,6 +83,12 @@ class FakeRGWAdmin:
         if (tenant, uid) in self._user_details:
             return self._user_details[(tenant, uid)]
         return {"uid": uid, "display_name": f"User-{uid}"}
+
+
+def test_rgw_bucket_metadata_is_not_reexported_from_listing_enrichment():
+    assert not hasattr(bucket_listing_enrichment, "_build_bucket_summary")
+    assert not hasattr(bucket_listing_enrichment, "_extract_bucket_name")
+    assert not hasattr(bucket_listing_enrichment, "_resolve_bucket_owner_identity")
 
 
 @pytest.fixture(autouse=True)
@@ -219,7 +227,7 @@ def test_ceph_admin_rgw_bucket_payload_cache_coalesces_parallel_misses():
 def test_ceph_admin_bucket_listing_snapshot_cache_coalesces_parallel_misses(monkeypatch: pytest.MonkeyPatch):
     payload = [{"name": "bucket-a", "owner": "owner-a"}]
     ctx, rgw_admin = _build_ctx(endpoint_id=178, payload=payload)
-    original_build_bucket_summary = buckets_router._build_bucket_summary
+    original_build_bucket_summary = rgw_bucket_metadata.build_bucket_summary
     started = threading.Event()
     unblock = threading.Event()
     calls = 0
@@ -237,7 +245,7 @@ def test_ceph_admin_bucket_listing_snapshot_cache_coalesces_parallel_misses(monk
             assert unblock.wait(timeout=1.0)
         return original_build_bucket_summary(entry)
 
-    monkeypatch.setattr(buckets_router, "_build_bucket_summary", blocking_build_bucket_summary)
+    monkeypatch.setattr(rgw_bucket_metadata, "build_bucket_summary", blocking_build_bucket_summary)
 
     def worker() -> None:
         try:

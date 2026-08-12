@@ -53,10 +53,8 @@ from app.services.bucket_listing_enrichment import (
     _apply_owner_enrichment,
     _backfill_bucket_owner_metadata,
     _bucket_identity_key,
-    _build_bucket_summary,
     _determine_owner_name_lookup_scope,
     enrich_buckets,
-    _extract_bucket_name,
     _extract_name_candidates,
     _filter_requires_owner_usage,
     _feature_status_active,
@@ -65,13 +63,12 @@ from app.services.bucket_listing_enrichment import (
     match_bucket_feature_param_rules,
     match_bucket_feature_rule,
     match_bucket_field_rule,
-    _owner_kind_from_owner,
     _request_requires_bucket_stats,
     _request_requires_owner_metadata,
     _request_requires_tenant_metadata,
-    _resolve_bucket_owner_identity,
     _resolve_owner_names_for_buckets,
 )
+from app.services import rgw_bucket_metadata
 from app.routers.ceph_admin.listing_common import (
     serialize_filter,
     stream_listing_response,
@@ -247,7 +244,7 @@ def _compute_bucket_listing(
                 return [
                     entry
                     for entry in get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
-                    if _extract_bucket_name(entry) in allowed_names
+                    if rgw_bucket_metadata.extract_bucket_name(entry) in allowed_names
                 ]
             return get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
 
@@ -293,7 +290,7 @@ def _compute_bucket_listing(
         total_entries = len(entries)
         for idx, entry in enumerate(entries, start=1):
             invoke_cancel_check(cancel_check)
-            summary = _build_bucket_summary(entry)
+            summary = rgw_bucket_metadata.build_bucket_summary(entry)
             if summary:
                 if not effective_with_stats:
                     summary.used_bytes = None
@@ -778,4 +775,3 @@ async def stream_buckets(
         logger=logger,
         failure_message="Bucket streaming search failed",
     )
-

@@ -39,7 +39,7 @@ from app.services import bucket_config_actions
 from app.services.buckets_service import BucketsService
 from app.services.rgw_admin import RGWAdminError
 from app.services.s3_execution_context import S3ExecutionContext
-from app.services.bucket_listing_enrichment import _resolve_bucket_owner_identity
+from app.services.rgw_bucket_metadata import resolve_bucket_owner_identity
 from app.utils.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.utils.storage_endpoint_features import resolve_feature_flags
 
@@ -194,7 +194,7 @@ def update_quota(
     if not bucket_info or (isinstance(bucket_info, dict) and bucket_info.get("not_found")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bucket not found")
 
-    owner_account_id, owner_uid = _resolve_bucket_owner_identity(bucket_info)
+    owner_account_id, owner_uid = resolve_bucket_owner_identity(bucket_info)
     if not owner_account_id and not owner_uid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
