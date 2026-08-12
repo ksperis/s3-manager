@@ -9,6 +9,7 @@ from app.routers.ceph_admin import accounts as accounts_router
 from app.routers.ceph_admin import bucket_config as bucket_config_router
 from app.routers.ceph_admin import bucket_tools as bucket_tools_router
 from app.routers.ceph_admin import buckets as buckets_router
+from app.routers.ceph_admin import user_keys as user_keys_router
 from app.routers.ceph_admin import users as users_router
 
 
@@ -231,3 +232,18 @@ def test_ceph_admin_bucket_config_routes_are_owned_by_dedicated_router():
         for route in bucket_tools_router.router.routes
     )
     assert len(buckets_router.router.routes) == 44
+
+
+def test_ceph_admin_user_key_routes_are_owned_by_dedicated_router():
+    assert len(user_keys_router.router.routes) == 4
+    assert all(
+        route.endpoint.__module__ == "app.routers.ceph_admin.user_keys"
+        for route in user_keys_router.router.routes
+    )
+    included_key_routes = [
+        route
+        for route in users_router.router.routes
+        if route.endpoint.__module__ == "app.routers.ceph_admin.user_keys"
+    ]
+    assert len(included_key_routes) == 4
+    assert len(users_router.router.routes) == 11

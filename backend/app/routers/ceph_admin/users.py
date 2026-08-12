@@ -8,16 +8,12 @@ import logging
 from threading import Lock
 from typing import Any, Callable, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.db import S3User
 from app.models.ceph_admin import (
     CephAdminEntityMetrics,
     CephAdminRgwAccessKey,
-    CephAdminRgwAccessKeyStatusChange,
     CephAdminRgwGeneratedAccessKey,
     CephAdminRgwUserCreate,
     CephAdminRgwUserCreateResponse,
@@ -50,9 +46,10 @@ from app.routers.ceph_admin.listing_common import (
 )
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
+from app.routers.ceph_admin import user_keys
+from app.routers.ceph_admin.user_common import extract_access_key, load_user_payload, serialize_access_keys
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
-from app.services.managed_private_access_service import ManagedPrivateAccessService
 from app.services.bucket_listing_shared import is_advanced_filter_stream_payload
 from app.services.listing_progress import (
     ListingProgressEmitter,
@@ -67,6 +64,7 @@ from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/users", tags=["ceph-admin-users"])
+router.include_router(user_keys.router)
 logger = logging.getLogger(__name__)
 
 USERS_LIST_CACHE_TTL_SECONDS = 30.0
@@ -86,12 +84,6 @@ def _split_tenant_uid(value: str) -> Tuple[Optional[str], str]:
         if tenant and uid:
             return tenant, uid
     return None, raw
-
-
-def _extract_access_key(payload: dict) -> tuple[Optional[str], Optional[str]]:
-    access_key = payload.get("access_key")
-    secret_key = payload.get("secret_key")
-    return access_key, secret_key
 
 
 def _optional_account_lookup_enabled(ctx: CephAdminContext) -> bool | None:
@@ -450,81 +442,6 @@ def _extract_caps(payload: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(result))
 
 
-def _parse_key_status(status_value: Any) -> tuple[Optional[str], Optional[bool]]:
-    if status_value is None:
-        return None, None
-    status_text = str(status_value).strip()
-    if not status_text:
-        return None, None
-    normalized = status_text.lower()
-    if normalized in {"enabled", "active", "true", "1"}:
-        return status_text, True
-    if normalized in {"disabled", "inactive", "suspended", "false", "0"}:
-        return status_text, False
-    return status_text, None
-
-
-def _serialize_access_key(entry: dict[str, Any]) -> Optional[CephAdminRgwAccessKey]:
-    access_key_value = entry.get("access_key") or entry.get("access_key_id")
-    access_key = normalize_optional_scalar(access_key_value)
-    if not access_key:
-        return None
-    secret_key = normalize_optional_scalar(entry.get("secret_key"))
-    status_text, is_active = _parse_key_status(entry.get("status") or entry.get("key_status") or entry.get("state"))
-    return CephAdminRgwAccessKey(
-        access_key=access_key,
-        secret_key=secret_key,
-        status=status_text,
-        is_active=is_active,
-        created_at=entry.get("create_date") or entry.get("created_at"),
-        user=normalize_optional_scalar(entry.get("user") or entry.get("uid")),
-        subuser=normalize_optional_scalar(entry.get("subuser")),
-    )
-
-
-def _serialize_access_keys(entries: list[dict]) -> list[CephAdminRgwAccessKey]:
-    results: list[CephAdminRgwAccessKey] = []
-    seen: set[str] = set()
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        serialized = _serialize_access_key(entry)
-        if not serialized:
-            continue
-        if serialized.access_key in seen:
-            continue
-        seen.add(serialized.access_key)
-        results.append(serialized)
-    return results
-
-
-def _managed_private_key(
-    db: Session,
-    ctx: CephAdminContext,
-    *,
-    uid: str,
-    tenant: Optional[str],
-    access_key: str,
-):
-    remote_uids = {uid}
-    if tenant:
-        remote_uids.add(f"{tenant}${uid}")
-    sources = (
-        db.query(S3User)
-        .filter(
-            S3User.storage_endpoint_id == ctx.endpoint.id,
-            S3User.rgw_user_uid.in_(remote_uids),
-        )
-        .all()
-    )
-    managed = ManagedPrivateAccessService(db)
-    for source in sources:
-        provisioning = managed.managed_key("s3_user", source.id, access_key)
-        if provisioning is not None:
-            return provisioning
-    return None
-
-
 def _resolve_user_identity(
     payload: dict[str, Any],
     *,
@@ -592,21 +509,6 @@ def _build_user_detail(
     )
 
 
-def _load_user_payload(uid: str, tenant: Optional[str], ctx: CephAdminContext) -> dict[str, Any]:
-    normalized_uid = uid.strip()
-    if not normalized_uid:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="uid is required")
-    try:
-        payload = ctx.rgw_admin.get_user(normalized_uid, tenant=tenant, allow_not_found=True)
-    except RGWAdminError as exc:
-        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-    if not payload or (isinstance(payload, dict) and payload.get("not_found")):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="RGW user not found")
-    if not isinstance(payload, dict):
-        return {"payload": payload}
-    return payload
-
-
 def _resolve_account_name(
     account_id: Optional[str],
     ctx: CephAdminContext,
@@ -648,7 +550,7 @@ def _extract_generated_key_from_payload(raw: Any, rgw_admin: Any) -> Optional[Ce
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        access_key, secret_key = _extract_access_key(entry)
+        access_key, secret_key = extract_access_key(entry)
         if access_key and secret_key:
             return CephAdminRgwGeneratedAccessKey(access_key=access_key, secret_key=secret_key)
     return None
@@ -664,7 +566,7 @@ def _apply_caps_update(
     caps_values = [str(value).strip() for value in values if str(value).strip()]
     caps_values = list(dict.fromkeys(caps_values))
     try:
-        current_payload = _load_user_payload(uid, tenant, ctx)
+        current_payload = load_user_payload(uid, tenant, ctx)
         existing_caps = _extract_caps(current_payload)
         if mode == "replace":
             if existing_caps:
@@ -1029,7 +931,7 @@ def create_rgw_user(
             )
 
     invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
-    user_payload = _load_user_payload(uid, lookup_tenant, ctx)
+    user_payload = load_user_payload(uid, lookup_tenant, ctx)
     resolved_account_id = normalize_optional_scalar(
         user_payload.get("account_id") or extract_rgw_user_payload(user_payload).get("account_id")
     )
@@ -1040,7 +942,7 @@ def create_rgw_user(
             user_payload.get("account_name") or extract_rgw_user_payload(user_payload).get("account_name")
         ),
     )
-    keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=lookup_tenant))
+    keys = serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=lookup_tenant))
     detail = _build_user_detail(
         user_payload,
         uid_fallback=uid,
@@ -1070,7 +972,7 @@ def get_rgw_user(
     tenant: Optional[str] = None,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> dict[str, Any]:
-    return _load_user_payload(user_id, tenant, ctx)
+    return load_user_payload(user_id, tenant, ctx)
 
 
 @router.get("/{user_id}/detail", response_model=CephAdminRgwUserDetail)
@@ -1079,7 +981,7 @@ def get_rgw_user_detail(
     tenant: Optional[str] = None,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> CephAdminRgwUserDetail:
-    payload = _load_user_payload(user_id, tenant, ctx)
+    payload = load_user_payload(user_id, tenant, ctx)
     account_id = normalize_optional_scalar(payload.get("account_id") or extract_rgw_user_payload(payload).get("account_id"))
     account_name = _resolve_account_name(
         account_id,
@@ -1088,7 +990,7 @@ def get_rgw_user_detail(
             payload.get("account_name") or extract_rgw_user_payload(payload).get("account_name")
         ),
     )
-    keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(user_id.strip(), tenant=tenant))
+    keys = serialize_access_keys(ctx.rgw_admin.list_user_keys(user_id.strip(), tenant=tenant))
     return _build_user_detail(
         payload,
         uid_fallback=user_id.strip(),
@@ -1186,7 +1088,7 @@ def update_rgw_user_config(
             raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
-    payload = _load_user_payload(uid, tenant, ctx)
+    payload = load_user_payload(uid, tenant, ctx)
     account_id = normalize_optional_scalar(payload.get("account_id") or extract_rgw_user_payload(payload).get("account_id"))
     account_name = _resolve_account_name(
         account_id,
@@ -1195,7 +1097,7 @@ def update_rgw_user_config(
             payload.get("account_name") or extract_rgw_user_payload(payload).get("account_name")
         ),
     )
-    keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=tenant))
+    keys = serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=tenant))
     record_ceph_admin_action(
         ctx,
         action="rgw_user.update",
@@ -1230,145 +1132,3 @@ def get_rgw_user_metrics(
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     return _build_metrics_from_buckets(payload)
 
-
-@router.get("/{user_id}/keys", response_model=list[CephAdminRgwAccessKey])
-def list_rgw_user_keys(
-    user_id: str,
-    tenant: Optional[str] = None,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-    db: Session = Depends(get_db),
-) -> list[CephAdminRgwAccessKey]:
-    uid = user_id.strip()
-    _load_user_payload(uid, tenant, ctx)
-    try:
-        keys = ctx.rgw_admin.list_user_keys(uid, tenant=tenant)
-    except RGWAdminError as exc:
-        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-    serialized = _serialize_access_keys(keys)
-    for key in serialized:
-        provisioning = _managed_private_key(
-            db,
-            ctx,
-            uid=uid,
-            tenant=tenant,
-            access_key=key.access_key,
-        )
-        if provisioning is not None:
-            key.is_private_access_managed = True
-            key.managed_connection_id = provisioning.s3_connection_id
-    return serialized
-
-
-@router.post("/{user_id}/keys", response_model=CephAdminRgwGeneratedAccessKey, status_code=status.HTTP_201_CREATED)
-def create_rgw_user_key(
-    user_id: str,
-    tenant: Optional[str] = None,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-) -> CephAdminRgwGeneratedAccessKey:
-    uid = user_id.strip()
-    _load_user_payload(uid, tenant, ctx)
-    try:
-        response = ctx.rgw_admin.create_access_key(uid, tenant=tenant)
-    except RGWAdminError as exc:
-        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-    access_key = secret_key = None
-    for entry in ctx.rgw_admin._extract_keys(response):
-        if not isinstance(entry, dict):
-            continue
-        access_key, secret_key = _extract_access_key(entry)
-        if access_key and secret_key:
-            break
-    if not access_key or not secret_key:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="RGW did not return access credentials for this key",
-        )
-    record_ceph_admin_action(
-        ctx,
-        action="rgw_user_key.create",
-        entity_type="rgw_user",
-        entity_id=f"{tenant}${uid}" if tenant else uid,
-        metadata={"access_key_suffix": access_key[-4:]},
-    )
-    return CephAdminRgwGeneratedAccessKey(access_key=access_key, secret_key=secret_key)
-
-
-@router.put("/{user_id}/keys/{access_key}/status", response_model=CephAdminRgwAccessKey)
-def update_rgw_user_key_status(
-    user_id: str,
-    access_key: str,
-    update: CephAdminRgwAccessKeyStatusChange,
-    tenant: Optional[str] = None,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-    db: Session = Depends(get_db),
-) -> CephAdminRgwAccessKey:
-    uid = user_id.strip()
-    normalized_key = access_key.strip()
-    if not normalized_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="access_key is required")
-    if _managed_private_key(db, ctx, uid=uid, tenant=tenant, access_key=normalized_key) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This key belongs to a managed private access; update or delete its private connection instead",
-        )
-    _load_user_payload(uid, tenant, ctx)
-    try:
-        ctx.rgw_admin.set_access_key_status(uid, normalized_key, update.active, tenant=tenant)
-        keys = ctx.rgw_admin.list_user_keys(uid, tenant=tenant)
-    except RGWAdminError as exc:
-        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-    for key in _serialize_access_keys(keys):
-        if key.access_key == normalized_key:
-            record_ceph_admin_action(
-                ctx,
-                action="rgw_user_key.update_status",
-                entity_type="rgw_user",
-                entity_id=f"{tenant}${uid}" if tenant else uid,
-                metadata={"access_key_suffix": normalized_key[-4:], "active": update.active},
-            )
-            return key
-    # Fallback when RGW does not return key details after status update.
-    record_ceph_admin_action(
-        ctx,
-        action="rgw_user_key.update_status",
-        entity_type="rgw_user",
-        entity_id=f"{tenant}${uid}" if tenant else uid,
-        metadata={"access_key_suffix": normalized_key[-4:], "active": update.active},
-    )
-    return CephAdminRgwAccessKey(
-        access_key=normalized_key,
-        status="enabled" if update.active else "suspended",
-        is_active=update.active,
-    )
-
-
-@router.delete("/{user_id}/keys/{access_key}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
-def delete_rgw_user_key(
-    user_id: str,
-    access_key: str,
-    tenant: Optional[str] = None,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-    db: Session = Depends(get_db),
-) -> Response:
-    uid = user_id.strip()
-    normalized_key = access_key.strip()
-    if not normalized_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="access_key is required")
-    if _managed_private_key(db, ctx, uid=uid, tenant=tenant, access_key=normalized_key) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This key belongs to a managed private access; delete its private connection instead",
-        )
-    _load_user_payload(uid, tenant, ctx)
-    try:
-        ctx.rgw_admin.delete_access_key(uid, normalized_key, tenant=tenant)
-    except RGWAdminError as exc:
-        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-    record_ceph_admin_action(
-        ctx,
-        action="rgw_user_key.delete",
-        entity_type="rgw_user",
-        entity_id=f"{tenant}${uid}" if tenant else uid,
-        metadata={"access_key_suffix": normalized_key[-4:]},
-    )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
