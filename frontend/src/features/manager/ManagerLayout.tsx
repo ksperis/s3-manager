@@ -233,7 +233,7 @@ function ManagerShell() {
     });
   }
 
-  if (managerCephKeysEnabled || managerPrivateAccessEnabled) {
+  if (isS3User && (managerCephKeysEnabled || managerPrivateAccessEnabled)) {
     navSections.push({
       label: "Ceph",
       links: [workspacePageLink(MANAGER_PAGE_CONTRACTS["ceph-keys"])],

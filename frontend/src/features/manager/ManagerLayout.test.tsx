@@ -235,6 +235,26 @@ describe("ManagerLayout", () => {
     expect(cephSection?.links.map((link) => link.label)).toEqual(["Access keys"]);
   });
 
+  it("hides Ceph access-key navigation for RGW account contexts", () => {
+    setStoredManagerUser();
+    useS3AccountContextMock.mockReturnValue(
+      buildContext({
+        selectedS3AccountType: "tenant",
+        managerCephKeysEnabled: false,
+        managerPrivateAccessEnabled: true,
+      })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    expect(capturedNavSections.map((section) => section.label)).not.toContain("Ceph");
+  });
+
   it("shows Feature rules and Integrity tools when bucket integrity flag is enabled", () => {
     setStoredManagerUser({
       manager_tool_access: {
