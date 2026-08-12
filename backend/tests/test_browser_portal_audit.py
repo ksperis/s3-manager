@@ -6,7 +6,7 @@ from inspect import signature
 
 import pytest
 
-from app.routers import browser, browser_objects, browser_transfers, portal
+from app.routers import browser, browser_objects, browser_transfers, portal_objects
 from app.routers.manager import objects as manager_objects
 
 
@@ -28,9 +28,9 @@ from app.routers.manager import objects as manager_objects
         browser_transfers.abort_multipart_upload,
         browser_objects.restore_object,
         browser_objects.cleanup_object_versions,
-        portal.portal_restore_storage_space_object,
-        portal.portal_delete_storage_space_object,
-        portal.portal_download_storage_space_object,
+        portal_objects.portal_restore_storage_space_object,
+        portal_objects.portal_delete_storage_space_object,
+        portal_objects.portal_download_storage_space_object,
         manager_objects.upload_object,
         manager_objects.create_folder,
         manager_objects.delete_objects,
@@ -44,7 +44,7 @@ def test_data_plane_endpoints_do_not_resolve_application_audit(endpoint) -> None
     "endpoint",
     [
         browser.create_bucket,
-        portal.portal_restore_deleted_prefix_stream,
+        portal_objects.portal_restore_deleted_prefix_stream,
     ],
 )
 def test_control_plane_and_global_workflow_endpoints_keep_application_audit(endpoint) -> None:

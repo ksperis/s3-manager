@@ -105,8 +105,8 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/manager/usage_stats.py", "stream_manager_usage_stats_aggregate", "/manager/usage-stats/stream"): "read-only stream",
     ("POST", "app/routers/storage_ops/buckets.py", "refresh_storage_ops_bucket_listing_cache", "/cache/refresh"): "cache refresh",
     ("POST", "app/routers/storage_ops/buckets.py", "query_storage_ops_buckets", "/query"): "read-only query",
-    ("DELETE", "app/routers/portal.py", "portal_delete_storage_space_object", "/storage-spaces/{space_id}/objects"): "data-plane operation covered by provider access logs",
-    ("POST", "app/routers/portal.py", "portal_restore_storage_space_object", "/storage-spaces/{space_id}/objects/restore"): "data-plane operation covered by provider access logs",
+    ("DELETE", "app/routers/portal_objects.py", "portal_delete_storage_space_object", "/storage-spaces/{space_id}/objects"): "data-plane operation covered by provider access logs",
+    ("POST", "app/routers/portal_objects.py", "portal_restore_storage_space_object", "/storage-spaces/{space_id}/objects/restore"): "data-plane operation covered by provider access logs",
     ("POST", "app/routers/storage_ops/usage_stats.py", "stream_storage_ops_bucket_usage_stats", "/stream"): "read-only stream",
     ("POST", "app/routers/users.py", "mark_my_notifications_read", "/me/notifications/read"): "user-local read marker",
 }

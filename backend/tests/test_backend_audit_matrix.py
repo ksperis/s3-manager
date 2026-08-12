@@ -82,6 +82,9 @@ def test_backend_audit_matrix_tracks_portal_stream_delegation():
     backend_root = Path(__file__).resolve().parents[1]
     rows_by_function = {row.function: row for row in collect_rows(backend_root)}
 
+    assert rows_by_function["portal_restore_deleted_prefix_stream"].file.relative_to(backend_root) == Path(
+        "app/routers/portal_objects.py"
+    )
     assert rows_by_function["portal_restore_deleted_prefix_stream"].signals[
         "delegated_portal_deleted_restore_audit"
     ]

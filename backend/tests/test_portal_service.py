@@ -58,6 +58,7 @@ from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router
 from app.routers import portal_access_keys as portal_access_keys_router
 from app.routers import portal_monitoring as portal_monitoring_router
+from app.routers import portal_objects as portal_objects_router
 from app.routers import portal_usage as portal_usage_router
 from app.services import app_settings_service, s3_client
 from app.services.portal.exceptions import (
@@ -5987,6 +5988,27 @@ def test_portal_sharing_routes_are_owned_by_dedicated_router():
     assert set(route_modules.values()) == {"app.routers.portal_sharing"}
 
 
+def test_portal_object_routes_are_owned_by_dedicated_router():
+    expected_paths = {
+        "/portal/storage-spaces/{space_id}/versions/cleanup/stream",
+        "/portal/storage-spaces/{space_id}/objects/detail",
+        "/portal/storage-spaces/{space_id}/objects/versions",
+        "/portal/storage-spaces/{space_id}/trash",
+        "/portal/storage-spaces/{space_id}/objects/restore",
+        "/portal/storage-spaces/{space_id}/trash/restore-prefix/stream",
+        "/portal/storage-spaces/{space_id}/objects",
+        "/portal/storage-spaces/{space_id}/objects/download",
+    }
+    route_modules = {
+        route.path: route.endpoint.__module__
+        for route in portal_router.router.routes
+        if route.path in expected_paths
+    }
+
+    assert set(route_modules) == expected_paths
+    assert set(route_modules.values()) == {"app.routers.portal_objects"}
+
+
 def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch, db_session):
     account = make_s3_account(db_session, name="portal-alert-empty", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     other_account = make_s3_account(db_session, name="portal-alert-other", rgw_access_key="ROOT-AK2", rgw_secret_key="ROOT-SK2")
@@ -6105,7 +6127,7 @@ def test_portal_object_download_route_does_not_require_application_audit(db_sess
             assert key == "raw-data/readme.txt"
             return iter([b"hello"]), "text/plain", "readme.txt"
 
-    response = portal_router.portal_download_storage_space_object(
+    response = portal_objects_router.portal_download_storage_space_object(
         "research-data",
         key="raw-data/readme.txt",
         access=access,
@@ -6143,7 +6165,7 @@ def test_portal_object_restore_route_does_not_require_application_audit(db_sessi
                 restored_from_version_id=version_id,
             )
 
-    response = portal_router.portal_restore_storage_space_object(
+    response = portal_objects_router.portal_restore_storage_space_object(
         "research-data",
         payload=PortalStorageObjectRestoreRequest(
             key="raw-data/readme.txt",
