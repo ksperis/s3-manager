@@ -59,6 +59,7 @@ from app.routers import portal as portal_router
 from app.routers import portal_access_keys as portal_access_keys_router
 from app.routers import portal_monitoring as portal_monitoring_router
 from app.routers import portal_objects as portal_objects_router
+from app.routers import portal_storage_spaces as portal_storage_spaces_router
 from app.routers import portal_usage as portal_usage_router
 from app.services import app_settings_service, s3_client
 from app.services.portal.exceptions import (
@@ -1621,7 +1622,7 @@ def test_delete_storage_space_route_returns_no_content_and_audits_without_secret
             self.actions.append(kwargs)
 
     audit_service = FakeAuditService()
-    response = portal_router.delete_portal_storage_space(
+    response = portal_storage_spaces_router.delete_portal_storage_space(
         "route-data",
         access=_portal_access(account, owner),
         audit_service=audit_service,
@@ -1646,7 +1647,7 @@ def test_delete_storage_space_route_maps_non_empty_to_conflict(db_session):
             raise PortalStorageSpaceNotEmpty("Storage Space is not empty. Clean up its history.")
 
     with pytest.raises(HTTPException) as exc_info:
-        portal_router.delete_portal_storage_space(
+        portal_storage_spaces_router.delete_portal_storage_space(
             "route-data",
             access=_portal_access(account, owner),
             audit_service=None,
@@ -6007,6 +6008,27 @@ def test_portal_object_routes_are_owned_by_dedicated_router():
 
     assert set(route_modules) == expected_paths
     assert set(route_modules.values()) == {"app.routers.portal_objects"}
+
+
+def test_portal_storage_space_routes_are_owned_by_dedicated_router():
+    expected_paths = {
+        "/portal/storage-spaces",
+        "/portal/storage-spaces/import",
+        "/portal/storage-spaces/{space_id}",
+        "/portal/storage-spaces/{space_id}/take-ownership",
+        "/portal/storage-spaces/{space_id}/icon",
+        "/portal/storage-spaces/{space_id}/icon/image",
+        "/portal/storage-spaces/{space_id}/access-summary",
+        "/portal/storage-spaces/{space_id}/settings",
+    }
+    route_modules = {
+        route.path: route.endpoint.__module__
+        for route in portal_router.router.routes
+        if route.path in expected_paths
+    }
+
+    assert set(route_modules) == expected_paths
+    assert set(route_modules.values()) == {"app.routers.portal_storage_spaces"}
 
 
 def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch, db_session):
