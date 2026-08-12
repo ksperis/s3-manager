@@ -58,6 +58,7 @@ from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router
 from app.routers import portal_access_keys as portal_access_keys_router
 from app.routers import portal_monitoring as portal_monitoring_router
+from app.routers import portal_usage as portal_usage_router
 from app.services import app_settings_service, s3_client
 from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
@@ -5366,9 +5367,9 @@ def test_portal_user_usage_omits_other_when_all_usage_is_visible(monkeypatch, db
 
 
 def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _usage_history_settings(True))
     monkeypatch.setattr(
-        portal_router,
+        portal_usage_router,
         "utcnow",
         lambda: datetime(2026, 6, 9, 12, 0, 0, tzinfo=timezone.utc),
     )
@@ -5426,7 +5427,7 @@ def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_se
     )
     db_session.commit()
 
-    payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
+    payload = portal_usage_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
 
     assert payload.storage is not None
     assert payload.storage.window == "month"
@@ -5438,7 +5439,7 @@ def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_se
 
 
 def test_portal_usage_trends_return_empty_when_history_disabled(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(False))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _usage_history_settings(False))
     endpoint = StorageEndpoint(
         name="portal-trends-disabled-endpoint",
         endpoint_url="https://portal-trends-disabled.example.test",
@@ -5460,13 +5461,13 @@ def test_portal_usage_trends_return_empty_when_history_disabled(monkeypatch, db_
     db_session.add_all([endpoint, account, user])
     db_session.commit()
 
-    payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
+    payload = portal_usage_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
 
     assert payload.model_dump(exclude_none=True) == {}
 
 
 def test_portal_usage_trends_return_empty_without_baseline(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _usage_history_settings(True))
     endpoint = StorageEndpoint(
         name="portal-trends-empty-endpoint",
         endpoint_url="https://portal-trends-empty.example.test",
@@ -5488,13 +5489,13 @@ def test_portal_usage_trends_return_empty_without_baseline(monkeypatch, db_sessi
     db_session.add_all([endpoint, account, user])
     db_session.commit()
 
-    payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
+    payload = portal_usage_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
 
     assert payload.model_dump(exclude_none=True) == {}
 
 
 def test_portal_usage_stats_latest_filters_to_visible_storage_spaces(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _bucket_usage_settings(True))
     account = make_s3_account(db_session, name="portal-usage-stats", rgw_account_id="portal-usage-stats")
     user = User(email="usage-stats@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -5529,7 +5530,7 @@ def test_portal_usage_stats_latest_filters_to_visible_storage_spaces(monkeypatch
         ],
     )
 
-    payload = portal_router.portal_usage_stats_latest(
+    payload = portal_usage_router.portal_usage_stats_latest(
         access=_portal_access(account, user),
         portal_service=service,
         db=db_session,
@@ -5546,14 +5547,14 @@ def test_portal_usage_stats_latest_filters_to_visible_storage_spaces(monkeypatch
 
 
 def test_portal_usage_stats_latest_respects_feature_flag(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(False))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _bucket_usage_settings(False))
     account = make_s3_account(db_session, name="portal-usage-stats-disabled", rgw_account_id="portal-usage-stats-disabled")
     user = User(email="usage-stats-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
 
     with pytest.raises(HTTPException) as excinfo:
-        portal_router.portal_usage_stats_latest(
+        portal_usage_router.portal_usage_stats_latest(
             access=_portal_access(account, user),
             portal_service=PortalService(db_session),
             db=db_session,
@@ -5564,7 +5565,7 @@ def test_portal_usage_stats_latest_respects_feature_flag(monkeypatch, db_session
 
 
 def test_portal_storage_space_usage_stats_returns_sanitized_snapshot(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _bucket_usage_settings(True))
     account = make_s3_account(db_session, name="portal-space-stats", rgw_account_id="portal-space-stats")
     user = User(email="space-stats@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -5588,7 +5589,7 @@ def test_portal_storage_space_usage_stats_returns_sanitized_snapshot(monkeypatch
         ],
     )
 
-    payload = portal_router.portal_storage_space_usage_stats(
+    payload = portal_usage_router.portal_storage_space_usage_stats(
         "space-id",
         access=_portal_access(account, user),
         portal_service=service,
@@ -5618,7 +5619,7 @@ def test_portal_storage_space_usage_stats_returns_sanitized_snapshot(monkeypatch
 
 
 def test_portal_storage_space_usage_stats_returns_empty_without_snapshot(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _bucket_usage_settings(True))
     account = make_s3_account(db_session, name="portal-space-stats-empty", rgw_account_id="portal-space-stats-empty")
     user = User(email="space-stats-empty@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -5637,7 +5638,7 @@ def test_portal_storage_space_usage_stats_returns_empty_without_snapshot(monkeyp
         ],
     )
 
-    payload = portal_router.portal_storage_space_usage_stats(
+    payload = portal_usage_router.portal_storage_space_usage_stats(
         "space-id",
         access=_portal_access(account, user),
         portal_service=service,
@@ -5663,7 +5664,7 @@ def test_portal_storage_space_usage_stats_rejects_inaccessible_space(
     archived,
     expected_status,
 ):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _bucket_usage_settings(True))
     account = make_s3_account(db_session, name="portal-space-stats-denied", rgw_account_id="portal-space-stats-denied")
     user = User(email="space-stats-denied@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -5686,7 +5687,7 @@ def test_portal_storage_space_usage_stats_rejects_inaccessible_space(
     )
 
     with pytest.raises(HTTPException) as excinfo:
-        portal_router.portal_storage_space_usage_stats(
+        portal_usage_router.portal_storage_space_usage_stats(
             requested_space_id,
             access=_portal_access(account, user),
             portal_service=service,
@@ -5697,14 +5698,14 @@ def test_portal_storage_space_usage_stats_rejects_inaccessible_space(
 
 
 def test_portal_storage_space_usage_stats_respects_feature_flag(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(False))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _bucket_usage_settings(False))
     account = make_s3_account(db_session, name="portal-space-stats-disabled", rgw_account_id="portal-space-stats-disabled")
     user = User(email="space-stats-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
 
     with pytest.raises(HTTPException) as excinfo:
-        portal_router.portal_storage_space_usage_stats(
+        portal_usage_router.portal_storage_space_usage_stats(
             "space-id",
             access=_portal_access(account, user),
             portal_service=PortalService(db_session),
@@ -5716,7 +5717,7 @@ def test_portal_storage_space_usage_stats_respects_feature_flag(monkeypatch, db_
 
 
 def test_portal_usage_history_trends_exposes_account_history(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _usage_history_settings(True))
     endpoint = StorageEndpoint(
         name="portal-history-endpoint",
         endpoint_url="https://portal-history.example.test",
@@ -5771,7 +5772,7 @@ def test_portal_usage_history_trends_exposes_account_history(monkeypatch, db_ses
     )
     db_session.commit()
 
-    payload = portal_router.portal_usage_history_trends(
+    payload = portal_usage_router.portal_usage_history_trends(
         window="month",
         access=_portal_access(account, user),
         db=db_session,
@@ -5785,13 +5786,13 @@ def test_portal_usage_history_trends_exposes_account_history(monkeypatch, db_ses
 
 
 def test_portal_usage_history_trends_return_unavailable_when_disabled(monkeypatch, db_session):
-    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(False))
+    monkeypatch.setattr(portal_usage_router, "load_app_settings", lambda: _usage_history_settings(False))
     account = make_s3_account(db_session, name="portal-history-disabled", rgw_account_id="portal-history-disabled")
     user = User(email="usage-history-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
 
-    payload = portal_router.portal_usage_history_trends(
+    payload = portal_usage_router.portal_usage_history_trends(
         window="month",
         access=_portal_access(account, user),
         db=db_session,
@@ -5799,6 +5800,24 @@ def test_portal_usage_history_trends_return_unavailable_when_disabled(monkeypatc
 
     assert payload.available is False
     assert payload.unavailable_reason == "Usage history is disabled."
+
+
+def test_portal_usage_routes_are_owned_by_dedicated_router():
+    expected_paths = {
+        "/portal/usage",
+        "/portal/usage-trends",
+        "/portal/usage-stats/latest",
+        "/portal/usage-history-trends",
+        "/portal/storage-spaces/{space_id}/usage-stats",
+    }
+    route_modules = {
+        route.path: route.endpoint.__module__
+        for route in portal_router.router.routes
+        if route.path in expected_paths
+    }
+
+    assert set(route_modules) == expected_paths
+    assert set(route_modules.values()) == {"app.routers.portal_usage"}
 
 
 def test_portal_alerts_are_derived_from_quota_and_public_sharing(monkeypatch, db_session):
