@@ -342,8 +342,9 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByRole("button", { name: "Copy secret key" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Download details/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Advanced: prepare credentials for secure transfer")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Configure this access" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Configure this access" }));
+    await user.click(screen.getByRole("button", { name: "Configure a tool" }));
     const setupDialog = screen.getByRole("dialog", { name: "Connect a tool" });
     expect(within(setupDialog).getByRole("combobox", { name: "Access used" })).toHaveValue("AK-NEW");
   });

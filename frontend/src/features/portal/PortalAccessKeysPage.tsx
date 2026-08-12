@@ -677,16 +677,6 @@ export default function PortalAccessKeysPage() {
                     : t({ en: "The secret is shown only once.", fr: "Le secret n'est affiché qu'une seule fois.", de: "Das Secret wird nur einmal angezeigt." })
                 }
                 badge={t({ en: "Copy these values now", fr: "Copiez ces valeurs maintenant", de: "Diese Werte jetzt kopieren" })}
-                actions={
-                  <UiButton
-                    type="button"
-                    size="xs"
-                    onClick={() => openConnectionDialog(createdKey)}
-                    disabled={!state || !hasAccountContext}
-                  >
-                    {t({ en: "Configure this access", fr: "Configurer cet accès", de: "Diesen Zugriff konfigurieren" })}
-                  </UiButton>
-                }
                 values={[
                   {
                     label: t({ en: "Access ID", fr: "ID d'accès", de: "Zugriffs-ID" }),

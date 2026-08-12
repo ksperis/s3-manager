@@ -26,10 +26,10 @@ workflow.
 4. Choose the space the tool should reach.
 5. Select **Read only** unless the tool must upload, replace, or delete files.
    Use **Read/write** only for tools that need those changes.
-6. Copy the secret immediately. It is shown only once, then select **Configure
-   this access** to continue with the identity that was just created.
-7. For an existing access, select **Connect** on its row, or open **Connect
-   tool** and select **Configure a tool**.
+6. Copy the secret immediately. It is shown only once.
+7. Select **Configure a tool** to continue with the identity that was just
+   created. For an existing access, select **Connect** on its row or use the
+   same action from **Connect tool**.
 8. For an external recipient only, if you must transmit both values in one
    file, expand **Advanced: prepare credentials for secure transfer** and use
    **Export unencrypted credentials (.txt)**. Confirm the warning, use a
