@@ -171,11 +171,7 @@ force_path_style = ${connection.forcePathStyle ? "true" : "false"}
 `;
 }
 
-export function buildGenericConnectionSheet(
-  connection: PortalExternalToolConnection,
-  options?: { secretAccessKey?: string | null }
-): string {
-  const secret = options?.secretAccessKey?.trim();
+export function buildGenericConnectionSheet(connection: PortalExternalToolConnection): string {
   const lines = [
     "Storage Space connection details",
     "",
@@ -184,7 +180,7 @@ export function buildGenericConnectionSheet(
     `Service address: ${connection.endpoint?.original || "Configured storage service"}`,
     `Access ID: ${connection.key.access_key_id}`,
     `Permission: ${connection.permissionLabel}`,
-    `Secret: ${secret || "Not included in this file"}`,
+    "Secret: Not included in this file",
     "",
     "Cyberduck",
     "- Import or double-click the .duck bookmark in Cyberduck or Mountain Duck.",
@@ -192,12 +188,10 @@ export function buildGenericConnectionSheet(
     "- The bookmark opens directly on the selected space.",
     "",
     "Manual setup",
-    "- Use the service address, storage name, access ID, and secret above.",
+    "- Use the service address, storage name, and Access ID above.",
+    "- Enter the one-time secret when the application asks for it.",
     "- Keep the secret in a password manager or your usual secure storage.",
   ];
-  if (secret) {
-    lines.splice(1, 0, "This unencrypted file contains a one-time secret. Transfer it securely and delete every copy after configuring the recipient's tool.");
-  }
   return `${lines.join("\n")}\n`;
 }
 

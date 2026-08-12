@@ -28,7 +28,6 @@ import ListPageSection from "../../components/list/ListPageSection";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiButton from "../../components/ui/UiButton";
-import UiDetails from "../../components/ui/UiDetails";
 import { cx, uiInputClass, uiLabelClass, uiMutedTextClass, uiPanelMutedClass, uiRadioClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
@@ -54,8 +53,7 @@ import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 
 type PendingAccessKeyAction =
   | { type: "disable"; key: PortalAccessKey }
-  | { type: "delete"; key: PortalAccessKey }
-  | { type: "export-secret"; key: PortalAccessKey };
+  | { type: "delete"; key: PortalAccessKey };
 
 type AccessKeysTab = "connect" | "access-list";
 type CreateTarget = "self" | "external";
@@ -286,12 +284,6 @@ export default function PortalAccessKeysPage() {
         permissionLabel: portalExternalToolPermissionLabel(selectedConnectionKey.permission),
       }
     : null;
-  const selectedConnectionHasOneTimeSecret = Boolean(
-    createdKey?.secret_access_key && selectedConnectionKey?.access_key_id === createdKey.access_key_id
-  );
-  const canExportOneTimeExternalCredentials = Boolean(
-    state && createdKey?.target_type === "external" && selectedConnectionHasOneTimeSecret && selectedConnection
-  );
   const connectionEndpointLabel = selectedConnection?.endpoint?.original || state?.s3_endpoint || t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" });
   const setupFileUnavailable = Boolean(selectedConnection && !selectedConnection.endpoint);
   const selectedConnectionNeedsSpace = Boolean(selectedConnectionKey && !selectedConnectionKeyBucket);
@@ -481,26 +473,16 @@ export default function PortalAccessKeysPage() {
     setActionMessage(t({ en: "rclone configuration downloaded.", fr: "Configuration rclone téléchargée.", de: "rclone-Konfiguration heruntergeladen." }));
   };
 
-  const handleDownloadConnectionSheet = (includeSecret: boolean) => {
+  const handleDownloadConnectionSheet = () => {
     if (!selectedConnection) return;
-    if (includeSecret && !canExportOneTimeExternalCredentials) return;
-    const filename = `${portalExternalToolBaseFilename(selectedConnection)}${includeSecret ? "-unencrypted-credentials" : ""}.txt`;
-    const secretAccessKey = includeSecret ? createdKey?.secret_access_key : null;
+    const filename = `${portalExternalToolBaseFilename(selectedConnection)}.txt`;
     triggerPortalExternalToolDownload(
       filename,
-      buildGenericConnectionSheet(selectedConnection, { secretAccessKey }),
+      buildGenericConnectionSheet(selectedConnection),
       "text/plain;charset=utf-8"
     );
     setError(null);
-    setActionMessage(
-      includeSecret && secretAccessKey
-        ? t({
-            en: "Unencrypted credentials downloaded. Delete the file after secure transfer.",
-            fr: "Identifiants non chiffrés téléchargés. Supprimez le fichier après le transfert sécurisé.",
-            de: "Unverschlüsselte Zugangsdaten heruntergeladen. Löschen Sie die Datei nach der sicheren Übertragung.",
-          })
-        : t({ en: "Connection details downloaded.", fr: "Détails de connexion téléchargés.", de: "Verbindungsdetails heruntergeladen." })
-    );
+    setActionMessage(t({ en: "Connection details downloaded.", fr: "Détails de connexion téléchargés.", de: "Verbindungsdetails heruntergeladen." }));
   };
 
   const closeConnectionDialog = () => {
@@ -690,39 +672,6 @@ export default function PortalAccessKeysPage() {
                   },
                 ]}
               />
-
-              {canExportOneTimeExternalCredentials ? (
-                <UiDetails className={cx("group", uiPanelMutedClass)}>
-                  <summary className="cursor-pointer px-3 py-3 ui-caption font-semibold text-[var(--ui-text)]">
-                    {t({
-                      en: "Advanced: prepare credentials for secure transfer",
-                      fr: "Avancé : préparer les identifiants pour un transfert sécurisé",
-                      de: "Erweitert: Zugangsdaten für eine sichere Übertragung vorbereiten",
-                    })}
-                  </summary>
-                  <div className="space-y-3 border-t border-[color:var(--ui-border-soft)] px-3 py-3">
-                    <p className={cx("ui-caption", uiMutedTextClass)}>
-                      {t({
-                        en: "Use this only when you must send this access to its recipient through a secure channel. The exported text file contains the unencrypted secret.",
-                        fr: "Utilisez cette option uniquement si vous devez transmettre cet accès à son destinataire par un canal sécurisé. Le fichier texte exporté contient la clé secrète non chiffrée.",
-                        de: "Verwenden Sie diese Option nur, wenn Sie diesen Zugriff über einen sicheren Kanal an den Empfänger senden müssen. Die exportierte Textdatei enthält das unverschlüsselte Secret.",
-                      })}
-                    </p>
-                    <UiButton
-                      type="button"
-                      variant="warning"
-                      size="xs"
-                      onClick={() => setPendingAction({ type: "export-secret", key: createdKey })}
-                    >
-                      {t({
-                        en: "Export unencrypted credentials (.txt)",
-                        fr: "Exporter les identifiants non chiffrés (.txt)",
-                        de: "Unverschlüsselte Zugangsdaten exportieren (.txt)",
-                      })}
-                    </UiButton>
-                  </div>
-                </UiDetails>
-              ) : null}
             </div>
           )}
 
@@ -1056,7 +1005,7 @@ export default function PortalAccessKeysPage() {
                               type="button"
                               size="sm"
                               variant="secondary"
-                              onClick={() => handleDownloadConnectionSheet(false)}
+                              onClick={handleDownloadConnectionSheet}
                               aria-label={`${t({ en: "Download connection details (.txt) for", fr: "Télécharger les détails de connexion (.txt) pour", de: "Verbindungsdetails (.txt) herunterladen für" })} ${selectedConnection.storageSpaceName}`}
                             >
                               {t({ en: "Download connection details (.txt)", fr: "Télécharger les détails de connexion (.txt)", de: "Verbindungsdetails herunterladen (.txt)" })}
@@ -1341,52 +1290,6 @@ export default function PortalAccessKeysPage() {
           ]}
           onCancel={() => setPendingAction(null)}
           onConfirm={() => confirmDeleteKey(pendingAction.key)}
-        />
-      ) : null}
-
-      {pendingAction?.type === "export-secret" ? (
-        <ConfirmActionDialog
-          title={t({
-            en: "Export unencrypted credentials?",
-            fr: "Exporter des identifiants non chiffrés ?",
-            de: "Unverschlüsselte Zugangsdaten exportieren?",
-          })}
-          description={t({
-            en: "This creates a text file containing the Access ID and one-time secret for this external recipient.",
-            fr: "Cette action crée un fichier texte contenant l'ID d'accès et la clé secrète à usage unique pour ce destinataire externe.",
-            de: "Dadurch wird eine Textdatei mit der Zugriffs-ID und dem einmaligen Secret für diesen externen Empfänger erstellt.",
-          })}
-          confirmLabel={t({
-            en: "Export credentials (.txt)",
-            fr: "Exporter les identifiants (.txt)",
-            de: "Zugangsdaten exportieren (.txt)",
-          })}
-          details={[
-            { label: t({ en: "Recipient", fr: "Destinataire", de: "Empfänger" }), value: keyTargetLabel(pendingAction.key, t) },
-            { label: t({ en: "Scope", fr: "Périmètre", de: "Umfang" }), value: keyScopeLabel(pendingAction.key, t) },
-          ]}
-          impacts={[
-            t({
-              en: "Anyone who obtains this file can use the access within its assigned permissions.",
-              fr: "Toute personne qui obtient ce fichier peut utiliser l'accès dans la limite de ses droits.",
-              de: "Jede Person mit dieser Datei kann den Zugriff im Rahmen der zugewiesenen Berechtigungen verwenden.",
-            }),
-            t({
-              en: "The file may remain in Downloads, backups, or synchronized folders until you delete it.",
-              fr: "Le fichier peut rester dans les téléchargements, les sauvegardes ou les dossiers synchronisés jusqu'à sa suppression.",
-              de: "Die Datei kann bis zum Löschen in Downloads, Sicherungen oder synchronisierten Ordnern verbleiben.",
-            }),
-          ]}
-          warning={t({
-            en: "Transfer it through a secure channel and delete every copy after the recipient configures the tool.",
-            fr: "Transmettez-le par un canal sécurisé et supprimez chaque copie après la configuration de l'outil par le destinataire.",
-            de: "Übertragen Sie die Datei über einen sicheren Kanal und löschen Sie jede Kopie, nachdem der Empfänger das Werkzeug konfiguriert hat.",
-          })}
-          onCancel={() => setPendingAction(null)}
-          onConfirm={() => {
-            handleDownloadConnectionSheet(true);
-            setPendingAction(null);
-          }}
         />
       ) : null}
     </div>

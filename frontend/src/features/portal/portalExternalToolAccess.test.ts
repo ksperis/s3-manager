@@ -153,15 +153,12 @@ describe("portalExternalToolAccess", () => {
     expect(() => buildRcloneConfig(invalidConnection)).toThrow();
   });
 
-  it("builds generic connection sheets with an explicit one-time secret option", () => {
-    const withoutSecret = buildGenericConnectionSheet(connection());
-    const withSecret = buildGenericConnectionSheet(connection(), { secretAccessKey: "SK-EXT" });
+  it("builds generic connection sheets without a secret", () => {
+    const details = buildGenericConnectionSheet(connection());
 
-    expect(withoutSecret).toContain("Storage name for external tools: research-data-bucket");
-    expect(withoutSecret).toContain("Secret: Not included in this file");
-    expect(withoutSecret).not.toContain("SK-EXT");
-    expect(withSecret).toContain("This unencrypted file contains a one-time secret.");
-    expect(withSecret).toContain("Transfer it securely and delete every copy");
-    expect(withSecret).toContain("Secret: SK-EXT");
+    expect(details).toContain("Storage name for external tools: research-data-bucket");
+    expect(details).toContain("Secret: Not included in this file");
+    expect(details).toContain("Enter the one-time secret when the application asks for it.");
+    expect(details).not.toContain("SK-EXT");
   });
 });
