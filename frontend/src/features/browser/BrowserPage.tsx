@@ -6951,7 +6951,7 @@ export default function BrowserPage({
     operationControllersRef.current.delete(operationId);
   }, []);
 
-  const abortOperationController = (operationId: string) => {
+  const cancelOperationController = (operationId: string) => {
     const controller = operationControllersRef.current.get(operationId);
     if (controller) {
       controller.abort();
@@ -6962,18 +6962,6 @@ export default function BrowserPage({
     err: unknown,
     controller?: AbortController | null,
   ) => isAbortError(err) || Boolean(controller?.signal.aborted);
-
-  const cancelUploadOperation = (operationId: string) => {
-    abortOperationController(operationId);
-  };
-
-  const cancelDownloadOperation = (operationId: string) => {
-    abortOperationController(operationId);
-  };
-
-  const cancelCopyOperation = (operationId: string) => {
-    abortOperationController(operationId);
-  };
 
   const cancelDownloadDetails = (operationId: string) => {
     setDownloadDetails((prev) =>
@@ -7009,9 +6997,7 @@ export default function BrowserPage({
   }, []);
 
   const cancelOperation = (operationId: string) => {
-    cancelUploadOperation(operationId);
-    cancelDownloadOperation(operationId);
-    cancelCopyOperation(operationId);
+    cancelOperationController(operationId);
     cancelDownloadDetails(operationId);
     cancelCopyDetails(operationId);
     cancelDeleteDetails(operationId);
@@ -7022,7 +7008,7 @@ export default function BrowserPage({
     const activeGroupOperations = operations.filter(
       (op) => op.kind === "upload" && op.groupId === groupId && !op.completedAt,
     );
-    activeGroupOperations.forEach((op) => cancelUploadOperation(op.id));
+    activeGroupOperations.forEach((op) => cancelOperationController(op.id));
   };
 
   const processUploadQueue = () => {
@@ -13236,7 +13222,7 @@ export default function BrowserPage({
           showMoreSection={showMoreSection}
           cancelOperation={cancelOperation}
           cancelUploadGroup={cancelUploadGroup}
-          cancelUploadOperation={cancelUploadOperation}
+          cancelUploadOperation={cancelOperationController}
           removeQueuedUpload={removeQueuedUpload}
           onDownloadOperationDetails={downloadOperationDetails}
           hasFinishedOperations={hasFinishedOperations}
