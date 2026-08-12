@@ -13,7 +13,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.object_diff_common import compare_object_entries
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services import s3_bucket_replication, s3_bucket_security, s3_client, s3_deletion
+from app.services import s3_bucket_access, s3_bucket_replication, s3_bucket_security, s3_client, s3_deletion
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
@@ -940,7 +940,7 @@ class BucketsService:
                     prefix=rule.get("Prefix") or (rule.get("Filter", {}) or {}).get("Prefix"),
                 )
             )
-        cors_rules = s3_client.get_bucket_cors(
+        cors_rules = s3_bucket_access.get_bucket_cors(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
         return BucketProperties(
@@ -974,7 +974,7 @@ class BucketsService:
 
     def get_bucket_cors(self, name: str, account: S3ExecutionTarget) -> list[dict]:
         access_key, secret_key = self._account_credentials(account)
-        return s3_client.get_bucket_cors(
+        return s3_bucket_access.get_bucket_cors(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
@@ -1485,31 +1485,31 @@ class BucketsService:
 
     def get_policy(self, name: str, account: S3ExecutionTarget) -> Optional[dict]:
         access_key, secret_key = self._account_credentials(account)
-        return s3_client.get_bucket_policy(
+        return s3_bucket_access.get_bucket_policy(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
     def put_policy(self, name: str, account: S3ExecutionTarget, policy: dict) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_policy(
+        s3_bucket_access.put_bucket_policy(
             name, policy=policy, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
     def delete_policy(self, name: str, account: S3ExecutionTarget) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.delete_bucket_policy(
+        s3_bucket_access.delete_bucket_policy(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
     def set_cors(self, name: str, account: S3ExecutionTarget, rules: list[dict]) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_cors(
+        s3_bucket_access.put_bucket_cors(
             name, rules=rules, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
     def delete_cors(self, name: str, account: S3ExecutionTarget) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.delete_bucket_cors(
+        s3_bucket_access.delete_bucket_cors(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
@@ -1722,7 +1722,7 @@ class BucketsService:
 
     def get_bucket_website(self, name: str, account: S3ExecutionTarget) -> BucketWebsiteConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        config = s3_client.get_bucket_website(
+        config = s3_bucket_access.get_bucket_website(
             name,
             access_key=access_key,
             secret_key=secret_key,
@@ -1786,7 +1786,7 @@ class BucketsService:
                 config["RoutingRules"] = payload.routing_rules
         if not config:
             raise ValueError("Website configuration is empty.")
-        s3_client.put_bucket_website(
+        s3_bucket_access.put_bucket_website(
             name,
             configuration=config,
             access_key=access_key,
@@ -1797,7 +1797,7 @@ class BucketsService:
 
     def delete_bucket_website(self, name: str, account: S3ExecutionTarget) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.delete_bucket_website(
+        s3_bucket_access.delete_bucket_website(
             name,
             access_key=access_key,
             secret_key=secret_key,

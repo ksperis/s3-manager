@@ -29,7 +29,7 @@ from app.models.portal import (
     PortalStorageSpaceShareScope,
     PortalStorageSpaceVisibility,
 )
-from app.services import s3_client
+from app.services import s3_bucket_access, s3_client
 from app.services.mappers.portal import portal_access_key_from_active_link, portal_access_key_from_iam_metadata
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_iam import RGWIAMService, get_iam_service
@@ -518,7 +518,7 @@ class PortalIamMixin:
             return
         access_key, secret_key = self._account_credentials(account)
         kwargs = self._s3_client_kwargs(account)
-        existing_policy = s3_client.get_bucket_policy(
+        existing_policy = s3_bucket_access.get_bucket_policy(
             bucket_name,
             access_key=access_key,
             secret_key=secret_key,
@@ -526,7 +526,7 @@ class PortalIamMixin:
         )
         policy = self._storage_space_bucket_policy(account, bucket_name, metadata, existing_policy)
         if policy is not None:
-            s3_client.put_bucket_policy(
+            s3_bucket_access.put_bucket_policy(
                 bucket_name,
                 policy=policy,
                 access_key=access_key,
@@ -535,7 +535,7 @@ class PortalIamMixin:
             )
             return
         if self._without_storage_space_policy_statements(existing_policy) is None and isinstance(existing_policy, dict):
-            s3_client.delete_bucket_policy(
+            s3_bucket_access.delete_bucket_policy(
                 bucket_name,
                 access_key=access_key,
                 secret_key=secret_key,
@@ -544,7 +544,7 @@ class PortalIamMixin:
         elif isinstance(existing_policy, dict):
             cleaned = self._without_storage_space_policy_statements(existing_policy)
             if cleaned is not None:
-                s3_client.put_bucket_policy(
+                s3_bucket_access.put_bucket_policy(
                     bucket_name,
                     policy=cleaned,
                     access_key=access_key,

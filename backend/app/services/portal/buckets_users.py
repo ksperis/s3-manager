@@ -7,7 +7,7 @@ from typing import Optional, TYPE_CHECKING
 from app.db import AccountIAMUser, AccountRole, S3Account, User
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
-from app.services import s3_client, s3_deletion
+from app.services import s3_bucket_access, s3_client, s3_deletion
 from app.services.rgw_iam import RGWIAMService
 
 if TYPE_CHECKING:
@@ -72,7 +72,7 @@ class PortalBucketsUsersMixin:
         if portal_defaults.bucket_defaults.enable_cors:
             origins = self._normalize_origins(portal_defaults.bucket_defaults.cors_allowed_origins)
             if origins:
-                s3_client.put_bucket_cors(
+                s3_bucket_access.put_bucket_cors(
                     bucket_name,
                     rules=self._portal_bucket_cors_rules(origins),
                     access_key=bucket_access_key,

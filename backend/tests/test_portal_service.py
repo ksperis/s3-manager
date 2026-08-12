@@ -62,7 +62,7 @@ from app.routers import portal_monitoring as portal_monitoring_router
 from app.routers import portal_objects as portal_objects_router
 from app.routers import portal_storage_spaces as portal_storage_spaces_router
 from app.routers import portal_usage as portal_usage_router
-from app.services import app_settings_service, s3_client, s3_deletion
+from app.services import app_settings_service, s3_bucket_access, s3_client, s3_deletion
 from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
@@ -345,7 +345,7 @@ def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(m
         lambda *args, **kwargs: lifecycle_calls.append((args, kwargs)),
     )
     monkeypatch.setattr(
-        s3_client,
+        s3_bucket_access,
         "put_bucket_cors",
         lambda *args, **kwargs: cors_calls.append((args, kwargs)),
     )
@@ -353,7 +353,7 @@ def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(m
     def fail_bucket_policy(*args, **kwargs):
         raise AssertionError("Bucket policy should not be created")
 
-    monkeypatch.setattr(s3_client, "put_bucket_policy", fail_bucket_policy)
+    monkeypatch.setattr(s3_bucket_access, "put_bucket_policy", fail_bucket_policy)
 
     portal_settings = PortalSettings()
     portal_settings.bucket_defaults.cors_allowed_origins = ["https://ui.example.test"]
@@ -432,7 +432,7 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
         lambda *args, **kwargs: lifecycle_calls.append((args, kwargs)),
     )
     monkeypatch.setattr(
-        s3_client,
+        s3_bucket_access,
         "put_bucket_cors",
         lambda *args, **kwargs: cors_calls.append((args, kwargs)),
     )
@@ -3558,8 +3558,8 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     db_session.commit()
 
     service = PortalService(db_session)
-    monkeypatch.setattr(s3_client, "get_bucket_policy", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(s3_client, "put_bucket_policy", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(s3_bucket_access, "get_bucket_policy", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(s3_bucket_access, "put_bucket_policy", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
         "list_storage_spaces",

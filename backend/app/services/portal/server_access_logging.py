@@ -33,7 +33,7 @@ from app.models.portal import (
     PortalServerAccessRequesterIdentity,
     PortalStorageSpaceSummary,
 )
-from app.services import s3_client
+from app.services import s3_bucket_access, s3_client
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
 from app.services.s3_client import get_s3_client
 from app.utils.aws_errors import aws_error_code
@@ -275,14 +275,14 @@ class PortalServerAccessLoggingMixin:
     def _ensure_portal_server_access_log_bucket_policy(self, account: S3Account, log_bucket: str) -> None:
         access_key, secret_key = self._account_credentials(account)
         kwargs = self._s3_client_kwargs(account)
-        existing_policy = s3_client.get_bucket_policy(
+        existing_policy = s3_bucket_access.get_bucket_policy(
             log_bucket,
             access_key=access_key,
             secret_key=secret_key,
             **kwargs,
         )
         policy = self._portal_server_access_log_policy(account, log_bucket, existing_policy)
-        s3_client.put_bucket_policy(
+        s3_bucket_access.put_bucket_policy(
             log_bucket,
             policy=policy,
             access_key=access_key,

@@ -4,7 +4,13 @@ from botocore.exceptions import ClientError, ParamValidationError
 from botocore.parsers import ResponseParserError
 from concurrent.futures import ThreadPoolExecutor
 
-from app.services import s3_bucket_replication, s3_bucket_security, s3_client, s3_deletion
+from app.services import (
+    s3_bucket_access,
+    s3_bucket_replication,
+    s3_bucket_security,
+    s3_client,
+    s3_deletion,
+)
 
 
 class FakeS3PublicAccessClient:
@@ -44,6 +50,15 @@ def test_s3_bucket_security_owns_security_contracts_without_legacy_exports():
     assert not hasattr(s3_client, "get_bucket_public_access_block")
     assert not hasattr(s3_client, "get_bucket_object_lock")
     assert not hasattr(s3_client, "get_bucket_encryption")
+
+
+def test_s3_bucket_access_owns_access_contracts_without_legacy_exports():
+    assert s3_bucket_access.get_bucket_cors.__module__ == "app.services.s3_bucket_access"
+    assert s3_bucket_access.get_bucket_website.__module__ == "app.services.s3_bucket_access"
+    assert s3_bucket_access.get_bucket_policy.__module__ == "app.services.s3_bucket_access"
+    assert not hasattr(s3_client, "get_bucket_cors")
+    assert not hasattr(s3_client, "get_bucket_website")
+    assert not hasattr(s3_client, "get_bucket_policy")
 
 
 class FakeS3EncryptionClient:
