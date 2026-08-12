@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildOperationGroupSortIndexes,
   buildDownloadOperationGroups,
   buildUploadOperationGroups,
+  filterDetailOperationGroups,
+  filterUploadOperationGroups,
   summarizeDetailOperationGroups,
 } from "../browserOperationGroups";
 import type {
@@ -138,5 +141,111 @@ describe("browserOperationGroups", () => {
     expect(groups[0].activeItems).toHaveLength(1);
     expect(groups[0].completedItems).toHaveLength(1);
     expect(groups[0].queuedItems).toEqual([queued]);
+  });
+
+  it("filters detail groups by active, queued, completed, and failed states", () => {
+    const groups = buildDownloadOperationGroups(
+      [
+        operation({ id: "active", kind: "download" }),
+        operation({ id: "queued", kind: "download" }),
+        operation({
+          id: "completed",
+          kind: "download",
+          completedAt: "2026-08-12T08:00:00Z",
+          completionStatus: "done",
+        }),
+        operation({
+          id: "failed",
+          kind: "download",
+          completedAt: "2026-08-12T08:01:00Z",
+          completionStatus: "failed",
+        }),
+      ],
+      {
+        queued: [{ id: "1", key: "a", label: "a", status: "queued" }],
+      },
+    );
+
+    expect(
+      filterDetailOperationGroups(groups, "downloading", {
+        active: false,
+        queued: false,
+        completed: true,
+        failed: false,
+      }).map((group) => group.op.id),
+    ).toEqual(["completed"]);
+    expect(
+      filterDetailOperationGroups(groups, "downloading", {
+        active: true,
+        queued: true,
+        completed: false,
+        failed: true,
+      }).map((group) => group.op.id),
+    ).toEqual(["active", "queued", "failed"]);
+  });
+
+  it("filters mixed upload groups and derives stable cross-kind sort indexes", () => {
+    const queue = [
+      {
+        id: "queued-oldest",
+        file: new File([], "oldest.txt"),
+        relativePath: "oldest.txt",
+        key: "oldest.txt",
+        bucket: "demo",
+        accountId: "account-1",
+        groupId: "queued-group",
+        groupLabel: "Queued",
+        groupKind: "files",
+        itemLabel: "oldest.txt",
+      },
+      {
+        id: "queued-newest",
+        file: new File([], "newest.txt"),
+        relativePath: "newest.txt",
+        key: "newest.txt",
+        bucket: "demo",
+        accountId: "account-1",
+        groupId: "queued-group",
+        groupLabel: "Queued",
+        groupKind: "files",
+        itemLabel: "newest.txt",
+      },
+    ] satisfies UploadQueueItem[];
+    const operations = [
+      operation({
+        id: "active-upload",
+        kind: "upload",
+        status: "uploading",
+        groupId: "mixed-group",
+      }),
+      operation({
+        id: "failed-upload",
+        kind: "upload",
+        status: "uploading",
+        groupId: "mixed-group",
+        completedAt: "2026-08-12T08:00:00Z",
+        completionStatus: "failed",
+      }),
+    ];
+    const groups = buildUploadOperationGroups(operations, queue);
+
+    expect(
+      filterUploadOperationGroups(groups, {
+        active: false,
+        queued: false,
+        completed: false,
+        failed: true,
+      }).map((group) => group.id),
+    ).toEqual(["mixed-group"]);
+    const indexes = buildOperationGroupSortIndexes(operations, queue, groups);
+    expect(indexes.operationById).toEqual({
+      "active-upload": 2,
+      "failed-upload": 1,
+    });
+    expect(indexes.uploadGroupById).toEqual({
+      "mixed-group": 2,
+      "queued-group": 2,
+    });
+    expect(indexes.fallback).toBe(1004);
   });
 });

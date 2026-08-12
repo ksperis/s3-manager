@@ -28,6 +28,19 @@ type DetailGroupSummary = {
   failed: number;
 };
 
+type OperationGroupVisibility = {
+  active: boolean;
+  queued: boolean;
+  completed: boolean;
+  failed: boolean;
+};
+
+type OperationGroupSortIndexes = {
+  operationById: Record<string, number>;
+  uploadGroupById: Record<string, number>;
+  fallback: number;
+};
+
 const DOWNLOAD_STATUSES: DownloadDetailStatus[] = [
   "queued",
   "downloading",
@@ -228,4 +241,92 @@ export function summarizeDetailOperationGroups(
     },
     { queued: 0, completed: 0, failed: 0 },
   );
+}
+
+export function filterUploadOperationGroups(
+  groups: UploadOperationGroup[],
+  visibility: OperationGroupVisibility,
+): UploadOperationGroup[] {
+  return groups.filter((group) => {
+    const hasActive = group.activeItems.length > 0;
+    const hasQueued = group.queuedItems.length > 0;
+    const hasCompleted = group.completedItems.some(
+      (item) => item.completionStatus !== "failed",
+    );
+    const hasFailed = group.completedItems.some(
+      (item) => item.completionStatus === "failed",
+    );
+    return (
+      (visibility.active && hasActive) ||
+      (visibility.queued && hasQueued) ||
+      (visibility.completed && hasCompleted) ||
+      (visibility.failed && hasFailed)
+    );
+  });
+}
+
+export function filterDetailOperationGroups<
+  TGroup extends { op: OperationItem; items: Array<{ status: string }> },
+>(
+  groups: TGroup[],
+  activeStatus: "downloading" | "deleting" | "copying",
+  visibility: OperationGroupVisibility,
+): TGroup[] {
+  return groups.filter((group) => {
+    const hasActive =
+      !group.op.completedAt &&
+      (group.op.status === activeStatus ||
+        group.items.some((item) => item.status === activeStatus));
+    const hasQueued = group.items.some((item) => item.status === "queued");
+    const hasCompleted =
+      group.items.some(
+        (item) => item.status === "done" || item.status === "cancelled",
+      ) ||
+      (Boolean(group.op.completedAt) &&
+        group.op.completionStatus !== "failed");
+    const hasFailed =
+      group.items.some((item) => item.status === "failed") ||
+      group.op.completionStatus === "failed";
+    return (
+      (visibility.active && hasActive) ||
+      (visibility.queued && hasQueued) ||
+      (visibility.completed && hasCompleted) ||
+      (visibility.failed && hasFailed)
+    );
+  });
+}
+
+export function buildOperationGroupSortIndexes(
+  operations: OperationItem[],
+  uploadQueue: UploadQueueItem[],
+  uploadGroups: UploadOperationGroup[],
+): OperationGroupSortIndexes {
+  const operationById: Record<string, number> = {};
+  operations.forEach((operation, index) => {
+    operationById[operation.id] = operations.length - index;
+  });
+  const queuedUploadGroupById: Record<string, number> = {};
+  uploadQueue.forEach((item, index) => {
+    if (queuedUploadGroupById[item.groupId] == null) {
+      queuedUploadGroupById[item.groupId] = uploadQueue.length - index;
+    }
+  });
+  const uploadGroupById: Record<string, number> = {};
+  uploadGroups.forEach((group) => {
+    const operationIndexes = [
+      ...group.activeItems,
+      ...group.completedItems,
+    ]
+      .map((item) => operationById[item.id])
+      .filter((value): value is number => typeof value === "number");
+    uploadGroupById[group.id] =
+      operationIndexes.length > 0
+        ? Math.max(...operationIndexes)
+        : (queuedUploadGroupById[group.id] ?? 0);
+  });
+  return {
+    operationById,
+    uploadGroupById,
+    fallback: operations.length + uploadQueue.length + 1000,
+  };
 }

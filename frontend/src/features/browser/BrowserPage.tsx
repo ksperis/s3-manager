@@ -142,7 +142,10 @@ import {
   buildCopyOperationGroups,
   buildDeleteOperationGroups,
   buildDownloadOperationGroups,
+  buildOperationGroupSortIndexes,
   buildUploadOperationGroups,
+  filterDetailOperationGroups,
+  filterUploadOperationGroups,
   summarizeDetailOperationGroups,
 } from "./browserOperationGroups";
 import {
@@ -9898,6 +9901,20 @@ export default function BrowserPage({
   const showQueuedFilter = showQueuedOperations || showAllOperations;
   const showCompletedFilter = showCompletedOperations || showAllOperations;
   const showFailedFilter = showFailedOperations || showAllOperations;
+  const operationGroupVisibility = useMemo(
+    () => ({
+      active: showActiveFilter,
+      queued: showQueuedFilter,
+      completed: showCompletedFilter,
+      failed: showFailedFilter,
+    }),
+    [
+      showActiveFilter,
+      showCompletedFilter,
+      showFailedFilter,
+      showQueuedFilter,
+    ],
+  );
   const activeOtherOperations = useMemo(
     () =>
       activeOperations.filter(
@@ -9923,155 +9940,44 @@ export default function BrowserPage({
     showCompletedFilter,
     showFailedFilter,
   ]);
-  const visibleUploadGroups = useMemo(() => {
-    return uploadGroups.filter((group) => {
-      const hasActive = group.activeItems.length > 0;
-      const hasQueued = group.queuedItems.length > 0;
-      const hasCompleted = group.completedItems.some(
-        (item) => item.completionStatus !== "failed",
-      );
-      const hasFailed = group.completedItems.some(
-        (item) => item.completionStatus === "failed",
-      );
-      return (
-        (showActiveFilter && hasActive) ||
-        (showQueuedFilter && hasQueued) ||
-        (showCompletedFilter && hasCompleted) ||
-        (showFailedFilter && hasFailed)
-      );
-    });
-  }, [
-    uploadGroups,
-    showActiveFilter,
-    showCompletedFilter,
-    showFailedFilter,
-    showQueuedFilter,
-  ]);
-  const visibleDownloadGroups = useMemo(() => {
-    return downloadGroups.filter((group) => {
-      const hasActive =
-        !group.op.completedAt &&
-        (group.op.status === "downloading" ||
-          group.items.some((item) => item.status === "downloading"));
-      const hasQueued = group.items.some((item) => item.status === "queued");
-      const hasCompleted = group.items.some(
-        (item) => item.status === "done" || item.status === "cancelled",
-      );
-      const hasFailed =
-        group.items.some((item) => item.status === "failed") ||
-        group.op.completionStatus === "failed";
-      return (
-        (showActiveFilter && hasActive) ||
-        (showQueuedFilter && hasQueued) ||
-        (showCompletedFilter && hasCompleted) ||
-        (showCompletedFilter &&
-          Boolean(group.op.completedAt) &&
-          group.op.completionStatus !== "failed") ||
-        (showFailedFilter && hasFailed)
-      );
-    });
-  }, [
-    downloadGroups,
-    showActiveFilter,
-    showCompletedFilter,
-    showFailedFilter,
-    showQueuedFilter,
-  ]);
-  const visibleDeleteGroups = useMemo(() => {
-    return deleteGroups.filter((group) => {
-      const hasActive =
-        !group.op.completedAt &&
-        (group.op.status === "deleting" ||
-          group.items.some((item) => item.status === "deleting"));
-      const hasQueued = group.items.some((item) => item.status === "queued");
-      const hasCompleted = group.items.some(
-        (item) => item.status === "done" || item.status === "cancelled",
-      );
-      const hasFailed =
-        group.items.some((item) => item.status === "failed") ||
-        group.op.completionStatus === "failed";
-      return (
-        (showActiveFilter && hasActive) ||
-        (showQueuedFilter && hasQueued) ||
-        (showCompletedFilter && hasCompleted) ||
-        (showCompletedFilter &&
-          Boolean(group.op.completedAt) &&
-          group.op.completionStatus !== "failed") ||
-        (showFailedFilter && hasFailed)
-      );
-    });
-  }, [
-    deleteGroups,
-    showActiveFilter,
-    showCompletedFilter,
-    showFailedFilter,
-    showQueuedFilter,
-  ]);
-  const visibleCopyGroups = useMemo(() => {
-    return copyGroups.filter((group) => {
-      const hasActive =
-        !group.op.completedAt &&
-        (group.op.status === "copying" ||
-          group.items.some((item) => item.status === "copying"));
-      const hasQueued = group.items.some((item) => item.status === "queued");
-      const hasCompleted = group.items.some(
-        (item) => item.status === "done" || item.status === "cancelled",
-      );
-      const hasFailed =
-        group.items.some((item) => item.status === "failed") ||
-        group.op.completionStatus === "failed";
-      return (
-        (showActiveFilter && hasActive) ||
-        (showQueuedFilter && hasQueued) ||
-        (showCompletedFilter && hasCompleted) ||
-        (showCompletedFilter &&
-          Boolean(group.op.completedAt) &&
-          group.op.completionStatus !== "failed") ||
-        (showFailedFilter && hasFailed)
-      );
-    });
-  }, [
-    copyGroups,
-    showActiveFilter,
-    showCompletedFilter,
-    showFailedFilter,
-    showQueuedFilter,
-  ]);
-  const operationSortIndexById = useMemo(() => {
-    const next: Record<string, number> = {};
-    operations.forEach((op, index) => {
-      next[op.id] = operations.length - index;
-    });
-    return next;
-  }, [operations]);
-  const uploadQueueOrderByGroup = useMemo(() => {
-    const next: Record<string, number> = {};
-    uploadQueue.forEach((item, index) => {
-      if (next[item.groupId] == null) {
-        next[item.groupId] = uploadQueue.length - index;
-      }
-    });
-    return next;
-  }, [uploadQueue]);
-  const uploadGroupSortIndexById = useMemo(() => {
-    const next: Record<string, number> = {};
-    uploadGroups.forEach((group) => {
-      const opIndices = [...group.activeItems, ...group.completedItems]
-        .map((item) => operationSortIndexById[item.id])
-        .filter((value): value is number => typeof value === "number");
-      if (opIndices.length > 0) {
-        next[group.id] = Math.max(...opIndices);
-        return;
-      }
-      next[group.id] = uploadQueueOrderByGroup[group.id] ?? 0;
-    });
-    return next;
-  }, [
-    uploadGroups,
-    operationSortIndexById,
-    uploadQueueOrderByGroup,
-  ]);
-  const operationSortFallback = operations.length + uploadQueue.length + 1000;
+  const visibleUploadGroups = useMemo(
+    () => filterUploadOperationGroups(uploadGroups, operationGroupVisibility),
+    [operationGroupVisibility, uploadGroups],
+  );
+  const visibleDownloadGroups = useMemo(
+    () =>
+      filterDetailOperationGroups(
+        downloadGroups,
+        "downloading",
+        operationGroupVisibility,
+      ),
+    [downloadGroups, operationGroupVisibility],
+  );
+  const visibleDeleteGroups = useMemo(
+    () =>
+      filterDetailOperationGroups(
+        deleteGroups,
+        "deleting",
+        operationGroupVisibility,
+      ),
+    [deleteGroups, operationGroupVisibility],
+  );
+  const visibleCopyGroups = useMemo(
+    () =>
+      filterDetailOperationGroups(
+        copyGroups,
+        "copying",
+        operationGroupVisibility,
+      ),
+    [copyGroups, operationGroupVisibility],
+  );
+  const operationGroupSortIndexes = useMemo(
+    () => buildOperationGroupSortIndexes(operations, uploadQueue, uploadGroups),
+    [operations, uploadGroups, uploadQueue],
+  );
+  const operationSortIndexById = operationGroupSortIndexes.operationById;
+  const uploadGroupSortIndexById = operationGroupSortIndexes.uploadGroupById;
+  const operationSortFallback = operationGroupSortIndexes.fallback;
   const isGroupExpanded = (groupId: string) =>
     Boolean(expandedOperationGroups[groupId]);
   const toggleGroupExpanded = (groupId: string) => {
