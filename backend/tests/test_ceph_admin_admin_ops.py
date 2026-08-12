@@ -17,7 +17,7 @@ from app.models.ceph_admin import (
     CephAdminBucketUnlinkRequest,
     CephAdminUserDeleteRequest,
 )
-from app.routers.ceph_admin import admin_ops, bucket_index_ops, identity_admin_ops
+from app.routers.ceph_admin import admin_ops, bucket_admin_ops, bucket_index_ops, identity_admin_ops
 from app.services.rgw_admin import RGWAdminError, RGWAdminOperationResponse
 
 
@@ -180,9 +180,9 @@ def test_bucket_delete_returns_rgw_error_status_and_keeps_cache(monkeypatch):
     )
     ctx, audit = _context(admin)
     invalidated: list[int] = []
-    monkeypatch.setattr(admin_ops, "_invalidate_all_admin_ops_caches", invalidated.append)
+    monkeypatch.setattr(bucket_admin_ops, "invalidate_all_admin_ops_caches", invalidated.append)
 
-    response = admin_ops.delete_bucket(
+    response = bucket_admin_ops.delete_bucket(
         "bucket-a",
         CephAdminBucketDeleteRequest(confirmation="DELETE BUCKET tenant-a/bucket-a"),
         tenant="tenant-a",
@@ -217,9 +217,9 @@ def test_bucket_link_validates_target_and_forwards_fresh_bucket_id(
 ):
     admin = FakeAdmin()
     ctx, audit = _context(admin)
-    monkeypatch.setattr(admin_ops, "_invalidate_all_admin_ops_caches", lambda endpoint_id: None)
+    monkeypatch.setattr(bucket_admin_ops, "invalidate_all_admin_ops_caches", lambda endpoint_id: None)
 
-    response = admin_ops.link_bucket(
+    response = bucket_admin_ops.link_bucket(
         "bucket-a",
         CephAdminBucketLinkRequest(
             confirmation=f"LINK BUCKET tenant-a/bucket-a TO {target_id}",
@@ -245,9 +245,9 @@ def test_bucket_link_validates_target_and_forwards_fresh_bucket_id(
 def test_bucket_unlink_derives_current_owner(monkeypatch):
     admin = FakeAdmin()
     ctx, _ = _context(admin)
-    monkeypatch.setattr(admin_ops, "_invalidate_all_admin_ops_caches", lambda endpoint_id: None)
+    monkeypatch.setattr(bucket_admin_ops, "invalidate_all_admin_ops_caches", lambda endpoint_id: None)
 
-    response = admin_ops.unlink_bucket(
+    response = bucket_admin_ops.unlink_bucket(
         "bucket-a",
         CephAdminBucketUnlinkRequest(confirmation="UNLINK BUCKET tenant-a/bucket-a"),
         tenant="tenant-a",
@@ -300,12 +300,18 @@ def test_index_check_rejects_check_objects_without_fix():
 def test_admin_ops_router_delegates_index_check_routes():
     assert len(admin_ops.router.routes) == 7
     assert len(identity_admin_ops.router.routes) == 2
+    assert len(bucket_admin_ops.router.routes) == 3
     assert len(bucket_index_ops.router.routes) == 2
     assert {
         route.endpoint.__module__
-        for route in (*identity_admin_ops.router.routes, *bucket_index_ops.router.routes)
+        for route in (
+            *identity_admin_ops.router.routes,
+            *bucket_admin_ops.router.routes,
+            *bucket_index_ops.router.routes,
+        )
     } == {
         "app.routers.ceph_admin.identity_admin_ops",
+        "app.routers.ceph_admin.bucket_admin_ops",
         "app.routers.ceph_admin.bucket_index_ops",
     }
 
