@@ -138,6 +138,7 @@ import {
 } from "./BrowserBucketDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
 import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
+import { buildBrowserOperationDetailsExport } from "./browserOperationDetailsExport";
 import {
   buildCopyOperationGroups,
   buildDeleteOperationGroups,
@@ -373,6 +374,7 @@ import type {
   DownloadDetailItem,
   DownloadDetailStatus,
   ObjectDetailsTabId,
+  OperationDetailsKind,
   OperationCompletionStatus,
   OperationItem,
   TreeNode,
@@ -495,7 +497,6 @@ function ToolbarToggleMenuItem({
   );
 }
 
-type OperationDetailsKind = "download" | "delete" | "copy" | "upload" | "other";
 type SearchScope = "prefix" | "bucket";
 type BrowserConfirmDialogState = {
   title: string;
@@ -10012,184 +10013,30 @@ export default function BrowserPage({
         getSectionVisibleCount(groupId, section) + DEFAULT_QUEUED_VISIBLE_COUNT,
     }));
   };
-  const sanitizeFilename = (value: string) => {
-    const cleaned = value
-      .replace(/[^a-zA-Z0-9-_]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-    return cleaned || "operation";
-  };
   const downloadOperationDetails = (
     kind: OperationDetailsKind,
     operationId: string,
   ) => {
     if (typeof window === "undefined") return;
     const exportedAt = new Date().toISOString();
-    const timestamp = exportedAt.replace(/[:.]/g, "-");
-    const baseName = sanitizeFilename(`operation-${kind}-${operationId}`);
-    const normalizeOperation = (op: OperationItem) => ({
-      id: op.id,
-      kind: op.kind,
-      label: op.label,
-      path: op.path,
-      status: op.status,
-      progress: op.progress,
-      completionStatus: op.completionStatus,
-      completedAt: op.completedAt,
-      errorMessage: op.errorMessage,
+    const exported = buildBrowserOperationDetailsExport({
+      kind,
+      operationId,
+      exportedAt,
+      operations,
+      downloadGroups,
+      deleteGroups,
+      copyGroups,
+      uploadGroups,
     });
-    let payload: Record<string, unknown> | null = null;
-
-    if (kind === "download") {
-      const group = downloadGroups.find((item) => item.op.id === operationId);
-      if (group) {
-        payload = {
-          exportedAt,
-          kind,
-          operation: normalizeOperation(group.op),
-          counts: group.counts,
-          items: group.items.map((item) => ({
-            id: item.id,
-            key: item.key,
-            label: item.label,
-            status: item.status,
-            sizeBytes: item.sizeBytes,
-            errorMessage: item.errorMessage,
-          })),
-        };
-      }
-    } else if (kind === "delete") {
-      const group = deleteGroups.find((item) => item.op.id === operationId);
-      if (group) {
-        payload = {
-          exportedAt,
-          kind,
-          operation: normalizeOperation(group.op),
-          counts: group.counts,
-          items: group.items.map((item) => ({
-            id: item.id,
-            key: item.key,
-            label: item.label,
-            status: item.status,
-            errorMessage: item.errorMessage,
-          })),
-        };
-      }
-    } else if (kind === "copy") {
-      const group = copyGroups.find((item) => item.op.id === operationId);
-      if (group) {
-        payload = {
-          exportedAt,
-          kind,
-          operation: normalizeOperation(group.op),
-          counts: group.counts,
-          items: group.items.map((item) => ({
-            id: item.id,
-            key: item.key,
-            label: item.label,
-            status: item.status,
-            sizeBytes: item.sizeBytes,
-            errorMessage: item.errorMessage,
-          })),
-        };
-      }
-    } else if (kind === "upload") {
-      const group = uploadGroups.find((item) => item.id === operationId);
-      if (group) {
-        const uploadItems: Array<{
-          id: string;
-          label: string;
-          path: string;
-          state: "queued" | "uploading" | "done" | "failed" | "cancelled";
-          progress: number;
-          sizeBytes?: number;
-          errorMessage?: string;
-          completedAt?: string;
-        }> = [
-          ...group.activeItems.map((item) => ({
-            id: item.id,
-            label: item.itemLabel ?? item.path,
-            path: item.path,
-            state: item.status === "downloading" || item.status === "copying" || item.status === "deleting" ? "uploading" : item.status,
-            progress: item.progress,
-            sizeBytes: item.sizeBytes,
-            errorMessage: item.errorMessage,
-            completedAt: item.completedAt,
-          })),
-          ...group.completedItems.map((item) => ({
-            id: item.id,
-            label: item.itemLabel ?? item.path,
-            path: item.path,
-            state: item.completionStatus ?? "done",
-            progress: item.progress,
-            sizeBytes: item.sizeBytes,
-            errorMessage: item.errorMessage,
-            completedAt: item.completedAt,
-          })),
-          ...group.queuedItems.map((item) => ({
-            id: item.id,
-            label: item.itemLabel ?? item.relativePath ?? item.key,
-            path: `${item.bucket}/${item.key}`,
-            state: "queued" as const,
-            progress: 0,
-            sizeBytes: item.file.size,
-            errorMessage: undefined,
-            completedAt: undefined,
-          })),
-        ];
-        const counts = uploadItems.reduce(
-          (acc, item) => {
-            acc.total += 1;
-            const key = item.state as
-              | "queued"
-              | "uploading"
-              | "done"
-              | "failed"
-              | "cancelled";
-            acc[key] = (acc[key] ?? 0) + 1;
-            return acc;
-          },
-          {
-            total: 0,
-            queued: 0,
-            uploading: 0,
-            done: 0,
-            failed: 0,
-            cancelled: 0,
-          },
-        );
-        payload = {
-          exportedAt,
-          kind,
-          group: {
-            id: group.id,
-            label: group.label,
-            kind: group.kind,
-            progress: group.progress,
-            totalBytes: group.totalBytes,
-          },
-          counts,
-          items: uploadItems,
-        };
-      }
-    } else if (kind === "other") {
-      const op = operations.find((item) => item.id === operationId);
-      if (op) {
-        payload = {
-          exportedAt,
-          kind,
-          operation: normalizeOperation(op),
-        };
-      }
-    }
-
-    if (!payload) {
+    if (!exported) {
       setStatusMessage("No details available for this operation.");
       return;
     }
 
     triggerBlobDownload(
-      `${baseName}-${timestamp}.json`,
-      new Blob([JSON.stringify(payload, null, 2)], {
+      exported.filename,
+      new Blob([JSON.stringify(exported.payload, null, 2)], {
         type: "application/json",
       }),
     );

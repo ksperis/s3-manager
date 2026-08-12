@@ -33,6 +33,13 @@ export type TreeNode = {
 
 export type OperationCompletionStatus = "done" | "failed" | "cancelled";
 
+export type OperationDetailsKind =
+  | "download"
+  | "delete"
+  | "copy"
+  | "upload"
+  | "other";
+
 export type OperationItem = {
   id: string;
   label: string;

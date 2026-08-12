@@ -20,11 +20,10 @@ import type {
   CopyOperationGroup,
   DeleteOperationGroup,
   DownloadOperationGroup,
+  OperationDetailsKind,
   OperationItem,
   UploadOperationGroup,
 } from "./browserTypes";
-
-type OperationDetailsKind = "download" | "delete" | "copy" | "upload" | "other";
 
 type BrowserOperationsModalProps = {
   totalOperationsCount: number;
