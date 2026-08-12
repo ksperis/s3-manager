@@ -140,6 +140,10 @@ import BrowserContextMenu from "./BrowserContextMenu";
 import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
 import { buildBrowserOperationDetailsExport } from "./browserOperationDetailsExport";
 import {
+  completeOperationById,
+  patchOperationById,
+} from "./browserOperationState";
+import {
   cancelPendingOperationDetails,
   updateOperationDetailById,
   updateOperationDetailsByKey,
@@ -6832,6 +6836,16 @@ export default function BrowserPage({
     [showOperationsBar],
   );
 
+  const updateOperation = useCallback(
+    (
+      operationId: string | null | undefined,
+      patch: Partial<Omit<OperationItem, "id">>,
+    ) => {
+      setOperations((prev) => patchOperationById(prev, operationId, patch));
+    },
+    [],
+  );
+
   const completeOperation = useCallback(
     (
       operationId: string,
@@ -6840,20 +6854,12 @@ export default function BrowserPage({
     ) => {
       const completedAt = new Date().toLocaleTimeString();
       setOperations((prev) =>
-        prev.map((op) =>
-          op.id === operationId
-            ? {
-                ...op,
-                progress: 100,
-                cancelable: false,
-                completedAt,
-                completionStatus: status,
-                errorMessage:
-                  status === "failed"
-                    ? (errorMessage ?? op.errorMessage)
-                    : undefined,
-              }
-            : op,
+        completeOperationById(
+          prev,
+          operationId,
+          status,
+          completedAt,
+          errorMessage,
         ),
       );
     },
@@ -7123,11 +7129,7 @@ export default function BrowserPage({
     operationId: string,
     controller: AbortController,
   ) => {
-    setOperations((prev) =>
-      prev.map((op) =>
-        op.id === operationId ? { ...op, label: "Multipart upload" } : op,
-      ),
-    );
+    updateOperation(operationId, { label: "Multipart upload" });
     await uploadBrowserFileMultipart({
       file,
       partSize: PART_SIZE,
@@ -7172,11 +7174,7 @@ export default function BrowserPage({
           ),
       },
       onProgress: (progress) => {
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === operationId ? { ...op, progress } : op,
-          ),
-        );
+        updateOperation(operationId, { progress });
       },
     });
   };
@@ -7230,11 +7228,7 @@ export default function BrowserPage({
         const onProgress = (event: AxiosProgressEvent) => {
           const total = event.total ?? file.size;
           const progress = total ? Math.round((event.loaded / total) * 100) : 0;
-          setOperations((prev) =>
-            prev.map((op) =>
-              op.id === operationId ? { ...op, progress } : op,
-            ),
-          );
+          updateOperation(operationId, { progress });
         };
         await uploadSimple(
           accountId,
@@ -7847,11 +7841,7 @@ export default function BrowserPage({
         (deleted, total) => {
           const progress =
             total > 0 ? Math.min(100, Math.round((deleted / total) * 100)) : 0;
-          setOperations((prev) =>
-            prev.map((op) =>
-              op.id === operationId ? { ...op, progress } : op,
-            ),
-          );
+          updateOperation(operationId, { progress });
         },
         detailItems.length > 0 ? operationId : undefined,
         controller.signal,
@@ -7983,22 +7973,8 @@ export default function BrowserPage({
             status,
             errorMessage,
           ),
-        onPhaseChange: (label) =>
-          setOperations((prev) =>
-            prev.map((operation) =>
-              operation.id === operationId
-                ? { ...operation, label }
-                : operation,
-            ),
-          ),
-        onProgress: (progress) =>
-          setOperations((prev) =>
-            prev.map((operation) =>
-              operation.id === operationId
-                ? { ...operation, progress }
-                : operation,
-            ),
-          ),
+        onPhaseChange: (label) => updateOperation(operationId, { label }),
+        onProgress: (progress) => updateOperation(operationId, { progress }),
         parallelism: downloadParallelismRef.current,
         streamingThresholdBytes: streamingZipThresholdBytes,
         targets: plan.targets,
@@ -8084,11 +8060,7 @@ export default function BrowserPage({
       const base =
         totalBytes > 0 ? downloadedBytes / totalBytes : completed / totalCount;
       const percent = Math.min(100, Math.round(base * 100));
-      setOperations((prev) =>
-        prev.map((op) =>
-          op.id === operationId ? { ...op, progress: percent } : op,
-        ),
-      );
+      updateOperation(operationId, { progress: percent });
     };
 
     try {
@@ -8148,11 +8120,7 @@ export default function BrowserPage({
         cancelDownloadDetails(operationId);
         return;
       }
-      setOperations((prev) =>
-        prev.map((op) =>
-          op.id === operationId ? { ...op, progress: 100 } : op,
-        ),
-      );
+      updateOperation(operationId, { progress: 100 });
       setStatusMessage(`Downloaded ${files.length} files`);
       if (failedCount > 0) {
         completionStatus = "failed";
@@ -8355,11 +8323,7 @@ export default function BrowserPage({
                 total > 0
                   ? Math.min(100, Math.round((deleted / total) * 100))
                   : 0;
-              setOperations((prev) =>
-                prev.map((op) =>
-                  op.id === operationId ? { ...op, progress } : op,
-                ),
-              );
+              updateOperation(operationId, { progress });
             },
             fileTargets.length > 1 ? operationId : undefined,
             controller?.signal,
@@ -8505,11 +8469,7 @@ export default function BrowserPage({
 
       const updateProgress = () => {
         const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === operationId ? { ...op, progress: percent } : op,
-          ),
-        );
+        updateOperation(operationId, { progress: percent });
       };
 
       const metadataRecord =
@@ -8759,11 +8719,7 @@ export default function BrowserPage({
 
       const updateProgress = (count: number) => {
         const percent = total > 0 ? Math.round((count / total) * 100) : 100;
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === operationId ? { ...op, progress: percent } : op,
-          ),
-        );
+        updateOperation(operationId, { progress: percent });
       };
 
       if (restoreList.length > 0) {
@@ -9112,11 +9068,7 @@ export default function BrowserPage({
     let cancelled = false;
     const updateProgress = () => {
       const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
-      setOperations((prev) =>
-        prev.map((op) =>
-          op.id === operationId ? { ...op, progress: percent } : op,
-        ),
-      );
+      updateOperation(operationId, { progress: percent });
     };
 
     try {
