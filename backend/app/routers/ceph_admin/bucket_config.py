@@ -29,7 +29,7 @@ from app.models.bucket import (
     BucketWebsiteConfiguration,
 )
 from app.routers.ceph_admin.audit import record_ceph_admin_action
-from app.routers.ceph_admin.bucket_listing_cache import invalidate_bucket_listing_cache
+from app.services.ceph_admin_bucket_listing_cache import invalidate_bucket_listing_cache
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
     build_ceph_admin_s3_context,

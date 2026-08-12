@@ -7,23 +7,28 @@ from concurrent.futures import Future
 from dataclasses import dataclass
 from threading import Lock
 from time import monotonic
-from typing import Callable
+from typing import Callable, Protocol
 
+from app.db import StorageEndpoint
 from app.models.ceph_admin import CephAdminBucketSummary
-from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.services.bucket_owner_enrichment import BucketOwnerUsage
+from app.services.rgw_admin import RGWAdminClient
 from app.utils.cache import prune_expired_lru_cache
 from app.utils.rgw_payloads import extract_bucket_list
+
 
 BUCKET_LIST_CACHE_TTL_SECONDS = 1800.0
 BUCKET_LIST_CACHE_MAX_ENTRIES = 64
 RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES = 16
-BUCKET_ENRICH_MAX_WORKERS = 6
-BUCKET_OWNER_LOOKUP_MAX_WORKERS = 6
+
+
+class CephAdminBucketListingContext(Protocol):
+    endpoint: StorageEndpoint
+    rgw_admin: RGWAdminClient
 
 
 @dataclass(frozen=True)
-class _BucketListCacheKey:
+class CephAdminBucketListCacheKey:
     endpoint_id: int
     advanced_filter: str | None
     sort_by: str
@@ -34,18 +39,18 @@ class _BucketListCacheKey:
 
 
 @dataclass
-class _BucketListCacheEntry:
-    endpoint_id: int
-    expires_at: float
-    listing: _BucketListingSnapshot
-
-
-@dataclass
-class _BucketListingSnapshot:
+class CephAdminBucketListingSnapshot:
     items: list[CephAdminBucketSummary]
     stats_available: bool = True
     stats_warning: str | None = None
     owner_usage_by_key: dict[str, BucketOwnerUsage] | None = None
+
+
+@dataclass
+class _BucketListCacheEntry:
+    endpoint_id: int
+    expires_at: float
+    listing: CephAdminBucketListingSnapshot
 
 
 @dataclass(frozen=True)
@@ -61,21 +66,17 @@ class _RgwBucketPayloadCacheEntry:
     entries: list[dict]
 
 
-_BUCKET_LIST_CACHE: OrderedDict[_BucketListCacheKey, _BucketListCacheEntry] = OrderedDict()
+_BUCKET_LIST_CACHE: OrderedDict[CephAdminBucketListCacheKey, _BucketListCacheEntry] = OrderedDict()
 _BUCKET_LIST_CACHE_LOCK = Lock()
-_BUCKET_LIST_INFLIGHT: dict[_BucketListCacheKey, Future[_BucketListingSnapshot]] = {}
+_BUCKET_LIST_INFLIGHT: dict[CephAdminBucketListCacheKey, Future[CephAdminBucketListingSnapshot]] = {}
 _RGW_BUCKET_PAYLOAD_CACHE: OrderedDict[_RgwBucketPayloadCacheKey, _RgwBucketPayloadCacheEntry] = OrderedDict()
 _RGW_BUCKET_PAYLOAD_CACHE_LOCK = Lock()
 _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS: dict[int, Lock] = {}
 _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS_LOCK = Lock()
 
 
-def _clone_bucket(bucket: CephAdminBucketSummary) -> CephAdminBucketSummary:
-    return bucket.model_copy(deep=True)
-
-
-def _clone_bucket_list(items: list[CephAdminBucketSummary]) -> list[CephAdminBucketSummary]:
-    return [_clone_bucket(item) for item in items]
+def clone_ceph_admin_bucket_list(items: list[CephAdminBucketSummary]) -> list[CephAdminBucketSummary]:
+    return [item.model_copy(deep=True) for item in items]
 
 
 def _get_rgw_bucket_payload_endpoint_lock(endpoint_id: int) -> Lock:
@@ -109,7 +110,7 @@ def _get_rgw_bucket_entries_from_cache(key: _RgwBucketPayloadCacheKey) -> list[d
     return None
 
 
-def get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> list[dict]:
+def get_cached_rgw_bucket_entries(ctx: CephAdminBucketListingContext, with_stats: bool) -> list[dict]:
     endpoint_id = int(getattr(ctx.endpoint, "id", 0) or 0)
     key = _RgwBucketPayloadCacheKey(endpoint_id=endpoint_id, with_stats=with_stats)
     cached = _get_rgw_bucket_entries_from_cache(key)
@@ -146,12 +147,11 @@ def get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> li
 
 
 def get_cached_bucket_listing(
-    key: _BucketListCacheKey,
-    builder: Callable[[], _BucketListingSnapshot],
-) -> _BucketListingSnapshot:
+    key: CephAdminBucketListCacheKey,
+    builder: Callable[[], CephAdminBucketListingSnapshot],
+) -> CephAdminBucketListingSnapshot:
     now = monotonic()
     is_owner = False
-    in_flight: Future[_BucketListingSnapshot] | None = None
     with _BUCKET_LIST_CACHE_LOCK:
         prune_expired_lru_cache(
             _BUCKET_LIST_CACHE,
@@ -211,3 +211,13 @@ def invalidate_bucket_listing_cache(endpoint_id: int) -> None:
         invalid_keys = [key for key, entry in _RGW_BUCKET_PAYLOAD_CACHE.items() if entry.endpoint_id == endpoint_id]
         for key in invalid_keys:
             _RGW_BUCKET_PAYLOAD_CACHE.pop(key, None)
+
+
+def clear_bucket_listing_caches() -> None:
+    with _BUCKET_LIST_CACHE_LOCK:
+        _BUCKET_LIST_CACHE.clear()
+        _BUCKET_LIST_INFLIGHT.clear()
+    with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
+        _RGW_BUCKET_PAYLOAD_CACHE.clear()
+    with _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS_LOCK:
+        _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS.clear()

@@ -13,6 +13,7 @@ from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import user_keys as user_keys_router
 from app.routers.ceph_admin import user_profiles as user_profiles_router
 from app.routers.ceph_admin import users as users_router
+from app.services import ceph_admin_bucket_listing_cache
 
 
 class FakeRGWAdmin:
@@ -26,17 +27,9 @@ class FakeRGWAdmin:
 
 @pytest.fixture(autouse=True)
 def _clear_buckets_caches():
-    with buckets_router._BUCKET_LIST_CACHE_LOCK:
-        buckets_router._BUCKET_LIST_CACHE.clear()
-        buckets_router._BUCKET_LIST_INFLIGHT.clear()
-    with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-        buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+    ceph_admin_bucket_listing_cache.clear_bucket_listing_caches()
     yield
-    with buckets_router._BUCKET_LIST_CACHE_LOCK:
-        buckets_router._BUCKET_LIST_CACHE.clear()
-        buckets_router._BUCKET_LIST_INFLIGHT.clear()
-    with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-        buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+    ceph_admin_bucket_listing_cache.clear_bucket_listing_caches()
 
 
 def _build_endpoint(*, endpoint_id: int = 1, metrics_enabled: bool = True, sse_enabled: bool = False):

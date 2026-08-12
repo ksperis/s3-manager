@@ -18,6 +18,7 @@ from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import endpoints as endpoints_router
 from app.routers.ceph_admin import user_listing_cache
 from app.routers.ceph_admin import user_profiles as user_profiles_router
+from app.services import ceph_admin_bucket_listing_cache
 
 
 @pytest.fixture(autouse=True)
@@ -30,11 +31,7 @@ def clear_ceph_admin_caches():
         user_listing_cache.USERS_LIST_CACHE.clear()
     with user_listing_cache.RGW_USERS_PAYLOAD_CACHE_LOCK:
         user_listing_cache.RGW_USERS_PAYLOAD_CACHE.clear()
-    with buckets_router._BUCKET_LIST_CACHE_LOCK:
-        buckets_router._BUCKET_LIST_CACHE.clear()
-        buckets_router._BUCKET_LIST_INFLIGHT.clear()
-    with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-        buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+    ceph_admin_bucket_listing_cache.clear_bucket_listing_caches()
     yield
     with account_listing_cache.ACCOUNTS_LIST_CACHE_LOCK:
         account_listing_cache.ACCOUNTS_LIST_CACHE.clear()
@@ -44,11 +41,7 @@ def clear_ceph_admin_caches():
         user_listing_cache.USERS_LIST_CACHE.clear()
     with user_listing_cache.RGW_USERS_PAYLOAD_CACHE_LOCK:
         user_listing_cache.RGW_USERS_PAYLOAD_CACHE.clear()
-    with buckets_router._BUCKET_LIST_CACHE_LOCK:
-        buckets_router._BUCKET_LIST_CACHE.clear()
-        buckets_router._BUCKET_LIST_INFLIGHT.clear()
-    with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-        buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+    ceph_admin_bucket_listing_cache.clear_bucket_listing_caches()
 
 
 class FakeAccountsAdmin:

@@ -23,7 +23,7 @@ from app.models.bucket import (
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.main import app
 from app.routers import dependencies
-from app.routers.ceph_admin import bucket_listing_cache
+from app.services import ceph_admin_bucket_listing_cache as bucket_listing_cache
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.services.listing_progress import ListingCancelled, ListingProgressSnapshot
@@ -93,18 +93,10 @@ def test_rgw_bucket_metadata_is_not_reexported_from_listing_enrichment():
 
 @pytest.fixture(autouse=True)
 def clear_buckets_listing_cache():
-    with buckets_router._BUCKET_LIST_CACHE_LOCK:
-        buckets_router._BUCKET_LIST_CACHE.clear()
-        buckets_router._BUCKET_LIST_INFLIGHT.clear()
-    with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-        buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+    bucket_listing_cache.clear_bucket_listing_caches()
     invalidate_bucket_owner_metadata_cache()
     yield
-    with buckets_router._BUCKET_LIST_CACHE_LOCK:
-        buckets_router._BUCKET_LIST_CACHE.clear()
-        buckets_router._BUCKET_LIST_INFLIGHT.clear()
-    with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-        buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+    bucket_listing_cache.clear_bucket_listing_caches()
     invalidate_bucket_owner_metadata_cache()
 
 

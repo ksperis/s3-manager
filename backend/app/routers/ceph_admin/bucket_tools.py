@@ -14,7 +14,7 @@ from app.models.bucket_config_backup import (
 )
 from app.models.ceph_admin import CephAdminBucketCompareRequest, CephAdminBucketCompareResult
 from app.models.browser import ListBrowserObjectsResponse
-from app.routers.ceph_admin.bucket_listing_cache import invalidate_bucket_listing_cache
+from app.services.ceph_admin_bucket_listing_cache import invalidate_bucket_listing_cache
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
     _resolve_storage_endpoint,
