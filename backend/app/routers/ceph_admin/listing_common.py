@@ -257,15 +257,6 @@ def collect_filter_fields(parsed_filter: Any | None) -> set[str]:
     return {rule.field for rule in rules if getattr(rule, "field", None)}
 
 
-def sort_value(value: Any, tie_breaker: str) -> tuple[int, Any, str]:
-    normalized_tie_breaker = str(tie_breaker or "").lower()
-    if value is None:
-        return (1, "", normalized_tie_breaker)
-    if isinstance(value, str):
-        return (0, value.lower(), normalized_tie_breaker)
-    return (0, value, normalized_tie_breaker)
-
-
 def apply_advanced_filter(
     items: list[_T],
     parsed_filter: Any | None,

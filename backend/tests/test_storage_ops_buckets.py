@@ -17,6 +17,7 @@ from app.models.execution_context import ExecutionContextCapabilities
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
 from app.routers import dependencies
 from app.routers.storage_ops import buckets as storage_ops_router
+from app.services import storage_ops_bucket_listing_service as storage_ops_listing_service
 from app.routers.storage_ops import summary as storage_ops_summary_router
 from app.services import app_settings_service, effective_access_service
 from app.services.connection_identity_service import ConnectionIdentityResolution
@@ -288,7 +289,7 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
         assert "endpoint_id" in first
         assert "bucket_name" in first
         assert "bucket_identity" in first
-        assert first["bucket_identity"] == storage_ops_router._build_bucket_identity(
+        assert first["bucket_identity"] == storage_ops_listing_service.build_storage_ops_bucket_identity(
             first["endpoint_id"], first["tenant"], first["bucket_name"]
         )
     finally:
@@ -550,8 +551,12 @@ def test_storage_ops_feature_param_filter_prefilters_base_candidates(monkeypatch
         captured["bucket_names"] = [bucket.name for bucket in buckets]
         return {}, set()
 
-    monkeypatch.setattr(storage_ops_router, "load_bucket_feature_param_snapshots", fake_load_feature_param_snapshots)
-    monkeypatch.setattr(storage_ops_router, "match_bucket_feature_param_rules", lambda rules, match_mode, snapshot: True)
+    monkeypatch.setattr(storage_ops_listing_service, "load_bucket_feature_param_snapshots", fake_load_feature_param_snapshots)
+    monkeypatch.setattr(
+        storage_ops_listing_service,
+        "match_bucket_feature_param_rules",
+        lambda rules, match_mode, snapshot: True,
+    )
 
     buckets = [
         StorageOpsBucketSummary(
@@ -584,7 +589,7 @@ def test_storage_ops_feature_param_filter_prefilters_base_candidates(monkeypatch
             ],
         }
     )
-    result = storage_ops_router._apply_advanced_filter_for_context(
+    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
@@ -611,8 +616,8 @@ def test_storage_ops_advanced_filter_parsing_accepts_context_fields():
 
 
 def test_storage_ops_bucket_identity_is_endpoint_scoped_and_shared_across_contexts():
-    primary_identity = storage_ops_router._build_bucket_identity(7, None, "shared")
-    archive_identity = storage_ops_router._build_bucket_identity(8, None, "shared")
+    primary_identity = storage_ops_listing_service.build_storage_ops_bucket_identity(7, None, "shared")
+    archive_identity = storage_ops_listing_service.build_storage_ops_bucket_identity(8, None, "shared")
     assert primary_identity
     assert archive_identity
     assert primary_identity != archive_identity
@@ -659,7 +664,7 @@ def test_storage_ops_bucket_identity_is_endpoint_scoped_and_shared_across_contex
         {"match": "all", "rules": [{"field": "bucket_identity", "op": "in", "value": [primary_identity]}]}
     )
 
-    result = storage_ops_router._apply_advanced_filter_for_context(
+    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
@@ -704,7 +709,7 @@ def test_storage_ops_context_filters_match_context_kind_and_endpoint():
             ],
         }
     )
-    result = storage_ops_router._apply_advanced_filter_for_context(
+    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
@@ -746,7 +751,7 @@ def test_storage_ops_context_filters_match_context_id():
             ],
         }
     )
-    result = storage_ops_router._apply_advanced_filter_for_context(
+    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
@@ -803,7 +808,7 @@ def test_storage_ops_lifecycle_rule_status_filter_uses_context_lifecycle_lookup(
             )
             return BucketLifecycleConfig(rules=rules)
 
-    result = storage_ops_router._apply_advanced_filter_for_context(
+    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=FakeBucketsService(),
@@ -856,7 +861,7 @@ def test_storage_ops_sse_detail_filter_uses_context_encryption_lookup():
             )
             return BucketEncryptionConfiguration(rules=rules)
 
-    result = storage_ops_router._apply_advanced_filter_for_context(
+    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=FakeBucketsService(),
@@ -900,7 +905,7 @@ def test_storage_ops_context_filters_match_s3_user_kind():
             ],
         }
     )
-    result = storage_ops_router._apply_advanced_filter_for_context(
+    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
@@ -1216,7 +1221,7 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-    monkeypatch.setattr(storage_ops_router, "enrich_buckets", fake_enrich_buckets)
+    monkeypatch.setattr(storage_ops_listing_service, "enrich_buckets", fake_enrich_buckets)
 
     app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
@@ -1250,8 +1255,8 @@ def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
         rgw_access_key="AKIA_TEST",
         rgw_secret_key="SECRET_TEST",
     )
-    context = storage_ops_router._StorageOpsResolvedContext(
-        ref=storage_ops_router._StorageOpsContextRef(
+    context = storage_ops_listing_service.StorageOpsResolvedContext(
+        ref=storage_ops_listing_service.StorageOpsContextRef(
             context_id="1",
             context_name="Account A",
             context_kind="account",
@@ -1285,10 +1290,14 @@ def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
             )
         return enriched
 
-    monkeypatch.setattr(storage_ops_router, "enrich_buckets", fake_enrich_buckets)
-    monkeypatch.setattr(storage_ops_router, "get_cached_bucket_listing_for_account", lambda **kwargs: kwargs["builder"]())
+    monkeypatch.setattr(storage_ops_listing_service, "enrich_buckets", fake_enrich_buckets)
+    monkeypatch.setattr(
+        storage_ops_listing_service,
+        "get_cached_bucket_listing_for_account",
+        lambda **kwargs: kwargs["builder"](),
+    )
 
-    result = storage_ops_router._list_context_buckets(
+    result = storage_ops_listing_service.list_storage_ops_context_buckets(
         context=context,
         service=FakeBucketsService(),
         needs_stats=False,
@@ -1323,8 +1332,8 @@ def test_storage_ops_notification_param_filter_uses_shared_snapshot_matching(mon
         rgw_access_key="AKIA_TEST",
         rgw_secret_key="SECRET_TEST",
     )
-    context = storage_ops_router._StorageOpsResolvedContext(
-        ref=storage_ops_router._StorageOpsContextRef(
+    context = storage_ops_listing_service.StorageOpsResolvedContext(
+        ref=storage_ops_listing_service.StorageOpsContextRef(
             context_id="1",
             context_name="Account A",
             context_kind="account",
@@ -1352,9 +1361,13 @@ def test_storage_ops_notification_param_filter_uses_shared_snapshot_matching(mon
                 }
             )
 
-    monkeypatch.setattr(storage_ops_router, "get_cached_bucket_listing_for_account", lambda **kwargs: kwargs["builder"]())
+    monkeypatch.setattr(
+        storage_ops_listing_service,
+        "get_cached_bucket_listing_for_account",
+        lambda **kwargs: kwargs["builder"](),
+    )
 
-    result = storage_ops_router._list_context_buckets(
+    result = storage_ops_listing_service.list_storage_ops_context_buckets(
         context=context,
         service=FakeBucketsService(),
         needs_stats=False,
@@ -1446,8 +1459,8 @@ def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_con
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-    monkeypatch.setattr(storage_ops_router.ConnectionIdentityService, "resolve_rgw_identity", fake_resolve_rgw_identity)
-    monkeypatch.setattr(storage_ops_router.BucketOwnerMetadataService, "enrich_buckets", fake_enrich_buckets)
+    monkeypatch.setattr(storage_ops_listing_service.ConnectionIdentityService, "resolve_rgw_identity", fake_resolve_rgw_identity)
+    monkeypatch.setattr(storage_ops_listing_service.BucketOwnerMetadataService, "enrich_buckets", fake_enrich_buckets)
 
     app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
@@ -1653,7 +1666,7 @@ def test_storage_ops_bucket_listing_filters_by_owner_suspended_status(client, mo
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-    monkeypatch.setattr(storage_ops_router.BucketOwnerMetadataService, "enrich_buckets", fake_enrich_buckets)
+    monkeypatch.setattr(storage_ops_listing_service.BucketOwnerMetadataService, "enrich_buckets", fake_enrich_buckets)
 
     app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
@@ -1710,7 +1723,7 @@ def test_storage_ops_owner_identity_failures_leave_owner_quota_fields_null(clien
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-    monkeypatch.setattr(storage_ops_router.ConnectionIdentityService, "resolve_rgw_identity", fake_resolve_rgw_identity)
+    monkeypatch.setattr(storage_ops_listing_service.ConnectionIdentityService, "resolve_rgw_identity", fake_resolve_rgw_identity)
 
     app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user

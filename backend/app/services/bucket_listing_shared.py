@@ -3,16 +3,25 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
-from pydantic import ValidationError
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from app.models.ceph_admin import CephAdminBucketFilterQuery
 from app.core.sensitive_data import sanitize_error_detail
+from app.models.ceph_admin import CephAdminBucketFilterQuery
 
 
 class BucketListingFilterError(ValueError):
     pass
+
+
+def listing_sort_key(value: Any, tie_breaker: str) -> tuple[int, Any, str]:
+    normalized_tie_breaker = str(tie_breaker or "").lower()
+    if value is None:
+        return (1, "", normalized_tie_breaker)
+    if isinstance(value, str):
+        return (0, value.lower(), normalized_tie_breaker)
+    return (0, value, normalized_tie_breaker)
 
 
 def parse_includes(include: list[str]) -> set[str]:

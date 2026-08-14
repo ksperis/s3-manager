@@ -24,10 +24,13 @@ from app.routers.ceph_admin.listing_common import (
     parse_filter_query,
     parse_includes,
     parse_int,
-    sort_value,
     stream_listing_response,
 )
-from app.services.bucket_listing_shared import serialize_filter
+from app.services.bucket_listing_shared import (
+    is_advanced_filter_stream_payload,
+    listing_sort_key,
+    serialize_filter,
+)
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.ceph_admin.user_common import (
     coerce_bool,
@@ -41,7 +44,6 @@ from app.routers.ceph_admin.user_listing_cache import (
 )
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
-from app.services.bucket_listing_shared import is_advanced_filter_stream_payload
 from app.services.listing_progress import (
     ListingProgressEmitter,
     ListingProgressSnapshot,
@@ -397,7 +399,7 @@ def _compute_users_listing(
                 value = item.quota_max_objects
             else:
                 value = item.uid
-            return sort_value(value, item.uid or "")
+            return listing_sort_key(value, item.uid or "")
 
         results.sort(key=sort_key, reverse=sort_dir == "desc")
         if needed_for_listing:
