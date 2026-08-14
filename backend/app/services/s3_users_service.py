@@ -1065,6 +1065,12 @@ class S3UsersService:
         except RGWAdminError as exc:
             raise ValueError(f"Unable to delete access key: {exc}") from exc
 
+    def delete_user_db_only(self, user_id: int) -> None:
+        s3_user = self.db.query(S3UserModel).filter(S3UserModel.id == user_id).first()
+        if not s3_user:
+            raise ValueError("S3 user not found")
+        self._delete_user_entry(s3_user)
+
     def delete_user(self, user_id: int, delete_rgw: bool = False) -> None:
         s3_user = self.db.query(S3UserModel).filter(S3UserModel.id == user_id).first()
         if not s3_user:
@@ -1087,6 +1093,9 @@ class S3UsersService:
                     admin.delete_access_key(s3_user.rgw_user_uid, key_to_delete, tenant=None)
                 except RGWAdminError as exc:
                     raise ValueError(f"Unable to delete interface access key: {exc}") from exc
+        self._delete_user_entry(s3_user)
+
+    def _delete_user_entry(self, s3_user: S3UserModel) -> None:
         (
             self.db.query(UserS3UserModel)
             .filter(UserS3UserModel.s3_user_id == s3_user.id)
@@ -1100,6 +1109,7 @@ class S3UsersService:
         self.db.flush()
         self.tags.cleanup_orphan_definitions()
         self.db.commit()
+
 
 def get_s3_users_service(db: Session) -> S3UsersService:
     return S3UsersService(db)

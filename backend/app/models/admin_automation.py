@@ -145,8 +145,8 @@ class S3UserMatch(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "S3UserMatch":
-        if not (self.id or self.uid):
-            raise ValueError("s3_users.match requires id or uid")
+        if sum((self.id is not None, bool(self.uid))) != 1:
+            raise ValueError("s3_users.match requires exactly one of id or uid")
         return self
 
 
@@ -163,6 +163,19 @@ class S3UserSpec(ApiModel):
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
     user_ids: Optional[list[int]] = None
+
+    @model_validator(mode="after")
+    def _ensure_single_endpoint_reference(self) -> "S3UserSpec":
+        selectors = (
+            self.storage_endpoint_id is not None,
+            bool(self.storage_endpoint_name),
+            bool(self.storage_endpoint_url),
+        )
+        if sum(selectors) > 1:
+            raise ValueError(
+                "s3_users.spec accepts only one storage endpoint reference"
+            )
+        return self
 
 
 class S3UserApply(ApiModel):
