@@ -18,12 +18,10 @@ from app.db import (
     UiGroupS3User,
     User,
     UserS3User as UserS3UserModel,
-    UserRole,
 )
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
+from app.services.s3_user_associations_service import S3UserAssociationsService
 from app.services.tags_service import TagsService
-from app.services.ui_group_avatar_service import UiGroupAvatarService
-from app.services.user_avatar_service import UserAvatarService
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.models.s3_user import (
     S3User as S3UserSchema,
@@ -56,6 +54,7 @@ def _extract_max_buckets(payload: Any) -> Optional[int]:
 class S3UsersService:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self.associations = S3UserAssociationsService(db)
         self.tags = TagsService(db)
 
     # Helpers
@@ -338,51 +337,6 @@ class S3UsersService:
             return False
         return None
 
-    def _ensure_links(self, s3_user: S3UserModel, target_ids: list[int]) -> None:
-        existing_links = self.db.query(UserS3UserModel).filter(UserS3UserModel.s3_user_id == s3_user.id).all()
-        existing_ids = {link.user_id for link in existing_links}
-        desired_ids = set(target_ids)
-        to_remove = existing_ids - desired_ids
-        to_add = desired_ids - existing_ids
-        if to_remove:
-            (
-                self.db.query(UserS3UserModel)
-                .filter(
-                    UserS3UserModel.s3_user_id == s3_user.id,
-                    UserS3UserModel.user_id.in_(to_remove),
-                )
-                .delete(synchronize_session=False)
-            )
-        if to_add:
-            users = self.db.query(User).filter(User.id.in_(to_add)).all()
-            found_ids = {user.id for user in users}
-            missing = to_add - found_ids
-            if missing:
-                missing_ids = ", ".join(str(mid) for mid in sorted(missing))
-                raise ValueError(f"Users not found: {missing_ids}")
-            for user in users:
-                if user.role not in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
-                    user.role = UserRole.UI_USER.value
-                    self.db.add(user)
-                self.db.add(UserS3UserModel(user_id=user.id, s3_user_id=s3_user.id))
-
-    def _ensure_user_link_objects(
-        self,
-        s3_user: S3UserModel,
-        links: list[S3UserUserLink],
-    ) -> None:
-        desired = {int(link.user_id): link for link in links}
-        self._ensure_links(s3_user, list(desired))
-        self.db.flush()
-        for row in self.db.query(UserS3UserModel).filter(
-            UserS3UserModel.s3_user_id == s3_user.id,
-            UserS3UserModel.user_id.in_(desired),
-        ).all():
-            row.allow_manager_browser_data_access = bool(
-                desired[row.user_id].allow_manager_browser_data_access
-            )
-            self.db.add(row)
-
     def _serialize_s3_user(
         self,
         row: S3UserModel,
@@ -415,81 +369,10 @@ class S3UsersService:
             tags=self.tags.get_s3_user_tags(row),
         )
 
-    def _load_user_links(
-        self,
-        s3_user_ids: list[int],
-    ) -> dict[int, list[S3UserUserLink]]:
-        if not s3_user_ids:
-            return {}
-        rows = (
-            self.db.query(
-                UserS3UserModel.s3_user_id,
-                User,
-                UserS3UserModel.allow_manager_browser_data_access,
-            )
-            .join(User, User.id == UserS3UserModel.user_id)
-            .filter(UserS3UserModel.s3_user_id.in_(s3_user_ids))
-            .order_by(UserS3UserModel.s3_user_id.asc(), User.email.asc(), User.id.asc())
-            .all()
-        )
-        links_by_s3_user: dict[int, list[S3UserUserLink]] = {}
-        avatar_service = UserAvatarService(self.db)
-        for s3_user_id, user, allow_manager_browser_data_access in rows:
-            normalized_s3_user_id = int(s3_user_id)
-            normalized_user_id = int(user.id)
-            links_by_s3_user.setdefault(normalized_s3_user_id, []).append(
-                S3UserUserLink(
-                    user_id=normalized_user_id,
-                    user_email=user.email,
-                    user_full_name=user.full_name,
-                    user_display_name=user.display_name,
-                    user_avatar=avatar_service.descriptor(user),
-                    allow_manager_browser_data_access=bool(
-                        allow_manager_browser_data_access
-                    ),
-                )
-            )
-        return links_by_s3_user
-
-    def _load_group_links(
-        self,
-        s3_user_ids: list[int],
-    ) -> dict[int, list[S3UserGroupLink]]:
-        if not s3_user_ids:
-            return {}
-        rows = (
-            self.db.query(
-                UiGroupS3User.s3_user_id,
-                UiGroup,
-                UiGroupS3User.allow_manager_browser_data_access,
-            )
-            .join(UiGroup, UiGroup.id == UiGroupS3User.group_id)
-            .filter(UiGroupS3User.s3_user_id.in_(s3_user_ids))
-            .order_by(UiGroupS3User.s3_user_id.asc(), UiGroup.name.asc(), UiGroup.id.asc())
-            .all()
-        )
-        links_by_s3_user: dict[int, list[S3UserGroupLink]] = {}
-        avatar_service = UiGroupAvatarService(self.db)
-        for s3_user_id, group, allow_manager_browser_data_access in rows:
-            normalized_user_id = int(s3_user_id)
-            normalized_group_id = int(group.id)
-            links_by_s3_user.setdefault(normalized_user_id, []).append(
-                S3UserGroupLink(
-                    group_id=normalized_group_id,
-                    group_name=group.name,
-                    group_avatar=avatar_service.descriptor(group),
-                    allow_manager_browser_data_access=bool(
-                        allow_manager_browser_data_access
-                    ),
-                )
-            )
-        return links_by_s3_user
-
     def list_users(self, include_quota: bool = False) -> list[S3UserSchema]:
         rows = self.db.query(S3UserModel).order_by(*name_order_by(S3UserModel)).all()
         s3_user_ids = [row.id for row in rows]
-        user_links_map = self._load_user_links(s3_user_ids)
-        group_links_map = self._load_group_links(s3_user_ids)
+        user_links_map, group_links_map = self.associations.load_links(s3_user_ids)
         return [
             self._serialize_s3_user(
                 row,
@@ -585,8 +468,7 @@ class S3UsersService:
                 query = query.order_by(sort_column.asc(), S3UserModel.id.asc())
         rows = query.offset(offset).limit(page_size).all()
         s3_user_ids = [row.id for row in rows]
-        user_links_map = self._load_user_links(s3_user_ids)
-        group_links_map = self._load_group_links(s3_user_ids)
+        user_links_map, group_links_map = self.associations.load_links(s3_user_ids)
         return [
             self._serialize_s3_user(
                 row,
@@ -604,8 +486,7 @@ class S3UsersService:
         include_quota: bool = False,
     ) -> S3UserSchema:
         s3_user = self._get_s3_user(user_id)
-        user_links_map = self._load_user_links([s3_user.id])
-        group_links_map = self._load_group_links([s3_user.id])
+        user_links_map, group_links_map = self.associations.load_links([s3_user.id])
         endpoint = self._endpoint_for_user(s3_user)
         quota_max_size_gb = None
         quota_max_objects = None
@@ -770,10 +651,11 @@ class S3UsersService:
             s3_user.name = payload.name
         if payload.email is not None:
             s3_user.email = payload.email
-        if payload.user_links is not None:
-            self._ensure_user_link_objects(s3_user, payload.user_links)
-        if payload.group_links is not None:
-            self._ensure_group_link_objects(s3_user, payload.group_links)
+        self.associations.replace_links(
+            s3_user,
+            user_links=payload.user_links,
+            group_links=payload.group_links,
+        )
         if payload.tags is not None:
             self.tags.replace_s3_user_tags(s3_user, payload.tags)
         if payload.allow_bucket_quota_management is not None:
@@ -796,8 +678,7 @@ class S3UsersService:
         self.db.add(s3_user)
         self.db.commit()
         self.db.refresh(s3_user)
-        user_links_map = self._load_user_links([s3_user.id])
-        group_links_map = self._load_group_links([s3_user.id])
+        user_links_map, group_links_map = self.associations.load_links([s3_user.id])
         endpoint = self._endpoint_for_user(s3_user)
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
         return S3UserSchema(
@@ -818,42 +699,6 @@ class S3UsersService:
             allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
-
-    def _ensure_group_links(self, s3_user: S3UserModel, group_ids: list[int]) -> None:
-        desired_ids = sorted({int(group_id) for group_id in group_ids if group_id is not None})
-        if desired_ids:
-            found = {row[0] for row in self.db.query(UiGroup.id).filter(UiGroup.id.in_(desired_ids)).all()}
-            missing = set(desired_ids) - found
-            if missing:
-                missing_str = ", ".join(str(mid) for mid in sorted(missing))
-                raise ValueError(f"UI groups not found: {missing_str}")
-        existing = self.db.query(UiGroupS3User).filter(UiGroupS3User.s3_user_id == s3_user.id).all()
-        existing_ids = {link.group_id for link in existing}
-        desired_set = set(desired_ids)
-        for group_id in existing_ids - desired_set:
-            self.db.query(UiGroupS3User).filter(
-                UiGroupS3User.s3_user_id == s3_user.id,
-                UiGroupS3User.group_id == group_id,
-            ).delete(synchronize_session=False)
-        for group_id in desired_set - existing_ids:
-            self.db.add(UiGroupS3User(group_id=group_id, s3_user_id=s3_user.id))
-
-    def _ensure_group_link_objects(
-        self,
-        s3_user: S3UserModel,
-        links: list[S3UserGroupLink],
-    ) -> None:
-        desired = {int(link.group_id): link for link in links}
-        self._ensure_group_links(s3_user, list(desired))
-        self.db.flush()
-        for row in self.db.query(UiGroupS3User).filter(
-            UiGroupS3User.s3_user_id == s3_user.id,
-            UiGroupS3User.group_id.in_(desired),
-        ).all():
-            row.allow_manager_browser_data_access = bool(
-                desired[row.group_id].allow_manager_browser_data_access
-            )
-            self.db.add(row)
 
     def rotate_keys(self, user_id: int) -> S3UserSchema:
         s3_user = self._get_s3_user(user_id)
@@ -894,8 +739,7 @@ class S3UsersService:
         self.db.commit()
         self.db.refresh(s3_user)
         endpoint = self._endpoint_for_user(s3_user)
-        user_links_map = self._load_user_links([s3_user.id])
-        group_links_map = self._load_group_links([s3_user.id])
+        user_links_map, group_links_map = self.associations.load_links([s3_user.id])
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
         return S3UserSchema(
             id=s3_user.id,

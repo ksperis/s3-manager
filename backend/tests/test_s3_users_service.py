@@ -25,6 +25,7 @@ from app.db import (
 )
 from app.models.s3_user import (
     S3UserCreate,
+    S3UserGroupLink,
     S3UserImport,
     S3UserUpdate,
     S3UserUserLink,
@@ -360,6 +361,98 @@ def test_update_links_normalizes_non_ui_roles_to_ui_user(db_session, monkeypatch
     assert [link.user_id for link in updated.user_links] == [actor.id]
     link = db_session.query(UserS3User).filter_by(user_id=actor.id, s3_user_id=created.id).one()
     assert link is not None
+
+
+def test_update_links_validates_users_before_removing_existing_links(
+    db_session,
+    monkeypatch,
+):
+    endpoint = _seed_ceph_endpoint(db_session)
+    service = _build_service(db_session, monkeypatch, FakeRGWAdmin())
+    created = service.create_user(
+        S3UserCreate(
+            name="Stable links",
+            uid="stable-links",
+            storage_endpoint_id=endpoint.id,
+        )
+    )
+    actor = User(
+        email="stable-link@example.test",
+        hashed_password="x",
+        role=UserRole.UI_USER.value,
+    )
+    db_session.add(actor)
+    db_session.flush()
+    db_session.add(
+        UserS3User(
+            user_id=actor.id,
+            s3_user_id=created.id,
+            allow_manager_browser_data_access=True,
+        )
+    )
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="Users not found"):
+        service.update_user(
+            created.id,
+            S3UserUpdate(
+                user_links=[S3UserUserLink(user_id=999_999)],
+            ),
+        )
+
+    link = db_session.query(UserS3User).filter_by(
+        user_id=actor.id,
+        s3_user_id=created.id,
+    ).one()
+    assert link.allow_manager_browser_data_access is True
+
+
+def test_update_links_validates_groups_before_mutating_user_links(
+    db_session,
+    monkeypatch,
+):
+    endpoint = _seed_ceph_endpoint(db_session)
+    service = _build_service(db_session, monkeypatch, FakeRGWAdmin())
+    created = service.create_user(
+        S3UserCreate(
+            name="Atomic links",
+            uid="atomic-links",
+            storage_endpoint_id=endpoint.id,
+        )
+    )
+    current_actor = User(
+        email="current-link@example.test",
+        hashed_password="x",
+        role=UserRole.UI_USER.value,
+    )
+    replacement_actor = User(
+        email="replacement-link@example.test",
+        hashed_password="x",
+        role=UserRole.UI_NONE.value,
+    )
+    db_session.add_all([current_actor, replacement_actor])
+    db_session.flush()
+    db_session.add(
+        UserS3User(
+            user_id=current_actor.id,
+            s3_user_id=created.id,
+        )
+    )
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="UI groups not found"):
+        service.update_user(
+            created.id,
+            S3UserUpdate(
+                user_links=[S3UserUserLink(user_id=replacement_actor.id)],
+                group_links=[S3UserGroupLink(group_id=999_999)],
+            ),
+        )
+
+    links = db_session.query(UserS3User).filter_by(s3_user_id=created.id).all()
+    assert [link.user_id for link in links] == [current_actor.id]
+    db_session.refresh(replacement_actor)
+    assert replacement_actor.role == UserRole.UI_NONE.value
 
 
 def test_update_user_persists_privileged_target_grants(db_session, monkeypatch):
