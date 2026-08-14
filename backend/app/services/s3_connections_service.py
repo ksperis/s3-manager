@@ -7,26 +7,26 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from app.db.s3_connection import ManagedPrivateAccess, S3Connection as DBS3Connection, UserS3Connection
-from app.db.storage_endpoint import StorageEndpoint
 from app.db.ui_group import UiGroup, UiGroupS3Connection
-from app.models.s3_connection import S3Connection, S3ConnectionCreate, S3ConnectionUpdate
+from app.models.s3_connection import (
+    S3_CONNECTION_ENDPOINT_FIELDS,
+    S3Connection,
+    S3ConnectionCreate,
+    S3ConnectionUpdate,
+)
 from app.models.s3_connection_admin import (
     S3ConnectionAdminCreate,
     S3ConnectionAdminUpdate,
 )
 from app.services.mappers.s3_connection import s3_connection_from_db
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
+from app.services.s3_connection_endpoint_planner import S3ConnectionEndpointPlanner
 from app.services.tags_service import TagsService
 from app.utils.s3_connection_capabilities import (
     parse_s3_connection_capabilities,
     s3_connection_can_manage_iam,
 )
-from app.utils.s3_connection_endpoint import (
-    build_custom_endpoint_config,
-    custom_endpoint_update_base,
-)
 from app.utils.name_ordering import name_order_by
-from app.utils.s3_endpoint import validate_user_supplied_s3_endpoint
 
 
 ACTIVE_MANAGED_SOURCE_DELETE_ERROR = (
@@ -38,25 +38,11 @@ ACTIVE_MANAGED_SOURCE_UPDATE_ERROR = (
 ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR = (
     "Connection credentials are locked while managed private accesses depend on this source"
 )
-_CUSTOM_ENDPOINT_FIELDS = {
-    "endpoint_url",
-    "region",
-    "force_path_style",
-    "verify_tls",
-    "provider_hint",
-}
-_ENDPOINT_FIELDS = _CUSTOM_ENDPOINT_FIELDS | {
-    "storage_endpoint_id"
-}
-_ADMIN_SHARED_SOURCE_IMMUTABLE_FIELDS = _ENDPOINT_FIELDS | {
+_ADMIN_SHARED_SOURCE_IMMUTABLE_FIELDS = S3_CONNECTION_ENDPOINT_FIELDS | {
     "is_active",
     "credential_owner_type",
     "credential_owner_identifier",
 }
-
-
-class StorageEndpointNotFoundError(ValueError):
-    pass
 
 
 class S3ConnectionsService:
@@ -65,6 +51,7 @@ class S3ConnectionsService:
     def __init__(self, db: Session):
         self.db = db
         self.tags = TagsService(db)
+        self.endpoint_planner = S3ConnectionEndpointPlanner(db)
 
     def list_for_user(self, user_id: int) -> list[S3Connection]:
         """List connections visible to a UI user."""
@@ -112,7 +99,7 @@ class S3ConnectionsService:
         self,
         payload: S3ConnectionAdminCreate,
     ) -> None:
-        self._connection_endpoint_plan(
+        self.endpoint_planner.plan(
             None,
             payload,
             enforce_manual_endpoint_policy=False,
@@ -124,7 +111,7 @@ class S3ConnectionsService:
         payload: S3ConnectionAdminCreate,
     ) -> DBS3Connection:
         storage_endpoint_id, custom_endpoint_config = (
-            self._connection_endpoint_plan(
+            self.endpoint_planner.plan(
                 None,
                 payload,
                 enforce_manual_endpoint_policy=False,
@@ -272,7 +259,7 @@ class S3ConnectionsService:
 
     def create(self, user_id: int, payload: S3ConnectionCreate) -> S3Connection:
         storage_endpoint_id, custom_endpoint_config = (
-            self._connection_endpoint_plan(
+            self.endpoint_planner.plan(
                 None,
                 payload,
                 enforce_manual_endpoint_policy=True,
@@ -343,8 +330,11 @@ class S3ConnectionsService:
         should_validate_existing_manual_endpoint = (
             not row.server_managed and row.storage_endpoint_id is None
         )
-        if _ENDPOINT_FIELDS & payload_data.keys() or should_validate_existing_manual_endpoint:
-            endpoint_plan = self._connection_endpoint_plan(
+        if (
+            S3_CONNECTION_ENDPOINT_FIELDS & payload_data.keys()
+            or should_validate_existing_manual_endpoint
+        ):
+            endpoint_plan = self.endpoint_planner.plan(
                 row,
                 payload,
                 enforce_manual_endpoint_policy=True,
@@ -419,93 +409,14 @@ class S3ConnectionsService:
         if update_credentials and self.is_active_managed_source(row.id):
             raise ValueError(ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR)
         endpoint_plan = None
-        if _ENDPOINT_FIELDS & fields_set:
-            endpoint_plan = self._connection_endpoint_plan(
+        if S3_CONNECTION_ENDPOINT_FIELDS & fields_set:
+            endpoint_plan = self.endpoint_planner.plan(
                 row,
                 payload,
                 enforce_manual_endpoint_policy=False,
             )
         group_ids = self._validated_admin_shared_group_ids(payload.group_ids)
         return endpoint_plan, group_ids
-
-    def _connection_endpoint_plan(
-        self,
-        row: Optional[DBS3Connection],
-        payload: (
-            S3ConnectionCreate
-            | S3ConnectionUpdate
-            | S3ConnectionAdminCreate
-            | S3ConnectionAdminUpdate
-        ),
-        *,
-        enforce_manual_endpoint_policy: bool,
-    ) -> tuple[Optional[int], Optional[str]]:
-        fields_set = payload.model_fields_set
-        if "storage_endpoint_id" in fields_set:
-            desired_endpoint_id = payload.storage_endpoint_id
-        elif row is not None:
-            desired_endpoint_id = row.storage_endpoint_id
-        else:
-            desired_endpoint_id = None
-        custom_fields = _CUSTOM_ENDPOINT_FIELDS & fields_set
-        if desired_endpoint_id is not None:
-            if custom_fields:
-                raise ValueError(
-                    "Custom endpoint fields cannot be combined with a managed storage endpoint"
-                )
-            endpoint = (
-                self.db.query(StorageEndpoint)
-                .filter(StorageEndpoint.id == desired_endpoint_id)
-                .first()
-            )
-            if endpoint is None:
-                raise StorageEndpointNotFoundError(
-                    "Storage endpoint not found"
-                )
-            return desired_endpoint_id, None
-
-        if row is not None and row.storage_endpoint_id is None:
-            current = custom_endpoint_update_base(row.custom_endpoint_config)
-        else:
-            current = custom_endpoint_update_base(None)
-        endpoint_url = (
-            payload.endpoint_url
-            if "endpoint_url" in fields_set
-            else current.endpoint_url
-        )
-        region = payload.region if "region" in fields_set else current.region
-        force_path_style = (
-            payload.force_path_style
-            if "force_path_style" in fields_set
-            else current.force_path_style
-        )
-        verify_tls = (
-            payload.verify_tls
-            if "verify_tls" in fields_set
-            else current.verify_tls
-        )
-        provider = (
-            payload.provider_hint
-            if "provider_hint" in fields_set
-            else current.provider
-        )
-        if force_path_style is None or verify_tls is None:
-            raise ValueError(
-                "force_path_style and verify_tls cannot be null for a custom endpoint"
-            )
-        normalized_endpoint_url = endpoint_url or ""
-        if enforce_manual_endpoint_policy:
-            normalized_endpoint_url = self._validate_manual_endpoint(
-                normalized_endpoint_url,
-                verify_tls,
-            )
-        return None, build_custom_endpoint_config(
-            normalized_endpoint_url,
-            region,
-            force_path_style,
-            verify_tls,
-            provider,
-        )
 
     def _validated_admin_shared_group_ids(
         self,
@@ -611,11 +522,3 @@ class S3ConnectionsService:
             .first()
             is not None
         )
-
-    def _validate_manual_endpoint(self, endpoint_url: Optional[str], verify_tls: bool) -> str:
-        normalized = (endpoint_url or "").strip()
-        if not normalized:
-            raise ValueError("Endpoint URL is required.")
-        if not verify_tls:
-            raise ValueError("Manual private connections require TLS verification.")
-        return validate_user_supplied_s3_endpoint(normalized, field_name="Endpoint URL")

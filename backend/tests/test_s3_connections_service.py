@@ -147,7 +147,7 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
     endpoint = _endpoint(db_session)
     service = S3ConnectionsService(db_session)
     monkeypatch.setattr(
-        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        "app.services.s3_connection_endpoint_planner.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value.rstrip("/"),
     )
 
@@ -206,7 +206,7 @@ def test_create_and_update_connection_normalize_tags(db_session, monkeypatch):
     owner = _user(db_session, "owner-tags@example.test")
     service = S3ConnectionsService(db_session)
     monkeypatch.setattr(
-        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        "app.services.s3_connection_endpoint_planner.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value.rstrip("/"),
     )
 
@@ -298,7 +298,7 @@ def test_update_connection_updates_private_connection(db_session, monkeypatch):
     )
     service = S3ConnectionsService(db_session)
     monkeypatch.setattr(
-        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        "app.services.s3_connection_endpoint_planner.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value.rstrip("/"),
     )
 
@@ -344,7 +344,7 @@ def test_update_private_connection_requires_explicit_managed_detachment(
     )
     service = S3ConnectionsService(db_session)
     monkeypatch.setattr(
-        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        "app.services.s3_connection_endpoint_planner.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value.rstrip("/"),
     )
     monkeypatch.setattr(
@@ -400,7 +400,7 @@ def test_create_connection_rejects_manual_private_endpoint(db_session, monkeypat
     owner = _user(db_session, "owner-private-endpoint@example.test")
     service = S3ConnectionsService(db_session)
     monkeypatch.setattr(
-        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        "app.services.s3_connection_endpoint_planner.validate_user_supplied_s3_endpoint",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             ValueError("Endpoint URL resolves to a private or local network address")
         ),
@@ -433,7 +433,7 @@ def test_update_connection_rejects_existing_manual_endpoint_without_tls_verifica
     )
     service = S3ConnectionsService(db_session)
     monkeypatch.setattr(
-        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        "app.services.s3_connection_endpoint_planner.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value.rstrip("/"),
     )
 
@@ -446,7 +446,7 @@ def test_update_connection_rejects_invalid_access_flags(db_session, monkeypatch)
     row = _create_row(db_session, created_by_user_id=owner.id, name="invalid-flags")
     service = S3ConnectionsService(db_session)
     monkeypatch.setattr(
-        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        "app.services.s3_connection_endpoint_planner.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value.rstrip("/"),
     )
 
@@ -459,7 +459,7 @@ def test_update_connection_supports_active_flag_and_keeps_inactive_visible_in_ma
     row = _create_row(db_session, created_by_user_id=owner.id, name="active-flag-conn", is_active=True)
     service = S3ConnectionsService(db_session)
     monkeypatch.setattr(
-        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        "app.services.s3_connection_endpoint_planner.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value.rstrip("/"),
     )
 

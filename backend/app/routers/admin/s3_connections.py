@@ -43,9 +43,9 @@ from app.services.s3_connections_service import (
     ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR,
     ACTIVE_MANAGED_SOURCE_DELETE_ERROR,
     ACTIVE_MANAGED_SOURCE_UPDATE_ERROR,
-    StorageEndpointNotFoundError,
     S3ConnectionsService,
 )
+from app.services.s3_connection_endpoint_planner import StorageEndpointNotFoundError
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.services.ui_group_avatar_service import UiGroupAvatarService

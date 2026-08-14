@@ -11,12 +11,15 @@ from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 CredentialOwnerType = Literal["iam_user", "account_user", "s3_user"]
-_CUSTOM_ENDPOINT_FIELDS = {
+S3_CONNECTION_CUSTOM_ENDPOINT_FIELDS = {
     "endpoint_url",
     "region",
     "force_path_style",
     "verify_tls",
     "provider_hint",
+}
+S3_CONNECTION_ENDPOINT_FIELDS = S3_CONNECTION_CUSTOM_ENDPOINT_FIELDS | {
+    "storage_endpoint_id"
 }
 
 
@@ -27,7 +30,9 @@ def _reject_custom_fields_with_managed_endpoint(
 ) -> None:
     if getattr(model, "storage_endpoint_id", None) is None:
         return
-    conflicting = sorted(_CUSTOM_ENDPOINT_FIELDS & model.model_fields_set)
+    conflicting = sorted(
+        S3_CONNECTION_CUSTOM_ENDPOINT_FIELDS & model.model_fields_set
+    )
     if conflicting:
         raise ValueError(
             f"{scope} custom endpoint fields cannot be combined with storage_endpoint_id"

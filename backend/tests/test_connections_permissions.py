@@ -233,7 +233,7 @@ def test_manual_connection_creation_supports_direct_free_url_and_group_registere
         lambda _service, row: setattr(row, "capabilities_json", '{"can_manage_iam":false}'),
     )
     monkeypatch.setattr(
-        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        "app.services.s3_connection_endpoint_planner.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value.rstrip("/"),
     )
 
