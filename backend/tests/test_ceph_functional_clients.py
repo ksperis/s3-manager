@@ -69,6 +69,7 @@ def test_backend_authenticator_uses_cookie_session_origin_and_csrf(monkeypatch):
     assert fake_session.login_call["headers"]["Origin"] == "http://127.0.0.1:8765"
     assert "Authorization" not in fake_session.headers
     assert fake_session.headers["Origin"] == "http://127.0.0.1:8765"
+    assert fake_session.headers["X-S3-Workspace"] == "manager-browser"
     assert fake_session.request_call is not None
     assert fake_session.request_call["headers"]["X-CSRF-Token"] == "csrf-value"
 

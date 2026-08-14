@@ -61,7 +61,16 @@ def _grant_account_root_access(
     user_id: int,
     account_id: int,
 ) -> None:
-    user = admin_session.get(f"/admin/users/{user_id}")
+    users = admin_session.get(
+        "/admin/users",
+        params={"page": 1, "page_size": 200},
+    )
+    user = next(
+        (item for item in users.get("items", []) if int(item.get("id") or 0) == user_id),
+        None,
+    )
+    if user is None:
+        raise AssertionError(f"Unable to find UI user {user_id} while granting account access")
     account_links = [
         {
             "account_id": int(link["account_id"]),

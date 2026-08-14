@@ -243,6 +243,45 @@ def _select_storage_endpoint(
     )
 
 
+def _grant_account_access_to_user(
+    super_admin_session: BackendSession,
+    *,
+    user_id: int,
+    account_id: int,
+) -> None:
+    users = super_admin_session.get(
+        "/admin/users",
+        params={"page": 1, "page_size": 200},
+    )
+    user = next(
+        (item for item in users.get("items", []) if int(item.get("id") or 0) == user_id),
+        None,
+    )
+    if user is None:
+        raise AssertionError(f"Unable to find UI user {user_id} while granting account access")
+    account_links = [
+        {
+            "account_id": int(link["account_id"]),
+            "role": link["role"],
+            "allow_manager_browser_data_access": bool(link.get("allow_manager_browser_data_access")),
+        }
+        for link in user.get("account_links", [])
+        if int(link["account_id"]) != account_id
+    ]
+    account_links.append(
+        {
+            "account_id": account_id,
+            "role": "account_administrator",
+            "allow_manager_browser_data_access": True,
+        }
+    )
+    super_admin_session.put(
+        f"/admin/users/{user_id}",
+        json={"account_links": account_links},
+        expected_status=200,
+    )
+
+
 @pytest.fixture(scope="session")
 def storage_endpoint_id(
     super_admin_session: BackendSession,
@@ -293,6 +332,27 @@ def _provision_account(
     )
     account_id = int(created_account["id"])
     resource_tracker.track_account(account_id, rgw_account_id=created_account.get("rgw_account_id"))
+
+    super_admin_users = super_admin_session.get(
+        "/admin/users",
+        params={"page": 1, "page_size": 200, "search": ceph_test_settings.super_admin_email},
+    )
+    super_admin_user = next(
+        (
+            item
+            for item in super_admin_users.get("items", [])
+            if str(item.get("email") or "").strip().lower()
+            == ceph_test_settings.super_admin_email.strip().lower()
+        ),
+        None,
+    )
+    if super_admin_user is None:
+        raise AssertionError("Unable to find the Ceph functional superadmin user")
+    _grant_account_access_to_user(
+        super_admin_session,
+        user_id=int(super_admin_user["id"]),
+        account_id=account_id,
+    )
 
     manager_email = f"{ceph_test_settings.test_prefix}.manager.{_rand_suffix(6)}@example.com"
     manager_password = f"Test-{_rand_suffix(10)}"

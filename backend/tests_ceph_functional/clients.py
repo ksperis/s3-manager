@@ -55,6 +55,7 @@ class BackendSession:
             {
                 "Accept": "application/json",
                 "Origin": self.request_origin,
+                "X-S3-Workspace": "manager-browser",
             }
         )
 

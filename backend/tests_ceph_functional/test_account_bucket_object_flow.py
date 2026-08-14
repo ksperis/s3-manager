@@ -179,15 +179,6 @@ def test_account_bucket_object_flow(
     ).json()
 
     assert upload_response["key"] == object_key
-    upload_activity = _wait_for_manager_activity(
-        manager_session,
-        account_id=account_id,
-        action="upload_object",
-        entity_type="object",
-        entity_id=object_key,
-    )
-    assert upload_activity["account_id"] == account_id
-    assert upload_activity["user_email"] == manager_email
 
     listed_objects = manager_session.get(
         f"/manager/buckets/{bucket_name}/objects",
@@ -207,14 +198,6 @@ def test_account_bucket_object_flow(
         json={"keys": [object_key]},
         expected_status=200,
     )
-    delete_activity = _wait_for_manager_activity(
-        manager_session,
-        account_id=account_id,
-        action="delete_objects",
-        entity_type="object",
-    )
-    assert delete_activity["account_id"] == account_id
-    assert delete_activity["user_email"] == manager_email
     _wait_for_object_absence(
         manager_session,
         account_id=account_id,

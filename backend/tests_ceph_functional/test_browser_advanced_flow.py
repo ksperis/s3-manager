@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import time
 from typing import Any
-import uuid
 
 import pytest
 
@@ -212,122 +211,19 @@ def _get_ceph_endpoint_info(
     return None
 
 
-def _select_ceph_browser_endpoint(session: BackendSession) -> dict[str, Any]:
-    endpoints = session.get("/ceph-admin/endpoints")
-    if not isinstance(endpoints, list) or not endpoints:
-        pytest.skip("Browser object settings tests require at least one configured Ceph endpoint.")
-    default_endpoint = next((item for item in endpoints if bool((item or {}).get("is_default"))), None)
-    selected = default_endpoint or endpoints[0]
-    endpoint_id = selected.get("id")
-    if endpoint_id is None:
-        pytest.skip("Browser object settings tests require a Ceph endpoint with an id.")
-    return selected
-
-
-def _create_browser_connection_context(
-    super_admin_session: BackendSession,
-    backend_authenticator,
-    ceph_test_settings: CephTestSettings,
-) -> dict[str, Any]:
-    if not ceph_test_settings.rgw_admin_access_key or not ceph_test_settings.rgw_admin_secret_key:
-        pytest.skip("Browser object settings tests require S3 credentials in backend/.env.")
-
-    endpoint = _select_ceph_browser_endpoint(super_admin_session)
-    suffix = uuid.uuid4().hex[:8]
-    manager_email = f"{ceph_test_settings.test_prefix}.browser.{suffix}@example.com"
-    manager_password = f"Test-{uuid.uuid4().hex[:12]}"
-
-    created_user = super_admin_session.post(
-        "/admin/users",
-        json={
-            "email": manager_email,
-            "password": manager_password,
-            "full_name": "Ceph Functional Browser User",
-            "role": "ui_user",
-        },
-        expected_status=201,
-    )
-    user_id = int(created_user["id"])
-
-    created_connection = super_admin_session.post(
-        "/admin/s3-connections",
-        json={
-            "name": f"{ceph_test_settings.test_prefix}-browser-conn-{suffix}",
-            "storage_endpoint_id": int(endpoint["id"]),
-            "access_key_id": ceph_test_settings.rgw_admin_access_key,
-            "secret_access_key": ceph_test_settings.rgw_admin_secret_key,
-        },
-        expected_status=201,
-    )
-    connection_id = int(created_connection["id"])
-    super_admin_session.post(
-        f"/admin/s3-connections/{connection_id}/users",
-        json={"user_id": user_id},
-        expected_status=201,
-    )
-
-    manager_session = backend_authenticator.login(manager_email, manager_password)
-    return {
-        "manager_session": manager_session,
-        "account_ref": f"conn-{connection_id}",
-        "connection_id": connection_id,
-        "user_id": user_id,
-        "endpoint_id": int(endpoint["id"]),
-    }
-
-
-def _delete_with_retry(
-    session: BackendSession,
-    path: str,
-    *,
-    expected_status: int | tuple[int, ...],
-    attempts: int = 5,
-) -> None:
-    for attempt in range(1, attempts + 1):
-        try:
-            session.delete(path, expected_status=expected_status)
-            return
-        except BackendAPIError as exc:
-            payload_text = str(exc.payload).lower() if exc.payload is not None else ""
-            if attempt < attempts and exc.status_code == 500 and "database is locked" in payload_text:
-                time.sleep(0.4 * attempt)
-                continue
-            raise
-
-
-def _cleanup_browser_connection_context(
-    super_admin_session: BackendSession,
-    context: dict[str, Any],
-) -> None:
-    manager_session: BackendSession = context["manager_session"]
-    manager_session.session.close()
-    _delete_with_retry(
-        super_admin_session,
-        f"/admin/s3-connections/{int(context['connection_id'])}",
-        expected_status=(204, 404),
-    )
-    _delete_with_retry(
-        super_admin_session,
-        f"/admin/users/{int(context['user_id'])}",
-        expected_status=(204, 404),
-    )
-
-
 def test_browser_object_properties_roundtrip_flow(
     ceph_test_settings: CephTestSettings,
     super_admin_session: BackendSession,
-    backend_authenticator,
+    provisioned_account,
+    resource_tracker: ResourceTracker,
+    storage_endpoint_id: int,
 ) -> None:
-    context = _create_browser_connection_context(
-        super_admin_session,
-        backend_authenticator,
-        ceph_test_settings,
-    )
-    manager_session: BackendSession = context["manager_session"]
-    account_id = context["account_ref"]
+    manager_session: BackendSession = provisioned_account.manager_session
+    account_id = provisioned_account.account_id
 
     bucket_name = _bucket_name(ceph_test_settings.test_prefix, "browser-object-properties")
     _create_bucket(manager_session, account_id, bucket_name, versioning=False)
+    resource_tracker.track_bucket(account_id, bucket_name)
 
     object_key = "properties/object-settings.txt"
     object_payload = b"browser properties roundtrip payload"
@@ -335,7 +231,7 @@ def test_browser_object_properties_roundtrip_flow(
     expected_metadata = {"owner": "qa", "purpose": "properties"}
     expected_tags = {"env": "ceph", "flow": "properties"}
     expected_expires = (datetime.now(timezone.utc) + timedelta(days=3)).replace(microsecond=0)
-    endpoint_info = _get_ceph_endpoint_info(super_admin_session, int(context["endpoint_id"]))
+    endpoint_info = _get_ceph_endpoint_info(super_admin_session, storage_endpoint_id)
 
     try:
         _upload_bytes(
@@ -464,32 +360,20 @@ def test_browser_object_properties_roundtrip_flow(
             _delete_object(manager_session, account_id, bucket_name, object_key)
         except BackendAPIError:
             pass
-        try:
-            manager_session.delete(
-                f"/manager/buckets/{bucket_name}",
-                params={"account_id": account_id, "force": "true"},
-                expected_status=(200, 404),
-            )
-        except BackendAPIError:
-            pass
-        _cleanup_browser_connection_context(super_admin_session, context)
+        _delete_bucket(manager_session, resource_tracker, account_id, bucket_name)
 
 
 def test_browser_object_access_and_protection_roundtrip_flow(
     ceph_test_settings: CephTestSettings,
-    super_admin_session: BackendSession,
-    backend_authenticator,
+    provisioned_account,
+    resource_tracker: ResourceTracker,
 ) -> None:
-    context = _create_browser_connection_context(
-        super_admin_session,
-        backend_authenticator,
-        ceph_test_settings,
-    )
-    manager_session: BackendSession = context["manager_session"]
-    account_id = context["account_ref"]
+    manager_session: BackendSession = provisioned_account.manager_session
+    account_id = provisioned_account.account_id
 
     bucket_name = _bucket_name(ceph_test_settings.test_prefix, "browser-object-protection")
     _create_bucket(manager_session, account_id, bucket_name, versioning=True)
+    resource_tracker.track_bucket(account_id, bucket_name)
 
     object_key = "protection/object-lock.txt"
     object_payload = b"browser access and protection payload"
@@ -660,15 +544,7 @@ def test_browser_object_access_and_protection_roundtrip_flow(
             _delete_all_object_versions(manager_session, account_id, bucket_name, object_key)
         except BackendAPIError:
             pass
-        try:
-            manager_session.delete(
-                f"/manager/buckets/{bucket_name}",
-                params={"account_id": account_id, "force": "true"},
-                expected_status=(200, 404),
-            )
-        except BackendAPIError:
-            pass
-        _cleanup_browser_connection_context(super_admin_session, context)
+        _delete_bucket(manager_session, resource_tracker, account_id, bucket_name)
 
 
 def test_browser_versions_cleanup_flow(

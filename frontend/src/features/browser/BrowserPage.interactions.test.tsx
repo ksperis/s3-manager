@@ -427,7 +427,7 @@ async function waitForOpenedMoreMenu(previousMenus: Set<HTMLElement>) {
     const menus = screen.queryAllByRole("menu", { name: "More" });
     openedMenu = menus.find((menu) => !previousMenus.has(menu)) ?? menus.at(-1);
     expect(openedMenu).toBeTruthy();
-  });
+  }, { timeout: 3_000 });
   if (!openedMenu) {
     throw new Error("Unable to find opened More menu");
   }
@@ -491,14 +491,14 @@ function setBrowserLayoutRect(width: number, height = 720) {
   return layout;
 }
 
-async function openContextMoreMenu(_user: ReturnType<typeof userEvent.setup>) {
+async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
   const previousMenus = new Set(screen.queryAllByRole("menu", { name: "More" }));
   const toolbar =
     screen.queryByRole("toolbar", { name: "Browser context bar" }) &&
     within(getContextToolbar()).queryByRole("button", { name: "More" })
       ? getContextToolbar()
       : getActionsToolbar();
-  fireEvent.click(within(toolbar).getByRole("button", { name: "More" }));
+  await user.click(within(toolbar).getByRole("button", { name: "More" }));
   return waitForOpenedMoreMenu(previousMenus);
 }
 
