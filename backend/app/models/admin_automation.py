@@ -23,8 +23,11 @@ class StorageEndpointMatch(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "StorageEndpointMatch":
-        if not (self.id or self.name or self.endpoint_url):
-            raise ValueError("storage_endpoints.match requires id, name, or endpoint_url")
+        selectors = (self.id is not None, bool(self.name), bool(self.endpoint_url))
+        if sum(selectors) != 1:
+            raise ValueError(
+                "storage_endpoints.match requires exactly one of id, name, or endpoint_url"
+            )
         return self
 
 

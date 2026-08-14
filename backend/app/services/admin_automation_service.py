@@ -9,8 +9,6 @@ from sqlalchemy.orm import Session
 from app.db import (
     S3Account,
     S3User,
-    StorageEndpoint,
-    StorageProvider,
     UiGroupS3User,
     User,
     UserS3Account,
@@ -24,13 +22,18 @@ from app.models.admin_automation import (
     AccountLinkApply,
     S3AccountApply,
     S3UserApply,
-    StorageEndpointApply,
 )
 from app.models.s3_account import S3AccountCreate, S3AccountUpdate
 from app.models.s3_user import S3UserCreate, S3UserUpdate
-from app.models.storage_endpoint import StorageEndpointCreate, StorageEndpointUpdate
 from app.services.admin_automation_connection_handler import AdminAutomationConnectionHandler
 from app.services.admin_automation_results import AdminAutomationResultFactory
+from app.services.admin_automation_storage_endpoint_handler import (
+    AdminAutomationStorageEndpointHandler,
+)
+from app.services.admin_automation_storage_endpoint_resolver import (
+    require_ceph_endpoint,
+    resolve_storage_endpoint,
+)
 from app.services.admin_automation_ui_user_handler import AdminAutomationUiUserHandler
 from app.services.audit_service import AuditService
 from app.services.mappers.s3_connection import mask_access_key_id
@@ -40,17 +43,18 @@ from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_users_service import S3UsersService
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.users_service import UsersService
-from app.utils.normalize import normalize_optional_string, normalize_storage_provider
+from app.utils.normalize import normalize_optional_string
 from app.utils.quota_stats import bytes_to_gb
-from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.size_units import size_to_bytes
-from app.utils.storage_endpoint_features import dump_features_config, normalize_features_config
 
 
 class AdminAutomationService(AdminAutomationResultFactory):
     def __init__(self, db: Session) -> None:
         self.db = db
-        self.storage_endpoints = StorageEndpointsService(db)
+        self.storage_endpoint_handler = AdminAutomationStorageEndpointHandler(
+            db,
+            StorageEndpointsService(db),
+        )
         self.users = UsersService(db)
         self.ui_user_handler = AdminAutomationUiUserHandler(db, self.users)
         self.s3_accounts = S3AccountsService(db)
@@ -88,7 +92,14 @@ class AdminAutomationService(AdminAutomationResultFactory):
             return summary.failed > 0 and not continue_on_error
 
         for item in payload.storage_endpoints:
-            record(self._apply_storage_endpoint(item, payload.dry_run, current_user, audit_service))
+            record(
+                self.storage_endpoint_handler.apply(
+                    item,
+                    payload.dry_run,
+                    current_user,
+                    audit_service,
+                )
+            )
             if should_stop():
                 break
 
@@ -130,105 +141,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             summary=summary,
             results=results,
         )
-
-    def _apply_storage_endpoint(
-        self,
-        item: StorageEndpointApply,
-        dry_run: bool,
-        current_user: User,
-        audit_service: AuditService,
-    ) -> AdminAutomationItemResult:
-        key = self._storage_endpoint_key(item)
-        try:
-            endpoint = self._find_storage_endpoint(item)
-            if item.state == "absent":
-                if not endpoint:
-                    return self._skipped("storage_endpoint", key, dry_run=dry_run)
-                if dry_run:
-                    return self._deleted("storage_endpoint", key, endpoint.id, dry_run=dry_run)
-                self.storage_endpoints.delete_endpoint(endpoint.id)
-                audit_service.record_action(
-                    user=current_user,
-                    scope="admin",
-                    action="delete_storage_endpoint",
-                    entity_type="storage_endpoint",
-                    entity_id=str(endpoint.id),
-                )
-                return self._deleted("storage_endpoint", key, endpoint.id, dry_run=dry_run)
-
-            spec = item.spec
-            if not endpoint:
-                if not spec:
-                    raise ValueError("storage_endpoints.spec is required to create a new endpoint")
-                payload = self._build_storage_endpoint_create(item, spec)
-                if dry_run:
-                    return self._created("storage_endpoint", key, dry_run=dry_run)
-                created = self.storage_endpoints.create_endpoint(payload)
-                if spec.set_default:
-                    self.storage_endpoints.set_default_endpoint(created.id)
-                audit_service.record_action(
-                    user=current_user,
-                    scope="admin",
-                    action="create_storage_endpoint",
-                    entity_type="storage_endpoint",
-                    entity_id=str(created.id),
-                    metadata={
-                        "endpoint_url": created.endpoint_url,
-                        "provider": created.provider.value,
-                        "admin_endpoint": created.admin_endpoint,
-                        "verify_tls": created.verify_tls,
-                    },
-                )
-                return self._created("storage_endpoint", key, created.id, dry_run=dry_run)
-
-            diff = self._diff_storage_endpoint(endpoint, item)
-            if not diff:
-                if spec and spec.set_default and not endpoint.is_default:
-                    if dry_run:
-                        return self._updated("storage_endpoint", key, endpoint.id, {"is_default": {"from": False, "to": True}}, dry_run=dry_run)
-                    updated = self.storage_endpoints.set_default_endpoint(endpoint.id)
-                    audit_service.record_action(
-                        user=current_user,
-                        scope="admin",
-                        action="set_default_storage_endpoint",
-                        entity_type="storage_endpoint",
-                        entity_id=str(updated.id),
-                        metadata={
-                            "endpoint_url": updated.endpoint_url,
-                            "provider": updated.provider.value,
-                        },
-                    )
-                    return self._updated(
-                        "storage_endpoint",
-                        key,
-                        endpoint.id,
-                        {"is_default": {"from": False, "to": True}},
-                        dry_run=dry_run,
-                    )
-                return self._skipped("storage_endpoint", key, dry_run=dry_run)
-
-            if dry_run:
-                return self._updated("storage_endpoint", key, endpoint.id, diff, dry_run=dry_run)
-            update_payload = self._build_storage_endpoint_update(item, item.spec)
-            updated = self.storage_endpoints.update_endpoint(endpoint.id, update_payload)
-            if item.spec and item.spec.set_default and not updated.is_default:
-                updated = self.storage_endpoints.set_default_endpoint(updated.id)
-            audit_service.record_action(
-                user=current_user,
-                scope="admin",
-                action="update_storage_endpoint",
-                entity_type="storage_endpoint",
-                entity_id=str(endpoint.id),
-                metadata={
-                    "endpoint_url": updated.endpoint_url,
-                    "provider": updated.provider.value,
-                    "admin_endpoint": updated.admin_endpoint,
-                    "verify_tls": updated.verify_tls,
-                },
-            )
-            return self._updated("storage_endpoint", key, endpoint.id, diff, dry_run=dry_run)
-        except Exception as exc:  # noqa: BLE001
-            return self._failed("storage_endpoint", key, exc, dry_run=dry_run)
 
     def _apply_s3_account(
         self,
@@ -279,10 +191,15 @@ class AdminAutomationService(AdminAutomationResultFactory):
                 name = spec.name or item.match.name
                 if not name:
                     raise ValueError("s3_accounts.spec.name is required to create a new account")
-                endpoint = self._resolve_storage_endpoint(spec.storage_endpoint_id, spec.storage_endpoint_name, spec.storage_endpoint_url)
+                endpoint = resolve_storage_endpoint(
+                    self.db,
+                    endpoint_id=spec.storage_endpoint_id,
+                    endpoint_name=spec.storage_endpoint_name,
+                    endpoint_url=spec.storage_endpoint_url,
+                )
                 if endpoint is None:
                     raise ValueError("storage_endpoint_id/name/url is required to create an account")
-                self._require_ceph_endpoint(endpoint)
+                require_ceph_endpoint(endpoint)
                 if dry_run:
                     return self._created("s3_account", key, dry_run=dry_run)
                 created = self.s3_accounts.create_account_with_manager(
@@ -380,7 +297,12 @@ class AdminAutomationService(AdminAutomationResultFactory):
                 if not name:
                     raise ValueError("s3_users.spec.name is required to create a new S3 user")
                 uid = spec.uid or item.match.uid
-                endpoint = self._resolve_storage_endpoint(spec.storage_endpoint_id, spec.storage_endpoint_name, spec.storage_endpoint_url)
+                endpoint = resolve_storage_endpoint(
+                    self.db,
+                    endpoint_id=spec.storage_endpoint_id,
+                    endpoint_name=spec.storage_endpoint_name,
+                    endpoint_url=spec.storage_endpoint_url,
+                )
                 if not endpoint:
                     raise ValueError("storage_endpoint_id/name/url is required to create an S3 user")
                 if dry_run:
@@ -530,84 +452,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
         except Exception as exc:  # noqa: BLE001
             return self._failed("account_link", key, exc, dry_run=dry_run)
 
-    def _diff_storage_endpoint(
-        self,
-        endpoint: StorageEndpoint,
-        item: StorageEndpointApply,
-    ) -> dict[str, dict[str, Any]]:
-        spec = item.spec
-        if not spec:
-            return {}
-        diff: dict[str, dict[str, Any]] = {}
-        fields_set = spec.model_fields_set
-        if "name" in fields_set:
-            desired = normalize_optional_string(spec.name) or endpoint.name
-            if desired != endpoint.name:
-                diff["name"] = {"from": endpoint.name, "to": desired}
-        if "endpoint_url" in fields_set:
-            desired = normalize_s3_endpoint(spec.endpoint_url)
-            current = normalize_s3_endpoint(endpoint.endpoint_url)
-            if desired != current:
-                diff["endpoint_url"] = {"from": current, "to": desired}
-        if "region" in fields_set:
-            desired = normalize_optional_string(spec.region)
-            if desired != normalize_optional_string(endpoint.region):
-                diff["region"] = {"from": endpoint.region, "to": desired}
-        if "force_path_style" in fields_set and spec.force_path_style is not None:
-            desired_force_path_style = bool(spec.force_path_style)
-            current_force_path_style = bool(getattr(endpoint, "force_path_style", False))
-            if desired_force_path_style != current_force_path_style:
-                diff["force_path_style"] = {"from": current_force_path_style, "to": desired_force_path_style}
-        if "verify_tls" in fields_set and spec.verify_tls is not None:
-            desired_verify_tls = bool(spec.verify_tls)
-            current_verify_tls = bool(getattr(endpoint, "verify_tls", True))
-            if desired_verify_tls != current_verify_tls:
-                diff["verify_tls"] = {"from": current_verify_tls, "to": desired_verify_tls}
-        if "provider" in fields_set:
-            desired = normalize_storage_provider(spec.provider).value
-            if desired != str(endpoint.provider):
-                diff["provider"] = {"from": endpoint.provider, "to": desired}
-        if "features_config" in fields_set:
-            provider = normalize_storage_provider(spec.provider if "provider" in fields_set else endpoint.provider)
-            desired_region = spec.region if "region" in fields_set else endpoint.region
-            desired_features = dump_features_config(
-                normalize_features_config(provider, spec.features_config, desired_region)
-            )
-            current_features = dump_features_config(
-                normalize_features_config(provider, endpoint.features_config, endpoint.region)
-            )
-            if desired_features != current_features:
-                diff["features_config"] = {"from": current_features, "to": desired_features}
-        if item.update_secrets:
-            if "admin_access_key" in fields_set:
-                desired = normalize_optional_string(spec.admin_access_key)
-                if desired != normalize_optional_string(endpoint.admin_access_key):
-                    diff["admin_access_key"] = {
-                        "from": mask_access_key_id(endpoint.admin_access_key),
-                        "to": mask_access_key_id(desired),
-                    }
-            if "admin_secret_key" in fields_set:
-                diff["admin_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
-            if "supervision_access_key" in fields_set:
-                desired = normalize_optional_string(spec.supervision_access_key)
-                if desired != normalize_optional_string(endpoint.supervision_access_key):
-                    diff["supervision_access_key"] = {
-                        "from": mask_access_key_id(endpoint.supervision_access_key),
-                        "to": mask_access_key_id(desired),
-                    }
-            if "supervision_secret_key" in fields_set:
-                diff["supervision_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
-            if "ceph_admin_access_key" in fields_set:
-                desired = normalize_optional_string(spec.ceph_admin_access_key)
-                if desired != normalize_optional_string(endpoint.ceph_admin_access_key):
-                    diff["ceph_admin_access_key"] = {
-                        "from": mask_access_key_id(endpoint.ceph_admin_access_key),
-                        "to": mask_access_key_id(desired),
-                    }
-            if "ceph_admin_secret_key" in fields_set:
-                diff["ceph_admin_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
-        return diff
-
     def _diff_s3_account(self, account: S3Account, item: S3AccountApply) -> dict[str, dict[str, Any]]:
         spec = item.spec
         if not spec:
@@ -623,10 +467,11 @@ class AdminAutomationService(AdminAutomationResultFactory):
             if desired != normalize_optional_string(account.email):
                 diff["email"] = {"from": account.email, "to": desired}
         if {"storage_endpoint_id", "storage_endpoint_name", "storage_endpoint_url"} & fields_set:
-            endpoint = self._resolve_storage_endpoint(
-                spec.storage_endpoint_id,
-                spec.storage_endpoint_name,
-                spec.storage_endpoint_url,
+            endpoint = resolve_storage_endpoint(
+                self.db,
+                endpoint_id=spec.storage_endpoint_id,
+                endpoint_name=spec.storage_endpoint_name,
+                endpoint_url=spec.storage_endpoint_url,
             )
             desired_id = endpoint.id if endpoint else None
             if desired_id != account.storage_endpoint_id:
@@ -668,10 +513,11 @@ class AdminAutomationService(AdminAutomationResultFactory):
             if desired != normalize_optional_string(s3_user.email):
                 diff["email"] = {"from": s3_user.email, "to": desired}
         if {"storage_endpoint_id", "storage_endpoint_name", "storage_endpoint_url"} & fields_set:
-            endpoint = self._resolve_storage_endpoint(
-                spec.storage_endpoint_id,
-                spec.storage_endpoint_name,
-                spec.storage_endpoint_url,
+            endpoint = resolve_storage_endpoint(
+                self.db,
+                endpoint_id=spec.storage_endpoint_id,
+                endpoint_name=spec.storage_endpoint_name,
+                endpoint_url=spec.storage_endpoint_url,
             )
             if endpoint is None or endpoint.id != s3_user.storage_endpoint_id:
                 raise ValueError("Storage endpoint cannot be changed for an existing S3 user")
@@ -699,41 +545,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
                 diff["user_ids"] = {"from": current_ids, "to": desired_ids}
         return diff
 
-    def _build_storage_endpoint_create(self, item: StorageEndpointApply, spec) -> StorageEndpointCreate:
-        name = normalize_optional_string(spec.name or item.match.name) or "Endpoint"
-        endpoint_url = normalize_s3_endpoint(spec.endpoint_url or item.match.endpoint_url)
-        if not endpoint_url:
-            raise ValueError("storage_endpoints.spec.endpoint_url is required to create a new endpoint")
-        return StorageEndpointCreate(
-            name=name,
-            endpoint_url=endpoint_url,
-            region=normalize_optional_string(spec.region),
-            force_path_style=bool(spec.force_path_style if spec.force_path_style is not None else False),
-            verify_tls=bool(spec.verify_tls if spec.verify_tls is not None else True),
-            provider=spec.provider or StorageProvider.CEPH,
-            admin_access_key=spec.admin_access_key,
-            admin_secret_key=spec.admin_secret_key,
-            supervision_access_key=spec.supervision_access_key,
-            supervision_secret_key=spec.supervision_secret_key,
-            ceph_admin_access_key=spec.ceph_admin_access_key,
-            ceph_admin_secret_key=spec.ceph_admin_secret_key,
-            features_config=spec.features_config,
-        )
-
-    def _build_storage_endpoint_update(self, item: StorageEndpointApply, spec) -> StorageEndpointUpdate:
-        if not spec:
-            return StorageEndpointUpdate()
-        payload = spec.model_dump(exclude_unset=True)
-        if not item.update_secrets:
-            payload.pop("admin_access_key", None)
-            payload.pop("admin_secret_key", None)
-            payload.pop("supervision_access_key", None)
-            payload.pop("supervision_secret_key", None)
-            payload.pop("ceph_admin_access_key", None)
-            payload.pop("ceph_admin_secret_key", None)
-        payload.pop("set_default", None)
-        return StorageEndpointUpdate(**payload)
-
     def _build_s3_account_update(self, item: S3AccountApply) -> S3AccountUpdate:
         spec = item.spec
         if not spec:
@@ -745,10 +556,11 @@ class AdminAutomationService(AdminAutomationResultFactory):
         payload.pop("rgw_secret_key", None)
         payload.pop("storage_endpoint_name", None)
         payload.pop("storage_endpoint_url", None)
-        endpoint = self._resolve_storage_endpoint(
-            spec.storage_endpoint_id,
-            spec.storage_endpoint_name,
-            spec.storage_endpoint_url,
+        endpoint = resolve_storage_endpoint(
+            self.db,
+            endpoint_id=spec.storage_endpoint_id,
+            endpoint_name=spec.storage_endpoint_name,
+            endpoint_url=spec.storage_endpoint_url,
         )
         if endpoint:
             payload["storage_endpoint_id"] = endpoint.id
@@ -766,39 +578,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
         payload.pop("storage_endpoint_url", None)
         return S3UserUpdate(**payload)
 
-    def _resolve_storage_endpoint(
-        self,
-        endpoint_id: Optional[int],
-        endpoint_name: Optional[str],
-        endpoint_url: Optional[str],
-    ) -> Optional[StorageEndpoint]:
-        if endpoint_id is not None:
-            endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
-            if not endpoint:
-                raise ValueError("Storage endpoint not found")
-            return endpoint
-        if endpoint_name:
-            endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.name == endpoint_name).first()
-            if not endpoint:
-                raise ValueError("Storage endpoint not found")
-            return endpoint
-        if endpoint_url:
-            normalized = normalize_s3_endpoint(endpoint_url)
-            endpoint = (
-                self.db.query(StorageEndpoint)
-                .filter(StorageEndpoint.endpoint_url == normalized)
-                .first()
-            )
-            if not endpoint:
-                raise ValueError("Storage endpoint not found")
-            return endpoint
-        return None
-
-    def _require_ceph_endpoint(self, endpoint: StorageEndpoint) -> None:
-        provider = normalize_storage_provider(endpoint.provider)
-        if provider != StorageProvider.CEPH:
-            raise ValueError("This endpoint is not a Ceph endpoint")
-
     def _register_s3_account(self, item: S3AccountApply, spec, dry_run: bool) -> S3Account:
         name = spec.name or item.match.name
         if not name:
@@ -810,14 +589,15 @@ class AdminAutomationService(AdminAutomationResultFactory):
             raise ValueError("s3_accounts.spec.root_user_uid is required for register action")
         if not spec.rgw_access_key or not spec.rgw_secret_key:
             raise ValueError("s3_accounts.spec.rgw_access_key and rgw_secret_key are required for register action")
-        endpoint = self._resolve_storage_endpoint(
-            spec.storage_endpoint_id,
-            spec.storage_endpoint_name,
-            spec.storage_endpoint_url,
+        endpoint = resolve_storage_endpoint(
+            self.db,
+            endpoint_id=spec.storage_endpoint_id,
+            endpoint_name=spec.storage_endpoint_name,
+            endpoint_url=spec.storage_endpoint_url,
         )
         if not endpoint:
             raise ValueError("storage_endpoint_id/name/url is required for register action")
-        self._require_ceph_endpoint(endpoint)
+        require_ceph_endpoint(endpoint)
         if self.db.query(S3Account).filter(S3Account.name == name).first():
             raise ValueError("S3Account already exists")
         if self.db.query(S3Account).filter(S3Account.rgw_account_id == rgw_account_id).first():
@@ -863,14 +643,15 @@ class AdminAutomationService(AdminAutomationResultFactory):
             raise ValueError("s3_users.spec.uid is required for register action")
         if not spec.rgw_access_key or not spec.rgw_secret_key:
             raise ValueError("s3_users.spec.rgw_access_key and rgw_secret_key are required for register action")
-        endpoint = self._resolve_storage_endpoint(
-            spec.storage_endpoint_id,
-            spec.storage_endpoint_name,
-            spec.storage_endpoint_url,
+        endpoint = resolve_storage_endpoint(
+            self.db,
+            endpoint_id=spec.storage_endpoint_id,
+            endpoint_name=spec.storage_endpoint_name,
+            endpoint_url=spec.storage_endpoint_url,
         )
         if not endpoint:
             raise ValueError("storage_endpoint_id/name/url is required for register action")
-        self._require_ceph_endpoint(endpoint)
+        require_ceph_endpoint(endpoint)
         if self.db.query(S3User).filter(S3User.rgw_user_uid == uid).first():
             raise ValueError("S3 user already exists")
         if dry_run:
@@ -932,17 +713,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             s3_user.rgw_secret_key = spec.rgw_secret_key
         self.db.add(s3_user)
         self.db.commit()
-
-    def _find_storage_endpoint(self, item: StorageEndpointApply) -> Optional[StorageEndpoint]:
-        match = item.match
-        if match.id is not None:
-            return self.db.query(StorageEndpoint).filter(StorageEndpoint.id == match.id).first()
-        if match.endpoint_url:
-            normalized = normalize_s3_endpoint(match.endpoint_url)
-            return self.db.query(StorageEndpoint).filter(StorageEndpoint.endpoint_url == normalized).first()
-        if match.name:
-            return self.db.query(StorageEndpoint).filter(StorageEndpoint.name == match.name).first()
-        return None
 
     def _find_s3_account(self, item: S3AccountApply) -> Optional[S3Account]:
         match = item.match
@@ -1006,13 +776,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             .all()
         )
         return sorted([row[0] for row in rows])
-
-    def _storage_endpoint_key(self, item: StorageEndpointApply) -> str:
-        if item.match.endpoint_url:
-            return f"endpoint_url={item.match.endpoint_url}"
-        if item.match.name:
-            return f"name={item.match.name}"
-        return f"id={item.match.id}"
 
     def _s3_account_key(self, item: S3AccountApply) -> str:
         if item.match.name:
