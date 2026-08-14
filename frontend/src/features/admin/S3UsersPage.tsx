@@ -934,6 +934,11 @@ export default function S3UsersPage() {
             </UiInlineMessage>
           )}
           <form onSubmit={submitCreate} className="space-y-4">
+            <WorkflowSection
+              title="User details"
+              description="Define the RGW identity, endpoint, contact, and administrative tags."
+            >
+              <div className="grid gap-4 md:grid-cols-2">
                 <UiInput
                   label="Display name *"
                   value={createForm.name}
@@ -966,8 +971,15 @@ export default function S3UsersPage() {
                     </option>
                   ))}
                 </UiSelect>
+                <UiInput
+                  label="Email"
+                  type="email"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))}
+                  placeholder="user@example.com"
+                />
                 {createForm.storage_endpoint_id && (
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1 md:col-span-2">
                     {createPermissionLoading ? (
                       <PageBanner tone="info">Checking endpoint permissions...</PageBanner>
                     ) : createPermissionError ? (
@@ -981,61 +993,35 @@ export default function S3UsersPage() {
                     ) : null}
                   </div>
                 )}
-                <UiInput
-                  label="Email"
-                  type="email"
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))}
-                  placeholder="user@example.com"
-                />
-                <div className={cx("flex flex-col gap-2 px-3 py-2", uiPanelMutedClass)}>
-                  <div className="flex flex-col gap-1">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max size</label>
-                    <div className="flex gap-2">
-                      <UiInput
-                        aria-label="Quota max size"
-                        type="number"
-                        min={0}
-                        step="any"
-                        fieldClassName="w-full"
-                        value={createForm.quota_max_size_gb}
-                        onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
-                        placeholder="e.g. 500"
-                      />
-                      <UiSelect
-                        aria-label="Quota max size unit"
-                        value={createForm.quota_max_size_unit}
-                        onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
-                        disabled={!createForm.quota_max_size_gb}
-                      >
-                        {["MiB", "GiB", "TiB"].map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                      </UiSelect>
-                    </div>
-                  </div>
-                  <UiInput
-                    label="Quota max objects"
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={createForm.quota_max_objects}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
-                    placeholder="e.g. 1000000"
+                <div className="md:col-span-2">
+                  {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                  <UiTagEditor
+                    label="Tags"
+                    tags={createForm.tags}
+                    catalog={adminTagCatalog}
+                    onChange={(tags) => setCreateForm((prev) => ({ ...prev, tags }))}
+                    placeholder="Add a tag for this RGW user"
+                    hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
                   />
                 </div>
-            {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
-            <UiTagEditor
-              label="Tags"
-              tags={createForm.tags}
-              catalog={adminTagCatalog}
-              onChange={(tags) => setCreateForm((prev) => ({ ...prev, tags }))}
-              placeholder="Add a tag for this RGW user"
-              hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
+              </div>
+            </WorkflowSection>
+            <AdminQuotaFields
+              storageValue={createForm.quota_max_size_gb}
+              storageUnit={createForm.quota_max_size_unit}
+              objectValue={createForm.quota_max_objects}
+              disabled={false}
+              onStorageValueChange={(value) =>
+                setCreateForm((prev) => ({ ...prev, quota_max_size_gb: value }))
+              }
+              onStorageUnitChange={(value) =>
+                setCreateForm((prev) => ({ ...prev, quota_max_size_unit: value }))
+              }
+              onObjectValueChange={(value) =>
+                setCreateForm((prev) => ({ ...prev, quota_max_objects: value }))
+              }
             />
-            <div className="flex items-center justify-end gap-3">
+            <WorkflowActions>
               <UiButton variant="secondary" onClick={createCloseGuard.requestClose}>
                 Cancel
               </UiButton>
@@ -1045,7 +1031,7 @@ export default function S3UsersPage() {
               >
                 {creating ? "Creating..." : "Create user"}
               </UiButton>
-            </div>
+            </WorkflowActions>
             {createCloseGuard.confirmationDialog}
           </form>
         </Modal>

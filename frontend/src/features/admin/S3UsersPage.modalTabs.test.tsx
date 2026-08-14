@@ -477,6 +477,8 @@ describe("S3UsersPage modal tabs", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
     const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "User details" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "Quotas" })).toBeInTheDocument();
     const nameInput = dialog.querySelector("input[required]") as HTMLInputElement | null;
     if (!nameInput) {
       throw new Error("User name input not found");
@@ -485,9 +487,10 @@ describe("S3UsersPage modal tabs", () => {
     expect(within(dialog).getByLabelText("UID (optional)")).toHaveClass("ui-control");
     expect(within(dialog).getByLabelText("Ceph endpoint *")).toHaveClass("ui-control");
     expect(within(dialog).getByLabelText("Email")).toHaveClass("ui-control");
-    expect(within(dialog).getByLabelText("Quota max size")).toHaveClass("ui-control");
-    expect(within(dialog).getByLabelText("Quota max size unit")).toHaveClass("ui-control");
-    expect(within(dialog).getByLabelText("Quota max objects")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Storage quota")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Storage quota unit")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Object quota")).toHaveClass("ui-control");
+    expect(nameInput.closest(".grid")).toHaveClass("md:grid-cols-2");
     fireEvent.change(nameInput, { target: { value: "tagged-user" } });
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this RGW user" });
     fireEvent.change(tagInput, {
