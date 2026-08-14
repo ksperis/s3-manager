@@ -66,16 +66,18 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "setup",
+      retries: 0,
+      testMatch: "setup/**/*.setup.ts",
+    },
+    {
       name: "auth",
+      dependencies: ["setup"],
       testMatch: "auth/**/*.spec.ts",
       use: {
         browserName: "chromium",
         storageState: { cookies: [], origins: [] },
       },
-    },
-    {
-      name: "setup",
-      testMatch: "setup/**/*.setup.ts",
     },
     {
       name: "chromium",

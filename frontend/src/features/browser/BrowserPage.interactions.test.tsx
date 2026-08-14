@@ -1129,7 +1129,9 @@ describe("BrowserPage interactions", () => {
       }),
     );
 
-    expect(onVisibilityChange).toHaveBeenCalledWith(true);
+    await waitFor(() => {
+      expect(onVisibilityChange).toHaveBeenCalledWith(true);
+    });
   });
 
   it("keeps historical folders reachable after dense version pages in the Portal mixed view", async () => {
@@ -5395,9 +5397,11 @@ describe("BrowserPage interactions", () => {
 
     renderPage({ defaultShowInspector: true });
     const menu = await openContextMoreMenu(user);
-    await user.click(
-      within(menu).getByRole("menuitem", { name: "Clean old versions" }),
-    );
+    const cleanupMenuItem = within(menu).getByRole("menuitem", {
+      name: "Clean old versions",
+    });
+    await waitFor(() => expect(cleanupMenuItem).toBeEnabled());
+    await user.click(cleanupMenuItem);
 
     const modal = await screen.findByRole("dialog", { name: "Clean old versions" });
     await user.type(within(modal).getByPlaceholderText("e.g. 3"), "1");

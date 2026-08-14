@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  E2E_ADMIN_EMAIL,
-  E2E_ADMIN_PASSWORD,
+  E2E_AUTH_ADMIN_EMAIL,
+  E2E_AUTH_ADMIN_PASSWORD,
   E2E_FRONTEND_BASE_URL,
 } from "../helpers/config";
 
@@ -24,9 +24,12 @@ test("enrolls and reuses a verified passkey with cookie-only multi-tab revocatio
   });
 
   const primaryLogin = async () => {
-    await page.goto("/login");
-    await page.locator('input[type="email"]').fill(E2E_ADMIN_EMAIL);
-    await page.locator('input[type="password"]').fill(E2E_ADMIN_PASSWORD);
+    await page.goto("/login").catch((error: unknown) => {
+      if (!String(error).includes("ERR_ABORTED")) throw error;
+    });
+    await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
+    await page.locator('input[type="email"]').fill(E2E_AUTH_ADMIN_EMAIL);
+    await page.locator('input[type="password"]').fill(E2E_AUTH_ADMIN_PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
   };
   const logout = async () => {

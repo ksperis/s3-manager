@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { openBucket, openFolder } from "../helpers/browser";
+import { getFileButton, openBucket, openFolder } from "../helpers/browser";
 
 test("navigates to a seeded object and exposes metadata from Details", async ({
   page,
@@ -10,7 +10,7 @@ test("navigates to a seeded object and exposes metadata from Details", async ({
   await openFolder(page, "daily");
 
   const objectRow = page.locator("tr").filter({
-    has: page.getByRole("button", { name: "report-2026-03-08.json", exact: true }),
+    has: getFileButton(page, "report-2026-03-08.json"),
   });
   await objectRow.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menu").getByRole("button", { name: "Properties" }).click();

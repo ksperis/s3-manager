@@ -765,7 +765,8 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Create account" }));
     const createDialog = screen.getByRole("dialog", { name: "Create an account" });
-    expect(await within(createDialog).findByLabelText("Storage endpoint (Ceph) *")).toHaveValue("10");
+    const createEndpoint = await within(createDialog).findByLabelText("Storage endpoint (Ceph) *");
+    await waitFor(() => expect(createEndpoint).toHaveValue("10"));
     expect(within(createDialog).getByLabelText("Account name *")).toBeInTheDocument();
     fireEvent.click(within(createDialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog", { name: "Discard changes?" })).not.toBeInTheDocument();
@@ -773,7 +774,8 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     const importDialog = screen.getByRole("dialog", { name: "Import RGW accounts" });
-    expect(await within(importDialog).findByLabelText("Ceph endpoint")).toHaveValue("10");
+    const importEndpoint = await within(importDialog).findByLabelText("Ceph endpoint");
+    await waitFor(() => expect(importEndpoint).toHaveValue("10"));
     fireEvent.click(within(importDialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog", { name: "Discard changes?" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Import RGW accounts" })).not.toBeInTheDocument();

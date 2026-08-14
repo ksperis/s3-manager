@@ -17,9 +17,10 @@ describe("browser fetch transfer responses", () => {
       "Download failed for report.csv",
     );
 
-    expect(blob).toBeInstanceOf(Blob);
+    expect(Object.prototype.toString.call(blob)).toBe("[object Blob]");
     expect(blob.size).toBe(7);
-    expect(stream).toBeInstanceOf(ReadableStream);
+    expect(blob.type).toBe("text/plain;charset=utf-8");
+    expect(typeof stream.getReader).toBe("function");
   });
 
   it("formats S3 response details once for every transfer type", async () => {

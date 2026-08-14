@@ -6,13 +6,16 @@ import { expect, test as setup, type APIResponse, type Page } from "@playwright/
 import {
   E2E_ADMIN_EMAIL,
   E2E_ADMIN_PASSWORD,
+  E2E_AUTH_ADMIN_EMAIL,
+  E2E_AUTH_ADMIN_FULL_NAME,
+  E2E_AUTH_ADMIN_PASSWORD,
+  E2E_BROWSER_CONNECTION_NAME,
   E2E_BUCKET_NAME,
   E2E_FRONTEND_BASE_URL,
   E2E_S3_ACCESS_KEY,
   E2E_S3_ENDPOINT,
   E2E_S3_REGION,
   E2E_S3_SECRET_KEY,
-  E2E_SHARED_CONNECTION_NAME,
   E2E_STORAGE_STATE_PATH,
   E2E_USER_EMAIL,
   E2E_USER_FULL_NAME,
@@ -28,21 +31,29 @@ type PaginatedUsersResponse = {
   }>;
 };
 
-type PaginatedConnectionsResponse = {
-  items: Array<{
-    id: number;
-    name: string;
-  }>;
-};
-
 type CreatedUser = {
   id: number;
   email: string;
 };
 
-type CreatedConnection = {
+type PrivateConnection = {
   id: number;
   name: string;
+};
+
+type PrivateStorageEndpoint = {
+  id: number;
+  endpoint_url: string;
+  is_default: boolean;
+};
+
+type UserSeed = {
+  email: string;
+  password: string;
+  fullName: string;
+  role: "ui_admin" | "ui_user";
+  canCreateManualPrivateConnections?: boolean;
+  browserAdvancedFeaturesEnabled?: boolean;
 };
 
 async function assertOk(response: APIResponse, message: string) {
@@ -59,22 +70,28 @@ async function csrfHeaders(page: Page): Promise<Record<string, string>> {
   };
 }
 
-async function ensureUser(page: Page): Promise<CreatedUser> {
+async function ensureUser(page: Page, seed: UserSeed): Promise<CreatedUser> {
   const listResponse = await page.request.get("/api/admin/users", {
-    params: { search: E2E_USER_EMAIL, page: 1, page_size: 200 },
+    params: { search: seed.email, page: 1, page_size: 200 },
   });
   await assertOk(listResponse, "Unable to list UI users");
   const listPayload = (await listResponse.json()) as PaginatedUsersResponse;
-  const existing = listPayload.items.find((item) => item.email === E2E_USER_EMAIL);
+  const existing = listPayload.items.find((item) => item.email === seed.email);
 
   if (!existing) {
     const createResponse = await page.request.post("/api/admin/users", {
       headers: await csrfHeaders(page),
       data: {
-        email: E2E_USER_EMAIL,
-        password: E2E_USER_PASSWORD,
-        full_name: E2E_USER_FULL_NAME,
-        role: "ui_user",
+        email: seed.email,
+        password: seed.password,
+        full_name: seed.fullName,
+        role: seed.role,
+        can_create_manual_private_connections: Boolean(
+          seed.canCreateManualPrivateConnections,
+        ),
+        browser_advanced_features_enabled: Boolean(
+          seed.browserAdvancedFeaturesEnabled,
+        ),
       },
     });
     await assertOk(createResponse, "Unable to create E2E UI user");
@@ -84,86 +101,71 @@ async function ensureUser(page: Page): Promise<CreatedUser> {
   const updateResponse = await page.request.put(`/api/admin/users/${existing.id}`, {
     headers: await csrfHeaders(page),
     data: {
-      password: E2E_USER_PASSWORD,
-      role: "ui_user",
+      full_name: seed.fullName,
+      password: seed.password,
+      role: seed.role,
       is_active: true,
+      can_create_manual_private_connections: Boolean(
+        seed.canCreateManualPrivateConnections,
+      ),
+      browser_advanced_features_enabled: Boolean(
+        seed.browserAdvancedFeaturesEnabled,
+      ),
     },
   });
   await assertOk(updateResponse, "Unable to refresh E2E UI user");
   return (await updateResponse.json()) as CreatedUser;
 }
 
-async function ensureConnection(page: Page): Promise<CreatedConnection> {
-  const listResponse = await page.request.get("/api/admin/s3-connections", {
-    params: { search: E2E_SHARED_CONNECTION_NAME, page: 1, page_size: 200 },
-  });
-  await assertOk(listResponse, "Unable to list shared S3 connections");
-  const listPayload = (await listResponse.json()) as PaginatedConnectionsResponse;
-  const existing = listPayload.items.find((item) => item.name === E2E_SHARED_CONNECTION_NAME);
+async function ensurePrivateConnection(page: Page): Promise<PrivateConnection> {
+  const listResponse = await page.request.get("/api/connections");
+  await assertOk(listResponse, "Unable to list private S3 connections");
+  const connections = (await listResponse.json()) as PrivateConnection[];
+  const existing = connections.find(
+    (item) => item.name === E2E_BROWSER_CONNECTION_NAME,
+  );
+
+  const endpointsResponse = await page.request.get(
+    "/api/connections/storage-endpoints",
+  );
+  await assertOk(endpointsResponse, "Unable to list private S3 endpoints");
+  const endpoints = (await endpointsResponse.json()) as PrivateStorageEndpoint[];
+  const normalizedEndpoint = E2E_S3_ENDPOINT.replace(/\/+$/, "");
+  const endpoint =
+    endpoints.find(
+      (item) => item.endpoint_url.replace(/\/+$/, "") === normalizedEndpoint,
+    ) ??
+    endpoints.find((item) => item.is_default) ??
+    endpoints[0];
+  expect(endpoint, "No managed S3 endpoint is available for Browser E2E").toBeDefined();
+
+  const payload = {
+    name: E2E_BROWSER_CONNECTION_NAME,
+    storage_endpoint_id: endpoint!.id,
+    access_key_id: E2E_S3_ACCESS_KEY,
+    secret_access_key: E2E_S3_SECRET_KEY,
+    access_manager: false,
+    access_browser: true,
+  };
 
   if (!existing) {
-    const createResponse = await page.request.post("/api/admin/s3-connections", {
+    const createResponse = await page.request.post("/api/connections", {
       headers: await csrfHeaders(page),
-      data: {
-        name: E2E_SHARED_CONNECTION_NAME,
-        provider_hint: "other",
-        endpoint_url: E2E_S3_ENDPOINT,
-        region: E2E_S3_REGION,
-        access_key_id: E2E_S3_ACCESS_KEY,
-        secret_access_key: E2E_S3_SECRET_KEY,
-        access_manager: false,
-        access_browser: true,
-        force_path_style: true,
-        verify_tls: false,
-      },
+      data: payload,
     });
-    await assertOk(createResponse, "Unable to create shared Moto connection");
-    return (await createResponse.json()) as CreatedConnection;
+    await assertOk(createResponse, "Unable to create private Moto connection");
+    return (await createResponse.json()) as PrivateConnection;
   }
 
-  const updateResponse = await page.request.put(`/api/admin/s3-connections/${existing.id}`, {
+  const updateResponse = await page.request.put(`/api/connections/${existing.id}`, {
     headers: await csrfHeaders(page),
     data: {
-      name: E2E_SHARED_CONNECTION_NAME,
-      provider_hint: "other",
-      endpoint_url: E2E_S3_ENDPOINT,
-      region: E2E_S3_REGION,
-      access_manager: false,
-      access_browser: true,
-      force_path_style: true,
-      verify_tls: false,
+      ...payload,
       is_active: true,
     },
   });
-  await assertOk(updateResponse, "Unable to update shared Moto connection");
-
-  const rotateResponse = await page.request.put(`/api/admin/s3-connections/${existing.id}/credentials`, {
-    headers: await csrfHeaders(page),
-    data: {
-      access_key_id: E2E_S3_ACCESS_KEY,
-      secret_access_key: E2E_S3_SECRET_KEY,
-    },
-  });
-  await assertOk(rotateResponse, "Unable to rotate shared Moto connection credentials");
-  return (await rotateResponse.json()) as CreatedConnection;
-}
-
-async function ensureConnectionLink(
-  page: Page,
-  connectionId: number,
-  userId: number,
-): Promise<void> {
-  const listResponse = await page.request.get(`/api/admin/s3-connections/${connectionId}/users`);
-  await assertOk(listResponse, "Unable to list shared connection users");
-  const linkedUsers = (await listResponse.json()) as Array<{ user_id: number }>;
-  if (linkedUsers.some((entry) => entry.user_id === userId)) {
-    return;
-  }
-  const linkResponse = await page.request.post(`/api/admin/s3-connections/${connectionId}/users`, {
-    headers: await csrfHeaders(page),
-    data: { user_id: userId },
-  });
-  await assertOk(linkResponse, "Unable to link E2E user to shared Moto connection");
+  await assertOk(updateResponse, "Unable to update private Moto connection");
+  return (await updateResponse.json()) as PrivateConnection;
 }
 
 setup("bootstrap browser auth with S3 backend", async ({ page }) => {
@@ -211,9 +213,20 @@ setup("bootstrap browser auth with S3 backend", async ({ page }) => {
   await page.getByRole("button", { name: "Use passkey" }).click();
   await expect(page).toHaveURL(/\/admin(?:\?.*)?$/);
 
-  const user = await ensureUser(page);
-  const connection = await ensureConnection(page);
-  await ensureConnectionLink(page, connection.id, user.id);
+  await ensureUser(page, {
+    email: E2E_USER_EMAIL,
+    password: E2E_USER_PASSWORD,
+    fullName: E2E_USER_FULL_NAME,
+    role: "ui_user",
+    canCreateManualPrivateConnections: true,
+    browserAdvancedFeaturesEnabled: true,
+  });
+  await ensureUser(page, {
+    email: E2E_AUTH_ADMIN_EMAIL,
+    password: E2E_AUTH_ADMIN_PASSWORD,
+    fullName: E2E_AUTH_ADMIN_FULL_NAME,
+    role: "ui_admin",
+  });
   await assertOk(
     await page.request.post("/api/auth/logout", { headers: await csrfHeaders(page) }),
     "Admin logout failed",
@@ -225,6 +238,11 @@ setup("bootstrap browser auth with S3 backend", async ({ page }) => {
   await page.locator('input[type="email"]').fill(E2E_USER_EMAIL);
   await page.locator('input[type="password"]').fill(E2E_USER_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/unauthorized(?:\?.*)?$/);
+  const connection = await ensurePrivateConnection(page);
+  await page.goto(
+    `/browser?ctx=${encodeURIComponent(`conn-${connection.id}`)}&bucket=${encodeURIComponent(E2E_BUCKET_NAME)}`,
+  );
   await expect(page).toHaveURL(/\/browser(?:\?.*)?$/);
   expect(await page.evaluate(() => window.localStorage.getItem("token"))).toBeNull();
   const cookies = await page.context().cookies();
@@ -233,7 +251,6 @@ setup("bootstrap browser auth with S3 backend", async ({ page }) => {
   expect(cookies.find((cookie) => cookie.name === "csrf_token")?.httpOnly).toBe(false);
   await page.reload();
   await expect(page).toHaveURL(/\/browser(?:\?.*)?$/);
-  await page.goto(`/browser?bucket=${encodeURIComponent(E2E_BUCKET_NAME)}`);
   await expect(page.getByRole("button", { name: "Select bucket" })).toContainText(E2E_BUCKET_NAME);
   await page.context().storageState({ path: E2E_STORAGE_STATE_PATH });
 });
