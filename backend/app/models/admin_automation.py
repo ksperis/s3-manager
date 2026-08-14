@@ -96,8 +96,11 @@ class S3AccountMatch(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "S3AccountMatch":
-        if not (self.id or self.name or self.rgw_account_id):
-            raise ValueError("s3_accounts.match requires id, name, or rgw_account_id")
+        selectors = (self.id is not None, bool(self.name), bool(self.rgw_account_id))
+        if sum(selectors) != 1:
+            raise ValueError(
+                "s3_accounts.match requires exactly one of id, name, or rgw_account_id"
+            )
         return self
 
 
@@ -114,6 +117,19 @@ class S3AccountSpec(ApiModel):
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _ensure_single_endpoint_reference(self) -> "S3AccountSpec":
+        selectors = (
+            self.storage_endpoint_id is not None,
+            bool(self.storage_endpoint_name),
+            bool(self.storage_endpoint_url),
+        )
+        if sum(selectors) > 1:
+            raise ValueError(
+                "s3_accounts.spec accepts only one storage endpoint reference"
+            )
+        return self
 
 
 class S3AccountApply(ApiModel):
