@@ -174,20 +174,23 @@ function BrowserShell() {
       >
         {accessError ? <PageBanner tone="warning">{accessError}</PageBanner> : null}
         {requiresContextSelection && contextsLoaded && !selectedContextId ? (
-          <PageEmptyState
-            title={contexts.length > 0 ? "Select a private Browser connection" : "No private Browser connection"}
-            description={
-              contexts.length > 0
-                ? "Choose a private connection explicitly to start browsing."
-                : "Accounts, RGW users and shared connections are unavailable in Browser. Create a private connection with a dedicated access key."
-            }
-            primaryAction={{
-              label: "Manage private connections",
-              to: "/browser/profile?tab=connections",
-            }}
-            tone="warning"
-            className="h-full"
-          />
+          <>
+            <h1 className="sr-only">Browser</h1>
+            <PageEmptyState
+              title={contexts.length > 0 ? "Select a private Browser connection" : "No private Browser connection"}
+              description={
+                contexts.length > 0
+                  ? "Choose a private connection explicitly to start browsing."
+                  : "Accounts, RGW users and shared connections are unavailable in Browser. Create a private connection with a dedicated access key."
+              }
+              primaryAction={{
+                label: "Manage private connections",
+                to: "/browser/profile?tab=connections",
+              }}
+              tone="warning"
+              className="h-full"
+            />
+          </>
         ) : (
           <Outlet key={`${selectedContextId ?? "session"}`} />
         )}

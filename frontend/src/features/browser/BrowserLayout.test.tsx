@@ -137,4 +137,22 @@ describe("BrowserLayout", () => {
       })
     );
   });
+
+  it("keeps a single page-level Browser heading when context selection blocks the outlet", () => {
+    useBrowserContextMock.mockReturnValue(buildBrowserContext({ selectedContextId: null }));
+
+    render(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <Routes>
+          <Route path="/browser" element={<BrowserLayout />}>
+            <Route index element={<BrowserSidebarSlotConsumer />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("heading", { name: "Browser", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Select a private Browser connection", level: 2 })).toBeInTheDocument();
+    expect(screen.queryByText("Browser page content")).not.toBeInTheDocument();
+  });
 });

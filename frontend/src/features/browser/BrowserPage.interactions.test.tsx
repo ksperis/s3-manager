@@ -854,6 +854,17 @@ describe("BrowserPage interactions", () => {
     expect(heading).toHaveClass("sr-only");
   });
 
+  it("keeps the embedded Browser below the parent page heading", async () => {
+    renderEmbeddedPage();
+
+    const heading = await screen.findByRole("heading", {
+      level: 2,
+      name: "Browser",
+    });
+    expect(heading).toHaveClass("sr-only");
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+  });
+
   it("uses the explicit connection kind for transfer guidance", async () => {
     const user = userEvent.setup();
     renderPage({

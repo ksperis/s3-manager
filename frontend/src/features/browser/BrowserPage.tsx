@@ -10645,7 +10645,11 @@ export default function BrowserPage({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <h1 className="sr-only">{isPortalBrowserSurface ? "Portal browser" : "Browser"}</h1>
+      {isEmbeddedBrowserPath ? (
+        <h2 className="sr-only">{isPortalBrowserSurface ? "Portal browser" : "Browser"}</h2>
+      ) : (
+        <h1 className="sr-only">{isPortalBrowserSurface ? "Portal browser" : "Browser"}</h1>
+      )}
       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
         <div className={browserShellClasses}>
         <div className={browserChromeShellClasses}>
