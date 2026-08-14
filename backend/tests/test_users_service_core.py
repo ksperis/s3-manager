@@ -20,6 +20,7 @@ from app.db import (
 )
 from app.models.admin_automation import UiUserSpec
 from app.models.user import PASSWORD_POLICY_ERROR, S3UserMembership, UserCreate, UserUpdate
+from app.services.user_output_service import UserOutputService
 from app.services.users_service import UsersService
 from tests.s3_account_factory import make_s3_account
 
@@ -392,15 +393,32 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
     service._set_s3_connection_links(user, [shared_conn.id])
     db_session.commit()
 
-    rows, total = service.paginate_users(
-        page=1,
-        page_size=10,
-        search="paged",
-        sort_field="last_login",
-        sort_direction="desc",
-    )
+    def fail_per_user_loader(*_args, **_kwargs):
+        raise AssertionError("Paginated projection must use its bulk preload")
+
+    with monkeypatch.context() as projection_patch:
+        for method_name in (
+            "_account_links",
+            "_group_ids",
+            "_s3_user_links",
+            "_s3_connection_ids",
+            "_group_names",
+        ):
+            projection_patch.setattr(
+                UserOutputService,
+                method_name,
+                fail_per_user_loader,
+            )
+        rows, total = service.paginate_users(
+            page=1,
+            page_size=10,
+            search="paged",
+            sort_field="last_login",
+            sort_direction="desc",
+        )
     assert total >= 1
     target = next(item for item in rows if item.id == user.id)
+    assert target.account_links[0].account_id == account.id
     assert target.s3_user_details and target.s3_user_details[0].name == "paged-s3-user"
     assert target.s3_connection_details and target.s3_connection_details[0].name == "paged-shared-conn"
 

@@ -41,10 +41,6 @@ from app.models.user import (
     UserUpdate,
     validate_password_policy,
 )
-from app.services.association_names import (
-    load_s3_user_names,
-    load_shared_s3_connection_names,
-)
 from app.services.portal_ownership import require_no_private_storage_space_ownership
 from app.services.portal_role_sync import (
     capture_effective_portal_roles,
@@ -500,44 +496,10 @@ class UsersService:
         total = total_query.scalar() or 0
         offset = max(page - 1, 0) * page_size
         rows = query.order_by(order_column).offset(offset).limit(page_size).all()
-        user_ids = [row.id for row in rows]
-        s3_links_rows = (
-            self.db.query(UserS3User.user_id, UserS3User.s3_user_id)
-            .filter(UserS3User.user_id.in_(user_ids))
-            .all()
-        )
-        s3_links: dict[int, list[int]] = {}
-        s3_ids: set[int] = set()
-        for user_id, s3_user_id in s3_links_rows:
-            s3_links.setdefault(user_id, []).append(s3_user_id)
-            s3_ids.add(s3_user_id)
-        s3_labels = load_s3_user_names(self.db, sorted(s3_ids))
-        connection_links_rows = (
-            self.db.query(UserS3Connection.user_id, UserS3Connection.s3_connection_id)
-            .join(S3Connection, S3Connection.id == UserS3Connection.s3_connection_id)
-            .filter(
-                UserS3Connection.user_id.in_(user_ids),
-                S3Connection.is_shared.is_(True),
-            )
-            .all()
-        )
-        connection_links: dict[int, list[int]] = {}
-        connection_ids: set[int] = set()
-        for user_id, connection_id in connection_links_rows:
-            connection_links.setdefault(user_id, []).append(connection_id)
-            connection_ids.add(connection_id)
-        connection_labels = load_shared_s3_connection_names(
-            self.db,
-            sorted(connection_ids),
-        )
+        output_service = UserOutputService(self.db)
+        preloaded = output_service.preload(rows)
         outputs = [
-            self.user_to_out(
-                user,
-                s3_user_labels=s3_labels,
-                preloaded_s3_links=s3_links,
-                s3_connection_labels=connection_labels,
-                preloaded_connection_links=connection_links,
-            )
+            output_service.to_out(user, preloaded=preloaded)
             for user in rows
         ]
         return outputs, total
@@ -669,19 +631,8 @@ class UsersService:
     def user_to_out(
         self,
         user: User,
-        *,
-        s3_user_labels: Optional[dict[int, str]] = None,
-        preloaded_s3_links: Optional[dict[int, list[int]]] = None,
-        s3_connection_labels: Optional[dict[int, str]] = None,
-        preloaded_connection_links: Optional[dict[int, list[int]]] = None,
     ) -> UserOut:
-        return UserOutputService(self.db).to_out(
-            user,
-            s3_user_labels=s3_user_labels,
-            preloaded_s3_links=preloaded_s3_links,
-            s3_connection_labels=s3_connection_labels,
-            preloaded_connection_links=preloaded_connection_links,
-        )
+        return UserOutputService(self.db).to_out(user)
 
     def mark_last_login(self, user: User) -> User:
         user.last_login_at = utcnow()

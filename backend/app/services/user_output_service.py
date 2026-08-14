@@ -1,12 +1,13 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 
-from typing import Optional
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.db import (
+    S3Connection,
     UiGroup,
     User,
     UserS3Account,
@@ -33,58 +34,154 @@ from app.services.effective_access_service import EffectiveAccessService
 from app.services.user_avatar_service import UserAvatarService
 
 
+@dataclass(frozen=True)
+class UserOutputPreload:
+    account_links_by_user: dict[int, list[AccountMembershipDetail]]
+    group_ids_by_user: dict[int, list[int]]
+    group_names: dict[int, str]
+    s3_user_links_by_user: dict[int, list[S3UserMembership]]
+    s3_user_names: dict[int, str]
+    connection_ids_by_user: dict[int, list[int]]
+    connection_names: dict[int, str]
+
+
 class UserOutputService:
     """Build the complete public user projection from direct and effective access."""
 
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def preload(self, users: list[User]) -> UserOutputPreload:
+        user_ids = [int(user.id) for user in users]
+        account_links_by_user: dict[int, list[AccountMembershipDetail]] = {
+            user_id: [] for user_id in user_ids
+        }
+        group_ids_by_user: dict[int, list[int]] = {
+            user_id: [] for user_id in user_ids
+        }
+        s3_user_links_by_user: dict[int, list[S3UserMembership]] = {
+            user_id: [] for user_id in user_ids
+        }
+        connection_ids_by_user: dict[int, list[int]] = {
+            user_id: [] for user_id in user_ids
+        }
+        if not user_ids:
+            return UserOutputPreload(
+                account_links_by_user=account_links_by_user,
+                group_ids_by_user=group_ids_by_user,
+                group_names={},
+                s3_user_links_by_user=s3_user_links_by_user,
+                s3_user_names={},
+                connection_ids_by_user=connection_ids_by_user,
+                connection_names={},
+            )
+
+        account_rows = (
+            self.db.query(UserS3Account)
+            .filter(UserS3Account.user_id.in_(user_ids))
+            .order_by(UserS3Account.id.asc())
+            .all()
+        )
+        for link in account_rows:
+            account_links_by_user[int(link.user_id)].append(
+                AccountMembershipDetail(
+                    account_id=link.account_id,
+                    role=link.role,
+                    allow_manager_browser_data_access=bool(
+                        link.allow_manager_browser_data_access
+                    ),
+                    is_root=bool(link.is_root),
+                )
+            )
+
+        group_rows = (
+            self.db.query(UserUiGroup, UiGroup.name)
+            .join(UiGroup, UiGroup.id == UserUiGroup.group_id)
+            .filter(UserUiGroup.user_id.in_(user_ids))
+            .order_by(UserUiGroup.id.asc())
+            .all()
+        )
+        group_names: dict[int, str] = {}
+        for link, group_name in group_rows:
+            group_id = int(link.group_id)
+            group_ids_by_user[int(link.user_id)].append(group_id)
+            group_names[group_id] = group_name
+
+        s3_user_rows = (
+            self.db.query(UserS3User)
+            .filter(UserS3User.user_id.in_(user_ids))
+            .order_by(UserS3User.id.asc())
+            .all()
+        )
+        s3_user_ids: set[int] = set()
+        for link in s3_user_rows:
+            s3_user_id = int(link.s3_user_id)
+            s3_user_ids.add(s3_user_id)
+            s3_user_links_by_user[int(link.user_id)].append(
+                S3UserMembership(
+                    s3_user_id=s3_user_id,
+                    allow_manager_browser_data_access=bool(
+                        link.allow_manager_browser_data_access
+                    ),
+                )
+            )
+
+        connection_rows = (
+            self.db.query(UserS3Connection, S3Connection.name)
+            .join(
+                S3Connection,
+                S3Connection.id == UserS3Connection.s3_connection_id,
+            )
+            .filter(
+                UserS3Connection.user_id.in_(user_ids),
+                S3Connection.is_shared.is_(True),
+            )
+            .order_by(UserS3Connection.id.asc())
+            .all()
+        )
+        connection_names: dict[int, str] = {}
+        for link, connection_name in connection_rows:
+            connection_id = int(link.s3_connection_id)
+            connection_ids_by_user[int(link.user_id)].append(connection_id)
+            connection_names[connection_id] = connection_name
+
+        return UserOutputPreload(
+            account_links_by_user=account_links_by_user,
+            group_ids_by_user=group_ids_by_user,
+            group_names=group_names,
+            s3_user_links_by_user=s3_user_links_by_user,
+            s3_user_names=load_s3_user_names(self.db, sorted(s3_user_ids)),
+            connection_ids_by_user=connection_ids_by_user,
+            connection_names=connection_names,
+        )
+
     def to_out(
         self,
         user: User,
         *,
-        s3_user_labels: Optional[dict[int, str]] = None,
-        preloaded_s3_links: Optional[dict[int, list[int]]] = None,
-        s3_connection_labels: Optional[dict[int, str]] = None,
-        preloaded_connection_links: Optional[dict[int, list[int]]] = None,
+        preloaded: UserOutputPreload | None = None,
     ) -> UserOut:
-        account_links = self._account_links(user)
-        group_ids = self._group_ids(user)
-        s3_user_ids, s3_user_links = self._s3_user_links(user)
-        s3_connection_ids = self._s3_connection_ids(user)
-
-        if preloaded_s3_links is not None and user.id in preloaded_s3_links:
-            s3_user_ids = preloaded_s3_links[user.id]
-            existing_permissions = {
-                link.s3_user_id: link.allow_manager_browser_data_access
-                for link in s3_user_links
-            }
-            s3_user_links = [
-                S3UserMembership(
-                    s3_user_id=s3_user_id,
-                    allow_manager_browser_data_access=existing_permissions.get(
-                        s3_user_id,
-                        False,
-                    ),
-                )
-                for s3_user_id in s3_user_ids
-            ]
-        if (
-            preloaded_connection_links is not None
-            and user.id in preloaded_connection_links
-        ):
-            s3_connection_ids = preloaded_connection_links[user.id]
-
-        s3_user_names = (
-            s3_user_labels
-            if s3_user_labels is not None
-            else load_s3_user_names(self.db, s3_user_ids)
-        )
-        s3_connection_names = (
-            s3_connection_labels
-            if s3_connection_labels is not None
-            else load_shared_s3_connection_names(self.db, s3_connection_ids)
-        )
+        if preloaded is None:
+            account_links = self._account_links(user)
+            group_ids = self._group_ids(user)
+            s3_user_ids, s3_user_links = self._s3_user_links(user)
+            s3_connection_ids = self._s3_connection_ids(user)
+            s3_user_names = load_s3_user_names(self.db, s3_user_ids)
+            s3_connection_names = load_shared_s3_connection_names(
+                self.db,
+                s3_connection_ids,
+            )
+            group_names = self._group_names(group_ids)
+        else:
+            user_id = int(user.id)
+            account_links = preloaded.account_links_by_user.get(user_id, [])
+            group_ids = preloaded.group_ids_by_user.get(user_id, [])
+            s3_user_links = preloaded.s3_user_links_by_user.get(user_id, [])
+            s3_user_ids = [link.s3_user_id for link in s3_user_links]
+            s3_connection_ids = preloaded.connection_ids_by_user.get(user_id, [])
+            s3_user_names = preloaded.s3_user_names
+            s3_connection_names = preloaded.connection_names
+            group_names = preloaded.group_names
         s3_user_details = [
             LinkedS3User(
                 id=s3_user_id,
@@ -105,7 +202,6 @@ class UserOutputService:
             )
             for connection_id in visible_connection_ids
         ]
-        group_names = self._group_names(group_ids)
         group_details = [
             LinkedUiGroup(
                 id=group_id,
