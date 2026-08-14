@@ -5396,12 +5396,18 @@ describe("BrowserPage interactions", () => {
     );
 
     renderPage({ defaultShowInspector: true });
-    const menu = await openContextMoreMenu(user);
-    const cleanupMenuItem = within(menu).getByRole("menuitem", {
-      name: "Clean old versions",
+    await waitFor(() => {
+      expect(getBucketVersioningMock).toHaveBeenCalledTimes(1);
     });
-    await waitFor(() => expect(cleanupMenuItem).toBeEnabled());
-    await user.click(cleanupMenuItem);
+    await openContextMoreMenu(user);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("menuitem", { name: "Clean old versions" }),
+      ).toBeEnabled();
+    });
+    await user.click(
+      screen.getByRole("menuitem", { name: "Clean old versions" }),
+    );
 
     const modal = await screen.findByRole("dialog", { name: "Clean old versions" });
     await user.type(within(modal).getByPlaceholderText("e.g. 3"), "1");
