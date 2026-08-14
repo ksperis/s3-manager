@@ -4,26 +4,24 @@ from __future__ import annotations
 
 from app.utils.time import utcnow
 
-from datetime import datetime
 import logging
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.db import (
     S3Account,
     S3User,
     StorageEndpoint,
     StorageProvider,
 )
-from app.models.app_settings import QuotaNotificationSettings
 from app.services.app_settings_service import load_app_settings
 from app.services.data_retention_service import DataRetentionService
+from app.services.quota_alert_content import build_quota_alert_content
+from app.services.quota_alert_email_service import QuotaAlertEmailService
 from app.services.quota_alert_recipients_service import (
     QuotaAlertRecipientIndex,
     QuotaAlertRecipientsService,
-    normalize_email,
 )
 from app.services.quota_alert_state_service import (
     QUOTA_ALERT_FULL,
@@ -32,7 +30,6 @@ from app.services.quota_alert_state_service import (
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_supervision import get_supervision_rgw_client
-from app.services import smtp_mailer
 from app.services.quota_subject import SubjectContext
 from app.services.quota_usage_history_service import QuotaUsageHistoryService
 from app.services.user_notifications_service import UserNotificationsService
@@ -41,14 +38,11 @@ from app.utils.storage_endpoint_features import resolve_admin_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
 logger = logging.getLogger(__name__)
-runtime_settings = get_settings()
 
 
 class QuotaMonitoringService:
     def __init__(self, db: Session) -> None:
         self.db = db
-        self._mail_error_reason: Optional[str] = None
-        self._mailer: Optional[smtp_mailer.SMTPMailer] = None
 
     def run_monitor(
         self,
@@ -104,6 +98,7 @@ class QuotaMonitoringService:
         usage_history_service = QuotaUsageHistoryService(self.db)
         alert_state_service = QuotaAlertStateService(self.db)
         recipients_service = QuotaAlertRecipientsService(self.db)
+        email_service = QuotaAlertEmailService()
         states = (
             alert_state_service.load_states()
             if quota_alerts_enabled
@@ -115,10 +110,13 @@ class QuotaMonitoringService:
             else QuotaAlertRecipientIndex()
         )
 
+        mailer = None
         if quota_alerts_enabled:
-            self._mailer, self._mail_error_reason = self._build_mailer(app_settings.quota_notifications)
-            if not self._mailer and self._mail_error_reason:
-                summary["warnings"].append(self._mail_error_reason)
+            mailer, mail_error_reason = email_service.build_mailer(
+                app_settings.quota_notifications
+            )
+            if mailer is None and mail_error_reason:
+                summary["warnings"].append(mail_error_reason)
 
         for subject in subjects:
             endpoint = endpoint_map.get(subject.endpoint_id)
@@ -223,6 +221,20 @@ class QuotaMonitoringService:
                     QUOTA_ALERT_FULL,
                 }:
                     summary["alerts_triggered"] += 1
+                    content = build_quota_alert_content(
+                        subject=subject,
+                        previous_level=transition.previous_level,
+                        alert_level=next_level,
+                        ratio_pct=ratio_pct,
+                        threshold_percent=int(
+                            app_settings.quota_notifications.threshold_percent
+                        ),
+                        used_bytes=usage_bytes,
+                        used_objects=usage_objects,
+                        quota_size_bytes=quota_size_bytes,
+                        quota_objects=quota_objects,
+                        checked_at=now,
+                    )
                     notification_user_ids = recipients_service.notification_user_ids(
                         subject=subject,
                         index=recipient_index,
@@ -232,34 +244,11 @@ class QuotaMonitoringService:
                         subject_type=subject.subject_type,
                         subject_id=subject.subject_id,
                         storage_endpoint_id=subject.endpoint_id,
-                        event_key=self._quota_notification_event_key(
-                            subject,
-                            transition.previous_level,
-                            next_level,
-                            now,
-                        ),
-                        title=self._quota_notification_title(next_level),
-                        message=self._quota_notification_message(
-                            subject=subject,
-                            alert_level=next_level,
-                            ratio_pct=ratio_pct,
-                        ),
-                        severity=(
-                            "error"
-                            if next_level == QUOTA_ALERT_FULL
-                            else "warning"
-                        ),
-                        payload=self._quota_notification_payload(
-                            subject=subject,
-                            alert_level=next_level,
-                            ratio_pct=ratio_pct,
-                            threshold_percent=int(app_settings.quota_notifications.threshold_percent),
-                            used_bytes=usage_bytes,
-                            used_objects=usage_objects,
-                            quota_size_bytes=quota_size_bytes,
-                            quota_objects=quota_objects,
-                            checked_at=now,
-                        ),
+                        event_key=content.event_key,
+                        title=content.title,
+                        message=content.message,
+                        severity=content.severity,
+                        payload=content.payload,
                         created_at=now,
                     )
                     recipients = recipients_service.email_recipients(
@@ -268,7 +257,8 @@ class QuotaMonitoringService:
                         include_subject_contact=bool(app_settings.quota_notifications.include_subject_contact_email),
                     )
                     if recipients:
-                        sent = self._send_quota_alert_email(
+                        sent = email_service.send_alert_email(
+                            mailer=mailer,
                             recipients=recipients,
                             subject=subject,
                             alert_level=next_level,
@@ -296,41 +286,6 @@ class QuotaMonitoringService:
         summary["retention"] = DataRetentionService(self.db).purge_all()
         summary["finished_at"] = utcnow().isoformat()
         return summary
-
-    def send_test_email(
-        self,
-        *,
-        notification_settings: QuotaNotificationSettings,
-        recipient_email: Optional[str],
-    ) -> dict[str, Any]:
-        recipient = normalize_email(recipient_email)
-        if not recipient:
-            raise ValueError("Current user email is required to send a test email.")
-
-        mailer, reason = self._build_mailer(notification_settings)
-        if not mailer:
-            raise ValueError(reason or "SMTP not configured for quota notifications.")
-
-        checked_at = utcnow()
-        subject = "[Quota TEST] SMTP configuration"
-        body = (
-            "This is a test email for quota notifications SMTP configuration.\n\n"
-            f"Threshold percent: {int(notification_settings.threshold_percent)}\n"
-            f"SMTP host: {(notification_settings.smtp_host or '').strip() or 'n/a'}\n"
-            f"SMTP port: {int(notification_settings.smtp_port)}\n"
-            f"STARTTLS: {'enabled' if bool(notification_settings.smtp_starttls) else 'disabled'}\n"
-            f"Sent at (UTC): {checked_at.isoformat()}\n"
-        )
-        try:
-            mailer.send(recipients=[recipient], subject=subject, body=body)
-        except Exception as exc:
-            raise ValueError(f"Unable to send test email: {exc}") from exc
-
-        return {
-            "status": "sent",
-            "recipient": recipient,
-            "sent_at": checked_at.isoformat(),
-        }
 
     def _load_subjects(
         self,
@@ -479,139 +434,3 @@ class QuotaMonitoringService:
         if not ratios:
             return None
         return round(max(ratios), 3)
-
-    def _quota_notification_event_key(
-        self,
-        subject: SubjectContext,
-        previous_level: Optional[str],
-        alert_level: str,
-        checked_at: datetime,
-    ) -> str:
-        transition_from = previous_level or "new"
-        return (
-            f"quota:{subject.subject_type}:{subject.endpoint_id}:"
-            f"{subject.subject_id}:{transition_from}:{alert_level}:{checked_at.isoformat()}"
-        )
-
-    def _quota_notification_title(self, alert_level: str) -> str:
-        if alert_level == QUOTA_ALERT_FULL:
-            return "Quota reached"
-        return "Quota near limit"
-
-    def _quota_notification_message(
-        self,
-        *,
-        subject: SubjectContext,
-        alert_level: str,
-        ratio_pct: Optional[float],
-    ) -> str:
-        subject_label = "RGW account" if subject.subject_type == "account" else "RGW user"
-        ratio_display = f"{ratio_pct:.3f}%" if ratio_pct is not None else "n/a"
-        if alert_level == QUOTA_ALERT_FULL:
-            return f"{subject_label} {subject.subject_name} has reached its quota ({ratio_display})."
-        return f"{subject_label} {subject.subject_name} is near its quota limit ({ratio_display})."
-
-    def _quota_notification_payload(
-        self,
-        *,
-        subject: SubjectContext,
-        alert_level: str,
-        ratio_pct: Optional[float],
-        threshold_percent: int,
-        used_bytes: int,
-        used_objects: int,
-        quota_size_bytes: Optional[int],
-        quota_objects: Optional[int],
-        checked_at: datetime,
-    ) -> dict[str, Any]:
-        return {
-            "alert_level": alert_level,
-            "subject_type": subject.subject_type,
-            "subject_label": "RGW account" if subject.subject_type == "account" else "RGW user",
-            "subject_name": subject.subject_name,
-            "endpoint_name": subject.endpoint_name,
-            "threshold_percent": int(threshold_percent),
-            "usage_ratio_pct": ratio_pct,
-            "used_bytes": int(used_bytes),
-            "quota_size_bytes": quota_size_bytes,
-            "used_objects": int(used_objects),
-            "quota_objects": quota_objects,
-            "checked_at": checked_at.isoformat(),
-        }
-
-    def _build_mailer(
-        self,
-        notification_settings: QuotaNotificationSettings,
-    ) -> tuple[Optional[smtp_mailer.SMTPMailer], Optional[str]]:
-        host = (notification_settings.smtp_host or "").strip()
-        from_email = (notification_settings.smtp_from_email or "").strip()
-        username = (notification_settings.smtp_username or "").strip() or None
-        password = (runtime_settings.smtp_password or "").strip() or None
-
-        if not host or not from_email:
-            return None, "SMTP not configured: smtp_host and smtp_from_email are required for quota notifications."
-        if password and not username:
-            return None, "SMTP configuration invalid: SMTP_PASSWORD is set but smtp_username is empty."
-
-        return (
-            smtp_mailer.SMTPMailer(
-                host=host,
-                port=int(notification_settings.smtp_port),
-                username=username,
-                password=password,
-                from_email=from_email,
-                from_name=notification_settings.smtp_from_name,
-                starttls=bool(notification_settings.smtp_starttls),
-                timeout_seconds=int(notification_settings.smtp_timeout_seconds),
-            ),
-            None,
-        )
-
-    def _send_quota_alert_email(
-        self,
-        *,
-        recipients: list[str],
-        subject: SubjectContext,
-        alert_level: str,
-        ratio_pct: Optional[float],
-        threshold_percent: int,
-        used_bytes: int,
-        used_objects: int,
-        quota_size_bytes: Optional[int],
-        quota_objects: Optional[int],
-        checked_at: datetime,
-    ) -> bool:
-        if not self._mailer:
-            return False
-        ratio_display = f"{ratio_pct:.3f}" if ratio_pct is not None else "n/a"
-        email_subject = f"[Quota {alert_level.upper()}] {subject.subject_type}:{subject.subject_name}"
-        body = (
-            f"Quota alert level: {alert_level}\n"
-            f"Subject type: {subject.subject_type}\n"
-            f"Subject: {subject.subject_name}\n"
-            f"Identifier: {subject.subject_identifier}\n"
-            f"Endpoint: {subject.endpoint_name}\n"
-            f"Threshold percent: {threshold_percent}\n"
-            f"Usage ratio (%): {ratio_display}\n"
-            f"Used bytes: {used_bytes}\n"
-            f"Quota bytes: {quota_size_bytes if quota_size_bytes is not None else 'unlimited'}\n"
-            f"Used objects: {used_objects}\n"
-            f"Quota objects: {quota_objects if quota_objects is not None else 'unlimited'}\n"
-            f"Checked at (UTC): {checked_at.isoformat()}\n"
-        )
-        try:
-            self._mailer.send(
-                recipients=recipients,
-                subject=email_subject,
-                body=body,
-            )
-            return True
-        except Exception as exc:  # pragma: no cover - network side effect
-            logger.warning(
-                "Unable to send quota alert email for %s:%s to %s recipients: %s",
-                subject.subject_type,
-                subject.subject_id,
-                len(recipients),
-                exc,
-            )
-            return False

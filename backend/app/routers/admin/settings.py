@@ -35,7 +35,7 @@ from app.services.oidc_provider_settings_service import (
     list_effective_oidc_providers,
     update_oidc_provider,
 )
-from app.services.quota_monitoring_service import QuotaMonitoringService
+from app.services.quota_alert_email_service import QuotaAlertEmailService
 from app.services.portal_service import get_portal_service
 
 router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
@@ -266,11 +266,9 @@ def delete_ldap_provider_settings(
 def send_quota_notifications_test_email(
     payload: QuotaNotificationSettings,
     current_user: User = Depends(get_current_ui_superadmin),
-    db: Session = Depends(get_db),
 ) -> dict:
-    service = QuotaMonitoringService(db)
     try:
-        return service.send_test_email(
+        return QuotaAlertEmailService().send_test_email(
             notification_settings=payload,
             recipient_email=current_user.email,
         )

@@ -28,6 +28,7 @@ from app.db import (
 )
 from app.models.app_settings import AppSettings
 from app.services import quota_monitoring_service
+from app.services.quota_alert_email_service import QuotaAlertEmailService
 from app.services.quota_alert_recipients_service import (
     QuotaAlertRecipientsService,
 )
@@ -216,7 +217,11 @@ def test_quota_monitor_mode_does_not_persist_usage_history(db_session, monkeypat
     monkeypatch.setattr(quota_monitoring_service, "load_app_settings", lambda: _settings(quota_alerts_enabled=True, usage_history_enabled=True))
     monkeypatch.setattr(quota_monitoring_service.DataRetentionService, "purge_all", lambda self: {})
     monkeypatch.setattr(QuotaMonitoringService, "_resolve_admin_client", lambda self, endpoint, cache: fake_admin)
-    monkeypatch.setattr(QuotaMonitoringService, "_build_mailer", lambda self, notification_settings: (_FakeMailer(), None))
+    monkeypatch.setattr(
+        QuotaAlertEmailService,
+        "build_mailer",
+        lambda self, notification_settings: (_FakeMailer(), None),
+    )
 
     service = QuotaMonitoringService(db_session)
     result = service.run_monitor(include_usage_history=False)
@@ -296,7 +301,11 @@ def test_alert_crossing_first_run_no_duplicate_and_reset(db_session, monkeypatch
     monkeypatch.setattr(quota_monitoring_service, "load_app_settings", lambda: _settings(quota_alerts_enabled=True, usage_history_enabled=False))
     monkeypatch.setattr(quota_monitoring_service.DataRetentionService, "purge_all", lambda self: {})
     monkeypatch.setattr(QuotaMonitoringService, "_resolve_admin_client", lambda self, endpoint, cache: fake_admin)
-    monkeypatch.setattr(QuotaMonitoringService, "_build_mailer", lambda self, notification_settings: (fake_mailer, None))
+    monkeypatch.setattr(
+        QuotaAlertEmailService,
+        "build_mailer",
+        lambda self, notification_settings: (fake_mailer, None),
+    )
 
     service = QuotaMonitoringService(db_session)
 

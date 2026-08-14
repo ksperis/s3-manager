@@ -5,7 +5,7 @@ from __future__ import annotations
 from app.db import User, UserRole
 from app.main import app
 from app.routers import dependencies
-from app.services.quota_monitoring_service import QuotaMonitoringService
+from app.services.quota_alert_email_service import QuotaAlertEmailService
 from fastapi.testclient import TestClient
 
 
@@ -58,7 +58,11 @@ def test_superadmin_can_send_quota_notification_test_email(client: TestClient, m
             "sent_at": "2026-01-01T00:00:00",
         }
 
-    monkeypatch.setattr(QuotaMonitoringService, "send_test_email", _fake_send_test_email)
+    monkeypatch.setattr(
+        QuotaAlertEmailService,
+        "send_test_email",
+        _fake_send_test_email,
+    )
 
     response = client.post("/api/admin/settings/quota-notifications/test-email", json=_smtp_payload())
     assert response.status_code == 200, response.text
