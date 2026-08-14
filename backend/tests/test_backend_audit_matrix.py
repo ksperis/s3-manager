@@ -108,6 +108,17 @@ def test_backend_audit_matrix_tracks_browser_bucket_config_mutation_delegation()
     ]
 
 
+def test_backend_audit_matrix_tracks_manager_bucket_config_mutation_delegation():
+    backend_root = Path(__file__).resolve().parents[1]
+    rows_by_function = {row.function: row for row in collect_rows(backend_root)}
+
+    assert rows_by_function["put_bucket_encryption"].file.relative_to(backend_root) == Path(
+        "app/routers/manager/bucket_config.py"
+    )
+    assert rows_by_function["put_bucket_encryption"].signals["delegated_manager_bucket_config_audit"]
+    assert rows_by_function["delete_bucket_encryption"].signals["delegated_manager_bucket_config_audit"]
+
+
 def test_backend_audit_matrix_classifies_every_mutating_route():
     backend_root = Path(__file__).resolve().parents[1]
 
