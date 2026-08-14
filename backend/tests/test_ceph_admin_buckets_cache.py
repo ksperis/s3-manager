@@ -21,10 +21,11 @@ from app.models.bucket import (
     BucketWebsiteConfiguration,
     BucketWebsiteRedirectAllRequestsTo,
 )
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.ceph_admin import CephAdminBucketSummary, PaginatedCephAdminBucketsResponse
 from app.main import app
 from app.routers import dependencies
 from app.services import ceph_admin_bucket_listing_cache as bucket_listing_cache
+from app.services import ceph_admin_bucket_listing_service as bucket_listing_service
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.services.listing_progress import ListingCancelled, ListingProgressSnapshot
@@ -32,6 +33,7 @@ from app.services import bucket_listing_enrichment
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.buckets_service import BucketsService
 from app.services import rgw_bucket_metadata
+from app.services.rgw_admin import RGWAdminError
 
 
 class FakeRGWAdmin:
@@ -819,7 +821,7 @@ def test_ceph_admin_bucket_listing_any_mixed_filter_prefers_bulk_field_rules(mon
             enriched.append(CephAdminBucketSummary(**base))
         return enriched
 
-    monkeypatch.setattr(buckets_router, "enrich_buckets", fake_enrich)
+    monkeypatch.setattr(bucket_listing_service, "enrich_buckets", fake_enrich)
 
     mixed_filter = json.dumps(
         {
@@ -1072,7 +1074,7 @@ def test_ceph_admin_bucket_listing_tag_filter_matches_s3_tags(monkeypatch: pytes
             enriched.append(CephAdminBucketSummary(**base))
         return enriched
 
-    monkeypatch.setattr(buckets_router, "enrich_buckets", fake_enrich)
+    monkeypatch.setattr(bucket_listing_service, "enrich_buckets", fake_enrich)
 
     tag_filter = json.dumps(
         {
@@ -1122,7 +1124,7 @@ def test_ceph_admin_bucket_listing_any_tag_filter_prefers_bulk_field_rules(monke
             enriched.append(CephAdminBucketSummary(**base))
         return enriched
 
-    monkeypatch.setattr(buckets_router, "enrich_buckets", fake_enrich)
+    monkeypatch.setattr(bucket_listing_service, "enrich_buckets", fake_enrich)
 
     mixed_filter = json.dumps(
         {
@@ -1501,7 +1503,7 @@ def test_ceph_admin_bucket_listing_falls_back_without_stats_and_backfills_owner(
         def get_all_buckets(self, with_stats: bool = True):
             self.calls.append(with_stats)
             if with_stats:
-                raise buckets_router.RGWAdminError("stats call failed")
+                raise RGWAdminError("stats call failed")
             return ["bucket-a", "bucket-b"]
 
         def get_bucket_info(self, bucket_name: str, stats: bool = True, allow_not_found: bool = False):
@@ -1546,7 +1548,7 @@ def test_ceph_admin_bucket_listing_rejects_stats_sort_when_stats_fetch_fails():
     class FailingStatsAdmin:
         def get_all_buckets(self, with_stats: bool = True):
             if with_stats:
-                raise buckets_router.RGWAdminError("stats call failed")
+                raise RGWAdminError("stats call failed")
             return ["bucket-a"]
 
     ctx = SimpleNamespace(
@@ -2671,8 +2673,8 @@ def test_ceph_admin_bucket_stream_emits_progress_result_and_done(monkeypatch: py
                     message="Filtering",
                 )
             )
-        return buckets_router.PaginatedCephAdminBucketsResponse(
-            items=[buckets_router.CephAdminBucketSummary(name="bucket-a", tenant=None, owner="owner-a")],
+        return PaginatedCephAdminBucketsResponse(
+            items=[CephAdminBucketSummary(name="bucket-a", tenant=None, owner="owner-a")],
             total=1,
             page=page,
             page_size=page_size,
