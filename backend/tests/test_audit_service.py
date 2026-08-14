@@ -5,6 +5,7 @@ import json
 import pytest
 
 from app.db import AuditLog, S3Account, User, UserRole
+from app.models.audit import AuditLogEntry
 from app.models.session import ManagerSessionPrincipal, SessionCapabilities
 from app.services.audit_policy import (
     DATA_PLANE_AUDIT_ACTIONS,
@@ -108,6 +109,21 @@ def test_record_action_accepts_manager_session_actor(db_session) -> None:
     assert log.user_id is None
     assert log.user_email == actor.email
     assert log.user_role == actor.role
+
+
+def test_serialize_log_matches_the_public_audit_contract(db_session) -> None:
+    user = _create_user(db_session)
+    service = AuditService(db_session)
+    service.record_action(
+        user=user,
+        scope="admin",
+        action="review_ui_consistency",
+    )
+
+    payload = service.serialize_log(db_session.query(AuditLog).one())
+
+    assert "user_id" not in payload
+    assert AuditLogEntry(**payload).user_email == user.email
 
 
 def test_record_action_sanitizes_sensitive_metadata_before_persisting(db_session) -> None:

@@ -199,7 +199,6 @@ class AuditService:
         return {
             "id": log.id,
             "created_at": log.created_at,
-            "user_id": log.user_id,
             "user_email": log.user_email,
             "user_role": log.user_role,
             "scope": log.scope,
