@@ -42,6 +42,7 @@ from app.services.mappers.s3_connection import mask_access_key_id
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import (
     ACTIVE_MANAGED_SOURCE_DELETE_ERROR,
+    ACTIVE_MANAGED_SOURCE_UPDATE_ERROR,
     S3ConnectionsService,
 )
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
@@ -54,8 +55,6 @@ from app.utils.s3_connection_capabilities import (
     s3_connection_can_manage_iam,
 )
 from app.utils.s3_connection_endpoint import (
-    build_custom_endpoint_config,
-    custom_endpoint_update_base,
     resolve_connection_details,
 )
 from app.utils.name_ordering import name_order_by
@@ -135,26 +134,6 @@ def _linked_group_details_by_connection(
 
 def _linked_group_details(db: Session, connection_id: int) -> list[S3ConnectionGroupDetail]:
     return _linked_group_details_by_connection(db, [connection_id]).get(connection_id, [])
-
-
-def _sync_group_links(db: Session, conn: S3Connection, group_ids: list[int]) -> None:
-    cleaned_ids = sorted({int(group_id) for group_id in group_ids if group_id is not None})
-    if cleaned_ids:
-        found = {row[0] for row in db.query(UiGroup.id).filter(UiGroup.id.in_(cleaned_ids)).all()}
-        missing = set(cleaned_ids) - found
-        if missing:
-            missing_str = ", ".join(str(mid) for mid in sorted(missing))
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"UI groups not found: {missing_str}")
-    existing = db.query(UiGroupS3Connection).filter(UiGroupS3Connection.s3_connection_id == conn.id).all()
-    existing_ids = {link.group_id for link in existing}
-    desired_ids = set(cleaned_ids)
-    for group_id in existing_ids - desired_ids:
-        db.query(UiGroupS3Connection).filter(
-            UiGroupS3Connection.s3_connection_id == conn.id,
-            UiGroupS3Connection.group_id == group_id,
-        ).delete(synchronize_session=False)
-    for group_id in desired_ids - existing_ids:
-        db.add(UiGroupS3Connection(group_id=group_id, s3_connection_id=conn.id))
 
 
 def _to_admin_item(
@@ -354,56 +333,23 @@ def create_s3_connection(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionAdminItem:
-    tags_service = TagsService(db)
-    endpoint_url = (payload.endpoint_url or "").strip()
-    region = payload.region
-    force_path_style = bool(payload.force_path_style)
-    verify_tls = bool(payload.verify_tls)
-    storage_endpoint_id = payload.storage_endpoint_id
-    if storage_endpoint_id is None and not endpoint_url:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Endpoint URL is required for manual connections")
-    if storage_endpoint_id is not None:
-        storage_endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == storage_endpoint_id).first()
-        if not storage_endpoint:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage endpoint not found")
-        custom_endpoint_config = None
-    else:
-        endpoint_url = endpoint_url.rstrip("/") if endpoint_url else None
-        custom_endpoint_config = build_custom_endpoint_config(
-            endpoint_url,
-            region,
-            force_path_style,
-            verify_tls,
-            payload.provider_hint,
-        )
-    conn = S3Connection(
-        created_by_user_id=current_user.id,
-        name=payload.name,
-        storage_endpoint_id=storage_endpoint_id,
-        custom_endpoint_config=custom_endpoint_config,
-        is_shared=True,
-        is_active=True,
-        access_manager=True,
-        access_browser=False,
-        remediation_required=False,
-        remediation_reason=None,
-        credential_owner_type=payload.credential_owner_type,
-        credential_owner_identifier=payload.credential_owner_identifier,
-        access_key_id=payload.access_key_id,
-        secret_access_key=payload.secret_access_key,
-        created_at=utcnow(),
-        updated_at=utcnow(),
-    )
+    service = S3ConnectionsService(db)
+    tags_service = service.tags
     try:
-        db.add(conn)
-        db.flush()
-        tags_service.replace_connection_tags(conn, payload.tags)
-        refresh_connection_detected_capabilities(conn)
-        db.commit()
+        conn = service.create_admin_shared(current_user.id, payload)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Storage endpoint not found",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to create S3Connection") from exc
-    db.refresh(conn)
     details = resolve_connection_details(conn)
     audit.record_action(
         user=current_user,
@@ -443,86 +389,24 @@ def update_s3_connection(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionAdminItem:
-    tags_service = TagsService(db)
-    conn = _get_admin_shared_connection(db, connection_id)
-    payload_data = payload.model_dump(exclude_unset=True)
-    source_immutable_fields = {
-        "is_active",
-        "provider_hint",
-        "storage_endpoint_id",
-        "endpoint_url",
-        "region",
-        "force_path_style",
-        "verify_tls",
-        "credential_owner_type",
-        "credential_owner_identifier",
-    }
-    if (
-        S3ConnectionsService(db).is_active_managed_source(conn.id)
-        and source_immutable_fields.intersection(payload_data)
-    ):
+    service = S3ConnectionsService(db)
+    tags_service = service.tags
+    _get_admin_shared_connection(db, connection_id)
+    try:
+        conn = service.update_admin_shared(connection_id, payload)
+    except KeyError as exc:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Connection endpoint and provenance are locked while managed private accesses depend on it",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Storage endpoint not found",
+        ) from exc
+    except ValueError as exc:
+        error = sanitize_error_detail(str(exc))
+        status_code = (
+            status.HTTP_409_CONFLICT
+            if error == ACTIVE_MANAGED_SOURCE_UPDATE_ERROR
+            else status.HTTP_400_BAD_REQUEST
         )
-    if payload.name is not None:
-        conn.name = payload.name
-    should_probe_iam = False
-    if "is_active" in payload_data:
-        conn.is_active = bool(payload.is_active)
-    if payload.storage_endpoint_id is not None:
-        storage_endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == payload.storage_endpoint_id).first()
-        if not storage_endpoint:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage endpoint not found")
-        conn.storage_endpoint_id = storage_endpoint.id
-        conn.custom_endpoint_config = None
-        should_probe_iam = True
-    elif payload.storage_endpoint_id is None and "storage_endpoint_id" in payload_data:
-        conn.storage_endpoint_id = None
-        if not payload.endpoint_url and not conn.custom_endpoint_config:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Endpoint URL is required for manual connections")
-        should_probe_iam = True
-    if conn.storage_endpoint_id is None:
-        current = custom_endpoint_update_base(conn.custom_endpoint_config)
-        endpoint_url = current.endpoint_url
-        region = current.region
-        force_path_style = current.force_path_style
-        verify_tls = current.verify_tls
-        provider = current.provider
-        if payload.endpoint_url is not None:
-            endpoint_url = payload.endpoint_url.rstrip("/")
-            should_probe_iam = True
-        if payload.region is not None:
-            region = payload.region
-            should_probe_iam = True
-        if payload.force_path_style is not None:
-            force_path_style = bool(payload.force_path_style)
-        if payload.verify_tls is not None:
-            verify_tls = bool(payload.verify_tls)
-            should_probe_iam = True
-        if payload.provider_hint is not None:
-            provider = payload.provider_hint
-        conn.custom_endpoint_config = build_custom_endpoint_config(
-            endpoint_url,
-            region,
-            force_path_style,
-            verify_tls,
-            provider,
-        )
-    conn.access_browser = False
-    if "credential_owner_type" in payload_data:
-        conn.credential_owner_type = payload.credential_owner_type
-    if "credential_owner_identifier" in payload_data:
-        conn.credential_owner_identifier = payload.credential_owner_identifier
-    if "tags" in payload_data:
-        tags_service.replace_connection_tags(conn, payload.tags)
-    if payload.group_ids is not None:
-        _sync_group_links(db, conn, payload.group_ids)
-    if should_probe_iam:
-        refresh_connection_detected_capabilities(conn)
-    conn.updated_at = utcnow()
-    db.commit()
-    db.refresh(conn)
+        raise HTTPException(status_code=status_code, detail=error) from exc
     audit.record_action(
         user=current_user,
         scope="admin",

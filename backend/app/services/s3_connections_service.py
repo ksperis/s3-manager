@@ -7,8 +7,13 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from app.db.s3_connection import ManagedPrivateAccess, S3Connection as DBS3Connection, UserS3Connection
-from app.db.ui_group import UiGroupS3Connection
+from app.db.storage_endpoint import StorageEndpoint
+from app.db.ui_group import UiGroup, UiGroupS3Connection
 from app.models.s3_connection import S3Connection, S3ConnectionCreate, S3ConnectionUpdate
+from app.models.s3_connection_admin import (
+    S3ConnectionAdminCreate,
+    S3ConnectionAdminUpdate,
+)
 from app.services.mappers.s3_connection import s3_connection_from_db
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.tags_service import TagsService
@@ -27,6 +32,24 @@ from app.utils.s3_endpoint import validate_user_supplied_s3_endpoint
 ACTIVE_MANAGED_SOURCE_DELETE_ERROR = (
     "Delete managed private accesses created from this source connection first"
 )
+ACTIVE_MANAGED_SOURCE_UPDATE_ERROR = (
+    "Connection endpoint and provenance are locked while managed private accesses depend on it"
+)
+_ADMIN_SHARED_CUSTOM_ENDPOINT_FIELDS = {
+    "endpoint_url",
+    "region",
+    "force_path_style",
+    "verify_tls",
+    "provider_hint",
+}
+_ADMIN_SHARED_ENDPOINT_FIELDS = _ADMIN_SHARED_CUSTOM_ENDPOINT_FIELDS | {
+    "storage_endpoint_id"
+}
+_ADMIN_SHARED_SOURCE_IMMUTABLE_FIELDS = _ADMIN_SHARED_ENDPOINT_FIELDS | {
+    "is_active",
+    "credential_owner_type",
+    "credential_owner_identifier",
+}
 
 
 class S3ConnectionsService:
@@ -76,6 +99,89 @@ class S3ConnectionsService:
         row = self.admin_shared_query().filter(DBS3Connection.id == connection_id).first()
         if row is None:
             raise KeyError("S3Connection not found")
+        return row
+
+    def validate_admin_shared_create(
+        self,
+        payload: S3ConnectionAdminCreate,
+    ) -> None:
+        self._admin_shared_endpoint_plan(None, payload)
+
+    def create_admin_shared(
+        self,
+        created_by_user_id: int,
+        payload: S3ConnectionAdminCreate,
+    ) -> DBS3Connection:
+        storage_endpoint_id, custom_endpoint_config = (
+            self._admin_shared_endpoint_plan(None, payload)
+        )
+        row = DBS3Connection(
+            created_by_user_id=created_by_user_id,
+            name=payload.name,
+            storage_endpoint_id=storage_endpoint_id,
+            custom_endpoint_config=custom_endpoint_config,
+            is_shared=True,
+            is_active=True,
+            access_manager=True,
+            access_browser=False,
+            remediation_required=False,
+            remediation_reason=None,
+            credential_owner_type=payload.credential_owner_type,
+            credential_owner_identifier=payload.credential_owner_identifier,
+            access_key_id=payload.access_key_id,
+            secret_access_key=payload.secret_access_key,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+        self.db.add(row)
+        self.db.flush()
+        self.tags.replace_connection_tags(row, payload.tags)
+        self._refresh_detected_capabilities(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return row
+
+    def validate_admin_shared_update(
+        self,
+        row: DBS3Connection,
+        payload: S3ConnectionAdminUpdate,
+    ) -> None:
+        self._prepare_admin_shared_update(row, payload)
+
+    def update_admin_shared(
+        self,
+        connection_id: int,
+        payload: S3ConnectionAdminUpdate,
+    ) -> DBS3Connection:
+        row = self.get_admin_shared(connection_id)
+        endpoint_plan, group_ids = self._prepare_admin_shared_update(row, payload)
+        payload_data = payload.model_dump(exclude_unset=True)
+        if payload.name is not None:
+            row.name = payload.name
+        if "is_active" in payload_data:
+            row.is_active = bool(payload.is_active)
+        if endpoint_plan is not None:
+            row.storage_endpoint_id, row.custom_endpoint_config = endpoint_plan
+        row.access_browser = False
+        if "credential_owner_type" in payload_data:
+            row.credential_owner_type = payload.credential_owner_type
+        if "credential_owner_identifier" in payload_data:
+            row.credential_owner_identifier = payload.credential_owner_identifier
+        if "tags" in payload_data:
+            self.tags.replace_connection_tags(row, payload.tags)
+        if group_ids is not None:
+            self._sync_admin_shared_group_links(row.id, group_ids)
+        probe_fields = {
+            "storage_endpoint_id",
+            "endpoint_url",
+            "region",
+            "verify_tls",
+        }
+        if probe_fields & payload_data.keys():
+            self._refresh_detected_capabilities(row)
+        row.updated_at = utcnow()
+        self.db.commit()
+        self.db.refresh(row)
         return row
 
     def update_credentials(self, user_id: int, connection_id: int, *, access_key_id: str, secret_access_key: str) -> S3Connection:
@@ -292,6 +398,137 @@ class S3ConnectionsService:
         if self.is_active_managed_source(row.id):
             raise ValueError(ACTIVE_MANAGED_SOURCE_DELETE_ERROR)
         self._delete_entry(row)
+
+    def _prepare_admin_shared_update(
+        self,
+        row: DBS3Connection,
+        payload: S3ConnectionAdminUpdate,
+    ) -> tuple[Optional[tuple[Optional[int], Optional[str]]], Optional[list[int]]]:
+        fields_set = payload.model_fields_set
+        if (
+            self.is_active_managed_source(row.id)
+            and _ADMIN_SHARED_SOURCE_IMMUTABLE_FIELDS & fields_set
+        ):
+            raise ValueError(ACTIVE_MANAGED_SOURCE_UPDATE_ERROR)
+        endpoint_plan = None
+        if _ADMIN_SHARED_ENDPOINT_FIELDS & fields_set:
+            endpoint_plan = self._admin_shared_endpoint_plan(row, payload)
+        group_ids = self._validated_admin_shared_group_ids(payload.group_ids)
+        return endpoint_plan, group_ids
+
+    def _admin_shared_endpoint_plan(
+        self,
+        row: Optional[DBS3Connection],
+        payload: S3ConnectionAdminCreate | S3ConnectionAdminUpdate,
+    ) -> tuple[Optional[int], Optional[str]]:
+        fields_set = payload.model_fields_set
+        if "storage_endpoint_id" in fields_set:
+            desired_endpoint_id = payload.storage_endpoint_id
+        elif row is not None:
+            desired_endpoint_id = row.storage_endpoint_id
+        else:
+            desired_endpoint_id = None
+        custom_fields = _ADMIN_SHARED_CUSTOM_ENDPOINT_FIELDS & fields_set
+        if desired_endpoint_id is not None:
+            if custom_fields:
+                raise ValueError(
+                    "Custom endpoint fields cannot be combined with a managed storage endpoint"
+                )
+            endpoint = (
+                self.db.query(StorageEndpoint)
+                .filter(StorageEndpoint.id == desired_endpoint_id)
+                .first()
+            )
+            if endpoint is None:
+                raise KeyError("Storage endpoint not found")
+            return desired_endpoint_id, None
+
+        if row is not None and row.storage_endpoint_id is None:
+            current = custom_endpoint_update_base(row.custom_endpoint_config)
+        else:
+            current = custom_endpoint_update_base(None)
+        endpoint_url = (
+            payload.endpoint_url
+            if "endpoint_url" in fields_set
+            else current.endpoint_url
+        )
+        region = payload.region if "region" in fields_set else current.region
+        force_path_style = (
+            payload.force_path_style
+            if "force_path_style" in fields_set
+            else current.force_path_style
+        )
+        verify_tls = (
+            payload.verify_tls
+            if "verify_tls" in fields_set
+            else current.verify_tls
+        )
+        provider = (
+            payload.provider_hint
+            if "provider_hint" in fields_set
+            else current.provider
+        )
+        if force_path_style is None or verify_tls is None:
+            raise ValueError(
+                "force_path_style and verify_tls cannot be null for a custom endpoint"
+            )
+        return None, build_custom_endpoint_config(
+            endpoint_url or "",
+            region,
+            force_path_style,
+            verify_tls,
+            provider,
+        )
+
+    def _validated_admin_shared_group_ids(
+        self,
+        group_ids: Optional[list[int]],
+    ) -> Optional[list[int]]:
+        if group_ids is None:
+            return None
+        cleaned_ids = sorted({int(group_id) for group_id in group_ids})
+        if not cleaned_ids:
+            return []
+        found = {
+            row[0]
+            for row in self.db.query(UiGroup.id)
+            .filter(UiGroup.id.in_(cleaned_ids))
+            .all()
+        }
+        missing = set(cleaned_ids) - found
+        if missing:
+            missing_str = ", ".join(str(group_id) for group_id in sorted(missing))
+            raise ValueError(f"UI groups not found: {missing_str}")
+        return cleaned_ids
+
+    def _sync_admin_shared_group_links(
+        self,
+        connection_id: int,
+        group_ids: list[int],
+    ) -> None:
+        existing = (
+            self.db.query(UiGroupS3Connection)
+            .filter(UiGroupS3Connection.s3_connection_id == connection_id)
+            .all()
+        )
+        existing_ids = {link.group_id for link in existing}
+        desired_ids = set(group_ids)
+        if existing_ids - desired_ids:
+            (
+                self.db.query(UiGroupS3Connection)
+                .filter(
+                    UiGroupS3Connection.s3_connection_id == connection_id,
+                    UiGroupS3Connection.group_id.in_(existing_ids - desired_ids),
+                )
+                .delete(synchronize_session=False)
+            )
+        for group_id in sorted(desired_ids - existing_ids):
+            self.db.add(
+                UiGroupS3Connection(
+                    group_id=group_id,
+                    s3_connection_id=connection_id,
+                )
+            )
 
     def _delete_entry(self, row: DBS3Connection) -> None:
         (

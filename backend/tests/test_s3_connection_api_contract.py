@@ -159,6 +159,64 @@ def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_c
     assert update_response.json()["is_active"] is False
 
 
+def test_admin_connections_api_requires_explicit_managed_endpoint_detachment(
+    monkeypatch,
+    contract_client,
+):
+    client, db_session, _ = contract_client
+    monkeypatch.setattr(
+        "app.services.s3_connection_capabilities_service.probe_connection_can_manage_iam",
+        lambda _connection: True,
+    )
+    endpoint = StorageEndpoint(
+        name="Contract managed endpoint",
+        endpoint_url="https://contract-managed.example.test",
+        provider=StorageProvider.CEPH.value,
+        is_default=True,
+        is_editable=True,
+    )
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+
+    create_response = client.post(
+        "/api/admin/s3-connections",
+        json={
+            "name": "contract-managed-connection",
+            "storage_endpoint_id": endpoint.id,
+            "access_key_id": "AKIAADMINMANAGEDCONTRACT",
+            "secret_access_key": "SECRETADMINMANAGEDCONTRACT",
+        },
+    )
+    assert create_response.status_code == 201
+    connection_id = create_response.json()["id"]
+
+    ignored_custom_update = client.put(
+        f"/api/admin/s3-connections/{connection_id}",
+        json={"endpoint_url": "https://must-not-be-ignored.example.test"},
+    )
+    assert ignored_custom_update.status_code == 400
+    assert ignored_custom_update.json()["detail"] == (
+        "Custom endpoint fields cannot be combined with a managed storage endpoint"
+    )
+
+    detach_response = client.put(
+        f"/api/admin/s3-connections/{connection_id}",
+        json={
+            "storage_endpoint_id": None,
+            "endpoint_url": "https://contract-detached.example.test/",
+            "region": "detached-region",
+        },
+    )
+    assert detach_response.status_code == 200
+    assert detach_response.json()["storage_endpoint_id"] is None
+    assert (
+        detach_response.json()["endpoint_url"]
+        == "https://contract-detached.example.test"
+    )
+    assert detach_response.json()["region"] == "detached-region"
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
