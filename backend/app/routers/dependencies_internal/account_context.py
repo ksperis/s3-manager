@@ -14,11 +14,11 @@ from app.db import S3Account, S3Connection, S3User, StorageEndpoint, User, UserS
 from app.models.session import ManagerSessionPrincipal
 from app.services import app_settings_service, effective_access_service
 from app.services.effective_access_service import EffectiveAccessService
+from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_endpoint
-from app.utils.time import utcnow
 
 from .auth_session import get_current_actor, settings
 from .ceph_admin_context import _resolve_default_endpoint
@@ -166,13 +166,7 @@ def _resolve_connection_context(
     # Keep a minimal usage signal for UX (recently used sorting / hints).
     if touch_usage:
         try:
-            now = utcnow()
-            db.query(S3Connection).filter(S3Connection.id == conn.id).update(
-                {S3Connection.last_used_at: now, S3Connection.updated_at: now},
-                synchronize_session=False,
-            )
-            db.commit()
-            db.refresh(conn)
+            S3ConnectionsService(db).touch_usage(conn)
         except Exception:
             db.rollback()
     can_manage_iam = _connection_iam_capable(conn)

@@ -511,6 +511,22 @@ class S3ConnectionsService:
     def serialize(self, row: DBS3Connection) -> S3Connection:
         return self._to_model(row)
 
+    def touch_usage(self, row: DBS3Connection) -> None:
+        now = utcnow()
+        (
+            self.db.query(DBS3Connection)
+            .filter(DBS3Connection.id == row.id)
+            .update(
+                {
+                    DBS3Connection.last_used_at: now,
+                    DBS3Connection.updated_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+        self.db.commit()
+        self.db.refresh(row)
+
     def is_active_managed_source(self, connection_id: int) -> bool:
         return (
             self.db.query(ManagedPrivateAccess.id)

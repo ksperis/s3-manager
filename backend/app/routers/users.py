@@ -49,7 +49,6 @@ def mark_my_notifications_read(
         notification_ids=payload.notification_ids,
         mark_all=payload.all,
     )
-    db.commit()
     return MarkUserNotificationsReadResponse(
         updated_count=updated,
         unread_count=service.unread_count_for_user(current_user),
@@ -114,9 +113,6 @@ async def upload_my_avatar(
         service.store_uploaded_image(current_user, payload, file.content_type)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
-    db.add(current_user)
-    db.commit()
-    db.refresh(current_user)
     audit_service.record_action(
         user=current_user,
         scope="users",
@@ -137,9 +133,6 @@ def delete_my_avatar(
 ) -> UserOut:
     service = UserAvatarService(db)
     service.remove_uploaded_image(current_user)
-    db.add(current_user)
-    db.commit()
-    db.refresh(current_user)
     audit_service.record_action(
         user=current_user,
         scope="users",

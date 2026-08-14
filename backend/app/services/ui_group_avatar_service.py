@@ -70,6 +70,7 @@ class UiGroupAvatarService:
         group.avatar_content_type = detected_type
         group.avatar_source = "uploaded"
         group.avatar_updated_at = utcnow()
+        self._persist(group)
 
     def remove_uploaded_image(self, group: UiGroup) -> None:
         group.avatar_image = None
@@ -77,6 +78,12 @@ class UiGroupAvatarService:
         group.avatar_updated_at = utcnow()
         if group.avatar_source == "uploaded":
             group.avatar_source = "initials"
+        self._persist(group)
+
+    def _persist(self, group: UiGroup) -> None:
+        self.db.add(group)
+        self.db.commit()
+        self.db.refresh(group)
 
     def image(self, group_id: int) -> tuple[bytes, str, str]:
         group = self.db.query(UiGroup).filter(UiGroup.id == group_id).first()

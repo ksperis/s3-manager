@@ -131,6 +131,7 @@ class UserAvatarService:
         user.avatar_content_type = detected_type
         user.avatar_preference = "uploaded"
         user.avatar_updated_at = utcnow()
+        self._persist(user)
 
     def remove_uploaded_image(self, user: User) -> None:
         user.avatar_image = None
@@ -138,6 +139,12 @@ class UserAvatarService:
         user.avatar_updated_at = utcnow()
         if user.avatar_preference == "uploaded":
             user.avatar_preference = "auto"
+        self._persist(user)
+
+    def _persist(self, user: User) -> None:
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
 
     def image_for_viewer(self, viewer: User, target_user_id: int) -> tuple[bytes, str, str]:
         target = self.db.query(User).filter(User.id == target_user_id, User.is_active.is_(True)).first()

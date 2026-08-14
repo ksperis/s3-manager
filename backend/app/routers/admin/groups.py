@@ -146,9 +146,6 @@ async def upload_group_avatar(
         UiGroupAvatarService(db).store_uploaded_image(group, payload, file.content_type)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
-    db.add(group)
-    db.commit()
-    db.refresh(group)
     audit_service.record_action(
         user=current_user,
         scope="admin",
@@ -172,9 +169,6 @@ def delete_group_avatar(
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UI group not found")
     UiGroupAvatarService(db).remove_uploaded_image(group)
-    db.add(group)
-    db.commit()
-    db.refresh(group)
     audit_service.record_action(
         user=current_user,
         scope="admin",

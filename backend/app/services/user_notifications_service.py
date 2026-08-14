@@ -113,6 +113,7 @@ class UserNotificationsService:
         rows = visible.all()
         for row in rows:
             row.read_at = now
+        self.db.commit()
         return len(rows)
 
     def unread_count_for_user(self, user: User) -> int:
