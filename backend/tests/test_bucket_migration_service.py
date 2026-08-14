@@ -1153,7 +1153,7 @@ def test_precheck_same_endpoint_copy_source_access_can_use_temporary_auto_grant(
     assert target_client.allow is False
 
 
-def test_copy_single_object_falls_back_to_stream_copy_on_copy_source_access_denied(db_session):
+def test_copy_object_falls_back_to_stream_copy_on_copy_source_access_denied(db_session):
     service = BucketMigrationService(db_session)
     source_ctx = SimpleNamespace()
     target_ctx = SimpleNamespace()
@@ -1184,7 +1184,7 @@ def test_copy_single_object_falls_back_to_stream_copy_on_copy_source_access_deni
         lambda ctx: source_client if ctx is source_ctx else target_client
     )
 
-    service._copy_single_object(
+    service._copy_object(
         source_ctx,
         target_ctx,
         source_bucket="bucket-src",
@@ -1194,6 +1194,89 @@ def test_copy_single_object_falls_back_to_stream_copy_on_copy_source_access_deni
     )
 
     assert copied == [("bucket-dst", "object-key")]
+
+
+def test_copy_object_version_falls_back_to_versioned_stream_copy_on_access_denied(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace()
+    target_ctx = SimpleNamespace()
+    source_version_requests: list[str | None] = []
+
+    class _SourceClient:
+        def head_object(self, *, Bucket, Key, VersionId=None):
+            assert Bucket == "bucket-src"
+            assert Key == "object-key"
+            source_version_requests.append(VersionId)
+            return {"Metadata": {"source-version": str(VersionId)}}
+
+        def get_object_tagging(self, *, Bucket, Key, VersionId=None):
+            assert Bucket == "bucket-src"
+            assert Key == "object-key"
+            source_version_requests.append(VersionId)
+            return {"TagSet": []}
+
+        def get_object(self, *, Bucket, Key, VersionId=None):
+            assert Bucket == "bucket-src"
+            assert Key == "object-key"
+            source_version_requests.append(VersionId)
+            return {"Body": io.BytesIO(b"versioned-payload")}
+
+    copied: list[dict[str, object]] = []
+
+    class _TargetClient:
+        def __init__(self) -> None:
+            self.copy_source: dict[str, str] | None = None
+
+        def copy_object(self, **kwargs):
+            self.copy_source = kwargs["CopySource"]
+            raise ClientError(
+                {
+                    "Error": {"Code": "AccessDenied", "Message": "Denied"},
+                    "ResponseMetadata": {"HTTPStatusCode": 403},
+                },
+                "CopyObject",
+            )
+
+        def upload_fileobj(self, body, bucket, key, ExtraArgs=None):
+            copied.append(
+                {
+                    "bucket": bucket,
+                    "key": key,
+                    "body": body.read(),
+                    "extra": ExtraArgs or {},
+                }
+            )
+
+    source_client = _SourceClient()
+    target_client = _TargetClient()
+    service._context_client = (  # type: ignore[method-assign]
+        lambda ctx: source_client if ctx is source_ctx else target_client
+    )
+
+    service._copy_object(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-src",
+        target_bucket="bucket-dst",
+        key="object-key",
+        version_id="source-v1",
+        same_endpoint=True,
+    )
+
+    assert target_client.copy_source == {
+        "Bucket": "bucket-src",
+        "Key": "object-key",
+        "VersionId": "source-v1",
+    }
+    assert source_version_requests == ["source-v1", "source-v1", "source-v1", "source-v1"]
+    assert copied == [
+        {
+            "bucket": "bucket-dst",
+            "key": "object-key",
+            "body": b"versioned-payload",
+            "extra": {"Metadata": {"source-version": "source-v1"}},
+        }
+    ]
 
 
 def test_strong_verify_single_object_prefers_head_checksum(db_session):
@@ -2214,7 +2297,7 @@ def test_sync_bucket_version_aware_cross_endpoint_replays_versions_and_delete_ma
     assert target_client.actions[1][1]["extra"]["Tagging"] == "stage=v2"
 
 
-def test_stream_copy_single_object_preserves_headers_metadata_and_tags(db_session):
+def test_stream_copy_object_preserves_headers_metadata_and_tags(db_session):
     service = BucketMigrationService(db_session)
     source_ctx = SimpleNamespace(context_id="src", endpoint="https://source.example.test", account=SimpleNamespace())
     target_ctx = SimpleNamespace(context_id="dst", endpoint="https://target.example.test", account=SimpleNamespace())
@@ -2261,7 +2344,7 @@ def test_stream_copy_single_object_preserves_headers_metadata_and_tags(db_sessio
 
     service._context_client = lambda ctx: source_client if ctx.context_id == "src" else target_client  # type: ignore[method-assign]
 
-    service._stream_copy_single_object(
+    service._stream_copy_object(
         source_ctx,
         target_ctx,
         source_bucket="bucket-a",
@@ -2697,7 +2780,7 @@ def test_replay_bucket_versions_returns_incremental_watermark(db_session):
 
     service._context_client = lambda _ctx: object()  # type: ignore[method-assign]
     service._iter_bucket_version_timelines = lambda *_args, **_kwargs: iter(timelines)  # type: ignore[method-assign]
-    service._copy_single_object_version = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._copy_object = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._replay_delete_marker = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     copied, watermark = service._replay_bucket_versions(
         source_ctx,
@@ -3760,7 +3843,7 @@ def test_sync_bucket_updates_object_counters_incrementally(db_session):
         ]
     )
     service._is_same_endpoint = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
-    service._copy_single_object = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._copy_object = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
 
     commit_calls = {"count": 0}
@@ -3846,7 +3929,7 @@ def test_sync_bucket_force_flushes_progress_when_pause_is_requested(db_session):
         ]
     )
     service._is_same_endpoint = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
-    service._copy_single_object = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._copy_object = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
 
     control_calls = {"count": 0}

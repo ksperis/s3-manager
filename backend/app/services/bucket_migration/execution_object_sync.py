@@ -669,7 +669,7 @@ class BucketMigrationObjectSyncMixin:
                 if entry.is_delete_marker:
                     self._replay_delete_marker(target_client, target_bucket, entry.key)
                 else:
-                    self._copy_single_object_version(
+                    self._copy_object(
                         source_ctx,
                         target_ctx,
                         source_bucket=source_bucket,
@@ -1364,13 +1364,13 @@ class BucketMigrationObjectSyncMixin:
             if target_client is None:
                 target_client = self._context_client(target_ctx)
                 thread_local.target_client = target_client
-            self._copy_single_object(
+            self._copy_object(
                 source_ctx,
                 target_ctx,
-                source_bucket,
-                target_bucket,
-                key,
-                same_endpoint,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                key=key,
+                same_endpoint=same_endpoint,
                 source_client=source_client,
                 target_client=target_client,
             )
@@ -1475,15 +1475,16 @@ class BucketMigrationObjectSyncMixin:
             on_progress(force=True)
         return deleted
 
-    def _copy_single_object(
+    def _copy_object(
         self,
         source_ctx: _ResolvedContext,
         target_ctx: _ResolvedContext,
+        *,
         source_bucket: str,
         target_bucket: str,
         key: str,
         same_endpoint: bool,
-        *,
+        version_id: Optional[str] = None,
         source_client: Any | None = None,
         target_client: Any | None = None,
     ) -> None:
@@ -1491,12 +1492,14 @@ class BucketMigrationObjectSyncMixin:
         resolved_target_client = target_client or self._context_client(target_ctx)
         if same_endpoint:
             copy_source = {"Bucket": source_bucket, "Key": key}
+            if version_id:
+                copy_source["VersionId"] = version_id
             try:
                 head = self._head_object_with_version(
                     resolved_source_client,
                     source_bucket,
                     key,
-                    version_id=None,
+                    version_id=version_id,
                 )
                 kwargs: dict[str, Any] = {
                     "Bucket": target_bucket,
@@ -1512,83 +1515,22 @@ class BucketMigrationObjectSyncMixin:
                 return
             except (ClientError, BotoCoreError) as exc:
                 if not self._is_access_denied_error(exc):
-                    raise RuntimeError(f"Unable to copy object '{key}' with x-amz-copy-source: {exc}") from exc
-                logger.warning(
-                    "CopyObject with x-amz-copy-source denied for '%s' (%s), falling back to stream-copy.",
-                    key,
-                    exc,
-                )
-                self._stream_copy_single_object(
-                    source_ctx,
-                    target_ctx,
-                    source_bucket=source_bucket,
-                    target_bucket=target_bucket,
-                    key=key,
-                    source_client=resolved_source_client,
-                    target_client=resolved_target_client,
-                )
-                return
-
-        self._stream_copy_single_object(
-            source_ctx,
-            target_ctx,
-            source_bucket=source_bucket,
-            target_bucket=target_bucket,
-            key=key,
-            source_client=resolved_source_client,
-            target_client=resolved_target_client,
-        )
-
-    def _copy_single_object_version(
-        self,
-        source_ctx: _ResolvedContext,
-        target_ctx: _ResolvedContext,
-        *,
-        source_bucket: str,
-        target_bucket: str,
-        key: str,
-        version_id: str,
-        same_endpoint: bool,
-        source_client: Any | None = None,
-        target_client: Any | None = None,
-    ) -> None:
-        resolved_source_client = source_client or self._context_client(source_ctx)
-        resolved_target_client = target_client or self._context_client(target_ctx)
-        if same_endpoint:
-            copy_source = {"Bucket": source_bucket, "Key": key, "VersionId": version_id}
-            head = self._head_object_with_version(
-                resolved_source_client,
-                source_bucket,
-                key,
-                version_id=version_id,
-            )
-            kwargs: dict[str, Any] = {
-                "Bucket": target_bucket,
-                "Key": key,
-                "CopySource": copy_source,
-                "MetadataDirective": "COPY",
-                "TaggingDirective": "COPY",
-            }
-            storage_class = head.get("StorageClass")
-            if isinstance(storage_class, str) and storage_class.strip():
-                kwargs["StorageClass"] = storage_class.strip()
-            try:
-                resolved_target_client.copy_object(**kwargs)
-                return
-            except (ClientError, BotoCoreError) as exc:
-                if not self._is_access_denied_error(exc):
+                    object_label = (
+                        f"object version '{version_id}' for '{key}'"
+                        if version_id
+                        else f"object '{key}'"
+                    )
                     raise RuntimeError(
-                        f"Unable to copy object version '{version_id}' for '{key}' with x-amz-copy-source: {exc}"
+                        f"Unable to copy {object_label} with x-amz-copy-source: {exc}"
                     ) from exc
+                copy_label = f"version '{version_id}' of '{key}'" if version_id else f"'{key}'"
                 logger.warning(
-                    "CopyObject with x-amz-copy-source denied for version '%s' of '%s' (%s), "
-                    "falling back to stream-copy.",
-                    version_id,
-                    key,
+                    "CopyObject with x-amz-copy-source denied for %s (%s), falling back to stream-copy.",
+                    copy_label,
                     exc,
                 )
 
-        self._stream_copy_single_object_version(
+        self._stream_copy_object(
             source_ctx,
             target_ctx,
             source_bucket=source_bucket,
@@ -1629,7 +1571,7 @@ class BucketMigrationObjectSyncMixin:
             extra_args["Tagging"] = urlencode({tag_key: tag_value for tag_key, tag_value in tags})
         return extra_args
 
-    def _stream_copy_single_object(
+    def _stream_copy_object(
         self,
         source_ctx: _ResolvedContext,
         target_ctx: _ResolvedContext,
@@ -1637,50 +1579,7 @@ class BucketMigrationObjectSyncMixin:
         source_bucket: str,
         target_bucket: str,
         key: str,
-        source_client: Any | None = None,
-        target_client: Any | None = None,
-    ) -> None:
-        resolved_source_client = source_client or self._context_client(source_ctx)
-        resolved_target_client = target_client or self._context_client(target_ctx)
-        body = None
-        try:
-            head = self._head_object_with_version(
-                resolved_source_client,
-                source_bucket,
-                key,
-                version_id=None,
-            )
-            tags = self._get_object_tags_with_version(
-                resolved_source_client,
-                source_bucket,
-                key,
-                version_id=None,
-            )
-            response = resolved_source_client.get_object(Bucket=source_bucket, Key=key)
-            body = response.get("Body")
-            extra_args = self._build_upload_extra_args(head=head, tags=tags)
-            if extra_args:
-                resolved_target_client.upload_fileobj(body, target_bucket, key, ExtraArgs=extra_args)
-            else:
-                resolved_target_client.upload_fileobj(body, target_bucket, key)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to stream-copy object '{key}': {exc}") from exc
-        finally:
-            if body is not None:
-                try:
-                    body.close()
-                except Exception:  # noqa: BLE001
-                    pass
-
-    def _stream_copy_single_object_version(
-        self,
-        source_ctx: _ResolvedContext,
-        target_ctx: _ResolvedContext,
-        *,
-        source_bucket: str,
-        target_bucket: str,
-        key: str,
-        version_id: str,
+        version_id: Optional[str] = None,
         source_client: Any | None = None,
         target_client: Any | None = None,
     ) -> None:
@@ -1700,11 +1599,10 @@ class BucketMigrationObjectSyncMixin:
                 key,
                 version_id=version_id,
             )
-            response = resolved_source_client.get_object(
-                Bucket=source_bucket,
-                Key=key,
-                VersionId=version_id,
-            )
+            get_kwargs: dict[str, Any] = {"Bucket": source_bucket, "Key": key}
+            if version_id:
+                get_kwargs["VersionId"] = version_id
+            response = resolved_source_client.get_object(**get_kwargs)
             body = response.get("Body")
             extra_args = self._build_upload_extra_args(head=head, tags=tags)
             if extra_args:
@@ -1712,9 +1610,12 @@ class BucketMigrationObjectSyncMixin:
             else:
                 resolved_target_client.upload_fileobj(body, target_bucket, key)
         except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(
-                f"Unable to stream-copy object version '{version_id}' for '{key}': {exc}"
-            ) from exc
+            object_label = (
+                f"object version '{version_id}' for '{key}'"
+                if version_id
+                else f"object '{key}'"
+            )
+            raise RuntimeError(f"Unable to stream-copy {object_label}: {exc}") from exc
         finally:
             if body is not None:
                 try:
