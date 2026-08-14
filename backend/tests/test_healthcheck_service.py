@@ -5,7 +5,8 @@ from datetime import timedelta
 
 from app.db import EndpointHealthLatest, HealthCheckStatus, StorageEndpoint, StorageProvider
 from app.services import healthcheck_service
-from app.services.healthcheck_service import EndpointCheckTarget, HealthCheckProfile, HealthCheckService, HealthWindow
+from app.services.healthcheck_common import EndpointCheckTarget, HealthCheckProfile, HealthWindow
+from app.services.healthcheck_service import HealthCheckService
 from app.utils.time import utcnow
 
 

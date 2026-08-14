@@ -20,7 +20,8 @@ from app.models.healthcheck import (
 from app.routers.dependencies import get_current_super_admin
 from app.core.sensitive_data import sanitize_error_detail
 from app.services.app_settings_service import load_app_settings
-from app.services.healthcheck_service import HealthCheckService, HealthWindow
+from app.services.healthcheck_common import HealthWindow
+from app.services.healthcheck_service import HealthCheckService
 from app.services.operation_lease_service import (
     HEALTHCHECK_RUN_OPERATION,
     OperationLeaseService,

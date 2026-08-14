@@ -15,11 +15,11 @@ from app.db import (
     UserNotification,
 )
 from app.services.billing_service import BillingCollector
-from app.services.healthcheck_service import (
+from app.services.healthcheck_common import (
     DEFAULT_ROLLUP_RESOLUTION_SECONDS,
     HealthCheckResult,
-    HealthCheckService,
 )
+from app.services.healthcheck_service import HealthCheckService
 from app.services.quota_monitoring_service import QuotaMonitoringService, SubjectContext
 from app.services.user_notifications_service import UserNotificationsService
 from app.utils.time import utcnow
