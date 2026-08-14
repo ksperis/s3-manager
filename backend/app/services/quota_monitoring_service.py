@@ -9,13 +9,11 @@ import logging
 from typing import Any, Optional
 
 from sqlalchemy import or_
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db import (
     AccountRole,
-    QuotaAlertState,
     S3Account,
     S3User,
     StorageEndpoint,
@@ -31,6 +29,11 @@ from app.db import (
 from app.models.app_settings import QuotaNotificationSettings
 from app.services.app_settings_service import load_app_settings
 from app.services.data_retention_service import DataRetentionService
+from app.services.quota_alert_state_service import (
+    QUOTA_ALERT_FULL,
+    QUOTA_ALERT_THRESHOLD,
+    QuotaAlertStateService,
+)
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_supervision import get_supervision_rgw_client
 from app.services import smtp_mailer
@@ -46,15 +49,6 @@ runtime_settings = get_settings()
 
 
 class QuotaMonitoringService:
-    _LEVEL_NORMAL = "normal"
-    _LEVEL_THRESHOLD = "threshold"
-    _LEVEL_FULL = "full"
-    _LEVEL_ORDER = {
-        _LEVEL_NORMAL: 0,
-        _LEVEL_THRESHOLD: 1,
-        _LEVEL_FULL: 2,
-    }
-
     def __init__(self, db: Session) -> None:
         self.db = db
         self._mail_error_reason: Optional[str] = None
@@ -114,11 +108,16 @@ class QuotaMonitoringService:
         account_notification_users = self._load_account_notification_users()
         s3_user_notification_users = self._load_s3_user_notification_users()
         global_watch_notification_users = self._load_global_watch_notification_users()
-        states = self._load_alert_states()
         usage_clients: dict[int, Optional[RGWAdminClient]] = {}
         admin_clients: dict[int, Optional[RGWAdminClient]] = {}
         notifications_service = UserNotificationsService(self.db)
         usage_history_service = QuotaUsageHistoryService(self.db)
+        alert_state_service = QuotaAlertStateService(self.db)
+        states = (
+            alert_state_service.load_states()
+            if quota_alerts_enabled
+            else {}
+        )
 
         if quota_alerts_enabled:
             self._mailer, self._mail_error_reason = self._build_mailer(app_settings.quota_notifications)
@@ -215,14 +214,18 @@ class QuotaMonitoringService:
                 summary["history_daily_upserts"] += 1
 
             if quota_alerts_enabled:
-                should_alert, next_level, previous_level = self._update_state_and_check_alert(
+                transition = alert_state_service.update(
                     subject=subject,
                     states=states,
                     ratio_pct=ratio_pct,
                     threshold_percent=int(app_settings.quota_notifications.threshold_percent),
                     now=now,
                 )
-                if should_alert and next_level in {self._LEVEL_THRESHOLD, self._LEVEL_FULL}:
+                next_level = transition.next_level
+                if transition.should_alert and next_level in {
+                    QUOTA_ALERT_THRESHOLD,
+                    QUOTA_ALERT_FULL,
+                }:
                     summary["alerts_triggered"] += 1
                     notification_user_ids = self._resolve_notification_user_ids(
                         subject=subject,
@@ -235,14 +238,23 @@ class QuotaMonitoringService:
                         subject_type=subject.subject_type,
                         subject_id=subject.subject_id,
                         storage_endpoint_id=subject.endpoint_id,
-                        event_key=self._quota_notification_event_key(subject, previous_level, next_level, now),
+                        event_key=self._quota_notification_event_key(
+                            subject,
+                            transition.previous_level,
+                            next_level,
+                            now,
+                        ),
                         title=self._quota_notification_title(next_level),
                         message=self._quota_notification_message(
                             subject=subject,
                             alert_level=next_level,
                             ratio_pct=ratio_pct,
                         ),
-                        severity="error" if next_level == self._LEVEL_FULL else "warning",
+                        severity=(
+                            "error"
+                            if next_level == QUOTA_ALERT_FULL
+                            else "warning"
+                        ),
                         payload=self._quota_notification_payload(
                             subject=subject,
                             alert_level=next_level,
@@ -476,92 +488,6 @@ class QuotaMonitoringService:
             return None
         return round(max(ratios), 3)
 
-    def _state_key(self, subject: SubjectContext) -> tuple[int, Optional[int], Optional[int]]:
-        return (
-            int(subject.endpoint_id),
-            subject.subject_id if subject.subject_type == "account" else None,
-            subject.subject_id if subject.subject_type == "s3_user" else None,
-        )
-
-    def _load_alert_states(self) -> dict[tuple[int, Optional[int], Optional[int]], QuotaAlertState]:
-        rows = self.db.query(QuotaAlertState).all()
-        return {
-            (int(row.storage_endpoint_id), row.s3_account_id, row.s3_user_id): row
-            for row in rows
-        }
-
-    def _determine_level(self, ratio_pct: Optional[float], threshold_percent: int) -> str:
-        if ratio_pct is None:
-            return self._LEVEL_NORMAL
-        if ratio_pct >= 100.0:
-            return self._LEVEL_FULL
-        if ratio_pct >= float(threshold_percent):
-            return self._LEVEL_THRESHOLD
-        return self._LEVEL_NORMAL
-
-    def _update_state_and_check_alert(
-        self,
-        *,
-        subject: SubjectContext,
-        states: dict[tuple[int, Optional[int], Optional[int]], QuotaAlertState],
-        ratio_pct: Optional[float],
-        threshold_percent: int,
-        now: datetime,
-    ) -> tuple[bool, str, Optional[str]]:
-        key = self._state_key(subject)
-        state = states.get(key)
-        previous_level = state.last_level if state else None
-        next_level = self._determine_level(ratio_pct, threshold_percent)
-
-        if state is None:
-            state = QuotaAlertState(
-                storage_endpoint_id=subject.endpoint_id,
-                s3_account_id=subject.subject_id if subject.subject_type == "account" else None,
-                s3_user_id=subject.subject_id if subject.subject_type == "s3_user" else None,
-                last_level=next_level,
-                last_ratio_pct=ratio_pct,
-                last_checked_at=now,
-                created_at=now,
-                updated_at=now,
-            )
-            try:
-                with self.db.begin_nested():
-                    self.db.add(state)
-                    self.db.flush()
-            except IntegrityError:
-                state = (
-                    self.db.query(QuotaAlertState)
-                    .filter(
-                        QuotaAlertState.storage_endpoint_id == subject.endpoint_id,
-                        QuotaAlertState.s3_account_id == (subject.subject_id if subject.subject_type == "account" else None),
-                        QuotaAlertState.s3_user_id == (subject.subject_id if subject.subject_type == "s3_user" else None),
-                    )
-                    .first()
-                )
-                if state is None:
-                    raise
-                previous_level = state.last_level
-            states[key] = state
-
-        should_alert = False
-        if ratio_pct is not None and next_level in {self._LEVEL_THRESHOLD, self._LEVEL_FULL}:
-            if previous_level is None:
-                should_alert = True
-            else:
-                should_alert = self._LEVEL_ORDER[next_level] > self._LEVEL_ORDER.get(previous_level, 0)
-
-        state.last_level = next_level
-        state.last_ratio_pct = ratio_pct
-        state.last_checked_at = now
-        state.updated_at = now
-
-        if should_alert:
-            state.last_notified_level = next_level
-            state.last_notified_at = now
-            state.updated_at = now
-
-        return should_alert, next_level, previous_level
-
     def _normalize_email(self, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
@@ -777,7 +703,7 @@ class QuotaMonitoringService:
         )
 
     def _quota_notification_title(self, alert_level: str) -> str:
-        if alert_level == self._LEVEL_FULL:
+        if alert_level == QUOTA_ALERT_FULL:
             return "Quota reached"
         return "Quota near limit"
 
@@ -790,7 +716,7 @@ class QuotaMonitoringService:
     ) -> str:
         subject_label = "RGW account" if subject.subject_type == "account" else "RGW user"
         ratio_display = f"{ratio_pct:.3f}%" if ratio_pct is not None else "n/a"
-        if alert_level == self._LEVEL_FULL:
+        if alert_level == QUOTA_ALERT_FULL:
             return f"{subject_label} {subject.subject_name} has reached its quota ({ratio_display})."
         return f"{subject_label} {subject.subject_name} is near its quota limit ({ratio_display})."
 

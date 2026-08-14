@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import QuotaUsageDaily, QuotaUsageHourly
-from app.services.quota_subject import SubjectContext
+from app.services.quota_subject import SubjectContext, quota_subject_ids
 
 
 class QuotaUsageHistoryService:
@@ -29,7 +29,7 @@ class QuotaUsageHistoryService:
         now: datetime,
     ) -> None:
         hour_ts = now.replace(minute=0, second=0, microsecond=0)
-        account_id, user_id = self._subject_ids(subject)
+        account_id, user_id = quota_subject_ids(subject)
         existing = self._find_hourly(
             hour_ts=hour_ts,
             subject=subject,
@@ -95,7 +95,7 @@ class QuotaUsageHistoryService:
         now: datetime,
     ) -> None:
         day = now.date()
-        account_id, user_id = self._subject_ids(subject)
+        account_id, user_id = quota_subject_ids(subject)
         existing = self._find_daily(
             day=day,
             subject=subject,
@@ -145,18 +145,6 @@ class QuotaUsageHistoryService:
                 ratio_pct=ratio_pct,
                 now=now,
             )
-
-    @staticmethod
-    def _subject_ids(
-        subject: SubjectContext,
-    ) -> tuple[Optional[int], Optional[int]]:
-        if subject.subject_type == "account":
-            return subject.subject_id, None
-        if subject.subject_type == "s3_user":
-            return None, subject.subject_id
-        raise ValueError(
-            f"Unsupported quota subject type: {subject.subject_type}"
-        )
 
     def _find_hourly(
         self,

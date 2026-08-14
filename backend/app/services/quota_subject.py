@@ -17,3 +17,15 @@ class SubjectContext:
     quota_account_id: Optional[str]
     quota_user_uid: Optional[str]
     contact_email: Optional[str]
+
+
+def quota_subject_ids(
+    subject: SubjectContext,
+) -> tuple[Optional[int], Optional[int]]:
+    if subject.subject_type == "account":
+        return subject.subject_id, None
+    if subject.subject_type == "s3_user":
+        return None, subject.subject_id
+    raise ValueError(
+        f"Unsupported quota subject type: {subject.subject_type}"
+    )
