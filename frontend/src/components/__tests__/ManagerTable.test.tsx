@@ -9,7 +9,7 @@ describe("ManagerTable", () => {
       <ManagerTable
         columns={[
           { key: "name", label: "Name" },
-          { key: "actions", label: "Actions", align: "right" },
+          { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
           { key: "select", label: "Select", hideLabel: true },
         ]}
       >
@@ -23,9 +23,10 @@ describe("ManagerTable", () => {
     expect(screen.getByRole("table")).toHaveClass("manager-table");
     expect(screen.getByRole("columnheader", { name: "Name" })).toHaveClass("text-left");
     expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveClass("text-right");
+    expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveAttribute("data-table-actions", "true");
     expect(screen.getByRole("columnheader", { name: "Select" }).querySelector(".sr-only")).toHaveTextContent("Select");
     expect(screen.getByText("logs-prod")).toBeInTheDocument();
-    expect(screen.getByText("Edit")).toBeInTheDocument();
+    expect(screen.getByText("Edit").closest("td")).toHaveAttribute("data-table-actions", "true");
   });
 
   it("adds shared responsive-card metadata when requested", () => {

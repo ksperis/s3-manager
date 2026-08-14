@@ -66,7 +66,7 @@ function labelToText(label: ReactNode): string | undefined {
   return undefined;
 }
 
-function decorateResponsiveRow(row: ReactElement, columns: ManagerTableColumn[]) {
+function decorateTableRow(row: ReactElement, columns: ManagerTableColumn[], responsiveCards: boolean) {
   let columnIndex = 0;
   const rowProps = row.props as { children?: ReactNode };
   const cells = Children.map(rowProps.children, (cell) => {
@@ -81,20 +81,21 @@ function decorateResponsiveRow(row: ReactElement, columns: ManagerTableColumn[])
     const mobileRole = column.mobileRole;
     const mobileLabel = column.mobileLabel ?? labelToText(column.label);
     return cloneElement(cell, {
-      "data-label": !mobileRole && !column.mobileHidden && mobileLabel ? mobileLabel : undefined,
-      "data-mobile-primary": mobileRole === "primary" ? "true" : undefined,
-      "data-mobile-actions": mobileRole === "actions" ? "true" : undefined,
-      "data-mobile-hidden": column.mobileHidden ? "true" : undefined,
+      "data-label": responsiveCards && !mobileRole && !column.mobileHidden && mobileLabel ? mobileLabel : undefined,
+      "data-mobile-primary": responsiveCards && mobileRole === "primary" ? "true" : undefined,
+      "data-mobile-actions": responsiveCards && mobileRole === "actions" ? "true" : undefined,
+      "data-mobile-hidden": responsiveCards && column.mobileHidden ? "true" : undefined,
+      "data-table-actions": mobileRole === "actions" ? "true" : undefined,
     });
   });
 
   return cloneElement(row, undefined, cells);
 }
 
-function decorateResponsiveRows(children: ReactNode, columns: ManagerTableColumn[]) {
+function decorateTableRows(children: ReactNode, columns: ManagerTableColumn[], responsiveCards: boolean) {
   return Children.map(children, (child) => {
     if (!isValidElement(child) || child.type !== "tr") return child;
-    return decorateResponsiveRow(child, columns);
+    return decorateTableRow(child, columns, responsiveCards);
   });
 }
 
@@ -137,7 +138,7 @@ export default function ManagerTable<TSortField extends string = string>({
   sort,
   tbodyClassName,
 }: ManagerTableProps<TSortField>) {
-  const bodyChildren = responsiveCards ? decorateResponsiveRows(children, columns) : children;
+  const bodyChildren = decorateTableRows(children, columns, responsiveCards);
 
   return (
     <div className={responsiveCards ? "overflow-x-hidden md:overflow-x-auto" : "overflow-x-auto"}>
@@ -150,6 +151,7 @@ export default function ManagerTable<TSortField extends string = string>({
               return (
                 <th
                   key={column.key}
+                  data-table-actions={column.mobileRole === "actions" ? "true" : undefined}
                   className={cx(
                     "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
                     column.align === "right" ? "text-right" : "text-left",

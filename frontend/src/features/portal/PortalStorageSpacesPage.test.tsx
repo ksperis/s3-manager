@@ -362,6 +362,50 @@ describe("PortalStorageSpacesPage", () => {
       screen.getByRole("heading", { name: "Create a space" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Space name")).toHaveClass("ui-control");
+    expect(screen.getByRole("dialog", { name: "Create a space" })).toBeInTheDocument();
+  });
+
+  it("closes an untouched create modal and protects edited values", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>,
+    );
+
+    const createTrigger = screen.getByRole("button", { name: "Create space" });
+    await user.click(createTrigger);
+    expect(screen.getByRole("dialog", { name: "Create a space" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Create a space" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Discard changes?" })).not.toBeInTheDocument();
+    await waitFor(() => expect(createTrigger).toHaveFocus());
+
+    await user.click(createTrigger);
+    await user.type(screen.getByLabelText("Space name"), "Research");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("dialog", { name: "Discard changes?" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(screen.queryByRole("dialog", { name: "Create a space" })).not.toBeInTheDocument();
+    await waitFor(() => expect(createTrigger).toHaveFocus());
+  });
+
+  it("renders import as a guarded modal", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>,
+    );
+
+    const importTrigger = screen.getByRole("button", { name: "Add existing space" });
+    await user.click(importTrigger);
+    expect(screen.getByRole("dialog", { name: "Add existing space" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Existing technical ID"), "existing-space");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("dialog", { name: "Discard changes?" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(importTrigger).toHaveFocus());
   });
 
   it("ignores the dashboard create query when creation is unavailable", () => {
@@ -385,7 +429,8 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.queryByLabelText("Space name")).not.toBeInTheDocument();
   });
 
-  it("renders the storage spaces page in French when requested", () => {
+  it("renders the storage spaces page and its close guard in French when requested", async () => {
+    const user = userEvent.setup();
     window.localStorage.setItem(
       "user",
       JSON.stringify({
@@ -416,6 +461,12 @@ describe("PortalStorageSpacesPage", () => {
       "href",
       "/portal/storage-spaces/research-data",
     );
+    await user.click(screen.getByRole("button", { name: "Créer un espace" }));
+    await user.type(screen.getByLabelText("Nom de l'espace"), "Projet");
+    await user.click(screen.getByRole("button", { name: "Annuler" }));
+    expect(
+      screen.getByRole("dialog", { name: "Abandonner les modifications ?" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps archived spaces in a separate tab", async () => {

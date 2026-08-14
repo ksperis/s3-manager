@@ -110,9 +110,10 @@ export default function DataTableShell<Row, SortField extends string = string>({
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
               {columns.map((column) => (
-                column.header ? (
+                column.header || column.mobileRole === "actions" ? (
                   <th
                     key={column.id}
+                    data-table-actions={column.mobileRole === "actions" ? "true" : undefined}
                     className={cx(
                       "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
                       (column.align ?? "left") === "right" ? "text-right" : "text-left",
@@ -120,7 +121,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
                     )}
                   >
                     <div className={cx("flex items-center", (column.align ?? "left") === "right" ? "justify-end" : "gap-1")}>
-                      {column.header}
+                      {column.header ?? column.label}
                     </div>
                   </th>
                 ) : (
@@ -165,6 +166,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
                           data-mobile-primary={responsiveCards && mobileRole === "primary" ? "true" : undefined}
                           data-mobile-actions={responsiveCards && mobileRole === "actions" ? "true" : undefined}
                           data-mobile-hidden={responsiveCards && column.mobileHidden ? "true" : undefined}
+                          data-table-actions={mobileRole === "actions" ? "true" : undefined}
                         >
                           {column.render(row)}
                         </td>

@@ -4,9 +4,10 @@ import WorkspaceNavCards from "../WorkspaceNavCards";
 
 describe("WorkspaceNavCards", () => {
   it("renders navigation links with descriptions", () => {
-    render(
+    const { container } = render(
       <MemoryRouter>
         <WorkspaceNavCards
+          columns={4}
           items={[
             {
               title: "Buckets",
@@ -27,5 +28,7 @@ describe("WorkspaceNavCards", () => {
     expect(screen.getByRole("link", { name: /Buckets/i })).toHaveAttribute("href", "/storage-ops/buckets");
     expect(screen.getByText("Cross-account bucket listing and operations.")).toBeInTheDocument();
     expect(screen.getByText("Workspace")).toBeInTheDocument();
+    expect(screen.queryByText("Navigation")).not.toBeInTheDocument();
+    expect(container.querySelector(".grid")).toHaveClass("xl:grid-cols-4");
   });
 });

@@ -136,7 +136,10 @@ describe("DataTableShell", () => {
     expect(table).toHaveClass("responsive-data-table");
     expect(screen.getByText("Archive").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(screen.getByText("3").closest("td")).toHaveAttribute("data-label", "Count");
-    expect(screen.getByRole("button", { name: "Open" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
+    const actionCell = screen.getByRole("button", { name: "Open" }).closest("td");
+    expect(actionCell).toHaveAttribute("data-mobile-actions", "true");
+    expect(actionCell).toHaveAttribute("data-table-actions", "true");
+    expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveAttribute("data-table-actions", "true");
   });
 
   it("renders custom column headers for selection controls", () => {

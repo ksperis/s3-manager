@@ -3,8 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -23,12 +25,11 @@ import {
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
+import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import StorageSpaceIcon from "../../components/StorageSpaceIcon";
-import WorkflowPage, {
-  WorkflowActions,
-  workflowPageHostClass,
-} from "../../components/WorkflowPage";
+import { WorkflowActions } from "../../components/WorkflowPage";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
@@ -48,6 +49,7 @@ import {
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
+import { stableSignature } from "../../utils/stableSignature";
 import {
   PortalAccessModeFields,
   PortalShareCandidatePicker,
@@ -130,7 +132,7 @@ export default function PortalStorageSpacesPage() {
     includeUsage: true,
   });
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<PortalStorageSpaceRole | "all">(
     "all",
@@ -175,6 +177,10 @@ export default function PortalStorageSpacesPage() {
     useState<PortalStorageSpaceAccountMemberRole>("Editor");
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [createInitialSignature, setCreateInitialSignature] = useState("");
+  const [importInitialSignature, setImportInitialSignature] = useState("");
+  const createFocusReturnRef = useRef<HTMLElement | null>(null);
+  const importFocusReturnRef = useRef<HTMLElement | null>(null);
   const activeSpaces = useMemo(
     () => workspace.spaces.filter((space) => space.status !== "Archived"),
     [workspace.spaces],
@@ -392,11 +398,127 @@ export default function PortalStorageSpacesPage() {
   const createRequested = searchParams.get("create") === "1";
   const startGuideStorageKey = `portal.storage-spaces.start-guide.dismissed.${accountIdForApi ?? "default"}`;
 
+  const createFormSignature = useMemo(
+    () =>
+      stableSignature({
+        name: newName,
+        description: newDescription,
+        namingMode: newNamingMode,
+        accessMode: effectiveNewAccessMode,
+        accountMemberRole: newAccountMemberRole,
+        restrictedRolesByUserId,
+      }),
+    [
+      effectiveNewAccessMode,
+      newAccountMemberRole,
+      newDescription,
+      newName,
+      newNamingMode,
+      restrictedRolesByUserId,
+    ],
+  );
+  const importFormSignature = useMemo(
+    () =>
+      stableSignature({
+        bucketName: importBucketName,
+        description: importDescription,
+        accessMode: importAccessMode,
+        accountMemberRole: importAccountMemberRole,
+        restrictedRolesByUserId: importRestrictedRolesByUserId,
+      }),
+    [
+      importAccessMode,
+      importAccountMemberRole,
+      importBucketName,
+      importDescription,
+      importRestrictedRolesByUserId,
+    ],
+  );
+
+  const closeCreate = useCallback(() => {
+    const focusTarget = createFocusReturnRef.current;
+    createFocusReturnRef.current = null;
+    setShowCreate(false);
+    setCreateError(null);
+    setCreateInitialSignature("");
+    if (searchParams.get("create") === "1") {
+      const next = new URLSearchParams(searchParams);
+      next.delete("create");
+      setSearchParams(next, { replace: true });
+    }
+    window.requestAnimationFrame(() => {
+      if (focusTarget?.isConnected) focusTarget.focus();
+    });
+  }, [searchParams, setSearchParams]);
+
+  const openCreate = useCallback(() => {
+    createFocusReturnRef.current =
+      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : null;
+    const initialAccessMode = createAccessModes[0] ?? "private";
+    setNewName("");
+    setNewDescription("");
+    setNewNamingMode("generic_uuid");
+    setNewAccessMode(initialAccessMode);
+    setNewAccountMemberRole("Editor");
+    setRestrictedRolesByUserId({});
+    setShareCandidateQuery("");
+    setCreateError(null);
+    setCreateInitialSignature(
+      stableSignature({
+        name: "",
+        description: "",
+        namingMode: "generic_uuid",
+        accessMode: initialAccessMode,
+        accountMemberRole: "Editor",
+        restrictedRolesByUserId: {},
+      }),
+    );
+    setShowCreate(true);
+  }, [createAccessModes]);
+
+  const closeImport = useCallback(() => {
+    const focusTarget = importFocusReturnRef.current;
+    importFocusReturnRef.current = null;
+    setShowImport(false);
+    setImportError(null);
+    setImportInitialSignature("");
+    window.requestAnimationFrame(() => {
+      if (focusTarget?.isConnected) focusTarget.focus();
+    });
+  }, []);
+
+  const openImport = useCallback(() => {
+    importFocusReturnRef.current =
+      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : null;
+    const initialAccessMode = importAccessModes[0] ?? "private";
+    setImportBucketName("");
+    setImportDescription("");
+    setImportAccessMode(initialAccessMode);
+    setImportAccountMemberRole("Editor");
+    setImportRestrictedRolesByUserId({});
+    setImportShareCandidateQuery("");
+    setImportError(null);
+    setImportInitialSignature(
+      stableSignature({
+        bucketName: "",
+        description: "",
+        accessMode: initialAccessMode,
+        accountMemberRole: "Editor",
+        restrictedRolesByUserId: {},
+      }),
+    );
+    setShowImport(true);
+  }, [importAccessModes]);
+
   useEffect(() => {
     if (canCreate && createRequested) {
-      setShowCreate(true);
+      openCreate();
     }
-  }, [canCreate, createRequested]);
+  }, [canCreate, createRequested, openCreate]);
 
   useEffect(() => {
     if (!createAccessModes.includes(newAccessMode) && createAccessModes[0]) {
@@ -557,6 +679,43 @@ export default function PortalStorageSpacesPage() {
     }
   };
 
+  const createCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges:
+      Boolean(createInitialSignature) && createFormSignature !== createInitialSignature,
+    disabled: createBusy,
+    onClose: closeCreate,
+    title: t({
+      en: "Discard changes?",
+      fr: "Abandonner les modifications ?",
+      de: "Änderungen verwerfen?",
+    }),
+    description: t({
+      en: "You have unapplied changes. Closing this dialog will discard them.",
+      fr: "Vous avez des modifications non appliquées. Fermer cette fenêtre les abandonnera.",
+      de: "Sie haben nicht angewendete Änderungen. Beim Schließen werden sie verworfen.",
+    }),
+    cancelLabel: t({ en: "Keep editing", fr: "Continuer la modification", de: "Weiter bearbeiten" }),
+    confirmLabel: t({ en: "Discard changes", fr: "Abandonner", de: "Änderungen verwerfen" }),
+  });
+  const importCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges:
+      Boolean(importInitialSignature) && importFormSignature !== importInitialSignature,
+    disabled: importBusy,
+    onClose: closeImport,
+    title: t({
+      en: "Discard changes?",
+      fr: "Abandonner les modifications ?",
+      de: "Änderungen verwerfen?",
+    }),
+    description: t({
+      en: "You have unapplied changes. Closing this dialog will discard them.",
+      fr: "Vous avez des modifications non appliquées. Fermer cette fenêtre les abandonnera.",
+      de: "Sie haben nicht angewendete Änderungen. Beim Schließen werden sie verworfen.",
+    }),
+    cancelLabel: t({ en: "Keep editing", fr: "Continuer la modification", de: "Weiter bearbeiten" }),
+    confirmLabel: t({ en: "Discard changes", fr: "Abandonner", de: "Änderungen verwerfen" }),
+  });
+
   const dismissStartGuide = () => {
     window.localStorage.setItem(startGuideStorageKey, "1");
     setStartGuideDismissed(true);
@@ -589,7 +748,7 @@ export default function PortalStorageSpacesPage() {
               fr: "Créer un espace",
               de: "Bereich erstellen",
             }),
-            onClick: () => setShowCreate(true),
+            onClick: openCreate,
           },
         ]
       : []),
@@ -601,7 +760,7 @@ export default function PortalStorageSpacesPage() {
               fr: "Ajouter un espace existant",
               de: "Vorhandenen Bereich hinzufügen",
             }),
-            onClick: () => setShowImport(true),
+            onClick: openImport,
             variant: "secondary" as const,
           },
         ]
@@ -614,7 +773,7 @@ export default function PortalStorageSpacesPage() {
   ];
 
   return (
-    <div className={workflowPageHostClass(showCreate || showImport)}>
+    <div>
       <PageHeader
         title={t({ en: "Spaces", fr: "Espaces", de: "Bereiche" })}
         description={t({
@@ -854,28 +1013,15 @@ export default function PortalStorageSpacesPage() {
       ) : null}
 
       {showCreate ? (
-        <WorkflowPage
+        <Modal
           title={t({
             en: "Create a space",
             fr: "Créer un espace",
             de: "Bereich erstellen",
           })}
-          description={t({
-            en: "Define the space, its storage identity, and who can work there.",
-            fr: "Définissez l'espace, son identité de stockage et les personnes qui peuvent y travailler.",
-            de: "Legen Sie den Bereich, seine Speicheridentität und die berechtigten Personen fest.",
-          })}
-          breadcrumbs={portalBreadcrumbs(
-            {
-              label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }),
-              to: "/portal/storage-spaces",
-            },
-            {
-              label: t({ en: "Create", fr: "Créer", de: "Erstellen" }),
-            },
-          )}
-          backLabel={t({ en: "Back to spaces", fr: "Retour aux espaces", de: "Zurück zu Bereichen" })}
-          onBack={createBusy ? undefined : () => setShowCreate(false)}
+          onClose={createCloseGuard.requestClose}
+          maxWidthClass="max-w-3xl"
+          maxBodyHeightClass="max-h-[80vh]"
         >
           <div className="space-y-4">
             <p className={cx("ui-caption", uiMutedTextClass)}>
@@ -1032,7 +1178,7 @@ export default function PortalStorageSpacesPage() {
             <WorkflowActions>
               <UiButton
                 variant="secondary"
-                onClick={() => setShowCreate(false)}
+                onClick={createCloseGuard.requestClose}
                 disabled={createBusy}
               >
                 {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
@@ -1045,35 +1191,30 @@ export default function PortalStorageSpacesPage() {
                 {t({ en: "Create", fr: "Créer", de: "Erstellen" })}
               </UiButton>
             </WorkflowActions>
+            {createCloseGuard.confirmationDialog}
           </div>
-        </WorkflowPage>
+        </Modal>
       ) : null}
 
       {showImport ? (
-        <WorkflowPage
+        <Modal
           title={t({
             en: "Add existing space",
             fr: "Ajouter un espace existant",
             de: "Vorhandenen Bereich hinzufügen",
           })}
-          description={t({
-            en: "Attach existing storage to Portal and define its initial access.",
-            fr: "Rattachez un stockage existant à Portal et définissez ses accès initiaux.",
-            de: "Binden Sie vorhandenen Speicher an Portal an und legen Sie den anfänglichen Zugriff fest.",
-          })}
-          breadcrumbs={portalBreadcrumbs(
-            {
-              label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }),
-              to: "/portal/storage-spaces",
-            },
-            {
-              label: t({ en: "Add existing", fr: "Ajouter un existant", de: "Vorhandenen hinzufügen" }),
-            },
-          )}
-          backLabel={t({ en: "Back to spaces", fr: "Retour aux espaces", de: "Zurück zu Bereichen" })}
-          onBack={importBusy ? undefined : () => setShowImport(false)}
+          onClose={importCloseGuard.requestClose}
+          maxWidthClass="max-w-3xl"
+          maxBodyHeightClass="max-h-[80vh]"
         >
           <div className="space-y-4">
+            <p className={cx("ui-caption", uiMutedTextClass)}>
+              {t({
+                en: "Attach existing storage to Portal and define its initial access.",
+                fr: "Rattachez un stockage existant à Portal et définissez ses accès initiaux.",
+                de: "Binden Sie vorhandenen Speicher an Portal an und legen Sie den anfänglichen Zugriff fest.",
+              })}
+            </p>
             <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr]">
               <UiInput
                 label={t({
@@ -1160,7 +1301,7 @@ export default function PortalStorageSpacesPage() {
             <WorkflowActions>
               <UiButton
                 variant="secondary"
-                onClick={() => setShowImport(false)}
+                onClick={importCloseGuard.requestClose}
                 disabled={importBusy}
               >
                 {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
@@ -1173,8 +1314,9 @@ export default function PortalStorageSpacesPage() {
                 {t({ en: "Add", fr: "Ajouter", de: "Hinzufügen" })}
               </UiButton>
             </WorkflowActions>
+            {importCloseGuard.confirmationDialog}
           </div>
-        </WorkflowPage>
+        </Modal>
       ) : null}
 
       <PortalPageTabs

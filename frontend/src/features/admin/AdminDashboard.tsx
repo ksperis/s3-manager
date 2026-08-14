@@ -45,6 +45,7 @@ import {
 } from "../../components/WorkspaceDashboardKit";
 import WorkspaceIncidentsCard from "../../components/WorkspaceIncidentsCard";
 import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
 import {
   cx,
   uiButtonBaseClass,
@@ -167,6 +168,36 @@ function OnboardingPanel({
   dismissBusy: boolean;
   onDismiss: () => void;
 }) {
+  const [reviewOpen, setReviewOpen] = useState(!onboarding.can_dismiss);
+
+  useEffect(() => {
+    if (!onboarding.can_dismiss) {
+      setReviewOpen(true);
+    }
+  }, [onboarding.can_dismiss]);
+
+  if (onboarding.can_dismiss && !reviewOpen) {
+    return (
+      <section className={cx(uiCardClass, "flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between")}>
+        <div className="min-w-0">
+          <h2 className="ui-body font-semibold text-[var(--ui-text)]">Initial setup complete</h2>
+          <p className={cx("mt-0.5 ui-caption", uiMutedTextClass)}>
+            The default admin is secured and a storage endpoint is configured.
+          </p>
+          {error ? <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-300">{error}</p> : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <UiButton variant="secondary" size="sm" onClick={() => setReviewOpen(true)}>
+            Review
+          </UiButton>
+          <UiButton variant="ghost" size="sm" onClick={onDismiss} disabled={dismissBusy} loading={dismissBusy}>
+            Dismiss
+          </UiButton>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className={cx(uiCardClass, "p-4 sm:p-5")}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -221,14 +252,25 @@ function OnboardingPanel({
           </div>
         </div>
         <div className="shrink-0 self-start lg:self-auto">
-          <button
-            type="button"
-            onClick={onDismiss}
-            disabled={!onboarding.can_dismiss || dismissBusy}
-            className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "px-2 py-1")}
-          >
-            {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {onboarding.can_dismiss ? (
+              <button
+                type="button"
+                onClick={() => setReviewOpen(false)}
+                className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2 py-1")}
+              >
+                Collapse checklist
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onDismiss}
+              disabled={!onboarding.can_dismiss || dismissBusy}
+              className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "px-2 py-1")}
+            >
+              {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
+            </button>
+          </div>
           {!onboarding.can_dismiss && (
             <p className={cx("mt-1 max-w-[13rem] ui-caption lg:text-right", uiMutedTextClass)}>
               Complete pending steps before dismissing.

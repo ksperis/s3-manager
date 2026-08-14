@@ -93,6 +93,16 @@ type AssociationTab = "accounts" | "s3_users" | "connections";
 type UserModalTab = "general" | "associations" | "groups" | "access" | "connections" | "browser" | "manager";
 type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
+const userWorkflowTabs: Array<{ id: UserModalTab; label: string }> = [
+  { id: "general", label: "General" },
+  { id: "groups", label: "Groups" },
+  { id: "associations", label: "Associations" },
+  { id: "access", label: "Workspaces" },
+  { id: "connections", label: "Connections" },
+  { id: "browser", label: "Browser" },
+  { id: "manager", label: "Manager" },
+];
+
 type AccountSelection = {
   id: number;
   role: AccountAccessRole;
@@ -1715,7 +1725,7 @@ export default function UsersPage() {
 
   const usersDescription = "Create, edit, delete, and link UI users to groups, RGW accounts, S3 users, and S3 connections.";
   const associationLabel = "Storage associations";
-  const filterPlaceholder = "Search by email, role, group, account, user, or connection";
+  const filterPlaceholder = "Search users...";
   const tableStatus = resolveListTableStatus({
     loading,
     error,
@@ -1841,15 +1851,7 @@ export default function UsersPage() {
               onTabChange={setCreateModalTab}
               ariaLabel="User creation sections"
               idPrefix="admin-user-create"
-              tabs={[
-                { id: "general", label: "General" },
-                { id: "associations", label: "Associations" },
-                { id: "groups", label: "Groups" },
-                { id: "access", label: "Workspaces" },
-                { id: "connections", label: "Connections" },
-                { id: "browser", label: "Browser" },
-                { id: "manager", label: "Manager" },
-              ]}
+              tabs={userWorkflowTabs}
             >
 
             {createModalTab === "general" && (
@@ -2202,15 +2204,7 @@ export default function UsersPage() {
               onTabChange={setEditModalTab}
               ariaLabel="User configuration sections"
               idPrefix="admin-user-edit"
-              tabs={[
-                { id: "general", label: "General" },
-                { id: "groups", label: "Groups" },
-                { id: "associations", label: "Associations" },
-                { id: "access", label: "Workspaces" },
-                { id: "connections", label: "Connections" },
-                { id: "browser", label: "Browser" },
-                { id: "manager", label: "Manager" },
-              ]}
+              tabs={userWorkflowTabs}
             >
 
             {editModalTab === "general" && (

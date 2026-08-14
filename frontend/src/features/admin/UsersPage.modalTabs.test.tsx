@@ -240,7 +240,7 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
     expect(screen.getByLabelText("Search")).toHaveAttribute(
       "placeholder",
-      "Search by email, role, group, account, user, or connection"
+      "Search users..."
     );
     fireEvent.change(screen.getByLabelText("Search"), { target: { value: "responsive" } });
     await waitFor(() => {
@@ -483,6 +483,15 @@ describe("UsersPage modal tabs", () => {
     render(<UsersPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "General",
+      "Groups",
+      "Associations",
+      "Workspaces",
+      "Connections",
+      "Browser",
+      "Manager",
+    ]);
     expect(screen.getByRole("tab", { name: "General" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Associations" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Workspaces" })).toBeInTheDocument();

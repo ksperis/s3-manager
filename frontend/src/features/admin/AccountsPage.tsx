@@ -272,6 +272,31 @@ export default function S3AccountsPage() {
     () => cephEndpoints.filter((ep) => Boolean(ep.capabilities?.account)),
     [cephEndpoints]
   );
+  const defaultAccountEndpointId = useMemo(() => {
+    const endpoint = accountCephEndpoints.find((candidate) => candidate.is_default) ?? accountCephEndpoints[0];
+    return endpoint ? String(endpoint.id) : "";
+  }, [accountCephEndpoints]);
+  const buildCreateSignature = useCallback(
+    (value: typeof form) =>
+      stableSignature({
+        form: {
+          ...value,
+          tags: normalizeUiTags(value.tags),
+          storage_endpoint_id:
+            value.storage_endpoint_id === defaultAccountEndpointId ? "" : value.storage_endpoint_id,
+        },
+      }),
+    [defaultAccountEndpointId]
+  );
+  const buildImportSignature = useCallback(
+    (value: { importText: string; importTenantEndpointId: string }) =>
+      stableSignature({
+        ...value,
+        importTenantEndpointId:
+          value.importTenantEndpointId === defaultAccountEndpointId ? "" : value.importTenantEndpointId,
+      }),
+    [defaultAccountEndpointId]
+  );
 
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
     if (quotaGb == null) {
@@ -764,7 +789,7 @@ export default function S3AccountsPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.name) {
-      setActionError("S3Account name is required");
+      setActionError("Account name is required");
       return;
     }
     if (!form.storage_endpoint_id) {
@@ -865,8 +890,8 @@ export default function S3AccountsPage() {
     importPermissionLoading ||
     !importEndpointCanWrite;
   const createCurrentSignature = useMemo(
-    () => stableSignature({ form: { ...form, tags: normalizeUiTags(form.tags) } }),
-    [form]
+    () => buildCreateSignature(form),
+    [buildCreateSignature, form]
   );
   const createCloseGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: Boolean(createInitialSignature) && createCurrentSignature !== createInitialSignature,
@@ -874,8 +899,8 @@ export default function S3AccountsPage() {
     onClose: () => setShowCreateModal(false),
   });
   const importCurrentSignature = useMemo(
-    () => stableSignature({ importText, importTenantEndpointId }),
-    [importTenantEndpointId, importText]
+    () => buildImportSignature({ importText, importTenantEndpointId }),
+    [buildImportSignature, importTenantEndpointId, importText]
   );
   const importCloseGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: Boolean(importInitialSignature) && importCurrentSignature !== importInitialSignature,
@@ -1153,7 +1178,7 @@ export default function S3AccountsPage() {
   };
 
   return (
-    <div className={workflowPageHostClass(showImportModal || Boolean(editingS3Account))}>
+    <div className={workflowPageHostClass(Boolean(editingS3Account))}>
       <PageHeader
         title="RGW Accounts"
         description="Provision Ceph RGW accounts (tenants), quotas, and root users."
@@ -1167,7 +1192,7 @@ export default function S3AccountsPage() {
                     setImportText("");
                     setImportError(null);
                     setImportMessage(null);
-                    setImportInitialSignature(stableSignature({ importText: "", importTenantEndpointId }));
+                    setImportInitialSignature(buildImportSignature({ importText: "", importTenantEndpointId }));
                     setShowImportModal(true);
                     void loadEndpointsIfNeeded();
                   },
@@ -1176,7 +1201,7 @@ export default function S3AccountsPage() {
                 {
                   label: "Create account",
                   onClick: () => {
-                    setCreateInitialSignature(stableSignature({ form: { ...form, tags: normalizeUiTags(form.tags) } }));
+                    setCreateInitialSignature(buildCreateSignature(form));
                     setShowCreateModal(true);
                     void loadEndpointsIfNeeded();
                   },
@@ -1206,7 +1231,7 @@ export default function S3AccountsPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <UiInput
-                  label="S3Account name *"
+                  label="Account name *"
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   required
@@ -1398,13 +1423,10 @@ export default function S3AccountsPage() {
       )}
 
       {isSuperAdmin && showImportModal && (
-        <WorkflowPage
+        <Modal
           title="Import RGW accounts"
-          description="Import multiple RGW accounts, validate endpoint access, and review the results."
-          breadcrumbs={adminPageBreadcrumbs("accounts", { label: "Import" })}
-          backLabel="Back to accounts"
-          onBack={importCloseGuard.requestClose}
-          width="standard"
+          onClose={importCloseGuard.requestClose}
+          maxWidthClass="max-w-xl"
         >
           <p className="mb-3 ui-body text-slate-500">
             Enter RGW tenant IDs (RGWXXXXXXXXXXXXXXX) one per line. The platform will ensure a root user exists and retrieve keys.
@@ -1504,7 +1526,7 @@ export default function S3AccountsPage() {
                   await importS3Accounts(payload);
                   setImportMessage("S3Accounts imported.");
                   setImportText("");
-                  setImportInitialSignature(stableSignature({ importText: "", importTenantEndpointId }));
+                  setImportInitialSignature(buildImportSignature({ importText: "", importTenantEndpointId }));
                   await fetchS3Accounts();
                 } catch (err) {
                   setImportError(extractError(err));
@@ -1517,7 +1539,7 @@ export default function S3AccountsPage() {
             </UiButton>
           </div>
           {importCloseGuard.confirmationDialog}
-        </WorkflowPage>
+        </Modal>
       )}
 
       {isSuperAdmin && editingS3Account && (

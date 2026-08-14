@@ -3,21 +3,13 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { fetchStorageOpsSummary, type StorageOpsSummary } from "../../api/storageOps";
 import PageBanner from "../../components/PageBanner";
 import PageShell from "../../components/PageShell";
 import { storageOpsPageBreadcrumbs } from "./storageOpsBreadcrumbs";
-import WorkspaceNavCards from "../../components/WorkspaceNavCards";
-import { uiCardClass } from "../../components/ui/styles";
+import { cx, uiButtonBaseClass, uiButtonVariants, uiCardClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-
-const cards = [
-  {
-    title: "Buckets",
-    description: "Cross-account, S3 user and cross-connection bucket listing, filtering and bulk operations.",
-    to: "/storage-ops/buckets",
-  },
-];
 
 export default function StorageOpsDashboard() {
   const [summary, setSummary] = useState<StorageOpsSummary | null>(null);
@@ -58,14 +50,21 @@ export default function StorageOpsDashboard() {
               {summary ? summary.total_contexts : "—"}
             </p>
           </div>
-          <p className="ui-caption text-slate-500 dark:text-slate-400">
-            Accounts: {summary?.total_accounts ?? "—"} | S3 users: {summary?.total_s3_users ?? "—"} | Connections:{" "}
-            {summary?.total_connections ?? "—"} | Shared: {summary?.total_shared_connections ?? "—"} | Private:{" "}
-            {summary?.total_private_connections ?? "—"} | Endpoints: {summary?.total_endpoints ?? "—"}
-          </p>
+          <div className="flex flex-col items-start gap-3 sm:items-end">
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
+              Accounts: {summary?.total_accounts ?? "—"} | S3 users: {summary?.total_s3_users ?? "—"} | Connections:{" "}
+              {summary?.total_connections ?? "—"} | Shared: {summary?.total_shared_connections ?? "—"} | Private:{" "}
+              {summary?.total_private_connections ?? "—"} | Endpoints: {summary?.total_endpoints ?? "—"}
+            </p>
+            <Link
+              to="/storage-ops/buckets"
+              className={cx(uiButtonBaseClass, uiButtonVariants.primary, "px-3 py-1.5 text-xs")}
+            >
+              Open buckets
+            </Link>
+          </div>
         </div>
       </section>
-      <WorkspaceNavCards items={cards} />
     </PageShell>
   );
 }

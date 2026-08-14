@@ -760,6 +760,31 @@ describe("AccountsPage modal tabs", () => {
     );
   });
 
+  it("uses guarded create and import modals without treating endpoint defaults as edits", async () => {
+    render(<AccountsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create account" }));
+    const createDialog = screen.getByRole("dialog", { name: "Create an account" });
+    expect(await within(createDialog).findByLabelText("Storage endpoint (Ceph) *")).toHaveValue("10");
+    expect(within(createDialog).getByLabelText("Account name *")).toBeInTheDocument();
+    fireEvent.click(within(createDialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Discard changes?" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Create an account" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    const importDialog = screen.getByRole("dialog", { name: "Import RGW accounts" });
+    expect(await within(importDialog).findByLabelText("Ceph endpoint")).toHaveValue("10");
+    fireEvent.click(within(importDialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Discard changes?" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Import RGW accounts" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    const editedImportDialog = screen.getByRole("dialog", { name: "Import RGW accounts" });
+    fireEvent.change(within(editedImportDialog).getByRole("textbox"), { target: { value: "RGW00000000000000001" } });
+    fireEvent.click(within(editedImportDialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("dialog", { name: "Discard changes?" })).toBeInTheDocument();
+  });
+
   it("keeps tagged accounts visible with exact quick filter mode", async () => {
     listS3AccountsMock.mockImplementation((params?: { search?: string }) => {
       const taggedAccount = {

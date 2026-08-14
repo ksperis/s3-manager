@@ -586,6 +586,29 @@ a:hover {
   padding: 0.5rem 0.75rem;
 }
 
+@media (min-width: 768px) {
+  .manager-table th[data-table-actions="true"],
+  .manager-table td[data-table-actions="true"] {
+    position: sticky;
+    right: 0;
+    box-shadow: -1px 0 0 var(--ui-border-soft);
+  }
+
+  .manager-table th[data-table-actions="true"] {
+    z-index: 2;
+    background: var(--ui-surface-muted);
+  }
+
+  .manager-table td[data-table-actions="true"] {
+    z-index: 1;
+    background: var(--ui-surface);
+  }
+
+  .manager-table tbody tr:hover td[data-table-actions="true"] {
+    background: var(--ui-hover);
+  }
+}
+
 @media (max-width: 767px) {
   .responsive-data-table {
     min-width: 0 !important;

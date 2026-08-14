@@ -45,9 +45,9 @@ describe("StorageOpsDashboard", () => {
         "Accounts: 1 | S3 users: 1 | Connections: 2 | Shared: 1 | Private: 1 | Endpoints: 2"
       )
     ).toBeInTheDocument();
-    const bucketLink = screen.getByRole("link", { name: /Buckets/i });
+    const bucketLink = screen.getByRole("link", { name: "Open buckets" });
     expect(bucketLink).toHaveAttribute("href", "/storage-ops/buckets");
-    expect(within(bucketLink).getByText("Navigation")).toBeInTheDocument();
+    expect(screen.queryByText("Navigation")).not.toBeInTheDocument();
   });
 
   it("keeps navigation visible when the summary fails", async () => {
@@ -56,6 +56,6 @@ describe("StorageOpsDashboard", () => {
     renderDashboard();
 
     await waitFor(() => expect(screen.getByText("Summary down")).toBeInTheDocument());
-    expect(screen.getByRole("link", { name: /Buckets/i })).toHaveAttribute("href", "/storage-ops/buckets");
+    expect(screen.getByRole("link", { name: "Open buckets" })).toHaveAttribute("href", "/storage-ops/buckets");
   });
 });

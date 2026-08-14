@@ -38,10 +38,12 @@ export default function WorkspaceNavCards({
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="ui-caption font-semibold uppercase tracking-wide text-primary">
-                {item.eyebrow ?? "Navigation"}
-              </p>
-              <h3 className="mt-1.5 ui-subtitle font-semibold text-slate-900 dark:text-slate-50">
+              {item.eyebrow ? (
+                <p className="ui-caption font-semibold uppercase tracking-wide text-primary">
+                  {item.eyebrow}
+                </p>
+              ) : null}
+              <h3 className={cx("ui-subtitle font-semibold text-slate-900 dark:text-slate-50", item.eyebrow && "mt-1.5")}>
                 {item.title}
               </h3>
             </div>

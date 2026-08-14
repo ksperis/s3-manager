@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneralSettings } from "../../api/appSettings";
@@ -298,6 +298,24 @@ describe("AdminDashboard feature summary", () => {
       ],
       next_cursor: null,
     });
+  });
+
+  it("collapses a completed onboarding checklist until the user reviews it", async () => {
+    mocks.fetchOnboardingStatus.mockResolvedValue({
+      can_dismiss: true,
+      dismissed: false,
+      endpoint_configured: true,
+      seed_user_configured: true,
+    });
+
+    await renderDashboard();
+
+    expect(screen.getByRole("heading", { name: "Initial setup complete" })).toBeInTheDocument();
+    expect(screen.queryByText("Secure the default admin")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    expect(screen.getByText("Secure the default admin")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Collapse checklist" }));
+    expect(screen.queryByText("Secure the default admin")).not.toBeInTheDocument();
   });
 
   it("renders exactly two compact feature summary cards with enabled features only", async () => {
