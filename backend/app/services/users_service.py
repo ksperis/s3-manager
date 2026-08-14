@@ -1,6 +1,5 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-import hashlib
 import json
 import logging
 from typing import Optional
@@ -41,6 +40,7 @@ from app.models.user import (
     UserUpdate,
     validate_password_policy,
 )
+from app.services.external_identity_user_service import ExternalIdentityUserService
 from app.services.portal_ownership import require_no_private_storage_space_ownership
 from app.services.portal_role_sync import (
     capture_effective_portal_roles,
@@ -881,61 +881,13 @@ class UsersService:
         full_name: Optional[str],
         picture_url: Optional[str],
     ) -> tuple[User, bool]:
-        normalized_provider = provider.lower()
-        existing = (
-            self.db.query(User)
-            .filter(
-                User.auth_provider == normalized_provider,
-                User.auth_provider_subject == subject,
-            )
-            .first()
-        )
-        if existing:
-            changed = False
-            if full_name and existing.display_name != full_name and not existing.full_name:
-                existing.display_name = full_name
-                changed = True
-            if picture_url and existing.picture_url != picture_url:
-                existing.picture_url = picture_url
-                changed = True
-            if changed:
-                self.db.add(existing)
-                self.db.commit()
-                self.db.refresh(existing)
-            return existing, False
-
-        if email:
-            user = self.get_by_email(email)
-            if user:
-                user.auth_provider = normalized_provider
-                user.auth_provider_subject = subject
-                if full_name and not user.display_name:
-                    user.display_name = full_name
-                if picture_url:
-                    user.picture_url = picture_url
-                self.db.add(user)
-                self.db.commit()
-                self.db.refresh(user)
-                logger.debug("Linked local user id=%s to OIDC provider=%s", user.id, normalized_provider)
-                return user, False
-
-        generated_email = email or f"{normalized_provider}-{subject}@oidc.local"
-        new_user = User(
-            email=generated_email,
+        return ExternalIdentityUserService(self.db).get_or_create_oidc_user(
+            provider=provider,
+            subject=subject,
+            email=email,
             full_name=full_name,
-            display_name=full_name,
             picture_url=picture_url,
-            hashed_password=None,
-            is_active=True,
-            role=UserRole.UI_NONE.value,
-            auth_provider=normalized_provider,
-            auth_provider_subject=subject,
         )
-        self.db.add(new_user)
-        self.db.commit()
-        self.db.refresh(new_user)
-        logger.debug("Created OIDC user id=%s provider=%s", new_user.id, normalized_provider)
-        return new_user, True
 
     def get_or_create_ldap_user(
         self,
@@ -946,77 +898,13 @@ class UsersService:
         full_name: Optional[str],
         allow_email_linking: bool = False,
     ) -> tuple[User, bool]:
-        normalized_provider = f"ldap:{provider.lower()}"
-        normalized_subject = str(subject or "").strip()
-        if not normalized_subject:
-            raise ValueError("LDAP subject is required")
-        normalized_email = str(email or "").strip().lower() or None
-        existing = (
-            self.db.query(User)
-            .filter(
-                User.auth_provider == normalized_provider,
-                User.auth_provider_subject == normalized_subject,
-            )
-            .first()
-        )
-        if existing:
-            changed = False
-            if normalized_email and normalized_email != existing.email:
-                other = self.get_by_email_case_insensitive(normalized_email)
-                if other and other.id != existing.id:
-                    raise ValueError("Email already in use by another account")
-                existing.email = normalized_email
-                changed = True
-            if full_name and existing.display_name != full_name and not existing.full_name:
-                existing.display_name = full_name
-                changed = True
-            if changed:
-                self.db.add(existing)
-                self.db.commit()
-                self.db.refresh(existing)
-            return existing, False
-
-        if normalized_email:
-            user = self.get_by_email_case_insensitive(normalized_email)
-            if user:
-                if not allow_email_linking:
-                    raise ValueError("Email already in use by another account")
-                if user.auth_provider and (
-                    user.auth_provider != normalized_provider
-                    or user.auth_provider_subject != normalized_subject
-                ):
-                    raise ValueError("Email already linked to another external identity")
-                user.auth_provider = normalized_provider
-                user.auth_provider_subject = normalized_subject
-                if full_name and not user.display_name:
-                    user.display_name = full_name
-                self.db.add(user)
-                self.db.commit()
-                self.db.refresh(user)
-                logger.debug("Linked local user id=%s to LDAP provider=%s", user.id, normalized_provider)
-                return user, False
-
-        generated_email = self._generated_ldap_email(provider, normalized_subject)
-        new_user = User(
-            email=normalized_email or generated_email,
+        return ExternalIdentityUserService(self.db).get_or_create_ldap_user(
+            provider=provider,
+            subject=subject,
+            email=email,
             full_name=full_name,
-            display_name=full_name,
-            hashed_password=None,
-            is_active=True,
-            role=UserRole.UI_NONE.value,
-            auth_provider=normalized_provider,
-            auth_provider_subject=normalized_subject,
+            allow_email_linking=allow_email_linking,
         )
-        self.db.add(new_user)
-        self.db.commit()
-        self.db.refresh(new_user)
-        logger.debug("Created LDAP user id=%s provider=%s", new_user.id, normalized_provider)
-        return new_user, True
-
-    @staticmethod
-    def _generated_ldap_email(provider: str, subject: str) -> str:
-        digest = hashlib.sha256(f"{provider}:{subject}".encode()).hexdigest()[:16]
-        return f"ldap-{provider}-{digest}@ldap.local"
 
 
 def get_users_service(db: Session) -> UsersService:
