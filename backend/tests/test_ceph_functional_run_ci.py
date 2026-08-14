@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from tests_ceph_functional import run_ci
 
@@ -107,3 +108,29 @@ def test_prepare_environment_generates_keyring_settings(monkeypatch, tmp_path):
     assert env["PUBLIC_ORIGIN"] == "http://127.0.0.1:8765"
     assert json.loads(env["CORS_ORIGINS"]) == ["http://127.0.0.1:8765"]
     assert env["CEPH_TEST_REQUEST_ORIGIN"] == "http://127.0.0.1:8765"
+
+
+def test_bootstrap_super_admin_session_exports_cookie_material(monkeypatch, tmp_path):
+    payload = {
+        "access_cookie_name": "ui_access",
+        "access_cookie_value": "access-value",
+        "csrf_cookie_name": "csrf_token",
+        "csrf_cookie_value": "csrf-value",
+    }
+    monkeypatch.setattr(
+        run_ci.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(payload),
+            stderr="",
+        ),
+    )
+    env: dict[str, str] = {}
+
+    run_ci._bootstrap_super_admin_session(tmp_path, env)
+
+    assert env["CEPH_TEST_ACCESS_COOKIE_NAME"] == "ui_access"
+    assert env["CEPH_TEST_CSRF_COOKIE_NAME"] == "csrf_token"
+    assert env["CEPH_TEST_BOOTSTRAP_ACCESS_COOKIE"] == "access-value"
+    assert env["CEPH_TEST_BOOTSTRAP_CSRF_TOKEN"] == "csrf-value"

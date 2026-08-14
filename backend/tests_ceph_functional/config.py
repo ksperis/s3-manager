@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
@@ -75,17 +75,20 @@ class CephTestSettings:
 
     backend_base_url: str
     super_admin_email: str
-    super_admin_password: str
+    super_admin_password: str = field(repr=False)
     request_origin: str
     csrf_cookie_name: str
+    access_cookie_name: str
+    bootstrap_access_cookie: str | None = field(repr=False)
+    bootstrap_csrf_token: str | None = field(repr=False)
     verify_tls: bool
     backend_ca_bundle: str | None
     request_timeout: float
     test_prefix: str
     cleanup_delete_rgw: bool
     rgw_admin_endpoint: str | None
-    rgw_admin_access_key: str | None
-    rgw_admin_secret_key: str | None
+    rgw_admin_access_key: str | None = field(repr=False)
+    rgw_admin_secret_key: str | None = field(repr=False)
     rgw_admin_region: str | None
     rgw_verify_tls: bool
     rgw_ca_bundle: str | None
@@ -130,6 +133,14 @@ def load_settings() -> CephTestSettings:
             default="csrf_token",
         )
         or "csrf_token",
+        access_cookie_name=_env_str(
+            "CEPH_TEST_ACCESS_COOKIE_NAME",
+            "ACCESS_TOKEN_COOKIE_NAME",
+            default="ui_access",
+        )
+        or "ui_access",
+        bootstrap_access_cookie=_env_str("CEPH_TEST_BOOTSTRAP_ACCESS_COOKIE"),
+        bootstrap_csrf_token=_env_str("CEPH_TEST_BOOTSTRAP_CSRF_TOKEN"),
         verify_tls=_env_bool("CEPH_TEST_VERIFY_TLS", False),
         backend_ca_bundle=_env_str("CEPH_TEST_BACKEND_CA_BUNDLE"),
         request_timeout=_env_float("CEPH_TEST_HTTP_TIMEOUT", 30.0),

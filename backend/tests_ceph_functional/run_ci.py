@@ -426,6 +426,30 @@ def _run_tests(backend_root: Path, env: dict[str, str], argv: list[str]) -> int:
     return process.returncode
 
 
+def _bootstrap_super_admin_session(backend_root: Path, env: dict[str, str]) -> None:
+    process = subprocess.run(
+        [sys.executable, "-m", "tests_ceph_functional.bootstrap_session"],
+        cwd=backend_root,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if process.returncode != 0:
+        raise RuntimeError(
+            "Unable to bootstrap the Ceph functional super-admin session.\n"
+            f"{process.stderr.strip() or process.stdout.strip()}"
+        )
+    try:
+        payload = json.loads(process.stdout.strip().splitlines()[-1])
+        env["CEPH_TEST_ACCESS_COOKIE_NAME"] = str(payload["access_cookie_name"])
+        env["CEPH_TEST_CSRF_COOKIE_NAME"] = str(payload["csrf_cookie_name"])
+        env["CEPH_TEST_BOOTSTRAP_ACCESS_COOKIE"] = str(payload["access_cookie_value"])
+        env["CEPH_TEST_BOOTSTRAP_CSRF_TOKEN"] = str(payload["csrf_cookie_value"])
+    except (IndexError, KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("Ceph functional session bootstrap returned an invalid response") from exc
+
+
 def main(argv: list[str]) -> int:
     backend_root = Path(__file__).resolve().parents[1]
     reports_dir = backend_root.parent / "gl-test-reports"
@@ -457,6 +481,7 @@ def main(argv: list[str]) -> int:
         )
         try:
             _wait_for_backend(backend, health_url, BACKEND_BOOT_TIMEOUT_SECONDS, backend_log_path)
+            _bootstrap_super_admin_session(backend_root, env)
             return _run_tests(backend_root, env, argv)
         finally:
             if backend.poll() is None:

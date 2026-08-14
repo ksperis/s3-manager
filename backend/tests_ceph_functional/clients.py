@@ -132,6 +132,7 @@ class BackendAuthenticator:
     """Handles token acquisition for API users."""
 
     def __init__(self, settings: CephTestSettings) -> None:
+        self.settings = settings
         self.base_url = settings.backend_base_url.rstrip("/")
         self.verify: bool | str = settings.backend_ca_bundle or settings.verify_tls
         self.timeout = settings.request_timeout
@@ -139,8 +140,31 @@ class BackendAuthenticator:
         self.retry_delay = max(0.5, settings.login_retry_delay)
         self.request_origin = settings.request_origin
         self.csrf_cookie_name = settings.csrf_cookie_name
+        self.access_cookie_name = settings.access_cookie_name
+        self.bootstrap_access_cookie = settings.bootstrap_access_cookie
+        self.bootstrap_csrf_token = settings.bootstrap_csrf_token
+
+    def _bootstrap_super_admin_session(self, email: str) -> BackendSession | None:
+        if email.strip().lower() != self.settings.super_admin_email.strip().lower():
+            return None
+        if not self.bootstrap_access_cookie or not self.bootstrap_csrf_token:
+            return None
+        session = requests.Session()
+        session.cookies.set(self.access_cookie_name, self.bootstrap_access_cookie, path="/api")
+        session.cookies.set(self.csrf_cookie_name, self.bootstrap_csrf_token, path="/")
+        return BackendSession(
+            base_url=self.base_url,
+            verify=self.verify,
+            timeout=self.timeout,
+            request_origin=self.request_origin,
+            csrf_cookie_name=self.csrf_cookie_name,
+            session=session,
+        )
 
     def login(self, email: str, password: str) -> BackendSession:
+        bootstrap_session = self._bootstrap_super_admin_session(email)
+        if bootstrap_session is not None:
+            return bootstrap_session
         attempt = 0
         last_error: Exception | None = None
         while attempt < self.login_retries:
