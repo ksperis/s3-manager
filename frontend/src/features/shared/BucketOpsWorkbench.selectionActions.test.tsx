@@ -333,6 +333,44 @@ describe("BucketOpsWorkbench selection actions", () => {
     await waitFor(() => expect(screen.queryByText("Selecting filtered buckets · 200 / 250")).not.toBeInTheDocument());
   });
 
+  it("ignores a late listing failure after unmount aborts the request", async () => {
+    const deferred = createDeferred<{
+      items: Array<Record<string, unknown>>;
+      total: number;
+      page: number;
+      page_size: number;
+      has_next: boolean;
+      stats_available: boolean;
+    }>();
+    let requestSignal: AbortSignal | undefined;
+    mocks.listCephAdminBuckets.mockImplementation(
+      (
+        _endpointId: number,
+        _params?: Record<string, unknown>,
+        options?: { signal?: AbortSignal },
+      ) => {
+        requestSignal = options?.signal;
+        return deferred.promise;
+      },
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(mocks.listCephAdminBuckets).toHaveBeenCalledTimes(1));
+    unmount();
+    expect(requestSignal?.aborted).toBe(true);
+
+    deferred.reject(new Error("Late listing failure"));
+    await deferred.promise.catch(() => undefined);
+
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it("reuses the current filtered query for full-selection CSV export and only requests needed includes", async () => {
     const allBuckets = buildBuckets(3);
     mocks.listCephAdminBuckets.mockImplementation(createBucketListMock(allBuckets));

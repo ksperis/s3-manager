@@ -189,7 +189,7 @@ export function useBucketOpsListing({
             },
           });
         } catch (streamErr) {
-          if (isCancelledError(streamErr)) return;
+          if (requestAbort.signal.aborted || isCancelledError(streamErr)) return;
           if (requestId !== requestSeqRef.current) return;
           setAdvancedProgress({
             active: true,
@@ -252,12 +252,12 @@ export function useBucketOpsListing({
         setStatsWarning(detailResponse.stats_warning ?? null);
         setItems(baseItems.map((bucket) => detailsByKey.get(bucketRowKey(bucket)) ?? bucket));
       } finally {
-        if (requestId === requestSeqRef.current) {
+        if (!requestAbort.signal.aborted && requestId === requestSeqRef.current) {
           setLoadingDetails(false);
         }
       }
     } catch (err) {
-      if (isCancelledError(err)) return;
+      if (requestAbort.signal.aborted || isCancelledError(err)) return;
       if (requestId !== requestSeqRef.current) return;
       console.error(err);
       setError(extractError(err));

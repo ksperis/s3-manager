@@ -5405,7 +5405,7 @@ describe("BrowserPage interactions", () => {
         screen.getByRole("menuitem", { name: "Clean old versions" }),
       ).toBeEnabled();
     });
-    await user.click(
+    fireEvent.click(
       screen.getByRole("menuitem", { name: "Clean old versions" }),
     );
 
