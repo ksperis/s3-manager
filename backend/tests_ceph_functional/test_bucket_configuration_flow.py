@@ -799,6 +799,7 @@ def test_manager_bucket_replication_roundtrip(
             lambda: super_admin_session.get(
                 f"/browser/buckets/{bucket_name}/object-meta",
                 params={"account_id": f"ceph-admin-{target_endpoint_id}", "key": object_key},
+                headers={"X-S3-Workspace": "ceph-admin"},
             ),
             lambda current: isinstance(current, dict)
             and current.get("key") == object_key

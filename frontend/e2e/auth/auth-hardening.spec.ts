@@ -73,7 +73,12 @@ test("enrolls and reuses a verified passkey with cookie-only multi-tab revocatio
   await expect(secondTab).toHaveURL(/\/admin(?:\?.*)?$/);
 
   await logout();
-  await secondTab.reload();
+  try {
+    await secondTab.reload();
+  } catch {
+    // The auth guard may complete its redirect while reload is still pending.
+    await expect(secondTab).toHaveURL(/\/login(?:\?.*)?$/);
+  }
   await expect(secondTab).toHaveURL(/\/login(?:\?.*)?$/);
   expect((await secondTab.request.get("/api/auth/session")).status()).toBe(401);
   cookies = await context.cookies();

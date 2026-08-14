@@ -421,13 +421,16 @@ function getOtherBucketsPanel() {
   return within(section);
 }
 
-async function waitForOpenedMoreMenu(previousMenus: Set<HTMLElement>) {
+async function waitForOpenedMoreMenu(
+  previousMenus: Set<HTMLElement>,
+  timeout = 1_500,
+) {
   let openedMenu: HTMLElement | undefined;
   await waitFor(() => {
     const menus = screen.queryAllByRole("menu", { name: "More" });
     openedMenu = menus.find((menu) => !previousMenus.has(menu)) ?? menus.at(-1);
     expect(openedMenu).toBeTruthy();
-  }, { timeout: 3_000 });
+  }, { timeout });
   if (!openedMenu) {
     throw new Error("Unable to find opened More menu");
   }
@@ -493,13 +496,20 @@ function setBrowserLayoutRect(width: number, height = 720) {
 
 async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
   const previousMenus = new Set(screen.queryAllByRole("menu", { name: "More" }));
-  const toolbar =
-    screen.queryByRole("toolbar", { name: "Browser context bar" }) &&
-    within(getContextToolbar()).queryByRole("button", { name: "More" })
-      ? getContextToolbar()
-      : getActionsToolbar();
-  await user.click(within(toolbar).getByRole("button", { name: "More" }));
-  return waitForOpenedMoreMenu(previousMenus);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const toolbar =
+      screen.queryByRole("toolbar", { name: "Browser context bar" }) &&
+      within(getContextToolbar()).queryByRole("button", { name: "More" })
+        ? getContextToolbar()
+        : getActionsToolbar();
+    await user.click(within(toolbar).getByRole("button", { name: "More" }));
+    try {
+      return await waitForOpenedMoreMenu(previousMenus);
+    } catch (error) {
+      if (attempt === 1) throw error;
+    }
+  }
+  throw new Error("Unable to open More menu");
 }
 
 function expectPassiveStatusBadge(badge: HTMLElement) {

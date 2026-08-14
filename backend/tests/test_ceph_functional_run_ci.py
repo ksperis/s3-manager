@@ -115,6 +115,8 @@ def test_bootstrap_super_admin_session_exports_cookie_material(monkeypatch, tmp_
     payload = {
         "access_cookie_name": "ui_access",
         "access_cookie_value": "access-value",
+        "refresh_cookie_name": "refresh_token",
+        "refresh_cookie_value": "refresh-value",
         "csrf_cookie_name": "csrf_token",
         "csrf_cookie_value": "csrf-value",
     }
@@ -132,6 +134,8 @@ def test_bootstrap_super_admin_session_exports_cookie_material(monkeypatch, tmp_
     run_ci._bootstrap_super_admin_session(tmp_path, env)
 
     assert env["CEPH_TEST_ACCESS_COOKIE_NAME"] == "ui_access"
+    assert env["CEPH_TEST_REFRESH_COOKIE_NAME"] == "refresh_token"
     assert env["CEPH_TEST_CSRF_COOKIE_NAME"] == "csrf_token"
     assert env["CEPH_TEST_BOOTSTRAP_ACCESS_COOKIE"] == "access-value"
+    assert env["CEPH_TEST_BOOTSTRAP_REFRESH_COOKIE"] == "refresh-value"
     assert env["CEPH_TEST_BOOTSTRAP_CSRF_TOKEN"] == "csrf-value"

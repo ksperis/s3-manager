@@ -79,7 +79,9 @@ class CephTestSettings:
     request_origin: str
     csrf_cookie_name: str
     access_cookie_name: str
+    refresh_cookie_name: str
     bootstrap_access_cookie: str | None = field(repr=False)
+    bootstrap_refresh_cookie: str | None = field(repr=False)
     bootstrap_csrf_token: str | None = field(repr=False)
     verify_tls: bool
     backend_ca_bundle: str | None
@@ -139,7 +141,14 @@ def load_settings() -> CephTestSettings:
             default="ui_access",
         )
         or "ui_access",
+        refresh_cookie_name=_env_str(
+            "CEPH_TEST_REFRESH_COOKIE_NAME",
+            "REFRESH_TOKEN_COOKIE_NAME",
+            default="refresh_token",
+        )
+        or "refresh_token",
         bootstrap_access_cookie=_env_str("CEPH_TEST_BOOTSTRAP_ACCESS_COOKIE"),
+        bootstrap_refresh_cookie=_env_str("CEPH_TEST_BOOTSTRAP_REFRESH_COOKIE"),
         bootstrap_csrf_token=_env_str("CEPH_TEST_BOOTSTRAP_CSRF_TOKEN"),
         verify_tls=_env_bool("CEPH_TEST_VERIFY_TLS", False),
         backend_ca_bundle=_env_str("CEPH_TEST_BACKEND_CA_BUNDLE"),

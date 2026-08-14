@@ -444,8 +444,10 @@ def _bootstrap_super_admin_session(backend_root: Path, env: dict[str, str]) -> N
     try:
         payload = json.loads(process.stdout.strip().splitlines()[-1])
         env["CEPH_TEST_ACCESS_COOKIE_NAME"] = str(payload["access_cookie_name"])
+        env["CEPH_TEST_REFRESH_COOKIE_NAME"] = str(payload["refresh_cookie_name"])
         env["CEPH_TEST_CSRF_COOKIE_NAME"] = str(payload["csrf_cookie_name"])
         env["CEPH_TEST_BOOTSTRAP_ACCESS_COOKIE"] = str(payload["access_cookie_value"])
+        env["CEPH_TEST_BOOTSTRAP_REFRESH_COOKIE"] = str(payload["refresh_cookie_value"])
         env["CEPH_TEST_BOOTSTRAP_CSRF_TOKEN"] = str(payload["csrf_cookie_value"])
     except (IndexError, KeyError, TypeError, ValueError) as exc:
         raise RuntimeError("Ceph functional session bootstrap returned an invalid response") from exc

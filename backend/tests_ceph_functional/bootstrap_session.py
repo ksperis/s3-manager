@@ -28,6 +28,8 @@ def main() -> None:
             {
                 "access_cookie_name": settings.access_token_cookie_name,
                 "access_cookie_value": credentials.access_token,
+                "refresh_cookie_name": settings.refresh_token_cookie_name,
+                "refresh_cookie_value": credentials.refresh_token,
                 "csrf_cookie_name": settings.csrf_cookie_name,
                 "csrf_cookie_value": credentials.csrf_token,
             }

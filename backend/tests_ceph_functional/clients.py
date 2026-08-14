@@ -59,6 +59,15 @@ class BackendSession:
             }
         )
 
+    def _refresh(self) -> bool:
+        response = self.session.post(
+            f"{self.base_url}/auth/refresh",
+            headers={"Accept": "application/json", "Origin": self.request_origin},
+            timeout=self.timeout,
+            verify=self.verify,
+        )
+        return response.status_code == 200
+
     def request(
         self,
         method: str,
@@ -86,6 +95,20 @@ class BackendSession:
             verify=self.verify,
             **kwargs,
         )
+        if response.status_code == 401 and self._refresh():
+            if method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+                csrf_token = self.session.cookies.get(self.csrf_cookie_name)
+                if not csrf_token:
+                    raise BackendAPIError("Refreshed session is missing its CSRF cookie")
+                headers["X-CSRF-Token"] = csrf_token
+                kwargs["headers"] = headers
+            response = self.session.request(
+                method,
+                url,
+                timeout=self.timeout,
+                verify=self.verify,
+                **kwargs,
+            )
         expected = _expected_set(expected_status)
         if response.status_code not in expected:
             body: Any
@@ -142,7 +165,9 @@ class BackendAuthenticator:
         self.request_origin = settings.request_origin
         self.csrf_cookie_name = settings.csrf_cookie_name
         self.access_cookie_name = settings.access_cookie_name
+        self.refresh_cookie_name = settings.refresh_cookie_name
         self.bootstrap_access_cookie = settings.bootstrap_access_cookie
+        self.bootstrap_refresh_cookie = settings.bootstrap_refresh_cookie
         self.bootstrap_csrf_token = settings.bootstrap_csrf_token
 
     def _bootstrap_super_admin_session(self, email: str) -> BackendSession | None:
@@ -152,6 +177,8 @@ class BackendAuthenticator:
             return None
         session = requests.Session()
         session.cookies.set(self.access_cookie_name, self.bootstrap_access_cookie, path="/api")
+        if self.bootstrap_refresh_cookie:
+            session.cookies.set(self.refresh_cookie_name, self.bootstrap_refresh_cookie, path="/api/auth")
         session.cookies.set(self.csrf_cookie_name, self.bootstrap_csrf_token, path="/")
         return BackendSession(
             base_url=self.base_url,
