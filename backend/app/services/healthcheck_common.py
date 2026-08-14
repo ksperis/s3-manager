@@ -9,7 +9,8 @@ from enum import Enum
 from typing import Literal, Optional
 
 from app.core.config import get_settings
-from app.db import HealthCheckStatus
+from app.db import HealthCheckStatus, StorageEndpoint
+from app.utils.storage_endpoint_features import normalize_features_config
 
 settings = get_settings()
 
@@ -104,3 +105,10 @@ def _compute_status(
 def _coerce_check_mode(value: object) -> Literal["http", "s3"]:
     return "s3" if str(value or "").strip().lower() == "s3" else "http"
 
+
+def resolve_healthcheck_profile(endpoint: StorageEndpoint) -> HealthCheckProfile:
+    features = normalize_features_config(endpoint.provider, endpoint.features_config)
+    healthcheck_cfg = features.get("healthcheck", {})
+    mode = _coerce_check_mode(healthcheck_cfg.get("mode"))
+    target_url = str(healthcheck_cfg.get("url") or endpoint.endpoint_url or "").strip()
+    return HealthCheckProfile(mode=mode, target_url=target_url)

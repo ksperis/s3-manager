@@ -4,8 +4,9 @@ import requests
 from datetime import timedelta
 
 from app.db import EndpointHealthLatest, HealthCheckStatus, StorageEndpoint, StorageProvider
-from app.services import healthcheck_service
+from app.services import healthcheck_query_service, healthcheck_service
 from app.services.healthcheck_common import EndpointCheckTarget, HealthCheckProfile, HealthWindow
+from app.services.healthcheck_query_service import HealthCheckQueryService
 from app.services.healthcheck_service import HealthCheckService
 from app.utils.time import utcnow
 
@@ -122,7 +123,7 @@ def test_healthcheck_endpoint_lists_are_sorted_by_name_case_insensitive(db_sessi
     _seed_endpoint(db_session, name="Beta", endpoint_url="https://beta.example.test", is_default=False)
     db_session.commit()
 
-    service = HealthCheckService(db_session)
+    service = HealthCheckQueryService(db_session)
     expected = ["alpha", "Beta", "Zulu"]
 
     summary_names = [entry["name"] for entry in service.build_summary()["endpoints"]]
@@ -137,7 +138,7 @@ def test_healthcheck_endpoint_lists_are_sorted_by_name_case_insensitive(db_sessi
 
 
 def test_workspace_health_overview_uses_requested_incident_window(db_session):
-    service = HealthCheckService(db_session)
+    service = HealthCheckQueryService(db_session)
 
     payload = service.build_workspace_health_overview(incident_highlight_minutes=7 * 24 * 60)
 
@@ -164,9 +165,9 @@ def test_workspace_health_overview_uses_configured_interval_for_stale_counts(db_
         )
     )
     db_session.commit()
-    monkeypatch.setattr(healthcheck_service.settings, "healthcheck_interval_seconds", 30)
+    monkeypatch.setattr(healthcheck_query_service.settings, "healthcheck_interval_seconds", 30)
 
-    payload = HealthCheckService(db_session).build_workspace_health_overview()
+    payload = HealthCheckQueryService(db_session).build_workspace_health_overview()
 
     assert payload["stale_after_seconds"] == 60
     assert payload["endpoints"][0]["is_stale"] is True

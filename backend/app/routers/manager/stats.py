@@ -21,7 +21,7 @@ from app.routers.dependencies import (
 from app.core.sensitive_data import sanitize_error_detail, sanitized_error_log_detail
 from app.services.app_settings_service import load_app_settings
 from app.services.buckets_service import BucketsService, get_buckets_service
-from app.services.healthcheck_service import HealthCheckService
+from app.services.healthcheck_query_service import HealthCheckQueryService
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import get_iam_service
 from app.services.s3_execution_context import S3ExecutionContext
@@ -194,7 +194,7 @@ def endpoint_health_overview(
             endpoints=[],
             incidents=[],
         )
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     return WorkspaceEndpointHealthOverviewResponse(
         **service.build_workspace_health_overview(endpoint_id=int(endpoint_id))
     )

@@ -21,6 +21,7 @@ from app.routers.dependencies import get_current_super_admin
 from app.core.sensitive_data import sanitize_error_detail
 from app.services.app_settings_service import load_app_settings
 from app.services.healthcheck_common import HealthWindow
+from app.services.healthcheck_query_service import HealthCheckQueryService
 from app.services.healthcheck_service import HealthCheckService
 from app.services.operation_lease_service import (
     HEALTHCHECK_RUN_OPERATION,
@@ -46,7 +47,7 @@ def health_summary(
     db: Session = Depends(get_db),
 ) -> EndpointHealthSummaryResponse:
     _ensure_endpoint_status_enabled()
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     return EndpointHealthSummaryResponse(**service.build_summary())
 
 
@@ -58,7 +59,7 @@ def health_series(
     db: Session = Depends(get_db),
 ) -> EndpointHealthSeries:
     _ensure_endpoint_status_enabled()
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     try:
         return EndpointHealthSeries(**service.build_series(endpoint_id, window))
     except ValueError as exc:
@@ -73,7 +74,7 @@ def health_incidents(
     db: Session = Depends(get_db),
 ) -> EndpointHealthIncidentsResponse:
     _ensure_endpoint_status_enabled()
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     try:
         return EndpointHealthIncidentsResponse(**service.build_incidents(endpoint_id, window))
     except ValueError as exc:
@@ -90,7 +91,7 @@ def health_raw_checks(
     db: Session = Depends(get_db),
 ) -> EndpointHealthRawChecksResponse:
     _ensure_endpoint_status_enabled()
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     try:
         return EndpointHealthRawChecksResponse(**service.build_raw_checks(endpoint_id, window, page=page, page_size=page_size))
     except ValueError as exc:
@@ -104,7 +105,7 @@ def health_overview(
     db: Session = Depends(get_db),
 ) -> EndpointHealthOverviewResponse:
     _ensure_endpoint_status_enabled()
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     return EndpointHealthOverviewResponse(**service.build_overview(window))
 
 
@@ -115,7 +116,7 @@ def health_latency_overview(
     db: Session = Depends(get_db),
 ) -> EndpointHealthLatencyOverviewResponse:
     _ensure_endpoint_status_enabled()
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     return EndpointHealthLatencyOverviewResponse(**service.build_latency_overview(window))
 
 
@@ -127,7 +128,7 @@ def health_global_incidents(
     db: Session = Depends(get_db),
 ) -> EndpointHealthGlobalIncidentsResponse:
     _ensure_endpoint_status_enabled()
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     return EndpointHealthGlobalIncidentsResponse(**service.build_global_incidents(window, limit=limit))
 
 
@@ -139,7 +140,7 @@ def workspace_health_overview(
     db: Session = Depends(get_db),
 ) -> WorkspaceEndpointHealthOverviewResponse:
     _ensure_endpoint_status_enabled()
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     try:
         return WorkspaceEndpointHealthOverviewResponse(
             **service.build_workspace_health_overview(

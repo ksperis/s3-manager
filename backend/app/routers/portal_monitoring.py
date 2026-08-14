@@ -15,7 +15,7 @@ from app.models.portal import PortalAlert
 from app.routers.dependencies import get_portal_account_access
 from app.routers.portal_common import raise_portal_storage_runtime
 from app.services.app_settings_service import load_app_settings
-from app.services.healthcheck_service import HealthCheckService
+from app.services.healthcheck_query_service import HealthCheckQueryService
 from app.services.portal_service import PortalService, get_portal_service
 from app.utils.time import utcnow
 
@@ -45,7 +45,7 @@ def portal_endpoint_health(
             endpoints=[],
             incidents=[],
         )
-    service = HealthCheckService(db)
+    service = HealthCheckQueryService(db)
     return WorkspaceEndpointHealthOverviewResponse(
         **service.build_workspace_health_overview(endpoint_id=int(endpoint_id))
     )
@@ -58,7 +58,7 @@ def _portal_endpoint_alerts(access: AccountAccess, db: Session) -> list[PortalAl
     endpoint_id = getattr(access.account, "storage_endpoint_id", None)
     if endpoint_id is None:
         return []
-    overview = HealthCheckService(db).build_workspace_health_overview(endpoint_id=int(endpoint_id))
+    overview = HealthCheckQueryService(db).build_workspace_health_overview(endpoint_id=int(endpoint_id))
     down_count = int(overview.get("down_count") or 0)
     degraded_count = int(overview.get("degraded_count") or 0)
     if down_count <= 0 and degraded_count <= 0:

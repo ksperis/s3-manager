@@ -5906,7 +5906,7 @@ def test_portal_endpoint_alerts_report_degraded_endpoint(monkeypatch, db_session
     class FakeSettings:
         general = FakeGeneral()
 
-    class FakeHealthService:
+    class FakeHealthQueryService:
         def __init__(self, _db):
             pass
 
@@ -5915,7 +5915,7 @@ def test_portal_endpoint_alerts_report_degraded_endpoint(monkeypatch, db_session
             return {"down_count": 0, "degraded_count": 1}
 
     monkeypatch.setattr(portal_monitoring_router, "load_app_settings", lambda: FakeSettings())
-    monkeypatch.setattr(portal_monitoring_router, "HealthCheckService", FakeHealthService)
+    monkeypatch.setattr(portal_monitoring_router, "HealthCheckQueryService", FakeHealthQueryService)
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
