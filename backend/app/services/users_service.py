@@ -182,6 +182,10 @@ class UsersService:
             if existing and existing.id != user.id:
                 raise ValueError("Email already in use")
             user.email = payload.email
+        if "full_name" in payload.model_fields_set:
+            normalized_name = (payload.full_name or "").strip()
+            user.full_name = normalized_name or None
+            user.display_name = normalized_name or None
         if payload.password:
             validate_password_policy(payload.password)
             user.hashed_password = get_password_hash(payload.password)

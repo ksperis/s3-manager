@@ -13,11 +13,8 @@ from app.db import (
     StorageProvider,
     UiGroupS3User,
     User,
-    UserRole,
     UserS3Account,
-    UserS3Connection,
     UserS3User,
-    is_superadmin_ui_role,
 )
 from app.models.admin_automation import (
     AdminAutomationApplyRequest,
@@ -28,14 +25,13 @@ from app.models.admin_automation import (
     S3AccountApply,
     S3UserApply,
     StorageEndpointApply,
-    UiUserApply,
 )
 from app.models.s3_account import S3AccountCreate, S3AccountUpdate
 from app.models.s3_user import S3UserCreate, S3UserUpdate
 from app.models.storage_endpoint import StorageEndpointCreate, StorageEndpointUpdate
-from app.models.user import UserCreate, UserUpdate
 from app.services.admin_automation_connection_handler import AdminAutomationConnectionHandler
 from app.services.admin_automation_results import AdminAutomationResultFactory
+from app.services.admin_automation_ui_user_handler import AdminAutomationUiUserHandler
 from app.services.audit_service import AuditService
 from app.services.mappers.s3_connection import mask_access_key_id
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
@@ -56,6 +52,7 @@ class AdminAutomationService(AdminAutomationResultFactory):
         self.db = db
         self.storage_endpoints = StorageEndpointsService(db)
         self.users = UsersService(db)
+        self.ui_user_handler = AdminAutomationUiUserHandler(db, self.users)
         self.s3_accounts = S3AccountsService(db)
         self.s3_users = S3UsersService(db)
         self.s3_connection_handler = AdminAutomationConnectionHandler(
@@ -97,7 +94,7 @@ class AdminAutomationService(AdminAutomationResultFactory):
 
         if not should_stop():
             for item in payload.ui_users:
-                record(self._apply_ui_user(item, payload.dry_run, current_user, audit_service))
+                record(self.ui_user_handler.apply(item, payload.dry_run, current_user, audit_service))
                 if should_stop():
                     break
 
@@ -232,93 +229,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             return self._updated("storage_endpoint", key, endpoint.id, diff, dry_run=dry_run)
         except Exception as exc:  # noqa: BLE001
             return self._failed("storage_endpoint", key, exc, dry_run=dry_run)
-
-    def _apply_ui_user(
-        self,
-        item: UiUserApply,
-        dry_run: bool,
-        current_user: User,
-        audit_service: AuditService,
-    ) -> AdminAutomationItemResult:
-        key = self._ui_user_key(item)
-        try:
-            user = self._find_ui_user(item)
-            if item.state == "absent":
-                if not user:
-                    return self._skipped("ui_user", key, dry_run=dry_run)
-                if dry_run:
-                    return self._deleted("ui_user", key, user.id, dry_run=dry_run)
-                self.users.delete_user(user.id)
-                audit_service.record_action(
-                    user=current_user,
-                    scope="admin",
-                    action="delete_ui_user",
-                    entity_type="ui_user",
-                    entity_id=str(user.id),
-                )
-                return self._deleted("ui_user", key, user.id, dry_run=dry_run)
-
-            spec = item.spec
-            if not user:
-                if not spec:
-                    raise ValueError("ui_users.spec is required to create a new user")
-                if spec.role == UserRole.UI_SUPERADMIN.value and not is_superadmin_ui_role(current_user.role):
-                    raise ValueError("Only superadmin users can promote superadmins")
-                email = spec.email or item.match.email
-                if not email:
-                    raise ValueError("ui_users.spec.email is required to create a new user")
-                if not spec.password:
-                    raise ValueError("ui_users.spec.password is required to create a new user")
-                if dry_run:
-                    return self._created("ui_user", key, dry_run=dry_run)
-                created = self.users.create_user(
-                    UserCreate(
-                        email=email,
-                        password=spec.password,
-                        full_name=spec.full_name,
-                        role=spec.role,
-                        is_root=bool(spec.is_root),
-                        can_create_manual_private_connections=bool(
-                            spec.can_create_manual_private_connections
-                        ),
-                        can_provision_managed_private_connections=bool(
-                            spec.can_provision_managed_private_connections
-                        ),
-                        manager_tool_access=spec.manager_tool_access,
-                    )
-                )
-                audit_service.record_action(
-                    user=current_user,
-                    scope="admin",
-                    action="create_ui_user",
-                    entity_type="ui_user",
-                    entity_id=str(created.id),
-                    metadata={"email": created.email, "role": created.role},
-                )
-                return self._created("ui_user", key, created.id, dry_run=dry_run)
-
-            diff = self._diff_ui_user(user, item)
-            if not diff:
-                return self._skipped("ui_user", key, dry_run=dry_run)
-
-            if dry_run:
-                return self._updated("ui_user", key, user.id, diff, dry_run=dry_run)
-            if item.spec:
-                if item.spec.role == UserRole.UI_SUPERADMIN.value and not is_superadmin_ui_role(current_user.role):
-                    raise ValueError("Only superadmin users can promote superadmins")
-            update_payload = self._build_ui_user_update(item)
-            updated = self.users.update_user(user.id, update_payload)
-            audit_service.record_action(
-                user=current_user,
-                scope="admin",
-                action="update_ui_user",
-                entity_type="ui_user",
-                entity_id=str(user.id),
-                metadata=update_payload.model_dump(exclude_unset=True, exclude_none=True),
-            )
-            return self._updated("ui_user", key, updated.id, diff, dry_run=dry_run)
-        except Exception as exc:  # noqa: BLE001
-            return self._failed("ui_user", key, exc, dry_run=dry_run)
 
     def _apply_s3_account(
         self,
@@ -698,71 +608,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
                 diff["ceph_admin_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
         return diff
 
-    def _diff_ui_user(self, user: User, item: UiUserApply) -> dict[str, dict[str, Any]]:
-        spec = item.spec
-        if not spec:
-            return {}
-        diff: dict[str, dict[str, Any]] = {}
-        fields_set = spec.model_fields_set
-        if "email" in fields_set and spec.email and spec.email != user.email:
-            diff["email"] = {"from": user.email, "to": spec.email}
-        if "full_name" in fields_set:
-            desired = normalize_optional_string(spec.full_name)
-            if desired != normalize_optional_string(user.full_name):
-                diff["full_name"] = {"from": user.full_name, "to": desired}
-        if "role" in fields_set and spec.role and spec.role != user.role:
-            diff["role"] = {"from": user.role, "to": spec.role}
-        if "is_active" in fields_set and spec.is_active is not None:
-            if bool(spec.is_active) != bool(user.is_active):
-                diff["is_active"] = {"from": bool(user.is_active), "to": bool(spec.is_active)}
-        if "is_root" in fields_set and spec.is_root is not None:
-            if bool(spec.is_root) != bool(user.is_root):
-                diff["is_root"] = {"from": bool(user.is_root), "to": bool(spec.is_root)}
-        if (
-            "can_create_manual_private_connections" in fields_set
-            and spec.can_create_manual_private_connections is not None
-            and bool(spec.can_create_manual_private_connections)
-            != bool(user.can_create_manual_private_connections)
-        ):
-            diff["can_create_manual_private_connections"] = {
-                "from": bool(user.can_create_manual_private_connections),
-                "to": bool(spec.can_create_manual_private_connections),
-            }
-        if (
-            "can_provision_managed_private_connections" in fields_set
-            and spec.can_provision_managed_private_connections is not None
-            and bool(spec.can_provision_managed_private_connections)
-            != bool(user.can_provision_managed_private_connections)
-        ):
-            diff["can_provision_managed_private_connections"] = {
-                "from": bool(user.can_provision_managed_private_connections),
-                "to": bool(spec.can_provision_managed_private_connections),
-            }
-        if "manager_tool_access" in fields_set and spec.manager_tool_access is not None:
-            current_access = {
-                "bucket_compare": bool(user.can_access_manager_bucket_compare),
-                "bucket_integrity_check": bool(user.can_access_manager_bucket_integrity_check),
-                "bucket_migration": bool(user.can_access_manager_bucket_migration),
-                "feature_rules": bool(user.can_access_manager_feature_rules),
-                "bucket_purge": bool(user.can_access_manager_bucket_purge),
-            }
-            desired_access = spec.manager_tool_access.model_dump()
-            if desired_access != current_access:
-                diff["manager_tool_access"] = {"from": current_access, "to": desired_access}
-        if item.set_password and spec.password:
-            diff["password"] = {"from": "<redacted>", "to": "<redacted>"}
-        if "s3_user_ids" in fields_set and spec.s3_user_ids is not None:
-            current_ids = self._user_s3_user_ids(user.id)
-            desired_ids = sorted({int(x) for x in spec.s3_user_ids})
-            if desired_ids != current_ids:
-                diff["s3_user_ids"] = {"from": current_ids, "to": desired_ids}
-        if "s3_connection_ids" in fields_set and spec.s3_connection_ids is not None:
-            current_ids = self._user_s3_connection_ids(user.id)
-            desired_ids = sorted({int(x) for x in spec.s3_connection_ids})
-            if desired_ids != current_ids:
-                diff["s3_connection_ids"] = {"from": current_ids, "to": desired_ids}
-        return diff
-
     def _diff_s3_account(self, account: S3Account, item: S3AccountApply) -> dict[str, dict[str, Any]]:
         spec = item.spec
         if not spec:
@@ -888,15 +733,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             payload.pop("ceph_admin_secret_key", None)
         payload.pop("set_default", None)
         return StorageEndpointUpdate(**payload)
-
-    def _build_ui_user_update(self, item: UiUserApply) -> UserUpdate:
-        spec = item.spec
-        if not spec:
-            return UserUpdate()
-        payload = spec.model_dump(exclude_unset=True)
-        if not item.set_password:
-            payload.pop("password", None)
-        return UserUpdate(**payload)
 
     def _build_s3_account_update(self, item: S3AccountApply) -> S3AccountUpdate:
         spec = item.spec
@@ -1108,14 +944,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             return self.db.query(StorageEndpoint).filter(StorageEndpoint.name == match.name).first()
         return None
 
-    def _find_ui_user(self, item: UiUserApply) -> Optional[User]:
-        match = item.match
-        if match.id is not None:
-            return self.db.query(User).filter(User.id == match.id).first()
-        if match.email:
-            return self.db.query(User).filter(User.email == match.email).first()
-        return None
-
     def _find_s3_account(self, item: S3AccountApply) -> Optional[S3Account]:
         match = item.match
         if match.id is not None:
@@ -1171,22 +999,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
         self.db.delete(s3_user)
         self.db.commit()
 
-    def _user_s3_user_ids(self, user_id: int) -> list[int]:
-        rows = (
-            self.db.query(UserS3User.s3_user_id)
-            .filter(UserS3User.user_id == user_id)
-            .all()
-        )
-        return sorted([row[0] for row in rows])
-
-    def _user_s3_connection_ids(self, user_id: int) -> list[int]:
-        rows = (
-            self.db.query(UserS3Connection.s3_connection_id)
-            .filter(UserS3Connection.user_id == user_id)
-            .all()
-        )
-        return sorted([row[0] for row in rows])
-
     def _s3_user_linked_ids(self, s3_user_id: int) -> list[int]:
         rows = (
             self.db.query(UserS3User.user_id)
@@ -1200,11 +1012,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             return f"endpoint_url={item.match.endpoint_url}"
         if item.match.name:
             return f"name={item.match.name}"
-        return f"id={item.match.id}"
-
-    def _ui_user_key(self, item: UiUserApply) -> str:
-        if item.match.email:
-            return f"email={item.match.email}"
         return f"id={item.match.id}"
 
     def _s3_account_key(self, item: S3AccountApply) -> str:

@@ -162,6 +162,7 @@ class UserCreate(ApiModel):
 
 class UserUpdate(ApiModel):
     email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
     password: Optional[str] = None
     role: Optional[UiRole] = None
     is_active: Optional[bool] = None
