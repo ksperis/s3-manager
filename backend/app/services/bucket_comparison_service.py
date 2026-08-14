@@ -16,8 +16,11 @@ from app.services import (
 from app.services.bucket_configuration_comparison import BucketConfigurationReader
 from app.services.buckets_service import BucketsService
 from app.services.object_listing_temp_store import TemporarySqliteStore
+from app.services.s3_execution_client import (
+    require_s3_execution_credentials,
+    s3_execution_client_kwargs,
+)
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.s3_errors import format_s3_error
 from app.utils.s3_etag import etag_md5
 
@@ -32,21 +35,14 @@ class BucketComparisonService:
 
     @staticmethod
     def _account_credentials(account: S3ExecutionTarget) -> tuple[str, str]:
-        access_key, secret_key = account.effective_rgw_credentials()
-        if not access_key or not secret_key:
-            raise RuntimeError("S3ExecutionTarget is missing admin credentials")
-        return access_key, secret_key
+        return require_s3_execution_credentials(
+            account,
+            error_message="S3ExecutionTarget is missing admin credentials",
+        )
 
     @staticmethod
     def _client_kwargs(account: S3ExecutionTarget) -> dict[str, object]:
-        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
-        return {
-            "endpoint": endpoint,
-            "region": region,
-            "force_path_style": force_path_style,
-            "verify_tls": verify_tls,
-            "session_token": account.session_token(),
-        }
+        return s3_execution_client_kwargs(account)
 
     def _compare_client(self, account: S3ExecutionTarget):
         access_key, secret_key = self._account_credentials(account)

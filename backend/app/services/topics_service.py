@@ -9,6 +9,7 @@ from urllib.parse import parse_qsl
 
 from app.db import StorageProvider
 from app.services.s3_execution_context import S3ExecutionTarget
+from app.services.s3_execution_client import require_s3_execution_credentials
 from app.models.topic import Topic
 from app.services import sns_client
 from app.utils.s3_endpoint import resolve_s3_client_options
@@ -53,10 +54,10 @@ class TopicsService:
     _CEPH_NOTIFICATION_ENDPOINT_KEYS = {"EndpointAddress", "EndpointArgs", "EndpointTopic"}
 
     def _account_credentials(self, account: S3ExecutionTarget) -> tuple[str, str]:
-        access_key, secret_key = account.effective_rgw_credentials()
-        if not access_key or not secret_key:
-            raise RuntimeError("S3ExecutionTarget is missing SNS credentials")
-        return access_key, secret_key
+        return require_s3_execution_credentials(
+            account,
+            error_message="S3ExecutionTarget is missing SNS credentials",
+        )
 
     def _client_kwargs(self, account: S3ExecutionTarget) -> dict:
         endpoint, region, _, verify_tls = resolve_s3_client_options(account)

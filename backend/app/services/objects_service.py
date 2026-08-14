@@ -11,25 +11,21 @@ from app.models.object import ListObjectsResponse, S3Object
 from app.services.aws_client_config import StorageRequestProfile
 from app.services.s3_client import get_s3_client
 from app.services.s3_deletion import delete_objects
-from app.utils.s3_endpoint import resolve_s3_client_options
+from app.services.s3_execution_client import (
+    require_s3_execution_credentials,
+    s3_execution_client_kwargs,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class ObjectsService:
     def _client(self, account: S3ExecutionTarget, *, request_profile: StorageRequestProfile = "interactive"):
-        access_key, secret_key = account.effective_rgw_credentials()
-        if not access_key or not secret_key:
-            raise RuntimeError("Execution context credentials are missing")
-        session_token = account.session_token()
-        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
-        client_options = {
-            "endpoint": endpoint,
-            "session_token": session_token,
-            "region": region,
-            "force_path_style": force_path_style,
-            "verify_tls": verify_tls,
-        }
+        access_key, secret_key = require_s3_execution_credentials(
+            account,
+            error_message="Execution context credentials are missing",
+        )
+        client_options = s3_execution_client_kwargs(account)
         if request_profile != "interactive":
             client_options["request_profile"] = request_profile
         return get_s3_client(

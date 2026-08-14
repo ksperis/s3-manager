@@ -4,6 +4,10 @@ from typing import Any, List, Optional
 import logging
 
 from app.services.s3_execution_context import S3ExecutionTarget
+from app.services.s3_execution_client import (
+    require_s3_execution_credentials,
+    s3_execution_client_kwargs,
+)
 from app.services import bucket_feature_enrichment
 from app.services import (
     s3_bucket_access,
@@ -42,7 +46,6 @@ from app.utils.rgw_identifiers import (
     resolve_admin_uid,
 )
 from app.utils.rgw_payloads import extract_bucket_list
-from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 from app.utils.size_units import size_to_bytes
@@ -114,21 +117,13 @@ class BucketsService:
         return extract_bucket_list(payload)
 
     def _account_credentials(self, account: S3ExecutionTarget) -> tuple[str, str]:
-        access_key, secret_key = account.effective_rgw_credentials()
-        if not access_key or not secret_key:
-            raise RuntimeError("S3ExecutionTarget is missing admin credentials")
-        return access_key, secret_key
+        return require_s3_execution_credentials(
+            account,
+            error_message="S3ExecutionTarget is missing admin credentials",
+        )
 
     def _client_kwargs(self, account: S3ExecutionTarget) -> dict:
-        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
-        session_token = account.session_token()
-        return {
-            "endpoint": endpoint,
-            "region": region,
-            "force_path_style": force_path_style,
-            "verify_tls": verify_tls,
-            "session_token": session_token,
-        }
+        return s3_execution_client_kwargs(account)
 
     def _extract_quota_from_admin_stats(self, stats: Any) -> tuple[Optional[int], Optional[int]]:
         quota_size: Optional[int] = None
