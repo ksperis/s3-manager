@@ -15,6 +15,33 @@ class BucketListingFilterError(ValueError):
     pass
 
 
+def coerce_filter_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    if isinstance(value, (int, float)) and value in {0, 1}:
+        return bool(value)
+    return None
+
+
+def coerce_filter_number(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
 def listing_sort_key(value: Any, tie_breaker: str) -> tuple[int, Any, str]:
     normalized_tie_breaker = str(tie_breaker or "").lower()
     if value is None:

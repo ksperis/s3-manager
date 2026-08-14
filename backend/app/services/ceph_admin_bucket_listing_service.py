@@ -17,19 +17,21 @@ from app.services.bucket_listing_enrichment import (
     OWNER_USAGE_PERCENT_FIELDS,
     apply_owner_enrichment,
     backfill_bucket_owner_metadata,
-    bucket_identity_key,
     determine_owner_name_lookup_scope,
     enrich_buckets,
     extract_name_candidates,
     filter_requires_owner_usage,
-    load_bucket_feature_param_snapshots,
-    match_bucket_feature_param_rules,
     match_bucket_feature_rule,
     match_bucket_field_rule,
     request_requires_bucket_stats,
     request_requires_owner_metadata,
     request_requires_tenant_metadata,
     resolve_owner_names_for_buckets,
+)
+from app.services.bucket_feature_param_matching import (
+    bucket_identity_key,
+    load_bucket_feature_param_snapshots,
+    match_bucket_feature_param_rules,
 )
 from app.services.bucket_listing_shared import parse_filter, parse_includes, serialize_filter
 from app.services.bucket_owner_enrichment import BucketOwnerUsage, compute_bucket_owner_usage

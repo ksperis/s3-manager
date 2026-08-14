@@ -79,3 +79,26 @@ def interpolate_progress_percent(start: int, end: int, *, processed: int, total:
     safe_processed = max(0, min(safe_total, int(processed)))
     span = clamped_end - clamped_start
     return clamped_start + round((span * safe_processed) / safe_total)
+
+
+def build_listing_progress_callback(
+    progress: ListingProgressEmitter | None,
+    *,
+    stage: str,
+    message: str,
+    start: int,
+    end: int,
+    total: int,
+) -> Callable[[int], None]:
+    def emit(processed: int) -> None:
+        if progress is None:
+            return
+        progress.emit(
+            percent=interpolate_progress_percent(start, end, processed=processed, total=total),
+            stage=stage,
+            processed=processed,
+            total=total,
+            message=message,
+        )
+
+    return emit
