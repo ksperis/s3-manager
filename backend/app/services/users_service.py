@@ -1,14 +1,12 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.utils.time import utcnow
 import hashlib
 import json
-from typing import Optional
 import logging
+from typing import Optional
 
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, aliased
-from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.security import get_password_hash, verify_password
 from app.db import (
@@ -33,10 +31,6 @@ from app.db import (
 )
 from app.models.user import (
     AccountMembership,
-    AccountMembershipDetail,
-    LinkedS3Connection,
-    LinkedS3User,
-    LinkedUiGroup,
     ManagerToolAccess,
     S3UserMembership,
     UiPreferences,
@@ -47,7 +41,10 @@ from app.models.user import (
     UserUpdate,
     validate_password_policy,
 )
-from app.services.effective_access_service import EffectiveAccessService
+from app.services.association_names import (
+    load_s3_user_names,
+    load_shared_s3_connection_names,
+)
 from app.services.portal_ownership import require_no_private_storage_space_ownership
 from app.services.portal_role_sync import (
     capture_effective_portal_roles,
@@ -55,8 +52,10 @@ from app.services.portal_role_sync import (
     sync_portal_role_promotions,
 )
 from app.services.user_avatar_service import UserAvatarService
-from app.services.association_names import load_s3_user_names, load_shared_s3_connection_names
+from app.services.user_output_service import UserOutputService
 from app.utils.account_roles import require_account_role
+from app.utils.time import utcnow
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,12 +64,14 @@ MANAGER_TOOL_ROLES = {
     UserRole.UI_ADMIN.value,
     UserRole.UI_USER.value,
 }
-def _parse_ui_preferences(raw: str) -> UiPreferences:
-    return UiPreferences.model_validate_json(raw)
 
 
 def _dump_ui_preferences(preferences: UiPreferences) -> str:
-    return json.dumps(preferences.model_dump(exclude_none=True), ensure_ascii=True, sort_keys=True)
+    return json.dumps(
+        preferences.model_dump(exclude_none=True),
+        ensure_ascii=True,
+        sort_keys=True,
+    )
 
 
 class UsersService:
@@ -441,12 +442,6 @@ class UsersService:
             for row in rows
         ]
 
-    def _load_group_names(self, ids: list[int]) -> dict[int, str]:
-        if not ids:
-            return {}
-        rows = self.db.query(UiGroup.id, UiGroup.name).filter(UiGroup.id.in_(ids)).all()
-        return {row[0]: row[1] for row in rows}
-
     def paginate_users(
         self,
         page: int,
@@ -680,166 +675,12 @@ class UsersService:
         s3_connection_labels: Optional[dict[int, str]] = None,
         preloaded_connection_links: Optional[dict[int, list[int]]] = None,
     ) -> UserOut:
-        account_links: list[AccountMembershipDetail] = []
-        group_ids: list[int] = []
-        s3_user_ids: list[int] = []
-        s3_user_links: list[S3UserMembership] = []
-        s3_connection_ids: list[int] = []
-        try:
-            if hasattr(user, "account_links") and user.account_links is not None:
-                account_links = [
-                    AccountMembershipDetail(
-                        account_id=link.account_id,
-                        role=link.role,
-                        allow_manager_browser_data_access=bool(
-                            link.allow_manager_browser_data_access
-                        ),
-                        is_root=bool(link.is_root),
-                    )
-                    for link in user.account_links
-                ]
-        except DetachedInstanceError:
-            account_rows = (
-                self.db.query(
-                    UserS3Account.account_id,
-                    UserS3Account.role,
-                    UserS3Account.allow_manager_browser_data_access,
-                    UserS3Account.is_root,
-                )
-                .filter(UserS3Account.user_id == user.id)
-                .all()
-            )
-            account_links = [
-                AccountMembershipDetail(
-                    account_id=row[0],
-                    role=row[1],
-                    allow_manager_browser_data_access=bool(row[2]),
-                    is_root=bool(row[3]),
-                )
-                for row in account_rows
-            ]
-        try:
-            if hasattr(user, "ui_group_links") and user.ui_group_links is not None:
-                group_ids = [link.group_id for link in user.ui_group_links]
-        except DetachedInstanceError:
-            group_ids = [
-                row[0]
-                for row in self.db.query(UserUiGroup.group_id).filter(UserUiGroup.user_id == user.id).all()
-            ]
-        try:
-            if hasattr(user, "s3_user_links") and user.s3_user_links is not None:
-                s3_user_ids = [link.s3_user_id for link in user.s3_user_links]
-                s3_user_links = [
-                    S3UserMembership(
-                        s3_user_id=link.s3_user_id,
-                        allow_manager_browser_data_access=bool(
-                            link.allow_manager_browser_data_access
-                        ),
-                    )
-                    for link in user.s3_user_links
-                ]
-        except DetachedInstanceError:
-            s3_user_ids = [
-                row.s3_user_id
-                for row in self.db.query(UserS3User).filter(UserS3User.user_id == user.id).all()
-            ]
-            s3_user_links = [
-                S3UserMembership(
-                    s3_user_id=row.s3_user_id,
-                    allow_manager_browser_data_access=bool(
-                        row.allow_manager_browser_data_access
-                    ),
-                )
-                for row in self.db.query(UserS3User).filter(UserS3User.user_id == user.id).all()
-            ]
-        try:
-            if hasattr(user, "s3_connection_links") and user.s3_connection_links is not None:
-                s3_connection_ids = [link.s3_connection_id for link in user.s3_connection_links]
-        except DetachedInstanceError:
-            s3_connection_ids = [
-                row[0]
-                for row in self.db.query(UserS3Connection.s3_connection_id).filter(UserS3Connection.user_id == user.id).all()
-            ]
-        if preloaded_s3_links is not None and user.id in preloaded_s3_links:
-            s3_user_ids = preloaded_s3_links[user.id]
-            existing_permissions = {
-                link.s3_user_id: link.allow_manager_browser_data_access
-                for link in s3_user_links
-            }
-            s3_user_links = [
-                S3UserMembership(
-                    s3_user_id=s3_user_id,
-                    allow_manager_browser_data_access=existing_permissions.get(s3_user_id, False),
-                )
-                for s3_user_id in s3_user_ids
-            ]
-        if preloaded_connection_links is not None and user.id in preloaded_connection_links:
-            s3_connection_ids = preloaded_connection_links[user.id]
-        s3_user_names: dict[int, str]
-        if s3_user_labels is not None:
-            s3_user_names = s3_user_labels
-        else:
-            s3_user_names = load_s3_user_names(self.db, s3_user_ids)
-        s3_connection_names: dict[int, str]
-        if s3_connection_labels is not None:
-            s3_connection_names = s3_connection_labels
-        else:
-            s3_connection_names = load_shared_s3_connection_names(
-                self.db,
-                s3_connection_ids,
-            )
-        s3_user_details = [
-            LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
-            for s3_id in s3_user_ids
-        ]
-        s3_connection_ids = [
-            conn_id for conn_id in s3_connection_ids if conn_id in s3_connection_names
-        ]
-        s3_connection_details = [
-            LinkedS3Connection(id=conn_id, name=s3_connection_names[conn_id])
-            for conn_id in s3_connection_ids
-        ]
-        group_names = self._load_group_names(group_ids)
-        group_details = [
-            LinkedUiGroup(id=group_id, name=group_names.get(group_id) or f"Group #{group_id}")
-            for group_id in group_ids
-        ]
-        effective_access = EffectiveAccessService(self.db).to_user_effective_access(user)
-        return UserOut(
-            id=user.id,
-            email=user.email,
-            full_name=user.full_name,
-            display_name=user.display_name or user.full_name,
-            picture_url=user.picture_url,
-            avatar=UserAvatarService(self.db).descriptor(user),
-            is_active=user.is_active,
-            is_admin=is_admin_ui_role(user.role),
-            role=user.role,
-            is_root=user.is_root,
-            can_access_ceph_admin=bool(user.can_access_ceph_admin),
-            can_access_storage_ops=bool(user.can_access_storage_ops),
-            can_create_manual_private_connections=bool(user.can_create_manual_private_connections),
-            can_provision_managed_private_connections=bool(user.can_provision_managed_private_connections),
-            manager_tool_access=ManagerToolAccess(
-                bucket_compare=bool(user.can_access_manager_bucket_compare),
-                bucket_integrity_check=bool(user.can_access_manager_bucket_integrity_check),
-                bucket_migration=bool(user.can_access_manager_bucket_migration),
-                feature_rules=bool(user.can_access_manager_feature_rules),
-                bucket_purge=bool(user.can_access_manager_bucket_purge),
-            ),
-            browser_advanced_features_enabled=bool(user.browser_advanced_features_enabled),
-            ui_language=user.ui_language,
-            quota_alerts_enabled=bool(user.quota_alerts_enabled),
-            quota_alerts_global_watch=bool(user.quota_alerts_global_watch),
-            ui_preferences=_parse_ui_preferences(user.ui_preferences_json),
-            account_links=account_links,
-            group_details=group_details,
-            s3_user_links=s3_user_links,
-            s3_user_details=s3_user_details,
-            s3_connection_details=s3_connection_details,
-            effective_access=effective_access,
-            auth_provider=user.auth_provider,
-            last_login_at=user.last_login_at,
+        return UserOutputService(self.db).to_out(
+            user,
+            s3_user_labels=s3_user_labels,
+            preloaded_s3_links=preloaded_s3_links,
+            s3_connection_labels=s3_connection_labels,
+            preloaded_connection_links=preloaded_connection_links,
         )
 
     def mark_last_login(self, user: User) -> User:
