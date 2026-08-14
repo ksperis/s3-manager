@@ -18,6 +18,10 @@ from app.models.user import (
 )
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
+from app.services.user_associations_service import (
+    UserAssociationsService,
+    get_user_associations_service,
+)
 from app.services.users_service import UsersService, get_users_service
 from app.core.sensitive_data import sanitize_error_detail
 
@@ -41,13 +45,15 @@ def _require_superadmin_for_privileged_change(
 
 def _require_superadmin_for_group_privileges(
     current_user: DbUser,
-    users_service: UsersService,
+    associations_service: UserAssociationsService,
     *,
     group_ids: Optional[list[int]],
 ) -> None:
     if group_ids is None:
         return
-    grants_ceph_admin = users_service.groups_grant_ceph_admin(group_ids)
+    grants_ceph_admin = associations_service.groups_grant_ceph_admin(
+        group_ids
+    )
     if grants_ceph_admin and not is_superadmin_ui_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -88,6 +94,9 @@ def list_users_minimal(
 def create_user(
     payload: UserCreate,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    associations_service: UserAssociationsService = Depends(
+        lambda db=Depends(get_db): get_user_associations_service(db)
+    ),
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
@@ -96,7 +105,11 @@ def create_user(
         role=payload.role,
         can_access_ceph_admin=payload.can_access_ceph_admin,
     )
-    _require_superadmin_for_group_privileges(current_user, users_service, group_ids=payload.group_ids)
+    _require_superadmin_for_group_privileges(
+        current_user,
+        associations_service,
+        group_ids=payload.group_ids,
+    )
     try:
         user = users_service.create_user(payload)
         audit_service.record_action(
@@ -121,6 +134,9 @@ def update_user(
     user_id: int,
     payload: UserUpdate,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    associations_service: UserAssociationsService = Depends(
+        lambda db=Depends(get_db): get_user_associations_service(db)
+    ),
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
@@ -129,7 +145,11 @@ def update_user(
         role=payload.role,
         can_access_ceph_admin=payload.can_access_ceph_admin,
     )
-    _require_superadmin_for_group_privileges(current_user, users_service, group_ids=payload.group_ids)
+    _require_superadmin_for_group_privileges(
+        current_user,
+        associations_service,
+        group_ids=payload.group_ids,
+    )
     try:
         user = users_service.update_user(user_id, payload)
         audit_service.record_action(

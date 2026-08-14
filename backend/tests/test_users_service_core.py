@@ -17,6 +17,7 @@ from app.db import (
     UserRole,
     UserS3Account,
     UserS3Connection,
+    UserS3User,
 )
 from app.models.admin_automation import UiUserSpec
 from app.models.user import PASSWORD_POLICY_ERROR, S3UserMembership, UserCreate, UserUpdate
@@ -228,6 +229,36 @@ def test_update_user_and_link_validations(db_session):
     assert updated.is_root is True
 
 
+def test_update_user_validates_s3_users_before_replacing_links(db_session):
+    service = UsersService(db_session)
+    user = _seed_user(db_session, "preserve-link@example.com")
+    s3_user = _seed_s3_user(db_session, "preserved-s3-user")
+    service.update_user(
+        user.id,
+        UserUpdate(
+            s3_user_links=[S3UserMembership(s3_user_id=s3_user.id)],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="S3 users not found"):
+        service.update_user(
+            user.id,
+            UserUpdate(
+                s3_user_links=[S3UserMembership(s3_user_id=99999)],
+            ),
+        )
+
+    assert (
+        db_session.query(UserS3User)
+        .filter(
+            UserS3User.user_id == user.id,
+            UserS3User.s3_user_id == s3_user.id,
+        )
+        .one_or_none()
+        is not None
+    )
+
+
 def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_session):
     service = UsersService(db_session)
     user = _seed_user(db_session, "account-links@example.com", role=UserRole.UI_NONE.value)
@@ -389,9 +420,13 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
         account_root=False,
         role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
     )
-    service._set_s3_user_links(user, [S3UserMembership(s3_user_id=s3_user.id)])
-    service._set_s3_connection_links(user, [shared_conn.id])
-    db_session.commit()
+    service.update_user(
+        user.id,
+        UserUpdate(
+            s3_user_links=[S3UserMembership(s3_user_id=s3_user.id)],
+            s3_connection_ids=[shared_conn.id],
+        ),
+    )
 
     def fail_per_user_loader(*_args, **_kwargs):
         raise AssertionError("Paginated projection must use its bulk preload")

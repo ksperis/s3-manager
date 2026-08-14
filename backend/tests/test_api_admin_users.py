@@ -209,6 +209,42 @@ def test_admin_cannot_create_superadmin_or_grant_ceph_admin(client: TestClient):
     assert resp.status_code == 403, resp.text
 
 
+def test_admin_cannot_assign_group_that_grants_ceph_admin(
+    client: TestClient,
+    db_session,
+):
+    privileged_group = UiGroup(
+        name="privileged-ceph-group",
+        can_access_ceph_admin=True,
+    )
+    db_session.add(privileged_group)
+    db_session.commit()
+    db_session.refresh(privileged_group)
+    admin_user = User(
+        id=1012,
+        email="group-admin@example.com",
+        full_name="Group Admin",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    app.dependency_overrides[dependencies.get_current_super_admin] = (
+        lambda: admin_user
+    )
+
+    response = client.post(
+        "/api/admin/users",
+        json={
+            "email": "privileged-group-member@example.com",
+            "password": "secret-pass-05",
+            "group_ids": [privileged_group.id],
+        },
+    )
+
+    assert response.status_code == 403, response.text
+    assert "assign groups" in response.json()["detail"]
+
+
 def test_superadmin_can_create_superadmin_and_grant_ceph_admin(client: TestClient):
     super_admin_user = User(
         id=1002,
