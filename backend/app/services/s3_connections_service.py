@@ -7,6 +7,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from app.db.s3_connection import ManagedPrivateAccess, S3Connection as DBS3Connection, UserS3Connection
+from app.db.ui_group import UiGroupS3Connection
 from app.models.s3_connection import S3Connection, S3ConnectionCreate, S3ConnectionUpdate
 from app.services.mappers.s3_connection import s3_connection_from_db
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
@@ -21,6 +22,11 @@ from app.utils.s3_connection_endpoint import (
 )
 from app.utils.name_ordering import name_order_by
 from app.utils.s3_endpoint import validate_user_supplied_s3_endpoint
+
+
+ACTIVE_MANAGED_SOURCE_DELETE_ERROR = (
+    "Delete managed private accesses created from this source connection first"
+)
 
 
 class S3ConnectionsService:
@@ -278,7 +284,26 @@ class S3ConnectionsService:
         if row.server_managed:
             raise ValueError("Server-managed connections must be deleted by the provisioning service")
         if self.is_active_managed_source(row.id):
-            raise ValueError("Delete managed private accesses created from this source connection first")
+            raise ValueError(ACTIVE_MANAGED_SOURCE_DELETE_ERROR)
+        self._delete_entry(row)
+
+    def delete_admin_shared(self, connection_id: int) -> None:
+        row = self.get_admin_shared(connection_id)
+        if self.is_active_managed_source(row.id):
+            raise ValueError(ACTIVE_MANAGED_SOURCE_DELETE_ERROR)
+        self._delete_entry(row)
+
+    def _delete_entry(self, row: DBS3Connection) -> None:
+        (
+            self.db.query(UserS3Connection)
+            .filter(UserS3Connection.s3_connection_id == row.id)
+            .delete(synchronize_session=False)
+        )
+        (
+            self.db.query(UiGroupS3Connection)
+            .filter(UiGroupS3Connection.s3_connection_id == row.id)
+            .delete(synchronize_session=False)
+        )
         self.db.delete(row)
         self.db.flush()
         self.tags.cleanup_orphan_definitions()

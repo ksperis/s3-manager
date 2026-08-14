@@ -40,7 +40,10 @@ from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.mappers.s3_connection import mask_access_key_id
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
-from app.services.s3_connections_service import S3ConnectionsService
+from app.services.s3_connections_service import (
+    ACTIVE_MANAGED_SOURCE_DELETE_ERROR,
+    S3ConnectionsService,
+)
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.services.ui_group_avatar_service import UiGroupAvatarService
@@ -637,20 +640,17 @@ def delete_s3_connection(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ):
-    tags_service = TagsService(db)
+    service = S3ConnectionsService(db)
     conn = _get_admin_shared_connection(db, connection_id)
-    if S3ConnectionsService(db).is_active_managed_source(conn.id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Delete managed private accesses created from this source connection first",
-        )
     details = resolve_connection_details(conn)
     meta = {"name": conn.name, "endpoint_url": details.endpoint_url, "provider_hint": details.provider}
-    db.query(UserS3Connection).filter(UserS3Connection.s3_connection_id == conn.id).delete()
-    db.delete(conn)
-    db.flush()
-    tags_service.cleanup_orphan_definitions()
-    db.commit()
+    try:
+        service.delete_admin_shared(conn.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ACTIVE_MANAGED_SOURCE_DELETE_ERROR,
+        ) from exc
     audit.record_action(
         user=current_user,
         scope="admin",

@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from app.db import S3Connection, StorageEndpoint, User, UserS3Connection
+from app.db import S3Connection, StorageEndpoint, User
 from app.models.admin_automation import (
     AdminAutomationItemResult,
     S3ConnectionApply,
@@ -54,13 +54,7 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
                     return self._skipped("s3_connection", key, dry_run=dry_run)
                 if dry_run:
                     return self._deleted("s3_connection", key, conn.id, dry_run=dry_run)
-                (
-                    self.db.query(UserS3Connection)
-                    .filter(UserS3Connection.s3_connection_id == conn.id)
-                    .delete(synchronize_session=False)
-                )
-                self.db.delete(conn)
-                self.db.commit()
+                self.s3_connections.delete_admin_shared(conn.id)
                 audit_service.record_action(
                     user=current_user,
                     scope="admin",

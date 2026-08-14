@@ -7,7 +7,17 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.db import S3Connection, StorageEndpoint, StorageProvider, User, UserRole, UserS3Connection
+from app.db import (
+    S3Connection,
+    StorageEndpoint,
+    StorageProvider,
+    TagDefinition,
+    UiGroup,
+    UiGroupS3Connection,
+    User,
+    UserRole,
+    UserS3Connection,
+)
 from app.models.s3_connection import S3ConnectionCreate, S3ConnectionUpdate
 from app.services.s3_connections_service import S3ConnectionsService
 
@@ -401,3 +411,74 @@ def test_get_capabilities_and_delete(db_session):
 
     service.delete(owner.id, row.id)
     assert db_session.query(S3Connection).filter(S3Connection.id == row.id).first() is None
+
+
+def test_delete_admin_shared_cleans_links_and_orphan_tags(db_session):
+    owner = _user(db_session, "shared-delete-owner@example.test")
+    linked_user = _user(db_session, "shared-delete-linked@example.test")
+    group = UiGroup(name="Shared delete group")
+    row = _create_row(
+        db_session,
+        created_by_user_id=owner.id,
+        name="shared-delete",
+        is_shared=True,
+    )
+    db_session.add_all(
+        [
+            group,
+            UserS3Connection(user_id=linked_user.id, s3_connection_id=row.id),
+        ]
+    )
+    db_session.flush()
+    db_session.add(
+        UiGroupS3Connection(group_id=group.id, s3_connection_id=row.id)
+    )
+    service = S3ConnectionsService(db_session)
+    service.tags.replace_connection_tags(row, ["orphan-after-shared-delete"])
+    db_session.commit()
+
+    service.delete_admin_shared(row.id)
+
+    assert db_session.query(S3Connection).filter(S3Connection.id == row.id).first() is None
+    assert (
+        db_session.query(UserS3Connection)
+        .filter(UserS3Connection.s3_connection_id == row.id)
+        .first()
+        is None
+    )
+    assert (
+        db_session.query(UiGroupS3Connection)
+        .filter(UiGroupS3Connection.s3_connection_id == row.id)
+        .first()
+        is None
+    )
+    assert (
+        db_session.query(TagDefinition)
+        .filter(TagDefinition.label_key == "orphan-after-shared-delete")
+        .first()
+        is None
+    )
+
+
+def test_delete_admin_shared_rejects_active_managed_source(
+    db_session,
+    monkeypatch,
+):
+    owner = _user(db_session, "shared-delete-blocked@example.test")
+    row = _create_row(
+        db_session,
+        created_by_user_id=owner.id,
+        name="shared-delete-blocked",
+        is_shared=True,
+    )
+    service = S3ConnectionsService(db_session)
+    monkeypatch.setattr(
+        service,
+        "is_active_managed_source",
+        lambda connection_id: connection_id == row.id,
+    )
+
+    with pytest.raises(ValueError, match="managed private accesses"):
+        service.delete_admin_shared(row.id)
+
+    assert db_session.query(S3Connection).filter(S3Connection.id == row.id).one()
