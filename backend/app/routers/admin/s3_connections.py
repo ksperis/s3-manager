@@ -39,10 +39,11 @@ from app.models.s3_connection_admin import (
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.mappers.s3_connection import mask_access_key_id
-from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import (
+    ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR,
     ACTIVE_MANAGED_SOURCE_DELETE_ERROR,
     ACTIVE_MANAGED_SOURCE_UPDATE_ERROR,
+    AdminSharedStorageEndpointNotFoundError,
     S3ConnectionsService,
 )
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
@@ -337,7 +338,7 @@ def create_s3_connection(
     tags_service = service.tags
     try:
         conn = service.create_admin_shared(current_user.id, payload)
-    except KeyError as exc:
+    except AdminSharedStorageEndpointNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Storage endpoint not found",
@@ -394,7 +395,7 @@ def update_s3_connection(
     _get_admin_shared_connection(db, connection_id)
     try:
         conn = service.update_admin_shared(connection_id, payload)
-    except KeyError as exc:
+    except AdminSharedStorageEndpointNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Storage endpoint not found",
@@ -439,17 +440,15 @@ def remediate_s3_connection(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionAdminItem:
-    conn = _get_admin_shared_connection(db, connection_id)
+    service = S3ConnectionsService(db)
+    _get_admin_shared_connection(db, connection_id)
     if payload.action != "activate_manager":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported remediation action")
-    conn.access_manager = True
-    conn.access_browser = False
-    conn.remediation_required = False
-    conn.remediation_reason = None
-    conn.is_active = True
-    conn.updated_at = utcnow()
-    db.commit()
-    db.refresh(conn)
+    conn = service.update_admin_shared(
+        connection_id,
+        S3ConnectionAdminUpdate(),
+        activate_manager=True,
+    )
     audit.record_action(
         user=current_user,
         scope="admin",
@@ -468,7 +467,7 @@ def remediate_s3_connection(
         user_count=len(user_details),
         user_details=user_details,
         group_details=group_details,
-        tags_service=TagsService(db),
+        tags_service=service.tags,
     )
 
 
@@ -480,19 +479,27 @@ def rotate_s3_connection_credentials(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionAdminItem:
-    tags_service = TagsService(db)
-    conn = _get_admin_shared_connection(db, connection_id)
-    if S3ConnectionsService(db).is_active_managed_source(conn.id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Delete managed private accesses created from this source connection first",
+    service = S3ConnectionsService(db)
+    tags_service = service.tags
+    _get_admin_shared_connection(db, connection_id)
+    try:
+        conn = service.update_admin_shared(
+            connection_id,
+            S3ConnectionAdminUpdate(),
+            access_key_id=payload.access_key_id,
+            secret_access_key=payload.secret_access_key,
         )
-    conn.access_key_id = payload.access_key_id
-    conn.secret_access_key = payload.secret_access_key
-    refresh_connection_detected_capabilities(conn)
-    conn.updated_at = utcnow()
-    db.commit()
-    db.refresh(conn)
+    except ValueError as exc:
+        error = sanitize_error_detail(str(exc))
+        status_code = (
+            status.HTTP_409_CONFLICT
+            if error == ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(
+            status_code=status_code,
+            detail=error,
+        ) from exc
     audit.record_action(
         user=current_user,
         scope="admin",

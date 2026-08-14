@@ -51,7 +51,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             S3UsersService(db),
         )
         self.s3_connection_handler = AdminAutomationConnectionHandler(
-            db,
             S3ConnectionsService(db),
         )
 

@@ -4,39 +4,25 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from sqlalchemy.orm import Session
-
-from app.db import S3Connection, StorageEndpoint, User
+from app.db import S3Connection, User
 from app.models.admin_automation import (
     AdminAutomationItemResult,
     S3ConnectionApply,
     S3ConnectionSpec,
 )
+from app.models.s3_connection_admin import (
+    S3ConnectionAdminCreate,
+    S3ConnectionAdminUpdate,
+)
 from app.services.admin_automation_results import AdminAutomationResultFactory
 from app.services.audit_service import AuditService
 from app.services.mappers.s3_connection import mask_access_key_id
-from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import S3ConnectionsService
-from app.utils.s3_connection_endpoint import (
-    build_custom_endpoint_config,
-    custom_endpoint_update_base,
-    resolve_connection_details,
-)
-
-
-_CUSTOM_ENDPOINT_FIELDS = {
-    "endpoint_url",
-    "region",
-    "force_path_style",
-    "verify_tls",
-    "provider_hint",
-}
-_ENDPOINT_FIELDS = _CUSTOM_ENDPOINT_FIELDS | {"storage_endpoint_id"}
+from app.utils.s3_connection_endpoint import resolve_connection_details
 
 
 class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
-    def __init__(self, db: Session, connections: S3ConnectionsService) -> None:
-        self.db = db
+    def __init__(self, connections: S3ConnectionsService) -> None:
         self.s3_connections = connections
 
     def apply(
@@ -72,10 +58,14 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
                     raise ValueError("s3_connections.spec.name is required to create a new connection")
                 if not spec.access_key_id or not spec.secret_access_key:
                     raise ValueError("s3_connections.spec.access_key_id and secret_access_key are required to create a new connection")
-                self._validate_endpoint_transition(None, spec)
+                create_payload = self._build_create(spec)
+                self.s3_connections.validate_admin_shared_create(create_payload)
                 if dry_run:
                     return self._created("s3_connection", key, dry_run=dry_run)
-                conn = self._create_s3_connection(spec, current_user)
+                conn = self.s3_connections.create_admin_shared(
+                    current_user.id,
+                    create_payload,
+                )
                 details = resolve_connection_details(conn)
                 audit_service.record_action(
                     user=current_user,
@@ -96,14 +86,39 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
                 return self._skipped("s3_connection", key, dry_run=dry_run)
             if dry_run:
                 return self._updated("s3_connection", key, conn.id, diff, dry_run=dry_run)
-            conn = self._update_s3_connection(conn, item)
+            if spec is None:
+                raise RuntimeError("S3 connection update diff requires a specification")
+            update_payload = self._build_update(spec)
+            credential_fields = self._changed_credential_fields(conn, item)
+            conn = self.s3_connections.update_admin_shared(
+                conn.id,
+                update_payload,
+                activate_manager=spec.remediation_action == "activate_manager",
+                access_key_id=(
+                    spec.access_key_id
+                    if "access_key_id" in credential_fields
+                    else None
+                ),
+                secret_access_key=(
+                    spec.secret_access_key
+                    if "secret_access_key" in credential_fields
+                    else None
+                ),
+            )
+            metadata = update_payload.model_dump(
+                exclude_unset=True,
+            )
+            if spec.remediation_action == "activate_manager":
+                metadata["remediation_action"] = "activate_manager"
+            if credential_fields:
+                metadata["credential_fields_updated"] = sorted(credential_fields)
             audit_service.record_action(
                 user=current_user,
                 scope="admin",
                 action="connection.update",
                 entity_type="s3_connection",
                 entity_id=str(conn.id),
-                metadata=item.spec.model_dump(exclude_none=True, exclude_unset=True) if item.spec else None,
+                metadata=metadata,
             )
             return self._updated("s3_connection", key, conn.id, diff, dry_run=dry_run)
         except Exception as exc:  # noqa: BLE001
@@ -115,8 +130,13 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
             return {}
         diff: dict[str, dict[str, Any]] = {}
         fields_set = spec.model_fields_set
-        if _ENDPOINT_FIELDS & fields_set:
-            self._validate_endpoint_transition(conn, spec)
+        update_payload = self._build_update(spec)
+        credential_fields = self._changed_credential_fields(conn, item)
+        self.s3_connections.validate_admin_shared_update(
+            conn,
+            update_payload,
+            update_credentials=bool(credential_fields),
+        )
         if "name" in fields_set and spec.name and spec.name != conn.name:
             diff["name"] = {"from": conn.name, "to": spec.name}
         if "storage_endpoint_id" in fields_set:
@@ -149,210 +169,54 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
                 "from": conn.credential_owner_identifier,
                 "to": spec.credential_owner_identifier,
             }
-        if item.update_credentials:
-            if "access_key_id" in fields_set and spec.access_key_id is not None and spec.access_key_id != conn.access_key_id:
-                diff["access_key_id"] = {
-                    "from": mask_access_key_id(conn.access_key_id),
-                    "to": mask_access_key_id(spec.access_key_id),
-                }
-            if "secret_access_key" in fields_set and spec.secret_access_key is not None and spec.secret_access_key != conn.secret_access_key:
-                diff["secret_access_key"] = {"from": "<redacted>", "to": "<redacted>"}
+        if "access_key_id" in credential_fields:
+            diff["access_key_id"] = {
+                "from": mask_access_key_id(conn.access_key_id),
+                "to": mask_access_key_id(spec.access_key_id),
+            }
+        if "secret_access_key" in credential_fields:
+            diff["secret_access_key"] = {
+                "from": "<redacted>",
+                "to": "<redacted>",
+            }
         return diff
 
-    def _create_s3_connection(
-        self,
-        spec: S3ConnectionSpec,
-        current_user: User,
-    ) -> S3Connection:
-        storage_endpoint_id = spec.storage_endpoint_id
-        endpoint_url = (spec.endpoint_url or "").strip()
-        if storage_endpoint_id is not None:
-            storage_endpoint = (
-                self.db.query(StorageEndpoint)
-                .filter(StorageEndpoint.id == storage_endpoint_id)
-                .first()
-            )
-            if not storage_endpoint:
-                raise ValueError("Storage endpoint not found")
-            custom_endpoint_config = None
-        else:
-            if not endpoint_url:
-                raise ValueError("Endpoint URL is required for manual connections")
-            endpoint_url = endpoint_url.rstrip("/")
-            custom_endpoint_config = build_custom_endpoint_config(
-                endpoint_url,
-                spec.region,
-                bool(spec.force_path_style or False),
-                bool(spec.verify_tls if spec.verify_tls is not None else True),
-                spec.provider_hint,
-            )
-        conn = S3Connection(
-            created_by_user_id=current_user.id,
-            name=spec.name,
-            storage_endpoint_id=storage_endpoint_id,
-            custom_endpoint_config=custom_endpoint_config,
-            is_shared=True,
-            access_manager=True,
-            access_browser=False,
-            remediation_required=False,
-            remediation_reason=None,
-            credential_owner_type=spec.credential_owner_type,
-            credential_owner_identifier=spec.credential_owner_identifier,
-            access_key_id=spec.access_key_id,
-            secret_access_key=spec.secret_access_key,
-        )
-        self.db.add(conn)
-        self.db.flush()
-        self._refresh_detected_capabilities(conn)
-        self.db.commit()
-        self.db.refresh(conn)
-        return conn
+    @staticmethod
+    def _build_create(spec: S3ConnectionSpec) -> S3ConnectionAdminCreate:
+        payload = spec.model_dump(exclude_unset=True)
+        payload.pop("remediation_action", None)
+        return S3ConnectionAdminCreate(**payload)
 
-    def _update_s3_connection(
-        self,
+    @staticmethod
+    def _build_update(spec: S3ConnectionSpec) -> S3ConnectionAdminUpdate:
+        payload = spec.model_dump(exclude_unset=True)
+        for field in ("access_key_id", "secret_access_key", "remediation_action"):
+            payload.pop(field, None)
+        return S3ConnectionAdminUpdate(**payload)
+
+    @staticmethod
+    def _changed_credential_fields(
         conn: S3Connection,
         item: S3ConnectionApply,
-    ) -> S3Connection:
+    ) -> set[str]:
         spec = item.spec
-        if not spec:
-            return conn
-        payload_data = spec.model_dump(exclude_unset=True)
-        should_probe_iam = False
-        if "name" in payload_data and spec.name is not None:
-            conn.name = spec.name
-        if "storage_endpoint_id" in payload_data:
-            if spec.storage_endpoint_id is not None:
-                storage_endpoint = (
-                    self.db.query(StorageEndpoint)
-                    .filter(StorageEndpoint.id == spec.storage_endpoint_id)
-                    .first()
-                )
-                if not storage_endpoint:
-                    raise ValueError("Storage endpoint not found")
-                conn.storage_endpoint_id = storage_endpoint.id
-                conn.custom_endpoint_config = None
-                should_probe_iam = True
-            else:
-                conn.storage_endpoint_id = None
-                should_probe_iam = True
-        if conn.storage_endpoint_id is None:
-            current = custom_endpoint_update_base(conn.custom_endpoint_config)
-            endpoint_url = current.endpoint_url
-            region = current.region
-            force_path_style = current.force_path_style
-            verify_tls = current.verify_tls
-            provider = current.provider
-            if "endpoint_url" in payload_data:
-                endpoint_url = (spec.endpoint_url or "").rstrip("/")
-                should_probe_iam = True
-            if "region" in payload_data:
-                region = spec.region
-                should_probe_iam = True
-            if "force_path_style" in payload_data:
-                force_path_style = bool(spec.force_path_style)
-            if "verify_tls" in payload_data:
-                verify_tls = bool(spec.verify_tls)
-                should_probe_iam = True
-            if "provider_hint" in payload_data:
-                provider = spec.provider_hint
-            if not endpoint_url:
-                raise ValueError("Endpoint URL is required for manual connections")
-            conn.custom_endpoint_config = build_custom_endpoint_config(
-                endpoint_url,
-                region,
-                force_path_style,
-                verify_tls,
-                provider,
-            )
-        conn.access_browser = False
-        if spec.remediation_action == "activate_manager":
-            conn.access_manager = True
-            conn.remediation_required = False
-            conn.remediation_reason = None
-            conn.is_active = True
-        if "credential_owner_type" in payload_data:
-            conn.credential_owner_type = spec.credential_owner_type
-        if "credential_owner_identifier" in payload_data:
-            conn.credential_owner_identifier = spec.credential_owner_identifier
-        if item.update_credentials:
-            if "access_key_id" in payload_data and spec.access_key_id is not None:
-                conn.access_key_id = spec.access_key_id
-                should_probe_iam = True
-            if "secret_access_key" in payload_data and spec.secret_access_key is not None:
-                conn.secret_access_key = spec.secret_access_key
-                should_probe_iam = True
-        if should_probe_iam:
-            self._refresh_detected_capabilities(conn)
-        self.db.add(conn)
-        self.db.commit()
-        self.db.refresh(conn)
-        return conn
-
-    def _validate_endpoint_transition(
-        self,
-        conn: Optional[S3Connection],
-        spec: S3ConnectionSpec,
-    ) -> None:
+        if not item.update_credentials or spec is None:
+            return set()
+        changed: set[str] = set()
         fields_set = spec.model_fields_set
-        endpoint_id_is_set = "storage_endpoint_id" in fields_set
-        if endpoint_id_is_set:
-            desired_endpoint_id = spec.storage_endpoint_id
-        elif conn is not None:
-            desired_endpoint_id = conn.storage_endpoint_id
-        else:
-            desired_endpoint_id = None
-        custom_fields = _CUSTOM_ENDPOINT_FIELDS & fields_set
-        if desired_endpoint_id is not None:
-            if custom_fields:
-                raise ValueError(
-                    "Custom endpoint fields cannot be combined with a managed storage endpoint"
-                )
-            endpoint = (
-                self.db.query(StorageEndpoint)
-                .filter(StorageEndpoint.id == desired_endpoint_id)
-                .first()
-            )
-            if endpoint is None:
-                raise ValueError("Storage endpoint not found")
-            return
-
-        if conn is not None and conn.storage_endpoint_id is None:
-            current = custom_endpoint_update_base(conn.custom_endpoint_config)
-        else:
-            current = custom_endpoint_update_base(None)
-        endpoint_url = (
-            spec.endpoint_url
-            if "endpoint_url" in fields_set
-            else current.endpoint_url
-        )
-        region = spec.region if "region" in fields_set else current.region
-        force_path_style = (
-            spec.force_path_style
-            if "force_path_style" in fields_set
-            else current.force_path_style
-        )
-        verify_tls = (
-            spec.verify_tls if "verify_tls" in fields_set else current.verify_tls
-        )
-        provider = (
-            spec.provider_hint
-            if "provider_hint" in fields_set
-            else current.provider
-        )
-        if force_path_style is None or verify_tls is None:
-            raise ValueError(
-                "force_path_style and verify_tls cannot be null for a custom endpoint"
-            )
-        build_custom_endpoint_config(
-            endpoint_url or "",
-            region,
-            force_path_style,
-            verify_tls,
-            provider,
-        )
-
-    def _refresh_detected_capabilities(self, conn: S3Connection) -> None:
-        refresh_connection_detected_capabilities(conn)
+        if (
+            "access_key_id" in fields_set
+            and spec.access_key_id is not None
+            and spec.access_key_id != conn.access_key_id
+        ):
+            changed.add("access_key_id")
+        if (
+            "secret_access_key" in fields_set
+            and spec.secret_access_key is not None
+            and spec.secret_access_key != conn.secret_access_key
+        ):
+            changed.add("secret_access_key")
+        return changed
 
     def _find_s3_connection(
         self,

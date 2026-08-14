@@ -35,6 +35,9 @@ ACTIVE_MANAGED_SOURCE_DELETE_ERROR = (
 ACTIVE_MANAGED_SOURCE_UPDATE_ERROR = (
     "Connection endpoint and provenance are locked while managed private accesses depend on it"
 )
+ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR = (
+    "Connection credentials are locked while managed private accesses depend on this source"
+)
 _ADMIN_SHARED_CUSTOM_ENDPOINT_FIELDS = {
     "endpoint_url",
     "region",
@@ -50,6 +53,10 @@ _ADMIN_SHARED_SOURCE_IMMUTABLE_FIELDS = _ADMIN_SHARED_ENDPOINT_FIELDS | {
     "credential_owner_type",
     "credential_owner_identifier",
 }
+
+
+class AdminSharedStorageEndpointNotFoundError(ValueError):
+    pass
 
 
 class S3ConnectionsService:
@@ -145,16 +152,31 @@ class S3ConnectionsService:
         self,
         row: DBS3Connection,
         payload: S3ConnectionAdminUpdate,
+        *,
+        update_credentials: bool = False,
     ) -> None:
-        self._prepare_admin_shared_update(row, payload)
+        self._prepare_admin_shared_update(
+            row,
+            payload,
+            update_credentials=update_credentials,
+        )
 
     def update_admin_shared(
         self,
         connection_id: int,
         payload: S3ConnectionAdminUpdate,
+        *,
+        activate_manager: bool = False,
+        access_key_id: Optional[str] = None,
+        secret_access_key: Optional[str] = None,
     ) -> DBS3Connection:
         row = self.get_admin_shared(connection_id)
-        endpoint_plan, group_ids = self._prepare_admin_shared_update(row, payload)
+        update_credentials = access_key_id is not None or secret_access_key is not None
+        endpoint_plan, group_ids = self._prepare_admin_shared_update(
+            row,
+            payload,
+            update_credentials=update_credentials,
+        )
         payload_data = payload.model_dump(exclude_unset=True)
         if payload.name is not None:
             row.name = payload.name
@@ -163,6 +185,11 @@ class S3ConnectionsService:
         if endpoint_plan is not None:
             row.storage_endpoint_id, row.custom_endpoint_config = endpoint_plan
         row.access_browser = False
+        if activate_manager:
+            row.access_manager = True
+            row.remediation_required = False
+            row.remediation_reason = None
+            row.is_active = True
         if "credential_owner_type" in payload_data:
             row.credential_owner_type = payload.credential_owner_type
         if "credential_owner_identifier" in payload_data:
@@ -171,13 +198,17 @@ class S3ConnectionsService:
             self.tags.replace_connection_tags(row, payload.tags)
         if group_ids is not None:
             self._sync_admin_shared_group_links(row.id, group_ids)
+        if access_key_id is not None:
+            row.access_key_id = access_key_id
+        if secret_access_key is not None:
+            row.secret_access_key = secret_access_key
         probe_fields = {
             "storage_endpoint_id",
             "endpoint_url",
             "region",
             "verify_tls",
         }
-        if probe_fields & payload_data.keys():
+        if probe_fields & payload_data.keys() or update_credentials:
             self._refresh_detected_capabilities(row)
         row.updated_at = utcnow()
         self.db.commit()
@@ -403,6 +434,8 @@ class S3ConnectionsService:
         self,
         row: DBS3Connection,
         payload: S3ConnectionAdminUpdate,
+        *,
+        update_credentials: bool,
     ) -> tuple[Optional[tuple[Optional[int], Optional[str]]], Optional[list[int]]]:
         fields_set = payload.model_fields_set
         if (
@@ -410,6 +443,8 @@ class S3ConnectionsService:
             and _ADMIN_SHARED_SOURCE_IMMUTABLE_FIELDS & fields_set
         ):
             raise ValueError(ACTIVE_MANAGED_SOURCE_UPDATE_ERROR)
+        if update_credentials and self.is_active_managed_source(row.id):
+            raise ValueError(ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR)
         endpoint_plan = None
         if _ADMIN_SHARED_ENDPOINT_FIELDS & fields_set:
             endpoint_plan = self._admin_shared_endpoint_plan(row, payload)
@@ -440,7 +475,9 @@ class S3ConnectionsService:
                 .first()
             )
             if endpoint is None:
-                raise KeyError("Storage endpoint not found")
+                raise AdminSharedStorageEndpointNotFoundError(
+                    "Storage endpoint not found"
+                )
             return desired_endpoint_id, None
 
         if row is not None and row.storage_endpoint_id is None:

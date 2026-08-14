@@ -25,8 +25,11 @@ from app.utils.s3_connection_endpoint import parse_custom_endpoint_config
 
 
 class _Audit:
-    def record_action(self, **_kwargs) -> None:
-        return None
+    def __init__(self) -> None:
+        self.actions: list[dict] = []
+
+    def record_action(self, **kwargs) -> None:
+        self.actions.append(kwargs)
 
 
 def test_access_key_masking_is_canonical() -> None:
@@ -209,7 +212,7 @@ def test_connection_update_detaches_managed_endpoint_explicitly(
     )
     service = AdminAutomationService(db_session)
     monkeypatch.setattr(
-        service.s3_connection_handler,
+        service.s3_connection_handler.s3_connections,
         "_refresh_detected_capabilities",
         lambda _connection: None,
     )
@@ -239,6 +242,91 @@ def test_connection_update_detaches_managed_endpoint_explicitly(
     assert config.endpoint_url == "https://detached-custom.example.test"
     assert config.region == "custom-region"
     assert config.provider == "custom-provider"
+
+
+def test_connection_credential_update_uses_service_without_audit_secrets(
+    db_session,
+    monkeypatch,
+):
+    user = _user(db_session)
+    connection = _connection(
+        db_session,
+        user,
+        name="automation-credential-update",
+        shared=True,
+    )
+    service = AdminAutomationService(db_session)
+    monkeypatch.setattr(
+        service.s3_connection_handler.s3_connections,
+        "_refresh_detected_capabilities",
+        lambda _connection: None,
+    )
+    audit = _Audit()
+
+    result = service.apply(
+        AdminAutomationApplyRequest(
+            s3_connections=[
+                S3ConnectionApply(
+                    match=S3ConnectionMatch(id=connection.id),
+                    update_credentials=True,
+                    spec=S3ConnectionSpec(
+                        access_key_id="AK-AUTOMATION-REPLACEMENT",
+                        secret_access_key="SK-AUTOMATION-REPLACEMENT",
+                    ),
+                )
+            ]
+        ),
+        current_user=user,
+        audit_service=audit,
+    )
+
+    db_session.refresh(connection)
+    metadata = audit.actions[0]["metadata"]
+    assert result.success is True
+    assert connection.access_key_id == "AK-AUTOMATION-REPLACEMENT"
+    assert connection.secret_access_key == "SK-AUTOMATION-REPLACEMENT"
+    assert metadata == {
+        "credential_fields_updated": ["access_key_id", "secret_access_key"]
+    }
+
+
+def test_connection_credential_dry_run_respects_managed_source_lock(
+    db_session,
+    monkeypatch,
+):
+    user = _user(db_session)
+    connection = _connection(
+        db_session,
+        user,
+        name="automation-credential-locked",
+        shared=True,
+    )
+    service = AdminAutomationService(db_session)
+    monkeypatch.setattr(
+        service.s3_connection_handler.s3_connections,
+        "is_active_managed_source",
+        lambda connection_id: connection_id == connection.id,
+    )
+
+    result = service.apply(
+        AdminAutomationApplyRequest(
+            dry_run=True,
+            s3_connections=[
+                S3ConnectionApply(
+                    match=S3ConnectionMatch(id=connection.id),
+                    update_credentials=True,
+                    spec=S3ConnectionSpec(
+                        access_key_id="AK-AUTOMATION-BLOCKED",
+                    ),
+                )
+            ],
+        ),
+        current_user=user,
+        audit_service=_Audit(),
+    )
+
+    assert result.success is False
+    assert "credentials are locked" in (result.results[0].error or "")
 
 
 @pytest.mark.parametrize("legacy_field", ["is_shared", "access_manager", "access_browser"])
@@ -282,7 +370,7 @@ def test_automation_creates_shared_manager_only_connection(db_session, monkeypat
     user = _user(db_session)
     service = AdminAutomationService(db_session)
     monkeypatch.setattr(
-        service.s3_connection_handler,
+        service.s3_connection_handler.s3_connections,
         "_refresh_detected_capabilities",
         lambda connection: None,
     )
