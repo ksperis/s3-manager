@@ -28,6 +28,9 @@ from app.db import (
 )
 from app.models.app_settings import AppSettings
 from app.services import quota_monitoring_service
+from app.services.quota_alert_recipients_service import (
+    QuotaAlertRecipientsService,
+)
 from app.services.quota_monitoring_service import QuotaMonitoringService
 from app.services.quota_subject import SubjectContext
 
@@ -175,6 +178,13 @@ def test_usage_history_hourly_and_daily_upserts(db_session, monkeypatch):
     monkeypatch.setattr(quota_monitoring_service, "load_app_settings", lambda: _settings(quota_alerts_enabled=False, usage_history_enabled=True))
     monkeypatch.setattr(quota_monitoring_service.DataRetentionService, "purge_all", lambda self: {})
     monkeypatch.setattr(QuotaMonitoringService, "_resolve_admin_client", lambda self, endpoint, cache: fake_admin)
+    monkeypatch.setattr(
+        QuotaAlertRecipientsService,
+        "load",
+        lambda self: (_ for _ in ()).throw(
+            AssertionError("History-only runs must not load alert recipients")
+        ),
+    )
 
     service = QuotaMonitoringService(db_session)
     first = service.run_monitor()
@@ -429,14 +439,8 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
     )
     db_session.commit()
 
-    service = QuotaMonitoringService(db_session)
-
-    account_recipients = service._load_account_recipients()
-    s3_user_recipients = service._load_s3_user_recipients()
-    global_watch_recipients = service._load_global_watch_recipients()
-    account_notification_users = service._load_account_notification_users()
-    s3_user_notification_users = service._load_s3_user_notification_users()
-    global_watch_notification_users = service._load_global_watch_notification_users()
+    service = QuotaAlertRecipientsService(db_session)
+    recipient_index = service.load()
 
     account_subject = SubjectContext(
         subject_type="account",
@@ -450,11 +454,9 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
         quota_user_uid=None,
         contact_email=account.email,
     )
-    account_resolved = service._resolve_recipients(
+    account_resolved = service.email_recipients(
         subject=account_subject,
-        account_recipients=account_recipients,
-        s3_user_recipients=s3_user_recipients,
-        global_watch_recipients=global_watch_recipients,
+        index=recipient_index,
         include_subject_contact=True,
     )
 
@@ -479,11 +481,9 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
         quota_user_uid=s3_user.rgw_user_uid,
         contact_email=s3_user.email,
     )
-    s3_user_resolved = service._resolve_recipients(
+    s3_user_resolved = service.email_recipients(
         subject=s3_user_subject,
-        account_recipients=account_recipients,
-        s3_user_recipients=s3_user_recipients,
-        global_watch_recipients=global_watch_recipients,
+        index=recipient_index,
         include_subject_contact=False,
     )
     assert set(s3_user_resolved) == {
@@ -493,11 +493,9 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
     }
 
     assert set(
-        service._resolve_notification_user_ids(
+        service.notification_user_ids(
             subject=account_subject,
-            account_notification_users=account_notification_users,
-            s3_user_notification_users=s3_user_notification_users,
-            global_watch_notification_users=global_watch_notification_users,
+            index=recipient_index,
         )
     ) == {
         account_admin.id,
@@ -510,11 +508,9 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
     }
 
     assert set(
-        service._resolve_notification_user_ids(
+        service.notification_user_ids(
             subject=s3_user_subject,
-            account_notification_users=account_notification_users,
-            s3_user_notification_users=s3_user_notification_users,
-            global_watch_notification_users=global_watch_notification_users,
+            index=recipient_index,
         )
     ) == {
         s3_user_member.id,

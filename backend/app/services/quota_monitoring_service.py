@@ -8,27 +8,23 @@ from datetime import datetime
 import logging
 from typing import Any, Optional
 
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db import (
-    AccountRole,
     S3Account,
     S3User,
     StorageEndpoint,
     StorageProvider,
-    UiGroupS3Account,
-    UiGroupS3User,
-    User,
-    UserRole,
-    UserS3Account,
-    UserS3User,
-    UserUiGroup,
 )
 from app.models.app_settings import QuotaNotificationSettings
 from app.services.app_settings_service import load_app_settings
 from app.services.data_retention_service import DataRetentionService
+from app.services.quota_alert_recipients_service import (
+    QuotaAlertRecipientIndex,
+    QuotaAlertRecipientsService,
+    normalize_email,
+)
 from app.services.quota_alert_state_service import (
     QUOTA_ALERT_FULL,
     QUOTA_ALERT_THRESHOLD,
@@ -102,21 +98,21 @@ class QuotaMonitoringService:
         subjects = self._load_subjects(endpoint_map=endpoint_map, default_endpoint_id=default_endpoint_id)
         summary["subjects_total"] = len(subjects)
 
-        account_recipients = self._load_account_recipients()
-        s3_user_recipients = self._load_s3_user_recipients()
-        global_watch_recipients = self._load_global_watch_recipients()
-        account_notification_users = self._load_account_notification_users()
-        s3_user_notification_users = self._load_s3_user_notification_users()
-        global_watch_notification_users = self._load_global_watch_notification_users()
         usage_clients: dict[int, Optional[RGWAdminClient]] = {}
         admin_clients: dict[int, Optional[RGWAdminClient]] = {}
         notifications_service = UserNotificationsService(self.db)
         usage_history_service = QuotaUsageHistoryService(self.db)
         alert_state_service = QuotaAlertStateService(self.db)
+        recipients_service = QuotaAlertRecipientsService(self.db)
         states = (
             alert_state_service.load_states()
             if quota_alerts_enabled
             else {}
+        )
+        recipient_index = (
+            recipients_service.load()
+            if quota_alerts_enabled
+            else QuotaAlertRecipientIndex()
         )
 
         if quota_alerts_enabled:
@@ -227,11 +223,9 @@ class QuotaMonitoringService:
                     QUOTA_ALERT_FULL,
                 }:
                     summary["alerts_triggered"] += 1
-                    notification_user_ids = self._resolve_notification_user_ids(
+                    notification_user_ids = recipients_service.notification_user_ids(
                         subject=subject,
-                        account_notification_users=account_notification_users,
-                        s3_user_notification_users=s3_user_notification_users,
-                        global_watch_notification_users=global_watch_notification_users,
+                        index=recipient_index,
                     )
                     summary["notifications_created"] += notifications_service.create_quota_alert_notifications(
                         user_ids=notification_user_ids,
@@ -268,11 +262,9 @@ class QuotaMonitoringService:
                         ),
                         created_at=now,
                     )
-                    recipients = self._resolve_recipients(
+                    recipients = recipients_service.email_recipients(
                         subject=subject,
-                        account_recipients=account_recipients,
-                        s3_user_recipients=s3_user_recipients,
-                        global_watch_recipients=global_watch_recipients,
+                        index=recipient_index,
                         include_subject_contact=bool(app_settings.quota_notifications.include_subject_contact_email),
                     )
                     if recipients:
@@ -311,7 +303,7 @@ class QuotaMonitoringService:
         notification_settings: QuotaNotificationSettings,
         recipient_email: Optional[str],
     ) -> dict[str, Any]:
-        recipient = self._normalize_email(recipient_email)
+        recipient = normalize_email(recipient_email)
         if not recipient:
             raise ValueError("Current user email is required to send a test email.")
 
@@ -487,207 +479,6 @@ class QuotaMonitoringService:
         if not ratios:
             return None
         return round(max(ratios), 3)
-
-    def _normalize_email(self, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        normalized = str(value).strip().lower()
-        return normalized or None
-
-    def _load_account_recipients(self) -> dict[int, set[str]]:
-        rows = (
-            self.db.query(UserS3Account.account_id, User.email)
-            .join(User, User.id == UserS3Account.user_id)
-            .filter(User.is_active.is_(True))
-            .filter(User.quota_alerts_enabled.is_(True))
-            .filter(
-                or_(
-                    UserS3Account.is_root.is_(True),
-                    UserS3Account.role.in_([
-                        AccountRole.PORTAL_MANAGER.value,
-                        AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                    ]),
-                )
-            )
-            .all()
-        )
-        result: dict[int, set[str]] = {}
-        for account_id, email in rows:
-            normalized = self._normalize_email(email)
-            if not normalized:
-                continue
-            result.setdefault(int(account_id), set()).add(normalized)
-
-        group_rows = (
-            self.db.query(UiGroupS3Account.account_id, User.email)
-            .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3Account.group_id)
-            .join(User, User.id == UserUiGroup.user_id)
-            .filter(User.is_active.is_(True))
-            .filter(User.quota_alerts_enabled.is_(True))
-            .filter(
-                UiGroupS3Account.role.in_([
-                    AccountRole.PORTAL_MANAGER.value,
-                    AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                ])
-            )
-            .all()
-        )
-        for account_id, email in group_rows:
-            normalized = self._normalize_email(email)
-            if not normalized:
-                continue
-            result.setdefault(int(account_id), set()).add(normalized)
-        return result
-
-    def _load_s3_user_recipients(self) -> dict[int, set[str]]:
-        rows = (
-            self.db.query(UserS3User.s3_user_id, User.email)
-            .join(User, User.id == UserS3User.user_id)
-            .filter(User.is_active.is_(True))
-            .filter(User.quota_alerts_enabled.is_(True))
-            .all()
-        )
-        result: dict[int, set[str]] = {}
-        for s3_user_id, email in rows:
-            normalized = self._normalize_email(email)
-            if not normalized:
-                continue
-            result.setdefault(int(s3_user_id), set()).add(normalized)
-
-        group_rows = (
-            self.db.query(UiGroupS3User.s3_user_id, User.email)
-            .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3User.group_id)
-            .join(User, User.id == UserUiGroup.user_id)
-            .filter(User.is_active.is_(True))
-            .filter(User.quota_alerts_enabled.is_(True))
-            .all()
-        )
-        for s3_user_id, email in group_rows:
-            normalized = self._normalize_email(email)
-            if not normalized:
-                continue
-            result.setdefault(int(s3_user_id), set()).add(normalized)
-        return result
-
-    def _load_global_watch_recipients(self) -> set[str]:
-        rows = (
-            self.db.query(User.email)
-            .filter(User.is_active.is_(True))
-            .filter(User.quota_alerts_enabled.is_(True))
-            .filter(User.quota_alerts_global_watch.is_(True))
-            .filter(User.role.in_([UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]))
-            .all()
-        )
-        recipients: set[str] = set()
-        for (email,) in rows:
-            normalized = self._normalize_email(email)
-            if normalized:
-                recipients.add(normalized)
-        return recipients
-
-    def _resolve_recipients(
-        self,
-        *,
-        subject: SubjectContext,
-        account_recipients: dict[int, set[str]],
-        s3_user_recipients: dict[int, set[str]],
-        global_watch_recipients: set[str],
-        include_subject_contact: bool,
-    ) -> list[str]:
-        recipients: set[str] = set(global_watch_recipients)
-        if subject.subject_type == "account":
-            recipients.update(account_recipients.get(subject.subject_id, set()))
-        else:
-            recipients.update(s3_user_recipients.get(subject.subject_id, set()))
-        if include_subject_contact:
-            normalized = self._normalize_email(subject.contact_email)
-            if normalized:
-                recipients.add(normalized)
-        return sorted(recipients)
-
-    def _load_account_notification_users(self) -> dict[int, set[int]]:
-        rows = (
-            self.db.query(UserS3Account.account_id, User.id)
-            .join(User, User.id == UserS3Account.user_id)
-            .filter(User.is_active.is_(True))
-            .filter(
-                or_(
-                    UserS3Account.is_root.is_(True),
-                    UserS3Account.role.in_([
-                        AccountRole.PORTAL_MANAGER.value,
-                        AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                    ]),
-                )
-            )
-            .all()
-        )
-        result: dict[int, set[int]] = {}
-        for account_id, user_id in rows:
-            result.setdefault(int(account_id), set()).add(int(user_id))
-
-        group_rows = (
-            self.db.query(UiGroupS3Account.account_id, User.id)
-            .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3Account.group_id)
-            .join(User, User.id == UserUiGroup.user_id)
-            .filter(User.is_active.is_(True))
-            .filter(
-                UiGroupS3Account.role.in_([
-                    AccountRole.PORTAL_MANAGER.value,
-                    AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                ])
-            )
-            .all()
-        )
-        for account_id, user_id in group_rows:
-            result.setdefault(int(account_id), set()).add(int(user_id))
-        return result
-
-    def _load_s3_user_notification_users(self) -> dict[int, set[int]]:
-        rows = (
-            self.db.query(UserS3User.s3_user_id, User.id)
-            .join(User, User.id == UserS3User.user_id)
-            .filter(User.is_active.is_(True))
-            .all()
-        )
-        result: dict[int, set[int]] = {}
-        for s3_user_id, user_id in rows:
-            result.setdefault(int(s3_user_id), set()).add(int(user_id))
-
-        group_rows = (
-            self.db.query(UiGroupS3User.s3_user_id, User.id)
-            .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3User.group_id)
-            .join(User, User.id == UserUiGroup.user_id)
-            .filter(User.is_active.is_(True))
-            .all()
-        )
-        for s3_user_id, user_id in group_rows:
-            result.setdefault(int(s3_user_id), set()).add(int(user_id))
-        return result
-
-    def _load_global_watch_notification_users(self) -> set[int]:
-        rows = (
-            self.db.query(User.id)
-            .filter(User.is_active.is_(True))
-            .filter(User.quota_alerts_global_watch.is_(True))
-            .filter(User.role.in_([UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]))
-            .all()
-        )
-        return {int(user_id) for (user_id,) in rows}
-
-    def _resolve_notification_user_ids(
-        self,
-        *,
-        subject: SubjectContext,
-        account_notification_users: dict[int, set[int]],
-        s3_user_notification_users: dict[int, set[int]],
-        global_watch_notification_users: set[int],
-    ) -> list[int]:
-        user_ids: set[int] = set(global_watch_notification_users)
-        if subject.subject_type == "account":
-            user_ids.update(account_notification_users.get(subject.subject_id, set()))
-        else:
-            user_ids.update(s3_user_notification_users.get(subject.subject_id, set()))
-        return sorted(user_ids)
 
     def _quota_notification_event_key(
         self,
