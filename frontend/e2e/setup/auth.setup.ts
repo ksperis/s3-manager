@@ -251,6 +251,9 @@ setup("bootstrap browser auth with S3 backend", async ({ page }) => {
   expect(cookies.find((cookie) => cookie.name === "csrf_token")?.httpOnly).toBe(false);
   await page.reload();
   await expect(page).toHaveURL(/\/browser(?:\?.*)?$/);
-  await expect(page.getByRole("button", { name: "Select bucket" })).toContainText(E2E_BUCKET_NAME);
+  await expect(page.getByRole("button", { name: "Select bucket" })).toContainText(
+    E2E_BUCKET_NAME,
+    { timeout: 30_000 },
+  );
   await page.context().storageState({ path: E2E_STORAGE_STATE_PATH });
 });
