@@ -256,9 +256,6 @@ def _create_browser_connection_context(
             "storage_endpoint_id": int(endpoint["id"]),
             "access_key_id": ceph_test_settings.rgw_admin_access_key,
             "secret_access_key": ceph_test_settings.rgw_admin_secret_key,
-            "provider_hint": "CEPH",
-            "region": endpoint.get("region") or ceph_test_settings.rgw_admin_region or "us-east-1",
-            "verify_tls": ceph_test_settings.rgw_verify_tls,
         },
         expected_status=201,
     )
