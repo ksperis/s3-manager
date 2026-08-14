@@ -206,6 +206,18 @@ def test_update_account_user_links_missing_user(db_session, monkeypatch):
             ),
         )
 
+    assert (
+        db_session.query(UserS3Account)
+        .filter(
+            UserS3Account.account_id == account.id,
+            UserS3Account.user_id == user_existing.id,
+            UserS3Account.is_root.is_(False),
+        )
+        .one()
+        .role
+        == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    )
+
 
 def test_update_account_adds_and_removes_links_with_quota_request(db_session, monkeypatch):
     endpoint = _seed_endpoint(db_session, name="ceph-update-ok", is_default=True)

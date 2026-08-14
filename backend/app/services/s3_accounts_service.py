@@ -15,10 +15,7 @@ from app.db import (
     UiGroup,
     UiGroupS3Account,
     User,
-    UserRole,
     UserS3Account,
-    UserUiGroup,
-    is_admin_ui_role,
 )
 from app.models.s3_account import (
     AccountGroupLink,
@@ -37,6 +34,7 @@ from app.services.portal_role_sync import (
 )
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
+from app.services.s3_account_associations_service import S3AccountAssociationsService
 from app.services.tags_service import TagsService
 from app.services.ui_group_avatar_service import UiGroupAvatarService
 from app.services.user_avatar_service import UserAvatarService
@@ -52,8 +50,6 @@ from app.utils.usage_stats import extract_usage_stats
 from app.utils.quota_stats import bytes_to_gb, extract_positive_limit, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.name_ordering import name_order_by
-from app.utils.account_roles import require_account_role
-from app.utils.time import utcnow
 
 
 logger = logging.getLogger(__name__)
@@ -765,30 +761,11 @@ class S3AccountsService:
         if not account:
             raise ValueError("S3Account not found")
 
-        affected_portal_user_ids: set[int] = set()
-        if payload.user_links is not None:
-            affected_portal_user_ids.update(
-                row[0]
-                for row in self.db.query(UserS3Account.user_id)
-                .filter(UserS3Account.account_id == account.id, UserS3Account.is_root.is_(False))
-                .all()
-            )
-            affected_portal_user_ids.update(int(link.user_id) for link in payload.user_links)
-        if payload.group_links is not None:
-            affected_group_ids = {
-                row[0]
-                for row in self.db.query(UiGroupS3Account.group_id)
-                .filter(UiGroupS3Account.account_id == account.id)
-                .all()
-            }
-            affected_group_ids.update(int(link.group_id) for link in payload.group_links)
-            if affected_group_ids:
-                affected_portal_user_ids.update(
-                    row[0]
-                    for row in self.db.query(UserUiGroup.user_id)
-                    .filter(UserUiGroup.group_id.in_(affected_group_ids))
-                    .all()
-                )
+        associations = S3AccountAssociationsService(self.db)
+        affected_portal_user_ids = associations.affected_portal_user_ids(
+            account,
+            payload,
+        )
         portal_roles_before = capture_effective_portal_roles(
             self.db,
             user_ids=affected_portal_user_ids,
@@ -829,98 +806,11 @@ class S3AccountsService:
                         payload.quota_max_size_unit,
                     )
 
-        # Update UI user associations (non-root links only)
         if payload.user_links is not None:
-            desired_links = payload.user_links
-
-            existing_links = (
-                self.db.query(UserS3Account)
-                .filter(UserS3Account.account_id == account.id, UserS3Account.is_root.is_(False))
-                .all()
-            )
-            existing_by_user = {link.user_id: link for link in existing_links}
-            desired_ids = {int(link.user_id) for link in desired_links}
-
-            to_remove = set(existing_by_user.keys()) - desired_ids
-            if to_remove:
-                (
-                    self.db.query(UserS3Account)
-                    .filter(
-                        UserS3Account.account_id == account.id,
-                        UserS3Account.user_id.in_(to_remove),
-                        UserS3Account.is_root.is_(False),
-                    )
-                    .delete(synchronize_session="fetch")
-                )
-
-            for link in desired_links:
-                user_id = int(link.user_id)
-                db_link = existing_by_user.get(user_id)
-                role = require_account_role(link.role)
-                if not db_link:
-                    user = self.db.query(User).filter(User.id == user_id).first()
-                    if not user:
-                        raise ValueError(f"User not found: {user_id}")
-                    if not is_admin_ui_role(user.role):
-                        user.role = UserRole.UI_USER.value
-                        self.db.add(user)
-                    db_link = UserS3Account(
-                        user_id=user_id,
-                        account_id=account.id,
-                        is_root=False,
-                        role=role,
-                        allow_manager_browser_data_access=bool(
-                            link.allow_manager_browser_data_access
-                        ),
-                    )
-                db_link.role = role
-                db_link.allow_manager_browser_data_access = bool(
-                    link.allow_manager_browser_data_access
-                )
-                db_link.updated_at = utcnow()
-                self.db.add(db_link)
+            associations.set_user_links(account, payload.user_links)
 
         if payload.group_links is not None:
-            desired_links: dict[int, AccountGroupLink] = {}
-            for link in payload.group_links:
-                group_id = int(link.group_id)
-                desired_links[group_id] = AccountGroupLink(
-                    group_id=group_id,
-                    role=require_account_role(link.role),
-                    allow_manager_browser_data_access=bool(
-                        link.allow_manager_browser_data_access
-                    ),
-                )
-
-            desired_ids = set(desired_links)
-            if desired_ids:
-                found = {row[0] for row in self.db.query(UiGroup.id).filter(UiGroup.id.in_(desired_ids)).all()}
-                missing = desired_ids - found
-                if missing:
-                    missing_str = ", ".join(str(mid) for mid in sorted(missing))
-                    raise ValueError(f"UI groups not found: {missing_str}")
-
-            existing_links = self.db.query(UiGroupS3Account).filter(UiGroupS3Account.account_id == account.id).all()
-            existing_by_group = {link.group_id: link for link in existing_links}
-            for group_id in set(existing_by_group) - desired_ids:
-                self.db.delete(existing_by_group[group_id])
-            for group_id, link in desired_links.items():
-                db_link = existing_by_group.get(group_id)
-                if db_link is None:
-                    db_link = UiGroupS3Account(
-                        group_id=group_id,
-                        account_id=account.id,
-                        role=link.role,
-                        allow_manager_browser_data_access=bool(
-                            link.allow_manager_browser_data_access
-                        ),
-                    )
-                db_link.role = require_account_role(link.role)
-                db_link.allow_manager_browser_data_access = bool(
-                    link.allow_manager_browser_data_access
-                )
-                db_link.updated_at = utcnow()
-                self.db.add(db_link)
+            associations.set_group_links(account, payload.group_links)
 
         self.db.add(account)
         self.db.flush()
