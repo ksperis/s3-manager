@@ -45,6 +45,35 @@ def test_environment_oidc_provider_rejects_unknown_fields():
         Settings(oidc_providers={"google": payload})
 
 
+def test_environment_oidc_provider_parses_security_lists_from_nested_env(monkeypatch):
+    variables = {
+        "OIDC_PROVIDERS__google__display_name": "Google",
+        "OIDC_PROVIDERS__google__discovery_url": (
+            "https://accounts.google.com/.well-known/openid-configuration"
+        ),
+        "OIDC_PROVIDERS__google__client_id": "client-id",
+        "OIDC_PROVIDERS__google__redirect_uri": "http://localhost:5173/oidc/google/callback",
+        "OIDC_PROVIDERS__google__scopes": '["openid","email","profile"]',
+        "OIDC_PROVIDERS__google__allowed_algorithms": '["RS256"]',
+        "OIDC_PROVIDERS__google__allowed_hosts": (
+            '["accounts.google.com","oauth2.googleapis.com","www.googleapis.com",'
+            '"openidconnect.googleapis.com"]'
+        ),
+    }
+    for name, value in variables.items():
+        monkeypatch.setenv(name, value)
+
+    provider = Settings(_env_file=None).oidc_providers["google"]
+
+    assert provider.allowed_algorithms == ["RS256"]
+    assert provider.allowed_hosts == [
+        "accounts.google.com",
+        "oauth2.googleapis.com",
+        "www.googleapis.com",
+        "openidconnect.googleapis.com",
+    ]
+
+
 def _ui_provider(provider_id: str, *, enabled: bool = True, display_name: str | None = None) -> OidcProvider:
     return OidcProvider(
         provider_id=provider_id,

@@ -52,6 +52,21 @@ class OIDCProviderSettings(BaseModel):
             return [item.strip() for item in text.split(",") if item.strip()]
         return value
 
+    @field_validator("allowed_algorithms", "allowed_hosts", mode="before")
+    @classmethod
+    def parse_security_lists(cls, value):
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            if text.startswith("["):
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("Unable to parse OIDC security list JSON") from exc
+            return [item.strip() for item in text.split(",") if item.strip()]
+        return value
+
     @field_validator("allowed_algorithms")
     @classmethod
     def validate_allowed_algorithms(cls, value: list[str]) -> list[str]:
