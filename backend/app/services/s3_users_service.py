@@ -20,6 +20,7 @@ from app.db import (
     UserS3User as UserS3UserModel,
 )
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
+from app.services.mappers.s3_user import s3_user_from_db, s3_user_summary_from_db
 from app.services.s3_user_associations_service import S3UserAssociationsService
 from app.services.tags_service import TagsService
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -350,22 +351,13 @@ class S3UsersService:
         quota_max_objects = None
         if include_quota:
             quota_max_size_gb, quota_max_objects = self._user_quota(row)
-        return S3UserSchema(
-            id=row.id,
-            name=row.name,
-            rgw_user_uid=row.rgw_user_uid,
-            email=row.email,
-            created_at=row.created_at,
+        return s3_user_from_db(
+            row,
             user_links=user_links_map.get(row.id, []),
             group_links=group_links_map.get(row.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            storage_endpoint_id=endpoint.id,
-            storage_endpoint_name=endpoint.name,
-            storage_endpoint_url=endpoint.endpoint_url,
-            allow_bucket_quota_management=bool(row.allow_bucket_quota_management),
-            allow_access_key_management=bool(row.allow_access_key_management),
-            allow_managed_private_connection_provisioning=bool(row.allow_managed_private_connection_provisioning),
+            storage_endpoint=endpoint,
             tags=self.tags.get_s3_user_tags(row),
         )
 
@@ -389,16 +381,9 @@ class S3UsersService:
         for row in rows:
             endpoint = self._endpoint_for_user(row)
             summaries.append(
-                S3UserSummary(
-                    id=row.id,
-                    name=row.name,
-                    rgw_user_uid=row.rgw_user_uid,
-                    storage_endpoint_id=endpoint.id,
-                    storage_endpoint_name=endpoint.name,
-                    storage_endpoint_url=endpoint.endpoint_url,
-                    allow_bucket_quota_management=bool(row.allow_bucket_quota_management),
-                    allow_access_key_management=bool(row.allow_access_key_management),
-                    allow_managed_private_connection_provisioning=bool(row.allow_managed_private_connection_provisioning),
+                s3_user_summary_from_db(
+                    row,
+                    storage_endpoint=endpoint,
                     tags=self.tags.get_s3_user_tags(row),
                 )
             )
@@ -493,23 +478,14 @@ class S3UsersService:
         if include_quota:
             quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
         bucket_count = self._interface_bucket_count(s3_user) if include_buckets else None
-        return S3UserSchema(
-            id=s3_user.id,
-            name=s3_user.name,
-            rgw_user_uid=s3_user.rgw_user_uid,
-            email=s3_user.email,
-            created_at=s3_user.created_at,
+        return s3_user_from_db(
+            s3_user,
             user_links=user_links_map.get(s3_user.id, []),
             group_links=group_links_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            storage_endpoint_id=endpoint.id,
-            storage_endpoint_name=endpoint.name,
-            storage_endpoint_url=endpoint.endpoint_url,
+            storage_endpoint=endpoint,
             bucket_count=bucket_count,
-            allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
-            allow_access_key_management=bool(s3_user.allow_access_key_management),
-            allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -564,20 +540,13 @@ class S3UsersService:
         self.db.commit()
         self.db.refresh(s3_user)
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
-        return S3UserSchema(
-            id=s3_user.id,
-            name=s3_user.name,
-            rgw_user_uid=s3_user.rgw_user_uid,
-            email=s3_user.email,
-            created_at=s3_user.created_at,
+        return s3_user_from_db(
+            s3_user,
+            user_links=[],
+            group_links=[],
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            storage_endpoint_id=endpoint.id,
-            storage_endpoint_name=endpoint.name,
-            storage_endpoint_url=endpoint.endpoint_url,
-            allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
-            allow_access_key_management=bool(s3_user.allow_access_key_management),
-            allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
+            storage_endpoint=endpoint,
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -623,20 +592,13 @@ class S3UsersService:
             self.db.flush()
             quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
             created.append(
-                S3UserSchema(
-                    id=s3_user.id,
-                    name=s3_user.name,
-                    rgw_user_uid=s3_user.rgw_user_uid,
-                    email=s3_user.email,
-                    created_at=s3_user.created_at,
+                s3_user_from_db(
+                    s3_user,
+                    user_links=[],
+                    group_links=[],
                     quota_max_size_gb=quota_max_size_gb,
                     quota_max_objects=quota_max_objects,
-                    storage_endpoint_id=endpoint.id,
-                    storage_endpoint_name=endpoint.name,
-                    storage_endpoint_url=endpoint.endpoint_url,
-                    allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
-                    allow_access_key_management=bool(s3_user.allow_access_key_management),
-                    allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
+                    storage_endpoint=endpoint,
                     tags=[],
                 )
             )
@@ -681,22 +643,13 @@ class S3UsersService:
         user_links_map, group_links_map = self.associations.load_links([s3_user.id])
         endpoint = self._endpoint_for_user(s3_user)
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
-        return S3UserSchema(
-            id=s3_user.id,
-            name=s3_user.name,
-            rgw_user_uid=s3_user.rgw_user_uid,
-            email=s3_user.email,
-            created_at=s3_user.created_at,
+        return s3_user_from_db(
+            s3_user,
             user_links=user_links_map.get(s3_user.id, []),
             group_links=group_links_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            storage_endpoint_id=endpoint.id,
-            storage_endpoint_name=endpoint.name,
-            storage_endpoint_url=endpoint.endpoint_url,
-            allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
-            allow_access_key_management=bool(s3_user.allow_access_key_management),
-            allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
+            storage_endpoint=endpoint,
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -741,22 +694,13 @@ class S3UsersService:
         endpoint = self._endpoint_for_user(s3_user)
         user_links_map, group_links_map = self.associations.load_links([s3_user.id])
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
-        return S3UserSchema(
-            id=s3_user.id,
-            name=s3_user.name,
-            rgw_user_uid=s3_user.rgw_user_uid,
-            email=s3_user.email,
-            created_at=s3_user.created_at,
+        return s3_user_from_db(
+            s3_user,
             user_links=user_links_map.get(s3_user.id, []),
             group_links=group_links_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            storage_endpoint_id=endpoint.id,
-            storage_endpoint_name=endpoint.name,
-            storage_endpoint_url=endpoint.endpoint_url,
-            allow_bucket_quota_management=bool(s3_user.allow_bucket_quota_management),
-            allow_access_key_management=bool(s3_user.allow_access_key_management),
-            allow_managed_private_connection_provisioning=bool(s3_user.allow_managed_private_connection_provisioning),
+            storage_endpoint=endpoint,
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
