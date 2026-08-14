@@ -491,14 +491,14 @@ function setBrowserLayoutRect(width: number, height = 720) {
   return layout;
 }
 
-async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
+async function openContextMoreMenu(_user: ReturnType<typeof userEvent.setup>) {
   const previousMenus = new Set(screen.queryAllByRole("menu", { name: "More" }));
   const toolbar =
     screen.queryByRole("toolbar", { name: "Browser context bar" }) &&
     within(getContextToolbar()).queryByRole("button", { name: "More" })
       ? getContextToolbar()
       : getActionsToolbar();
-  await user.click(within(toolbar).getByRole("button", { name: "More" }));
+  fireEvent.click(within(toolbar).getByRole("button", { name: "More" }));
   return waitForOpenedMoreMenu(previousMenus);
 }
 

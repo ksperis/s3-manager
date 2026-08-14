@@ -316,9 +316,17 @@ def _provision_account(
     manager_user_id = created_user["id"]
     resource_tracker.track_user(manager_user_id)
 
-    super_admin_session.post(
-        f"/admin/users/{manager_user_id}/assign-account",
-        json={"account_id": account_id, "role": "account_administrator"},
+    super_admin_session.put(
+        f"/admin/users/{manager_user_id}",
+        json={
+            "account_links": [
+                {
+                    "account_id": account_id,
+                    "role": "account_administrator",
+                    "allow_manager_browser_data_access": True,
+                }
+            ]
+        },
         expected_status=200,
     )
 

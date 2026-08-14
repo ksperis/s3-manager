@@ -31,7 +31,6 @@ def test_manager_stats_overview_and_traffic(
         json={
             "name": bucket_name,
             "versioning": False,
-            "block_public_access": False,
         },
         expected_status=201,
     )

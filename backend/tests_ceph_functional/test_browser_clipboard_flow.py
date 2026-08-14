@@ -51,7 +51,6 @@ def _create_bucket(
         json={
             "name": bucket_name,
             "versioning": versioning,
-            "block_public_access": False,
         },
         expected_status=201,
     )
@@ -62,9 +61,26 @@ def _grant_account_root_access(
     user_id: int,
     account_id: int,
 ) -> None:
-    admin_session.post(
-        f"/admin/users/{user_id}/assign-account",
-        json={"account_id": account_id, "account_root": True},
+    user = admin_session.get(f"/admin/users/{user_id}")
+    account_links = [
+        {
+            "account_id": int(link["account_id"]),
+            "role": link["role"],
+            "allow_manager_browser_data_access": bool(link.get("allow_manager_browser_data_access")),
+        }
+        for link in user.get("account_links", [])
+        if int(link["account_id"]) != account_id
+    ]
+    account_links.append(
+        {
+            "account_id": account_id,
+            "role": "account_administrator",
+            "allow_manager_browser_data_access": True,
+        }
+    )
+    admin_session.put(
+        f"/admin/users/{user_id}",
+        json={"account_links": account_links},
         expected_status=200,
     )
 

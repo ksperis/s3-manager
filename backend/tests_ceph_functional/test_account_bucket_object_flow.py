@@ -92,7 +92,6 @@ def test_account_bucket_object_flow(
         json={
             "name": bucket_name,
             "versioning": False,
-            "block_public_access": False,
         },
         expected_status=201,
     )

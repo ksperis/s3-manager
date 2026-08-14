@@ -130,7 +130,7 @@ describe("PortalAccessKeysPage", () => {
 
     expect(await screen.findByRole("heading", { name: "External S3 tools" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Connect tool" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Tool access (1)" })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: "Tool access (1)" })).toBeInTheDocument();
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "Tool access (1)",
       "Connect tool",

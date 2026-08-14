@@ -348,6 +348,7 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
         "Ceph Functional CI Admin"
     )
     env["SEED_SUPER_ADMIN_MODE"] = "if_empty"
+    env["ACCESS_TOKEN_EXPIRE_MINUTES"] = "15"
     env["ENV_STORAGE_ENDPOINTS"] = endpoint_payload
     app_settings_path.write_text(_build_app_settings_payload(), encoding="utf-8")
     env["APP_SETTINGS_PATH"] = app_settings_path.resolve().as_posix()

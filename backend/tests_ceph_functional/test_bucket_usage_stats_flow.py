@@ -148,7 +148,6 @@ def test_bucket_usage_stats_counts_current_and_noncurrent_version_bytes(
         json={
             "name": bucket_name,
             "versioning": True,
-            "block_public_access": False,
         },
         expected_status=201,
     )

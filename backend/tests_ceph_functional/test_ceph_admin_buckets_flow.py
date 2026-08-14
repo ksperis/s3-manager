@@ -50,7 +50,6 @@ def test_ceph_admin_bucket_configuration_and_compare(
             json={
                 "name": bucket_name,
                 "versioning": False,
-                "block_public_access": False,
             },
             expected_status=201,
         )

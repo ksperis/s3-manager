@@ -125,7 +125,6 @@ def _create_bucket(
         json={
             "name": bucket_name,
             "versioning": versioning,
-            "block_public_access": False,
         },
         expected_status=201,
     )

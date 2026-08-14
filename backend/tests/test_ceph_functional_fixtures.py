@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 from tests_ceph_functional.conftest import _select_storage_endpoint
+from tests_ceph_functional.test_browser_clipboard_flow import _grant_account_root_access
 
 
 def test_select_storage_endpoint_prefers_configured_name() -> None:
@@ -24,3 +25,48 @@ def test_select_storage_endpoint_falls_back_to_default() -> None:
     selected = _select_storage_endpoint(endpoints, preferred_name=None)
 
     assert selected == endpoints[1]
+
+
+def test_grant_account_root_access_preserves_existing_account_links() -> None:
+    class StubAdminSession:
+        def __init__(self) -> None:
+            self.updated: tuple[str, dict, int] | None = None
+
+        def get(self, path: str) -> dict:
+            assert path == "/admin/users/7"
+            return {
+                "account_links": [
+                    {
+                        "account_id": 11,
+                        "role": "account_administrator",
+                        "allow_manager_browser_data_access": True,
+                        "is_root": True,
+                    }
+                ]
+            }
+
+        def put(self, path: str, *, json: dict, expected_status: int) -> None:
+            self.updated = (path, json, expected_status)
+
+    session = StubAdminSession()
+
+    _grant_account_root_access(session, user_id=7, account_id=12)  # type: ignore[arg-type]
+
+    assert session.updated == (
+        "/admin/users/7",
+        {
+            "account_links": [
+                {
+                    "account_id": 11,
+                    "role": "account_administrator",
+                    "allow_manager_browser_data_access": True,
+                },
+                {
+                    "account_id": 12,
+                    "role": "account_administrator",
+                    "allow_manager_browser_data_access": True,
+                },
+            ]
+        },
+        200,
+    )
