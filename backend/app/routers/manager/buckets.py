@@ -29,6 +29,10 @@ from app.routers.bucket_purge_stream import (
 )
 from app.routers.manager import bucket_config
 from app.services.audit_service import AuditService
+from app.services.bucket_comparison_service import (
+    BucketComparisonService,
+    get_bucket_comparison_service,
+)
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services import bucket_config_actions
@@ -138,7 +142,7 @@ def compare_bucket_pair(
     _tool_user: User = Depends(require_bucket_compare_enabled),
     source_account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketComparisonService = Depends(get_bucket_comparison_service),
 ) -> ManagerBucketCompareResult:
     target_account = get_account_context(
         request=request,
@@ -168,7 +172,7 @@ def run_compare_bucket_action(
     _tool_user: User = Depends(require_bucket_compare_enabled),
     source_account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketComparisonService = Depends(get_bucket_comparison_service),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> ManagerBucketCompareActionResult:
     target_account = get_account_context(

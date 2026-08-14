@@ -11,7 +11,7 @@ from app.models.manager_bucket_compare import (
     ManagerBucketCompareRequest,
     ManagerBucketCompareResult,
 )
-from app.services.buckets_service import BucketsService
+from app.services.bucket_comparison_service import BucketComparisonService
 from app.services.s3_execution_context import S3ExecutionContext
 
 
@@ -40,7 +40,7 @@ def _validate_distinct_buckets(
 
 def compare_manager_buckets(
     *,
-    service: BucketsService,
+    service: BucketComparisonService,
     payload: ManagerBucketCompareRequest,
     source_account: S3ExecutionContext,
     target_account: S3ExecutionContext,
@@ -114,7 +114,7 @@ def _remediation_message(
 
 def remediate_manager_bucket_comparison(
     *,
-    service: BucketsService,
+    service: BucketComparisonService,
     payload: ManagerBucketCompareActionRequest,
     source_account: S3ExecutionContext,
     target_account: S3ExecutionContext,

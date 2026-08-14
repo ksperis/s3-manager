@@ -25,6 +25,7 @@ from app.services.bucket_config_backup_service import (
     BucketConfigBackupService,
     quota_from_bucket_summary,
 )
+from app.services.bucket_comparison_service import get_bucket_comparison_service
 from app.services.rgw_bucket_metadata import build_bucket_summary
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.buckets_service import BucketsService
@@ -108,7 +109,7 @@ def compare_bucket_pair(
         target_secret_key,
     )
 
-    service = BucketsService()
+    service = get_bucket_comparison_service()
     content_diff = None
     config_diff = None
     try:

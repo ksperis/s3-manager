@@ -3,12 +3,12 @@
 from types import SimpleNamespace
 
 from app.services import s3_client
+from app.services.bucket_comparison_service import BucketComparisonService
 from app.services.bucket_integrity_service import BucketIntegrityCheckService
 from app.services.bucket_migration import execution_context
 from app.services.bucket_migration.execution_context import BucketMigrationExecutionContextMixin
 from app.services.bucket_purge_service import BucketPurgeService
 from app.services.bucket_usage_stats_service import BucketUsageStatsService
-from app.services.buckets_service import BucketsService
 
 
 def test_compare_migration_purge_integrity_and_usage_select_long_running_profile(monkeypatch):
@@ -25,7 +25,7 @@ def test_compare_migration_purge_integrity_and_usage_select_long_running_profile
         session_token=lambda: None,
     )
 
-    BucketsService()._compare_client(account)
+    BucketComparisonService()._compare_client(account)
     BucketPurgeService()._build_client(account)
     BucketIntegrityCheckService()._build_client(account)
     BucketUsageStatsService()._build_client(account)

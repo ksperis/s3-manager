@@ -17,6 +17,8 @@ from app.models.bucket import (
 )
 from app.services import bucket_compare_remediation, object_listing_temp_store
 from app.services import buckets_service as buckets_service_module
+from app.services import bucket_comparison_service as bucket_comparison_service_module
+from app.services.bucket_comparison_service import BucketComparisonService
 from app.services.bucket_content_comparison import BucketCompareObjectEntry
 from app.services.buckets_service import BucketsService
 
@@ -43,16 +45,22 @@ def _payload_entries(payload: dict[str, dict[str, object]]):
         )
 
 
+def _build_service(configuration_reader: BucketsService | None = None) -> BucketComparisonService:
+    return BucketComparisonService(configuration_reader or BucketsService())
+
+
 def test_bucket_compare_types_are_owned_by_dedicated_module():
     assert not hasattr(buckets_service_module, "_BucketCompareObjectEntry")
     assert not hasattr(buckets_service_module, "_BucketCompareObjectIndex")
     assert not hasattr(buckets_service_module, "BucketCompareRemediationResult")
-    assert not hasattr(buckets_service_module.BucketsService, "_stable_compare_value")
-    assert not hasattr(buckets_service_module.BucketsService, "_normalize_tags_for_compare")
+    assert not hasattr(buckets_service_module.BucketsService, "compare_bucket_content")
+    assert not hasattr(buckets_service_module.BucketsService, "compare_bucket_configuration")
+    assert not hasattr(buckets_service_module.BucketsService, "run_compare_content_remediation")
+    assert hasattr(bucket_comparison_service_module.BucketComparisonService, "compare_bucket_content")
 
 
 def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
-    service = BucketsService()
+    service = _build_service()
     source = _build_account("source")
     target = _build_account("target")
     older = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
@@ -103,7 +111,7 @@ def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
 
 
 def test_compare_bucket_content_detects_md5_mismatch(monkeypatch):
-    service = BucketsService()
+    service = _build_service()
     source = _build_account("source")
     target = _build_account("target")
     payloads = {
@@ -131,7 +139,7 @@ def test_compare_bucket_content_detects_md5_mismatch(monkeypatch):
 
 
 def test_compare_bucket_content_reports_different_sample(monkeypatch):
-    service = BucketsService()
+    service = _build_service()
     source = _build_account("source")
     target = _build_account("target")
     older = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
@@ -172,7 +180,7 @@ def test_compare_bucket_content_reports_different_sample(monkeypatch):
 
 
 def test_compare_bucket_content_limits_display_rows_but_keeps_totals(monkeypatch):
-    service = BucketsService()
+    service = _build_service()
     source = _build_account("source")
     target = _build_account("target")
 
@@ -215,7 +223,7 @@ def test_compare_bucket_content_limits_display_rows_but_keeps_totals(monkeypatch
 
 
 def test_compare_bucket_content_excludes_entire_key_after_cutoff(monkeypatch):
-    service = BucketsService()
+    service = _build_service()
     source = _build_account("source")
     target = _build_account("target")
     older = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
@@ -255,7 +263,7 @@ def test_compare_bucket_content_excludes_entire_key_after_cutoff(monkeypatch):
 
 
 def test_compare_bucket_content_wraps_list_objects_client_error(monkeypatch):
-    service = BucketsService()
+    service = _build_service()
     source = _build_account("source")
     target = _build_account("target")
 
@@ -282,7 +290,7 @@ def test_compare_bucket_content_wraps_list_objects_client_error(monkeypatch):
 
 
 def test_compare_bucket_content_cleans_temp_store_when_listing_fails(monkeypatch, tmp_path):
-    service = BucketsService()
+    service = _build_service()
     source = _build_account("source")
     target = _build_account("target")
     created_paths = []
@@ -314,7 +322,7 @@ def test_compare_bucket_content_cleans_temp_store_when_listing_fails(monkeypatch
 
 
 def test_compare_remediation_uses_requested_object_keys(monkeypatch):
-    service = BucketsService()
+    service = _build_service()
     source = _build_account("source")
     target = _build_account("target")
     requested_keys: list[str] = []
@@ -379,7 +387,8 @@ def test_bucket_compare_remediation_copies_requested_objects():
 
 
 def test_compare_bucket_configuration_detects_changes(monkeypatch):
-    service = BucketsService()
+    configuration_reader = BucketsService()
+    service = _build_service(configuration_reader)
     source = _build_account("source")
     target = _build_account("target")
 
@@ -412,14 +421,14 @@ def test_compare_bucket_configuration_detects_changes(monkeypatch):
         ),
     }
 
-    monkeypatch.setattr(service, "get_bucket_properties", lambda bucket_name, _account: properties[bucket_name])
+    monkeypatch.setattr(configuration_reader, "get_bucket_properties", lambda bucket_name, _account: properties[bucket_name])
     monkeypatch.setattr(
-        service,
+        configuration_reader,
         "get_policy",
         lambda bucket_name, _account: {"Statement": [{"Sid": "A"}]} if bucket_name == "source-bucket" else None,
     )
     monkeypatch.setattr(
-        service,
+        configuration_reader,
         "get_bucket_logging",
         lambda bucket_name, _account: BucketLoggingConfiguration(
             enabled=bucket_name == "source-bucket",
@@ -428,7 +437,7 @@ def test_compare_bucket_configuration_detects_changes(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        service,
+        configuration_reader,
         "get_bucket_tags",
         lambda bucket_name, _account: [BucketTag(key="env", value="prod")] if bucket_name == "source-bucket" else [],
     )
@@ -443,7 +452,8 @@ def test_compare_bucket_configuration_detects_changes(monkeypatch):
 
 
 def test_compare_bucket_configuration_filters_selected_sections(monkeypatch):
-    service = BucketsService()
+    configuration_reader = BucketsService()
+    service = _build_service(configuration_reader)
     source = _build_account("source")
     target = _build_account("target")
     call_counts = {"properties": 0, "policy": 0, "logging": 0, "tags": 0}
@@ -478,10 +488,10 @@ def test_compare_bucket_configuration_filters_selected_sections(monkeypatch):
             return [BucketTag(key="env", value="prod")]
         return [BucketTag(key="env", value="stage")]
 
-    monkeypatch.setattr(service, "get_bucket_properties", fake_properties)
-    monkeypatch.setattr(service, "get_policy", fake_policy)
-    monkeypatch.setattr(service, "get_bucket_logging", fake_logging)
-    monkeypatch.setattr(service, "get_bucket_tags", fake_tags)
+    monkeypatch.setattr(configuration_reader, "get_bucket_properties", fake_properties)
+    monkeypatch.setattr(configuration_reader, "get_policy", fake_policy)
+    monkeypatch.setattr(configuration_reader, "get_bucket_logging", fake_logging)
+    monkeypatch.setattr(configuration_reader, "get_bucket_tags", fake_tags)
 
     diff = service.compare_bucket_configuration(
         "source-bucket",

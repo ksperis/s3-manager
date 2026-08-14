@@ -15,6 +15,7 @@ from app.models.manager_bucket_compare import ManagerBucketCompareActionRequest,
 from app.routers import dependencies as dependencies_router
 from app.services import app_settings_service
 from app.routers.manager import buckets as buckets_router
+from app.services.bucket_comparison_service import BucketComparisonService
 from app.services.s3_execution_context import S3ExecutionContext
 
 
@@ -93,9 +94,9 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         )
 
     monkeypatch.setattr(buckets_router, "get_account_context", fake_get_account_context)
-    monkeypatch.setattr(buckets_router.BucketsService, "compare_bucket_content", fake_compare_content)
+    monkeypatch.setattr(BucketComparisonService, "compare_bucket_content", fake_compare_content)
     monkeypatch.setattr(
-        buckets_router.BucketsService,
+        BucketComparisonService,
         "compare_bucket_configuration",
         lambda *_args, **_kwargs: CephAdminBucketConfigDiff(changed=False, sections=[]),
     )
@@ -106,7 +107,7 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         db=SimpleNamespace(),
         source_account=source_account,
         actor=SimpleNamespace(),
-        service=buckets_router.BucketsService(),
+        service=BucketComparisonService(),
     )
 
     assert response.source_context_id == "1"
@@ -130,7 +131,7 @@ def test_compare_bucket_pair_returns_no_diff(monkeypatch):
     target_account = _build_account(2)
     monkeypatch.setattr(buckets_router, "get_account_context", lambda **_kwargs: target_account)
     monkeypatch.setattr(
-        buckets_router.BucketsService,
+        BucketComparisonService,
         "compare_bucket_content",
         lambda *_args, **_kwargs: CephAdminBucketContentDiff(
             source_count=5,
@@ -151,7 +152,7 @@ def test_compare_bucket_pair_returns_no_diff(monkeypatch):
         db=SimpleNamespace(),
         source_account=source_account,
         actor=SimpleNamespace(),
-        service=buckets_router.BucketsService(),
+        service=BucketComparisonService(),
     )
 
     assert response.has_differences is False
@@ -171,7 +172,7 @@ def test_compare_bucket_pair_translates_runtime_errors(monkeypatch):
     def failing_compare(*_args, **_kwargs):
         raise RuntimeError("target bucket not found")
 
-    monkeypatch.setattr(buckets_router.BucketsService, "compare_bucket_content", failing_compare)
+    monkeypatch.setattr(BucketComparisonService, "compare_bucket_content", failing_compare)
 
     with pytest.raises(HTTPException) as exc:
         buckets_router.compare_bucket_pair(
@@ -180,7 +181,7 @@ def test_compare_bucket_pair_translates_runtime_errors(monkeypatch):
             db=SimpleNamespace(),
             source_account=source_account,
             actor=SimpleNamespace(),
-            service=buckets_router.BucketsService(),
+            service=BucketComparisonService(),
         )
 
     assert exc.value.status_code == 502
@@ -202,9 +203,9 @@ def test_compare_bucket_pair_supports_config_only(monkeypatch):
     def should_not_compare_content(*_args, **_kwargs):
         raise AssertionError("compare_bucket_content should not be called in config-only mode")
 
-    monkeypatch.setattr(buckets_router.BucketsService, "compare_bucket_content", should_not_compare_content)
+    monkeypatch.setattr(BucketComparisonService, "compare_bucket_content", should_not_compare_content)
     monkeypatch.setattr(
-        buckets_router.BucketsService,
+        BucketComparisonService,
         "compare_bucket_configuration",
         lambda *_args, **_kwargs: CephAdminBucketConfigDiff(changed=True, sections=[]),
     )
@@ -215,7 +216,7 @@ def test_compare_bucket_pair_supports_config_only(monkeypatch):
         db=SimpleNamespace(),
         source_account=source_account,
         actor=SimpleNamespace(),
-        service=buckets_router.BucketsService(),
+        service=BucketComparisonService(),
     )
 
     assert response.content_diff is None
@@ -248,8 +249,8 @@ def test_compare_bucket_pair_forwards_selected_config_features(monkeypatch):
         captured["include_sections"] = kwargs.get("include_sections")
         return CephAdminBucketConfigDiff(changed=False, sections=[])
 
-    monkeypatch.setattr(buckets_router.BucketsService, "compare_bucket_content", should_not_compare_content)
-    monkeypatch.setattr(buckets_router.BucketsService, "compare_bucket_configuration", fake_compare_config)
+    monkeypatch.setattr(BucketComparisonService, "compare_bucket_content", should_not_compare_content)
+    monkeypatch.setattr(BucketComparisonService, "compare_bucket_configuration", fake_compare_config)
 
     response = buckets_router.compare_bucket_pair(
         payload=payload,
@@ -257,7 +258,7 @@ def test_compare_bucket_pair_forwards_selected_config_features(monkeypatch):
         db=SimpleNamespace(),
         source_account=source_account,
         actor=SimpleNamespace(),
-        service=buckets_router.BucketsService(),
+        service=BucketComparisonService(),
     )
 
     assert response.has_differences is False
@@ -285,7 +286,7 @@ def test_compare_bucket_pair_rejects_source_equals_target_for_same_context(monke
             db=SimpleNamespace(),
             source_account=source_account,
             actor=SimpleNamespace(),
-            service=buckets_router.BucketsService(),
+            service=BucketComparisonService(),
         )
 
     assert exc.value.status_code == 400
@@ -359,7 +360,7 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
             failed_keys_sample=[],
         )
 
-    monkeypatch.setattr(buckets_router.BucketsService, "run_compare_content_remediation", fake_run_action)
+    monkeypatch.setattr(BucketComparisonService, "run_compare_content_remediation", fake_run_action)
     audit = _RecordingAudit()
 
     response = buckets_router.run_compare_bucket_action(
@@ -368,7 +369,7 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
         db=SimpleNamespace(),
         source_account=source_account,
         actor=SimpleNamespace(),
-        service=buckets_router.BucketsService(),
+        service=BucketComparisonService(),
         audit_service=audit,
     )
 
@@ -416,7 +417,7 @@ def test_compare_bucket_action_runs_sync_different(monkeypatch):
             failed_keys_sample=[],
         )
 
-    monkeypatch.setattr(buckets_router.BucketsService, "run_compare_content_remediation", fake_run_action)
+    monkeypatch.setattr(BucketComparisonService, "run_compare_content_remediation", fake_run_action)
 
     response = buckets_router.run_compare_bucket_action(
         payload=payload,
@@ -424,7 +425,7 @@ def test_compare_bucket_action_runs_sync_different(monkeypatch):
         db=SimpleNamespace(),
         source_account=source_account,
         actor=SimpleNamespace(),
-        service=buckets_router.BucketsService(),
+        service=BucketComparisonService(),
         audit_service=_RecordingAudit(),
     )
 
@@ -455,7 +456,7 @@ def test_compare_bucket_action_forwards_object_keys(monkeypatch):
             failed_keys_sample=[],
         )
 
-    monkeypatch.setattr(buckets_router.BucketsService, "run_compare_content_remediation", fake_run_action)
+    monkeypatch.setattr(BucketComparisonService, "run_compare_content_remediation", fake_run_action)
     audit = _RecordingAudit()
 
     response = buckets_router.run_compare_bucket_action(
@@ -464,7 +465,7 @@ def test_compare_bucket_action_forwards_object_keys(monkeypatch):
         db=SimpleNamespace(),
         source_account=source_account,
         actor=SimpleNamespace(),
-        service=buckets_router.BucketsService(),
+        service=BucketComparisonService(),
         audit_service=audit,
     )
 
@@ -487,7 +488,7 @@ def test_compare_bucket_action_delete_returns_partial_failure(monkeypatch):
     monkeypatch.setattr(buckets_router, "get_account_context", lambda **_kwargs: target_account)
 
     monkeypatch.setattr(
-        buckets_router.BucketsService,
+        BucketComparisonService,
         "run_compare_content_remediation",
         lambda *_args, **_kwargs: SimpleNamespace(
             action="delete_target_only",
@@ -504,7 +505,7 @@ def test_compare_bucket_action_delete_returns_partial_failure(monkeypatch):
         db=SimpleNamespace(),
         source_account=source_account,
         actor=SimpleNamespace(),
-        service=buckets_router.BucketsService(),
+        service=BucketComparisonService(),
         audit_service=_RecordingAudit(),
     )
 
@@ -535,7 +536,7 @@ def test_compare_bucket_action_rejects_source_equals_target_for_same_context(mon
             db=SimpleNamespace(),
             source_account=source_account,
             actor=SimpleNamespace(),
-            service=buckets_router.BucketsService(),
+            service=BucketComparisonService(),
         )
 
     assert exc.value.status_code == 400
@@ -557,7 +558,7 @@ def test_compare_bucket_action_translates_runtime_error(monkeypatch):
     def failing_action(*_args, **_kwargs):
         raise RuntimeError("copy failed")
 
-    monkeypatch.setattr(buckets_router.BucketsService, "run_compare_content_remediation", failing_action)
+    monkeypatch.setattr(BucketComparisonService, "run_compare_content_remediation", failing_action)
 
     with pytest.raises(HTTPException) as exc:
         buckets_router.run_compare_bucket_action(
@@ -566,7 +567,7 @@ def test_compare_bucket_action_translates_runtime_error(monkeypatch):
             db=SimpleNamespace(),
             source_account=source_account,
             actor=SimpleNamespace(),
-            service=buckets_router.BucketsService(),
+            service=BucketComparisonService(),
         )
 
     assert exc.value.status_code == 502
@@ -595,7 +596,7 @@ def test_compare_bucket_action_rejects_unauthorized_target_context(monkeypatch):
             db=SimpleNamespace(),
             source_account=source_account,
             actor=SimpleNamespace(),
-            service=buckets_router.BucketsService(),
+            service=BucketComparisonService(),
         )
 
     assert exc.value.status_code == 403
@@ -670,7 +671,7 @@ def test_compare_bucket_action_feature_off_returns_403(monkeypatch):
             db=SimpleNamespace(),
             source_account=_build_account(1),
             actor=SimpleNamespace(),
-            service=buckets_router.BucketsService(),
+            service=BucketComparisonService(),
             _tool_user=dependencies_router.require_bucket_compare_enabled(_tool_user()),
         )
 
