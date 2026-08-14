@@ -20,6 +20,10 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
+export function shouldBootstrapSession(pathname: string): boolean {
+  return !/^\/oidc\/[^/]+\/callback\/?$/.test(pathname);
+}
+
 function sessionUserFromResponse(response: CurrentSessionResponse): SessionUser | null {
   if (response.user) return { ...response.user, authType: response.auth_session.auth_type as SessionUser["authType"] };
   if (!response.session) return null;
@@ -86,7 +90,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
-    void refresh();
+    if (typeof window === "undefined" || shouldBootstrapSession(window.location.pathname)) {
+      void refresh();
+    } else {
+      // The OIDC callback must exchange its single-use code before any failed
+      // session restoration can redirect the browser back to /login.
+      setLoading(false);
+    }
     const ended = () => clear();
     window.addEventListener("s3-manager:session-ended", ended);
     return () => window.removeEventListener("s3-manager:session-ended", ended);

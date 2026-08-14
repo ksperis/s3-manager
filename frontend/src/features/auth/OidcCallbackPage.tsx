@@ -12,6 +12,7 @@ import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { useSession } from "../../auth/SessionProvider";
+import { coordinateOidcCallback } from "./oidcCallbackCoordinator";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import {
   resolvePostLoginPath,
@@ -51,7 +52,12 @@ export default function OidcCallbackPage() {
 
     async function finalizeLogin() {
       try {
-        const res = await completeOidcLogin(providerId, codeValue, stateValue);
+        const res = await coordinateOidcCallback(
+          providerId,
+          codeValue,
+          stateValue,
+          completeOidcLogin,
+        );
         if (cancelled) return;
         if (res.status === "mfa_required" || res.status === "mfa_enrollment_required") {
           navigate(`/login?mfa=${res.status}`, { replace: true });
