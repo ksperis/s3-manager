@@ -77,15 +77,14 @@ def test_automation_cannot_find_or_delete_private_connection_by_id(db_session):
     assert db_session.query(S3Connection).filter(S3Connection.id == private.id).one()
 
 
-def test_automation_name_lookup_selects_shared_connection_only(db_session):
+def test_connection_handler_name_lookup_selects_shared_connection_only(db_session):
     user = _user(db_session)
     private = _connection(db_session, user, name="same-name", shared=False)
     shared = _connection(db_session, user, name="same-name", shared=True)
     service = AdminAutomationService(db_session)
 
-    found = service._find_s3_connection(
+    found = service.s3_connection_handler._find_s3_connection(
         S3ConnectionApply(state="absent", match=S3ConnectionMatch(name="same-name")),
-        user,
     )
 
     assert found is not None and found.id == shared.id
@@ -132,7 +131,11 @@ def test_automation_present_account_link_requires_canonical_role():
 def test_automation_creates_shared_manager_only_connection(db_session, monkeypatch):
     user = _user(db_session)
     service = AdminAutomationService(db_session)
-    monkeypatch.setattr(service, "_refresh_detected_capabilities", lambda connection: None)
+    monkeypatch.setattr(
+        service.s3_connection_handler,
+        "_refresh_detected_capabilities",
+        lambda connection: None,
+    )
     item = S3ConnectionApply(
         match=S3ConnectionMatch(name="automation-created"),
         spec=S3ConnectionSpec(
