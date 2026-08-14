@@ -16,6 +16,13 @@ from app.utils.account_roles import CanonicalAccountRole
 ApplyState = Literal["present", "absent"]
 
 
+def _provided_reference_count(*values: object) -> int:
+    return sum(
+        value is not None and (not isinstance(value, str) or bool(value))
+        for value in values
+    )
+
+
 class StorageEndpointMatch(ApiModel):
     id: Optional[int] = None
     name: Optional[str] = None
@@ -23,8 +30,7 @@ class StorageEndpointMatch(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "StorageEndpointMatch":
-        selectors = (self.id is not None, bool(self.name), bool(self.endpoint_url))
-        if sum(selectors) != 1:
+        if _provided_reference_count(self.id, self.name, self.endpoint_url) != 1:
             raise ValueError(
                 "storage_endpoints.match requires exactly one of id, name, or endpoint_url"
             )
@@ -63,8 +69,8 @@ class UiUserMatch(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "UiUserMatch":
-        if not (self.id or self.email):
-            raise ValueError("ui_users.match requires id or email")
+        if _provided_reference_count(self.id, self.email) != 1:
+            raise ValueError("ui_users.match requires exactly one of id or email")
         return self
 
 
@@ -96,8 +102,7 @@ class S3AccountMatch(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "S3AccountMatch":
-        selectors = (self.id is not None, bool(self.name), bool(self.rgw_account_id))
-        if sum(selectors) != 1:
+        if _provided_reference_count(self.id, self.name, self.rgw_account_id) != 1:
             raise ValueError(
                 "s3_accounts.match requires exactly one of id, name, or rgw_account_id"
             )
@@ -120,12 +125,14 @@ class S3AccountSpec(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_single_endpoint_reference(self) -> "S3AccountSpec":
-        selectors = (
-            self.storage_endpoint_id is not None,
-            bool(self.storage_endpoint_name),
-            bool(self.storage_endpoint_url),
-        )
-        if sum(selectors) > 1:
+        if (
+            _provided_reference_count(
+                self.storage_endpoint_id,
+                self.storage_endpoint_name,
+                self.storage_endpoint_url,
+            )
+            > 1
+        ):
             raise ValueError(
                 "s3_accounts.spec accepts only one storage endpoint reference"
             )
@@ -145,7 +152,7 @@ class S3UserMatch(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "S3UserMatch":
-        if sum((self.id is not None, bool(self.uid))) != 1:
+        if _provided_reference_count(self.id, self.uid) != 1:
             raise ValueError("s3_users.match requires exactly one of id or uid")
         return self
 
@@ -166,12 +173,14 @@ class S3UserSpec(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_single_endpoint_reference(self) -> "S3UserSpec":
-        selectors = (
-            self.storage_endpoint_id is not None,
-            bool(self.storage_endpoint_name),
-            bool(self.storage_endpoint_url),
-        )
-        if sum(selectors) > 1:
+        if (
+            _provided_reference_count(
+                self.storage_endpoint_id,
+                self.storage_endpoint_name,
+                self.storage_endpoint_url,
+            )
+            > 1
+        ):
             raise ValueError(
                 "s3_users.spec accepts only one storage endpoint reference"
             )
@@ -191,8 +200,10 @@ class S3ConnectionMatch(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "S3ConnectionMatch":
-        if not (self.id or self.name):
-            raise ValueError("s3_connections.match requires id or name")
+        if _provided_reference_count(self.id, self.name) != 1:
+            raise ValueError(
+                "s3_connections.match requires exactly one of id or name"
+            )
         return self
 
 
@@ -210,6 +221,14 @@ class S3ConnectionSpec(ApiModel):
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _ensure_single_endpoint_reference(self) -> "S3ConnectionSpec":
+        if _provided_reference_count(self.storage_endpoint_id, self.endpoint_url) > 1:
+            raise ValueError(
+                "s3_connections.spec accepts only one endpoint reference"
+            )
+        return self
+
 
 class S3ConnectionApply(ApiModel):
     state: ApplyState = "present"
@@ -224,7 +243,7 @@ class AccountLinkUserRef(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "AccountLinkUserRef":
-        if sum((self.id is not None, self.email is not None)) != 1:
+        if _provided_reference_count(self.id, self.email) != 1:
             raise ValueError("account_links.user requires exactly one of id or email")
         return self
 
@@ -236,8 +255,7 @@ class AccountLinkAccountRef(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "AccountLinkAccountRef":
-        selectors = (self.id is not None, bool(self.name), bool(self.rgw_account_id))
-        if sum(selectors) != 1:
+        if _provided_reference_count(self.id, self.name, self.rgw_account_id) != 1:
             raise ValueError(
                 "account_links.account requires exactly one of id, name, or rgw_account_id"
             )

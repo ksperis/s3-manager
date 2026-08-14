@@ -2,6 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from app.db import User, UserRole
 from app.models.admin_automation import (
     AdminAutomationApplyRequest,
@@ -150,3 +153,8 @@ def test_ui_user_update_maps_association_ids_to_user_service_contract():
 
     assert [link.s3_user_id for link in payload.s3_user_links or []] == [2, 4]
     assert payload.s3_connection_ids == [1, 3]
+
+
+def test_ui_user_match_rejects_ambiguous_references():
+    with pytest.raises(ValidationError):
+        UiUserMatch(id=42, email="ambiguous-ui-user@example.com")

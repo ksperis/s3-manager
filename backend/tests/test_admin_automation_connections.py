@@ -28,6 +28,21 @@ def test_access_key_masking_is_canonical() -> None:
     assert mask_access_key_id(" 1234567890 ") == "1234***7890"
 
 
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: S3ConnectionMatch(id=1, name="ambiguous-connection"),
+        lambda: S3ConnectionSpec(
+            storage_endpoint_id=1,
+            endpoint_url="https://ambiguous-connection.example.test",
+        ),
+    ],
+)
+def test_connection_contract_rejects_ambiguous_references(factory):
+    with pytest.raises(ValidationError):
+        factory()
+
+
 def _user(db_session) -> User:
     user = User(
         email="automation-connections@example.test",
