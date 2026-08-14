@@ -1,7 +1,3 @@
-import axios, {
-  type AxiosProgressEvent,
-  type AxiosResponse,
-} from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   uploadBrowserFileMultipart,
@@ -9,13 +5,7 @@ import {
   type BrowserMultipartUploadLifecycle,
 } from "./browserMultipartUpload";
 
-vi.mock("axios", () => ({
-  default: {
-    put: vi.fn(),
-  },
-}));
-
-const putMock = vi.mocked(axios.put);
+const fetchMock = vi.fn();
 
 const createLifecycle = (): BrowserMultipartUploadLifecycle => ({
   initiate: vi.fn().mockResolvedValue("upload-1"),
@@ -32,19 +22,21 @@ const createLifecycle = (): BrowserMultipartUploadLifecycle => ({
 describe("browser multipart uploads", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("fetch", fetchMock);
   });
 
   it("uploads file parts with bounded orchestration and completes them in order", async () => {
     const lifecycle = createLifecycle();
     const uploadedSizes: number[] = [];
     const progress: number[] = [];
-    putMock.mockImplementation(async (_url, body, config) => {
-      const blob = body as Blob;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const blob = init?.body as Blob;
       uploadedSizes.push(blob.size);
-      config?.onUploadProgress?.({ loaded: blob.size } as AxiosProgressEvent);
-      return {
-        headers: { ETag: `"etag-${uploadedSizes.length}"` },
-      } as AxiosResponse;
+      const partNumber = Number(String(input).split("-").at(-1));
+      return new Response(null, {
+        status: 200,
+        headers: { ETag: `"etag-${partNumber}"` },
+      });
     });
 
     await uploadBrowserFileMultipart({
@@ -71,7 +63,7 @@ describe("browser multipart uploads", () => {
   it("aborts the remote upload when a part response has no ETag", async () => {
     const lifecycle = createLifecycle();
     const controller = new AbortController();
-    putMock.mockResolvedValue({ headers: {} } as AxiosResponse);
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
 
     await expect(
       uploadBrowserFileMultipart({
@@ -92,12 +84,14 @@ describe("browser multipart uploads", () => {
   it("reassembles stream chunks into fixed-size multipart uploads", async () => {
     const lifecycle = createLifecycle();
     const uploadedSizes: number[] = [];
-    putMock.mockImplementation(async (_url, body) => {
-      const blob = body as Blob;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const blob = init?.body as Blob;
       uploadedSizes.push(blob.size);
-      return {
-        headers: { etag: `etag-${uploadedSizes.length}` },
-      } as AxiosResponse;
+      const partNumber = Number(String(input).split("-").at(-1));
+      return new Response(null, {
+        status: 200,
+        headers: { etag: `etag-${partNumber}` },
+      });
     });
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {

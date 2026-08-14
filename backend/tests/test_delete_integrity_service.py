@@ -5,13 +5,14 @@ from datetime import UTC, date, datetime
 
 from app.db import (
     ApiToken,
+    AuthSession,
     AuditLog,
     BucketMigration,
     BillingAssignment,
     BillingRateCard,
     BillingStorageDaily,
     BillingUsageDaily,
-    RefreshSession,
+    RefreshToken,
     S3Account,
     S3Connection,
     S3User,
@@ -90,18 +91,42 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
     db_session.add(own_token)
     db_session.add(other_token)
 
-    own_refresh = RefreshSession(
-        id="ref-own",
-        token_hash="ref-hash-own",
+    own_session = AuthSession(
+        id="session-own",
         user_id=owner.id,
         auth_type="ui",
-        expires_at=datetime(2099, 1, 1, tzinfo=UTC),
+        principal_type="user",
+        auth_version=1,
+        last_activity_at=datetime(2026, 1, 1, tzinfo=UTC),
+        idle_expires_at=datetime(2099, 1, 1, tzinfo=UTC),
+        absolute_expires_at=datetime(2099, 1, 1, tzinfo=UTC),
+        csrf_token_hash="csrf-own",
     )
-    other_refresh = RefreshSession(
-        id="ref-other",
-        token_hash="ref-hash-other",
+    other_session = AuthSession(
+        id="session-other",
         user_id=other.id,
         auth_type="ui",
+        principal_type="user",
+        auth_version=1,
+        last_activity_at=datetime(2026, 1, 1, tzinfo=UTC),
+        idle_expires_at=datetime(2099, 1, 1, tzinfo=UTC),
+        absolute_expires_at=datetime(2099, 1, 1, tzinfo=UTC),
+        csrf_token_hash="csrf-other",
+    )
+    db_session.add_all([own_session, other_session])
+    db_session.flush()
+    own_refresh = RefreshToken(
+        id="ref-own",
+        family_id="family-own",
+        auth_session_id=own_session.id,
+        token_hash="ref-hash-own",
+        expires_at=datetime(2099, 1, 1, tzinfo=UTC),
+    )
+    other_refresh = RefreshToken(
+        id="ref-other",
+        family_id="family-other",
+        auth_session_id=other_session.id,
+        token_hash="ref-hash-other",
         expires_at=datetime(2099, 1, 1, tzinfo=UTC),
     )
     db_session.add(own_refresh)
@@ -121,9 +146,10 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
         is None
     )
     assert db_session.query(ApiToken).filter(ApiToken.id == "tok-own").first() is None
-    assert db_session.query(RefreshSession).filter(RefreshSession.id == "ref-own").first() is None
+    assert db_session.query(AuthSession).filter(AuthSession.id == "session-own").first() is None
+    assert db_session.query(RefreshToken).filter(RefreshToken.id == "ref-own").first() is None
     token = db_session.query(ApiToken).filter(ApiToken.id == "tok-other").first()
-    refresh = db_session.query(RefreshSession).filter(RefreshSession.id == "ref-other").first()
+    refresh = db_session.query(RefreshToken).filter(RefreshToken.id == "ref-other").first()
     assert token is not None
     assert refresh is not None
 

@@ -10,7 +10,8 @@ import Sidebar, { SidebarLink, SidebarSection, resolveWorkspaceProfilePath, type
 import { useWorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import Topbar from "./Topbar";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
-import { clearAuthStorage, CLIENT_STORAGE_KEYS, readClientJson } from "../utils/clientStorage";
+import { clearAuthStorage } from "../utils/clientStorage";
+import { readStoredUser } from "../utils/workspaces";
 
 type LayoutProps = {
   navLinks?: SidebarLink[];
@@ -38,7 +39,7 @@ type LayoutProps = {
 };
 
 function getUserEmail(): string | null {
-  return readClientJson<{ email?: string | null }>(CLIENT_STORAGE_KEYS.sessionUser)?.email ?? null;
+  return readStoredUser()?.email ?? null;
 }
 
 export default function Layout({

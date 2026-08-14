@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../api/client";
 import { isRouteErrorResponse } from "react-router-dom";
 import type { GeneralSettings } from "../api/appSettings";
 import { readStoredUser, resolvePostLoginPath } from "./workspaces";
@@ -26,7 +26,7 @@ export function classifyRouteError(error: unknown): RouteErrorKind {
     return "backend_unavailable";
   }
 
-  if (axios.isAxiosError(error)) {
+  if (isApiError(error)) {
     if (hasBackendUnavailableStatus(error.response?.status)) {
       return "backend_unavailable";
     }

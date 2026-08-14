@@ -213,6 +213,7 @@ backend-vuln-scan:
     - |
       trivy fs \
         --scanners vuln \
+        --exit-code 1 \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \
@@ -221,6 +222,7 @@ backend-vuln-scan:
         --format json \
         --output gl-security-reports/backend-dependencies-trivy.json \
         backend || scan_exit=$?
+    - trivy fs --scanners vuln --format cyclonedx --output gl-security-reports/backend-sbom.cdx.json backend
     - |
       trivy fs \
         --scanners vuln \
@@ -237,6 +239,7 @@ backend-vuln-scan:
     expire_in: 1 week
     paths:
       - gl-security-reports/backend-dependencies-trivy.json
+      - gl-security-reports/backend-sbom.cdx.json
 
 frontend-quality:
   stage: test
@@ -251,6 +254,7 @@ frontend-quality:
   script:
     - cd frontend
     - npm ci
+    - npm audit --omit=dev --audit-level=high
     - npm run check:ci
 
 frontend-tests:
@@ -348,6 +352,7 @@ frontend-vuln-scan:
     - |
       trivy fs \
         --scanners vuln \
+        --exit-code 1 \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \
@@ -356,6 +361,7 @@ frontend-vuln-scan:
         --format json \
         --output gl-security-reports/frontend-dependencies-trivy.json \
         frontend || scan_exit=$?
+    - trivy fs --scanners vuln --format cyclonedx --output gl-security-reports/frontend-sbom.cdx.json frontend
     - |
       trivy fs \
         --scanners vuln \
@@ -372,6 +378,7 @@ frontend-vuln-scan:
     expire_in: 1 week
     paths:
       - gl-security-reports/frontend-dependencies-trivy.json
+      - gl-security-reports/frontend-sbom.cdx.json
 
 ceph-functional-tests:
   stage: test
@@ -510,6 +517,7 @@ backend-image-vuln-scan:
       trivy image \
         --scanners vuln \
         --pkg-types os,library \
+        --exit-code 1 \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \
@@ -520,6 +528,13 @@ backend-image-vuln-scan:
         --format json \
         --output gl-security-reports/backend-image-trivy.json \
         "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" || scan_exit=$?
+    - |
+      trivy image \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format cyclonedx \
+        --output gl-security-reports/backend-image-sbom.cdx.json \
+        "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
     - |
       trivy image \
         --scanners vuln \
@@ -539,6 +554,7 @@ backend-image-vuln-scan:
     expire_in: 1 week
     paths:
       - gl-security-reports/backend-image-trivy.json
+      - gl-security-reports/backend-image-sbom.cdx.json
 
 frontend-image-vuln-scan:
   extends: .trivy-job
@@ -558,6 +574,7 @@ frontend-image-vuln-scan:
       trivy image \
         --scanners vuln \
         --pkg-types os,library \
+        --exit-code 1 \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \
@@ -568,6 +585,13 @@ frontend-image-vuln-scan:
         --format json \
         --output gl-security-reports/frontend-image-trivy.json \
         "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" || scan_exit=$?
+    - |
+      trivy image \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format cyclonedx \
+        --output gl-security-reports/frontend-image-sbom.cdx.json \
+        "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
     - |
       trivy image \
         --scanners vuln \
@@ -587,6 +611,7 @@ frontend-image-vuln-scan:
     expire_in: 1 week
     paths:
       - gl-security-reports/frontend-image-trivy.json
+      - gl-security-reports/frontend-image-sbom.cdx.json
 
 backend-release-image-vuln-scan:
   extends: .trivy-job
@@ -604,6 +629,7 @@ backend-release-image-vuln-scan:
       trivy image \
         --scanners vuln \
         --pkg-types os,library \
+        --exit-code 1 \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \
@@ -618,6 +644,7 @@ backend-release-image-vuln-scan:
       trivy image \
         --scanners vuln \
         --pkg-types os,library \
+        --exit-code 1 \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \

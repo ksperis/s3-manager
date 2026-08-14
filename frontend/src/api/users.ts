@@ -102,7 +102,6 @@ export type User = {
   effective_access?: EffectiveUserAccess | null;
   is_active?: boolean;
   is_root?: boolean;
-  auth_provider?: string | null;
   last_login_at?: string | null;
 };
 

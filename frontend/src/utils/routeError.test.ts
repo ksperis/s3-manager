@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_GENERAL_SETTINGS } from "../components/GeneralSettingsContext";
+import { ApiError } from "../api/client";
 import { classifyRouteError, resolveRouteErrorHomePath } from "./routeError";
 
 describe("classifyRouteError", () => {
-  it("treats axios network errors without a response as backend unavailable", () => {
+  it("treats API network errors without a response as backend unavailable", () => {
     expect(
-      classifyRouteError({
-        isAxiosError: true,
-        message: "socket hang up",
-      })
+      classifyRouteError(new ApiError("socket hang up"))
     ).toBe("backend_unavailable");
   });
 

@@ -29,7 +29,7 @@ Legend: {
   style.stroke: "#cbd5e1"
   "users": {
     class: table
-    tooltip: "PK: id\nUnique: uq_users_email(email); uq_users_provider_subject(auth_provider, auth_provider_subject)\nIndexes: ix_users_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_users_email(email)\nIndexes: ix_users_id(id) [index]"
   }
   "ui_groups": {
     class: table
@@ -41,11 +41,39 @@ Legend: {
   }
   "api_tokens": {
     class: table
-    tooltip: "PK: id\nIndexes: ix_api_tokens_created_at(created_at) [index]; ix_api_tokens_id(id) [index]; ix_api_tokens_jti(jti) [unique]; ix_api_tokens_revoked_by_user_id(revoked_by_user_id) [index]; ix_api_tokens_token_hash(token_hash) [unique]; ix_api_tokens_user_id(user_id) [index]"
+    tooltip: "PK: id\nIndexes: created_at, id, jti [unique], token_hash [unique], user_id"
   }
-  "refresh_sessions": {
+  "auth_sessions": {
     class: table
-    tooltip: "PK: id\nIndexes: ix_refresh_sessions_id(id) [index]; ix_refresh_sessions_revoked_by_user_id(revoked_by_user_id) [index]; ix_refresh_sessions_s3_session_id(s3_session_id) [index]; ix_refresh_sessions_token_hash(token_hash) [unique]; ix_refresh_sessions_user_id(user_id) [index]"
+    tooltip: "PK: id\nIndexes: user_id, s3_session_id, activity and expiry"
+  }
+  "refresh_tokens": {
+    class: table
+    tooltip: "PK: id\nIndexes: family_id, auth_session_id, token_hash [unique], expiry and revocation"
+  }
+  "external_identities": {
+    class: table
+    tooltip: "PK: id\nUnique: provider_type, provider_id, subject"
+  }
+  "external_identity_link_requests": {
+    class: table
+    tooltip: "PK: id\nUnique: provider_type, provider_id, subject"
+  }
+  "webauthn_credentials": {
+    class: table
+    tooltip: "PK: id\nIndexes: user_id, credential_id [unique], revoked_at"
+  }
+  "auth_challenges": {
+    class: table
+    tooltip: "PK: id\nIndexes: user_id, binding_sid, purpose, expires_at"
+  }
+  "recovery_codes": {
+    class: table
+    tooltip: "PK: id\nIndexes: user_id, consumed_at"
+  }
+  "auth_rate_limits": {
+    class: table
+    tooltip: "PK: id\nUnique: bucket_key, window_started_at"
   }
   "s3_sessions": {
     class: table
@@ -58,6 +86,10 @@ Legend: {
   "oidc_login_states": {
     class: table
     tooltip: "PK: state\nIndexes: ix_oidc_login_states_created_at(created_at) [index]; ix_oidc_login_states_state(state) [index]"
+  }
+  "oidc_authorization_codes": {
+    class: table
+    tooltip: "PK: id\nUnique: code_hash\nIndexes: provider, code_hash, expires_at"
   }
   "ldap_providers": {
     class: table
@@ -235,16 +267,20 @@ Legend: {
 }
 
 "api_tokens" -> "users"
-"api_tokens" -> "users"
+"auth_challenges" -> "users"
+"auth_sessions" -> "s3_sessions"
+"auth_sessions" -> "users"
 "billing_rate_cards" -> "storage_endpoints"
 "bucket_migrations" -> "users"
 "endpoint_health_checks" -> "storage_endpoints"
 "endpoint_health_latest" -> "storage_endpoints"
 "endpoint_health_rollups" -> "storage_endpoints"
 "endpoint_health_status_segments" -> "storage_endpoints"
-"refresh_sessions" -> "users"
-"refresh_sessions" -> "s3_sessions"
-"refresh_sessions" -> "users"
+"external_identities" -> "users"
+"external_identity_link_requests" -> "users"
+"recovery_codes" -> "users"
+"refresh_tokens" -> "auth_sessions"
+"refresh_tokens" -> "refresh_tokens"
 "s3_accounts" -> "storage_endpoints"
 "s3_connections" -> "users"
 "s3_connections" -> "storage_endpoints"
@@ -252,6 +288,7 @@ Legend: {
 "tag_definitions" -> "users"
 "user_ui_groups" -> "ui_groups"
 "user_ui_groups" -> "users"
+"webauthn_credentials" -> "users"
 "account_iam_users" -> "s3_accounts"
 "account_iam_users" -> "users"
 "audit_logs" -> "s3_accounts"

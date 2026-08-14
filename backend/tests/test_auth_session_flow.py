@@ -11,6 +11,7 @@ from app.main import app
 from app.routers import dependencies
 from app.routers import auth as auth_router
 from app.services import session_service as session_module
+from tests.auth_test_utils import trusted_origin_headers
 from tests.s3_account_factory import make_s3_account
 
 
@@ -82,6 +83,7 @@ def test_login_s3_grants_iam_capability_when_iam_client_succeeds(monkeypatch, cl
     response = client.post(
         "/api/auth/login-s3",
         json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": "https://s3.example.test"},
+        headers=trusted_origin_headers(),
     )
     assert response.status_code == 200
     payload = response.json()
@@ -100,6 +102,7 @@ def test_login_s3_disables_iam_capability_when_iam_client_denied(monkeypatch, cl
     response = client.post(
         "/api/auth/login-s3",
         json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": "https://s3.example.test"},
+        headers=trusted_origin_headers(),
     )
     assert response.status_code == 200
     payload = response.json()
@@ -124,10 +127,11 @@ def test_login_s3_rejects_invalid_custom_endpoint(monkeypatch, client, endpoint_
     response = client.post(
         "/api/auth/login-s3",
         json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": endpoint_url},
+        headers=trusted_origin_headers(),
     )
 
     assert response.status_code == 400
-    assert "Custom endpoint URL" in response.json()["detail"]
+    assert response.json()["detail"] == "Invalid S3 endpoint"
 
 
 def test_login_s3_records_custom_endpoint_audit_event(monkeypatch, client, db_session):
@@ -138,7 +142,11 @@ def test_login_s3_records_custom_endpoint_audit_event(monkeypatch, client, db_se
     response = client.post(
         "/api/auth/login-s3",
         json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": "https://s3.example.test/"},
-        headers={"X-Forwarded-For": "198.51.100.20", "User-Agent": "pytest-agent"},
+        headers={
+            **trusted_origin_headers(),
+            "X-Forwarded-For": "198.51.100.20",
+            "User-Agent": "pytest-agent",
+        },
     )
     assert response.status_code == 200, response.text
 
@@ -149,7 +157,7 @@ def test_login_s3_records_custom_endpoint_audit_event(monkeypatch, client, db_se
         .first()
     )
     assert event is not None
-    assert event.ip_address == "198.51.100.20"
+    assert event.ip_address == "testclient"
     assert event.user_agent == "pytest-agent"
     assert "https://s3.example.test" in (event.metadata_json or "")
 
@@ -221,7 +229,10 @@ def test_ui_login_updates_last_login_timestamp(client, db_session):
     response = client.post(
         "/api/auth/login",
         data={"username": user.email, "password": password},
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        headers={
+            **trusted_origin_headers(),
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
     )
     assert response.status_code == 200
     payload = response.json()
@@ -245,6 +256,7 @@ def test_login_rate_limit_returns_429_after_max_failed_attempts(monkeypatch, cli
     monkeypatch.setattr(auth_router.settings, "login_rate_limit_window_seconds", 3600)
 
     common_headers = {
+        **trusted_origin_headers(),
         "Content-Type": "application/x-www-form-urlencoded",
         "X-Forwarded-For": "198.51.100.25",
         "User-Agent": "pytest-rate-limit",
@@ -276,7 +288,7 @@ def test_login_rate_limit_returns_429_after_max_failed_attempts(monkeypatch, cli
         .first()
     )
     assert event is not None
-    assert event.ip_address == "198.51.100.25"
+    assert event.ip_address == "testclient"
     assert event.user_agent == "pytest-rate-limit"
 
 

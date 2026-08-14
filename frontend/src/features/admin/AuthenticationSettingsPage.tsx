@@ -84,7 +84,6 @@ type LdapProviderFormState = {
   timeout_seconds: string;
   enabled: boolean;
   allow_insecure: boolean;
-  allow_email_linking: boolean;
 };
 
 type ProviderBadgeInput = {
@@ -177,7 +176,6 @@ function emptyLdapForm(): LdapProviderFormState {
     timeout_seconds: "5",
     enabled: true,
     allow_insecure: false,
-    allow_email_linking: false,
   };
 }
 
@@ -200,7 +198,6 @@ function ldapProviderToForm(provider: LdapProviderAdminItem): LdapProviderFormSt
     timeout_seconds: String(provider.timeout_seconds),
     enabled: provider.enabled,
     allow_insecure: provider.allow_insecure,
-    allow_email_linking: provider.allow_email_linking,
   };
 }
 
@@ -226,7 +223,6 @@ function ldapPayloadFromForm(form: LdapProviderFormState): LdapProviderAdminPayl
     timeout_seconds: Number.isFinite(timeoutSeconds) ? timeoutSeconds : 5,
     enabled: form.enabled,
     allow_insecure: form.allow_insecure,
-    allow_email_linking: form.allow_email_linking,
     clear_bind_password: !bindDn,
   };
 }
@@ -1323,16 +1319,6 @@ export default function AuthenticationSettingsPage() {
                   className={settingsCheckboxClassName}
                 />
                 Allow insecure LDAP
-              </label>
-              <label className="inline-flex items-center gap-2 ui-body text-[var(--ui-text)]">
-                <input
-                  type="checkbox"
-                  checked={ldapForm.allow_email_linking}
-                  onChange={(event) => updateLdapFormField("allow_email_linking", event.target.checked)}
-                  disabled={isLdapFieldLocked("allow_email_linking")}
-                  className={settingsCheckboxClassName}
-                />
-                Allow email linking
               </label>
             </div>
             {ldapForm.allow_legacy_tls && (

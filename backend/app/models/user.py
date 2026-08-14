@@ -141,7 +141,6 @@ class User(ApiModel):
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
     ui_preferences: UiPreferences = Field(default_factory=UiPreferences)
-    auth_provider: Optional[str] = None
     last_login_at: Optional[datetime] = None
 
 
@@ -235,7 +234,6 @@ class UserOut(ApiModel):
     s3_user_details: list[LinkedS3User] = []
     s3_connection_details: list[LinkedS3Connection] = []
     effective_access: Optional[EffectiveUserAccess] = None
-    auth_provider: Optional[str] = None
     last_login_at: Optional[datetime] = None
 
 

@@ -4,11 +4,13 @@ from app.utils.time import utcnow
 import hashlib
 import logging
 import uuid
+from datetime import timedelta
 from typing import Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.security import decrypt_secret, encrypt_secret
+from app.core.config import get_settings
 from app.db import S3Session, UserRole
 from app.models.session import ManagerSessionPrincipal, SessionCapabilities
 
@@ -42,6 +44,9 @@ class SessionService:
     ) -> ManagerSessionPrincipal:
         self._cleanup_existing_sessions(access_key)
 
+        now = utcnow()
+        settings = get_settings()
+        absolute_expires_at = now + timedelta(minutes=settings.s3_session_absolute_minutes)
         session = S3Session(
             id=str(uuid.uuid4()),
             access_key_enc=encrypt_secret(access_key),
@@ -53,8 +58,13 @@ class SessionService:
             account_name=account_name,
             user_uid=user_uid,
             capabilities=capabilities.model_dump_json(),
-            created_at=utcnow(),
-            last_used_at=utcnow(),
+            created_at=now,
+            last_used_at=now,
+            idle_expires_at=min(
+                now + timedelta(minutes=settings.s3_session_idle_minutes),
+                absolute_expires_at,
+            ),
+            absolute_expires_at=absolute_expires_at,
         )
         self.db.add(session)
         self.db.commit()
@@ -62,12 +72,37 @@ class SessionService:
 
     def get_principal(self, session_id: str) -> Optional[ManagerSessionPrincipal]:
         session = self.db.query(S3Session).filter(S3Session.id == session_id).first()
-        if not session:
+        now = utcnow()
+        if (
+            not session
+            or session.revoked_at is not None
+            or not session.access_key_enc
+            or not session.secret_key_enc
+            or session.idle_expires_at <= now
+            or session.absolute_expires_at <= now
+        ):
+            if session and session.revoked_at is None:
+                self.revoke(session.id, "expired")
             return None
-        session.last_used_at = utcnow()
+        session.last_used_at = now
+        session.idle_expires_at = min(
+            now + timedelta(minutes=get_settings().s3_session_idle_minutes),
+            session.absolute_expires_at,
+        )
         self.db.add(session)
         self.db.commit()
         return self._to_principal(session)
+
+    def revoke(self, session_id: str, reason: str = "revoked") -> None:
+        session = self.db.query(S3Session).filter(S3Session.id == session_id).first()
+        if not session:
+            return
+        session.access_key_enc = None
+        session.secret_key_enc = None
+        session.revoked_at = session.revoked_at or utcnow()
+        session.revoke_reason = session.revoke_reason or reason
+        self.db.add(session)
+        self.db.commit()
 
     def introspect_credentials(
         self,
@@ -122,7 +157,7 @@ class SessionService:
                 return None
             return data
         except RGWAdminError as exc:
-            logger.debug("RGW admin lookup failed for key %s: %s", access_key, exc)
+            logger.debug("RGW admin lookup failed for submitted access key: %s", type(exc).__name__)
             return None
 
     def _derive_capabilities(self, actor_type: str, user_info: Optional[dict], iam_full_access: bool) -> SessionCapabilities:
@@ -137,6 +172,8 @@ class SessionService:
         )
 
     def _to_principal(self, session: S3Session) -> ManagerSessionPrincipal:
+        if not session.access_key_enc or not session.secret_key_enc:
+            raise SessionIntrospectionError("S3 session credentials have been erased")
         capabilities = self._capabilities_from_row(session)
         access_key = decrypt_secret(session.access_key_enc)
         secret_key = decrypt_secret(session.secret_key_enc)

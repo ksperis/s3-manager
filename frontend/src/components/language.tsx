@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { CLIENT_STORAGE_KEYS, readClientJson } from "../utils/clientStorage";
+import { readStoredUser, SESSION_USER_UPDATED_EVENT } from "../utils/workspaces";
 
 export type UiLanguage = "en" | "fr" | "de";
 export type UiLanguagePreference = UiLanguage | "auto";
@@ -15,17 +15,13 @@ type LanguageContextValue = {
   setLanguagePreference: (preference: UiLanguagePreference) => void;
 };
 
-type StoredUserLanguage = {
-  ui_language?: string | null;
-};
-
 const SUPPORTED_LANGUAGES: UiLanguage[] = ["en", "fr", "de"];
 
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 
 function parseStoredUserLanguage(): UiLanguagePreference {
   if (typeof window === "undefined") return "auto";
-  const parsed = readClientJson<StoredUserLanguage>(CLIENT_STORAGE_KEYS.sessionUser);
+  const parsed = readStoredUser();
   const lang = parsed?.ui_language;
   if (lang === "en" || lang === "fr" || lang === "de") {
     return lang;
@@ -71,12 +67,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== CLIENT_STORAGE_KEYS.sessionUser) return;
+    const handleSessionUpdate = () => {
       setLanguagePreferenceState(parseStoredUserLanguage());
     };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    window.addEventListener(SESSION_USER_UPDATED_EVENT, handleSessionUpdate);
+    return () => window.removeEventListener(SESSION_USER_UPDATED_EVENT, handleSessionUpdate);
   }, []);
 
   const setLanguage = useCallback((next: UiLanguage) => {

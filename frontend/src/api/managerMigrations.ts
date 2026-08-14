@@ -2,9 +2,8 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { buildApiRequestHeaders } from "./client";
 import { sanitizeErrorMessage } from "../utils/apiError";
-import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientStorage } from "../utils/clientStorage";
 
 export type BucketMigrationMode = "one_shot" | "pre_sync";
 export type BucketMigrationStatus =
@@ -234,11 +233,7 @@ export async function streamManagerMigration(
   const url = `${baseUrl}/manager/migrations/${migrationId}/stream?${query.toString()}`;
 
   const buildHeaders = () => {
-    const headers = new Headers({ Accept: "text/event-stream" });
-    const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
+    const headers = buildApiRequestHeaders("GET", { Accept: "text/event-stream" });
     return headers;
   };
 
@@ -251,14 +246,11 @@ export async function streamManagerMigration(
 
   if (response.status === 401 || response.status === 419) {
     try {
-      const refresh = await client.post<{ access_token: string; token_type: string }>(
+      await client.post(
         "/auth/refresh",
         undefined,
         { signal: options?.signal }
       );
-      if (typeof window !== "undefined") {
-        writeClientStorage(CLIENT_STORAGE_KEYS.authToken, refresh.data.access_token);
-      }
       response = await fetch(url, {
         method: "GET",
         headers: buildHeaders(),

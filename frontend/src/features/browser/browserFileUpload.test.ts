@@ -1,19 +1,13 @@
-import axios, { type AxiosResponse } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { uploadBrowserFile } from "./browserFileUpload";
 
-vi.mock("axios", () => ({
-  default: {
-    put: vi.fn(),
-  },
-}));
-
-const putMock = vi.mocked(axios.put);
+const fetchMock = vi.fn();
 
 describe("uploadBrowserFile", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    putMock.mockResolvedValue({} as AxiosResponse);
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
   });
 
   it("delegates proxy uploads without requesting a presigned URL", async () => {
@@ -30,7 +24,7 @@ describe("uploadBrowserFile", () => {
 
     expect(uploadProxy).toHaveBeenCalledOnce();
     expect(presign).not.toHaveBeenCalled();
-    expect(putMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("uploads presigned PUT files with signed and content type headers", async () => {
@@ -53,13 +47,25 @@ describe("uploadBrowserFile", () => {
       }),
     });
 
-    expect(putMock).toHaveBeenCalledWith("https://upload.test/put", file, {
+    expect(fetchMock).toHaveBeenCalledWith("https://upload.test/put", {
+      method: "PUT",
       headers: {
         "X-Signed": "yes",
         "Content-Type": "application/json",
       },
-      onUploadProgress: onProgress,
+      body: file,
+      credentials: "omit",
       signal,
+    });
+    expect(onProgress).toHaveBeenNthCalledWith(1, {
+      loaded: 0,
+      total: file.size,
+      progress: 0,
+    });
+    expect(onProgress).toHaveBeenLastCalledWith({
+      loaded: file.size,
+      total: file.size,
+      progress: 1,
     });
   });
 
@@ -77,6 +83,6 @@ describe("uploadBrowserFile", () => {
       }),
     ).rejects.toThrow("Unexpected presigned upload method: POST.");
 
-    expect(putMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

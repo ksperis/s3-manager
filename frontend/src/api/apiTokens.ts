@@ -11,11 +11,13 @@ export type ApiTokenInfo = {
   last_used_at?: string | null;
   expires_at: string;
   revoked_at?: string | null;
+  scopes: string[];
 };
 
 type CreateApiTokenPayload = {
   name: string;
   expires_in_days?: number;
+  scopes: string[];
 };
 
 type CreateApiTokenResponse = {

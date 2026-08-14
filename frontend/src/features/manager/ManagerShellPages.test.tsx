@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
+import { ApiError } from "../../api/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BucketsPage from "./BucketsPage";
@@ -1248,11 +1249,14 @@ describe("manager shell pages", () => {
   });
 
   it("distinguishes an unavailable bucket inventory from an empty one", async () => {
-    listBucketsMock.mockRejectedValueOnce({
-      isAxiosError: true,
-      code: "ECONNABORTED",
-      response: { status: 504, data: { detail: "Read timeout" } },
-    });
+    listBucketsMock.mockRejectedValueOnce(new ApiError("Request timeout", {
+      code: "ETIMEDOUT",
+      response: {
+        status: 504,
+        data: { detail: "Read timeout" },
+        headers: {},
+      },
+    }));
     setSelectedManagerAccountContext();
 
     render(

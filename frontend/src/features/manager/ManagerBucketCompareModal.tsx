@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../../api/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
 import WorkflowPage from "../../components/WorkflowPage";
@@ -511,7 +511,7 @@ export default function ManagerBucketCompareModal({
         (result, index) => {
           const cancelled =
             cancelRequestedRef.current ||
-            (result.status === "rejected" && axios.isAxiosError(result.reason) && result.reason.code === "ERR_CANCELED") ||
+            (result.status === "rejected" && isApiError(result.reason) && result.reason.code === "ERR_CANCELED") ||
             (result.status === "rejected" && result.reason instanceof DOMException && result.reason.name === "AbortError");
           setProgress((prev) => ({
             completed: prev.completed + 1,

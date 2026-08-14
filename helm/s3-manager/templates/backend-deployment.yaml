@@ -1,8 +1,21 @@
 {{- $backendReplicas := int (.Values.backend.replicas | default 1) -}}
-{{- $databaseURL := lower (toString (get .Values.backend.env "DATABASE_URL" | default "")) -}}
 {{- $backendAccessMode := lower (toString (.Values.backend.persistence.accessMode | default "ReadWriteOnce")) -}}
-{{- if and (gt $backendReplicas 1) (not (or .Values.postgresql.enabled (hasPrefix "postgres" $databaseURL))) -}}
-{{- fail "backend.replicas > 1 requires PostgreSQL; enable postgresql or set backend.env.DATABASE_URL to a PostgreSQL URL." -}}
+{{- if not .Values.backend.existingSecret -}}
+{{- fail "backend.existingSecret is required and must reference an existing authentication secret." -}}
+{{- end -}}
+{{- if not .Values.ingress.enabled -}}
+{{- fail "ingress.enabled=true is required for the production security profile." -}}
+{{- end -}}
+{{- if not .Values.ingress.tls -}}
+{{- fail "ingress.tls must reference an existing TLS secret." -}}
+{{- end -}}
+{{- range $secretName := list "DATABASE_URL" "UI_JWT_KEYS" "API_JWT_KEYS" "CREDENTIAL_KEYS" "INTERNAL_CRON_TOKEN" "SMTP_PASSWORD" -}}
+{{- if hasKey $.Values.backend.env $secretName -}}
+{{- fail (printf "%s must be supplied through backend.existingSecret, not backend.env." $secretName) -}}
+{{- end -}}
+{{- end -}}
+{{- if and (gt $backendReplicas 1) (ne (lower .Values.backend.databaseType) "postgresql") -}}
+{{- fail "backend.replicas > 1 requires backend.databaseType=postgresql." -}}
 {{- end -}}
 {{- if and (gt $backendReplicas 1) .Values.backend.persistence.enabled (ne $backendAccessMode "readwritemany") -}}
 {{- fail "backend.replicas > 1 cannot use backend.persistence with ReadWriteOnce; disable backend.persistence.enabled or set backend.persistence.accessMode=ReadWriteMany." -}}
@@ -42,21 +55,37 @@ spec:
             - name: BACKEND_REPLICAS
               value: {{ .Values.backend.replicas | quote }}
             {{- end }}
-            {{- if and .Values.billingCronJob.internalToken (not (hasKey .Values.backend.env "INTERNAL_CRON_TOKEN")) }}
-            - name: INTERNAL_CRON_TOKEN
-              value: {{ .Values.billingCronJob.internalToken | quote }}
-            {{- end }}
-            {{- if and .Values.postgresql.enabled (not (hasKey .Values.backend.env "DATABASE_URL")) }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "s3-manager.fullname" . }}-postgresql
-                  key: database-url
-            {{- end }}
-            {{- if and (not .Values.postgresql.enabled) (not (hasKey .Values.backend.env "DATABASE_URL")) }}
-            - name: DATABASE_URL
-              value: "sqlite:////data/app.db"
-            {{- end }}
+                  name: {{ .Values.backend.existingSecret | quote }}
+                  key: {{ .Values.backend.secretKeys.databaseUrl | quote }}
+            - name: UI_JWT_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.existingSecret | quote }}
+                  key: {{ .Values.backend.secretKeys.uiJwtKeys | quote }}
+            - name: API_JWT_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.existingSecret | quote }}
+                  key: {{ .Values.backend.secretKeys.apiJwtKeys | quote }}
+            - name: CREDENTIAL_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.existingSecret | quote }}
+                  key: {{ .Values.backend.secretKeys.credentialKeys | quote }}
+            - name: INTERNAL_CRON_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.existingSecret | quote }}
+                  key: {{ .Values.backend.secretKeys.internalCronToken | quote }}
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.existingSecret | quote }}
+                  key: {{ .Values.backend.secretKeys.smtpPassword | quote }}
+                  optional: true
             {{- range .Values.backend.extraEnv }}
             - name: {{ .name }}
               value: {{ .value | quote }}

@@ -7,7 +7,8 @@ import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { ExecutionContext, listExecutionContexts } from "../../api/executionContexts";
 import { fetchManagerContext, type ManagerAccessMode } from "../../api/managerContext";
-import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
+import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
+import { readStoredUser } from "../../utils/workspaces";
 import { EXECUTION_CONTEXTS_REFRESH_EVENT } from "../../utils/executionContextRefresh";
 import { resolveUrlScopedSelection } from "../../utils/urlScopedSelection";
 
@@ -84,9 +85,7 @@ function readSessionInfo(): SessionInfo {
   if (typeof window === "undefined") {
     return { isSession: false, accountName: null };
   }
-  const parsed = readClientJson<{ authType?: string | null; accountName?: string | null; accountId?: string | null }>(
-    CLIENT_STORAGE_KEYS.sessionUser
-  );
+  const parsed = readStoredUser();
   if (!parsed) {
     return { isSession: false, accountName: null };
   }
@@ -134,7 +133,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
       try {
         const data = await listExecutionContexts(scope, { signal: controller.signal });
         if (controller.signal.aborted) return;
-        setS3Accounts(data);
+        setS3Accounts(Array.isArray(data) ? data : []);
       } catch {
         if (controller.signal.aborted) return;
         setS3Accounts([]);

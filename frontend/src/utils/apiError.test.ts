@@ -1,24 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { ApiError } from "../api/client";
 
 import { classifyApiError, extractApiError, isApiFeatureNotImplemented, sanitizeErrorMessage } from "./apiError";
 
 describe("extractApiError", () => {
   it("prefers backend detail when available", () => {
-    const error = {
-      isAxiosError: true,
-      response: { data: { detail: "Forbidden by policy" } },
-      message: "Request failed with status code 403",
-    };
+    const error = new ApiError("Request failed with status 403", {
+      response: { status: 403, data: { detail: "Forbidden by policy" }, headers: {} },
+    });
 
     expect(extractApiError(error, "Fallback message")).toBe("Forbidden by policy");
   });
 
   it("normalizes low-level network errors when backend detail is missing", () => {
-    const error = {
-      isAxiosError: true,
-      response: { data: {} },
-      message: "Network Error",
-    };
+    const error = new ApiError("Failed to fetch");
 
     expect(extractApiError(error, "Fallback message")).toBe("Fallback message");
   });
@@ -29,14 +24,14 @@ describe("extractApiError", () => {
 
   it("uses the sanitized backend detail for upstream timeouts", () => {
     const failure = classifyApiError(
-      {
-        isAxiosError: true,
-        code: "ECONNABORTED",
+      new ApiError("Request timeout", {
+        code: "ETIMEDOUT",
         response: {
           status: 504,
           data: { detail: "HTTPConnectionPool(host='10.0.0.5', port=7480): Read timed out" },
+          headers: {},
         },
-      },
+      }),
       "Storage endpoint is unavailable."
     );
 
@@ -54,15 +49,15 @@ describe("extractApiError", () => {
     [504, "timeout"],
   ] as const)("keeps sanitized backend detail for status %s", (status, kind) => {
     const failure = classifyApiError(
-      {
-        isAxiosError: true,
+      new ApiError("Request failed", {
         response: {
           status,
           data: {
             detail: "Storage request to https://rgw.internal:7480 failed with secret_access_key=do-not-show",
           },
+          headers: {},
         },
-      },
+      }),
       "Operation failed."
     );
 
@@ -81,16 +76,16 @@ describe("extractApiError", () => {
   });
 
   it("redacts sensitive values from backend details", () => {
-    const error = {
-      isAxiosError: true,
+    const error = new ApiError("Request failed with status 500", {
       response: {
+        status: 500,
         data: {
           detail:
             "Request to https://rgw.internal.local:7480/admin failed with access_key=AKIAIOSFODNN7EXAMPLE and secret_access_key=very-secret",
         },
+        headers: {},
       },
-      message: "Request failed with status code 500",
-    };
+    });
 
     const message = extractApiError(error, "Fallback message");
 

@@ -10,9 +10,30 @@ image:
 
 backend:
   replicas: 1
+  databaseType: postgresql
+  # Existing Secret is mandatory. It must contain database-url, ui-jwt-keys,
+  # api-jwt-keys, credential-keys and internal-cron-token.
+  existingSecret: ""
+  secretKeys:
+    databaseUrl: database-url
+    uiJwtKeys: ui-jwt-keys
+    apiJwtKeys: api-jwt-keys
+    credentialKeys: credential-keys
+    internalCronToken: internal-cron-token
+    smtpPassword: smtp-password
   env:
+    APP_ENV: production
     API_V1_PREFIX: /api
-    CORS_ORIGINS: '["http://localhost:8080"]'
+    PUBLIC_ORIGIN: https://s3-manager.local
+    CORS_ORIGINS: '["https://s3-manager.local"]'
+    ALLOWED_HOSTS: '["s3-manager.local"]'
+    REFRESH_TOKEN_COOKIE_SECURE: "true"
+    REQUIRE_REGISTERED_S3_LOGIN_ENDPOINTS: "true"
+    SEED_SUPER_ADMIN_MODE: disabled
+    WEBAUTHN_ORIGIN: https://s3-manager.local
+    WEBAUTHN_RP_ID: s3-manager.local
+    # No implicit storage seed is created in production. Configure endpoints
+    # administratively after startup or provide an explicit HTTPS seed.
     APP_SETTINGS_PATH: /data/app_settings.json
     BILLING_DAILY_RETENTION_DAYS: "365"
     QUOTA_HISTORY_HOURLY_RETENTION_DAYS: "30"
@@ -26,7 +47,8 @@ backend:
 
 frontend:
   replicas: 1
-  env: {}
+  env:
+    CSP_CONNECT_SRC: "'self'"
   extraEnv: []
 
 service:
@@ -38,14 +60,14 @@ service:
     port: 80
 
 postgresql:
-  enabled: true
+  enabled: false
   image:
     repository: postgres
     tag: "16-alpine"
     pullPolicy: IfNotPresent
   auth:
     username: s3manager
-    password: s3manager
+    password: ""
     database: s3manager
   service:
     port: 5432
@@ -55,11 +77,14 @@ postgresql:
     storageClass: ""
 
 ingress:
-  enabled: false
+  enabled: true
   className: ""
   annotations: {}
   host: s3-manager.local
-  tls: []
+  tls:
+    - secretName: s3-manager-tls
+      hosts:
+        - s3-manager.local
 
 billingCronJob:
   enabled: false
@@ -68,7 +93,6 @@ billingCronJob:
   backoffLimit: 1
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2
-  internalToken: ""
   extraEnv: []
 
 healthcheckCronJob:
@@ -77,7 +101,6 @@ healthcheckCronJob:
   backoffLimit: 1
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2
-  internalToken: ""
   extraEnv: []
 
 quotaMonitorCronJob:
@@ -86,7 +109,6 @@ quotaMonitorCronJob:
   backoffLimit: 1
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2
-  internalToken: ""
   extraEnv: []
 
 usageHistoryCronJob:
@@ -95,7 +117,6 @@ usageHistoryCronJob:
   backoffLimit: 1
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2
-  internalToken: ""
   extraEnv: []
 
 nameOverride: ""

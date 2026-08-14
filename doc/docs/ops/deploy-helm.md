@@ -11,6 +11,7 @@ Use Helm for Kubernetes deployments.
 
 ```bash
 helm install s3-manager helm/s3-manager \
+  --set backend.existingSecret=s3-manager-auth \
   --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \
   --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend
 ```
@@ -36,8 +37,13 @@ LDAP providers can be injected through `backend.extraEnv` with
 `LDAP_PROVIDERS__<key>__...` variables. Store bind passwords in Kubernetes
 Secrets or your external secret manager rather than plain values files. Use
 provider keys matching `[a-z0-9_-]+`; `TLS_VERIFY=false`,
-`ALLOW_INSECURE=true`, and `ALLOW_EMAIL_LINKING=true` emit startup security
-warnings.
+`ALLOW_INSECURE=true` and `ALLOW_LEGACY_TLS=true` are rejected in production;
+external-identity collisions use the manual approval queue.
+
+The referenced existing Secret is mandatory and must provide the keys mapped
+by `backend.secretKeys`: database URL, distinct UI/API JWT rings, credential
+ring, and internal Cron token. Ingress must be enabled with an existing TLS
+secret. Sensitive values in `backend.env` are rejected by chart rendering.
 
 ## Multi-backend profile
 

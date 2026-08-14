@@ -1,5 +1,20 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 authentication cutover
+
+Migrations `0107` through `0110` replace legacy browser Bearers and refresh
+rows with revocable database sessions, single-use refresh families, separate
+external identities, WebAuthn, recovery codes, persistent rate limits, and
+scoped API tokens. The cutover revokes every existing UI session and API token,
+deletes every S3 session and its credential material, and purges OIDC states.
+
+This is a backend/frontend/configuration big-bang boundary; there is no legacy
+Bearer compatibility. Verify a restorable backup and complete credential
+re-encryption before deployment, then set
+`S3_MANAGER_DB_BACKUP_VERIFIED=true` for the migration run. The `0109`
+downgrade deliberately fails because it cannot reconstruct erased secrets.
+Follow [Authentication security and cutover](authentication-hardening.md).
+
 ## 2026-08 strict API object contracts
 
 All backend application request and response objects now reject unknown

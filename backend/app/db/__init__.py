@@ -7,14 +7,23 @@ from .s3_account import AccountIAMUser, S3Account, UserS3Account
 from .user import User
 from .audit import AuditLog
 from .session import S3Session
-from .refresh_session import RefreshSession
+from .auth_security import (
+    AuthChallenge,
+    AuthRateLimit,
+    AuthSession,
+    ExternalIdentity,
+    ExternalIdentityLinkRequest,
+    RecoveryCode,
+    RefreshToken,
+    WebAuthnCredential,
+)
 from .api_token import ApiToken
 from .s3_user import S3User, UserS3User
 from .s3_connection import ManagedPrivateAccess, S3Connection, UserS3Connection
 from .ui_group import UiGroup, UserUiGroup, UiGroupS3Account, UiGroupS3User, UiGroupS3Connection
 from .tag_definition import TagDefinition, StorageEndpointTag, S3AccountTag, S3UserTag, S3ConnectionTag
 from .ldap import LdapProvider
-from .oidc import OidcLoginState, OidcProvider
+from .oidc import OidcAuthorizationCode, OidcLoginState, OidcProvider
 from .billing import BillingAssignment, BillingRateCard, BillingStorageDaily, BillingUsageDaily
 from .quota_monitoring import QuotaAlertState, QuotaUsageDaily, QuotaUsageHourly
 from .user_notification import UserNotification
@@ -45,7 +54,14 @@ __all__ = [
     "User",
     "AuditLog",
     "S3Session",
-    "RefreshSession",
+    "RefreshToken",
+    "AuthSession",
+    "ExternalIdentity",
+    "ExternalIdentityLinkRequest",
+    "WebAuthnCredential",
+    "AuthChallenge",
+    "RecoveryCode",
+    "AuthRateLimit",
     "ApiToken",
     "S3User",
     "UserS3User",
@@ -64,6 +80,7 @@ __all__ = [
     "S3ConnectionTag",
     "LdapProvider",
     "OidcLoginState",
+    "OidcAuthorizationCode",
     "OidcProvider",
     "BillingAssignment",
     "BillingRateCard",

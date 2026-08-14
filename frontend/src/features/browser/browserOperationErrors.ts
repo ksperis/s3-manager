@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../../api/client";
 
 type BrowserErrorDetails = { code?: string; message?: string };
 
@@ -70,7 +70,7 @@ export const formatBrowserOperationError = (
   context?: string,
 ) => {
   let detail: string | undefined;
-  if (axios.isAxiosError(error)) {
+  if (isApiError(error)) {
     const status = error.response?.status;
     const statusText = error.response?.statusText;
     const statusLabel = status

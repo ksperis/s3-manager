@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api/client";
 
 import PortalCollaboratorAccessPage from "./PortalCollaboratorAccessPage";
 
@@ -156,10 +157,9 @@ describe("PortalCollaboratorAccessPage", () => {
   });
 
   it("renders a dedicated denied state", async () => {
-    mocks.fetchReview.mockRejectedValue({
-      isAxiosError: true,
-      response: { status: 403, data: { detail: "Reviewing this collaborator is not allowed." } },
-    });
+    mocks.fetchReview.mockRejectedValue(new ApiError("Access denied", {
+      response: { status: 403, data: { detail: "Reviewing this collaborator is not allowed." }, headers: {} },
+    }));
     renderPage();
 
     expect(

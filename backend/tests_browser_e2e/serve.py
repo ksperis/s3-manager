@@ -12,7 +12,7 @@ from pathlib import Path
 
 BACKEND_HOST = "127.0.0.1"
 BACKEND_PORT = 8000
-FRONTEND_ORIGINS = ["http://127.0.0.1:4173", "http://localhost:4173"]
+FRONTEND_ORIGINS = ["http://localhost:4173", "http://127.0.0.1:4173"]
 
 
 def _env_str(name: str, default: str | None = None) -> str | None:
@@ -81,6 +81,8 @@ def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env["DATABASE_URL"] = f"sqlite:///{database_path.resolve().as_posix()}"
     env["APP_SETTINGS_PATH"] = app_settings_path.resolve().as_posix()
     env["JWT_KEYS"] = _env_str("JWT_KEYS", json.dumps([_generate_secret()])) or json.dumps([_generate_secret()])
+    env["UI_JWT_KEYS"] = json.dumps([_generate_secret()])
+    env["API_JWT_KEYS"] = json.dumps([_generate_secret()])
     env["CREDENTIAL_KEYS"] = _env_str(
         "CREDENTIAL_KEYS",
         json.dumps([_generate_secret()]),
@@ -107,6 +109,10 @@ def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env["OIDC_PROVIDERS"] = "{}"
     env["LDAP_PROVIDERS"] = "{}"
     env["CORS_ORIGINS"] = json.dumps(FRONTEND_ORIGINS)
+    env["PUBLIC_ORIGIN"] = FRONTEND_ORIGINS[0]
+    env["WEBAUTHN_RP_ID"] = "localhost"
+    env["WEBAUTHN_ORIGIN"] = FRONTEND_ORIGINS[0]
+    env["REFRESH_TOKEN_COOKIE_SECURE"] = "false"
     env["BUCKET_MIGRATION_WORKER_ENABLED"] = "false"
     env["PYTHONUNBUFFERED"] = "1"
 

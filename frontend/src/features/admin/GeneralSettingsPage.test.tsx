@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, GeneralFeatureLocks, QuotaNotificationSettings } from "../../api/appSettings";
+import { ApiError } from "../../api/client";
 import GeneralSettingsPage from "./GeneralSettingsPage";
 
 const setGeneralSettingsMock = vi.fn();
@@ -227,11 +228,9 @@ describe("GeneralSettingsPage branding", () => {
   });
 
   it("shows backend detail when initial settings load fails with detail", async () => {
-    fetchAppSettingsMock.mockRejectedValueOnce({
-      isAxiosError: true,
-      response: { data: { detail: "Forbidden by policy" } },
-      message: "Request failed with status code 403",
-    });
+    fetchAppSettingsMock.mockRejectedValueOnce(new ApiError("Request failed", {
+      response: { status: 403, data: { detail: "Forbidden by policy" }, headers: {} },
+    }));
 
     render(<GeneralSettingsPage />);
 
@@ -239,11 +238,7 @@ describe("GeneralSettingsPage branding", () => {
   });
 
   it("shows a public fallback when initial settings load fails without detail", async () => {
-    fetchAppSettingsMock.mockRejectedValueOnce({
-      isAxiosError: true,
-      response: { data: {} },
-      message: "Network Error",
-    });
+    fetchAppSettingsMock.mockRejectedValueOnce(new ApiError("Network Error"));
 
     render(<GeneralSettingsPage />);
 

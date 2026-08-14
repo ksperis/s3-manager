@@ -92,6 +92,7 @@ vi.mock("../../utils/workspaces", () => ({
     role: "ui_admin",
     authType: "password",
   }),
+  setSessionUserCache: vi.fn(),
   readStoredWorkspaceId: () => null,
   resolveAvailableWorkspacesWithFlags: () => [],
 }));

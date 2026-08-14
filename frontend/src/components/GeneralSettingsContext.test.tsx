@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GeneralSettingsProvider, useGeneralSettings } from "./GeneralSettingsContext";
 import * as appSettingsApi from "../api/appSettings";
 
+const sessionState = vi.hoisted(() => ({ authenticated: false }));
+
+vi.mock("../auth/SessionProvider", () => ({
+  useSession: () => ({ authenticated: sessionState.authenticated, loading: false }),
+}));
+
 vi.mock("../api/appSettings", async () => {
   const actual = await vi.importActual<typeof import("../api/appSettings")>("../api/appSettings");
   return {
@@ -34,6 +40,7 @@ function Probe() {
 
 describe("GeneralSettingsProvider fallbacks", () => {
   beforeEach(() => {
+    sessionState.authenticated = false;
     window.localStorage.clear();
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
@@ -88,8 +95,8 @@ describe("GeneralSettingsProvider fallbacks", () => {
   });
 
   it("falls back to local defaults when settings fetch fails", async () => {
+    sessionState.authenticated = true;
     const fetchGeneralSettings = vi.mocked(appSettingsApi.fetchGeneralSettings);
-    window.localStorage.setItem("token", "token-value");
     fetchGeneralSettings.mockRejectedValueOnce(new Error("network down"));
 
     render(

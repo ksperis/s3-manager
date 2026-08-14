@@ -7,13 +7,19 @@ from typing import Optional
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, aliased
 
-from app.core.security import get_password_hash, verify_password
+from app.core.security import (
+    consume_dummy_password_hash,
+    get_password_hash,
+    verify_and_update_password,
+    verify_password,
+)
 from app.db import (
     AccountIAMUser,
     ApiToken,
     AuditLog,
     BucketMigration,
-    RefreshSession,
+    AuthSession,
+    RefreshToken,
     S3Account,
     S3Connection,
     S3User,
@@ -179,11 +185,13 @@ class UsersService:
             user_ids=[user.id],
             account_ids=affected_portal_account_ids,
         )
+        security_changed = False
         if payload.email and payload.email != user.email:
             existing = self.get_by_email(payload.email)
             if existing and existing.id != user.id:
                 raise ValueError("Email already in use")
             user.email = payload.email
+            security_changed = True
         if "full_name" in payload.model_fields_set:
             normalized_name = (payload.full_name or "").strip()
             user.full_name = normalized_name or None
@@ -191,10 +199,13 @@ class UsersService:
         if payload.password:
             validate_password_policy(payload.password)
             user.hashed_password = get_password_hash(payload.password)
+            security_changed = True
         next_role = payload.role or user.role
         if payload.role:
+            security_changed = security_changed or payload.role != user.role
             user.role = payload.role
         if payload.is_active is not None:
+            security_changed = security_changed or payload.is_active != user.is_active
             user.is_active = payload.is_active
         if payload.is_root is not None:
             user.is_root = payload.is_root
@@ -261,6 +272,8 @@ class UsersService:
             )
         if payload.group_ids is not None:
             associations.set_group_links(user, payload.group_ids)
+        if security_changed:
+            user.auth_version += 1
         self.db.add(user)
         self.db.flush()
         portal_roles_after = capture_effective_portal_roles(
@@ -272,6 +285,14 @@ class UsersService:
         self.db.commit()
         sync_portal_role_promotions(self.db, before=portal_roles_before, after=portal_roles_after)
         self.db.refresh(user)
+        if security_changed:
+            from app.services.auth_session_service import AuthSessionService
+
+            AuthSessionService(self.db).revoke_all_for_user(
+                user,
+                "user_security_changed",
+                increment_version=False,
+            )
         logger.debug("Updated user id=%s email=%s", user.id, user.email)
         return user
 
@@ -310,6 +331,7 @@ class UsersService:
         if update_avatar_preference:
             UserAvatarService(self.db).set_preference(user, avatar_preference or "auto")
 
+        password_changed = False
         if current_password is not None or new_password is not None:
             if not current_password or not new_password:
                 raise ValueError("Both current_password and new_password are required")
@@ -319,10 +341,20 @@ class UsersService:
                 raise ValueError("Current password is incorrect")
             validate_password_policy(new_password)
             user.hashed_password = get_password_hash(new_password)
+            user.auth_version += 1
+            password_changed = True
 
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
+        if password_changed:
+            from app.services.auth_session_service import AuthSessionService
+
+            AuthSessionService(self.db).revoke_all_for_user(
+                user,
+                "password_changed",
+                increment_version=False,
+            )
         logger.debug("Updated profile for user id=%s", user.id)
         return user
 
@@ -404,11 +436,17 @@ class UsersService:
             .filter(ApiToken.user_id == user.id)
             .delete(synchronize_session=False)
         )
-        (
-            self.db.query(RefreshSession)
-            .filter(RefreshSession.user_id == user.id)
-            .delete(synchronize_session=False)
-        )
+        auth_session_ids = [
+            row[0]
+            for row in self.db.query(AuthSession.id).filter(AuthSession.user_id == user.id).all()
+        ]
+        if auth_session_ids:
+            self.db.query(RefreshToken).filter(
+                RefreshToken.auth_session_id.in_(auth_session_ids)
+            ).delete(synchronize_session=False)
+            self.db.query(AuthSession).filter(
+                AuthSession.id.in_(auth_session_ids)
+            ).delete(synchronize_session=False)
         (
             self.db.query(AuditLog)
             .filter(AuditLog.user_id == user.id)
@@ -630,9 +668,24 @@ class UsersService:
     def authenticate(self, email: str, password: str) -> Optional[User]:
         user = self.get_by_email(email)
         if not user or not user.is_active or not user.hashed_password:
+            consume_dummy_password_hash(password)
             return None
-        if not verify_password(password, user.hashed_password):
+        valid, updated_hash = verify_and_update_password(password, user.hashed_password)
+        if not valid:
             return None
+        if updated_hash:
+            user.hashed_password = updated_hash
+            user.auth_version += 1
+            self.db.add(user)
+            self.db.commit()
+            from app.services.auth_session_service import AuthSessionService
+
+            AuthSessionService(self.db).revoke_all_for_user(
+                user,
+                "password_rehashed",
+                increment_version=False,
+            )
+            self.db.refresh(user)
         logger.debug("Authenticated user id=%s email=%s", user.id, user.email)
         return self.mark_last_login(user)
 
@@ -673,14 +726,12 @@ class UsersService:
         subject: str,
         email: Optional[str],
         full_name: Optional[str],
-        allow_email_linking: bool = False,
     ) -> tuple[User, bool]:
         return ExternalIdentityUserService(self.db).get_or_create_ldap_user(
             provider=provider,
             subject=subject,
             email=email,
             full_name=full_name,
-            allow_email_linking=allow_email_linking,
         )
 
 

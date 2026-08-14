@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Bucket, ManagerBucketCompareActionResult, ManagerBucketCompareResult } from "../../api/buckets";
+import { ApiError } from "../../api/client";
 import type { ExecutionContext } from "../../api/executionContexts";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 
@@ -569,15 +570,13 @@ describe("ManagerBucketCompareModal remediation actions", () => {
   });
 
   it("marks a rejected comparison as failed and leaves the running state", async () => {
-    compareManagerBucketPairMock.mockRejectedValueOnce({
-      isAxiosError: true,
-      message: "Request failed with status code 502",
+    compareManagerBucketPairMock.mockRejectedValueOnce(new ApiError("Request failed", {
       response: {
-        data: {
-          detail: "Unable to list objects in bucket 'bucket-a': ListObjectsV2 failed with AccessDenied",
-        },
+        status: 502,
+        data: { detail: "Unable to list objects in bucket 'bucket-a': ListObjectsV2 failed with AccessDenied" },
+        headers: {},
       },
-    });
+    }));
 
     const user = await runInitialComparison();
 

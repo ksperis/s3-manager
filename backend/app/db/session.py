@@ -13,8 +13,8 @@ class S3Session(Base):
     __tablename__ = "s3_sessions"
 
     id = Column(String, primary_key=True, index=True)
-    access_key_enc = Column(String, nullable=False)
-    secret_key_enc = Column(String, nullable=False)
+    access_key_enc = Column(String, nullable=True)
+    secret_key_enc = Column(String, nullable=True)
     access_key_hash = Column(String, nullable=False, index=True)
     actor_type = Column(String, nullable=False)
     role = Column(String, nullable=False, default=UserRole.UI_USER.value)
@@ -24,3 +24,7 @@ class S3Session(Base):
     capabilities = Column(Text, nullable=False)
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     last_used_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    idle_expires_at = Column(UTCDateTime(), nullable=False)
+    absolute_expires_at = Column(UTCDateTime(), nullable=False)
+    revoked_at = Column(UTCDateTime(), nullable=True, index=True)
+    revoke_reason = Column(String, nullable=True)

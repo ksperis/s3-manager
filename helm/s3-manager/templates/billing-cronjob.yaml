@@ -30,14 +30,11 @@ spec:
                   value: {{ printf "http://%s-backend:%d" (include "s3-manager.fullname" .) (.Values.service.backend.port | int) | quote }}
                 - name: BILLING_DAY_OFFSET
                   value: {{ .Values.billingCronJob.dayOffset | quote }}
-                {{- $backendToken := get .Values.backend.env "INTERNAL_CRON_TOKEN" }}
-                {{- if $backendToken }}
                 - name: INTERNAL_CRON_TOKEN
-                  value: {{ $backendToken | quote }}
-                {{- else if .Values.billingCronJob.internalToken }}
-                - name: INTERNAL_CRON_TOKEN
-                  value: {{ .Values.billingCronJob.internalToken | quote }}
-                {{- end }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backend.existingSecret | quote }}
+                      key: {{ .Values.backend.secretKeys.internalCronToken | quote }}
                 {{- range .Values.billingCronJob.extraEnv }}
                 - name: {{ .name }}
                   value: {{ .value | quote }}

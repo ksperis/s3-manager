@@ -23,6 +23,10 @@ Use this page to define the minimum backup contract for s3-manager deployments.
    irreversibly purges historical data-plane and operational-noise audit rows.
 7. Protect provider access-log buckets or the equivalent centralized log store
    according to the required object-audit retention period.
+8. Before migration `0109`, verify a restorable backup and set
+   `S3_MANAGER_DB_BACKUP_VERIFIED=true` only for that migration run. Its erased
+   S3 session secrets and revoked authenticators cannot be reconstructed by a
+   downgrade.
 
 ## Restore checklist
 

@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios, { type AxiosProgressEvent } from "axios";
+import type { UploadProgressEvent } from "../../api/browser";
 
 type PresignedFileUpload = {
   url: string;
@@ -14,7 +14,7 @@ type UploadBrowserFileParams = {
   file: File;
   mode: "direct" | "proxy";
   signal?: AbortSignal;
-  onProgress: (event: AxiosProgressEvent) => void;
+  onProgress: (event: UploadProgressEvent) => void;
   uploadProxy: () => Promise<void>;
   presign: () => Promise<PresignedFileUpload>;
 };
@@ -38,12 +38,17 @@ export const uploadBrowserFile = async ({
     throw new Error(`Unexpected presigned upload method: ${method}.`);
   }
 
-  await axios.put(signedUpload.url, file, {
+  onProgress({ loaded: 0, total: file.size, progress: 0 });
+  const response = await fetch(signedUpload.url, {
+    method: "PUT",
     headers: {
       ...(signedUpload.headers || {}),
       "Content-Type": file.type || "application/octet-stream",
     },
-    onUploadProgress: onProgress,
+    body: file,
+    credentials: "omit",
     signal,
   });
+  if (!response.ok) throw new Error(`Direct upload failed with status ${response.status}`);
+  onProgress({ loaded: file.size, total: file.size, progress: 1 });
 };

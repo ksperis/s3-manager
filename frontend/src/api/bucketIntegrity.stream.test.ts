@@ -22,6 +22,7 @@ describe("bucket integrity streams", () => {
   });
 
   it("posts manager payload and parses progress/result events", async () => {
+    document.cookie = "csrf_token=stream-csrf; path=/";
     const progressEvents: Array<{ checked: number; listed: number }> = [];
     const responseBody = buildStream([
       'event: progress\ndata: {"stage":"verify","total_buckets":1,"completed_buckets":0,"listed_count":2,"checked_count":1,"failed_count":0,"bytes_read":12}\n\n',
@@ -53,6 +54,9 @@ describe("bucket integrity streams", () => {
         body: JSON.stringify({ buckets: ["bucket-a"], parallelism: 4, all_versions: true }),
       })
     );
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get("X-CSRF-Token")).toBe("stream-csrf");
+    expect(fetchMock.mock.calls[0][1]?.credentials).toBe("include");
   });
 
   it("posts ceph admin and storage ops targets to their surfaces", async () => {

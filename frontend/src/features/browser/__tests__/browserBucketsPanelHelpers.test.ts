@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ApiError } from "../../../api/client";
 import {
   extractBucketListError,
   normalizeBrowserListingIssue,
@@ -36,14 +37,9 @@ describe("browserBucketsPanelHelpers", () => {
 
   it("normalizes access denied listing errors", () => {
     const issue = normalizeBrowserListingIssue(
-      {
-        isAxiosError: true,
-        response: {
-          status: 403,
-          data: { detail: "Forbidden by policy" },
-        },
-        message: "Request failed with status code 403",
-      },
+      new ApiError("Request failed", {
+        response: { status: 403, data: { detail: "Forbidden by policy" }, headers: {} },
+      }),
       "Fallback message",
     );
 

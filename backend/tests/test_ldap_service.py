@@ -9,7 +9,8 @@ from pydantic import ValidationError
 
 from app.core.config import LDAPProviderSettings, Settings
 from app.models.ldap import LDAPLoginRequest
-from app.db import User, UserRole
+from app.db import ExternalIdentity, ExternalIdentityLinkRequest, User, UserRole
+from app.services.external_identity_user_service import ExternalIdentityLinkRequiredError
 from app.services.ldap_service import (
     LDAPAuthenticationError,
     LDAPAuthService,
@@ -274,8 +275,11 @@ def test_authenticate_creates_ldap_user_without_ui_access(db_session, monkeypatc
     assert created is True
     assert user.email == "jane@example.test"
     assert user.role == UserRole.UI_NONE.value
-    assert user.auth_provider == "ldap:corp"
-    assert user.auth_provider_subject == "uuid-123"
+    identity = db_session.query(ExternalIdentity).one()
+    assert identity.user_id == user.id
+    assert identity.provider_type == "ldap"
+    assert identity.provider_id == "corp"
+    assert identity.subject == "uuid-123"
     assert user.hashed_password is None
     assert user.last_login_at is not None
 
@@ -303,11 +307,16 @@ def test_authenticate_rejects_email_collision_by_default(db_session, monkeypatch
         ),
     )
 
-    with pytest.raises(LDAPUserConflictError, match="Email already in use"):
+    with pytest.raises(ExternalIdentityLinkRequiredError):
         service.authenticate("corp", "jane", "secret-password")
+    request = db_session.query(ExternalIdentityLinkRequest).one()
+    assert request.provider_type == "ldap"
+    assert request.provider_id == "corp"
+    assert request.subject == "uuid-123"
+    assert request.status == "pending"
 
 
-def test_authenticate_links_existing_email_when_enabled(db_session, monkeypatch):
+def test_authenticate_never_links_existing_email_automatically(db_session, monkeypatch):
     db_session.add(
         User(
             email="jane@example.test",
@@ -317,8 +326,7 @@ def test_authenticate_links_existing_email_when_enabled(db_session, monkeypatch)
         )
     )
     db_session.commit()
-    provider = _provider(allow_email_linking=True)
-    service = _service(db_session, provider)
+    service = _service(db_session)
     monkeypatch.setattr(
         service,
         "_authenticate_directory",
@@ -331,8 +339,7 @@ def test_authenticate_links_existing_email_when_enabled(db_session, monkeypatch)
         ),
     )
 
-    user, created = service.authenticate("corp", "jane", "secret-password")
-
-    assert created is False
-    assert user.auth_provider == "ldap:corp"
-    assert user.auth_provider_subject == "uuid-123"
+    with pytest.raises(ExternalIdentityLinkRequiredError):
+        service.authenticate("corp", "jane", "secret-password")
+    assert db_session.query(ExternalIdentity).count() == 0
+    assert db_session.query(ExternalIdentityLinkRequest).count() == 1

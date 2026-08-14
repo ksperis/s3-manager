@@ -3,8 +3,9 @@
 ## Production hardening checklist
 
 - Use OIDC or LDAP over verified TLS for real users.
-- Set strong JWT, refresh-cookie, credential-encryption, and scheduler secrets.
-- Keep `CORS_ORIGINS` explicit and enable secure refresh cookies outside local development.
+- Set distinct strong UI/API JWT rings, credential-encryption keys, and scheduler secrets.
+- Set `APP_ENV=production`; startup then rejects HTTP origins, insecure cookies, wildcard hosts, weak keys, insecure providers, broad proxy trust, and unregistered S3 login endpoints.
+- Keep `PUBLIC_ORIGIN`, `CORS_ORIGINS`, `ALLOWED_HOSTS`, `WEBAUTHN_ORIGIN`, and `WEBAUTHN_RP_ID` exact.
 - Expose internal scheduler/API automation paths only on trusted networks.
 - Store LDAP bind passwords, SMTP password, storage credentials, and registry tokens in a secret manager.
 - Enable only the workspaces and feature flags that are ready for users.
@@ -15,7 +16,8 @@
 ## Authentication and access
 
 - Prefer enterprise OIDC.
-- For LDAP, require LDAPS or StartTLS with certificate verification, keep the bind account least-privilege, and leave `ALLOW_EMAIL_LINKING=false` unless you are intentionally migrating existing local users.
+- For LDAP, require LDAPS or StartTLS with certificate verification and keep the bind account least-privilege. Email linking is never automatic.
+- Require WebAuthn for every admin and use the manual superadmin approval queue for OIDC/LDAP email collisions.
 - Restrict admin surface access by network/ingress policy.
 - Use least privilege for UI users and storage credentials.
 
@@ -25,11 +27,13 @@
 - Store all secrets in secure secret management systems.
 - Treat LDAP bind passwords like other runtime secrets; inject them from your deployment secret manager and never place them in public compose/Helm values.
 - Rotate credentials and API tokens periodically.
+- Follow [Authentication security and cutover](authentication-hardening.md) for JWT-ring, credential-ring, session, recovery-code, and destructive-migration procedures.
 
 ## Transport and network
 
 - Enforce TLS at ingress/reverse proxy.
 - Configure `CORS_ORIGINS` with explicit trusted UI origins. Avoid `*` for authenticated deployments, and enable `REFRESH_TOKEN_COOKIE_SECURE=true` for non-local origins.
+- Trust `X-Forwarded-For` only from direct peers listed in `TRUSTED_PROXY_CIDRS`; Uvicorn runs with implicit proxy trust disabled.
 - Keep internal endpoints protected with `INTERNAL_CRON_TOKEN` and private network exposure.
 - End-user custom S3 endpoints are restricted to public `https://` targets. Only admin-managed endpoint flows may keep `http://` endpoints when an internal deployment explicitly requires them.
 

@@ -62,6 +62,7 @@ from app.routers import portal_monitoring as portal_monitoring_router
 from app.routers import portal_objects as portal_objects_router
 from app.routers import portal_storage_spaces as portal_storage_spaces_router
 from app.routers import portal_usage as portal_usage_router
+from tests.router_test_utils import effective_routes
 from app.services import app_settings_service, s3_bucket_access, s3_bucket_metadata, s3_client, s3_deletion
 from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
@@ -3670,7 +3671,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     assert any(statement["Sid"] == "PortalStorageSpaceViewer" for statement in target_policy["Statement"])
     assert ("GET", "/portal/settings") in {
         (method, route.path)
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         for method in getattr(route, "methods", set())
     }
 
@@ -5815,7 +5816,7 @@ def test_portal_usage_routes_are_owned_by_dedicated_router():
     }
     route_modules = {
         route.path: route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         if route.path in expected_paths
     }
 
@@ -5930,7 +5931,7 @@ def test_portal_monitoring_routes_are_owned_by_dedicated_router():
     expected_paths = {"/portal/endpoint-health", "/portal/alerts"}
     route_modules = {
         route.path: route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         if route.path in expected_paths
     }
 
@@ -5946,7 +5947,7 @@ def test_portal_collaboration_routes_are_owned_by_dedicated_router():
     }
     route_modules = {
         route.path: route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         if route.path in expected_paths
     }
 
@@ -5963,7 +5964,7 @@ def test_portal_context_routes_are_owned_by_dedicated_router():
     }
     route_modules = {
         route.path: route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         if route.path in expected_paths
     }
 
@@ -5982,7 +5983,7 @@ def test_portal_sharing_routes_are_owned_by_dedicated_router():
     }
     route_modules = {
         route.path: route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         if route.path in expected_paths
     }
 
@@ -6003,7 +6004,7 @@ def test_portal_object_routes_are_owned_by_dedicated_router():
     }
     route_modules = {
         route.path: route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         if route.path in expected_paths
     }
 
@@ -6024,7 +6025,7 @@ def test_portal_storage_space_routes_are_owned_by_dedicated_router():
     }
     route_modules = {
         route.path: route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         if route.path in expected_paths
     }
 
@@ -6035,7 +6036,7 @@ def test_portal_storage_space_routes_are_owned_by_dedicated_router():
 def test_portal_cross_cutting_routes_are_owned_by_domain_routers():
     route_modules = {
         route.path: route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         if route.path in {"/portal/billing/me", "/portal/traffic"}
     }
 
@@ -6047,7 +6048,10 @@ def test_portal_cross_cutting_routes_are_owned_by_domain_routers():
 
 def test_portal_root_router_is_a_pure_aggregator():
     assert portal_router.router.routes
-    assert all(route.endpoint.__module__ != "app.routers.portal" for route in portal_router.router.routes)
+    assert all(
+        route.endpoint.__module__ != "app.routers.portal"
+        for route in effective_routes(portal_router.router)
+    )
 
 
 def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch, db_session):
@@ -6840,7 +6844,7 @@ def test_portal_access_key_routes_translate_disabled_management(db_session):
 def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
     route_keys = {
         (method, route.path)
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         for method in getattr(route, "methods", set())
     }
 
@@ -6875,7 +6879,7 @@ def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
     assert expected_routes.issubset(route_keys)
     access_key_routes = {
         (method, route.path): route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         for method in getattr(route, "methods", set())
         if (method, route.path) in expected_routes
     }

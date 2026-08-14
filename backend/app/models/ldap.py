@@ -61,7 +61,6 @@ class LDAPProviderAdminItem(ApiModel):
     timeout_seconds: float = 5.0
     enabled: bool = True
     allow_insecure: bool = False
-    allow_email_linking: bool = False
     source: Literal["environment", "ui"]
     editable: bool
     field_locks: dict[str, LDAPProviderFieldLock] = Field(default_factory=dict)
@@ -86,7 +85,6 @@ class LDAPProviderAdminPayload(ApiModel):
     timeout_seconds: float = Field(5.0, gt=0, le=60)
     enabled: bool = True
     allow_insecure: bool = False
-    allow_email_linking: bool = False
     clear_bind_password: bool = False
 
     @field_validator("provider_id", mode="before")

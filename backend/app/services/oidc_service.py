@@ -9,18 +9,21 @@ import hashlib
 import logging
 import secrets
 import time
+import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import requests
 from jose import JWTError, jwt
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import OIDCProviderSettings, Settings, get_settings
-from app.db import OidcLoginState
+from app.db import OidcAuthorizationCode, OidcLoginState
 from app.services.oidc_provider_settings_service import resolve_oidc_provider_map
 from app.services.users_service import UsersService, get_users_service
+from app.services.external_identity_user_service import ExternalIdentityLinkRequiredError
 
 LOGGER = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 10
@@ -80,7 +83,7 @@ class OidcService:
             raise OIDCConfigurationError("Provider does not expose an authorization endpoint")
         self._purge_expired_states()
         state_token = secrets.token_urlsafe(32)
-        nonce = secrets.token_urlsafe(16) if provider.use_nonce else None
+        nonce = secrets.token_urlsafe(32)
         code_verifier = secrets.token_urlsafe(64)
         params = {
             "response_type": "code",
@@ -89,13 +92,11 @@ class OidcService:
             "scope": " ".join(provider.scopes),
             "state": state_token,
         }
-        if provider.use_nonce and nonce:
-            params["nonce"] = nonce
+        params["nonce"] = nonce
         if provider.prompt:
             params["prompt"] = provider.prompt
-        if provider.use_pkce:
-            params["code_challenge_method"] = "S256"
-            params["code_challenge"] = self._build_code_challenge(code_verifier)
+        params["code_challenge_method"] = "S256"
+        params["code_challenge"] = self._build_code_challenge(code_verifier)
 
         record = OidcLoginState(
             state=state_token,
@@ -124,6 +125,19 @@ class OidcService:
             self.db.delete(login_state)
             self.db.commit()
             raise OIDCStateError("OIDC state expired")
+        code_verifier = login_state.code_verifier
+        expected_nonce = login_state.nonce
+        redirect_path = login_state.redirect_path
+        # Claim the state before any network call. A concurrent callback can no
+        # longer exchange the same authorization response.
+        deleted = self.db.query(OidcLoginState).filter(
+            OidcLoginState.state == state,
+            OidcLoginState.provider == provider_key,
+        ).delete(synchronize_session=False)
+        self.db.commit()
+        if deleted != 1:
+            raise OIDCStateError("OIDC state has already been consumed")
+        self._claim_authorization_code(provider_key, code)
 
         metadata = self._get_metadata(provider_key, provider)
         token_endpoint = metadata.get("token_endpoint")
@@ -136,8 +150,7 @@ class OidcService:
             "redirect_uri": provider.redirect_uri,
             "client_id": provider.client_id,
         }
-        if provider.use_pkce:
-            token_request["code_verifier"] = login_state.code_verifier
+        token_request["code_verifier"] = code_verifier
         if provider.client_secret:
             token_request["client_secret"] = provider.client_secret
         try:
@@ -151,9 +164,14 @@ class OidcService:
             raise OIDCAuthenticationError("Unable to reach token endpoint") from exc
 
         if response.status_code >= 400:
-            LOGGER.warning("OIDC token endpoint error status=%s body=%s", response.status_code, response.text)
+            LOGGER.warning("OIDC token endpoint rejected the exchange status=%s", response.status_code)
             raise OIDCAuthenticationError("OIDC token exchange failed")
-        token_payload = response.json()
+        try:
+            token_payload = response.json()
+        except (TypeError, ValueError) as exc:
+            raise OIDCAuthenticationError("OIDC token endpoint returned an invalid response") from exc
+        if not isinstance(token_payload, dict):
+            raise OIDCAuthenticationError("OIDC token endpoint returned an invalid response")
         id_token = token_payload.get("id_token")
         if not id_token:
             raise OIDCAuthenticationError("Provider did not return an ID token")
@@ -163,7 +181,7 @@ class OidcService:
             provider,
             metadata,
             id_token,
-            login_state.nonce,
+            expected_nonce,
             token_payload.get("access_token"),
         )
         subject = claims.get("sub")
@@ -171,7 +189,7 @@ class OidcService:
             raise OIDCAuthenticationError("OIDC token missing subject claim")
         email = claims.get("email")
         email_verified = claims.get("email_verified")
-        if email_verified is False:
+        if email and email_verified is not True:
             raise OIDCAuthenticationError("Email is not verified for this provider")
         full_name = claims.get("name") or claims.get("given_name")
         picture_url = claims.get("picture")
@@ -179,20 +197,16 @@ class OidcService:
         if not email and token_payload.get("access_token") and metadata.get("userinfo_endpoint"):
             email = self._fetch_userinfo_email(metadata["userinfo_endpoint"], token_payload["access_token"])
 
-        try:
-            user, created = self.users_service.get_or_create_oidc_user(
-                provider=provider_key,
-                subject=subject,
-                email=email,
-                full_name=full_name,
-                picture_url=picture_url,
-            )
-        finally:
-            self.db.delete(login_state)
-            self.db.commit()
+        user, created = self.users_service.get_or_create_oidc_user(
+            provider=provider_key,
+            subject=subject,
+            email=email,
+            full_name=full_name,
+            picture_url=picture_url,
+        )
 
         user = self.users_service.mark_last_login(user)
-        return user, login_state.redirect_path, created
+        return user, redirect_path, created
 
     def _provider_map(self) -> dict[str, OIDCProviderSettings]:
         return resolve_oidc_provider_map(self.db, self.settings)
@@ -202,6 +216,8 @@ class OidcService:
         provider = self._provider_map().get(provider_key)
         if not provider or not provider.enabled:
             raise OIDCProviderNotFoundError("OIDC provider not found")
+        if not provider.use_pkce or not provider.use_nonce:
+            raise OIDCConfigurationError("OIDC providers must enable PKCE S256 and nonce")
         return provider_key, provider
 
     def _get_metadata(self, provider_key: str, provider: OIDCProviderSettings) -> dict[str, Any]:
@@ -214,7 +230,13 @@ class OidcService:
             response.raise_for_status()
         except requests.RequestException as exc:
             raise OIDCConfigurationError("Failed to fetch OIDC discovery document") from exc
-        metadata = response.json()
+        try:
+            metadata = response.json()
+        except (TypeError, ValueError) as exc:
+            raise OIDCConfigurationError("OIDC discovery document is invalid") from exc
+        if not isinstance(metadata, dict):
+            raise OIDCConfigurationError("OIDC discovery document is invalid")
+        self._validate_metadata(provider, metadata)
         self._metadata_cache[provider_key] = (metadata, now + 3600)
         return metadata
 
@@ -228,7 +250,12 @@ class OidcService:
             response.raise_for_status()
         except requests.RequestException as exc:
             raise OIDCConfigurationError("Failed to download provider keys") from exc
-        jwks_data = response.json()
+        try:
+            jwks_data = response.json()
+        except (TypeError, ValueError) as exc:
+            raise OIDCConfigurationError("OIDC provider keys are invalid") from exc
+        if not isinstance(jwks_data, dict) or not isinstance(jwks_data.get("keys"), list):
+            raise OIDCConfigurationError("OIDC provider keys are invalid")
         self._jwks_cache[jwks_uri] = (jwks_data, now + 3600)
         return jwks_data
 
@@ -241,15 +268,30 @@ class OidcService:
         expected_nonce: Optional[str],
         access_token: Optional[str],
     ) -> Dict[str, Any]:
-        header = jwt.get_unverified_header(id_token)
+        try:
+            header = jwt.get_unverified_header(id_token)
+        except JWTError as exc:
+            raise OIDCAuthenticationError("Invalid ID token header") from exc
         jwks_uri = metadata.get("jwks_uri")
         if not jwks_uri:
             raise OIDCConfigurationError("Provider does not expose a JWKS endpoint")
         jwks = self._get_jwks(jwks_uri)
         kid = header.get("kid")
+        algorithm = header.get("alg")
+        if not isinstance(kid, str) or not kid:
+            raise OIDCAuthenticationError("ID token is missing a signing key id")
+        if algorithm not in provider.allowed_algorithms:
+            raise OIDCAuthenticationError("ID token uses a disallowed signing algorithm")
+        expected_key_type = "EC" if str(algorithm).startswith("ES") else "RSA"
         key = None
         for candidate in jwks.get("keys", []):
-            if candidate.get("kid") == kid or kid is None:
+            key_ops = candidate.get("key_ops")
+            if (
+                candidate.get("kid") == kid
+                and candidate.get("use", "sig") == "sig"
+                and candidate.get("kty") == expected_key_type
+                and (not key_ops or "verify" in key_ops)
+            ):
                 key = candidate
                 break
         if not key:
@@ -258,14 +300,14 @@ class OidcService:
             claims = jwt.decode(
                 id_token,
                 key,
-                algorithms=[header.get("alg", "RS256")],
+                algorithms=provider.allowed_algorithms,
                 audience=provider.client_id,
                 issuer=metadata.get("issuer"),
                 access_token=access_token,
             )
         except JWTError as exc:
             raise OIDCAuthenticationError("Invalid ID token") from exc
-        if expected_nonce and claims.get("nonce") != expected_nonce:
+        if not expected_nonce or claims.get("nonce") != expected_nonce:
             raise OIDCStateError("Nonce mismatch detected")
         return claims
 
@@ -279,11 +321,31 @@ class OidcService:
             response.raise_for_status()
         except requests.RequestException:
             return None
-        payload = response.json()
+        try:
+            payload = response.json()
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict):
+            return None
         email = payload.get("email")
-        if payload.get("email_verified") is False:
+        if payload.get("email_verified") is not True:
             return None
         return email
+
+    def _validate_metadata(self, provider: OIDCProviderSettings, metadata: dict[str, Any]) -> None:
+        discovery_host = (urlparse(provider.discovery_url).hostname or "").lower()
+        allowed_hosts = {host.lower() for host in provider.allowed_hosts} or {discovery_host}
+        for field in ("issuer", "authorization_endpoint", "token_endpoint", "jwks_uri", "userinfo_endpoint"):
+            raw = metadata.get(field)
+            if field == "userinfo_endpoint" and not raw:
+                continue
+            parsed = urlparse(str(raw or ""))
+            if parsed.scheme != "https" or not parsed.hostname or parsed.hostname.lower() not in allowed_hosts:
+                raise OIDCConfigurationError(f"OIDC metadata field {field} is not an allowed HTTPS endpoint")
+        issuer = str(metadata.get("issuer") or "").rstrip("/")
+        discovery_base = provider.discovery_url.split("/.well-known/", 1)[0].rstrip("/")
+        if issuer != discovery_base:
+            raise OIDCConfigurationError("OIDC discovery issuer does not match the configured issuer")
 
     def _build_code_challenge(self, code_verifier: str) -> str:
         digest = hashlib.sha256(code_verifier.encode()).digest()
@@ -292,7 +354,27 @@ class OidcService:
     def _purge_expired_states(self) -> None:
         cutoff = utcnow() - timedelta(seconds=self.settings.oidc_state_ttl_seconds)
         self.db.query(OidcLoginState).filter(OidcLoginState.created_at < cutoff).delete()
+        self.db.query(OidcAuthorizationCode).filter(OidcAuthorizationCode.expires_at <= utcnow()).delete()
         self.db.commit()
+
+    def _claim_authorization_code(self, provider_key: str, code: str) -> None:
+        now = utcnow()
+        digest = hashlib.sha256(f"{provider_key}\x00{code}".encode()).hexdigest()
+        self.db.query(OidcAuthorizationCode).filter(OidcAuthorizationCode.expires_at <= now).delete()
+        self.db.add(
+            OidcAuthorizationCode(
+                id=str(uuid.uuid4()),
+                provider=provider_key,
+                code_hash=digest,
+                created_at=now,
+                expires_at=now + timedelta(seconds=self.settings.oidc_state_ttl_seconds),
+            )
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise OIDCStateError("OIDC authorization code has already been consumed") from exc
 
 
 def get_oidc_service(db: Session) -> OidcService:

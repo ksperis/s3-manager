@@ -24,7 +24,7 @@ import {
 import { WORKSPACE_TRAFFIC_TREND_WINDOWS } from "../../components/workspaceDashboardKpis";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
-import { CLIENT_STORAGE_KEYS, readClientJson } from "../../utils/clientStorage";
+import { readStoredUser } from "../../utils/workspaces";
 import {
   buildPortalWorkspaceModel,
   type PortalWorkspaceActivityItem,
@@ -40,7 +40,7 @@ import { usePortalAccountContext } from "./PortalAccountContext";
 
 function readUserEmail(): string | null {
   if (typeof window === "undefined") return null;
-  return readClientJson<{ email?: string | null }>(CLIENT_STORAGE_KEYS.sessionUser)?.email ?? null;
+  return readStoredUser()?.email ?? null;
 }
 
 function activityFromApi(item: PortalActivityItem, locale: ReturnType<typeof useI18n>["locale"], t: ReturnType<typeof useI18n>["t"]): PortalWorkspaceActivityItem {

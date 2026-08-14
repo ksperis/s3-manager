@@ -6,8 +6,9 @@ import { createContext, useContext, useEffect, useMemo, useState, ReactNode } fr
 import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { ExecutionContext, ExecutionContextKind, listExecutionContexts } from "../../api/executionContexts";
-import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
+import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 import { EXECUTION_CONTEXTS_REFRESH_EVENT } from "../../utils/executionContextRefresh";
+import { readStoredUser } from "../../utils/workspaces";
 
 const EXECUTION_CONTEXT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedBrowserExecutionContext;
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
@@ -49,9 +50,7 @@ function readSessionInfo(): SessionInfo {
   if (typeof window === "undefined") {
     return { isSession: false, accountName: null };
   }
-  const parsed = readClientJson<{ authType?: string | null; accountName?: string | null; accountId?: string | null }>(
-    CLIENT_STORAGE_KEYS.sessionUser
-  );
+  const parsed = readStoredUser();
   if (!parsed) {
     return { isSession: false, accountName: null };
   }

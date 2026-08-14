@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../../api/client";
 import type { BrowserObjectVersion } from "../../api/browser";
 import type { BrowserItem, TreeNode, UploadCandidate, WebkitEntry } from "./browserTypes";
 
@@ -100,13 +100,13 @@ export const findTreeNodeByPrefix = (nodes: TreeNode[], targetPrefix: string): T
 export const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 export const isLikelyCorsError = (error: unknown) => {
-  if (!axios.isAxiosError(error)) return false;
+  if (!isApiError(error)) return false;
   if (!error.response) return true;
   return error.code === "ERR_NETWORK" || error.message === "Network Error";
 };
 
 export const isAbortError = (error: unknown) => {
-  if (axios.isAxiosError(error)) {
+  if (isApiError(error)) {
     return error.code === "ERR_CANCELED" || error.name === "CanceledError";
   }
   return error instanceof DOMException && error.name === "AbortError";

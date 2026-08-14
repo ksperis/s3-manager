@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../../api/client";
 import { useCallback, useEffect, useState } from "react";
 import { fetchAdminS3UserStats, ManagerStats } from "../../api/stats";
 
@@ -37,7 +37,7 @@ export function useAdminS3UserStats(
       setError(null);
     } catch (err) {
       let message = "Unable to load storage stats.";
-      if (axios.isAxiosError(err)) {
+      if (isApiError(err)) {
         const detail = err.response?.data?.detail;
         if (typeof detail === "string" && detail.trim()) {
           message = detail;

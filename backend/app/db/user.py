@@ -14,7 +14,6 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
-        UniqueConstraint("auth_provider", "auth_provider_subject", name="uq_users_provider_subject"),
         CheckConstraint(
             "role IN ('ui_superadmin', 'ui_admin', 'ui_user', 'ui_none')",
             name="ck_users_role",
@@ -31,6 +30,7 @@ class User(Base):
     avatar_content_type = Column(String, nullable=True)
     avatar_updated_at = Column(UTCDateTime(), nullable=True)
     hashed_password = Column(String, nullable=True)
+    auth_version = Column(Integer, nullable=False, default=1, server_default="1")
     is_active = Column(Boolean, default=True)
     role = Column(
         String,
@@ -49,8 +49,6 @@ class User(Base):
     can_create_manual_private_connections = Column(Boolean, default=False, nullable=False, server_default="0")
     can_provision_managed_private_connections = Column(Boolean, default=False, nullable=False, server_default="0")
     browser_advanced_features_enabled = Column(Boolean, default=False, nullable=False, server_default="0")
-    auth_provider = Column(String, nullable=True)
-    auth_provider_subject = Column(String, nullable=True)
     created_at = Column(UTCDateTime(), default=utcnow)
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
     last_login_at = Column(UTCDateTime(), nullable=True)

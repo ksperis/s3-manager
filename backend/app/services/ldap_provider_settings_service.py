@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Iterable, Optional
+from urllib.parse import urlparse
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -36,7 +37,6 @@ LDAP_PROVIDER_FIELDS = (
     "timeout_seconds",
     "enabled",
     "allow_insecure",
-    "allow_email_linking",
 )
 
 
@@ -61,6 +61,16 @@ def normalize_ldap_provider_id(provider_id: str) -> str:
     if not normalized or not LDAP_PROVIDER_ID_PATTERN.fullmatch(normalized):
         raise ValueError("Invalid LDAP provider id")
     return normalized
+
+
+def _validate_production_payload(payload: LDAPProviderAdminPayload, settings: Optional[Settings] = None) -> None:
+    settings = settings or get_settings()
+    if settings.app_env != "production" or not payload.enabled:
+        return
+    scheme = urlparse(payload.url).scheme
+    encrypted_transport = scheme == "ldaps" or (scheme == "ldap" and payload.start_tls)
+    if not encrypted_transport or payload.allow_insecure or not payload.tls_verify or payload.allow_legacy_tls:
+        raise ValueError("LDAP provider violates the production TLS policy")
 
 
 def list_effective_ldap_providers(
@@ -97,6 +107,7 @@ def resolve_ldap_provider_map(
 
 
 def create_ldap_provider(db: Session, payload: LDAPProviderAdminPayload) -> LDAPProviderAdminItem:
+    _validate_production_payload(payload)
     provider_id = normalize_ldap_provider_id(payload.provider_id)
     if provider_id in _environment_provider_map():
         raise LDAPProviderManagedByEnvironmentError("LDAP provider is managed by environment settings")
@@ -119,6 +130,7 @@ def update_ldap_provider(
     provider_id: str,
     payload: LDAPProviderAdminPayload,
 ) -> LDAPProviderAdminItem:
+    _validate_production_payload(payload)
     normalized_id = normalize_ldap_provider_id(provider_id)
     payload_id = normalize_ldap_provider_id(payload.provider_id)
     if payload_id != normalized_id:
@@ -191,7 +203,6 @@ def _apply_payload(provider: LdapProvider, payload: LDAPProviderAdminPayload, *,
         timeout_seconds=payload.timeout_seconds,
         enabled=payload.enabled,
         allow_insecure=payload.allow_insecure,
-        allow_email_linking=payload.allow_email_linking,
     )
 
     provider.provider_id = normalize_ldap_provider_id(payload.provider_id)
@@ -210,7 +221,6 @@ def _apply_payload(provider: LdapProvider, payload: LDAPProviderAdminPayload, *,
     provider.timeout_seconds = float(payload.timeout_seconds)
     provider.enabled = bool(payload.enabled)
     provider.allow_insecure = bool(payload.allow_insecure)
-    provider.allow_email_linking = bool(payload.allow_email_linking)
     if replace_secret or payload.bind_password is not None or payload.bind_dn is None or payload.clear_bind_password:
         provider.bind_password = candidate_secret
 
@@ -233,7 +243,6 @@ def _ui_provider_to_settings(provider: LdapProvider) -> LDAPProviderSettings:
         timeout_seconds=provider.timeout_seconds,
         enabled=bool(provider.enabled),
         allow_insecure=bool(provider.allow_insecure),
-        allow_email_linking=bool(provider.allow_email_linking),
     )
 
 
@@ -255,7 +264,6 @@ def _ui_provider_item(provider: LdapProvider) -> LDAPProviderAdminItem:
         timeout_seconds=provider.timeout_seconds,
         enabled=bool(provider.enabled),
         allow_insecure=bool(provider.allow_insecure),
-        allow_email_linking=bool(provider.allow_email_linking),
         source="ui",
         editable=True,
         has_bind_password=bool(provider.bind_password),
@@ -280,7 +288,6 @@ def _environment_provider_item(provider_id: str, provider: LDAPProviderSettings)
         timeout_seconds=provider.timeout_seconds,
         enabled=bool(provider.enabled),
         allow_insecure=bool(provider.allow_insecure),
-        allow_email_linking=bool(provider.allow_email_linking),
         source="environment",
         editable=False,
         field_locks={

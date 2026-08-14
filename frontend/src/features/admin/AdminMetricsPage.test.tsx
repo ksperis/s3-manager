@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api/client";
 
 import AdminMetricsPage from "./AdminMetricsPage";
 
@@ -13,12 +14,10 @@ const getAdminUsageStatsAggregateMock = vi.fn();
 const streamAdminUsageStatsAggregateMock = vi.fn();
 let usageHistoryEnabled = false;
 
-function makeAxiosError(detail: string) {
-  return {
-    isAxiosError: true,
-    response: { data: { detail } },
-    message: "Request failed with status code 403",
-  };
+function makeApiError(detail: string) {
+  return new ApiError("Request failed", {
+    response: { status: 403, data: { detail }, headers: {} },
+  });
 }
 
 function makeCephEndpoint() {
@@ -213,7 +212,7 @@ describe("AdminMetricsPage", () => {
 
   it("keeps disabled storage metrics inside the storage snapshot card", async () => {
     listStorageEndpointsMock.mockResolvedValue([makeCephEndpoint()]);
-    fetchAdminStorageMock.mockRejectedValueOnce(makeAxiosError("Storage metrics are disabled for this endpoint"));
+    fetchAdminStorageMock.mockRejectedValueOnce(makeApiError("Storage metrics are disabled for this endpoint"));
 
     render(
       <MemoryRouter>
@@ -275,7 +274,7 @@ describe("AdminMetricsPage", () => {
 
   it("keeps disabled usage logs inside the traffic card without empty counters", async () => {
     listStorageEndpointsMock.mockResolvedValue([makeCephEndpoint()]);
-    fetchAdminTrafficMock.mockRejectedValueOnce(makeAxiosError("Usage logs are disabled for this endpoint"));
+    fetchAdminTrafficMock.mockRejectedValueOnce(makeApiError("Usage logs are disabled for this endpoint"));
 
     render(
       <MemoryRouter>

@@ -97,8 +97,7 @@ describe("LoginPage LDAP", () => {
       default_workspace: null,
     });
     mocks.loginWithLdap.mockResolvedValue({
-      access_token: "ldap-access-token",
-      token_type: "bearer",
+      status: "authenticated",
       user: {
         id: 42,
         email: "jane@example.test",
@@ -107,7 +106,6 @@ describe("LoginPage LDAP", () => {
         account_links: [],
         s3_user_details: [],
         s3_connection_details: [],
-        auth_provider: "ldap:corp",
       },
     });
   });
@@ -122,7 +120,7 @@ describe("LoginPage LDAP", () => {
     expect(passwordInput).toHaveAttribute("autocomplete", "current-password");
   });
 
-  it("shows directory login when LDAP providers exist and stores ldap auth type", async () => {
+  it("shows directory login without persisting browser credentials", async () => {
     const user = userEvent.setup();
     renderLoginPage();
 
@@ -135,11 +133,7 @@ describe("LoginPage LDAP", () => {
       expect(mocks.loginWithLdap).toHaveBeenCalledWith("corp", "jane", "secret-password");
       expect(mocks.getWorkspaceAccess).toHaveBeenCalledOnce();
     });
-    expect(window.localStorage.getItem("token")).toBe("ldap-access-token");
-    expect(JSON.parse(window.localStorage.getItem("user") || "{}")).toMatchObject({
-      email: "jane@example.test",
-      authType: "ldap",
-      auth_provider: "ldap:corp",
-    });
+    expect(window.localStorage.getItem("token")).toBeNull();
+    expect(window.localStorage.getItem("user")).toBeNull();
   });
 });

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../../api/client";
 import { useCallback, useEffect, useState } from "react";
 import { fetchIamOverview, IamOverview } from "../../api/iamOverview";
 import { S3AccountSelector } from "../../api/accountParams";
@@ -39,7 +39,7 @@ export function useIamOverview(
       setOverview(data);
       setError(data.warnings && data.warnings.length > 0 ? data.warnings.join("; ") : null);
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 403) {
+      if (isApiError(err) && err.response?.status === 403) {
         setError("IAM inventory unavailable for this credential.");
       } else {
         setError(extractApiError(err, "Unable to load IAM overview."));

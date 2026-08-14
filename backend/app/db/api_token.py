@@ -3,7 +3,7 @@
 from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -17,6 +17,8 @@ class ApiToken(Base):
     token_hash = Column(String, nullable=False, unique=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
+    scopes_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    auth_version = Column(Integer, nullable=False, default=1, server_default="1")
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
     last_used_at = Column(UTCDateTime(), nullable=True)
     expires_at = Column(UTCDateTime(), nullable=False)

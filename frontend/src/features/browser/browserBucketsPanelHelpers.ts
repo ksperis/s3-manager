@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../../api/client";
 import type { BrowserBucket } from "../../api/browser";
 import { extractApiError } from "../../utils/apiError";
 
@@ -61,7 +61,7 @@ export function normalizeBrowserListingIssue(
   fallbackTechnicalDetail: string
 ): BrowserListingIssue {
   const technicalDetail = extractApiError(error, fallbackTechnicalDetail);
-  const statusCode = axios.isAxiosError(error) ? error.response?.status : undefined;
+  const statusCode = isApiError(error) ? error.response?.status : undefined;
   const accessDenied = statusCode === 403 || ACCESS_DENIED_PATTERN.test(technicalDetail);
 
   if (accessDenied) {

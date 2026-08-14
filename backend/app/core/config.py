@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import json
+import ipaddress
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
@@ -33,6 +34,8 @@ class OIDCProviderSettings(BaseModel):
     icon_url: Optional[str] = None
     use_pkce: bool = True
     use_nonce: bool = True
+    allowed_algorithms: list[str] = Field(default_factory=lambda: ["RS256"])
+    allowed_hosts: list[str] = Field(default_factory=list)
 
     @field_validator("scopes", mode="before")
     @classmethod
@@ -48,6 +51,15 @@ class OIDCProviderSettings(BaseModel):
                     raise ValueError("Unable to parse scopes JSON") from exc
             return [item.strip() for item in text.split(",") if item.strip()]
         return value
+
+    @field_validator("allowed_algorithms")
+    @classmethod
+    def validate_allowed_algorithms(cls, value: list[str]) -> list[str]:
+        allowed = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256", "PS384", "PS512"}
+        normalized = [str(item).strip().upper() for item in value]
+        if not normalized or any(item not in allowed for item in normalized):
+            raise ValueError("OIDC allowed_algorithms must contain supported asymmetric signature algorithms")
+        return normalized
 
 
 class LDAPProviderSettings(BaseModel):
@@ -69,7 +81,6 @@ class LDAPProviderSettings(BaseModel):
     timeout_seconds: float = Field(5.0, gt=0, le=60)
     enabled: bool = True
     allow_insecure: bool = False
-    allow_email_linking: bool = False
 
     normalize_required_strings = field_validator(
         "display_name",
@@ -106,6 +117,7 @@ class LDAPProviderSettings(BaseModel):
 
 
 SuperAdminSeedMode = Literal["if_empty", "if_missing", "disabled"]
+AppEnvironment = Literal["development", "test", "production"]
 
 ENV_FILE_PATH = Path(__file__).resolve().parents[2] / ".env"
 DEFAULT_SQLITE_DB_PATH = ENV_FILE_PATH.parent / "app.db"
@@ -146,6 +158,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = Field("s3-manager", description="Application name")
+    app_env: AppEnvironment = Field("development", description="Runtime security profile")
     api_v1_prefix: str = "/api"
     jwt_keys: list[str] = Field(
         default_factory=lambda: ["change-me"],
@@ -155,8 +168,21 @@ class Settings(BaseSettings):
         default_factory=lambda: ["change-me"],
         description="Credential key ring (JSON list)",
     )
-    access_token_expire_minutes: int = 60
-    refresh_token_expire_minutes: int = Field(60 * 24 * 14, description="Refresh token expiry (minutes)")
+    ui_jwt_keys: list[str] = Field(default_factory=list, description="Dedicated UI JWT key ring")
+    api_jwt_keys: list[str] = Field(default_factory=list, description="Dedicated API JWT key ring")
+    jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
+    jwt_issuer: str = "s3-manager"
+    ui_jwt_audience: str = "s3-manager-ui"
+    api_jwt_audience: str = "s3-manager-api"
+    pre_auth_jwt_audience: str = "s3-manager-pre-auth"
+    access_token_expire_minutes: int = Field(5, ge=1, le=15)
+    refresh_token_expire_minutes: int = Field(60 * 24 * 7, description="Absolute refresh lifetime (minutes)")
+    ui_session_idle_minutes: int = Field(60 * 12, ge=5)
+    ui_session_absolute_minutes: int = Field(60 * 24 * 7, ge=5)
+    s3_session_idle_minutes: int = Field(30, ge=5)
+    s3_session_absolute_minutes: int = Field(60 * 8, ge=5)
+    pre_auth_expire_minutes: int = Field(5, ge=1, le=10)
+    mfa_recent_minutes: int = Field(15, ge=1, le=60)
     log_level: str = Field("INFO", description="Root log level")
     login_rate_limit_window_seconds: int = Field(
         300,
@@ -169,18 +195,33 @@ class Settings(BaseSettings):
         description="Maximum failed login attempts allowed in rate-limit window",
     )
     api_token_default_expire_days: int = Field(
-        90,
+        30,
         description="Default API token expiry (days)",
     )
     api_token_max_expire_days: int = Field(
-        365,
+        90,
         description="Maximum API token expiry (days)",
     )
     refresh_token_cookie_name: str = Field("refresh_token", description="Cookie name for refresh token")
+    access_token_cookie_name: str = Field("ui_access", description="Cookie name for UI access token")
+    csrf_cookie_name: str = Field("csrf_token", description="Readable CSRF cookie name")
+    pre_auth_cookie_name: str = Field("pre_auth", description="Cookie name for pre-authentication")
     refresh_token_cookie_path: str = Field("/api/auth", description="Cookie path for refresh token")
     refresh_token_cookie_domain: Optional[str] = Field(None, description="Cookie domain for refresh token")
     refresh_token_cookie_secure: bool = Field(False, description="Secure flag for refresh cookie")
     refresh_token_cookie_samesite: str = Field("lax", description="SameSite policy for refresh cookie")
+    public_origin: str = Field("http://localhost:5173", description="Canonical browser origin")
+    allowed_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "testserver"])
+    trusted_proxy_cidrs: list[str] = Field(default_factory=list)
+    require_registered_s3_login_endpoints: bool = False
+    webauthn_rp_id: str = "localhost"
+    webauthn_rp_name: str = "S3 Manager"
+    webauthn_origin: str = "http://localhost:5173"
+    content_security_policy: str = (
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
+        "img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
+        "connect-src 'self'"
+    )
 
     database_url: str = Field(
         _default_sqlite_database_url(),
@@ -286,7 +327,7 @@ class Settings(BaseSettings):
         description="Seed default super-admin login",
     )
     seed_super_admin_password: str = Field(
-        "changeme",
+        "",
         description="Seed default super-admin password",
     )
     seed_super_admin_full_name: Optional[str] = Field(
@@ -294,7 +335,7 @@ class Settings(BaseSettings):
         description="Seed default super-admin name",
     )
     seed_super_admin_mode: SuperAdminSeedMode = Field(
-        "if_empty",
+        "disabled",
         description=(
             "Controls bootstrap super-admin seeding strategy "
             "(SEED_SUPER_ADMIN_MODE: if_empty|if_missing|disabled)"
@@ -544,7 +585,95 @@ class Settings(BaseSettings):
             raise ValueError("api_token_max_expire_days must be >= 1")
         if self.api_token_default_expire_days > self.api_token_max_expire_days:
             raise ValueError("api_token_default_expire_days must be <= api_token_max_expire_days")
+        if self.ui_session_idle_minutes > self.ui_session_absolute_minutes:
+            raise ValueError("ui_session_idle_minutes must be <= ui_session_absolute_minutes")
+        if self.s3_session_idle_minutes > self.s3_session_absolute_minutes:
+            raise ValueError("s3_session_idle_minutes must be <= s3_session_absolute_minutes")
+        for value in self.trusted_proxy_cidrs:
+            try:
+                ipaddress.ip_network(value, strict=False)
+            except ValueError as exc:
+                raise ValueError(f"Invalid trusted proxy CIDR: {value}") from exc
+        if self.app_env == "production":
+            self._validate_production_security()
         return self
+
+    def effective_ui_jwt_keys(self) -> list[str]:
+        return list(self.ui_jwt_keys or self.jwt_keys)
+
+    def effective_api_jwt_keys(self) -> list[str]:
+        return list(self.api_jwt_keys or self.jwt_keys)
+
+    def _validate_production_security(self) -> None:
+        public = urlparse(self.public_origin)
+        if public.scheme != "https" or not public.hostname or public.path not in {"", "/"}:
+            raise ValueError("PUBLIC_ORIGIN must be an HTTPS origin without a path in production")
+        webauthn = urlparse(self.webauthn_origin)
+        if self.webauthn_origin.rstrip("/") != self.public_origin.rstrip("/"):
+            raise ValueError("WEBAUTHN_ORIGIN must exactly match PUBLIC_ORIGIN in production")
+        if webauthn.hostname != self.webauthn_rp_id:
+            raise ValueError("WEBAUTHN_RP_ID must match the WebAuthn origin host in production")
+        if not self.refresh_token_cookie_secure:
+            raise ValueError("Secure authentication cookies are mandatory in production")
+        if self.refresh_token_cookie_domain is not None:
+            raise ValueError("Authentication cookies must remain host-only in production")
+        if self.refresh_token_cookie_samesite.lower() != "lax":
+            raise ValueError("Authentication cookies must use SameSite=Lax in production")
+        if self.seed_super_admin_mode != "disabled":
+            raise ValueError("SEED_SUPER_ADMIN_MODE must be disabled in production")
+        if not self.require_registered_s3_login_endpoints:
+            raise ValueError("Production requires administratively registered S3 login endpoints")
+        if not self.allowed_hosts or any(host.strip() == "*" for host in self.allowed_hosts):
+            raise ValueError("Explicit ALLOWED_HOSTS are mandatory in production")
+        if public.hostname not in {host.strip().lower() for host in self.allowed_hosts}:
+            raise ValueError("ALLOWED_HOSTS must include the PUBLIC_ORIGIN host in production")
+        if self.cors_origins != [self.public_origin]:
+            raise ValueError("CORS_ORIGINS must contain only PUBLIC_ORIGIN in production")
+        for cidr in self.trusted_proxy_cidrs:
+            network = ipaddress.ip_network(cidr, strict=False)
+            if network.prefixlen == 0:
+                raise ValueError("TRUSTED_PROXY_CIDRS cannot trust the entire address space in production")
+        key_sets = {
+            "UI_JWT_KEYS": self.ui_jwt_keys,
+            "API_JWT_KEYS": self.api_jwt_keys,
+            "CREDENTIAL_KEYS": self.credential_keys,
+        }
+        for name, values in key_sets.items():
+            if not values or any(is_weak_secret_value(value) for value in values):
+                raise ValueError(f"{name} must contain strong non-default keys in production")
+        if set(self.ui_jwt_keys) & set(self.api_jwt_keys):
+            raise ValueError("UI and API JWT key rings must be distinct in production")
+        seed_endpoint_configured = "seed_s3_endpoint" in self.model_fields_set
+        seed_endpoint = urlparse(self.seed_s3_endpoint)
+        if seed_endpoint_configured and (seed_endpoint.scheme != "https" or not seed_endpoint.hostname):
+            raise ValueError("SEED_S3_ENDPOINT must use HTTPS in production")
+        production_secrets = {
+            "SEED_S3_SECRET_KEY": self.seed_s3_secret_key if seed_endpoint_configured else None,
+            "SEED_RGW_ADMIN_SECRET_KEY": self.seed_rgw_admin_secret_key,
+            "SEED_SUPERVISION_SECRET_KEY": self.seed_supervision_secret_key,
+            "SEED_CEPH_ADMIN_SECRET_KEY": self.seed_ceph_admin_secret_key,
+            "INTERNAL_CRON_TOKEN": self.internal_cron_token,
+        }
+        for name, value in production_secrets.items():
+            if value is not None and is_weak_secret_value(value):
+                raise ValueError(f"{name} must be a strong non-default secret in production")
+        for provider_id, provider in self.oidc_providers.items():
+            if not provider.enabled:
+                continue
+            if not provider.use_pkce or not provider.use_nonce:
+                raise ValueError(f"OIDC provider {provider_id} must require PKCE and nonce")
+            if urlparse(provider.discovery_url).scheme != "https":
+                raise ValueError(f"OIDC provider {provider_id} discovery URL must use HTTPS")
+            redirect = urlparse(provider.redirect_uri)
+            if redirect.scheme != "https" or redirect.netloc != public.netloc:
+                raise ValueError(f"OIDC provider {provider_id} redirect must use PUBLIC_ORIGIN")
+        for provider_id, provider in self.ldap_providers.items():
+            if not provider.enabled:
+                continue
+            ldap_scheme = urlparse(provider.url).scheme
+            encrypted_transport = ldap_scheme == "ldaps" or (ldap_scheme == "ldap" and provider.start_tls)
+            if not encrypted_transport or provider.allow_insecure or not provider.tls_verify or provider.allow_legacy_tls:
+                raise ValueError(f"LDAP provider {provider_id} violates the production TLS policy")
 
 
 def is_weak_secret_value(value: Optional[str]) -> bool:
@@ -605,16 +734,6 @@ def collect_secret_warnings(settings: Settings) -> list[str]:
         warnings.append(
             "LDAP provider(s) allow legacy TLS cipher compatibility: "
             f"{', '.join(sorted(legacy_tls_ldap))}. Prefer modern ECDHE cipher suites on the LDAP server."
-        )
-    email_linking_ldap = [
-        key
-        for key, provider in ldap_providers.items()
-        if getattr(provider, "enabled", False) and getattr(provider, "allow_email_linking", False)
-    ]
-    if email_linking_ldap:
-        warnings.append(
-            "LDAP provider(s) allow email-based linking to existing local users: "
-            f"{', '.join(sorted(email_linking_ldap))}. Use only during planned identity migrations."
         )
     return warnings
 

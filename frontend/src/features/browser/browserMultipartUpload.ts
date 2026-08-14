@@ -2,7 +2,6 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { runWithConcurrency } from "../../utils/concurrency";
 import { normalizeEtag } from "./browserUtils";
 
@@ -39,12 +38,6 @@ type UploadStreamMultipartParams = {
   partSize: number;
   signal?: AbortSignal;
   lifecycle: BrowserMultipartUploadLifecycle;
-};
-
-const readEtag = (headers: unknown): string | undefined => {
-  if (!headers || typeof headers !== "object") return undefined;
-  const values = headers as Record<string, string | string[] | undefined>;
-  return normalizeEtag(values.etag || values.ETag || values.ETAG);
 };
 
 const abortStartedUpload = async (
@@ -109,22 +102,16 @@ export const uploadBrowserFileMultipart = async ({
             startedUploadId,
             part.partNumber,
           );
-          const response = await axios.put(
-            presignedPart.url,
-            file.slice(part.start, part.end),
-            {
-              headers: presignedPart.headers || {},
-              signal: controller.signal,
-              onUploadProgress: (event) => {
-                recordProgress(
-                  part.partNumber,
-                  event.loaded ?? 0,
-                  part.size,
-                );
-              },
-            },
-          );
-          const etag = readEtag(response.headers);
+          recordProgress(part.partNumber, 0, part.size);
+          const response = await fetch(presignedPart.url, {
+            method: "PUT",
+            headers: presignedPart.headers || {},
+            body: file.slice(part.start, part.end),
+            credentials: "omit",
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error(`Multipart upload failed with status ${response.status}`);
+          const etag = normalizeEtag(response.headers.get("etag") ?? undefined);
           if (!etag) {
             throw new Error("Missing ETag from multipart upload.");
           }
@@ -172,17 +159,17 @@ export const uploadBrowserStreamMultipart = async ({
       currentPartNumber,
     );
     const partBuffer = new Uint8Array(partBytes).buffer;
-    const response = await axios.put(
-      presignedPart.url,
-      new Blob([partBuffer], {
+    const response = await fetch(presignedPart.url, {
+      method: "PUT",
+      headers: presignedPart.headers || {},
+      body: new Blob([partBuffer], {
         type: contentType || "application/octet-stream",
       }),
-      {
-        headers: presignedPart.headers || {},
-        signal,
-      },
-    );
-    const etag = readEtag(response.headers);
+      credentials: "omit",
+      signal,
+    });
+    if (!response.ok) throw new Error(`Multipart upload failed with status ${response.status}`);
+    const etag = normalizeEtag(response.headers.get("etag") ?? undefined);
     if (!etag) {
       throw new Error("Missing ETag from multipart upload.");
     }

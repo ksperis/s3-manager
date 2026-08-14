@@ -4,11 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { GeneralSettings } from "../../api/appSettings";
 import { useWorkspaceSwitcherModel } from "../EnvironmentSwitcher";
+import { readStoredUser, setSessionUserCache } from "../../utils/workspaces";
 
 const mocks = vi.hoisted(() => ({
   fetchCurrentUser: vi.fn(),
   generalSettings: {} as GeneralSettings,
   getWorkspaceAccess: vi.fn(),
+  sessionUser: null as Record<string, unknown> | null,
+}));
+
+vi.mock("../../auth/SessionProvider", () => ({
+  useSession: () => ({
+    authenticated: Boolean(mocks.sessionUser),
+    loading: false,
+    user: mocks.sessionUser,
+  }),
 }));
 
 vi.mock("../GeneralSettingsContext", () => ({
@@ -97,33 +107,32 @@ function renderSwitcherModel(initialPath: string) {
 }
 
 function storePortalAdminUser() {
-  window.localStorage.setItem(
-    "user",
-    JSON.stringify({
+  const user = {
       id: 1,
       email: "admin@example.com",
       role: "ui_admin",
       authType: "password",
       account_links: [{ account_id: 101, role: "account_administrator" }],
-    })
-  );
+  };
+  mocks.sessionUser = user;
+  window.localStorage.setItem("user", JSON.stringify(user));
 }
 
 function storePlainAdminUser() {
-  window.localStorage.setItem(
-    "user",
-    JSON.stringify({
+  const user = {
       id: 2,
       email: "plain-admin@example.com",
       role: "ui_admin",
       authType: "password",
       account_links: [],
-    })
-  );
+  };
+  mocks.sessionUser = user;
+  window.localStorage.setItem("user", JSON.stringify(user));
 }
 
 describe("useWorkspaceSwitcherModel Portal workspace", () => {
   beforeEach(() => {
+    setSessionUserCache(null);
     mocks.generalSettings = { ...baseSettings };
     mocks.fetchCurrentUser.mockResolvedValue({
       id: 1,
@@ -145,6 +154,7 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
   });
 
   afterEach(() => {
+    setSessionUserCache(null);
     window.localStorage.clear();
     vi.clearAllMocks();
   });
@@ -196,7 +206,6 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
   });
 
   it("refreshes the stored user before deciding Portal is unavailable", async () => {
-    window.localStorage.setItem("token", "test-token");
     storePlainAdminUser();
     mocks.fetchCurrentUser.mockResolvedValue({
       id: 2,
@@ -212,7 +221,7 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       const options = within(screen.getByRole("list", { name: "Workspace options" }));
       expect(options.getByText("Portal (self-service)")).toBeInTheDocument();
     });
-    expect(JSON.parse(window.localStorage.getItem("user") ?? "{}").account_links[0].role).toBe(
+    expect(readStoredUser()?.account_links?.[0]?.role).toBe(
       "account_administrator"
     );
   });
@@ -222,17 +231,17 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       ...baseSettings,
       storage_ops_enabled: true,
     };
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
+    const portalOnlyUser = {
         id: 3,
         email: "portal-only@example.com",
         role: "ui_user",
         authType: "password",
         can_access_storage_ops: true,
         account_links: [{ account_id: 101, role: "portal_user" }],
-      })
-    );
+    };
+    mocks.sessionUser = portalOnlyUser;
+    mocks.fetchCurrentUser.mockResolvedValue(portalOnlyUser);
+    window.localStorage.setItem("user", JSON.stringify(portalOnlyUser));
     mocks.getWorkspaceAccess.mockResolvedValue({
       admin: { available: false, context_count: 0 },
       ceph_admin: { available: false, context_count: 0 },

@@ -22,7 +22,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router-dom";
-import type { AxiosProgressEvent } from "axios";
+import type { UploadProgressEvent } from "../../api/browser";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import {
@@ -7091,7 +7091,7 @@ export default function BrowserPage({
     bucket: string,
     file: File,
     key: string,
-    onProgress: (event: AxiosProgressEvent) => void,
+    onProgress: (event: UploadProgressEvent) => void,
     controller?: AbortController,
   ) => {
     await uploadBrowserFile({
@@ -7225,7 +7225,7 @@ export default function BrowserPage({
           controller,
         );
       } else {
-        const onProgress = (event: AxiosProgressEvent) => {
+        const onProgress = (event: UploadProgressEvent) => {
           const total = event.total ?? file.size;
           const progress = total ? Math.round((event.loaded / total) * 100) : 0;
           updateOperation(operationId, { progress });

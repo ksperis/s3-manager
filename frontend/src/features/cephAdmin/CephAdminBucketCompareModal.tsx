@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
+import { isApiError } from "../../api/client";
 import Modal from "../../components/Modal";
 import WorkflowPage from "../../components/WorkflowPage";
 import UiBadge from "../../components/ui/UiBadge";
@@ -434,7 +434,7 @@ export default function CephAdminBucketCompareModal({
       (result, index) => {
         const cancelled =
           cancelRequestedRef.current ||
-          (result.status === "rejected" && axios.isAxiosError(result.reason) && result.reason.code === "ERR_CANCELED") ||
+            (result.status === "rejected" && isApiError(result.reason) && result.reason.code === "ERR_CANCELED") ||
           (result.status === "rejected" && result.reason instanceof DOMException && result.reason.name === "AbortError");
         setProgress((prev) => ({
           completed: prev.completed + 1,

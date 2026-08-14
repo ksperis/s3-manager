@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler as fastapi_http_exception_handler
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from botocore.exceptions import ClientError
 from sqlalchemy.exc import DatabaseError
@@ -139,13 +140,45 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID", "X-S3-Workspace"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    has_ui_auth_cookie = any(
+        request.cookies.get(name)
+        for name in (
+            settings.access_token_cookie_name,
+            settings.refresh_token_cookie_name,
+            settings.pre_auth_cookie_name,
+        )
+    )
+    if has_ui_auth_cookie and request.headers.get("authorization"):
+        response = JSONResponse(
+            status_code=400,
+            content={"detail": "Cookie and Bearer authentication cannot be combined"},
+        )
+    else:
+        response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = settings.content_security_policy
+    response.headers["X-Frame-Options"] = "DENY"
+    if settings.app_env == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    if request.url.path.startswith(f"{settings.api_v1_prefix}/auth"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.get("/health")

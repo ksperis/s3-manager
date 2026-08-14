@@ -7,10 +7,16 @@ import { useNavigate } from "react-router-dom";
 import {
   fetchLdapProviders,
   fetchOidcProviders,
+  beginWebAuthnAuthentication,
+  beginWebAuthnRegistration,
+  finishWebAuthnAuthentication,
+  finishWebAuthnRegistration,
   login,
   loginWithKeys,
   loginWithLdap,
   startOidcLogin,
+  verifyRecoveryCode,
+  type AuthenticationResponse,
   type LDAPProviderInfo,
   type OidcProviderInfo,
 } from "../../api/auth";
@@ -20,7 +26,9 @@ import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/G
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
-import { CLIENT_STORAGE_KEYS, removeClientStorage, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
+import { CLIENT_STORAGE_KEYS, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
+import { useSession } from "../../auth/SessionProvider";
+import { authenticatePasskey, createPasskey } from "../../auth/webauthn";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import {
   resolvePostLoginPath,
@@ -35,6 +43,7 @@ export default function LoginPage() {
   const { setGeneralSettings } = useGeneralSettings();
   const { setLanguagePreference } = useLanguage();
   const { setTheme } = useTheme();
+  const { acceptAuthentication } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [ldapUsername, setLdapUsername] = useState("");
@@ -56,6 +65,14 @@ export default function LoginPage() {
   const [selectedEndpoint, setSelectedEndpoint] = useState("");
   const [customEndpoint, setCustomEndpoint] = useState("");
   const [loginBrandingLogoFailed, setLoginBrandingLogoFailed] = useState(false);
+  const [mfaStage, setMfaStage] = useState<"mfa_required" | "mfa_enrollment_required" | null>(() => {
+    if (typeof window === "undefined") return null;
+    const value = new URLSearchParams(window.location.search).get("mfa");
+    return value === "mfa_required" || value === "mfa_enrollment_required" ? value : null;
+  });
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [pendingEnrollment, setPendingEnrollment] = useState<AuthenticationResponse | null>(null);
   const loadGeneralSettings = async (): Promise<GeneralSettings> => {
     try {
       const settings = await fetchGeneralSettings();
@@ -78,6 +95,40 @@ export default function LoginPage() {
       console.error(workspaceError);
       return resolvePostLoginPath(sessionUser, settings);
     }
+  };
+
+  const finishLogin = async (res: AuthenticationResponse, authType: SessionUser["authType"]) => {
+    if (res.status === "mfa_required" || res.status === "mfa_enrollment_required") {
+      setMfaStage(res.status);
+      return;
+    }
+    if (res.status !== "authenticated") {
+      throw new Error("Authentication requires administrator approval");
+    }
+    acceptAuthentication(res, authType);
+    const sessionUser: SessionUser = res.user
+      ? { ...res.user, authType }
+      : {
+          email: res.session?.account_id ? `${res.session.account_id}@s3-session` : "s3-session",
+          role: "ui_user",
+          authType: "s3_session",
+          actorType: res.session?.actor_type,
+          accountId: res.session?.account_id ?? null,
+          accountName: res.session?.account_name ?? null,
+          capabilities: res.session?.capabilities,
+        };
+    if (res.user) {
+      setLanguagePreference(res.user.ui_language ?? "auto");
+      if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
+        setTheme(res.user.ui_preferences.theme);
+      }
+    } else {
+      setLanguagePreference("auto");
+    }
+    const appSettings = await loadGeneralSettings();
+    const destination = await resolveInteractiveDestination(sessionUser, appSettings);
+    prefetchWorkspaceBranch(destination);
+    navigate(destination, { replace: true });
   };
 
   useEffect(() => {
@@ -164,18 +215,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await login(email, password);
-      writeClientStorage(CLIENT_STORAGE_KEYS.authToken, res.access_token);
-      const sessionUser: SessionUser = { ...res.user, authType: "password" };
-      writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, sessionUser);
-      setLanguagePreference(res.user.ui_language ?? "auto");
-      if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
-        setTheme(res.user.ui_preferences.theme);
-      }
-      removeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
-      const settings = await loadGeneralSettings();
-      const destination = await resolveInteractiveDestination(sessionUser, settings);
-      prefetchWorkspaceBranch(destination);
-      navigate(destination, { replace: true });
+      await finishLogin(res, "password");
     } catch (err) {
       console.error(err);
       setError("Invalid credentials or server unavailable");
@@ -196,18 +236,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await loginWithLdap(providerId, ldapUsername.trim(), ldapPassword);
-      writeClientStorage(CLIENT_STORAGE_KEYS.authToken, res.access_token);
-      const sessionUser: SessionUser = { ...res.user, authType: "ldap" };
-      writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, sessionUser);
-      setLanguagePreference(res.user.ui_language ?? "auto");
-      if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
-        setTheme(res.user.ui_preferences.theme);
-      }
-      removeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
-      const settings = await loadGeneralSettings();
-      const destination = await resolveInteractiveDestination(sessionUser, settings);
-      prefetchWorkspaceBranch(destination);
-      navigate(destination, { replace: true });
+      await finishLogin(res, "ldap");
     } catch (err) {
       console.error(err);
       setError("Unable to authenticate with this directory account");
@@ -230,27 +259,12 @@ export default function LoginPage() {
         ? normalizedCustom || normalizedSelected || normalizedDefault || undefined
         : undefined;
       const res = await loginWithKeys(accessKey.trim(), secretKey.trim(), endpointUrl);
-      writeClientStorage(CLIENT_STORAGE_KEYS.authToken, res.access_token);
       if (endpointUrl) {
         writeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint, endpointUrl);
       } else {
         removeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
       }
-      const userPayload: SessionUser = {
-        email: res.session.account_id ? `${res.session.account_id}@s3-session` : "s3-session",
-        role: "ui_user",
-        authType: "s3_session",
-        actorType: res.session.actor_type,
-        accountId: res.session.account_id ?? null,
-        accountName: res.session.account_name ?? null,
-        capabilities: res.session.capabilities,
-      };
-      writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, userPayload);
-      setLanguagePreference("auto");
-      const settings = await loadGeneralSettings();
-      const destination = resolvePostLoginPath(userPayload, settings);
-      prefetchWorkspaceBranch(destination);
-      navigate(destination, { replace: true });
+      await finishLogin(res, "s3_session");
     } catch (err) {
       console.error(err);
       setError("Unable to authenticate with these access keys");
@@ -274,6 +288,48 @@ export default function LoginPage() {
       console.error(err);
       setOidcError("Unable to start external authentication");
       setOidcLoading(null);
+    }
+  };
+
+  const completePasskey = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = mfaStage === "mfa_enrollment_required"
+        ? await (async () => {
+            const options = await beginWebAuthnRegistration();
+            const credential = await createPasskey(options);
+            return finishWebAuthnRegistration(credential);
+          })()
+        : await (async () => {
+            const options = await beginWebAuthnAuthentication();
+            const credential = await authenticatePasskey(options);
+            return finishWebAuthnAuthentication(credential);
+          })();
+      if (res.recovery_codes?.length) {
+        setRecoveryCodes(res.recovery_codes);
+        setPendingEnrollment(res);
+        return;
+      }
+      await finishLogin(res, "password");
+    } catch (err) {
+      console.error(err);
+      setError("Passkey verification failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const completeRecovery = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await finishLogin(await verifyRecoveryCode(recoveryCode), "password");
+    } catch (err) {
+      console.error(err);
+      setError("The recovery code is invalid or has already been used.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -311,6 +367,58 @@ export default function LoginPage() {
       setMode("password");
     }
   }, [allowAccessKeys, hasLdapProviders, mode]);
+
+  if (mfaStage) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+        <section className="w-full max-w-md rounded-3xl bg-white p-8 text-slate-900 shadow-2xl">
+          <h1 className="text-2xl font-semibold">
+            {mfaStage === "mfa_enrollment_required" ? "Create your administrator passkey" : "Verify your passkey"}
+          </h1>
+          <p className="mt-3 ui-body text-slate-600">
+            Administrator access requires user verification with a passkey bound to this site.
+          </p>
+          {error && <div className="mt-4"><UiInlineMessage tone="error">{error}</UiInlineMessage></div>}
+          {!pendingEnrollment && (
+            <button type="button" className={`${buttonClasses} mt-6`} disabled={loading} onClick={() => void completePasskey()}>
+              {mfaStage === "mfa_enrollment_required" ? "Create passkey" : "Use passkey"}
+            </button>
+          )}
+          {mfaStage === "mfa_required" && !pendingEnrollment && (
+            <div className="mt-6 border-t border-slate-200 pt-5">
+              <label className="ui-body font-medium" htmlFor="recovery-code">Recovery code</label>
+              <input
+                id="recovery-code"
+                className={inputClasses}
+                value={recoveryCode}
+                onChange={(event) => setRecoveryCode(event.target.value)}
+                autoComplete="one-time-code"
+              />
+              <button type="button" className="mt-3 ui-body font-semibold text-primary" disabled={loading || !recoveryCode.trim()} onClick={() => void completeRecovery()}>
+                Use recovery code
+              </button>
+            </div>
+          )}
+          {recoveryCodes.length > 0 && (
+            <div className="mt-6 rounded-xl bg-amber-50 p-4 text-amber-950">
+              <p className="font-semibold">Save these one-time recovery codes now.</p>
+              <ul className="mt-2 grid grid-cols-2 gap-1 font-mono text-sm">
+                {recoveryCodes.map((code) => <li key={code}>{code}</li>)}
+              </ul>
+              <button
+                type="button"
+                className={`${buttonClasses} mt-5`}
+                disabled={loading || !pendingEnrollment}
+                onClick={() => pendingEnrollment && void finishLogin(pendingEnrollment, "password")}
+              >
+                I saved these recovery codes
+              </button>
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">

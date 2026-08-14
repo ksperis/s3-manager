@@ -6,9 +6,21 @@ services:
   backend:
     image: ${S3_MANAGER_BACKEND_IMAGE:-ghcr.io/ksperis/s3-manager-backend}:${S3_MANAGER_TAG:-latest}
     environment:
-      CORS_ORIGINS: '["http://127.0.0.1:8080", "http://localhost:8080"]'
+      APP_ENV: ${APP_ENV:-development}
+      UI_JWT_KEYS: '${UI_JWT_KEYS:-["change-me"]}'
+      API_JWT_KEYS: '${API_JWT_KEYS:-["change-me"]}'
+      CREDENTIAL_KEYS: '${CREDENTIAL_KEYS:-["change-me"]}'
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://127.0.0.1:8080", "http://localhost:8080"]}'
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:8080}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      ALLOWED_HOSTS: '${ALLOWED_HOSTS:-["localhost", "127.0.0.1", "backend"]}'
+      TRUSTED_PROXY_CIDRS: '${TRUSTED_PROXY_CIDRS:-[]}'
+      REFRESH_TOKEN_COOKIE_SECURE: ${REFRESH_TOKEN_COOKIE_SECURE:-false}
+      REQUIRE_REGISTERED_S3_LOGIN_ENDPOINTS: ${REQUIRE_REGISTERED_S3_LOGIN_ENDPOINTS:-false}
+      SEED_SUPER_ADMIN_MODE: disabled
       DATABASE_URL: sqlite:////data/app.db
-      INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:-change-me-internal-token}
+      INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:?INTERNAL_CRON_TOKEN must be set}
       BILLING_DAILY_RETENTION_DAYS: ${BILLING_DAILY_RETENTION_DAYS:-365}
       QUOTA_HISTORY_HOURLY_RETENTION_DAYS: ${QUOTA_HISTORY_HOURLY_RETENTION_DAYS:-30}
       QUOTA_HISTORY_DAILY_RETENTION_DAYS: ${QUOTA_HISTORY_DAILY_RETENTION_DAYS:-365}
@@ -16,20 +28,22 @@ services:
     volumes:
       - backend-data:/data
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
   frontend:
     image: ${S3_MANAGER_FRONTEND_IMAGE:-ghcr.io/ksperis/s3-manager-frontend}:${S3_MANAGER_TAG:-latest}
     ports:
       - "8080:80"
     depends_on:
       - backend
+    environment:
+      CSP_CONNECT_SRC: ${CSP_CONNECT_SRC:-"'self'"}
   scheduler:
     image: alpine:3.20
     depends_on:
       - backend
     environment:
       BACKEND_API_BASE: ${BACKEND_API_BASE:-http://backend:8000/api}
-      INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:-change-me-internal-token}
+      INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:?INTERNAL_CRON_TOKEN must be set}
       HEALTHCHECK_CRON_SCHEDULE: ${HEALTHCHECK_CRON_SCHEDULE:-*/5 * * * *}
       BILLING_CRON_SCHEDULE: ${BILLING_CRON_SCHEDULE:-0 2 * * *}
       QUOTA_MONITOR_CRON_SCHEDULE: ${QUOTA_MONITOR_CRON_SCHEDULE:-0 * * * *}

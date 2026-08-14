@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api/client";
 
 const mocks = vi.hoisted(() => ({
   listStorageOpsBuckets: vi.fn(),
@@ -154,10 +155,9 @@ describe("StorageOpsBucketDetailPage", () => {
   });
 
   it("shows an explicit unavailable state when validation is denied", async () => {
-    mocks.listStorageOpsBuckets.mockRejectedValue({
-      isAxiosError: true,
-      response: { status: 403, data: { detail: "Storage Ops access denied" } },
-    });
+    mocks.listStorageOpsBuckets.mockRejectedValue(new ApiError("Access denied", {
+      response: { status: 403, data: { detail: "Storage Ops access denied" }, headers: {} },
+    }));
 
     renderRoute("/storage-ops/buckets/bucket-a?ctx=account-1");
 

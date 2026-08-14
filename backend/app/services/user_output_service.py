@@ -255,7 +255,6 @@ class UserOutputService:
             effective_access=EffectiveAccessService(
                 self.db
             ).to_user_effective_access(user),
-            auth_provider=user.auth_provider,
             last_login_at=user.last_login_at,
         )
 

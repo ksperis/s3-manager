@@ -3,7 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage, removeClientStorage, writeClientStorage } from "../utils/clientStorage";
+import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../utils/clientStorage";
+import { readStoredUser } from "../utils/workspaces";
 
 type Theme = "light" | "dark";
 type ThemeSource = "system" | "user";
@@ -23,7 +24,7 @@ function getPreferredTheme(): { theme: Theme; source: ThemeSource } {
   if (stored === "light" || stored === "dark") {
     return { theme: stored, source: "user" };
   }
-  const parsedUser = readClientJson<{ ui_preferences?: { theme?: string | null } | null }>(CLIENT_STORAGE_KEYS.sessionUser);
+  const parsedUser = readStoredUser();
   if (parsedUser) {
     const preferred = parsedUser.ui_preferences?.theme;
     if (preferred === "light" || preferred === "dark") {

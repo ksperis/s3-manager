@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Iterable, Optional
+from urllib.parse import urlparse
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -59,6 +60,20 @@ def normalize_oidc_provider_id(provider_id: str) -> str:
     return normalized
 
 
+def _validate_production_payload(payload: OIDCProviderAdminPayload, settings: Optional[Settings] = None) -> None:
+    settings = settings or get_settings()
+    if settings.app_env != "production" or not payload.enabled:
+        return
+    discovery = urlparse(payload.discovery_url)
+    redirect = urlparse(payload.redirect_uri)
+    if discovery.scheme != "https" or not discovery.hostname:
+        raise ValueError("OIDC discovery must use HTTPS in production")
+    if redirect.scheme != "https" or redirect.netloc != urlparse(settings.public_origin).netloc:
+        raise ValueError("OIDC redirect must use PUBLIC_ORIGIN in production")
+    if not payload.use_pkce or not payload.use_nonce:
+        raise ValueError("OIDC PKCE and nonce are mandatory in production")
+
+
 def list_effective_oidc_providers(
     db: Session,
     settings: Optional[Settings] = None,
@@ -93,6 +108,7 @@ def resolve_oidc_provider_map(
 
 
 def create_oidc_provider(db: Session, payload: OIDCProviderAdminPayload) -> OIDCProviderAdminItem:
+    _validate_production_payload(payload)
     provider_id = normalize_oidc_provider_id(payload.provider_id)
     if provider_id in _environment_provider_map():
         raise OIDCProviderManagedByEnvironmentError("OIDC provider is managed by environment settings")
@@ -116,6 +132,7 @@ def update_oidc_provider(
     provider_id: str,
     payload: OIDCProviderAdminPayload,
 ) -> OIDCProviderAdminItem:
+    _validate_production_payload(payload)
     normalized_id = normalize_oidc_provider_id(provider_id)
     payload_id = normalize_oidc_provider_id(payload.provider_id)
     if payload_id != normalized_id:

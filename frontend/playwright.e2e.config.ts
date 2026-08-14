@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 
 import { defineConfig } from "@playwright/test";
 
-const frontendUrl = "http://127.0.0.1:4173";
+const frontendUrl = "http://localhost:4173";
 const backendHealthUrl = "http://127.0.0.1:8000/health";
 const motoServerUrl = process.env.E2E_S3_ENDPOINT ?? "http://localhost:5000";
 const storageStatePath = "./e2e/.auth/browser-user.json";
@@ -36,7 +36,7 @@ const webServer = [
     reuseExistingServer: !process.env.CI,
   },
   {
-    command: "npm run dev -- --host 127.0.0.1 --port 4173",
+    command: "npm run dev -- --host localhost --port 4173",
     url: frontendUrl,
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
@@ -65,6 +65,14 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   projects: [
+    {
+      name: "auth",
+      testMatch: "auth/**/*.spec.ts",
+      use: {
+        browserName: "chromium",
+        storageState: { cookies: [], origins: [] },
+      },
+    },
     {
       name: "setup",
       testMatch: "setup/**/*.setup.ts",

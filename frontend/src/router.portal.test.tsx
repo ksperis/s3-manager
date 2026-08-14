@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneralSettings } from "./api/appSettings";
 import { RequirePortalAccess, createAppRoutes } from "./router";
+import { readStoredUser, setSessionUserCache } from "./utils/workspaces";
 
 const mocks = vi.hoisted(() => ({
   fetchCurrentUser: vi.fn(),
@@ -63,10 +64,12 @@ describe("portal routes", () => {
       authType: "password",
       account_links: [],
     });
+    setSessionUserCache(null);
     window.localStorage.clear();
   });
 
   afterEach(() => {
+    setSessionUserCache(null);
     window.localStorage.clear();
     vi.clearAllMocks();
   });
@@ -114,7 +117,6 @@ describe("portal routes", () => {
   });
 
   it("redirects /portal to unauthorized when no explicit portal account role exists", async () => {
-    window.localStorage.setItem("token", "test-token");
     window.localStorage.setItem(
       "user",
       JSON.stringify({
@@ -148,7 +150,6 @@ describe("portal routes", () => {
       authType: "password",
       account_links: [{ account_id: 24, role: "portal_manager" }],
     });
-    window.localStorage.setItem("token", "test-token");
     window.localStorage.setItem(
       "user",
       JSON.stringify({
@@ -172,8 +173,7 @@ describe("portal routes", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Portal workspace" })).toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem("user") ?? "{}").account_links[0].role).toBe(
-      "portal_manager"
-    );
+    expect(readStoredUser()?.account_links?.[0]?.role).toBe("portal_manager");
+    expect(window.localStorage.getItem("user")).not.toContain("portal_manager");
   });
 });

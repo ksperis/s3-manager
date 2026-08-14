@@ -5,13 +5,14 @@ from __future__ import annotations
 from app.utils.time import utcnow
 
 import uuid
+import json
 from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import constant_time_equal, create_access_token, hash_refresh_token
+from app.core.security import constant_time_equal, create_api_access_token, hash_refresh_token
 from app.db import ApiToken, User, is_admin_ui_role
 
 settings = get_settings()
@@ -34,6 +35,7 @@ class ApiTokenService:
         user: User,
         *,
         name: str,
+        scopes: list[str],
         expires_in_days: Optional[int] = None,
     ) -> tuple[str, ApiToken]:
         if not is_admin_ui_role(user.role):
@@ -51,23 +53,27 @@ class ApiTokenService:
         now = utcnow()
         expires_at = now + timedelta(days=days)
         jti = uuid.uuid4().hex
-        token = create_access_token(
-            data={
-                "sub": user.email,
-                "uid": user.id,
-                "role": user.role,
-                "auth_type": "api_token",
-                "typ": "api_admin",
-                "jti": jti,
-            },
+        token_id = str(uuid.uuid4())
+        normalized_scopes = sorted(set(scopes))
+        if not normalized_scopes:
+            raise ApiTokenError("At least one API token scope is required")
+        token = create_api_access_token(
+            user_id=user.id,
+            token_id=token_id,
+            auth_version=user.auth_version,
+            role=user.role,
+            scopes=normalized_scopes,
             expires_delta=expires_at - now,
+            jti=jti,
         )
         row = ApiToken(
-            id=str(uuid.uuid4()),
+            id=token_id,
             jti=jti,
             token_hash=hash_refresh_token(token),
             user_id=user.id,
             name=token_name,
+            scopes_json=json.dumps(normalized_scopes, separators=(",", ":")),
+            auth_version=user.auth_version,
             created_at=now,
             expires_at=expires_at,
         )
@@ -103,10 +109,15 @@ class ApiTokenService:
             self.db.refresh(row)
         return row
 
-    def resolve_user_from_claims(self, claims: dict, *, token: Optional[str] = None) -> Optional[User]:
+    def resolve_user_from_claims(
+        self,
+        claims: dict,
+        *,
+        token: Optional[str] = None,
+        required_scope: Optional[str] = None,
+    ) -> Optional[User]:
         token_type = claims.get("typ")
-        auth_type = claims.get("auth_type")
-        if token_type != "api_admin" and auth_type != "api_token":
+        if token_type != "api_access":
             return None
         jti = claims.get("jti")
         uid = claims.get("uid")
@@ -126,8 +137,22 @@ class ApiTokenService:
             return None
         if row.user_id != user_id:
             return None
+        if claims.get("sid") != row.id or claims.get("auth_version") != row.auth_version:
+            return None
+        try:
+            db_scopes = sorted(json.loads(row.scopes_json))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+        claim_scopes = sorted(claims.get("scopes") or [])
+        if db_scopes != claim_scopes or (required_scope and required_scope not in db_scopes):
+            return None
         user = self.db.query(User).filter(User.id == user_id).first()
-        if not user or not user.is_active or not is_admin_ui_role(user.role):
+        if (
+            not user
+            or not user.is_active
+            or not is_admin_ui_role(user.role)
+            or user.auth_version != row.auth_version
+        ):
             return None
         row.last_used_at = now
         self.db.add(row)

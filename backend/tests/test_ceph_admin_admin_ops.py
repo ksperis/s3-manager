@@ -19,6 +19,7 @@ from app.models.ceph_admin import (
 )
 from app.routers.ceph_admin import admin_ops, bucket_admin_ops, bucket_index_ops, identity_admin_ops
 from app.services.rgw_admin import RGWAdminError, RGWAdminOperationResponse
+from router_test_utils import effective_routes
 
 
 def _upstream(
@@ -298,7 +299,7 @@ def test_index_check_rejects_check_objects_without_fix():
 
 
 def test_admin_ops_router_delegates_index_check_routes():
-    assert len(admin_ops.router.routes) == 7
+    assert len(effective_routes(admin_ops.router)) == 7
     assert len(identity_admin_ops.router.routes) == 2
     assert len(bucket_admin_ops.router.routes) == 3
     assert len(bucket_index_ops.router.routes) == 2

@@ -8,7 +8,8 @@ import { useGeneralSettings } from "./GeneralSettingsContext";
 import type { TopbarDropdownOption } from "./TopbarDropdownSelect";
 import { getWorkspaceAccess } from "../api/executionContexts";
 import { fetchCurrentUser } from "../api/users";
-import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientJson, writeClientStorage } from "../utils/clientStorage";
+import { writeClientStorage } from "../utils/clientStorage";
+import { useSession } from "../auth/SessionProvider";
 import {
   WORKSPACE_STORAGE_KEY,
   isAdminLikeRole,
@@ -17,6 +18,7 @@ import {
   type WorkspaceId,
   readStoredUser,
   readStoredWorkspaceId,
+  setSessionUserCache,
   resolveAvailableWorkspacesWithFlags,
   resolveWorkspaceFromPath,
 } from "../utils/workspaces";
@@ -40,15 +42,16 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     availability: { manager: false, browser: false, portal: false },
   });
   const { generalSettings } = useGeneralSettings();
+  const { authenticated, user: sessionUser } = useSession();
 
   useEffect(() => {
-    if (!readClientStorage(CLIENT_STORAGE_KEYS.authToken)) return;
+    if (!authenticated) return;
     let cancelled = false;
     fetchCurrentUser()
       .then((currentUser) => {
         if (cancelled) return;
-        const mergedUser = { ...(readStoredUser() ?? {}), ...currentUser } as SessionUser;
-        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, mergedUser);
+        const mergedUser = { ...(sessionUser ?? {}), ...currentUser } as SessionUser;
+        setSessionUserCache(mergedUser);
         setUser(mergedUser);
       })
       .catch(() => {
@@ -57,7 +60,7 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authenticated, sessionUser]);
 
   const requiresContextResolution =
     user?.authType !== "s3_session" &&

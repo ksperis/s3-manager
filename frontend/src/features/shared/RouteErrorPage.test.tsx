@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { Outlet, Route, RouterProvider, createMemoryRouter, createRoutesFromElements } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "../../components/theme";
+import { ApiError } from "../../api/client";
 import RouteErrorPage from "./RouteErrorPage";
 
 function ThrowingRoute({ error }: { error: unknown }) {
@@ -47,10 +48,7 @@ describe("RouteErrorPage", () => {
     );
     window.localStorage.setItem("theme", "light");
 
-    const { container } = renderRouteError({
-      isAxiosError: true,
-      message: "Network Error",
-    });
+    const { container } = renderRouteError(new ApiError("Network Error"));
 
     expect(document.documentElement).not.toHaveClass("dark");
     expect(container.querySelector("main")).toHaveClass("bg-slate-50", "dark:bg-slate-950");

@@ -13,6 +13,12 @@ credentials perform S3, IAM, or RGW operations.
 | Portal grant model | User-facing Storage Space visibility and role. | Private Owner, team Viewer/Editor grants, project Manager, Portal account links. |
 | Backend workflow identity | Explicit technical credential used for controlled orchestration. | Portal IAM provisioning, healthchecks, billing, quota, key rotation. |
 
+UI sessions are represented by `auth_sessions` and single-use
+`refresh_tokens`. `external_identities` binds an immutable provider subject to
+a user; email collisions are held in `external_identity_link_requests` for
+superadmin approval. `users.auth_version` is the immediate invalidation boundary
+for password, role, activation, MFA, and external-identity changes.
+
 ## Personal storage identity contract
 
 - Every human operator uses a dedicated IAM identity or owned private S3
@@ -133,9 +139,10 @@ allowed.
   Ops configuration clipboard are operational tab state. They are not shared
   through `localStorage`; bucket/prefix position and the clipboard use
   `sessionStorage`, while row selections start empty after a remount.
-- Access-token refresh is serialized across tabs. After one tab rotates the
-  refresh cookie, waiting tabs reuse the newly stored access token instead of
-  attempting a second rotation.
+- Cookie refresh is serialized across tabs with Web Locks and a storage lease
+  fallback. After one tab rotates the single-use refresh cookie, waiting tabs
+  reuse the resulting server session and call `/api/auth/session`; no access
+  token is stored in browser storage.
 
 These rules intentionally do not migrate former shared selector, selection, or
 Browser-position snapshots. Old values are ignored rather than kept through a

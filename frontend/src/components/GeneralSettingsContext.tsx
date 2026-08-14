@@ -4,12 +4,8 @@
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { fetchGeneralSettings, GeneralSettings } from "../api/appSettings";
-import {
-  CLIENT_STORAGE_KEYS,
-  readClientJson,
-  readClientStorage,
-  writeClientJson,
-} from "../utils/clientStorage";
+import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../utils/clientStorage";
+import { useSession } from "../auth/SessionProvider";
 
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   manager_enabled: true,
@@ -52,15 +48,14 @@ const GeneralSettingsContext = createContext<GeneralSettingsContextValue>({
 });
 
 export function GeneralSettingsProvider({ children }: { children: ReactNode }) {
+  const { authenticated, loading: sessionLoading } = useSession();
   const [cachedSettings] = useState(() => readClientJson<GeneralSettings>(CLIENT_STORAGE_KEYS.generalSettingsCache));
   const [generalSettings, setGeneralSettingsState] = useState<GeneralSettings>(cachedSettings ?? DEFAULT_GENERAL_SETTINGS);
-  const [loading, setLoading] = useState(
-    () => Boolean(readClientStorage(CLIENT_STORAGE_KEYS.authToken)) && cachedSettings == null
-  );
+  const [loading, setLoading] = useState(() => cachedSettings == null);
 
   const refresh = useCallback(async () => {
-    const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
-    if (!token) {
+    if (sessionLoading) return;
+    if (!authenticated) {
       setGeneralSettingsState(DEFAULT_GENERAL_SETTINGS);
       setLoading(false);
       return;
@@ -75,7 +70,7 @@ export function GeneralSettingsProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [cachedSettings]);
+  }, [authenticated, cachedSettings, sessionLoading]);
 
   const setGeneralSettings = useCallback((settings: GeneralSettings) => {
     setGeneralSettingsState(settings);

@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
+import { isApiError } from "../../api/client";
 import { useSearchParams } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -116,7 +116,7 @@ function persistStoredUser(values: {
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (axios.isAxiosError(error)) {
+  if (isApiError(error)) {
     const detail = error.response?.data?.detail;
     if (typeof detail === "string" && detail.trim()) {
       return detail;

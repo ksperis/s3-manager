@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api/client";
 import BrowserPage from "./BrowserPage";
 
 const searchBrowserBucketsMock = vi.fn();
@@ -75,11 +76,9 @@ describe("BrowserPage error handling", () => {
   });
 
   it("shows backend detail when bucket loading fails with detail", async () => {
-    searchBrowserBucketsMock.mockRejectedValueOnce({
-      isAxiosError: true,
-      response: { data: { detail: "Forbidden by policy" } },
-      message: "Request failed with status code 403",
-    });
+    searchBrowserBucketsMock.mockRejectedValueOnce(new ApiError("Request failed", {
+      response: { status: 403, data: { detail: "Forbidden by policy" }, headers: {} },
+    }));
 
     renderPage();
 
@@ -87,11 +86,7 @@ describe("BrowserPage error handling", () => {
   });
 
   it("shows a public fallback when bucket loading fails without detail", async () => {
-    searchBrowserBucketsMock.mockRejectedValueOnce({
-      isAxiosError: true,
-      response: { data: {} },
-      message: "Network Error",
-    });
+    searchBrowserBucketsMock.mockRejectedValueOnce(new ApiError("Network Error"));
 
     renderPage();
 

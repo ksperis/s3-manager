@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api/client";
 
 import CephAdminMetricsPage from "./CephAdminMetricsPage";
 
@@ -48,12 +49,10 @@ vi.mock("recharts", () => {
   };
 });
 
-function makeAxiosError(detail: string) {
-  return {
-    isAxiosError: true,
-    response: { data: { detail } },
-    message: "Request failed with status code 403",
-  };
+function makeApiError(detail: string) {
+  return new ApiError("Request failed", {
+    response: { status: 403, data: { detail }, headers: {} },
+  });
 }
 
 function buildEndpoint(capabilities: { metrics?: boolean; usage?: boolean } = { metrics: true, usage: true }) {
@@ -224,7 +223,7 @@ describe("CephAdminMetricsPage", () => {
   });
 
   it("keeps storage load errors inside the storage snapshot card", async () => {
-    fetchCephAdminClusterStorageMock.mockRejectedValueOnce(makeAxiosError("Unable to load cluster storage metrics."));
+    fetchCephAdminClusterStorageMock.mockRejectedValueOnce(makeApiError("Unable to load cluster storage metrics."));
 
     renderPage();
 
@@ -239,7 +238,7 @@ describe("CephAdminMetricsPage", () => {
   });
 
   it("keeps traffic load errors inside the traffic card without empty counters", async () => {
-    fetchCephAdminClusterTrafficMock.mockRejectedValueOnce(makeAxiosError("Usage logs are disabled for this endpoint."));
+    fetchCephAdminClusterTrafficMock.mockRejectedValueOnce(makeApiError("Usage logs are disabled for this endpoint."));
 
     renderPage();
 

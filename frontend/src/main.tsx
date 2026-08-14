@@ -11,6 +11,7 @@ import { GeneralSettingsProvider } from "./components/GeneralSettingsContext";
 import { LanguageProvider } from "./components/language";
 import { bootstrapBranding } from "./components/ui/brandingRuntime";
 import { installConsoleRedaction } from "./utils/runtimeDiagnostics";
+import { SessionProvider } from "./auth/SessionProvider";
 
 const root = document.getElementById("root");
 installConsoleRedaction();
@@ -20,9 +21,11 @@ ReactDOM.createRoot(root as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider>
       <LanguageProvider>
-        <GeneralSettingsProvider>
-          <AppRouter />
-        </GeneralSettingsProvider>
+        <SessionProvider>
+          <GeneralSettingsProvider>
+            <AppRouter />
+          </GeneralSettingsProvider>
+        </SessionProvider>
       </LanguageProvider>
     </ThemeProvider>
   </React.StrictMode>

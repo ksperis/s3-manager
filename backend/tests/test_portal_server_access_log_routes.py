@@ -14,6 +14,7 @@ from app.routers import portal_access_logs as portal_access_logs_router
 from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
 from tests.s3_account_factory import make_s3_account
+from tests.router_test_utils import effective_routes
 
 
 def _portal_access(account: S3Account, user: User, role: str) -> AccountAccess:
@@ -101,7 +102,7 @@ def test_portal_server_access_log_routes_are_owned_by_dedicated_router() -> None
     }
     route_modules = {
         route.path: route.endpoint.__module__
-        for route in portal_router.router.routes
+        for route in effective_routes(portal_router.router)
         if route.path in expected_paths
     }
 

@@ -13,7 +13,7 @@ Use route-level schemas and examples in code as the canonical API contract.
 
 | Prefix | Audience | Notes |
 |---|---|---|
-| `/api/auth` | login/session | Local, OIDC, LDAP, refresh-session, and current-user flows. |
+| `/api/auth` | login/session | Local, OIDC, LDAP, cookie refresh, `/session`, session revocation, WebAuthn, recovery codes, external-identity approval, and scoped API tokens. |
 | `/api/admin` | platform admins | Users, groups, endpoints, app settings, billing, audit, metrics, and key rotation. |
 | `/api/manager` | account/context admins | Buckets, IAM, topics, usage stats, migrations, and Manager tools. |
 | `/api/portal` | Portal users/managers | Storage Spaces, files, shares, access keys, usage, governance activity, provider access logs, and settings. |
@@ -24,13 +24,29 @@ Use route-level schemas and examples in code as the canonical API contract.
 
 ## Error contract
 
-- `401` means the UI session or API token is missing or invalid.
-- `403` means the authenticated UI identity cannot access the surface or action.
+- `400` is returned when cookie and Bearer authentication are combined.
+- `401` means the UI session or API token is missing, expired, or revoked.
+- `403` means the authenticated identity lacks the route permission, CSRF/origin check, recent WebAuthn verification, or API-token scope.
 - `404` may mean the resource does not exist or is intentionally hidden from the current scope.
 - `409` is used for state conflicts or guarded destructive workflows.
 - Storage-side denials preserve upstream semantics where possible, especially `AccessDenied`.
 
 Do not infer storage permission from UI access. Native storage workflows still depend on the selected execution identity and S3/IAM decision.
+
+## Authentication transport
+
+UI authentication uses host-only cookies only. Login and refresh responses do
+not contain an access token. `GET /api/auth/session` is the browser identity
+contract, and mutating UI calls require both the exact configured `Origin` and
+the session-bound `X-CSRF-Token`. Bearer authentication is reserved for scoped
+API tokens; routes without an API-scope mapping reject it by default.
+
+The security inventory is exposed through `/api/auth/sessions`,
+`/api/auth/security/webauthn/credentials`, and
+`/api/auth/security/external-identities`. Mutating MFA and identity operations
+require recent WebAuthn verification. Superadmins use `/api/auth/admin/sessions`
+and `/api/auth/external-link-requests` to revoke sessions and decide manual
+federated-identity links.
 
 ## Audit and Portal access-log APIs
 

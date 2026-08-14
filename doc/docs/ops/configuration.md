@@ -18,7 +18,7 @@ Configuration is split between backend environment variables and UI settings.
 
 | You need to control... | Primary place | Also check |
 |---|---|---|
-| Login sessions, stored credentials, trusted origins | Backend environment and secret manager | `CORS_ORIGINS`, JWT/refresh secrets, credential encryption key, secure cookie settings. |
+| Login sessions, stored credentials, trusted origins | Backend environment and secret manager | `APP_ENV`, `PUBLIC_ORIGIN`, `CORS_ORIGINS`, `ALLOWED_HOSTS`, UI/API JWT rings, credential encryption, WebAuthn, trusted proxies, and secure cookies. |
 | Which workspaces users can see | Admin app settings and feature force-locks | `FEATURE_*` env locks, user roles, UI groups, account links, Manager tool access. |
 | Schedulers and internal automation | Runtime env, Compose scheduler, or Helm CronJobs | `INTERNAL_CRON_TOKEN`, `healthcheckCronJob`, `billingCronJob`, `quotaMonitorCronJob`, `usageHistoryCronJob`. |
 | Health, metrics, billing, quota, and usage history freshness | App settings plus job schedules | Endpoint capability, retention env vars, latest collection logs. |
@@ -45,7 +45,10 @@ Primary source of truth: `backend/app/core/config.py`.
 
 Key areas:
 
-- Security and auth: JWT keys, credential keys, refresh cookie settings, OIDC/LDAP environment providers.
+- Security and auth: `APP_ENV`, distinct `UI_JWT_KEYS`/`API_JWT_KEYS`,
+  `CREDENTIAL_KEYS`, access/session lifetimes, secure host-only cookie settings,
+  `PUBLIC_ORIGIN`, `ALLOWED_HOSTS`, `TRUSTED_PROXY_CIDRS`, WebAuthn, and
+  OIDC/LDAP environment providers.
 - Database: `DATABASE_URL` (SQLite defaults to `backend/app.db`; relative SQLite paths are normalized against `backend/`). Multi-backend deployments require PostgreSQL.
 - CORS: `CORS_ORIGINS`.
 - Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_PORTAL_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
@@ -85,7 +88,8 @@ Common environment fields:
 - `OIDC_PROVIDERS__<key>__CLIENT_SECRET`
 - `OIDC_PROVIDERS__<key>__REDIRECT_URI`
 - `OIDC_PROVIDERS__<key>__SCOPES`
-- optional behavior fields: `PROMPT`, `ENABLED`, `ICON_URL`, `USE_PKCE`, `USE_NONCE`
+- optional behavior fields: `PROMPT`, `ENABLED`, `ICON_URL`, `USE_PKCE`,
+  `USE_NONCE`, `ALLOWED_ALGORITHMS`, and `ALLOWED_HOSTS`
 
 LDAP providers can be configured either from Admin **Settings > Authentication**
 or with nested environment variables:
@@ -108,14 +112,14 @@ Common environment fields:
 - `LDAP_PROVIDERS__<key>__USER_FILTER` containing `{username}`
 - optional attributes: `EMAIL_ATTRIBUTE`, `NAME_ATTRIBUTE`, `SUBJECT_ATTRIBUTE`
 - TLS and safety knobs: `START_TLS`, `TLS_VERIFY`, `TLS_CA_FILE`,
-  `ALLOW_LEGACY_TLS`, `ALLOW_INSECURE`, `ALLOW_EMAIL_LINKING`.
+  `ALLOW_LEGACY_TLS`, `ALLOW_INSECURE`.
   `ALLOW_LEGACY_TLS=true` enables the OpenSSL `DEFAULT` cipher set for a
   provider that cannot negotiate the modern client defaults; prefer enabling
   ECDHE cipher suites on the LDAP server.
 
 Provider keys must match `[a-z0-9_-]+`. `ALLOW_INSECURE=true`,
-`TLS_VERIFY=false`, and `ALLOW_EMAIL_LINKING=true` are startup-warning
-conditions and should be limited to isolated labs or planned migrations.
+`TLS_VERIFY=false`, and `ALLOW_LEGACY_TLS=true` are rejected when
+`APP_ENV=production`. Email collisions are never linked automatically.
 
 LDAP only authenticates the UI identity. First LDAP login creates a user with
 `ui_none`; admins still grant roles and storage access in s3-manager.
@@ -184,6 +188,8 @@ Portal IAM policies are not editable settings.
 
 - `VITE_API_URL` for API base URL in frontend build/runtime.
 - In container deployments, route `/api` to backend via reverse proxy/ingress.
+- Browser identity always comes from `/api/auth/session`; UI tokens must never
+  be added to `VITE_*` values or browser storage.
 
 ## From user error to configuration area
 

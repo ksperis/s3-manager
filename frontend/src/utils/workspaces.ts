@@ -16,6 +16,7 @@ import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "./client
 
 export const WORKSPACE_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedWorkspace;
 export const SESSION_USER_UPDATED_EVENT = "s3-manager:session-user-updated";
+let sessionUserCache: SessionUser | null = null;
 
 const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
@@ -119,7 +120,20 @@ export function canAccessPrivateConnectionsSection(user: PrivateConnectionAccess
 }
 
 export function readStoredUser(): SessionUser | null {
-  return readClientJson<SessionUser>(CLIENT_STORAGE_KEYS.sessionUser);
+  if (sessionUserCache) return sessionUserCache;
+  // Isolated component tests historically seed a non-secret user fixture in
+  // localStorage. Production authentication state never reads that value.
+  if (import.meta.env.MODE === "test") {
+    return readClientJson<SessionUser>(CLIENT_STORAGE_KEYS.sessionUser);
+  }
+  return null;
+}
+
+export function setSessionUserCache(user: SessionUser | null): void {
+  sessionUserCache = user;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(SESSION_USER_UPDATED_EVENT));
+  }
 }
 
 export function readStoredWorkspaceId(): WorkspaceId | null {

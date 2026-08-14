@@ -24,7 +24,7 @@ Legend: {
   style.stroke: "#cbd5e1"
   "users": {
     class: table
-    tooltip: "PK: id\nUnique: uq_users_email(email); uq_users_provider_subject(auth_provider, auth_provider_subject)\nIndexes: ix_users_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_users_email(email)\nIndexes: ix_users_id(id) [index]"
     "id": "INTEGER [PK, NN]"
     "email": "VARCHAR [NN]"
     "full_name": "VARCHAR"
@@ -35,6 +35,7 @@ Legend: {
     "avatar_content_type": "VARCHAR"
     "avatar_updated_at": "DATETIME"
     "hashed_password": "VARCHAR"
+    "auth_version": "INTEGER [NN]"
     "is_active": "BOOLEAN"
     "role": "VARCHAR [NN]"
     "is_root": "BOOLEAN [NN]"
@@ -46,8 +47,6 @@ Legend: {
     "can_access_manager_feature_rules": "BOOLEAN [NN]"
     "can_access_manager_bucket_purge": "BOOLEAN [NN]"
     "browser_advanced_features_enabled": "BOOLEAN [NN]"
-    "auth_provider": "VARCHAR"
-    "auth_provider_subject": "VARCHAR"
     "created_at": "DATETIME"
     "updated_at": "DATETIME [NN]"
     "last_login_at": "DATETIME"
@@ -88,44 +87,60 @@ Legend: {
   }
   "api_tokens": {
     class: table
-    tooltip: "PK: id\nIndexes: ix_api_tokens_created_at(created_at) [index]; ix_api_tokens_id(id) [index]; ix_api_tokens_jti(jti) [unique]; ix_api_tokens_revoked_by_user_id(revoked_by_user_id) [index]; ix_api_tokens_token_hash(token_hash) [unique]; ix_api_tokens_user_id(user_id) [index]"
+    tooltip: "PK: id\nIndexes: ix_api_tokens_created_at(created_at) [index]; ix_api_tokens_id(id) [index]; ix_api_tokens_jti(jti) [unique]; ix_api_tokens_token_hash(token_hash) [unique]; ix_api_tokens_user_id(user_id) [index]"
     "id": "VARCHAR [PK, NN]"
     "jti": "VARCHAR [NN, UQ]"
     "token_hash": "VARCHAR [NN, UQ]"
     "user_id": "INTEGER [FK, NN]"
-    "revoked_by_user_id": "INTEGER [FK]"
     "name": "VARCHAR [NN]"
+    "scopes_json": "TEXT [NN]"
+    "auth_version": "INTEGER [NN]"
     "created_at": "DATETIME [NN]"
     "last_used_at": "DATETIME"
-    "last_ip": "VARCHAR"
-    "last_user_agent": "VARCHAR"
     "expires_at": "DATETIME [NN]"
     "revoked_at": "DATETIME"
-    "revoked_reason": "VARCHAR"
   }
-  "refresh_sessions": {
+  "auth_sessions": {
     class: table
-    tooltip: "PK: id\nIndexes: ix_refresh_sessions_id(id) [index]; ix_refresh_sessions_revoked_by_user_id(revoked_by_user_id) [index]; ix_refresh_sessions_s3_session_id(s3_session_id) [index]; ix_refresh_sessions_token_hash(token_hash) [unique]; ix_refresh_sessions_user_id(user_id) [index]"
+    tooltip: "PK: id\nIndexes: user_id, s3_session_id, last_activity_at, idle_expires_at, absolute_expires_at, revoked_at"
     "id": "VARCHAR [PK, NN]"
-    "token_hash": "VARCHAR [NN, UQ]"
     "user_id": "INTEGER [FK]"
-    "revoked_by_user_id": "INTEGER [FK]"
     "s3_session_id": "VARCHAR [FK]"
-    "auth_type": "VARCHAR"
+    "principal_type": "VARCHAR [NN]"
+    "auth_type": "VARCHAR [NN]"
+    "auth_version": "INTEGER [NN]"
     "created_at": "DATETIME [NN]"
-    "last_used_at": "DATETIME [NN]"
-    "last_ip": "VARCHAR"
-    "last_user_agent": "VARCHAR"
-    "expires_at": "DATETIME [NN]"
+    "last_activity_at": "DATETIME [NN]"
+    "idle_expires_at": "DATETIME [NN]"
+    "absolute_expires_at": "DATETIME [NN]"
+    "mfa_verified_at": "DATETIME"
+    "ip_address": "VARCHAR"
+    "user_agent": "TEXT"
+    "csrf_token_hash": "VARCHAR [NN]"
     "revoked_at": "DATETIME"
-    "revoked_reason": "VARCHAR"
+    "revoke_reason": "VARCHAR"
+  }
+  "refresh_tokens": {
+    class: table
+    tooltip: "PK: id\nIndexes: family_id, auth_session_id, token_hash [unique], expires_at, revoked_at"
+    "id": "VARCHAR [PK, NN]"
+    "family_id": "VARCHAR [NN]"
+    "auth_session_id": "VARCHAR [FK, NN]"
+    "parent_id": "VARCHAR [FK]"
+    "token_hash": "VARCHAR [NN, UQ]"
+    "created_at": "DATETIME [NN]"
+    "expires_at": "DATETIME [NN]"
+    "used_at": "DATETIME"
+    "replaced_by_id": "VARCHAR [FK]"
+    "revoked_at": "DATETIME"
+    "revoke_reason": "VARCHAR"
   }
   "s3_sessions": {
     class: table
     tooltip: "PK: id\nIndexes: ix_s3_sessions_access_key_hash(access_key_hash) [index]; ix_s3_sessions_id(id) [index]"
     "id": "VARCHAR [PK, NN]"
-    "access_key_enc": "VARCHAR [NN]"
-    "secret_key_enc": "VARCHAR [NN]"
+    "access_key_enc": "VARCHAR"
+    "secret_key_enc": "VARCHAR"
     "access_key_hash": "VARCHAR [NN]"
     "actor_type": "VARCHAR [NN]"
     "role": "VARCHAR [NN]"
@@ -135,6 +150,87 @@ Legend: {
     "capabilities": "TEXT [NN]"
     "created_at": "DATETIME [NN]"
     "last_used_at": "DATETIME [NN]"
+    "idle_expires_at": "DATETIME [NN]"
+    "absolute_expires_at": "DATETIME [NN]"
+    "revoked_at": "DATETIME"
+    "revoke_reason": "VARCHAR"
+  }
+  "external_identities": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_external_identity_subject(provider_type, provider_id, subject)\nIndexes: user_id, email, revoked_at"
+    "id": "VARCHAR [PK, NN]"
+    "user_id": "INTEGER [FK, NN]"
+    "provider_type": "VARCHAR [NN]"
+    "provider_id": "VARCHAR [NN]"
+    "subject": "VARCHAR [NN]"
+    "email": "VARCHAR"
+    "email_verified": "BOOLEAN [NN]"
+    "created_at": "DATETIME [NN]"
+    "last_login_at": "DATETIME"
+    "revoked_at": "DATETIME"
+  }
+  "external_identity_link_requests": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_external_link_request_subject(provider_type, provider_id, subject)\nIndexes: user_id, status"
+    "id": "VARCHAR [PK, NN]"
+    "user_id": "INTEGER [FK, NN]"
+    "provider_type": "VARCHAR [NN]"
+    "provider_id": "VARCHAR [NN]"
+    "subject": "VARCHAR [NN]"
+    "email": "VARCHAR [NN]"
+    "display_name": "VARCHAR"
+    "picture_url": "VARCHAR"
+    "status": "VARCHAR [NN]"
+    "created_at": "DATETIME [NN]"
+    "expires_at": "DATETIME [NN]"
+    "decided_at": "DATETIME"
+    "decided_by_user_id": "INTEGER [FK]"
+    "decision_reason": "VARCHAR"
+  }
+  "webauthn_credentials": {
+    class: table
+    tooltip: "PK: id\nIndexes: user_id, credential_id [unique], revoked_at"
+    "id": "VARCHAR [PK, NN]"
+    "user_id": "INTEGER [FK, NN]"
+    "credential_id": "VARCHAR [NN, UQ]"
+    "public_key": "TEXT [NN]"
+    "sign_count": "INTEGER [NN]"
+    "transports_json": "TEXT [NN]"
+    "name": "VARCHAR [NN]"
+    "created_at": "DATETIME [NN]"
+    "last_used_at": "DATETIME"
+    "revoked_at": "DATETIME"
+  }
+  "auth_challenges": {
+    class: table
+    tooltip: "PK: id\nIndexes: user_id, binding_sid, purpose, expires_at"
+    "id": "VARCHAR [PK, NN]"
+    "user_id": "INTEGER [FK, NN]"
+    "binding_sid": "VARCHAR"
+    "purpose": "VARCHAR [NN]"
+    "challenge_hash": "VARCHAR [NN, UQ]"
+    "payload_json": "TEXT [NN]"
+    "created_at": "DATETIME [NN]"
+    "expires_at": "DATETIME [NN]"
+    "consumed_at": "DATETIME"
+  }
+  "recovery_codes": {
+    class: table
+    tooltip: "PK: id\nIndexes: user_id, consumed_at"
+    "id": "VARCHAR [PK, NN]"
+    "user_id": "INTEGER [FK, NN]"
+    "code_hash": "VARCHAR [NN, UQ]"
+    "created_at": "DATETIME [NN]"
+    "consumed_at": "DATETIME"
+  }
+  "auth_rate_limits": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_auth_rate_limit_window(bucket_key, window_started_at)\nIndexes: bucket_key"
+    "id": "VARCHAR [PK, NN]"
+    "bucket_key": "VARCHAR [NN]"
+    "window_started_at": "DATETIME [NN]"
+    "attempts": "INTEGER [NN]"
+    "updated_at": "DATETIME [NN]"
   }
   "oidc_providers": {
     class: table
@@ -165,6 +261,15 @@ Legend: {
     "redirect_path": "VARCHAR"
     "created_at": "DATETIME [NN]"
   }
+  "oidc_authorization_codes": {
+    class: table
+    tooltip: "PK: id\nUnique: code_hash\nIndexes: provider, code_hash, expires_at"
+    "id": "VARCHAR [PK, NN]"
+    "provider": "VARCHAR [NN]"
+    "code_hash": "VARCHAR [NN, UQ]"
+    "created_at": "DATETIME [NN]"
+    "expires_at": "DATETIME [NN]"
+  }
   "ldap_providers": {
     class: table
     tooltip: "PK: id\nUnique: unnamed(provider_id)\nIndexes: ix_ldap_providers_id(id) [index]"
@@ -186,7 +291,6 @@ Legend: {
     "timeout_seconds": "FLOAT [NN]"
     "enabled": "BOOLEAN [NN]"
     "allow_insecure": "BOOLEAN [NN]"
-    "allow_email_linking": "BOOLEAN [NN]"
     "created_at": "DATETIME [NN]"
     "updated_at": "DATETIME [NN]"
   }
@@ -257,16 +361,23 @@ Legend: {
   }
 }
 
-"api_tokens"."revoked_by_user_id" -> "users"."id"
 "api_tokens"."user_id" -> "users"."id"
+"auth_challenges"."user_id" -> "users"."id": "ondelete=CASCADE"
+"auth_sessions"."s3_session_id" -> "s3_sessions"."id": "ondelete=CASCADE"
+"auth_sessions"."user_id" -> "users"."id": "ondelete=CASCADE"
 "bucket_migrations" -> "users"."id"
-"refresh_sessions"."revoked_by_user_id" -> "users"."id"
-"refresh_sessions"."s3_session_id" -> "s3_sessions"."id"
-"refresh_sessions"."user_id" -> "users"."id"
+"external_identities"."user_id" -> "users"."id": "ondelete=CASCADE"
+"external_identity_link_requests"."decided_by_user_id" -> "users"."id": "ondelete=SET NULL"
+"external_identity_link_requests"."user_id" -> "users"."id": "ondelete=CASCADE"
+"recovery_codes"."user_id" -> "users"."id": "ondelete=CASCADE"
+"refresh_tokens"."auth_session_id" -> "auth_sessions"."id": "ondelete=CASCADE"
+"refresh_tokens"."parent_id" -> "refresh_tokens"."id": "ondelete=SET NULL"
+"refresh_tokens"."replaced_by_id" -> "refresh_tokens"."id": "ondelete=SET NULL"
 "s3_connections" -> "users"."id"
 "tag_definitions" -> "users"."id"
 "user_ui_groups"."group_id" -> "ui_groups"."id"
 "user_ui_groups"."user_id" -> "users"."id"
+"webauthn_credentials"."user_id" -> "users"."id": "ondelete=CASCADE"
 "account_iam_users" -> "users"."id"
 "audit_logs" -> "users"."id"
 "portal_public_links" -> "users"."id"

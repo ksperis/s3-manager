@@ -133,6 +133,7 @@ nav:
           - "Operations: upgrade and compatibility": ops/operations-upgrade-compatibility.md
       - Security and Recovery:
           - Production readiness: ops/production-readiness.md
+          - Authentication security and cutover: ops/authentication-hardening.md
           - Backup and restore: ops/backup-restore.md
           - "Operations: security": ops/operations-security.md
       - Backends:

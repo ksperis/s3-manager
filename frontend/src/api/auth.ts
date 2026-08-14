@@ -12,10 +12,7 @@ import type {
 } from "./users";
 import type { AccountAccessRole } from "./accountRoles";
 
-type LoginResponse = {
-  access_token: string;
-  token_type: string;
-  user: {
+export type AuthUser = {
     id: number;
     email: string;
     full_name?: string | null;
@@ -44,8 +41,6 @@ type LoginResponse = {
       name: string;
     }[] | null;
     effective_access?: EffectiveUserAccess | null;
-    auth_provider?: string | null;
-  };
 };
 
 type SessionCapabilities = {
@@ -56,26 +51,44 @@ type SessionCapabilities = {
   endpoint_url?: string | null;
 };
 
-type KeyLoginResponse = {
-  access_token: string;
-  token_type: string;
-  session: {
+export type AuthSessionDescriptor = {
     session_id: string;
     actor_type: string;
     account_id?: string | null;
     account_name?: string | null;
     user_uid?: string | null;
     capabilities: SessionCapabilities;
+};
+
+export type AuthenticationResponse = {
+  status: "authenticated" | "mfa_required" | "mfa_enrollment_required" | "link_approval_required";
+  user?: AuthUser | null;
+  session?: AuthSessionDescriptor | null;
+  redirect_path?: string | null;
+  link_request_id?: string | null;
+  recovery_codes?: string[] | null;
+};
+
+export type CurrentSessionResponse = {
+  authenticated: true;
+  user?: AuthUser | null;
+  session?: AuthSessionDescriptor | null;
+  auth_session: {
+    id: string;
+    auth_type: string;
+    mfa_verified_at?: string | null;
+    idle_expires_at: string;
+    absolute_expires_at: string;
   };
 };
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
+export async function login(email: string, password: string): Promise<AuthenticationResponse> {
   const formData = new URLSearchParams();
   formData.append("username", email);
   formData.append("password", password);
   formData.append("grant_type", "password");
 
-  const { data } = await client.post<LoginResponse>("/auth/login", formData, {
+  const { data } = await client.post<AuthenticationResponse>("/auth/login", formData, {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
 
@@ -96,8 +109,8 @@ export async function loginWithLdap(
   providerId: string,
   username: string,
   password: string,
-): Promise<LoginResponse> {
-  const { data } = await client.post<LoginResponse>(`/auth/ldap/${providerId}/login`, {
+): Promise<AuthenticationResponse> {
+  const { data } = await client.post<AuthenticationResponse>(`/auth/ldap/${providerId}/login`, {
     username,
     password,
   });
@@ -108,8 +121,8 @@ export async function loginWithKeys(
   accessKey: string,
   secretKey: string,
   endpointUrl?: string,
-): Promise<KeyLoginResponse> {
-  const { data } = await client.post<KeyLoginResponse>("/auth/login-s3", {
+): Promise<AuthenticationResponse> {
+  const { data } = await client.post<AuthenticationResponse>("/auth/login-s3", {
     access_key: accessKey,
     secret_key: secretKey,
     endpoint_url: endpointUrl,
@@ -129,10 +142,6 @@ type OidcStartResponse = {
   state: string;
 };
 
-type OidcCallbackResponse = LoginResponse & {
-  redirect_path?: string | null;
-};
-
 export async function fetchOidcProviders(): Promise<OidcProviderInfo[]> {
   const { data } = await client.get<OidcProviderInfo[]>("/auth/oidc/providers");
   return data;
@@ -149,8 +158,8 @@ export async function completeOidcLogin(
   providerId: string,
   code: string,
   state: string,
-): Promise<OidcCallbackResponse> {
-  const { data } = await client.post<OidcCallbackResponse>(`/auth/oidc/${providerId}/callback`, {
+): Promise<AuthenticationResponse> {
+  const { data } = await client.post<AuthenticationResponse>(`/auth/oidc/${providerId}/callback`, {
     code,
     state,
   });
@@ -159,4 +168,34 @@ export async function completeOidcLogin(
 
 export async function logout(): Promise<void> {
   await client.post("/auth/logout");
+}
+
+export async function fetchCurrentSession(): Promise<CurrentSessionResponse> {
+  const { data } = await client.get<CurrentSessionResponse>("/auth/session");
+  return data;
+}
+
+export async function beginWebAuthnRegistration(): Promise<Record<string, unknown> & { challenge: string }> {
+  const { data } = await client.post<Record<string, unknown> & { challenge: string }>("/auth/webauthn/registration/options");
+  return data;
+}
+
+export async function finishWebAuthnRegistration(credential: unknown, name = "Passkey"): Promise<AuthenticationResponse> {
+  const { data } = await client.post<AuthenticationResponse>("/auth/webauthn/registration/verify", { credential, name });
+  return data;
+}
+
+export async function beginWebAuthnAuthentication(): Promise<Record<string, unknown> & { challenge: string }> {
+  const { data } = await client.post<Record<string, unknown> & { challenge: string }>("/auth/webauthn/authentication/options");
+  return data;
+}
+
+export async function finishWebAuthnAuthentication(credential: unknown): Promise<AuthenticationResponse> {
+  const { data } = await client.post<AuthenticationResponse>("/auth/webauthn/authentication/verify", { credential });
+  return data;
+}
+
+export async function verifyRecoveryCode(code: string): Promise<AuthenticationResponse> {
+  const { data } = await client.post<AuthenticationResponse>("/auth/recovery/verify", { code });
+  return data;
 }

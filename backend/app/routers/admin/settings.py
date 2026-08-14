@@ -333,7 +333,6 @@ def _ldap_audit_metadata(payload: LDAPProviderAdminPayload, *, secret_action: st
             "timeout_seconds",
             "enabled",
             "allow_insecure",
-            "allow_email_linking",
         ],
         "enabled": payload.enabled,
         "bind_password_action": secret_action,

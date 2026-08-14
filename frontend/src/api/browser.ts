@@ -7,10 +7,10 @@ import client, {
   LONG_RUNNING_REQUEST_TIMEOUT_MS,
 } from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
-import type { AxiosProgressEvent } from "axios";
 import type { StorageSpaceIconDescriptor } from "./storageSpaceIcons";
 
 export type BrowserWorkspaceSurface = "browser" | "manager" | "ceph-admin" | "portal";
+export type UploadProgressEvent = { loaded: number; total?: number; progress?: number };
 
 export type BrowserRequestOptions = {
   workspaceSurface?: BrowserWorkspaceSurface;
@@ -938,7 +938,7 @@ export async function proxyUpload(
   bucketName: string,
   key: string,
   file: Blob,
-  onUploadProgress?: (event: AxiosProgressEvent) => void,
+  onUploadProgress?: (event: UploadProgressEvent) => void,
   signal?: AbortSignal,
   sseCustomerKeyBase64?: string | null,
   fileName?: string,
@@ -953,16 +953,17 @@ export async function proxyUpload(
       ? file.name
       : "upload.bin");
   form.append("file", file, inferredName);
+  onUploadProgress?.({ loaded: 0, total: file.size, progress: 0 });
   await client.post(`/browser/buckets/${encodeURIComponent(bucketName)}/proxy-upload`, form, {
     params: withS3AccountParam(undefined, accountId),
     headers: mergeBrowserHeaders(
       buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
       buildBrowserWorkspaceHeaders(options),
     ),
-    onUploadProgress,
     signal,
     timeout: LONG_RUNNING_REQUEST_TIMEOUT_MS,
   });
+  onUploadProgress?.({ loaded: file.size, total: file.size, progress: 1 });
 }
 
 export async function proxyDownload(

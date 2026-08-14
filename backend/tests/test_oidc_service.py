@@ -11,7 +11,7 @@ import requests
 from jose import JWTError
 
 from app.core.config import OIDCProviderSettings, Settings
-from app.db import OidcLoginState
+from app.db import OidcAuthorizationCode, OidcLoginState
 from app.services.oidc_service import (
     OIDCAuthenticationError,
     OIDCConfigurationError,
@@ -204,7 +204,7 @@ def test_complete_login_token_endpoint_errors(db_session, monkeypatch):
         lambda *args, **kwargs: _Response(status_code=401, payload={"error": "invalid_grant"}, text="invalid"),
     )
     with pytest.raises(OIDCAuthenticationError, match="token exchange failed"):
-        service.complete_login("google", "code", "state-token-4xx")
+        service.complete_login("google", "code-4xx", "state-token-4xx")
 
 
 def test_complete_login_missing_id_token_and_unverified_email(db_session, monkeypatch):
@@ -242,10 +242,14 @@ def test_complete_login_missing_id_token_and_unverified_email(db_session, monkey
     monkeypatch.setattr(
         service,
         "_decode_id_token",
-        lambda *args, **kwargs: {"sub": "sub-1", "email_verified": False},
+        lambda *args, **kwargs: {
+            "sub": "sub-1",
+            "email": "oidc@example.test",
+            "email_verified": False,
+        },
     )
     with pytest.raises(OIDCAuthenticationError, match="Email is not verified"):
-        service.complete_login("google", "code", "state-email-unverified")
+        service.complete_login("google", "code-email-unverified", "state-email-unverified")
 
 
 def test_complete_login_success_uses_userinfo_fallback_and_cleans_state(db_session, monkeypatch):
@@ -278,6 +282,40 @@ def test_complete_login_success_uses_userinfo_fallback_and_cleans_state(db_sessi
     assert db_session.query(OidcLoginState).filter(OidcLoginState.state == started["state"]).first() is None
 
 
+def test_complete_login_rejects_replayed_authorization_code(db_session, monkeypatch):
+    service, _ = _service(db_session)
+    monkeypatch.setattr(
+        service,
+        "_get_metadata",
+        lambda *args, **kwargs: {
+            "authorization_endpoint": "https://issuer.example.test/auth",
+            "token_endpoint": "https://issuer.example.test/token",
+        },
+    )
+    first = service.start_login("google", "/")
+    second = service.start_login("google", "/")
+    monkeypatch.setattr(
+        "app.services.oidc_service.requests.post",
+        lambda *args, **kwargs: _Response(payload={"id_token": "id-token"}),
+    )
+    monkeypatch.setattr(
+        service,
+        "_decode_id_token",
+        lambda *args, **kwargs: {
+            "sub": "sub-123",
+            "email": "oidc@example.test",
+            "email_verified": True,
+        },
+    )
+
+    service.complete_login("google", "single-use-code", first["state"])
+
+    with pytest.raises(OIDCStateError, match="authorization code has already been consumed"):
+        service.complete_login("google", "single-use-code", second["state"])
+    assert db_session.query(OidcAuthorizationCode).count() == 1
+    assert db_session.query(OidcLoginState).filter(OidcLoginState.state == second["state"]).first() is None
+
+
 def test_metadata_and_jwks_caching(db_session, monkeypatch):
     service, _ = _service(db_session)
     provider = _provider()
@@ -286,8 +324,15 @@ def test_metadata_and_jwks_caching(db_session, monkeypatch):
     def fake_get(url, timeout=0, headers=None):
         calls["count"] += 1
         if "jwks" in url:
-            return _Response(payload={"keys": [{"kid": "k1"}]})
-        return _Response(payload={"issuer": "https://issuer", "jwks_uri": "https://issuer/jwks"})
+            return _Response(payload={"keys": [{"kid": "k1", "kty": "RSA", "use": "sig"}]})
+        return _Response(
+            payload={
+                "issuer": "https://issuer.example.test",
+                "authorization_endpoint": "https://issuer.example.test/auth",
+                "token_endpoint": "https://issuer.example.test/token",
+                "jwks_uri": "https://issuer.example.test/jwks",
+            }
+        )
 
     monkeypatch.setattr("app.services.oidc_service.requests.get", fake_get)
     first = service._get_metadata("google", provider)
@@ -320,11 +365,19 @@ def test_decode_id_token_key_lookup_invalid_token_and_nonce_mismatch(db_session,
     provider = _provider()
 
     monkeypatch.setattr("app.services.oidc_service.jwt.get_unverified_header", lambda token: {"kid": "kid-1", "alg": "RS256"})
-    monkeypatch.setattr(service, "_get_jwks", lambda uri: {"keys": [{"kid": "other-key"}]})
+    monkeypatch.setattr(
+        service,
+        "_get_jwks",
+        lambda uri: {"keys": [{"kid": "other-key", "kty": "RSA", "use": "sig"}]},
+    )
     with pytest.raises(OIDCAuthenticationError, match="matching signing key"):
         service._decode_id_token("google", provider, metadata, "token", expected_nonce="n", access_token="a")
 
-    monkeypatch.setattr(service, "_get_jwks", lambda uri: {"keys": [{"kid": "kid-1"}]})
+    monkeypatch.setattr(
+        service,
+        "_get_jwks",
+        lambda uri: {"keys": [{"kid": "kid-1", "kty": "RSA", "use": "sig"}]},
+    )
     monkeypatch.setattr("app.services.oidc_service.jwt.decode", lambda *args, **kwargs: (_ for _ in ()).throw(JWTError("invalid")))
     with pytest.raises(OIDCAuthenticationError, match="Invalid ID token"):
         service._decode_id_token("google", provider, metadata, "token", expected_nonce="n", access_token="a")

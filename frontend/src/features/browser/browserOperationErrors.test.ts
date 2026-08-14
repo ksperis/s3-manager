@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ApiError } from "../../api/client";
 
 import {
   extractBrowserErrorDetails,
@@ -30,16 +31,15 @@ describe("browser operation errors", () => {
     expect(extractBrowserErrorDetails("x".repeat(400))?.message).toHaveLength(300);
   });
 
-  it("formats Axios response details with HTTP context", () => {
-    const error = {
-      isAxiosError: true,
-      message: "Request failed",
+  it("formats API response details with HTTP context", () => {
+    const error = new ApiError("Request failed", {
       response: {
         status: 403,
         statusText: "Forbidden",
         data: { code: "AccessDenied", message: "Denied" },
+        headers: {},
       },
-    };
+    });
 
     expect(formatBrowserOperationError(error, "Download failed.")).toBe(
       "HTTP 403 Forbidden - AccessDenied: Denied",

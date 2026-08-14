@@ -32,14 +32,14 @@ describe("clientStorage", () => {
   });
 
   it("clears auth storage without touching workspace preferences", () => {
-    writeClientStorage(CLIENT_STORAGE_KEYS.authToken, "token");
+    window.localStorage.setItem("token", "legacy-bearer-token");
     writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { role: "ui_user" });
     writeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint, "https://s3.example.test");
     writeClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace, "browser");
 
     clearAuthStorage();
 
-    expect(readClientStorage(CLIENT_STORAGE_KEYS.authToken)).toBeNull();
+    expect(window.localStorage.getItem("token")).toBeNull();
     expect(readClientStorage(CLIENT_STORAGE_KEYS.sessionUser)).toBeNull();
     expect(readClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint)).toBeNull();
     expect(readClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace)).toBe("browser");

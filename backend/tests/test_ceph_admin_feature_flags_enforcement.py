@@ -14,6 +14,7 @@ from app.routers.ceph_admin import user_keys as user_keys_router
 from app.routers.ceph_admin import user_profiles as user_profiles_router
 from app.routers.ceph_admin import users as users_router
 from app.services import ceph_admin_bucket_listing_cache
+from router_test_utils import effective_routes
 
 
 class FakeRGWAdmin:
@@ -215,9 +216,10 @@ def test_ceph_admin_bucket_config_routes_are_owned_by_dedicated_router():
         route.endpoint.__module__ == "app.routers.ceph_admin.bucket_config"
         for route in bucket_config_router.router.routes
     )
+    bucket_routes = effective_routes(buckets_router.router)
     included_config_routes = [
         route
-        for route in buckets_router.router.routes
+        for route in bucket_routes
         if route.endpoint.__module__ == "app.routers.ceph_admin.bucket_config"
     ]
     assert len(included_config_routes) == 37
@@ -226,7 +228,7 @@ def test_ceph_admin_bucket_config_routes_are_owned_by_dedicated_router():
         route.endpoint.__module__ == "app.routers.ceph_admin.bucket_tools"
         for route in bucket_tools_router.router.routes
     )
-    assert len(buckets_router.router.routes) == 44
+    assert len(bucket_routes) == 44
 
 
 def test_ceph_admin_account_routes_have_dedicated_owners():
@@ -248,17 +250,18 @@ def test_ceph_admin_user_key_routes_are_owned_by_dedicated_router():
         route.endpoint.__module__ == "app.routers.ceph_admin.user_keys"
         for route in user_keys_router.router.routes
     )
+    user_profile_routes = effective_routes(user_profiles_router.router)
     included_key_routes = [
         route
-        for route in user_profiles_router.router.routes
+        for route in user_profile_routes
         if route.endpoint.__module__ == "app.routers.ceph_admin.user_keys"
     ]
     assert len(included_key_routes) == 4
     profile_routes = [
         route
-        for route in user_profiles_router.router.routes
+        for route in user_profile_routes
         if route.endpoint.__module__ == "app.routers.ceph_admin.user_profiles"
     ]
     assert len(profile_routes) == 5
-    assert len(user_profiles_router.router.routes) == 9
+    assert len(user_profile_routes) == 9
     assert len(users_router.router.routes) == 2

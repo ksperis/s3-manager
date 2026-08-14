@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy import create_engine, text
 
 from app.core.config import LDAPProviderSettings, Settings
-from app.db import AuditLog, LdapProvider, User, UserRole
+from app.db import AuditLog, ExternalIdentity, LdapProvider, User, UserRole
 from app.main import app
 from app.routers import dependencies
 from app.services.ldap_provider_settings_service import (
@@ -90,7 +90,6 @@ def _payload(**overrides) -> dict:
         "timeout_seconds": 5,
         "enabled": True,
         "allow_insecure": False,
-        "allow_email_linking": False,
     }
     payload.update(overrides)
     return payload
@@ -263,8 +262,11 @@ def test_ldap_service_authenticate_uses_ui_defined_provider(db_session, monkeypa
 
     assert created is True
     assert user.email == "jane@example.test"
-    assert user.auth_provider == "ldap:ui"
-    assert user.auth_provider_subject == "uuid-123"
+    identity = db_session.query(ExternalIdentity).one()
+    assert identity.user_id == user.id
+    assert identity.provider_type == "ldap"
+    assert identity.provider_id == "ui"
+    assert identity.subject == "uuid-123"
 
 
 def test_admin_ldap_api_never_returns_secret_and_preserves_replaces_it(client, db_session, monkeypatch):

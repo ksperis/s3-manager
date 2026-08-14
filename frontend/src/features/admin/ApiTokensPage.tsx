@@ -34,7 +34,12 @@ type RevealedToken = {
   token: ApiTokenInfo;
 };
 
-const DEFAULT_EXPIRY_DAYS = 90;
+const DEFAULT_EXPIRY_DAYS = 30;
+const API_SCOPES = [
+  "profile:read", "profile:write", "admin:read", "admin:write", "manager:read", "manager:write",
+  "browser:read", "browser:write", "portal:read", "portal:write", "ceph-admin:read", "ceph-admin:write",
+  "storage-ops:read", "storage-ops:write",
+];
 const secondaryCompactButtonClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-3 py-1.5 ui-caption");
 const primaryCompactButtonClass = cx(uiButtonBaseClass, uiButtonVariants.primary, "px-3 py-1.5 ui-caption");
 const toolbarActionButtonClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "h-8 px-3 py-1.5 ui-caption");
@@ -87,10 +92,11 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [tokenName, setTokenName] = useState("");
   const [expiresInDays, setExpiresInDays] = useState(String(DEFAULT_EXPIRY_DAYS));
+  const [scopes, setScopes] = useState<string[]>(["profile:read"]);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [createInitialSignature, setCreateInitialSignature] = useState(() =>
-    stableSignature({ tokenName: "", expiresInDays: String(DEFAULT_EXPIRY_DAYS) })
+    stableSignature({ tokenName: "", expiresInDays: String(DEFAULT_EXPIRY_DAYS), scopes: ["profile:read"] })
   );
 
   const [busyTokenId, setBusyTokenId] = useState<string | null>(null);
@@ -139,9 +145,10 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
   const resetCreateForm = () => {
     setTokenName("");
     setExpiresInDays(String(DEFAULT_EXPIRY_DAYS));
+    setScopes(["profile:read"]);
     setFormError(null);
     setCreating(false);
-    setCreateInitialSignature(stableSignature({ tokenName: "", expiresInDays: String(DEFAULT_EXPIRY_DAYS) }));
+    setCreateInitialSignature(stableSignature({ tokenName: "", expiresInDays: String(DEFAULT_EXPIRY_DAYS), scopes: ["profile:read"] }));
   };
 
   const openCreateModal = () => {
@@ -155,8 +162,8 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
   };
 
   const createCurrentSignature = useMemo(
-    () => stableSignature({ tokenName, expiresInDays }),
-    [expiresInDays, tokenName]
+    () => stableSignature({ tokenName, expiresInDays, scopes: [...scopes].sort() }),
+    [expiresInDays, scopes, tokenName]
   );
   const createHasUnsavedChanges = showCreateModal && createCurrentSignature !== createInitialSignature;
   useEffect(() => {
@@ -177,6 +184,10 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
       setFormError("Token name is required.");
       return;
     }
+    if (scopes.length === 0) {
+      setFormError("Select at least one scope.");
+      return;
+    }
     const normalizedDays = expiresInDays.trim();
     let payloadDays: number | undefined;
     if (normalizedDays) {
@@ -192,6 +203,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
       const created = await createApiToken({
         name: normalizedName,
         expires_in_days: payloadDays,
+        scopes,
       });
       setRevealedToken({ value: created.access_token, token: created.api_token });
       setCopyMessage(null);
@@ -427,6 +439,24 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
                 required
               />
             </div>
+            <fieldset className="space-y-2">
+              <legend className="ui-body font-medium text-slate-700 dark:text-slate-200">Scopes</legend>
+              <div className="grid grid-cols-2 gap-2">
+                {API_SCOPES.map((scope) => (
+                  <label key={scope} className="flex items-center gap-2 ui-caption text-slate-700 dark:text-slate-200">
+                    <input
+                      type="checkbox"
+                      className={uiCheckboxClass}
+                      checked={scopes.includes(scope)}
+                      onChange={(event) => setScopes((current) => event.target.checked
+                        ? [...current, scope]
+                        : current.filter((entry) => entry !== scope))}
+                    />
+                    {scope}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <div className="space-y-1">
               <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Expiry (days)</label>
               <input

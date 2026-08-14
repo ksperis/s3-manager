@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import { ApiError } from "../../api/client";
 import CephAdminUsersPage from "./CephAdminUsersPage";
 
 const listCephAdminUsersMock = vi.fn();
@@ -131,11 +132,9 @@ describe("CephAdminUsersPage list states", () => {
   });
 
   it("shows backend detail when list loading fails with detail payload", async () => {
-    listCephAdminUsersMock.mockRejectedValueOnce({
-      isAxiosError: true,
-      response: { data: { detail: "Forbidden by policy" } },
-      message: "Request failed with status code 403",
-    });
+    listCephAdminUsersMock.mockRejectedValueOnce(new ApiError("Request failed", {
+      response: { status: 403, data: { detail: "Forbidden by policy" }, headers: {} },
+    }));
 
     renderPage();
 

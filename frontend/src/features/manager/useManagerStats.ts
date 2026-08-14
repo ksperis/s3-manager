@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../../api/client";
 import { useCallback, useEffect, useState } from "react";
 import { S3AccountSelector } from "../../api/accountParams";
 import { fetchManagerStats, ManagerStats } from "../../api/stats";
@@ -38,7 +38,7 @@ export function useManagerStats(
       setStats(data);
       setError(null);
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 403) {
+      if (isApiError(err) && err.response?.status === 403) {
         setError("Storage metrics are not available for this credential.");
       } else {
         setError(extractApiError(err, "Unable to load manager stats."));

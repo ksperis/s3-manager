@@ -2,8 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
-import { SESSION_USER_UPDATED_EVENT } from "../../utils/workspaces";
+import { readStoredUser, setSessionUserCache } from "../../utils/workspaces";
 import type { UserAvatarDescriptor } from "../../api/users";
 
 type StoredUserProfilePatch = {
@@ -18,7 +17,7 @@ export function updateStoredUserProfile(
   patch: StoredUserProfilePatch,
   options: { createIfMissing?: boolean } = {}
 ): boolean {
-  const stored = readClientJson<Record<string, unknown>>(CLIENT_STORAGE_KEYS.sessionUser);
+  const stored = readStoredUser();
   if (!stored && !options.createIfMissing) return false;
   const next = { ...(stored ?? {}) };
   if ("fullName" in patch) {
@@ -36,9 +35,6 @@ export function updateStoredUserProfile(
   if ("avatar" in patch) {
     next.avatar = patch.avatar ?? null;
   }
-  writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, next);
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(SESSION_USER_UPDATED_EVENT));
-  }
+  setSessionUserCache(next);
   return true;
 }

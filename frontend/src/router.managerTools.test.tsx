@@ -18,7 +18,6 @@ function renderRoute(path: string) {
 }
 
 function setStoredUser(featureRules: boolean, effectiveFeatureRules = featureRules) {
-  window.localStorage.setItem("token", "test-token");
   window.localStorage.setItem(
     "user",
     JSON.stringify({

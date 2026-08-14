@@ -20,6 +20,18 @@ class OidcLoginState(Base):
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
 
 
+class OidcAuthorizationCode(Base):
+    """Short-lived hash ledger preventing authorization-code replay."""
+
+    __tablename__ = "oidc_authorization_codes"
+
+    id = Column(String, primary_key=True)
+    provider = Column(String, nullable=False, index=True)
+    code_hash = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    expires_at = Column(UTCDateTime(), nullable=False, index=True)
+
+
 class OidcProvider(Base):
     __tablename__ = "oidc_providers"
 

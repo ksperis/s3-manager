@@ -11,7 +11,7 @@ import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/G
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
-import { CLIENT_STORAGE_KEYS, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
+import { useSession } from "../../auth/SessionProvider";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import {
   resolvePostLoginPath,
@@ -28,6 +28,7 @@ export default function OidcCallbackPage() {
   const { setTheme } = useTheme();
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(true);
+  const { acceptAuthentication } = useSession();
 
   useEffect(() => {
     let cancelled = false;
@@ -52,9 +53,18 @@ export default function OidcCallbackPage() {
       try {
         const res = await completeOidcLogin(providerId, codeValue, stateValue);
         if (cancelled) return;
-        writeClientStorage(CLIENT_STORAGE_KEYS.authToken, res.access_token);
+        if (res.status === "mfa_required" || res.status === "mfa_enrollment_required") {
+          navigate(`/login?mfa=${res.status}`, { replace: true });
+          return;
+        }
+        if (res.status === "link_approval_required") {
+          setError("This identity must be approved by a superadministrator before it can be linked.");
+          setProcessing(false);
+          return;
+        }
+        if (!res.user) throw new Error("OIDC session did not return a user");
+        acceptAuthentication(res, "oidc");
         const sessionUser: SessionUser = { ...res.user, authType: "oidc" };
-        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { ...sessionUser, authProvider: providerId });
         setLanguagePreference(res.user.ui_language ?? "auto");
         if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
           setTheme(res.user.ui_preferences.theme);
@@ -93,7 +103,7 @@ export default function OidcCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, provider, searchParams, setGeneralSettings, setLanguagePreference, setTheme]);
+  }, [acceptAuthentication, navigate, provider, searchParams, setGeneralSettings, setLanguagePreference, setTheme]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">

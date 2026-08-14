@@ -7,7 +7,6 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import axios from "axios";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -18,6 +17,7 @@ import {
 } from "react";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
+import { ApiError } from "../../api/client";
 import type { ExecutionContext } from "../../api/executionContexts";
 import {
   BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY,
@@ -3217,11 +3217,13 @@ describe("BrowserPage interactions", () => {
     listBrowserObjectsMock.mockImplementation(
       (_accountId: string, bucket: string, _options?: { maxKeys?: number }) => {
         if (bucket === "locked-bucket") {
-          return Promise.reject({
-            isAxiosError: true,
-            response: { data: { detail: "Forbidden by policy" } },
-            message: "Request failed with status code 403",
-          });
+          return Promise.reject(new ApiError("Request failed with status 403", {
+            response: {
+              status: 403,
+              data: { detail: "Forbidden by policy" },
+              headers: {},
+            },
+          }));
         }
         return Promise.resolve({
           prefix: "",
@@ -3281,11 +3283,9 @@ describe("BrowserPage interactions", () => {
     listBrowserObjectsMock.mockImplementation(
       (_accountId: string, bucket: string, _options?: { maxKeys?: number }) => {
         if (bucket === "flaky-bucket") {
-          return Promise.reject({
-            isAxiosError: true,
-            response: { status: 502, data: {} },
-            message: "Network Error",
-          });
+          return Promise.reject(new ApiError("Failed to fetch", {
+            response: { status: 502, data: {}, headers: {} },
+          }));
         }
         return Promise.resolve({
           prefix: "",
@@ -4826,52 +4826,40 @@ describe("BrowserPage interactions", () => {
     const file = new File(["small direct payload"], "small-direct.txt", {
       type: "text/plain",
     });
-    const putSpy = vi.spyOn(axios, "put").mockResolvedValue({
-      headers: {},
-    } as Awaited<ReturnType<typeof axios.put>>);
-    const postSpy = vi.spyOn(axios, "post").mockResolvedValue({
-      headers: {},
-    } as Awaited<ReturnType<typeof axios.post>>);
+    renderPage({ accountIdForApi: "acc-1" });
+    await findRowByLabel("a.txt");
 
-    try {
-      renderPage({ accountIdForApi: "acc-1" });
-      await findRowByLabel("a.txt");
+    const fileInput = document.querySelector(
+      'input[type="file"]:not([directory])',
+    ) as HTMLInputElement | null;
+    expect(fileInput).not.toBeNull();
+    fireEvent.change(fileInput as HTMLInputElement, {
+      target: { files: [file] },
+    });
 
-      const fileInput = document.querySelector(
-        'input[type="file"]:not([directory])',
-      ) as HTMLInputElement | null;
-      expect(fileInput).not.toBeNull();
-      fireEvent.change(fileInput as HTMLInputElement, {
-        target: { files: [file] },
-      });
-
-      await waitFor(() => {
-        expect(presignObjectMock).toHaveBeenCalledWith(
-          "acc-1",
-          "bucket-1",
-          {
-            key: "small-direct.txt",
-            operation: "put_object",
-            content_type: "text/plain",
-            expires_in: 1800,
-          },
-          null,
-          undefined,
-        );
-        expect(putSpy).toHaveBeenCalledWith(
-          "https://example.test/small-direct.txt",
-          file,
-          expect.objectContaining({
-            headers: { "Content-Type": "text/plain" },
-          }),
-        );
-      });
-      expect(postSpy).not.toHaveBeenCalled();
-      expect(proxyUploadMock).not.toHaveBeenCalled();
-    } finally {
-      putSpy.mockRestore();
-      postSpy.mockRestore();
-    }
+    await waitFor(() => {
+      expect(presignObjectMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        {
+          key: "small-direct.txt",
+          operation: "put_object",
+          content_type: "text/plain",
+          expires_in: 1800,
+        },
+        null,
+        undefined,
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://example.test/small-direct.txt",
+        expect.objectContaining({
+          method: "PUT",
+          headers: { "Content-Type": "text/plain" },
+          credentials: "omit",
+        }),
+      );
+    });
+    expect(proxyUploadMock).not.toHaveBeenCalled();
   });
 
   it("cancels cross-context move batches without deleting pending sources and keeps paste available", async () => {

@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../api/client";
 
 type ApiFailureKind = "timeout" | "unavailable" | "denied" | "invalid_response" | "unknown";
 
@@ -43,7 +43,7 @@ export function extractApiError(error: unknown, fallback: string): string {
 }
 
 export function classifyApiError(error: unknown, fallback: string): ApiFailure {
-  if (axios.isAxiosError(error)) {
+  if (isApiError(error)) {
     const status = error.response?.status ?? null;
     const code = String(error.code ?? "").toUpperCase();
     const lowLevelMessage = typeof error.message === "string" ? error.message : "";

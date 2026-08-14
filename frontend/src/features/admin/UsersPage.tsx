@@ -62,9 +62,8 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { cx, uiInputClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 import { stableSignature } from "../../utils/stableSignature";
-import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
+import { isAdminLikeRole, isSuperAdminRole, readStoredUser, setSessionUserCache } from "../../utils/workspaces";
 import {
   clearAdminPrincipalEditRequest,
   readAdminPrincipalEditRequest,
@@ -1671,8 +1670,7 @@ export default function UsersPage() {
       payload.s3_connection_ids = editSelectedS3Connections;
       const updatedUser = await updateUser(editingUser.id, payload);
       if (currentUserId !== null && currentUserId === editingUser.id && typeof window !== "undefined") {
-        const stored = readClientJson<Record<string, unknown>>(CLIENT_STORAGE_KEYS.sessionUser);
-        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { ...(stored ?? {}), ...updatedUser });
+        setSessionUserCache({ ...(readStoredUser() ?? {}), ...updatedUser });
       }
       setActionMessage("User updated");
       closeEditModal();

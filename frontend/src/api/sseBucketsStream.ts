@@ -1,6 +1,5 @@
-import client from "./client";
+import client, { buildApiRequestHeaders } from "./client";
 import { sanitizeErrorMessage } from "../utils/apiError";
-import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientStorage } from "../utils/clientStorage";
 
 type StreamBucketsOptions<TProgress> = {
   signal?: AbortSignal;
@@ -28,35 +27,29 @@ function isCancelledError(err: unknown): boolean {
   return name === "CanceledError" || code === "ERR_CANCELED";
 }
 
-function buildHeaders(extraHeaders?: HeadersInit): Headers {
-  const headers = new Headers(extraHeaders);
+function buildHeaders(method: string, extraHeaders?: HeadersInit): Headers {
+  const headers = buildApiRequestHeaders(method, extraHeaders);
   headers.set("Accept", "text/event-stream");
-  const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
   return headers;
 }
 
 async function fetchStream(url: string, signal?: AbortSignal, requestInit?: RequestInit): Promise<Response> {
+  const method = requestInit?.method?.toUpperCase() ?? "GET";
   let response = await fetch(url, {
     ...requestInit,
-    method: requestInit?.method ?? "GET",
-    headers: buildHeaders(requestInit?.headers),
+    method,
+    headers: buildHeaders(method, requestInit?.headers),
     credentials: "include",
     signal,
   });
 
   if (response.status === 401 || response.status === 419) {
     try {
-      const refresh = await client.post<{ access_token: string; token_type: string }>("/auth/refresh", undefined, { signal });
-      if (typeof window !== "undefined") {
-        writeClientStorage(CLIENT_STORAGE_KEYS.authToken, refresh.data.access_token);
-      }
+      await client.post("/auth/refresh", undefined, { signal });
       response = await fetch(url, {
         ...requestInit,
-        method: requestInit?.method ?? "GET",
-        headers: buildHeaders(requestInit?.headers),
+        method,
+        headers: buildHeaders(method, requestInit?.headers),
         credentials: "include",
         signal,
       });

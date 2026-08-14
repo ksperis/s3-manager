@@ -4,39 +4,141 @@ import base64
 import binascii
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import timedelta
 from functools import lru_cache
 from typing import Any, Dict, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
+from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlalchemy.types import String, TypeDecorator
 
 from app.utils.time import utcnow
 
 from .config import get_settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+password_hash = PasswordHash((Argon2Hasher(), BcryptHasher()))
+dummy_password_hash = PasswordHash((Argon2Hasher(),)).hash("not-a-real-password-value")
 
 _credential_keys_override: Optional[list[str]] = None
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return password_hash.verify(plain_password, hashed_password)
+
+
+def verify_and_update_password(plain_password: str, hashed_password: str) -> tuple[bool, Optional[str]]:
+    return password_hash.verify_and_update(plain_password, hashed_password)
+
+
+def consume_dummy_password_hash(plain_password: str) -> None:
+    password_hash.verify(plain_password or "", dummy_password_hash)
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return password_hash.hash(password)
 
 
-def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
+def _kid_for_key(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def _create_typed_token(
+    data: Dict[str, Any],
+    *,
+    token_type: str,
+    audience: str,
+    key_ring: "JwtKeyRing",
+    expires_delta: timedelta,
+) -> str:
     settings = get_settings()
-    expire = utcnow() + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, _get_jwt_key_ring().current_key(), algorithm="HS256")
-    return encoded_jwt
+    now = utcnow()
+    key = key_ring.current_key()
+    claims = data.copy()
+    claims.update(
+        {
+            "typ": token_type,
+            "iss": settings.jwt_issuer,
+            "aud": audience,
+            "iat": now,
+            "nbf": now,
+            "exp": now + expires_delta,
+            "jti": claims.get("jti") or secrets.token_hex(16),
+        }
+    )
+    required = {"sub", "sid", "auth_version"}
+    missing = sorted(field for field in required if claims.get(field) is None)
+    if missing:
+        raise ValueError(f"Missing typed JWT claim(s): {', '.join(missing)}")
+    return jwt.encode(
+        claims,
+        key,
+        algorithm=settings.jwt_algorithm,
+        headers={"kid": _kid_for_key(key), "typ": token_type},
+    )
+
+
+def create_ui_access_token(*, user_id: int, session_id: str, auth_version: int, role: str) -> str:
+    settings = get_settings()
+    return _create_typed_token(
+        {"sub": f"user:{user_id}", "uid": user_id, "sid": session_id, "auth_version": auth_version, "role": role},
+        token_type="ui_access",
+        audience=settings.ui_jwt_audience,
+        key_ring=_get_ui_jwt_key_ring(),
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+
+
+def create_s3_access_token(*, s3_session_id: str, auth_session_id: str) -> str:
+    settings = get_settings()
+    return _create_typed_token(
+        {"sub": f"s3:{s3_session_id}", "sid": auth_session_id, "s3_sid": s3_session_id, "auth_version": 1},
+        token_type="s3_access",
+        audience=settings.ui_jwt_audience,
+        key_ring=_get_ui_jwt_key_ring(),
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+
+
+def create_api_access_token(
+    *,
+    user_id: int,
+    token_id: str,
+    auth_version: int,
+    role: str,
+    scopes: list[str],
+    expires_delta: timedelta,
+    jti: str,
+) -> str:
+    settings = get_settings()
+    return _create_typed_token(
+        {
+            "sub": f"user:{user_id}",
+            "uid": user_id,
+            "sid": token_id,
+            "auth_version": auth_version,
+            "role": role,
+            "scopes": scopes,
+            "jti": jti,
+        },
+        token_type="api_access",
+        audience=settings.api_jwt_audience,
+        key_ring=_get_api_jwt_key_ring(),
+        expires_delta=expires_delta,
+    )
+
+
+def create_pre_auth_token(*, user_id: int, session_id: str, auth_version: int, purpose: str) -> str:
+    settings = get_settings()
+    return _create_typed_token(
+        {"sub": f"user:{user_id}", "uid": user_id, "sid": session_id, "auth_version": auth_version, "purpose": purpose},
+        token_type="pre_auth",
+        audience=settings.pre_auth_jwt_audience,
+        key_ring=_get_ui_jwt_key_ring(),
+        expires_delta=timedelta(minutes=settings.pre_auth_expire_minutes),
+    )
 
 
 def create_refresh_token() -> str:
@@ -53,10 +155,40 @@ def constant_time_equal(value: Optional[str], expected: Optional[str]) -> bool:
     return secrets.compare_digest(value, expected)
 
 
-def decode_token(token: str) -> Optional[Dict[str, Any]]:
-    for key in _get_jwt_key_ring().all_keys():
+def decode_typed_token(token: str, *, expected_type: str) -> Optional[Dict[str, Any]]:
+    settings = get_settings()
+    if expected_type == "api_access":
+        key_ring = _get_api_jwt_key_ring()
+        audience = settings.api_jwt_audience
+    elif expected_type == "pre_auth":
+        key_ring = _get_ui_jwt_key_ring()
+        audience = settings.pre_auth_jwt_audience
+    else:
+        key_ring = _get_ui_jwt_key_ring()
+        audience = settings.ui_jwt_audience
+    try:
+        header = jwt.get_unverified_header(token)
+    except JWTError:
+        return None
+    if header.get("typ") != expected_type or header.get("alg") != settings.jwt_algorithm:
+        return None
+    kid = header.get("kid")
+    keys = [key for key in key_ring.all_keys() if _kid_for_key(key) == kid]
+    if len(keys) != 1:
+        return None
+    for key in keys:
         try:
-            return jwt.decode(token, key, algorithms=["HS256"])
+            claims = jwt.decode(
+                token,
+                key,
+                algorithms=[settings.jwt_algorithm],
+                audience=audience,
+                issuer=settings.jwt_issuer,
+                options={"require_sub": True, "require_iat": True, "require_nbf": True, "require_exp": True, "require_jti": True},
+            )
+            if claims.get("typ") != expected_type or not claims.get("sid") or claims.get("auth_version") is None:
+                return None
+            return claims
         except JWTError:
             continue
     return None
@@ -93,9 +225,20 @@ class JwtKeyRing:
 
 
 @lru_cache(maxsize=1)
-def _get_jwt_key_ring() -> JwtKeyRing:
+def _get_ui_jwt_key_ring() -> JwtKeyRing:
     settings = get_settings()
-    return JwtKeyRing(list(settings.jwt_keys))
+    return JwtKeyRing(settings.effective_ui_jwt_keys())
+
+
+@lru_cache(maxsize=1)
+def _get_api_jwt_key_ring() -> JwtKeyRing:
+    settings = get_settings()
+    return JwtKeyRing(settings.effective_api_jwt_keys())
+
+
+def clear_jwt_key_ring_cache() -> None:
+    _get_ui_jwt_key_ring.cache_clear()
+    _get_api_jwt_key_ring.cache_clear()
 
 
 def _get_credential_keys() -> list[str]:

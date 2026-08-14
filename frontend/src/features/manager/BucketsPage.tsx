@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import { isApiError } from "../../api/client";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -758,7 +758,7 @@ export default function BucketsPage() {
     } catch (err) {
       const msg = extractError(err, `Unable to delete bucket '${name}'.`);
       const notEmpty = msg.toLowerCase().includes("not empty");
-      const conflict = axios.isAxiosError(err) && err.response?.status === 409;
+      const conflict = isApiError(err) && err.response?.status === 409;
       if (notEmpty || conflict) {
         setActionError(`Bucket '${name}' is not empty. Empty it before deleting.`);
         return;

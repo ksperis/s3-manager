@@ -28,14 +28,11 @@ spec:
               env:
                 - name: USAGE_HISTORY_API_BASE
                   value: {{ printf "http://%s-backend:%d" (include "s3-manager.fullname" .) (.Values.service.backend.port | int) | quote }}
-                {{- $backendToken := get .Values.backend.env "INTERNAL_CRON_TOKEN" }}
-                {{- if $backendToken }}
                 - name: INTERNAL_CRON_TOKEN
-                  value: {{ $backendToken | quote }}
-                {{- else if .Values.usageHistoryCronJob.internalToken }}
-                - name: INTERNAL_CRON_TOKEN
-                  value: {{ .Values.usageHistoryCronJob.internalToken | quote }}
-                {{- end }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backend.existingSecret | quote }}
+                      key: {{ .Values.backend.secretKeys.internalCronToken | quote }}
                 {{- range .Values.usageHistoryCronJob.extraEnv }}
                 - name: {{ .name }}
                   value: {{ .value | quote }}

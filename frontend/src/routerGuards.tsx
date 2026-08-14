@@ -10,22 +10,18 @@ import { useGeneralSettings } from "./components/GeneralSettingsContext";
 import { cx, uiCardClass } from "./components/ui/styles";
 import { useS3AccountContext } from "./features/manager/S3AccountContext";
 import FeatureDisabledPage from "./features/shared/FeatureDisabledPage";
-import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientJson } from "./utils/clientStorage";
+import { useSession } from "./auth/SessionProvider";
 import {
   getManagerToolAccess,
   hasPortalWorkspaceAccess,
   isAdminLikeRole,
-  readStoredUser,
   resolvePostLoginPath,
+  setSessionUserCache,
   type SessionUser,
 } from "./utils/workspaces";
 import { prefetchWorkspaceBranch } from "./utils/routePrefetch";
 
 const USER_ROLE = "ui_user";
-
-function getStoredUser(): SessionUser | null {
-  return readStoredUser();
-}
 
 function unauthorizedRoute() {
   return <Navigate to="/unauthorized" replace />;
@@ -61,21 +57,22 @@ export function RouteFallback() {
 }
 
 export function RequireAuth() {
-  const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
-  const user = getStoredUser();
-  if (!token || !user) return <Navigate to="/login" replace />;
+  const { loading, authenticated } = useSession();
+  if (loading) return <RouteFallback />;
+  if (!authenticated) return <Navigate to="/login" replace />;
   return <Outlet />;
 }
 
 export function RequireRole({ roles }: { roles: string[] }) {
-  const user = getStoredUser();
+  const { loading, user } = useSession();
+  if (loading) return <RouteFallback />;
   if (!user || !user.role) return <Navigate to="/login" replace />;
   if (!roles.includes(user.role)) return unauthorizedRoute();
   return <Outlet />;
 }
 
 export function RoleRedirect() {
-  const user = getStoredUser();
+  const { user } = useSession();
   const { generalSettings, loading } = useGeneralSettings();
   const destination = loading ? null : resolvePostLoginPath(user, generalSettings);
   useEffect(() => {
@@ -95,12 +92,12 @@ export function RequireManagerFeature() {
 
 export function RequirePortalAccess() {
   const { generalSettings, loading } = useGeneralSettings();
-  const [sessionUser, setSessionUser] = useState<SessionUser | null>(() => getStoredUser());
+  const { authenticated, user: authenticatedUser } = useSession();
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(() => authenticatedUser);
   const [refreshingSession, setRefreshingSession] = useState(() => {
-    const storedUser = getStoredUser();
+    const storedUser = authenticatedUser;
     return Boolean(
-      typeof window !== "undefined" &&
-        readClientStorage(CLIENT_STORAGE_KEYS.authToken) &&
+      typeof window !== "undefined" && authenticated &&
         storedUser &&
         !hasPortalWorkspaceAccess(storedUser)
     );
@@ -108,14 +105,14 @@ export function RequirePortalAccess() {
 
   useEffect(() => {
     if (loading || !generalSettings.portal_enabled || hasPortalWorkspaceAccess(sessionUser)) return;
-    if (typeof window === "undefined" || !readClientStorage(CLIENT_STORAGE_KEYS.authToken)) return;
+    if (typeof window === "undefined" || !authenticated) return;
     let cancelled = false;
     setRefreshingSession(true);
     fetchCurrentUser()
       .then((currentUser) => {
         if (cancelled) return;
-        const mergedUser = { ...(getStoredUser() ?? {}), ...currentUser } as SessionUser;
-        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, mergedUser);
+        const mergedUser = { ...(authenticatedUser ?? {}), ...currentUser } as SessionUser;
+        setSessionUserCache(mergedUser);
         setSessionUser(mergedUser);
       })
       .catch(() => {
@@ -127,7 +124,7 @@ export function RequirePortalAccess() {
     return () => {
       cancelled = true;
     };
-  }, [generalSettings.portal_enabled, loading, sessionUser]);
+  }, [authenticated, authenticatedUser, generalSettings.portal_enabled, loading, sessionUser]);
 
   if (loading) {
     return <RouteFallback />;
@@ -149,7 +146,7 @@ export function RequirePortalAccess() {
 
 export function RequireCephAdminFeature() {
   const { generalSettings, loading } = useGeneralSettings();
-  const user = getStoredUser();
+  const { user } = useSession();
   if (!user || !isAdminLikeRole(user.role) || !user.can_access_ceph_admin) {
     return unauthorizedRoute();
   }
@@ -158,7 +155,7 @@ export function RequireCephAdminFeature() {
 
 export function RequireStorageOpsFeature() {
   const { generalSettings, loading } = useGeneralSettings();
-  const user = getStoredUser();
+  const { user } = useSession();
   const canUseStorageOpsRole = Boolean(user && (isAdminLikeRole(user.role) || user.role === USER_ROLE));
   if (!user || !canUseStorageOpsRole || !user.can_access_storage_ops) {
     return unauthorizedRoute();
@@ -177,7 +174,7 @@ function isBrowserSurfaceEnabled(generalSettings: GeneralSettings, surface: Brow
 
 export function RequireBrowserSurface({ surface }: { surface: BrowserSurface }) {
   const { generalSettings, loading } = useGeneralSettings();
-  const user = getStoredUser();
+  const { user } = useSession();
   if (loading) return <RouteFallback />;
   const portalBrowserRootEnabled =
     surface === "root" &&
@@ -240,7 +237,7 @@ function canAccessManagerFeatureRules(user: SessionUser | null): boolean {
 
 export function RequireManagerMigrationFeature() {
   const { generalSettings, loading } = useGeneralSettings();
-  const user = getStoredUser();
+  const { user } = useSession();
   return renderManagerToolFeature(
     loading,
     generalSettings.bucket_migration_enabled,
@@ -252,7 +249,7 @@ export function RequireManagerMigrationFeature() {
 export function RequireManagerBucketCompareFeature() {
   const { generalSettings, loading } = useGeneralSettings();
   const { requiresS3AccountSelection } = useS3AccountContext();
-  const user = getStoredUser();
+  const { user } = useSession();
   return renderManagerToolFeature(
     loading,
     generalSettings.bucket_compare_enabled,
@@ -265,7 +262,7 @@ export function RequireManagerBucketCompareFeature() {
 export function RequireManagerBucketIntegrityFeature() {
   const { generalSettings, loading } = useGeneralSettings();
   const { requiresS3AccountSelection } = useS3AccountContext();
-  const user = getStoredUser();
+  const { user } = useSession();
   return renderManagerToolFeature(
     loading,
     generalSettings.bucket_integrity_check_enabled,
@@ -278,7 +275,7 @@ export function RequireManagerBucketIntegrityFeature() {
 export function RequireManagerBucketPurgeFeature() {
   const { generalSettings, loading } = useGeneralSettings();
   const { requiresS3AccountSelection } = useS3AccountContext();
-  const user = getStoredUser();
+  const { user } = useSession();
   return renderManagerToolFeature(
     loading,
     generalSettings.bucket_purge_enabled,
@@ -289,7 +286,7 @@ export function RequireManagerBucketPurgeFeature() {
 }
 
 export function RequireManagerFeatureRulesTool() {
-  const user = getStoredUser();
+  const { user } = useSession();
   if (canAccessManagerFeatureRules(user)) {
     return <Outlet />;
   }
