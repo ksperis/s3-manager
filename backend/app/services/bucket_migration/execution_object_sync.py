@@ -2,9 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import ExitStack
 from typing import Any, Callable, Optional
 
@@ -18,14 +16,12 @@ from app.utils.time import utcnow
 from ._shared import (
     _DIFF_CONTROL_CHECK_INTERVAL_OBJECTS,
     _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER,
-    _RUN_ACTIONS_WAIT_TIMEOUT_SECONDS,
     _SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS,
     _SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD,
     _ResolvedContext,
     _SyncDiff,
     _VersionReplayWatermarkBuilder,
     _WorkerLeaseLostError,
-    _chunked,
     _json_loads,
 )
 
@@ -487,146 +483,6 @@ class BucketMigrationObjectSyncMixin:
             raise RuntimeError(
                 f"Unable to recreate delete marker for '{key}' in bucket '{target_bucket}': {exc}"
             ) from exc
-
-    def _run_copy_actions(
-        self,
-        source_ctx: _ResolvedContext,
-        target_ctx: _ResolvedContext,
-        source_bucket: str,
-        target_bucket: str,
-        keys: list[str],
-        *,
-        parallelism_max: int,
-        same_endpoint: bool,
-        control_check: Callable[[], str],
-        on_progress: Optional[Callable[..., None]] = None,
-    ) -> int:
-        if not keys:
-            return 0
-        copied = 0
-        worker_count = max(1, min(int(parallelism_max), len(keys)))
-        chunk_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
-        thread_local = threading.local()
-
-        def _copy_worker(key: str) -> None:
-            source_client = getattr(thread_local, "source_client", None)
-            if source_client is None:
-                source_client = self._context_client(source_ctx)
-                thread_local.source_client = source_client
-            target_client = getattr(thread_local, "target_client", None)
-            if target_client is None:
-                target_client = self._context_client(target_ctx)
-                thread_local.target_client = target_client
-            self._copy_object(
-                source_ctx,
-                target_ctx,
-                source_bucket=source_bucket,
-                target_bucket=target_bucket,
-                key=key,
-                same_endpoint=same_endpoint,
-                source_client=source_client,
-                target_client=target_client,
-            )
-
-        for chunk in _chunked(keys, chunk_size):
-            state = control_check()
-            if state == "lost_lease":
-                if on_progress is not None:
-                    on_progress(force=True)
-                raise _WorkerLeaseLostError("Worker lease lost while copying objects")
-            if state in {"pause", "cancel"}:
-                if on_progress is not None:
-                    on_progress(force=True)
-                return -1
-            with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-copy") as executor:
-                futures = {executor.submit(_copy_worker, key) for key in chunk}
-                interrupted_state: Optional[str] = None
-                pending = set(futures)
-                while pending:
-                    done, pending = wait(pending, timeout=_RUN_ACTIONS_WAIT_TIMEOUT_SECONDS)
-                    state = control_check()
-                    if state == "lost_lease":
-                        interrupted_state = "lost_lease"
-                    elif state in {"pause", "cancel"} and interrupted_state is None:
-                        interrupted_state = state
-                    for future in done:
-                        future.result()
-                        copied += 1
-                        if on_progress is not None:
-                            on_progress(copied_inc=1)
-                if interrupted_state == "lost_lease":
-                    if on_progress is not None:
-                        on_progress(force=True)
-                    raise _WorkerLeaseLostError("Worker lease lost while copying objects")
-                if interrupted_state in {"pause", "cancel"}:
-                    if on_progress is not None:
-                        on_progress(force=True)
-                    return -1
-        if on_progress is not None:
-            on_progress(force=True)
-        return copied
-
-    def _run_delete_actions(
-        self,
-        target_ctx: _ResolvedContext,
-        target_bucket: str,
-        keys: list[str],
-        *,
-        parallelism_max: int,
-        control_check: Callable[[], str],
-        on_progress: Optional[Callable[..., None]] = None,
-    ) -> int:
-        if not keys:
-            return 0
-        deleted = 0
-        worker_count = max(1, min(int(parallelism_max), len(keys)))
-        chunk_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
-        thread_local = threading.local()
-
-        def _delete_worker(key: str) -> None:
-            target_client = getattr(thread_local, "target_client", None)
-            if target_client is None:
-                target_client = self._context_client(target_ctx)
-                thread_local.target_client = target_client
-            self._delete_single_object(target_ctx, target_bucket, key, target_client=target_client)
-
-        for chunk in _chunked(keys, chunk_size):
-            state = control_check()
-            if state == "lost_lease":
-                if on_progress is not None:
-                    on_progress(force=True)
-                raise _WorkerLeaseLostError("Worker lease lost while deleting objects")
-            if state in {"pause", "cancel"}:
-                if on_progress is not None:
-                    on_progress(force=True)
-                return -1
-            with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-delete") as executor:
-                futures = {executor.submit(_delete_worker, key) for key in chunk}
-                interrupted_state: Optional[str] = None
-                pending = set(futures)
-                while pending:
-                    done, pending = wait(pending, timeout=_RUN_ACTIONS_WAIT_TIMEOUT_SECONDS)
-                    state = control_check()
-                    if state == "lost_lease":
-                        interrupted_state = "lost_lease"
-                    elif state in {"pause", "cancel"} and interrupted_state is None:
-                        interrupted_state = state
-                    for future in done:
-                        future.result()
-                        deleted += 1
-                        if on_progress is not None:
-                            on_progress(deleted_inc=1)
-                if interrupted_state == "lost_lease":
-                    if on_progress is not None:
-                        on_progress(force=True)
-                    raise _WorkerLeaseLostError("Worker lease lost while deleting objects")
-                if interrupted_state in {"pause", "cancel"}:
-                    if on_progress is not None:
-                        on_progress(force=True)
-                    return -1
-        if on_progress is not None:
-            on_progress(force=True)
-        return deleted
 
     def _source_versioning_status_from_item(self, item: BucketMigrationItem) -> Optional[str]:
         source_snapshot = _json_loads(item.source_snapshot_json)
