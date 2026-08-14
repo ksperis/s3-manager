@@ -246,7 +246,7 @@ describe("PortalDashboard storage workspace UX", () => {
     );
 
     expect(document.querySelector('[data-workspace-dashboard-kpi-row="true"]')).toBeInTheDocument();
-    expect(document.querySelector('[data-workspace-dashboard-kpi-row="true"]')).toHaveClass("2xl:grid-cols-5");
+    expect(document.querySelector('[data-workspace-dashboard-kpi-row="true"]')).toHaveClass("xl:grid-cols-5");
     expect(screen.getByText(trendText("256 B vs last 30 days"))).toBeInTheDocument();
     expect(screen.getAllByText(trendText("1 vs last 30 days")).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(trendText("4 vs last 30 days"))).toBeInTheDocument();

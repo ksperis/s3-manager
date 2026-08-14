@@ -92,7 +92,7 @@ export default function CephAdminDashboard() {
           className="grid gap-4"
         />
       )}
-      {selectedEndpoint?.id ? <WorkspaceNavCards items={cards} /> : null}
+      {selectedEndpoint?.id ? <WorkspaceNavCards items={cards} columns={4} /> : null}
     </PageShell>
   );
 }

@@ -399,13 +399,20 @@ function WorkspaceDashboardMetricCard({ metric }: { metric: WorkspaceDashboardMe
 
 export function WorkspaceDashboardKpiRow({
   metrics,
+  columns = 4,
   className,
 }: {
   metrics: WorkspaceDashboardMetric[];
+  columns?: 4 | 5;
   className?: string;
 }) {
+  const gridColumnsClass = columns === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4";
+
   return (
-    <div className={cx("grid gap-3 md:grid-cols-2 xl:grid-cols-4", className)} data-workspace-dashboard-kpi-row="true">
+    <div
+      className={cx("grid gap-3 md:grid-cols-2", gridColumnsClass, className)}
+      data-workspace-dashboard-kpi-row="true"
+    >
       {metrics.map((metric) => (
         <WorkspaceDashboardMetricCard key={metric.label} metric={metric} />
       ))}

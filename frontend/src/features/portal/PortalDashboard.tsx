@@ -687,7 +687,7 @@ export default function PortalDashboard() {
         </PageBanner>
       )}
 
-      <KpiRow metrics={metrics} className="2xl:grid-cols-5" />
+      <KpiRow metrics={metrics} columns={5} />
 
       <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-12">
         <div className="min-w-0 xl:col-span-4">
