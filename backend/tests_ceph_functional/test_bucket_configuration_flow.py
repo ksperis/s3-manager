@@ -240,8 +240,6 @@ def _create_replication_connection_context(
             json={
                 "name": f"{ceph_test_settings.test_prefix}-replication-conn-{suffix}",
                 "storage_endpoint_id": int(endpoint["id"]),
-                "access_manager": True,
-                "access_browser": True,
                 "access_key_id": ceph_test_settings.rgw_admin_access_key,
                 "secret_access_key": ceph_test_settings.rgw_admin_secret_key,
                 "provider_hint": "CEPH",

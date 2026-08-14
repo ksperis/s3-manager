@@ -222,11 +222,57 @@ def _rand_suffix(length: int = 8) -> str:
     return uuid.uuid4().hex[:length]
 
 
+def _select_storage_endpoint(
+    endpoints: list[dict[str, Any]],
+    *,
+    preferred_name: str | None,
+) -> dict[str, Any] | None:
+    normalized_name = (preferred_name or "").strip().lower()
+    if normalized_name:
+        return next(
+            (
+                endpoint
+                for endpoint in endpoints
+                if str(endpoint.get("name") or "").strip().lower() == normalized_name
+            ),
+            None,
+        )
+    return next(
+        (endpoint for endpoint in endpoints if bool(endpoint.get("is_default"))),
+        endpoints[0] if endpoints else None,
+    )
+
+
+@pytest.fixture(scope="session")
+def storage_endpoint_id(
+    super_admin_session: BackendSession,
+    ceph_test_settings: CephTestSettings,
+) -> int:
+    endpoints = super_admin_session.get("/admin/storage-endpoints")
+    if not isinstance(endpoints, list) or not endpoints:
+        pytest.fail("Ceph functional tests require at least one configured storage endpoint")
+
+    selected = _select_storage_endpoint(
+        endpoints,
+        preferred_name=ceph_test_settings.ceph_admin_endpoint_name,
+    )
+    if selected is None:
+        pytest.fail(
+            "Ceph functional tests could not find the configured storage endpoint "
+            f"'{ceph_test_settings.ceph_admin_endpoint_name}'"
+        )
+    endpoint_id = selected.get("id")
+    if endpoint_id is None:
+        pytest.fail("Ceph functional tests selected a storage endpoint without an id")
+    return int(endpoint_id)
+
+
 def _provision_account(
     super_admin_session: BackendSession,
     backend_authenticator: BackendAuthenticator,
     ceph_test_settings: CephTestSettings,
     resource_tracker: ResourceTracker,
+    storage_endpoint_id: int,
     *,
     account_payload: dict | None = None,
 ) -> S3AccountTestContext:
@@ -235,6 +281,7 @@ def _provision_account(
         "email": f"{_rand_suffix()}@example.com",
         "quota_max_size_gb": 5,
         "quota_max_objects": 5000,
+        "storage_endpoint_id": storage_endpoint_id,
     }
     if account_payload:
         default_payload.update(account_payload)
@@ -295,6 +342,7 @@ def account_factory(
     backend_authenticator: BackendAuthenticator,
     ceph_test_settings: CephTestSettings,
     resource_tracker: ResourceTracker,
+    storage_endpoint_id: int,
 ) -> Callable[..., S3AccountTestContext]:
     def _factory(**kwargs) -> S3AccountTestContext:
         payload = kwargs.get("account_payload")
@@ -303,6 +351,7 @@ def account_factory(
             backend_authenticator,
             ceph_test_settings,
             resource_tracker,
+            storage_endpoint_id,
             account_payload=payload,
         )
 

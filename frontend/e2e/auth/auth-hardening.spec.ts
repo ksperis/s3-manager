@@ -24,9 +24,12 @@ test("enrolls and reuses a verified passkey with cookie-only multi-tab revocatio
   });
 
   const primaryLogin = async () => {
-    await page.goto("/login").catch((error: unknown) => {
-      if (!String(error).includes("ERR_ABORTED")) throw error;
-    });
+    try {
+      await page.goto("/login");
+    } catch {
+      // The auth guard can complete its own redirect to /login first.
+      await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
+    }
     await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
     await page.locator('input[type="email"]').fill(E2E_AUTH_ADMIN_EMAIL);
     await page.locator('input[type="password"]').fill(E2E_AUTH_ADMIN_PASSWORD);
