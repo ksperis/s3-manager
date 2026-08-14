@@ -19,7 +19,7 @@ from app.services.healthcheck_common import (
     DEFAULT_ROLLUP_RESOLUTION_SECONDS,
     HealthCheckResult,
 )
-from app.services.healthcheck_service import HealthCheckService
+from app.services.healthcheck_persistence_service import HealthCheckPersistenceService
 from app.services.quota_monitoring_service import QuotaMonitoringService, SubjectContext
 from app.services.user_notifications_service import UserNotificationsService
 from app.utils.time import utcnow
@@ -146,7 +146,7 @@ def test_billing_daily_upserts_keep_one_row(db_session):
 
 
 def test_health_latest_and_rollup_upserts_keep_one_row(db_session):
-    service = HealthCheckService(db_session)
+    service = HealthCheckPersistenceService(db_session)
     checked_at = utcnow()
     first = HealthCheckResult(
         endpoint_id=7,
