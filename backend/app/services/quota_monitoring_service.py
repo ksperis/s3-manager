@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.utils.time import utcnow
 
-from dataclasses import dataclass
 from datetime import datetime
 import logging
 from typing import Any, Optional
@@ -17,8 +16,6 @@ from app.core.config import get_settings
 from app.db import (
     AccountRole,
     QuotaAlertState,
-    QuotaUsageDaily,
-    QuotaUsageHourly,
     S3Account,
     S3User,
     StorageEndpoint,
@@ -37,6 +34,8 @@ from app.services.data_retention_service import DataRetentionService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_supervision import get_supervision_rgw_client
 from app.services import smtp_mailer
+from app.services.quota_subject import SubjectContext
+from app.services.quota_usage_history_service import QuotaUsageHistoryService
 from app.services.user_notifications_service import UserNotificationsService
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
@@ -44,20 +43,6 @@ from app.utils.usage_stats import extract_usage_stats
 
 logger = logging.getLogger(__name__)
 runtime_settings = get_settings()
-
-
-@dataclass
-class SubjectContext:
-    subject_type: str
-    subject_id: int
-    endpoint_id: int
-    endpoint_name: str
-    subject_name: str
-    subject_identifier: str
-    usage_uid: Optional[str]
-    quota_account_id: Optional[str]
-    quota_user_uid: Optional[str]
-    contact_email: Optional[str]
 
 
 class QuotaMonitoringService:
@@ -133,6 +118,7 @@ class QuotaMonitoringService:
         usage_clients: dict[int, Optional[RGWAdminClient]] = {}
         admin_clients: dict[int, Optional[RGWAdminClient]] = {}
         notifications_service = UserNotificationsService(self.db)
+        usage_history_service = QuotaUsageHistoryService(self.db)
 
         if quota_alerts_enabled:
             self._mailer, self._mail_error_reason = self._build_mailer(app_settings.quota_notifications)
@@ -207,9 +193,25 @@ class QuotaMonitoringService:
             )
 
             if usage_history_collection_enabled:
-                self._upsert_hourly(subject, usage_bytes, usage_objects, bucket_count, quota_size_bytes, quota_objects, ratio_pct, now)
+                usage_history_service.upsert_hourly(
+                    subject,
+                    usage_bytes,
+                    usage_objects,
+                    bucket_count,
+                    quota_size_bytes,
+                    quota_objects,
+                    ratio_pct,
+                    now,
+                )
                 summary["history_hourly_upserts"] += 1
-                self._upsert_daily(subject, usage_bytes, usage_objects, bucket_count, ratio_pct, now)
+                usage_history_service.upsert_daily(
+                    subject,
+                    usage_bytes,
+                    usage_objects,
+                    bucket_count,
+                    ratio_pct,
+                    now,
+                )
                 summary["history_daily_upserts"] += 1
 
             if quota_alerts_enabled:
@@ -473,154 +475,6 @@ class QuotaMonitoringService:
         if not ratios:
             return None
         return round(max(ratios), 3)
-
-    def _hour_floor(self, value: datetime) -> datetime:
-        return value.replace(minute=0, second=0, microsecond=0)
-
-    def _upsert_hourly(
-        self,
-        subject: SubjectContext,
-        used_bytes: int,
-        used_objects: int,
-        bucket_count: int,
-        quota_size_bytes: Optional[int],
-        quota_objects: Optional[int],
-        ratio_pct: Optional[float],
-        now: datetime,
-    ) -> None:
-        hour_ts = self._hour_floor(now)
-        account_id = subject.subject_id if subject.subject_type == "account" else None
-        user_id = subject.subject_id if subject.subject_type == "s3_user" else None
-        existing = (
-            self.db.query(QuotaUsageHourly)
-            .filter(
-                QuotaUsageHourly.hour_ts == hour_ts,
-                QuotaUsageHourly.storage_endpoint_id == subject.endpoint_id,
-                QuotaUsageHourly.s3_account_id == account_id,
-                QuotaUsageHourly.s3_user_id == user_id,
-            )
-            .first()
-        )
-        if existing:
-            existing.used_bytes = int(used_bytes)
-            existing.used_objects = int(used_objects)
-            existing.bucket_count = int(bucket_count)
-            existing.quota_size_bytes = quota_size_bytes
-            existing.quota_objects = quota_objects
-            existing.usage_ratio_pct = ratio_pct
-            existing.collected_at = now
-            return
-        row = QuotaUsageHourly(
-            hour_ts=hour_ts,
-            storage_endpoint_id=subject.endpoint_id,
-            s3_account_id=account_id,
-            s3_user_id=user_id,
-            used_bytes=int(used_bytes),
-            used_objects=int(used_objects),
-            bucket_count=int(bucket_count),
-            quota_size_bytes=quota_size_bytes,
-            quota_objects=quota_objects,
-            usage_ratio_pct=ratio_pct,
-            collected_at=now,
-        )
-        try:
-            with self.db.begin_nested():
-                self.db.add(row)
-                self.db.flush()
-        except IntegrityError:
-            existing = (
-                self.db.query(QuotaUsageHourly)
-                .filter(
-                    QuotaUsageHourly.hour_ts == hour_ts,
-                    QuotaUsageHourly.storage_endpoint_id == subject.endpoint_id,
-                    QuotaUsageHourly.s3_account_id == account_id,
-                    QuotaUsageHourly.s3_user_id == user_id,
-                )
-                .first()
-            )
-            if existing is None:
-                raise
-            existing.used_bytes = int(used_bytes)
-            existing.used_objects = int(used_objects)
-            existing.bucket_count = int(bucket_count)
-            existing.quota_size_bytes = quota_size_bytes
-            existing.quota_objects = quota_objects
-            existing.usage_ratio_pct = ratio_pct
-            existing.collected_at = now
-
-    def _upsert_daily(
-        self,
-        subject: SubjectContext,
-        used_bytes: int,
-        used_objects: int,
-        bucket_count: int,
-        ratio_pct: Optional[float],
-        now: datetime,
-    ) -> None:
-        day = now.date()
-        account_id = subject.subject_id if subject.subject_type == "account" else None
-        user_id = subject.subject_id if subject.subject_type == "s3_user" else None
-        existing = (
-            self.db.query(QuotaUsageDaily)
-            .filter(
-                QuotaUsageDaily.day == day,
-                QuotaUsageDaily.storage_endpoint_id == subject.endpoint_id,
-                QuotaUsageDaily.s3_account_id == account_id,
-                QuotaUsageDaily.s3_user_id == user_id,
-            )
-            .first()
-        )
-        if existing:
-            existing.last_used_bytes = int(used_bytes)
-            existing.last_used_objects = int(used_objects)
-            existing.bucket_count = int(bucket_count)
-            if ratio_pct is not None:
-                if existing.max_ratio_pct is None:
-                    existing.max_ratio_pct = ratio_pct
-                else:
-                    existing.max_ratio_pct = max(float(existing.max_ratio_pct), ratio_pct)
-            existing.samples_count = int(existing.samples_count or 0) + 1
-            existing.updated_at = now
-            return
-        row = QuotaUsageDaily(
-            day=day,
-            storage_endpoint_id=subject.endpoint_id,
-            s3_account_id=account_id,
-            s3_user_id=user_id,
-            last_used_bytes=int(used_bytes),
-            last_used_objects=int(used_objects),
-            bucket_count=int(bucket_count),
-            max_ratio_pct=ratio_pct,
-            samples_count=1,
-            updated_at=now,
-        )
-        try:
-            with self.db.begin_nested():
-                self.db.add(row)
-                self.db.flush()
-        except IntegrityError:
-            existing = (
-                self.db.query(QuotaUsageDaily)
-                .filter(
-                    QuotaUsageDaily.day == day,
-                    QuotaUsageDaily.storage_endpoint_id == subject.endpoint_id,
-                    QuotaUsageDaily.s3_account_id == account_id,
-                    QuotaUsageDaily.s3_user_id == user_id,
-                )
-                .first()
-            )
-            if existing is None:
-                raise
-            existing.last_used_bytes = int(used_bytes)
-            existing.last_used_objects = int(used_objects)
-            existing.bucket_count = int(bucket_count)
-            if ratio_pct is not None:
-                if existing.max_ratio_pct is None:
-                    existing.max_ratio_pct = ratio_pct
-                else:
-                    existing.max_ratio_pct = max(float(existing.max_ratio_pct), ratio_pct)
-            existing.samples_count = int(existing.samples_count or 0) + 1
-            existing.updated_at = now
 
     def _state_key(self, subject: SubjectContext) -> tuple[int, Optional[int], Optional[int]]:
         return (

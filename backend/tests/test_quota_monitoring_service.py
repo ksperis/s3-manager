@@ -28,7 +28,8 @@ from app.db import (
 )
 from app.models.app_settings import AppSettings
 from app.services import quota_monitoring_service
-from app.services.quota_monitoring_service import QuotaMonitoringService, SubjectContext
+from app.services.quota_monitoring_service import QuotaMonitoringService
+from app.services.quota_subject import SubjectContext
 
 
 class _FakeAdminClient:
@@ -606,4 +607,3 @@ def test_quota_history_constraints_prevent_duplicate_subject_rows(db_session):
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
-

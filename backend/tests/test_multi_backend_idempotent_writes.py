@@ -20,7 +20,8 @@ from app.services.healthcheck_common import (
     HealthCheckResult,
 )
 from app.services.healthcheck_persistence_service import HealthCheckPersistenceService
-from app.services.quota_monitoring_service import QuotaMonitoringService, SubjectContext
+from app.services.quota_subject import SubjectContext
+from app.services.quota_usage_history_service import QuotaUsageHistoryService
 from app.services.user_notifications_service import UserNotificationsService
 from app.utils.time import utcnow
 
@@ -41,14 +42,14 @@ def _subject() -> SubjectContext:
 
 
 def test_quota_usage_history_upserts_keep_one_row(db_session):
-    service = QuotaMonitoringService(db_session)
+    service = QuotaUsageHistoryService(db_session)
     now = utcnow()
     subject = _subject()
 
-    service._upsert_hourly(subject, 10, 1, 1, 100, 10, 10.0, now)
-    service._upsert_hourly(subject, 20, 2, 2, 100, 10, 20.0, now)
-    service._upsert_daily(subject, 10, 1, 1, 10.0, now)
-    service._upsert_daily(subject, 20, 2, 2, 20.0, now)
+    service.upsert_hourly(subject, 10, 1, 1, 100, 10, 10.0, now)
+    service.upsert_hourly(subject, 20, 2, 2, 100, 10, 20.0, now)
+    service.upsert_daily(subject, 10, 1, 1, 10.0, now)
+    service.upsert_daily(subject, 20, 2, 2, 20.0, now)
     db_session.commit()
 
     hourly = db_session.query(QuotaUsageHourly).one()
