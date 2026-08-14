@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.db import S3Connection, User, UserRole
+from app.db import (
+    S3Connection,
+    StorageEndpoint,
+    StorageProvider,
+    User,
+    UserRole,
+)
 from app.models.admin_automation import (
     AccountLinkApply,
     AdminAutomationApplyRequest,
@@ -15,6 +21,7 @@ from app.models.admin_automation import (
 )
 from app.services.admin_automation_service import AdminAutomationService
 from app.services.mappers.s3_connection import mask_access_key_id
+from app.utils.s3_connection_endpoint import parse_custom_endpoint_config
 
 
 class _Audit:
@@ -56,7 +63,14 @@ def _user(db_session) -> User:
     return user
 
 
-def _connection(db_session, user: User, *, name: str, shared: bool) -> S3Connection:
+def _connection(
+    db_session,
+    user: User,
+    *,
+    name: str,
+    shared: bool,
+    storage_endpoint_id: int | None = None,
+) -> S3Connection:
     connection = S3Connection(
         created_by_user_id=user.id,
         name=name,
@@ -65,11 +79,26 @@ def _connection(db_session, user: User, *, name: str, shared: bool) -> S3Connect
         access_browser=True,
         access_key_id=f"AK-{name}-{shared}",
         secret_access_key=f"SK-{name}-{shared}",
+        storage_endpoint_id=storage_endpoint_id,
     )
     db_session.add(connection)
     db_session.commit()
     db_session.refresh(connection)
     return connection
+
+
+def _endpoint(db_session) -> StorageEndpoint:
+    endpoint = StorageEndpoint(
+        name="Automation managed endpoint",
+        endpoint_url="https://automation-managed.example.test",
+        provider=StorageProvider.CEPH.value,
+        is_default=True,
+        is_editable=True,
+    )
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+    return endpoint
 
 
 def test_automation_cannot_find_or_delete_private_connection_by_id(db_session):
@@ -104,6 +133,112 @@ def test_connection_handler_name_lookup_selects_shared_connection_only(db_sessio
 
     assert found is not None and found.id == shared.id
     assert found.id != private.id
+
+
+def test_connection_dry_run_rejects_unknown_managed_endpoint(db_session):
+    user = _user(db_session)
+
+    result = AdminAutomationService(db_session).apply(
+        AdminAutomationApplyRequest(
+            dry_run=True,
+            s3_connections=[
+                S3ConnectionApply(
+                    match=S3ConnectionMatch(name="missing-managed-endpoint"),
+                    spec=S3ConnectionSpec(
+                        name="missing-managed-endpoint",
+                        storage_endpoint_id=999_999,
+                        access_key_id="AK-MISSING-ENDPOINT",
+                        secret_access_key="SK-MISSING-ENDPOINT",
+                    ),
+                )
+            ],
+        ),
+        current_user=user,
+        audit_service=_Audit(),
+    )
+
+    assert result.success is False
+    assert result.results[0].error == "Storage endpoint not found"
+
+
+def test_connection_update_rejects_custom_fields_while_managed(db_session):
+    user = _user(db_session)
+    endpoint = _endpoint(db_session)
+    connection = _connection(
+        db_session,
+        user,
+        name="managed-endpoint-update",
+        shared=True,
+        storage_endpoint_id=endpoint.id,
+    )
+
+    result = AdminAutomationService(db_session).apply(
+        AdminAutomationApplyRequest(
+            dry_run=True,
+            s3_connections=[
+                S3ConnectionApply(
+                    match=S3ConnectionMatch(id=connection.id),
+                    spec=S3ConnectionSpec(
+                        endpoint_url="https://ignored-custom.example.test"
+                    ),
+                )
+            ],
+        ),
+        current_user=user,
+        audit_service=_Audit(),
+    )
+
+    assert result.success is False
+    assert result.results[0].error == (
+        "Custom endpoint fields cannot be combined with a managed storage endpoint"
+    )
+
+
+def test_connection_update_detaches_managed_endpoint_explicitly(
+    db_session,
+    monkeypatch,
+):
+    user = _user(db_session)
+    endpoint = _endpoint(db_session)
+    connection = _connection(
+        db_session,
+        user,
+        name="detach-managed-endpoint",
+        shared=True,
+        storage_endpoint_id=endpoint.id,
+    )
+    service = AdminAutomationService(db_session)
+    monkeypatch.setattr(
+        service.s3_connection_handler,
+        "_refresh_detected_capabilities",
+        lambda _connection: None,
+    )
+
+    result = service.apply(
+        AdminAutomationApplyRequest(
+            s3_connections=[
+                S3ConnectionApply(
+                    match=S3ConnectionMatch(id=connection.id),
+                    spec=S3ConnectionSpec(
+                        storage_endpoint_id=None,
+                        endpoint_url="https://detached-custom.example.test/",
+                        region="custom-region",
+                        provider_hint="custom-provider",
+                    ),
+                )
+            ]
+        ),
+        current_user=user,
+        audit_service=_Audit(),
+    )
+
+    db_session.refresh(connection)
+    config = parse_custom_endpoint_config(connection.custom_endpoint_config)
+    assert result.success is True
+    assert connection.storage_endpoint_id is None
+    assert config.endpoint_url == "https://detached-custom.example.test"
+    assert config.region == "custom-region"
+    assert config.provider == "custom-provider"
 
 
 @pytest.mark.parametrize("legacy_field", ["is_shared", "access_manager", "access_browser"])

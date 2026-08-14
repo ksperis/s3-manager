@@ -24,6 +24,16 @@ from app.utils.s3_connection_endpoint import (
 )
 
 
+_CUSTOM_ENDPOINT_FIELDS = {
+    "endpoint_url",
+    "region",
+    "force_path_style",
+    "verify_tls",
+    "provider_hint",
+}
+_ENDPOINT_FIELDS = _CUSTOM_ENDPOINT_FIELDS | {"storage_endpoint_id"}
+
+
 class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
     def __init__(self, db: Session, connections: S3ConnectionsService) -> None:
         self.db = db
@@ -68,8 +78,7 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
                     raise ValueError("s3_connections.spec.name is required to create a new connection")
                 if not spec.access_key_id or not spec.secret_access_key:
                     raise ValueError("s3_connections.spec.access_key_id and secret_access_key are required to create a new connection")
-                if spec.storage_endpoint_id is None and not spec.endpoint_url:
-                    raise ValueError("s3_connections.spec.endpoint_url or storage_endpoint_id is required to create a new connection")
+                self._validate_endpoint_transition(None, spec)
                 if dry_run:
                     return self._created("s3_connection", key, dry_run=dry_run)
                 conn = self._create_s3_connection(spec, current_user)
@@ -112,6 +121,8 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
             return {}
         diff: dict[str, dict[str, Any]] = {}
         fields_set = spec.model_fields_set
+        if _ENDPOINT_FIELDS & fields_set:
+            self._validate_endpoint_transition(conn, spec)
         if "name" in fields_set and spec.name and spec.name != conn.name:
             diff["name"] = {"from": conn.name, "to": spec.name}
         if "storage_endpoint_id" in fields_set:
@@ -120,20 +131,20 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
                 diff["storage_endpoint_id"] = {"from": conn.storage_endpoint_id, "to": desired}
         if {"endpoint_url", "region", "force_path_style", "verify_tls", "provider_hint"} & fields_set:
             details = resolve_connection_details(conn)
-            if "endpoint_url" in fields_set and spec.endpoint_url is not None:
-                desired = spec.endpoint_url.rstrip("/")
+            if "endpoint_url" in fields_set:
+                desired = (spec.endpoint_url or "").rstrip("/")
                 current = (details.endpoint_url or "").rstrip("/")
                 if desired != current:
                     diff["endpoint_url"] = {"from": details.endpoint_url, "to": desired}
-            if "region" in fields_set and spec.region is not None and spec.region != details.region:
+            if "region" in fields_set and spec.region != details.region:
                 diff["region"] = {"from": details.region, "to": spec.region}
-            if "force_path_style" in fields_set and spec.force_path_style is not None:
+            if "force_path_style" in fields_set:
                 if bool(spec.force_path_style) != bool(details.force_path_style):
                     diff["force_path_style"] = {"from": bool(details.force_path_style), "to": bool(spec.force_path_style)}
-            if "verify_tls" in fields_set and spec.verify_tls is not None:
+            if "verify_tls" in fields_set:
                 if bool(spec.verify_tls) != bool(details.verify_tls):
                     diff["verify_tls"] = {"from": bool(details.verify_tls), "to": bool(spec.verify_tls)}
-            if "provider_hint" in fields_set and spec.provider_hint is not None and spec.provider_hint != details.provider:
+            if "provider_hint" in fields_set and spec.provider_hint != details.provider:
                 diff["provider_hint"] = {"from": details.provider, "to": spec.provider_hint}
         if spec.remediation_action == "activate_manager" and conn.remediation_required:
             diff["execution_status"] = {"from": "remediation_required", "to": "ready"}
@@ -237,18 +248,18 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
             force_path_style = current.force_path_style
             verify_tls = current.verify_tls
             provider = current.provider
-            if "endpoint_url" in payload_data and spec.endpoint_url is not None:
-                endpoint_url = spec.endpoint_url.rstrip("/")
+            if "endpoint_url" in payload_data:
+                endpoint_url = (spec.endpoint_url or "").rstrip("/")
                 should_probe_iam = True
-            if "region" in payload_data and spec.region is not None:
+            if "region" in payload_data:
                 region = spec.region
                 should_probe_iam = True
-            if "force_path_style" in payload_data and spec.force_path_style is not None:
+            if "force_path_style" in payload_data:
                 force_path_style = bool(spec.force_path_style)
-            if "verify_tls" in payload_data and spec.verify_tls is not None:
+            if "verify_tls" in payload_data:
                 verify_tls = bool(spec.verify_tls)
                 should_probe_iam = True
-            if "provider_hint" in payload_data and spec.provider_hint is not None:
+            if "provider_hint" in payload_data:
                 provider = spec.provider_hint
             if not endpoint_url:
                 raise ValueError("Endpoint URL is required for manual connections")
@@ -282,6 +293,69 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
         self.db.commit()
         self.db.refresh(conn)
         return conn
+
+    def _validate_endpoint_transition(
+        self,
+        conn: Optional[S3Connection],
+        spec: S3ConnectionSpec,
+    ) -> None:
+        fields_set = spec.model_fields_set
+        endpoint_id_is_set = "storage_endpoint_id" in fields_set
+        if endpoint_id_is_set:
+            desired_endpoint_id = spec.storage_endpoint_id
+        elif conn is not None:
+            desired_endpoint_id = conn.storage_endpoint_id
+        else:
+            desired_endpoint_id = None
+        custom_fields = _CUSTOM_ENDPOINT_FIELDS & fields_set
+        if desired_endpoint_id is not None:
+            if custom_fields:
+                raise ValueError(
+                    "Custom endpoint fields cannot be combined with a managed storage endpoint"
+                )
+            endpoint = (
+                self.db.query(StorageEndpoint)
+                .filter(StorageEndpoint.id == desired_endpoint_id)
+                .first()
+            )
+            if endpoint is None:
+                raise ValueError("Storage endpoint not found")
+            return
+
+        if conn is not None and conn.storage_endpoint_id is None:
+            current = custom_endpoint_update_base(conn.custom_endpoint_config)
+        else:
+            current = custom_endpoint_update_base(None)
+        endpoint_url = (
+            spec.endpoint_url
+            if "endpoint_url" in fields_set
+            else current.endpoint_url
+        )
+        region = spec.region if "region" in fields_set else current.region
+        force_path_style = (
+            spec.force_path_style
+            if "force_path_style" in fields_set
+            else current.force_path_style
+        )
+        verify_tls = (
+            spec.verify_tls if "verify_tls" in fields_set else current.verify_tls
+        )
+        provider = (
+            spec.provider_hint
+            if "provider_hint" in fields_set
+            else current.provider
+        )
+        if force_path_style is None or verify_tls is None:
+            raise ValueError(
+                "force_path_style and verify_tls cannot be null for a custom endpoint"
+            )
+        build_custom_endpoint_config(
+            endpoint_url or "",
+            region,
+            force_path_style,
+            verify_tls,
+            provider,
+        )
 
     def _refresh_detected_capabilities(self, conn: S3Connection) -> None:
         refresh_connection_detected_capabilities(conn)
