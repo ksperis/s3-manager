@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 try:
     from dotenv import load_dotenv
@@ -62,6 +62,13 @@ def _load_local_env_files() -> None:
             load_dotenv(path, override=False)
 
 
+def _origin_from_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"Unable to derive request origin from '{url}'")
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 @dataclass(frozen=True)
 class CephTestSettings:
     """Runtime configuration loaded from the environment."""
@@ -69,6 +76,8 @@ class CephTestSettings:
     backend_base_url: str
     super_admin_email: str
     super_admin_password: str
+    request_origin: str
+    csrf_cookie_name: str
     verify_tls: bool
     backend_ca_bundle: str | None
     request_timeout: float
@@ -109,6 +118,18 @@ def load_settings() -> CephTestSettings:
         backend_base_url=base_url,
         super_admin_email=super_admin_email,
         super_admin_password=super_admin_password,
+        request_origin=_env_str(
+            "CEPH_TEST_REQUEST_ORIGIN",
+            "PUBLIC_ORIGIN",
+            default=_origin_from_url(base_url),
+        )
+        or _origin_from_url(base_url),
+        csrf_cookie_name=_env_str(
+            "CEPH_TEST_CSRF_COOKIE_NAME",
+            "CSRF_COOKIE_NAME",
+            default="csrf_token",
+        )
+        or "csrf_token",
         verify_tls=_env_bool("CEPH_TEST_VERIFY_TLS", False),
         backend_ca_bundle=_env_str("CEPH_TEST_BACKEND_CA_BUNDLE"),
         request_timeout=_env_float("CEPH_TEST_HTTP_TIMEOUT", 30.0),

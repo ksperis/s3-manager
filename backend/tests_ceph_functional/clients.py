@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 import requests
@@ -41,19 +41,20 @@ def _expected_set(expected_status: int | Iterable[int]) -> set[int]:
 
 @dataclass
 class BackendSession:
-    """Thin wrapper around a requests session with bearer authentication."""
+    """Thin wrapper around an authenticated cookie session."""
 
     base_url: str
-    token: str
     verify: bool | str
     timeout: float
+    request_origin: str
+    csrf_cookie_name: str
+    session: requests.Session = field(repr=False)
 
     def __post_init__(self) -> None:
-        self.session = requests.Session()
         self.session.headers.update(
             {
-                "Authorization": f"Bearer {self.token}",
                 "Accept": "application/json",
+                "Origin": self.request_origin,
             }
         )
 
@@ -69,6 +70,14 @@ class BackendSession:
             url = f"{self.base_url}{path}"
         else:
             url = path
+        headers = dict(kwargs.pop("headers", {}) or {})
+        if method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+            csrf_token = self.session.cookies.get(self.csrf_cookie_name)
+            if not csrf_token:
+                raise BackendAPIError("Authenticated session is missing its CSRF cookie")
+            headers.setdefault("X-CSRF-Token", csrf_token)
+        if headers:
+            kwargs["headers"] = headers
         response = self.session.request(
             method,
             url,
@@ -128,17 +137,24 @@ class BackendAuthenticator:
         self.timeout = settings.request_timeout
         self.login_retries = max(1, settings.login_max_retries)
         self.retry_delay = max(0.5, settings.login_retry_delay)
+        self.request_origin = settings.request_origin
+        self.csrf_cookie_name = settings.csrf_cookie_name
 
     def login(self, email: str, password: str) -> BackendSession:
         attempt = 0
         last_error: Exception | None = None
         while attempt < self.login_retries:
             attempt += 1
+            login_session = requests.Session()
             try:
-                token_response = requests.post(
+                login_response = login_session.post(
                     f"{self.base_url}/auth/login",
                     data={"username": email, "password": password},
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    headers={
+                        "Accept": "application/json",
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Origin": self.request_origin,
+                    },
                     timeout=self.timeout,
                     verify=self.verify,
                 )
@@ -146,20 +162,24 @@ class BackendAuthenticator:
                 last_error = exc
                 logger.warning("Login attempt %s for %s failed: %s", attempt, email, exc)
             else:
-                if token_response.status_code != 200:
+                if login_response.status_code != 200:
                     raise BackendAPIError(
                         f"Unable to login user {email}",
-                        status_code=token_response.status_code,
-                        payload=token_response.text,
+                        status_code=login_response.status_code,
+                        payload=login_response.text,
                     )
-                payload = token_response.json()
-                if "access_token" not in payload:
-                    raise BackendAPIError("Login response did not include access_token", payload=payload)
+                payload = login_response.json()
+                if payload.get("status") != "authenticated":
+                    raise BackendAPIError("Login did not create an authenticated session", payload=payload)
+                if not login_session.cookies.get(self.csrf_cookie_name):
+                    raise BackendAPIError("Login response did not include the CSRF cookie")
                 return BackendSession(
                     base_url=self.base_url,
-                    token=payload["access_token"],
                     verify=self.verify,
                     timeout=self.timeout,
+                    request_origin=self.request_origin,
+                    csrf_cookie_name=self.csrf_cookie_name,
+                    session=login_session,
                 )
             time.sleep(self.retry_delay * attempt)
         raise BackendAPIError(f"Unable to login user {email}: {last_error}")

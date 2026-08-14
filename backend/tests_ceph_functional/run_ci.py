@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import requests
 
@@ -48,6 +49,13 @@ def _require_env(name: str, source: dict[str, str] | None = None) -> str:
             "This CI runner starts a backend against the lab RGW endpoint and needs explicit lab credentials."
         )
     return value
+
+
+def _origin_from_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if not parsed.scheme or not parsed.netloc:
+        raise RuntimeError(f"Unable to derive request origin from '{url}'")
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def _generate_secret() -> str:
@@ -310,6 +318,7 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
         app_settings_path.unlink()
 
     super_admin_email = _env_str("SEED_SUPER_ADMIN_EMAIL", "ci-ceph-functional-admin@example.com", source=env)
+    request_origin = _origin_from_url(backend_base_url)
     super_admin_password = _env_str("SEED_SUPER_ADMIN_PASSWORD", _generate_secret(), source=env)
     rgw_region = _env_str("CEPH_TEST_RGW_REGION", "us-east-1", source=env) or "us-east-1"
     rgw_verify_tls = _env_bool(
@@ -319,6 +328,8 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
     )
 
     env["DATABASE_URL"] = f"sqlite:///{database_path.resolve().as_posix()}"
+    env["PUBLIC_ORIGIN"] = request_origin
+    env["CORS_ORIGINS"] = json.dumps([request_origin])
     env["JWT_KEYS"] = _env_str("JWT_KEYS", json.dumps([_generate_secret()]), source=env) or json.dumps(
         [_generate_secret()]
     )
@@ -352,6 +363,7 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
     env["CEPH_TEST_BACKEND_BASE_URL"] = backend_base_url
     env["CEPH_TEST_SUPERADMIN_EMAIL"] = env["SEED_SUPER_ADMIN_EMAIL"]
     env["CEPH_TEST_SUPERADMIN_PASSWORD"] = env["SEED_SUPER_ADMIN_PASSWORD"]
+    env["CEPH_TEST_REQUEST_ORIGIN"] = request_origin
     env["CEPH_TEST_VERIFY_TLS"] = "false"
     env["CEPH_TEST_RGW_ADMIN_ENDPOINT"] = _require_env("CEPH_TEST_RGW_ADMIN_ENDPOINT", source=env)
     env["CEPH_TEST_RGW_ADMIN_ACCESS_KEY"] = _require_env("CEPH_TEST_RGW_ADMIN_ACCESS_KEY", source=env)

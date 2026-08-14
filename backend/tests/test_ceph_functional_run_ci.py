@@ -104,3 +104,6 @@ def test_prepare_environment_generates_keyring_settings(monkeypatch, tmp_path):
 
     assert len(json.loads(env["JWT_KEYS"])) == 1
     assert len(json.loads(env["CREDENTIAL_KEYS"])) == 1
+    assert env["PUBLIC_ORIGIN"] == "http://127.0.0.1:8765"
+    assert json.loads(env["CORS_ORIGINS"]) == ["http://127.0.0.1:8765"]
+    assert env["CEPH_TEST_REQUEST_ORIGIN"] == "http://127.0.0.1:8765"
