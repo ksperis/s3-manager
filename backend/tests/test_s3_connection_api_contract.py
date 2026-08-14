@@ -317,6 +317,70 @@ def test_admin_connections_api_returns_404_for_non_shared_targets(contract_clien
     assert private_users.status_code == 404
 
 
+def test_admin_connection_user_links_keep_crud_contract(contract_client):
+    client, db_session, user = contract_client
+    target = User(
+        email="contract-linked-user@example.com",
+        full_name="Contract Linked User",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    shared_connection = S3Connection(
+        created_by_user_id=user.id,
+        name="contract-shared-user-links",
+        is_shared=True,
+        access_manager=True,
+        access_browser=False,
+        access_key_id="AKIASHAREDUSERLINKS",
+        secret_access_key="SECRETSHAREDUSERLINKS",
+    )
+    db_session.add_all([target, shared_connection])
+    db_session.commit()
+    db_session.refresh(target)
+    db_session.refresh(shared_connection)
+    path = f"/api/admin/s3-connections/{shared_connection.id}/users"
+
+    created = client.post(path, json={"user_id": target.id})
+    upserted = client.post(path, json={"user_id": target.id})
+    touched = client.put(
+        f"{path}/{target.id}",
+        json={"user_id": target.id},
+    )
+    listed = client.get(path)
+
+    assert created.status_code == 201
+    assert upserted.status_code == 201
+    assert touched.status_code == 200
+    assert listed.status_code == 200
+    assert listed.json() == [
+        {
+            "user_id": target.id,
+            "email": target.email,
+            "full_name": target.full_name,
+            "created_at": created.json()["created_at"],
+            "updated_at": touched.json()["updated_at"],
+        }
+    ]
+
+    removed = client.delete(f"{path}/{target.id}")
+    missing_touch = client.put(
+        f"{path}/{target.id}",
+        json={"user_id": target.id},
+    )
+    missing_delete = client.delete(f"{path}/{target.id}")
+    missing_user = client.post(path, json={"user_id": 999_999})
+
+    assert removed.status_code == 204
+    assert client.get(path).json() == []
+    assert missing_touch.status_code == 404
+    assert missing_touch.json()["detail"] == "Link not found"
+    assert missing_delete.status_code == 404
+    assert missing_delete.json()["detail"] == "Link not found"
+    assert missing_user.status_code == 404
+    assert missing_user.json()["detail"] == "User not found"
+
+
 def test_admin_cannot_mutate_or_delete_a_connection_used_as_managed_access_source(contract_client):
     client, db_session, user = contract_client
     source = S3Connection(

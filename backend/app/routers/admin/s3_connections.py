@@ -1,7 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 
-from app.utils.time import utcnow
 import logging
 from typing import Optional
 
@@ -46,6 +45,10 @@ from app.services.s3_connections_service import (
     S3ConnectionsService,
 )
 from app.services.s3_connection_endpoint_planner import StorageEndpointNotFoundError
+from app.services.s3_connection_user_links_service import (
+    S3ConnectionUserLinksError,
+    S3ConnectionUserLinksService,
+)
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.services.ui_group_avatar_service import UiGroupAvatarService
@@ -559,14 +562,13 @@ def list_connection_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
 ) -> list[S3ConnectionUserLink]:
-    conn = _get_admin_shared_connection(db, connection_id)
-    links = (
-        db.query(UserS3Connection, User)
-        .join(User, User.id == UserS3Connection.user_id)
-        .filter(UserS3Connection.s3_connection_id == connection_id)
-        .order_by(User.email.asc())
-        .all()
-    )
+    try:
+        links = S3ConnectionUserLinksService(db).list_for_admin_shared(connection_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="S3Connection not found",
+        ) from exc
     return [
         S3ConnectionUserLink(
             user_id=user.id,
@@ -587,31 +589,23 @@ def add_connection_user(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionUserLink:
-    conn = _get_admin_shared_connection(db, connection_id)
-    user = db.query(User).filter(User.id == payload.user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    existing = (
-        db.query(UserS3Connection)
-        .filter(UserS3Connection.user_id == payload.user_id, UserS3Connection.s3_connection_id == connection_id)
-        .first()
-    )
-    now = utcnow()
-    if existing:
-        existing.updated_at = now
-        link = existing
-        action = "connection.user.update"
-    else:
-        link = UserS3Connection(
-            user_id=payload.user_id,
-            s3_connection_id=connection_id,
-            created_at=now,
-            updated_at=now,
+    service = S3ConnectionUserLinksService(db)
+    try:
+        link, user, created = service.upsert_for_admin_shared(
+            connection_id,
+            payload.user_id,
         )
-        db.add(link)
-        action = "connection.user.add"
-    db.commit()
-    db.refresh(link)
+    except S3ConnectionUserLinksError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="S3Connection not found",
+        ) from exc
+    action = "connection.user.add" if created else "connection.user.update"
     audit.record_action(
         user=current_user,
         scope="admin",
@@ -640,19 +634,19 @@ def update_connection_user(
 ) -> S3ConnectionUserLink:
     if payload.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id mismatch")
-    conn = _get_admin_shared_connection(db, connection_id)
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    link = (
-        db.query(UserS3Connection)
-        .filter(UserS3Connection.user_id == user_id, UserS3Connection.s3_connection_id == connection_id)
-        .first()
-    )
-    if not link:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
-    link.updated_at = utcnow()
-    db.commit()
+    service = S3ConnectionUserLinksService(db)
+    try:
+        link, user = service.touch_for_admin_shared(connection_id, user_id)
+    except S3ConnectionUserLinksError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="S3Connection not found",
+        ) from exc
     audit.record_action(
         user=current_user,
         scope="admin",
@@ -678,16 +672,19 @@ def remove_connection_user(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ):
-    conn = _get_admin_shared_connection(db, connection_id)
-    link = (
-        db.query(UserS3Connection)
-        .filter(UserS3Connection.user_id == user_id, UserS3Connection.s3_connection_id == connection_id)
-        .first()
-    )
-    if not link:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
-    db.delete(link)
-    db.commit()
+    service = S3ConnectionUserLinksService(db)
+    try:
+        service.remove_for_admin_shared(connection_id, user_id)
+    except S3ConnectionUserLinksError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="S3Connection not found",
+        ) from exc
     audit.record_action(
         user=current_user,
         scope="admin",
