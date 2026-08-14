@@ -7,6 +7,7 @@ from .execution_context import BucketMigrationExecutionContextMixin
 from .execution_control import BucketMigrationExecutionControlMixin
 from .execution_item_runner import BucketMigrationItemRunnerMixin
 from .execution_object_sync import BucketMigrationObjectSyncMixin
+from .execution_object_transfer import BucketMigrationObjectTransferMixin
 from .execution_policy_grants import BucketMigrationPolicyGrantsMixin
 
 
@@ -14,6 +15,7 @@ class BucketMigrationExecutionMixin(
     BucketMigrationExecutionControlMixin,
     BucketMigrationItemRunnerMixin,
     BucketMigrationPolicyGrantsMixin,
+    BucketMigrationObjectTransferMixin,
     BucketMigrationObjectSyncMixin,
     BucketMigrationCleanupMixin,
     BucketMigrationExecutionContextMixin,
