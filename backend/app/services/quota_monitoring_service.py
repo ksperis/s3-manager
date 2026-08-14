@@ -6,10 +6,7 @@ from app.utils.time import utcnow
 
 from dataclasses import dataclass
 from datetime import datetime
-from email.message import EmailMessage
-from email.utils import formatdate, make_msgid
 import logging
-import smtplib
 from typing import Any, Optional
 
 from sqlalchemy import or_
@@ -39,6 +36,7 @@ from app.services.app_settings_service import load_app_settings
 from app.services.data_retention_service import DataRetentionService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_supervision import get_supervision_rgw_client
+from app.services import smtp_mailer
 from app.services.user_notifications_service import UserNotificationsService
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
@@ -62,58 +60,6 @@ class SubjectContext:
     contact_email: Optional[str]
 
 
-class SMTPMailer:
-    def __init__(
-        self,
-        *,
-        host: str,
-        port: int,
-        username: Optional[str],
-        password: Optional[str],
-        from_email: str,
-        from_name: Optional[str],
-        starttls: bool,
-        timeout_seconds: int,
-    ) -> None:
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password
-        self.from_email = from_email
-        self.from_name = from_name
-        self.starttls = starttls
-        self.timeout_seconds = timeout_seconds
-
-    def send(self, *, recipients: list[str], subject: str, body: str) -> None:
-        if not recipients:
-            return
-        message = EmailMessage()
-        message["To"] = ", ".join(recipients)
-        message["From"] = f"{self.from_name} <{self.from_email}>" if self.from_name else self.from_email
-        message["Subject"] = subject
-        # Some receivers (including Gmail) reject RFC-non-compliant mails
-        # when Message-ID is missing.
-        message["Message-ID"] = make_msgid(domain=self._message_id_domain())
-        message["Date"] = formatdate(localtime=True)
-        message.set_content(body)
-
-        with smtplib.SMTP(self.host, self.port, timeout=self.timeout_seconds) as smtp:
-            smtp.ehlo()
-            if self.starttls:
-                smtp.starttls()
-                smtp.ehlo()
-            if self.username or self.password:
-                smtp.login(self.username or "", self.password or "")
-            smtp.send_message(message)
-
-    def _message_id_domain(self) -> str:
-        sender = (self.from_email or "").strip()
-        if "@" not in sender:
-            return "localhost"
-        domain = sender.rsplit("@", 1)[1].strip()
-        return domain or "localhost"
-
-
 class QuotaMonitoringService:
     _LEVEL_NORMAL = "normal"
     _LEVEL_THRESHOLD = "threshold"
@@ -127,7 +73,7 @@ class QuotaMonitoringService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self._mail_error_reason: Optional[str] = None
-        self._mailer: Optional[SMTPMailer] = None
+        self._mailer: Optional[smtp_mailer.SMTPMailer] = None
 
     def run_monitor(
         self,
@@ -1025,7 +971,7 @@ class QuotaMonitoringService:
     def _build_mailer(
         self,
         notification_settings: QuotaNotificationSettings,
-    ) -> tuple[Optional[SMTPMailer], Optional[str]]:
+    ) -> tuple[Optional[smtp_mailer.SMTPMailer], Optional[str]]:
         host = (notification_settings.smtp_host or "").strip()
         from_email = (notification_settings.smtp_from_email or "").strip()
         username = (notification_settings.smtp_username or "").strip() or None
@@ -1037,7 +983,7 @@ class QuotaMonitoringService:
             return None, "SMTP configuration invalid: SMTP_PASSWORD is set but smtp_username is empty."
 
         return (
-            SMTPMailer(
+            smtp_mailer.SMTPMailer(
                 host=host,
                 port=int(notification_settings.smtp_port),
                 username=username,
