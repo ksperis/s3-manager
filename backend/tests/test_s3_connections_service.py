@@ -18,7 +18,11 @@ from app.db import (
     UserRole,
     UserS3Connection,
 )
-from app.models.s3_connection import S3ConnectionCreate, S3ConnectionUpdate
+from app.models.s3_connection import (
+    S3ConnectionCreate,
+    S3ConnectionCredentialsValidationRequest,
+    S3ConnectionUpdate,
+)
 from app.services.s3_connections_service import S3ConnectionsService
 
 
@@ -255,6 +259,33 @@ def test_connection_models_reject_non_string_tags():
         )
 
 
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: S3ConnectionCreate(
+            name="ambiguous-create-endpoint",
+            storage_endpoint_id=1,
+            endpoint_url="https://ambiguous-create.example.test",
+            access_key_id="AKIA-AMBIGUOUS-CREATE",
+            secret_access_key="SECRET-AMBIGUOUS-CREATE",
+        ),
+        lambda: S3ConnectionUpdate(
+            storage_endpoint_id=1,
+            region="ambiguous-region",
+        ),
+        lambda: S3ConnectionCredentialsValidationRequest(
+            storage_endpoint_id=1,
+            verify_tls=True,
+            access_key_id="AKIA-AMBIGUOUS-VALIDATION",
+            secret_access_key="SECRET-AMBIGUOUS-VALIDATION",
+        ),
+    ],
+)
+def test_connection_models_reject_managed_and_custom_endpoint_fields(factory):
+    with pytest.raises(ValidationError, match="custom endpoint fields"):
+        factory()
+
+
 def test_update_connection_updates_private_connection(db_session, monkeypatch):
     owner = _user(db_session, "owner3@example.test")
     row = _create_row(
@@ -297,6 +328,53 @@ def test_update_connection_updates_private_connection(db_session, monkeypatch):
     assert updated.access_manager is True
     assert updated.credential_owner_type == "iam_user"
     assert refreshed == [row.id]
+
+
+def test_update_private_connection_requires_explicit_managed_detachment(
+    db_session,
+    monkeypatch,
+):
+    owner = _user(db_session, "private-detachment@example.test")
+    endpoint = _endpoint(db_session)
+    row = _create_row(
+        db_session,
+        created_by_user_id=owner.id,
+        name="private-managed-detachment",
+        storage_endpoint_id=endpoint.id,
+    )
+    service = S3ConnectionsService(db_session)
+    monkeypatch.setattr(
+        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        lambda value, field_name="Endpoint URL": value.rstrip("/"),
+    )
+    monkeypatch.setattr(
+        service,
+        "_refresh_detected_capabilities",
+        lambda _row: None,
+    )
+
+    with pytest.raises(ValueError, match="Custom endpoint fields"):
+        service.update(
+            owner.id,
+            row.id,
+            S3ConnectionUpdate(
+                endpoint_url="https://must-not-be-ignored.example.test"
+            ),
+        )
+
+    updated = service.update(
+        owner.id,
+        row.id,
+        S3ConnectionUpdate(
+            storage_endpoint_id=None,
+            endpoint_url="https://private-detached.example.test/",
+            region="private-detached-region",
+        ),
+    )
+
+    assert updated.storage_endpoint_id is None
+    assert updated.endpoint_url == "https://private-detached.example.test"
+    assert updated.region == "private-detached-region"
 
 
 def test_create_connection_rejects_manual_endpoint_without_tls_verification(db_session):

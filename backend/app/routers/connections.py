@@ -19,7 +19,10 @@ from app.models.tagging import TagDefinitionListResponse
 from app.routers.dependencies import get_current_account_user
 from app.services.audit_service import AuditService
 from app.services.effective_access_service import EffectiveAccessService
-from app.services.s3_connections_service import S3ConnectionsService
+from app.services.s3_connections_service import (
+    StorageEndpointNotFoundError,
+    S3ConnectionsService,
+)
 from app.services.managed_private_access_service import (
     ManagedPrivateAccessCleanupPending,
     ManagedPrivateAccessService,
@@ -122,8 +125,6 @@ def create_connection(
     user: User = Depends(get_current_account_user),
 ):
     _ensure_manual_private_connection_creation_allowed(db, user)
-    if payload.storage_endpoint_id is None and not (payload.endpoint_url or "").strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Endpoint URL is required for manual connections")
     service = S3ConnectionsService(db)
     audit = AuditService(db)
     try:
@@ -148,10 +149,16 @@ def create_connection(
             },
         )
         return created
+    except StorageEndpointNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Storage endpoint not found",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc)))
     except Exception as exc:
         # Avoid leaking internal details or sensitive hints.
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to create S3Connection (invalid payload or duplicate name)",
@@ -165,19 +172,12 @@ def update_connection(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_account_user),
 ):
-    payload_data = payload.model_dump(exclude_unset=True)
     service = S3ConnectionsService(db)
     audit = AuditService(db)
     try:
         service.get_owned(user.id, connection_id)
         if _SENSITIVE_UPDATE_FIELDS.intersection(payload.model_fields_set):
             _ensure_manual_private_connection_creation_allowed(db, user)
-        if "storage_endpoint_id" in payload_data and payload.storage_endpoint_id is None and payload.endpoint_url is None:
-            from app.utils.s3_connection_endpoint import resolve_connection_details
-
-            existing = service.get_owned(user.id, connection_id)
-            if not resolve_connection_details(existing).endpoint_url:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Endpoint URL is required for manual connections")
         updated = service.update(user.id, connection_id, payload)
         audit.record_action(
             user=user,
@@ -200,6 +200,11 @@ def update_connection(
         return updated
     except KeyError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
+    except StorageEndpointNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Storage endpoint not found",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc)))
 

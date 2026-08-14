@@ -4,13 +4,34 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 CredentialOwnerType = Literal["iam_user", "account_user", "s3_user"]
+_CUSTOM_ENDPOINT_FIELDS = {
+    "endpoint_url",
+    "region",
+    "force_path_style",
+    "verify_tls",
+    "provider_hint",
+}
+
+
+def _reject_custom_fields_with_managed_endpoint(
+    model: ApiModel,
+    *,
+    scope: str,
+) -> None:
+    if getattr(model, "storage_endpoint_id", None) is None:
+        return
+    conflicting = sorted(_CUSTOM_ENDPOINT_FIELDS & model.model_fields_set)
+    if conflicting:
+        raise ValueError(
+            f"{scope} custom endpoint fields cannot be combined with storage_endpoint_id"
+        )
 
 
 class S3Connection(ApiModel):
@@ -60,6 +81,14 @@ class S3ConnectionCreate(ApiModel):
     def normalize_tags(cls, value: object) -> list[dict[str, str]]:
         return validate_tag_definition_list(value, allow_none=False) or []
 
+    @model_validator(mode="after")
+    def ensure_canonical_endpoint(self) -> "S3ConnectionCreate":
+        _reject_custom_fields_with_managed_endpoint(
+            self,
+            scope="S3 connection",
+        )
+        return self
+
 
 class S3ConnectionUpdate(ApiModel):
     name: Optional[str] = None
@@ -83,6 +112,14 @@ class S3ConnectionUpdate(ApiModel):
     def normalize_optional_tags(cls, value: object) -> Optional[list[dict[str, str]]]:
         return validate_tag_definition_list(value, allow_none=True)
 
+    @model_validator(mode="after")
+    def ensure_canonical_endpoint(self) -> "S3ConnectionUpdate":
+        _reject_custom_fields_with_managed_endpoint(
+            self,
+            scope="S3 connection",
+        )
+        return self
+
 
 class S3ConnectionCredentialsUpdate(ApiModel):
     """Write-only credential rotation payload.
@@ -103,6 +140,16 @@ class S3ConnectionCredentialsValidationRequest(ApiModel):
     secret_access_key: str
     force_path_style: bool = False
     verify_tls: bool = True
+
+    @model_validator(mode="after")
+    def ensure_canonical_endpoint(
+        self,
+    ) -> "S3ConnectionCredentialsValidationRequest":
+        _reject_custom_fields_with_managed_endpoint(
+            self,
+            scope="S3 credential validation",
+        )
+        return self
 
 
 class S3ConnectionCredentialsValidationResult(ApiModel):

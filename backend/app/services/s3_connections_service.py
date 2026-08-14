@@ -38,24 +38,24 @@ ACTIVE_MANAGED_SOURCE_UPDATE_ERROR = (
 ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR = (
     "Connection credentials are locked while managed private accesses depend on this source"
 )
-_ADMIN_SHARED_CUSTOM_ENDPOINT_FIELDS = {
+_CUSTOM_ENDPOINT_FIELDS = {
     "endpoint_url",
     "region",
     "force_path_style",
     "verify_tls",
     "provider_hint",
 }
-_ADMIN_SHARED_ENDPOINT_FIELDS = _ADMIN_SHARED_CUSTOM_ENDPOINT_FIELDS | {
+_ENDPOINT_FIELDS = _CUSTOM_ENDPOINT_FIELDS | {
     "storage_endpoint_id"
 }
-_ADMIN_SHARED_SOURCE_IMMUTABLE_FIELDS = _ADMIN_SHARED_ENDPOINT_FIELDS | {
+_ADMIN_SHARED_SOURCE_IMMUTABLE_FIELDS = _ENDPOINT_FIELDS | {
     "is_active",
     "credential_owner_type",
     "credential_owner_identifier",
 }
 
 
-class AdminSharedStorageEndpointNotFoundError(ValueError):
+class StorageEndpointNotFoundError(ValueError):
     pass
 
 
@@ -112,7 +112,11 @@ class S3ConnectionsService:
         self,
         payload: S3ConnectionAdminCreate,
     ) -> None:
-        self._admin_shared_endpoint_plan(None, payload)
+        self._connection_endpoint_plan(
+            None,
+            payload,
+            enforce_manual_endpoint_policy=False,
+        )
 
     def create_admin_shared(
         self,
@@ -120,7 +124,11 @@ class S3ConnectionsService:
         payload: S3ConnectionAdminCreate,
     ) -> DBS3Connection:
         storage_endpoint_id, custom_endpoint_config = (
-            self._admin_shared_endpoint_plan(None, payload)
+            self._connection_endpoint_plan(
+                None,
+                payload,
+                enforce_manual_endpoint_policy=False,
+            )
         )
         row = DBS3Connection(
             created_by_user_id=created_by_user_id,
@@ -263,25 +271,13 @@ class S3ConnectionsService:
         return row
 
     def create(self, user_id: int, payload: S3ConnectionCreate) -> S3Connection:
-        endpoint_url = (payload.endpoint_url or "").strip()
-        region = payload.region
-        force_path_style = bool(payload.force_path_style)
-        verify_tls = bool(payload.verify_tls)
-        custom_endpoint_config = None
-        if payload.storage_endpoint_id is not None:
-            endpoint_url = None
-            region = None
-            force_path_style = False
-            verify_tls = True
-        else:
-            endpoint_url = self._validate_manual_endpoint(endpoint_url, verify_tls)
-            custom_endpoint_config = build_custom_endpoint_config(
-                endpoint_url,
-                region,
-                force_path_style,
-                verify_tls,
-                payload.provider_hint,
+        storage_endpoint_id, custom_endpoint_config = (
+            self._connection_endpoint_plan(
+                None,
+                payload,
+                enforce_manual_endpoint_policy=True,
             )
+        )
         access_manager, access_browser = self._resolve_access_flags(
             access_manager=payload.access_manager,
             access_browser=payload.access_browser,
@@ -289,7 +285,7 @@ class S3ConnectionsService:
         row = DBS3Connection(
             created_by_user_id=user_id,
             name=payload.name,
-            storage_endpoint_id=payload.storage_endpoint_id,
+            storage_endpoint_id=storage_endpoint_id,
             custom_endpoint_config=custom_endpoint_config,
             is_shared=False,
             is_active=True,
@@ -343,53 +339,30 @@ class S3ConnectionsService:
         }
         if self.is_active_managed_source(row.id) and source_immutable_fields.intersection(payload_data):
             raise ValueError("Connection endpoint and credentials are locked while managed private accesses depend on it")
+        endpoint_plan = None
+        should_validate_existing_manual_endpoint = (
+            not row.server_managed and row.storage_endpoint_id is None
+        )
+        if _ENDPOINT_FIELDS & payload_data.keys() or should_validate_existing_manual_endpoint:
+            endpoint_plan = self._connection_endpoint_plan(
+                row,
+                payload,
+                enforce_manual_endpoint_policy=True,
+            )
         should_probe_iam = False
         if payload.name is not None:
             row.name = payload.name
         if "is_active" in payload_data:
             row.is_active = bool(payload.is_active)
-        if "storage_endpoint_id" in payload_data:
-            row.storage_endpoint_id = payload.storage_endpoint_id
-            if payload.storage_endpoint_id is not None:
-                row.custom_endpoint_config = None
-            should_probe_iam = True
-        endpoint_fields = {
-            "endpoint_url",
-            "region",
-            "force_path_style",
-            "verify_tls",
-            "provider_hint",
-            "storage_endpoint_id",
-        }
-        should_rebuild_custom_endpoint = not row.server_managed or bool(endpoint_fields.intersection(payload_data))
-        if row.storage_endpoint_id is None and should_rebuild_custom_endpoint:
-            current = custom_endpoint_update_base(row.custom_endpoint_config)
-            endpoint_url = current.endpoint_url
-            region = current.region
-            force_path_style = current.force_path_style
-            verify_tls = current.verify_tls
-            provider = current.provider
-            if payload.endpoint_url is not None:
-                endpoint_url = payload.endpoint_url.rstrip("/")
-                should_probe_iam = True
-            if payload.region is not None:
-                region = payload.region
-                should_probe_iam = True
-            if payload.force_path_style is not None:
-                force_path_style = bool(payload.force_path_style)
-            if payload.verify_tls is not None:
-                verify_tls = bool(payload.verify_tls)
-                should_probe_iam = True
-            if payload.provider_hint is not None:
-                provider = payload.provider_hint
-            endpoint_url = self._validate_manual_endpoint(endpoint_url, verify_tls)
-            row.custom_endpoint_config = build_custom_endpoint_config(
-                endpoint_url,
-                region,
-                force_path_style,
-                verify_tls,
-                provider,
-            )
+        if endpoint_plan is not None:
+            row.storage_endpoint_id, row.custom_endpoint_config = endpoint_plan
+            probe_fields = {
+                "storage_endpoint_id",
+                "endpoint_url",
+                "region",
+                "verify_tls",
+            }
+            should_probe_iam = bool(probe_fields & payload_data.keys())
         if payload.access_key_id is not None:
             row.access_key_id = payload.access_key_id
             should_probe_iam = True
@@ -446,15 +419,26 @@ class S3ConnectionsService:
         if update_credentials and self.is_active_managed_source(row.id):
             raise ValueError(ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR)
         endpoint_plan = None
-        if _ADMIN_SHARED_ENDPOINT_FIELDS & fields_set:
-            endpoint_plan = self._admin_shared_endpoint_plan(row, payload)
+        if _ENDPOINT_FIELDS & fields_set:
+            endpoint_plan = self._connection_endpoint_plan(
+                row,
+                payload,
+                enforce_manual_endpoint_policy=False,
+            )
         group_ids = self._validated_admin_shared_group_ids(payload.group_ids)
         return endpoint_plan, group_ids
 
-    def _admin_shared_endpoint_plan(
+    def _connection_endpoint_plan(
         self,
         row: Optional[DBS3Connection],
-        payload: S3ConnectionAdminCreate | S3ConnectionAdminUpdate,
+        payload: (
+            S3ConnectionCreate
+            | S3ConnectionUpdate
+            | S3ConnectionAdminCreate
+            | S3ConnectionAdminUpdate
+        ),
+        *,
+        enforce_manual_endpoint_policy: bool,
     ) -> tuple[Optional[int], Optional[str]]:
         fields_set = payload.model_fields_set
         if "storage_endpoint_id" in fields_set:
@@ -463,7 +447,7 @@ class S3ConnectionsService:
             desired_endpoint_id = row.storage_endpoint_id
         else:
             desired_endpoint_id = None
-        custom_fields = _ADMIN_SHARED_CUSTOM_ENDPOINT_FIELDS & fields_set
+        custom_fields = _CUSTOM_ENDPOINT_FIELDS & fields_set
         if desired_endpoint_id is not None:
             if custom_fields:
                 raise ValueError(
@@ -475,7 +459,7 @@ class S3ConnectionsService:
                 .first()
             )
             if endpoint is None:
-                raise AdminSharedStorageEndpointNotFoundError(
+                raise StorageEndpointNotFoundError(
                     "Storage endpoint not found"
                 )
             return desired_endpoint_id, None
@@ -509,8 +493,14 @@ class S3ConnectionsService:
             raise ValueError(
                 "force_path_style and verify_tls cannot be null for a custom endpoint"
             )
+        normalized_endpoint_url = endpoint_url or ""
+        if enforce_manual_endpoint_policy:
+            normalized_endpoint_url = self._validate_manual_endpoint(
+                normalized_endpoint_url,
+                verify_tls,
+            )
         return None, build_custom_endpoint_config(
-            endpoint_url or "",
+            normalized_endpoint_url,
             region,
             force_path_style,
             verify_tls,

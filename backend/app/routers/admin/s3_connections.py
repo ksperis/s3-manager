@@ -43,7 +43,7 @@ from app.services.s3_connections_service import (
     ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR,
     ACTIVE_MANAGED_SOURCE_DELETE_ERROR,
     ACTIVE_MANAGED_SOURCE_UPDATE_ERROR,
-    AdminSharedStorageEndpointNotFoundError,
+    StorageEndpointNotFoundError,
     S3ConnectionsService,
 )
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
@@ -338,7 +338,7 @@ def create_s3_connection(
     tags_service = service.tags
     try:
         conn = service.create_admin_shared(current_user.id, payload)
-    except AdminSharedStorageEndpointNotFoundError as exc:
+    except StorageEndpointNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Storage endpoint not found",
@@ -395,7 +395,7 @@ def update_s3_connection(
     _get_admin_shared_connection(db, connection_id)
     try:
         conn = service.update_admin_shared(connection_id, payload)
-    except AdminSharedStorageEndpointNotFoundError as exc:
+    except StorageEndpointNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Storage endpoint not found",

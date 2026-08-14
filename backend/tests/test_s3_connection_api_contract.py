@@ -82,6 +82,25 @@ def test_private_connections_api_does_not_expose_iam_capable(monkeypatch, contra
     assert payload["capabilities"]["can_manage_iam"] is True
 
 
+def test_private_connection_create_rejects_unknown_managed_endpoint(
+    contract_client,
+):
+    client, _, _ = contract_client
+
+    response = client.post(
+        "/api/connections",
+        json={
+            "name": "contract-private-missing-endpoint",
+            "storage_endpoint_id": 999_999,
+            "access_key_id": "AKIAPRIVATEMISSINGENDPOINT",
+            "secret_access_key": "SECRETPRIVATEMISSINGENDPOINT",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Storage endpoint not found"
+
+
 def test_admin_connections_api_does_not_expose_iam_capable(monkeypatch, contract_client):
     client, _, _ = contract_client
     monkeypatch.setattr(
