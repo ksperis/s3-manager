@@ -11,7 +11,6 @@ from app.db import (
     S3User,
     UiGroupS3User,
     User,
-    UserS3Account,
     UserS3User,
 )
 from app.models.admin_automation import (
@@ -19,12 +18,14 @@ from app.models.admin_automation import (
     AdminAutomationApplyResponse,
     AdminAutomationItemResult,
     AdminAutomationSummary,
-    AccountLinkApply,
     S3AccountApply,
     S3UserApply,
 )
 from app.models.s3_account import S3AccountCreate, S3AccountUpdate
 from app.models.s3_user import S3UserCreate, S3UserUpdate
+from app.services.admin_automation_account_link_handler import (
+    AdminAutomationAccountLinkHandler,
+)
 from app.services.admin_automation_connection_handler import AdminAutomationConnectionHandler
 from app.services.admin_automation_results import AdminAutomationResultFactory
 from app.services.admin_automation_storage_endpoint_handler import (
@@ -55,8 +56,9 @@ class AdminAutomationService(AdminAutomationResultFactory):
             db,
             StorageEndpointsService(db),
         )
-        self.users = UsersService(db)
-        self.ui_user_handler = AdminAutomationUiUserHandler(db, self.users)
+        users = UsersService(db)
+        self.ui_user_handler = AdminAutomationUiUserHandler(db, users)
+        self.account_link_handler = AdminAutomationAccountLinkHandler(db, users)
         self.s3_accounts = S3AccountsService(db)
         self.s3_users = S3UsersService(db)
         self.s3_connection_handler = AdminAutomationConnectionHandler(
@@ -129,7 +131,14 @@ class AdminAutomationService(AdminAutomationResultFactory):
 
         if not should_stop():
             for item in payload.account_links:
-                record(self._apply_account_link(item, payload.dry_run, current_user, audit_service))
+                record(
+                    self.account_link_handler.apply(
+                        item,
+                        payload.dry_run,
+                        current_user,
+                        audit_service,
+                    )
+                )
                 if should_stop():
                     break
 
@@ -348,109 +357,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             return self._updated("s3_user", key, updated.id, diff, dry_run=dry_run)
         except Exception as exc:  # noqa: BLE001
             return self._failed("s3_user", key, exc, dry_run=dry_run)
-
-    def _apply_account_link(
-        self,
-        item: AccountLinkApply,
-        dry_run: bool,
-        current_user: User,
-        audit_service: AuditService,
-    ) -> AdminAutomationItemResult:
-        key = self._account_link_key(item)
-        try:
-            user = self._resolve_user_ref(item)
-            account = self._resolve_account_ref(item)
-            link = (
-                self.db.query(UserS3Account)
-                .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
-                .first()
-            )
-
-            if item.state == "absent":
-                if not link:
-                    return self._skipped("account_link", key, dry_run=dry_run)
-                if link.is_root:
-                    raise ValueError("Cannot remove the root account link")
-                if dry_run:
-                    return self._deleted("account_link", key, link.id, dry_run=dry_run)
-                (
-                    self.db.query(UserS3Account)
-                    .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
-                    .delete(synchronize_session=False)
-                )
-                self.db.commit()
-                audit_service.record_action(
-                    user=current_user,
-                    scope="admin",
-                    action="unassign_user_account",
-                    entity_type="ui_user",
-                    entity_id=str(user.id),
-                    account_id=account.id,
-                    metadata={"assigned_user_id": user.id},
-                )
-                return self._deleted("account_link", key, link.id, dry_run=dry_run)
-
-            desired_role = item.role
-            if link:
-                if link.is_root and desired_role not in {None, "account_administrator"}:
-                    raise ValueError("Cannot modify the root account link")
-                if desired_role is None:
-                    desired_role = link.role
-            else:
-                if desired_role is None:
-                    raise ValueError("role is required when creating an account link")
-
-            if link:
-                diff: dict[str, dict[str, Any]] = {}
-                if desired_role != link.role:
-                    diff["role"] = {"from": link.role, "to": desired_role}
-                if not diff:
-                    return self._skipped("account_link", key, dry_run=dry_run)
-                if dry_run:
-                    return self._updated("account_link", key, link.id, diff, dry_run=dry_run)
-                self.users.assign_user_to_account(
-                    user.id,
-                    account.id,
-                    account_root=link.is_root,
-                    role=desired_role,
-                )
-                audit_service.record_action(
-                    user=current_user,
-                    scope="admin",
-                    action="assign_user_account",
-                    entity_type="ui_user",
-                    entity_id=str(user.id),
-                    account_id=account.id,
-                    metadata={
-                        "account_root": bool(link.is_root),
-                        "assigned_user_id": user.id,
-                    },
-                )
-                return self._updated("account_link", key, link.id, diff, dry_run=dry_run)
-
-            if dry_run:
-                return self._created("account_link", key, dry_run=dry_run)
-            self.users.assign_user_to_account(
-                user.id,
-                account.id,
-                account_root=False,
-                role=desired_role,
-            )
-            audit_service.record_action(
-                user=current_user,
-                scope="admin",
-                action="assign_user_account",
-                entity_type="ui_user",
-                entity_id=str(user.id),
-                account_id=account.id,
-                metadata={
-                    "account_root": False,
-                    "assigned_user_id": user.id,
-                },
-            )
-            return self._created("account_link", key, dry_run=dry_run)
-        except Exception as exc:  # noqa: BLE001
-            return self._failed("account_link", key, exc, dry_run=dry_run)
 
     def _diff_s3_account(self, account: S3Account, item: S3AccountApply) -> dict[str, dict[str, Any]]:
         spec = item.spec
@@ -732,30 +638,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
             return self.db.query(S3User).filter(S3User.rgw_user_uid == match.uid).first()
         return None
 
-    def _resolve_user_ref(self, item: AccountLinkApply) -> User:
-        ref = item.user
-        user = None
-        if ref.id is not None:
-            user = self.db.query(User).filter(User.id == ref.id).first()
-        elif ref.email:
-            user = self.db.query(User).filter(User.email == ref.email).first()
-        if not user:
-            raise ValueError("UI user not found")
-        return user
-
-    def _resolve_account_ref(self, item: AccountLinkApply) -> S3Account:
-        ref = item.account
-        account = None
-        if ref.id is not None:
-            account = self.db.query(S3Account).filter(S3Account.id == ref.id).first()
-        elif ref.rgw_account_id:
-            account = self.db.query(S3Account).filter(S3Account.rgw_account_id == ref.rgw_account_id).first()
-        elif ref.name:
-            account = self.db.query(S3Account).filter(S3Account.name == ref.name).first()
-        if not account:
-            raise ValueError("S3Account not found")
-        return account
-
     def _delete_s3_user_db_only(self, s3_user: S3User) -> None:
         (
             self.db.query(UserS3User)
@@ -788,11 +670,6 @@ class AdminAutomationService(AdminAutomationResultFactory):
         if item.match.uid:
             return f"uid={item.match.uid}"
         return f"id={item.match.id}"
-
-    def _account_link_key(self, item: AccountLinkApply) -> str:
-        user_label = item.user.email or str(item.user.id)
-        account_label = item.account.name
-        return f"user={user_label},account={account_label}"
 
 
 def get_admin_automation_service(db: Session) -> AdminAutomationService:

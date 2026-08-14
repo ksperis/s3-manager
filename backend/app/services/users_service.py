@@ -612,6 +612,56 @@ class UsersService:
         self.db.refresh(user)
         return user
 
+    def unassign_user_from_account(self, user_id: int, account_id: int) -> User:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise ValueError("User not found")
+        account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
+        if not account:
+            raise ValueError("S3Account not found")
+        link = (
+            self.db.query(UserS3Account)
+            .filter(
+                UserS3Account.user_id == user.id,
+                UserS3Account.account_id == account.id,
+            )
+            .first()
+        )
+        if not link:
+            raise ValueError("Account link not found")
+        if link.is_root:
+            raise ValueError("Cannot remove the root account link")
+
+        before_roles = capture_effective_portal_roles(
+            self.db,
+            user_ids=[user.id],
+            account_ids=[account.id],
+        )
+        self.db.delete(link)
+        self.db.flush()
+        after_roles = capture_effective_portal_roles(
+            self.db,
+            user_ids=[user.id],
+            account_ids=[account.id],
+        )
+        try:
+            sync_portal_role_downgrades(
+                self.db,
+                before=before_roles,
+                after=after_roles,
+            )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        sync_portal_role_promotions(
+            self.db,
+            before=before_roles,
+            after=after_roles,
+        )
+        self.db.refresh(user)
+        return user
+
     def authenticate(self, email: str, password: str) -> Optional[User]:
         user = self.get_by_email(email)
         if not user or not user.is_active or not user.hashed_password:

@@ -195,8 +195,8 @@ class AccountLinkUserRef(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "AccountLinkUserRef":
-        if not (self.id or self.email):
-            raise ValueError("account_links.user requires id or email")
+        if sum((self.id is not None, self.email is not None)) != 1:
+            raise ValueError("account_links.user requires exactly one of id or email")
         return self
 
 
@@ -207,8 +207,11 @@ class AccountLinkAccountRef(ApiModel):
 
     @model_validator(mode="after")
     def _ensure_match(self) -> "AccountLinkAccountRef":
-        if not (self.id or self.name or self.rgw_account_id):
-            raise ValueError("account_links.account requires id, name, or rgw_account_id")
+        selectors = (self.id is not None, bool(self.name), bool(self.rgw_account_id))
+        if sum(selectors) != 1:
+            raise ValueError(
+                "account_links.account requires exactly one of id, name, or rgw_account_id"
+            )
         return self
 
 
