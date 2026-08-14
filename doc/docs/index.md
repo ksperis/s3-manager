@@ -2,7 +2,7 @@
 
 **s3-manager** is an open-source web application for managing **S3-compatible object storage** with IAM-aligned workflows.
 
-> Project status: **Early-stage / Proof of Concept**. Suitable for labs and validation environments.
+> Project status: **Beta**. Suitable for evaluation and controlled deployments.
 
 ## Start from what you need to do
 

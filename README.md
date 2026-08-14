@@ -3,11 +3,11 @@
 [![Docs](https://img.shields.io/badge/docs-github%20pages-0A66C2)](https://ksperis.github.io/s3-manager/)
 [![Tag](https://img.shields.io/github/v/tag/ksperis/s3-manager?sort=semver)](https://github.com/ksperis/s3-manager/tags)
 [![License](https://img.shields.io/github/license/ksperis/s3-manager)](./LICENSE)
-![Status](https://img.shields.io/badge/status-early--stage%20%2F%20PoC-F28C28)
+![Status](https://img.shields.io/badge/status-beta-F28C28)
 
 **s3-manager** is an open-source web application to manage S3-compatible object storage primarily focused on **Ceph RGW**.
 
-> Project status: **Early-stage / Proof of Concept**. Suitable for labs and validation environments.
+> Project status: **Beta**. Suitable for evaluation and controlled deployments.
 
 It gives storage administrators and delegated team managers a single interface to manage their storage environments.
 It can also be used solely through the integrated S3 browser for direct object access.
