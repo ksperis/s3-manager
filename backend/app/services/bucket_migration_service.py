@@ -6,6 +6,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.buckets_service import BucketsService
 from .bucket_migration.execution import BucketMigrationExecutionMixin
 from .bucket_migration.persistence import BucketMigrationPersistenceMixin
@@ -31,6 +32,7 @@ class BucketMigrationService(
     ) -> None:
         self.db = db
         self._buckets = BucketsService()
+        self._configuration = BucketConfigurationService()
         self._inspector = BucketMigrationInspector(self)
         self._precheck_planner = BucketMigrationPrecheckPlanner(self, self._inspector)
         self._authorized_context_ids: Optional[set[str]]

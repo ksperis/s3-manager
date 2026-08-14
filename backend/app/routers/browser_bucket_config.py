@@ -42,6 +42,10 @@ from app.services.browser_bucket_config_mutation_service import (
     BrowserBucketConfigMutationService,
 )
 from app.services.browser_service import BrowserService, get_browser_service
+from app.services.bucket_configuration_service import (
+    BucketConfigurationService,
+    get_bucket_configuration_service,
+)
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.s3_execution_context import S3ExecutionContext
 
@@ -60,12 +64,12 @@ def _invalidate_browser_listing_cache(
 
 
 def get_browser_bucket_config_mutation_service(
-    buckets_service: BucketsService = Depends(get_buckets_service),
+    configuration_service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     browser_service: BrowserService = Depends(get_browser_service),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> BrowserBucketConfigMutationService:
     return BrowserBucketConfigMutationService(
-        buckets_service=buckets_service,
+        configuration_service=configuration_service,
         browser_service=browser_service,
         audit_service=audit_service,
     )
@@ -171,7 +175,7 @@ def deny_bucket_quota_update(
 def get_bucket_properties_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketProperties:
     return bucket_config_actions.get_bucket_properties_config(
@@ -203,7 +207,7 @@ def update_bucket_versioning_config(
 def get_bucket_object_lock_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketObjectLock:
     return bucket_config_actions.get_bucket_object_lock_config(
@@ -235,7 +239,7 @@ def put_bucket_object_lock_config(
 def get_bucket_encryption_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketEncryptionConfiguration:
     require_sse_feature(account)
@@ -286,7 +290,7 @@ def delete_bucket_encryption_config(
 def get_bucket_policy_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketPolicyOut:
     return bucket_config_actions.get_bucket_policy_config(
@@ -334,7 +338,7 @@ def delete_bucket_policy_config(
 def get_bucket_acl_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketAcl:
     return bucket_config_actions.get_bucket_acl_config(
@@ -366,7 +370,7 @@ def put_bucket_acl_config(
 def get_bucket_public_access_block_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketPublicAccessBlock:
     return bucket_config_actions.get_bucket_public_access_block_config(
@@ -398,7 +402,7 @@ def put_bucket_public_access_block_config(
 def get_bucket_lifecycle_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketLifecycleConfig:
     return bucket_config_actions.get_bucket_lifecycle_config(
@@ -446,7 +450,7 @@ def delete_bucket_lifecycle_config(
 def get_bucket_cors_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> dict[str, Any]:
     return bucket_config_actions.get_bucket_cors_config(
@@ -494,7 +498,7 @@ def delete_bucket_cors_config(
 def get_bucket_notifications_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketNotificationConfiguration:
     return bucket_config_actions.get_bucket_notifications_config(
@@ -542,7 +546,7 @@ def delete_bucket_notifications_config(
 def get_bucket_replication_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketReplicationConfiguration:
     require_replication_feature(account)
@@ -593,7 +597,7 @@ def delete_bucket_replication_config(
 def get_bucket_logging_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketLoggingConfiguration:
     return bucket_config_actions.get_bucket_logging_config(
@@ -641,7 +645,7 @@ def delete_bucket_logging_config(
 def get_bucket_website_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BucketWebsiteConfiguration:
     return bucket_config_actions.get_bucket_website_config(
@@ -689,7 +693,7 @@ def delete_bucket_website_config(
 def get_bucket_tags_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
+    service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> dict[str, Any]:
     return bucket_config_actions.get_bucket_tags_config(
@@ -731,4 +735,3 @@ def delete_bucket_tags_config(
         audit_action="delete_bucket_tags",
         action=bucket_config_actions.delete_bucket_tags_config,
     )
-

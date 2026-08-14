@@ -184,7 +184,7 @@ def test_ceph_admin_bucket_encryption_requires_sse_feature(monkeypatch):
             calls["get"] += 1
             return bucket_config_router.BucketEncryptionConfiguration(rules=[])
 
-    monkeypatch.setattr(bucket_config_router, "BucketsService", lambda: _FakeBucketsService())
+    monkeypatch.setattr(bucket_config_router, "BucketConfigurationService", lambda: _FakeBucketsService())
 
     with pytest.raises(HTTPException) as exc:
         bucket_config_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
@@ -202,7 +202,7 @@ def test_ceph_admin_bucket_encryption_allows_when_sse_feature_enabled(monkeypatc
                 rules=[{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
             )
 
-    monkeypatch.setattr(bucket_config_router, "BucketsService", lambda: _FakeBucketsService())
+    monkeypatch.setattr(bucket_config_router, "BucketConfigurationService", lambda: _FakeBucketsService())
 
     payload = bucket_config_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
 

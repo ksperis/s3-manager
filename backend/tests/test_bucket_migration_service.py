@@ -995,7 +995,7 @@ def test_apply_read_only_policy_uses_supported_actions(db_session):
             captured["policy"] = policy
 
     service = BucketMigrationService(db_session)
-    service._buckets = _BucketsStub()  # type: ignore[assignment]
+    service._configuration = _BucketsStub()  # type: ignore[assignment]
 
     item = SimpleNamespace(source_policy_backup_json=None)
     service._apply_read_only_policy(source, "bucket-a", item)
@@ -1025,7 +1025,7 @@ def test_set_managed_block_policy_can_keep_put_block_without_delete_deny(db_sess
             captured["policy"] = policy
 
     service = BucketMigrationService(db_session)
-    service._buckets = _BucketsStub()  # type: ignore[assignment]
+    service._configuration = _BucketsStub()  # type: ignore[assignment]
 
     service._set_managed_block_policy("bucket-a", source, deny_delete=False)
 
@@ -1051,7 +1051,7 @@ def test_apply_target_write_lock_policy_uses_migration_user_agent_condition(db_s
             captured["policy"] = policy
 
     service = BucketMigrationService(db_session)
-    service._buckets = _BucketsStub()  # type: ignore[assignment]
+    service._configuration = _BucketsStub()  # type: ignore[assignment]
 
     item = SimpleNamespace(target_policy_backup_json=None)
     service._validate_target_lock_worker_access = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
@@ -1140,7 +1140,7 @@ def test_precheck_same_endpoint_copy_source_access_can_use_temporary_auto_grant(
         def delete_policy(self, *_args, **_kwargs):
             target_client.allow = False
 
-    service._buckets = _BucketsStub()  # type: ignore[assignment]
+    service._configuration = _BucketsStub()  # type: ignore[assignment]
 
     result = service._precheck_same_endpoint_copy_source_access(
         source_ctx,
@@ -1435,7 +1435,7 @@ def test_apply_read_only_policy_returns_clear_message_on_access_denied(db_sessio
             )
 
     service = BucketMigrationService(db_session)
-    service._buckets = _BucketsStub()  # type: ignore[assignment]
+    service._configuration = _BucketsStub()  # type: ignore[assignment]
     item = SimpleNamespace(source_policy_backup_json=None)
 
     try:
@@ -1672,7 +1672,7 @@ def test_run_precheck_skips_disabled_endpoint_website_probe_when_copy_bucket_set
 
     buckets_stub, website_calls, _notification_calls, _replication_calls, _policy_calls = _make_bucket_feature_probe_stub()
     service._resolve_context = _resolve_context  # type: ignore[method-assign]
-    service._buckets = buckets_stub  # type: ignore[assignment]
+    service._configuration = buckets_stub  # type: ignore[assignment]
     service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._count_bucket_objects = lambda *_args, **_kwargs: 1  # type: ignore[method-assign]
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
@@ -1739,7 +1739,7 @@ def test_run_precheck_skips_non_required_bucket_setting_probes_when_copy_bucket_
         get_policy=_unexpected_policy,
     )
     service._resolve_context = _resolve_context  # type: ignore[method-assign]
-    service._buckets = buckets_stub  # type: ignore[assignment]
+    service._configuration = buckets_stub  # type: ignore[assignment]
     service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._count_bucket_objects = lambda *_args, **_kwargs: 1  # type: ignore[method-assign]
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
@@ -1807,7 +1807,7 @@ def test_run_precheck_warns_when_website_probe_is_method_not_allowed_but_not_blo
         get_bucket_website=_website_method_not_allowed,
     )
     service._resolve_context = _resolve_context  # type: ignore[method-assign]
-    service._buckets = buckets_stub  # type: ignore[assignment]
+    service._configuration = buckets_stub  # type: ignore[assignment]
     service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._count_bucket_objects = lambda *_args, **_kwargs: 1  # type: ignore[method-assign]
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
@@ -2178,7 +2178,7 @@ def test_sync_bucket_version_aware_cross_endpoint_replays_versions_and_delete_ma
     source_client = _SourceClient()
 
     service._context_client = lambda ctx: source_client if ctx.context_id == "src" else target_client  # type: ignore[method-assign]
-    service._buckets = SimpleNamespace(set_versioning=lambda *_args, **_kwargs: None)  # type: ignore[assignment]
+    service._configuration = SimpleNamespace(set_versioning=lambda *_args, **_kwargs: None)  # type: ignore[assignment]
     service._iter_bucket_version_timelines = lambda *_args, **_kwargs: iter(version_timelines)  # type: ignore[method-assign]
     service._compare_versioned_timelines = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
         source_count=0,
@@ -2372,7 +2372,7 @@ def test_sync_bucket_version_aware_same_endpoint_uses_copy_source_version_id(db_
     target_client = _TargetClient()
 
     service._context_client = lambda ctx: source_client if ctx.context_id == "src" else target_client  # type: ignore[method-assign]
-    service._buckets = SimpleNamespace(set_versioning=lambda *_args, **_kwargs: None)  # type: ignore[assignment]
+    service._configuration = SimpleNamespace(set_versioning=lambda *_args, **_kwargs: None)  # type: ignore[assignment]
     service._iter_bucket_version_timelines = lambda *_args, **_kwargs: iter(version_timelines)  # type: ignore[method-assign]
     service._compare_versioned_timelines = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
         source_count=1,
@@ -2508,7 +2508,7 @@ def test_sync_bucket_version_aware_presync_stores_watermark_and_cutover_replays_
     timeline_state = {"current": first_pass_timelines}
 
     service._context_client = lambda ctx: source_client if ctx.context_id == "src" else target_client  # type: ignore[method-assign]
-    service._buckets = SimpleNamespace(set_versioning=lambda *_args, **kwargs: set_versioning_calls.append(bool(kwargs.get("enabled"))))  # type: ignore[assignment]
+    service._configuration = SimpleNamespace(set_versioning=lambda *_args, **kwargs: set_versioning_calls.append(bool(kwargs.get("enabled"))))  # type: ignore[assignment]
     service._iter_bucket_version_timelines = lambda *_args, **_kwargs: iter(timeline_state["current"])  # type: ignore[method-assign]
     service._compare_versioned_timelines = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
         source_count=1,
@@ -2780,7 +2780,7 @@ def test_finalize_target_versioning_state_suspends_target_for_version_aware_copy
         replication_state_json=None,
     )
     set_versioning_calls: list[bool] = []
-    service._buckets = SimpleNamespace(set_versioning=lambda *_args, **kwargs: set_versioning_calls.append(bool(kwargs.get("enabled"))))  # type: ignore[assignment]
+    service._configuration = SimpleNamespace(set_versioning=lambda *_args, **kwargs: set_versioning_calls.append(bool(kwargs.get("enabled"))))  # type: ignore[assignment]
     service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
 
     service._finalize_target_versioning_state(SimpleNamespace(), "bucket-b", migration, item)
@@ -2804,7 +2804,7 @@ def test_restore_source_policy_replays_backup_policy_as_is(db_session):
             captured["delete_called"] = True
 
     service = BucketMigrationService(db_session)
-    service._buckets = _BucketsStub()  # type: ignore[assignment]
+    service._configuration = _BucketsStub()  # type: ignore[assignment]
 
     backup_policy = {
         "Version": "2012-10-17",

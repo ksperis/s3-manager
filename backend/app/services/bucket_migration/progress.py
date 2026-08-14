@@ -269,7 +269,7 @@ class BucketMigrationProgressMixin:
         bucket_name: str,
         expected_policy: Any,
     ) -> None:
-        current_policy = self._buckets.get_policy(bucket_name, account)
+        current_policy = self._configuration.get_policy(bucket_name, account)
         expected = expected_policy if isinstance(expected_policy, dict) else None
         current = current_policy if isinstance(current_policy, dict) else None
         if _json_dumps(expected) == _json_dumps(current):

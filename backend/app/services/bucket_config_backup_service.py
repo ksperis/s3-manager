@@ -13,6 +13,7 @@ from app.models.bucket_config_backup import (
     BucketConfigBackupResponse,
     BucketConfigBackupSource,
 )
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.buckets_service import BucketsService
 from app.utils.jsonable import model_to_jsonable
 
@@ -20,8 +21,13 @@ QuotaSnapshotLoader = Callable[[str], dict[str, int | None]]
 
 
 class BucketConfigBackupService:
-    def __init__(self, buckets_service: BucketsService | None = None) -> None:
-        self._buckets = buckets_service or BucketsService()
+    def __init__(
+        self,
+        configuration_service: BucketConfigurationService | None = None,
+        bucket_stats_service: BucketsService | None = None,
+    ) -> None:
+        self._configuration = configuration_service or BucketConfigurationService()
+        self._bucket_stats = bucket_stats_service or BucketsService()
 
     def build_backup(
         self,
@@ -77,23 +83,23 @@ class BucketConfigBackupService:
         if feature == "quota":
             return self._load_quota(account, bucket_name, quota_loader)
         if feature == "versioning":
-            status_value = self._buckets.get_bucket_versioning_status(bucket_name, account)
+            status_value = self._configuration.get_bucket_versioning_status(bucket_name, account)
             return {"status": status_value, "enabled": status_value == "Enabled"}
         if feature == "object_lock":
-            return model_to_jsonable(self._buckets.get_object_lock(bucket_name, account))
+            return model_to_jsonable(self._configuration.get_object_lock(bucket_name, account))
         if feature == "public_access_block":
-            return model_to_jsonable(self._buckets.get_public_access_block(bucket_name, account))
+            return model_to_jsonable(self._configuration.get_public_access_block(bucket_name, account))
         if feature == "lifecycle":
-            lifecycle = self._buckets.get_lifecycle(bucket_name, account)
+            lifecycle = self._configuration.get_lifecycle(bucket_name, account)
             return {"rules": lifecycle.rules or []}
         if feature == "cors":
-            return {"rules": self._buckets.get_bucket_cors(bucket_name, account) or []}
+            return {"rules": self._configuration.get_bucket_cors(bucket_name, account) or []}
         if feature == "policy":
-            return {"policy": self._buckets.get_policy(bucket_name, account)}
+            return {"policy": self._configuration.get_policy(bucket_name, account)}
         if feature == "access_logging":
-            return model_to_jsonable(self._buckets.get_bucket_logging(bucket_name, account))
+            return model_to_jsonable(self._configuration.get_bucket_logging(bucket_name, account))
         if feature == "tags":
-            tags = self._buckets.get_bucket_tags(bucket_name, account)
+            tags = self._configuration.get_bucket_tags(bucket_name, account)
             return {"tags": [model_to_jsonable(tag) for tag in tags]}
         raise ValueError(f"Unsupported backup feature: {feature}")
 
@@ -110,7 +116,7 @@ class BucketConfigBackupService:
                 "max_objects": _normalize_quota_limit(snapshot.get("max_objects")),
             }
 
-        stats = self._buckets.get_bucket_stats(bucket_name, account, with_stats=True)
+        stats = self._bucket_stats.get_bucket_stats(bucket_name, account, with_stats=True)
         return {
             "max_size_bytes": _normalize_quota_limit(getattr(stats, "quota_max_size_bytes", None)),
             "max_objects": _normalize_quota_limit(getattr(stats, "quota_max_objects", None)),

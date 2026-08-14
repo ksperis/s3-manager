@@ -14,7 +14,7 @@ from app.services import (
     s3_client,
 )
 from app.services.bucket_configuration_comparison import BucketConfigurationReader
-from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.object_listing_temp_store import TemporarySqliteStore
 from app.services.s3_execution_client import (
     require_s3_execution_credentials,
@@ -31,7 +31,7 @@ class BucketComparisonService:
     """Compare bucket contents and configuration, then remediate content differences."""
 
     def __init__(self, configuration_reader: Optional[BucketConfigurationReader] = None) -> None:
-        self._configuration_reader = configuration_reader or BucketsService()
+        self._configuration_reader = configuration_reader or BucketConfigurationService()
 
     @staticmethod
     def _account_credentials(account: S3ExecutionTarget) -> tuple[str, str]:

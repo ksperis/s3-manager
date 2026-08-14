@@ -66,6 +66,7 @@ def feature_rule_client(client, db_session, monkeypatch):
     db_session.commit()
     app.dependency_overrides[feature_rules_router.get_account_context] = lambda: account
     app.dependency_overrides[feature_rules_router.get_buckets_service] = lambda: service
+    app.dependency_overrides[feature_rules_router.get_bucket_configuration_service] = lambda: service
     app.dependency_overrides[dependencies.get_current_user] = lambda: user
     monkeypatch.setattr(feature_rule_inventory_service, "account_sns_feature_enabled", lambda _account: True)
     return client, service
@@ -271,6 +272,7 @@ def test_feature_rules_requires_manager_tool_access(client, db_session, monkeypa
     db_session.commit()
     app.dependency_overrides[feature_rules_router.get_account_context] = lambda: account
     app.dependency_overrides[feature_rules_router.get_buckets_service] = lambda: service
+    app.dependency_overrides[feature_rules_router.get_bucket_configuration_service] = lambda: service
     app.dependency_overrides[dependencies.get_current_user] = lambda: user
     monkeypatch.setattr(feature_rule_inventory_service, "account_sns_feature_enabled", lambda _account: True)
 
@@ -302,6 +304,7 @@ def test_feature_rules_allows_group_inherited_manager_tool_access(client, db_ses
     db_session.commit()
     app.dependency_overrides[feature_rules_router.get_account_context] = lambda: account
     app.dependency_overrides[feature_rules_router.get_buckets_service] = lambda: service
+    app.dependency_overrides[feature_rules_router.get_bucket_configuration_service] = lambda: service
     app.dependency_overrides[dependencies.get_current_user] = lambda: user
     monkeypatch.setattr(feature_rule_inventory_service, "account_sns_feature_enabled", lambda _account: True)
 

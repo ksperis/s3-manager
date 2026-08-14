@@ -350,74 +350,74 @@ class BucketMigrationInspector:
             mark_feature(feature, state="available", capability=capability)
             return value
 
-        props = self._service._buckets.get_bucket_properties(bucket_name, account)
+        props = self._service._configuration.get_bucket_properties(bucket_name, account)
         mark_feature("versioning", state="available")
         versioning_status = str(props.versioning_status or "").strip() or None
-        object_lock = self._service._buckets.get_bucket_object_lock(bucket_name, account)
+        object_lock = self._service._configuration.get_bucket_object_lock(bucket_name, account)
         mark_feature("object_lock", state="available")
         encryption = probe_feature(
             "encryption",
-            lambda: self._service._buckets.get_bucket_encryption(bucket_name, account),
+            lambda: self._service._configuration.get_bucket_encryption(bucket_name, account),
             soft_unavailable=True,
             default=None,
         )
         policy = probe_feature(
             "bucket_policy",
-            lambda: self._service._buckets.get_policy(bucket_name, account),
+            lambda: self._service._configuration.get_policy(bucket_name, account),
             soft_unavailable=False,
             default=None,
         )
         logging_cfg = probe_feature(
             "access_logging",
-            lambda: self._service._buckets.get_bucket_logging(bucket_name, account),
+            lambda: self._service._configuration.get_bucket_logging(bucket_name, account),
             soft_unavailable=False,
             default=None,
         )
         tags = probe_feature(
             "tags",
-            lambda: self._service._buckets.get_bucket_tags(bucket_name, account),
+            lambda: self._service._configuration.get_bucket_tags(bucket_name, account),
             soft_unavailable=False,
             default=[],
         )
         lifecycle = probe_feature(
             "lifecycle",
-            lambda: self._service._buckets.get_lifecycle(bucket_name, account),
+            lambda: self._service._configuration.get_lifecycle(bucket_name, account),
             soft_unavailable=False,
             default=None,
         )
         cors = probe_feature(
             "cors",
-            lambda: self._service._buckets.get_bucket_cors(bucket_name, account),
+            lambda: self._service._configuration.get_bucket_cors(bucket_name, account),
             soft_unavailable=False,
             default=[],
         )
         public_access_block = probe_feature(
             "public_access_block",
-            lambda: self._service._buckets.get_public_access_block(bucket_name, account),
+            lambda: self._service._configuration.get_public_access_block(bucket_name, account),
             soft_unavailable=False,
             default=None,
         )
         website = probe_feature(
             "website",
-            lambda: self._service._buckets.get_bucket_website(bucket_name, account),
+            lambda: self._service._configuration.get_bucket_website(bucket_name, account),
             soft_unavailable=True,
             default=None,
         )
         notifications = probe_feature(
             "notifications",
-            lambda: self._service._buckets.get_bucket_notifications(bucket_name, account),
+            lambda: self._service._configuration.get_bucket_notifications(bucket_name, account),
             soft_unavailable=True,
             default=None,
         )
         replication = probe_feature(
             "replication",
-            lambda: self._service._buckets.get_bucket_replication(bucket_name, account),
+            lambda: self._service._configuration.get_bucket_replication(bucket_name, account),
             soft_unavailable=True,
             default=None,
         )
         acl = probe_feature(
             "acl",
-            lambda: self._service._buckets.get_bucket_acl(bucket_name, account),
+            lambda: self._service._configuration.get_bucket_acl(bucket_name, account),
             soft_unavailable=True,
             default=None,
         )

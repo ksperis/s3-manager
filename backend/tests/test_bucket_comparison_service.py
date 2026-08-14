@@ -19,6 +19,7 @@ from app.services import bucket_compare_remediation, object_listing_temp_store
 from app.services import buckets_service as buckets_service_module
 from app.services import bucket_comparison_service as bucket_comparison_service_module
 from app.services.bucket_comparison_service import BucketComparisonService
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.bucket_content_comparison import BucketCompareObjectEntry
 from app.services.buckets_service import BucketsService
 
@@ -45,8 +46,8 @@ def _payload_entries(payload: dict[str, dict[str, object]]):
         )
 
 
-def _build_service(configuration_reader: BucketsService | None = None) -> BucketComparisonService:
-    return BucketComparisonService(configuration_reader or BucketsService())
+def _build_service(configuration_reader: BucketConfigurationService | None = None) -> BucketComparisonService:
+    return BucketComparisonService(configuration_reader or BucketConfigurationService())
 
 
 def test_bucket_compare_types_are_owned_by_dedicated_module():
@@ -387,7 +388,7 @@ def test_bucket_compare_remediation_copies_requested_objects():
 
 
 def test_compare_bucket_configuration_detects_changes(monkeypatch):
-    configuration_reader = BucketsService()
+    configuration_reader = BucketConfigurationService()
     service = _build_service(configuration_reader)
     source = _build_account("source")
     target = _build_account("target")
@@ -452,7 +453,7 @@ def test_compare_bucket_configuration_detects_changes(monkeypatch):
 
 
 def test_compare_bucket_configuration_filters_selected_sections(monkeypatch):
-    configuration_reader = BucketsService()
+    configuration_reader = BucketConfigurationService()
     service = _build_service(configuration_reader)
     source = _build_account("source")
     target = _build_account("target")

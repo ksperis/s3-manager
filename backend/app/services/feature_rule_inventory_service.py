@@ -15,6 +15,7 @@ from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     normalize_bucket_notification_configuration,
 )
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.buckets_service import BucketsService
 from app.services.s3_execution_context import S3ExecutionContext
 from app.utils.concurrency import bounded_ordered_map
@@ -435,8 +436,13 @@ def _unavailable_bucket(bucket_name: str, feature: FeatureRuleInventoryFeature, 
 
 
 class FeatureRuleInventoryService:
-    def __init__(self, buckets_service: BucketsService) -> None:
+    def __init__(
+        self,
+        buckets_service: BucketsService,
+        configuration_service: BucketConfigurationService,
+    ) -> None:
         self.buckets_service = buckets_service
+        self.configuration_service = configuration_service
 
     def list_inventory(
         self,
@@ -457,7 +463,7 @@ class FeatureRuleInventoryService:
         def load_bucket_rules(bucket: Bucket) -> FeatureRuleInventoryBucket:
             try:
                 if feature == "lifecycle":
-                    lifecycle = self.buckets_service.get_lifecycle(bucket.name, account)
+                    lifecycle = self.configuration_service.get_lifecycle(bucket.name, account)
                     return _bucket_result(
                         bucket_name=bucket.name,
                         feature=feature,
@@ -467,21 +473,21 @@ class FeatureRuleInventoryService:
                     return _bucket_result(
                         bucket_name=bucket.name,
                         feature=feature,
-                        rules=_normalize_policy_rules(self.buckets_service.get_policy(bucket.name, account)),
+                        rules=_normalize_policy_rules(self.configuration_service.get_policy(bucket.name, account)),
                     )
                 if feature == "cors":
                     return _bucket_result(
                         bucket_name=bucket.name,
                         feature=feature,
-                        rules=_normalize_cors_rules(self.buckets_service.get_bucket_cors(bucket.name, account) or []),
+                        rules=_normalize_cors_rules(self.configuration_service.get_bucket_cors(bucket.name, account) or []),
                     )
                 if feature == "tags":
                     return _bucket_result(
                         bucket_name=bucket.name,
                         feature=feature,
-                        rules=_normalize_tag_rules(self.buckets_service.get_bucket_tags(bucket.name, account) or []),
+                        rules=_normalize_tag_rules(self.configuration_service.get_bucket_tags(bucket.name, account) or []),
                     )
-                notifications = self.buckets_service.get_bucket_notifications(bucket.name, account)
+                notifications = self.configuration_service.get_bucket_notifications(bucket.name, account)
                 return _bucket_result(
                     bucket_name=bucket.name,
                     feature=feature,

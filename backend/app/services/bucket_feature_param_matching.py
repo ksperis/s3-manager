@@ -14,7 +14,7 @@ from app.models.bucket import (
 from app.models.ceph_admin import CephAdminBucketFilterRule, CephAdminBucketSummary
 from app.services.bucket_listing_shared import coerce_filter_bool, coerce_filter_number
 from app.services.bucket_notification_state import account_sns_feature_enabled
-from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.listing_progress import (
     ListingProgressEmitter,
     build_listing_progress_callback,
@@ -940,7 +940,7 @@ def _required_feature_param_sources(rules: list[CephAdminBucketFilterRule]) -> s
 def _load_feature_param_snapshot_for_bucket(
     bucket: CephAdminBucketSummary,
     required_sources: set[str],
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
 ) -> dict[str, object]:
     snapshot: dict[str, object] = {}
@@ -988,7 +988,7 @@ def _load_feature_param_snapshot_for_bucket(
 def load_bucket_feature_param_snapshots(
     buckets: list[CephAdminBucketSummary],
     rules: list[CephAdminBucketFilterRule],
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     *,
     progress: ListingProgressEmitter | None = None,

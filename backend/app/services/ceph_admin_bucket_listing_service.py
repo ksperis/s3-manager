@@ -35,7 +35,7 @@ from app.services.bucket_feature_param_matching import (
 )
 from app.services.bucket_listing_shared import parse_filter, parse_includes, serialize_filter
 from app.services.bucket_owner_enrichment import BucketOwnerUsage, compute_bucket_owner_usage
-from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.ceph_admin_bucket_listing_cache import (
     CephAdminBucketListCacheKey,
     CephAdminBucketListingSnapshot,
@@ -295,7 +295,7 @@ def compute_ceph_admin_bucket_listing(
                 requires_owner_usage_lookup = any(
                     rule.field in (OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS) for rule in expensive_field_rules
                 )
-                service = BucketsService()
+                service = BucketConfigurationService()
                 account = _build_s3_context(ctx)
                 expensive_candidates = results
 
@@ -593,7 +593,7 @@ def compute_ceph_admin_bucket_listing(
 
     requested = ({feature for feature in requested_features if feature != "tags"} | requested_detail_fields)
     if requested or ("tags" in requested_features):
-        service = BucketsService()
+        service = BucketConfigurationService()
         account = _build_s3_context(ctx)
         progress.emit(
             percent=96,

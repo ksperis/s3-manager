@@ -553,7 +553,7 @@ class BucketMigrationObjectSyncMixin:
             purge_before_replay = True
             replay_mode = "one_shot_full"
 
-        self._buckets.set_versioning(target_bucket, target_ctx.account, enabled=True)
+        self._configuration.set_versioning(target_bucket, target_ctx.account, enabled=True)
 
         deleted = 0
         if purge_before_replay:
@@ -2100,7 +2100,7 @@ class BucketMigrationObjectSyncMixin:
         replication_state = self._load_item_replication_state(item)
         if replication_state.get("target_versioning_finalized") == "suspended":
             return
-        self._buckets.set_versioning(target_bucket, target_account, enabled=False)
+        self._configuration.set_versioning(target_bucket, target_account, enabled=False)
         replication_state["target_versioning_finalized"] = "suspended"
         self._store_item_replication_state(item, replication_state)
         self._add_event(

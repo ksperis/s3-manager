@@ -31,7 +31,7 @@ from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.services.listing_progress import ListingCancelled, ListingProgressSnapshot
 from app.services import bucket_listing_enrichment
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
-from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services import rgw_bucket_metadata
 from app.services.rgw_admin import RGWAdminError
 
@@ -448,7 +448,7 @@ def test_ceph_admin_get_bucket_versioning_returns_status(client, monkeypatch):
         captured["account_name"] = account.name
         return "Suspended"
 
-    monkeypatch.setattr(BucketsService, "get_bucket_versioning_status", fake_get_versioning)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_versioning_status", fake_get_versioning)
 
     app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
@@ -475,8 +475,8 @@ def test_ceph_admin_get_cors_uses_dedicated_cors_api(client, monkeypatch):
     def fail_get_properties(self, bucket_name, account):  # noqa: ANN001, ARG001
         raise AssertionError("get_bucket_properties should not be used for CORS")
 
-    monkeypatch.setattr(BucketsService, "get_bucket_cors", fake_get_cors)
-    monkeypatch.setattr(BucketsService, "get_bucket_properties", fail_get_properties)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_cors", fake_get_cors)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_properties", fail_get_properties)
 
     app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
@@ -637,7 +637,7 @@ def test_ceph_admin_bucket_listing_cache_does_not_leak_lifecycle_column_details(
     def fake_get_lifecycle(self, name: str, account):
         return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     with_details = buckets_router.list_buckets(
         page=1,
@@ -873,7 +873,7 @@ def test_ceph_admin_bucket_listing_notifications_include_and_filter(monkeypatch:
             )
         return BucketNotificationConfiguration(configuration={"TopicConfigurations": [], "QueueConfigurations": [{}]})
 
-    monkeypatch.setattr(BucketsService, "get_bucket_notifications", fake_get_notifications)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_notifications", fake_get_notifications)
 
     included = buckets_router.list_buckets(
         page=1,
@@ -985,7 +985,7 @@ def test_ceph_admin_bucket_listing_notification_detail_filters_and_topic_column(
     def fake_get_notifications(self, bucket_name, *_args, **_kwargs):  # noqa: ANN001, ARG001
         return BucketNotificationConfiguration(configuration=notification_configs.get(bucket_name, {}))
 
-    monkeypatch.setattr(BucketsService, "get_bucket_notifications", fake_get_notifications)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_notifications", fake_get_notifications)
 
     included = buckets_router.list_buckets(
         page=1,
@@ -1691,7 +1691,7 @@ def test_ceph_admin_bucket_listing_lifecycle_param_filters_use_same_rule_matchin
     def fake_get_lifecycle(self, name: str, account):
         return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     advanced_filter = json.dumps(
         {
@@ -1730,7 +1730,7 @@ def test_ceph_admin_bucket_listing_lifecycle_rule_name_can_be_negated_with_quant
         rules = [{"ID": "archive"}] if name == "bucket-b" else [{"ID": "keep"}]
         return BucketLifecycleConfig(rules=rules)
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     advanced_filter = json.dumps(
         {
@@ -1785,7 +1785,7 @@ def test_ceph_admin_bucket_listing_lifecycle_rule_status_filters_same_rule(monke
     def fake_get_lifecycle(self, name: str, account):
         return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     status_filter = json.dumps(
         {
@@ -1874,7 +1874,7 @@ def test_ceph_admin_bucket_listing_lifecycle_rule_type_filters(
     def fake_get_lifecycle(self, name: str, account):
         return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     advanced_filter = json.dumps(
         {
@@ -1925,7 +1925,7 @@ def test_ceph_admin_bucket_listing_lifecycle_rule_type_and_abort_days_must_match
     def fake_get_lifecycle(self, name: str, account):
         return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     advanced_filter = json.dumps(
         {
@@ -1976,7 +1976,7 @@ def test_ceph_admin_bucket_listing_lifecycle_abort_days_operators(
         days = 3 if name == "bucket-a" else 10
         return BucketLifecycleConfig(rules=[{"ID": f"rule-{name}", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": days}}])
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     advanced_filter = json.dumps(
         {
@@ -2051,7 +2051,7 @@ def test_ceph_admin_bucket_listing_lifecycle_other_days_filters(
         rule = bucket_a_rule if name == "bucket-a" else bucket_b_rule
         return BucketLifecycleConfig(rules=[rule])
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     advanced_filter = json.dumps(
         {
@@ -2106,7 +2106,7 @@ def test_ceph_admin_bucket_listing_lifecycle_transition_days_operators(
         days = 3 if name == "bucket-a" else 10
         return BucketLifecycleConfig(rules=[{"ID": f"rule-{name}", "Transitions": [{"Days": days, "StorageClass": "GLACIER"}]}])
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     advanced_filter = json.dumps(
         {
@@ -2159,7 +2159,7 @@ def test_ceph_admin_bucket_listing_lifecycle_transition_days_and_rule_name_must_
     def fake_get_lifecycle(self, name: str, account):
         return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     advanced_filter = json.dumps(
         {
@@ -2200,7 +2200,7 @@ def test_ceph_admin_bucket_listing_feature_param_filters_exclude_unavailable_buc
             raise RuntimeError("lifecycle unavailable")
         return BucketLifecycleConfig(rules=[{"ID": "rule-a", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 5}}])
 
-    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+    monkeypatch.setattr(BucketConfigurationService, "get_lifecycle", fake_get_lifecycle)
 
     advanced_filter = json.dumps(
         {
@@ -2300,11 +2300,11 @@ def test_ceph_admin_bucket_listing_feature_param_filters_cover_non_lifecycle_fea
             )
         return BucketEncryptionConfiguration(rules=[{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}])
 
-    monkeypatch.setattr(BucketsService, "get_bucket_properties", fake_get_bucket_properties)
-    monkeypatch.setattr(BucketsService, "get_bucket_logging", fake_get_bucket_logging)
-    monkeypatch.setattr(BucketsService, "get_bucket_website", fake_get_bucket_website)
-    monkeypatch.setattr(BucketsService, "get_policy", fake_get_policy)
-    monkeypatch.setattr(BucketsService, "get_bucket_encryption", fake_get_bucket_encryption)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_properties", fake_get_bucket_properties)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_logging", fake_get_bucket_logging)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_website", fake_get_bucket_website)
+    monkeypatch.setattr(BucketConfigurationService, "get_policy", fake_get_policy)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_encryption", fake_get_bucket_encryption)
 
     advanced_filter = json.dumps(
         {
@@ -2366,7 +2366,7 @@ def test_ceph_admin_bucket_listing_cors_combined_filters_match_same_rule(monkeyp
         )
         return BucketProperties(lifecycle_rules=[], cors_rules=cors_rules)
 
-    monkeypatch.setattr(BucketsService, "get_bucket_properties", fake_get_bucket_properties)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_properties", fake_get_bucket_properties)
 
     advanced_filter = json.dumps(
         {
@@ -2418,7 +2418,7 @@ def test_ceph_admin_bucket_listing_sse_combined_filters_match_same_rule(monkeypa
         )
         return BucketEncryptionConfiguration(rules=rules)
 
-    monkeypatch.setattr(BucketsService, "get_bucket_encryption", fake_get_bucket_encryption)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_encryption", fake_get_bucket_encryption)
 
     advanced_filter = json.dumps(
         {
@@ -2493,11 +2493,11 @@ def test_ceph_admin_bucket_listing_includes_audit_feature_column_details(monkeyp
             ]
         )
 
-    monkeypatch.setattr(BucketsService, "get_bucket_properties", fake_get_bucket_properties)
-    monkeypatch.setattr(BucketsService, "get_bucket_logging", fake_get_bucket_logging)
-    monkeypatch.setattr(BucketsService, "get_bucket_website", fake_get_bucket_website)
-    monkeypatch.setattr(BucketsService, "get_policy", fake_get_policy)
-    monkeypatch.setattr(BucketsService, "get_bucket_encryption", fake_get_bucket_encryption)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_properties", fake_get_bucket_properties)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_logging", fake_get_bucket_logging)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_website", fake_get_bucket_website)
+    monkeypatch.setattr(BucketConfigurationService, "get_policy", fake_get_policy)
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_encryption", fake_get_bucket_encryption)
 
     response = buckets_router.list_buckets(
         page=1,

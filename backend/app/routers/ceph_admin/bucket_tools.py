@@ -28,7 +28,6 @@ from app.services.bucket_config_backup_service import (
 from app.services.bucket_comparison_service import get_bucket_comparison_service
 from app.services.rgw_bucket_metadata import build_bucket_summary
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
-from app.services.buckets_service import BucketsService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.rgw_admin import RGWAdminError
 from app.services.s3_execution_context import S3ExecutionContext
@@ -61,7 +60,7 @@ def backup_bucket_configs(
     payload: BucketConfigBackupRequest,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketConfigBackupResponse:
-    service = BucketConfigBackupService(BucketsService())
+    service = BucketConfigBackupService()
     account = build_ceph_admin_s3_context(ctx)
 
     def quota_loader(bucket_name: str) -> dict[str, int | None]:

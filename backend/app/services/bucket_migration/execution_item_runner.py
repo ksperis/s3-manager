@@ -102,7 +102,7 @@ class BucketMigrationItemRunnerMixin:
             if item.step == "create_bucket":
                 object_lock_enabled = False
                 if migration.copy_bucket_settings:
-                    object_lock = self._buckets.get_bucket_object_lock(item.source_bucket, source_ctx.account)
+                    object_lock = self._configuration.get_bucket_object_lock(item.source_bucket, source_ctx.account)
                     object_lock_enabled = bool(object_lock and object_lock.enabled)
                 try:
                     self._buckets.create_bucket(
@@ -477,14 +477,14 @@ class BucketMigrationItemRunnerMixin:
 
         run_copy_step(
             "versioning",
-            lambda: self._buckets.set_versioning(
+            lambda: self._configuration.set_versioning(
                 target_bucket,
                 target_account,
                 enabled=(
                     True
                     if strategy == "version_aware"
                     else str(
-                        self._buckets.get_bucket_properties(source_bucket, source_account).versioning_status or ""
+                        self._configuration.get_bucket_properties(source_bucket, source_account).versioning_status or ""
                     ).strip().lower()
                     == "enabled"
                 ),
@@ -493,82 +493,82 @@ class BucketMigrationItemRunnerMixin:
         )
 
         def _copy_object_lock() -> None:
-            src_object_lock = self._buckets.get_bucket_object_lock(source_bucket, source_account)
+            src_object_lock = self._configuration.get_bucket_object_lock(source_bucket, source_account)
             if src_object_lock and (
                 src_object_lock.enabled is not None
                 or src_object_lock.mode is not None
                 or src_object_lock.days is not None
                 or src_object_lock.years is not None
             ):
-                self._buckets.set_object_lock(target_bucket, target_account, src_object_lock)
+                self._configuration.set_object_lock(target_bucket, target_account, src_object_lock)
 
         run_copy_step("object_lock", _copy_object_lock, message="Object lock copy failed.")
 
         def _copy_encryption() -> None:
-            encryption = self._buckets.get_bucket_encryption(source_bucket, source_account)
+            encryption = self._configuration.get_bucket_encryption(source_bucket, source_account)
             rules = list(encryption.rules or [])
             if rules:
-                self._buckets.set_bucket_encryption(target_bucket, target_account, rules)
+                self._configuration.set_bucket_encryption(target_bucket, target_account, rules)
             else:
-                self._buckets.delete_bucket_encryption(target_bucket, target_account)
+                self._configuration.delete_bucket_encryption(target_bucket, target_account)
 
         run_copy_step("encryption", _copy_encryption, message="Default bucket encryption copy failed.")
         run_copy_step(
             "public_access_block",
-            lambda: self._buckets.set_public_access_block(
+            lambda: self._configuration.set_public_access_block(
                 target_bucket,
                 target_account,
-                self._buckets.get_public_access_block(source_bucket, source_account),
+                self._configuration.get_public_access_block(source_bucket, source_account),
             ),
             message="Public access block copy failed.",
         )
 
         def _copy_lifecycle() -> None:
-            lifecycle = self._buckets.get_lifecycle(source_bucket, source_account)
+            lifecycle = self._configuration.get_lifecycle(source_bucket, source_account)
             rules = lifecycle.rules or []
             if rules:
-                self._buckets.set_lifecycle(target_bucket, target_account, rules)
+                self._configuration.set_lifecycle(target_bucket, target_account, rules)
             else:
-                self._buckets.delete_lifecycle(target_bucket, target_account)
+                self._configuration.delete_lifecycle(target_bucket, target_account)
 
         run_copy_step("lifecycle", _copy_lifecycle, message="Lifecycle copy failed.")
 
         def _copy_cors() -> None:
-            cors = self._buckets.get_bucket_cors(source_bucket, source_account)
+            cors = self._configuration.get_bucket_cors(source_bucket, source_account)
             if cors:
-                self._buckets.set_cors(target_bucket, target_account, cors)
+                self._configuration.set_cors(target_bucket, target_account, cors)
             else:
-                self._buckets.delete_cors(target_bucket, target_account)
+                self._configuration.delete_cors(target_bucket, target_account)
 
         run_copy_step("cors", _copy_cors, message="CORS copy failed.")
 
         def _copy_policy() -> None:
-            policy = self._buckets.get_policy(source_bucket, source_account)
+            policy = self._configuration.get_policy(source_bucket, source_account)
             if policy:
-                self._buckets.put_policy(target_bucket, target_account, policy)
+                self._configuration.put_policy(target_bucket, target_account, policy)
             else:
-                self._buckets.delete_policy(target_bucket, target_account)
+                self._configuration.delete_policy(target_bucket, target_account)
 
         run_copy_step("bucket_policy", _copy_policy, message="Policy copy failed.")
 
         def _copy_tags() -> None:
-            tags = self._buckets.get_bucket_tags(source_bucket, source_account)
+            tags = self._configuration.get_bucket_tags(source_bucket, source_account)
             if tags:
-                self._buckets.set_bucket_tags(
+                self._configuration.set_bucket_tags(
                     target_bucket,
                     target_account,
                     [{"key": tag.key, "value": tag.value} for tag in tags],
                 )
             else:
-                self._buckets.delete_bucket_tags(target_bucket, target_account)
+                self._configuration.delete_bucket_tags(target_bucket, target_account)
 
         run_copy_step("tags", _copy_tags, message="Tags copy failed.")
         run_copy_step(
             "access_logging",
-            lambda: self._buckets.set_bucket_logging(
+            lambda: self._configuration.set_bucket_logging(
                 target_bucket,
                 target_account,
-                self._buckets.get_bucket_logging(source_bucket, source_account),
+                self._configuration.get_bucket_logging(source_bucket, source_account),
             ),
             message="Access logging copy failed.",
         )
@@ -802,7 +802,7 @@ class BucketMigrationItemRunnerMixin:
 
     def _precheck_target_lock_roundtrip(self, target_ctx: _ResolvedContext, target_bucket: str) -> None:
         try:
-            existing_policy = self._buckets.get_policy(target_bucket, target_ctx.account)
+            existing_policy = self._configuration.get_policy(target_bucket, target_ctx.account)
         except RuntimeError as exc:
             if self._is_access_denied_error(exc):
                 raise RuntimeError(
@@ -816,7 +816,7 @@ class BucketMigrationItemRunnerMixin:
             existing_policy if isinstance(existing_policy, dict) else None,
         )
         try:
-            self._buckets.put_policy(target_bucket, target_ctx.account, lock_policy_doc)
+            self._configuration.put_policy(target_bucket, target_ctx.account, lock_policy_doc)
         except RuntimeError as exc:
             if self._is_access_denied_error(exc):
                 raise RuntimeError(
@@ -835,9 +835,9 @@ class BucketMigrationItemRunnerMixin:
         try:
             restored = self._without_managed_target_write_lock_statement(existing_policy)
             if isinstance(restored, dict):
-                self._buckets.put_policy(target_bucket, target_ctx.account, restored)
+                self._configuration.put_policy(target_bucket, target_ctx.account, restored)
             else:
-                self._buckets.delete_policy(target_bucket, target_ctx.account)
+                self._configuration.delete_policy(target_bucket, target_ctx.account)
         except Exception as exc:  # noqa: BLE001
             restore_error = exc
 

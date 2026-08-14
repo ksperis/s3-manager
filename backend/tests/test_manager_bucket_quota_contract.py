@@ -118,7 +118,7 @@ def test_manager_bucket_quota_update_succeeds_with_privileged_access(client, db_
 
     app.dependency_overrides[dependencies.get_current_user] = lambda: user
     app.dependency_overrides[dependencies.get_current_actor] = lambda: user
-    app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeBucketsService()
+    app.dependency_overrides[manager_buckets_router.get_bucket_configuration_service] = lambda: FakeBucketsService()
     app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
     try:
         response = client.put(
@@ -129,7 +129,7 @@ def test_manager_bucket_quota_update_succeeds_with_privileged_access(client, db_
     finally:
         app.dependency_overrides.pop(dependencies.get_current_user, None)
         app.dependency_overrides.pop(dependencies.get_current_actor, None)
-        app.dependency_overrides.pop(manager_buckets_router.get_buckets_service, None)
+        app.dependency_overrides.pop(manager_buckets_router.get_bucket_configuration_service, None)
         app.dependency_overrides.pop(manager_buckets_router.get_audit_service, None)
 
     assert response.status_code == 200, response.text
@@ -180,7 +180,7 @@ def test_embedded_browser_private_connection_cannot_forge_manager_quota_update(c
     app.dependency_overrides[dependencies.get_current_user] = lambda: user
     app.dependency_overrides[dependencies.get_current_actor] = lambda: user
     app.dependency_overrides[dependencies.get_account_context] = lambda: context
-    app.dependency_overrides[manager_buckets_router.get_buckets_service] = fail_if_ceph_service_is_resolved
+    app.dependency_overrides[manager_buckets_router.get_bucket_configuration_service] = fail_if_ceph_service_is_resolved
     try:
         response = client.put(
             "/api/manager/buckets/demo-bucket/quota",
@@ -191,7 +191,7 @@ def test_embedded_browser_private_connection_cannot_forge_manager_quota_update(c
         app.dependency_overrides.pop(dependencies.get_current_user, None)
         app.dependency_overrides.pop(dependencies.get_current_actor, None)
         app.dependency_overrides.pop(dependencies.get_account_context, None)
-        app.dependency_overrides.pop(manager_buckets_router.get_buckets_service, None)
+        app.dependency_overrides.pop(manager_buckets_router.get_bucket_configuration_service, None)
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Bucket quota management is not available for this context"

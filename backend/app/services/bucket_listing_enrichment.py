@@ -37,7 +37,7 @@ from app.services.bucket_notification_state import (
     is_bucket_notification_configuration_configured,
 )
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService, BucketOwnerUsage
-from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.rgw_bucket_metadata import (
     extract_bucket_owner_scope,
     owner_kind_from_owner,
@@ -652,7 +652,7 @@ def enrich_buckets(
     buckets: list[CephAdminBucketSummary],
     requested: set[str],
     include_tags: bool,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     *,
     progress: ListingProgressEmitter | None = None,

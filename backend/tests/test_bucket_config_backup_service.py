@@ -16,6 +16,7 @@ from app.models.bucket_config_backup import (
     BucketConfigBackupSource,
 )
 from app.routers.ceph_admin import bucket_tools as buckets_router
+from app.services import bucket_config_backup_service as bucket_config_backup_module
 from app.services.bucket_config_backup_service import BucketConfigBackupService
 from app.services.s3_execution_context import S3ExecutionContext
 
@@ -70,7 +71,8 @@ def test_bucket_config_backup_collects_selected_features_without_secrets():
         access_key="AKIA_TEST",
         secret_key="SECRET_TEST",
     )
-    service = BucketConfigBackupService(FakeBucketsService())
+    fake_service = FakeBucketsService()
+    service = BucketConfigBackupService(fake_service, fake_service)
 
     backup = service.build_backup(
         account=account,
@@ -138,7 +140,7 @@ def test_ceph_admin_backup_route_uses_endpoint_quota_loader(monkeypatch):
             assert allow_not_found is True
             return {"bucket": "bucket-a", "bucket_quota": {"max_size": 2048, "max_objects": 3}}
 
-    monkeypatch.setattr(buckets_router, "BucketsService", lambda: RouteBucketsService())
+    monkeypatch.setattr(bucket_config_backup_module, "BucketConfigurationService", lambda: RouteBucketsService())
     ctx = SimpleNamespace(
         endpoint=SimpleNamespace(id=7, name="Archive"),
         rgw_admin=FakeRGWAdmin(),

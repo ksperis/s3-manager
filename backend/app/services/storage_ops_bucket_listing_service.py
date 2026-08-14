@@ -29,6 +29,7 @@ from app.services.bucket_listing_shared import (
 )
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService
 from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.listing_progress import (
     ListingProgressEmitter,
@@ -240,7 +241,7 @@ def apply_storage_ops_advanced_filter(
     buckets: list[StorageOpsBucketSummary],
     parsed_filter: CephAdminBucketFilterQuery | None,
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account,
 ) -> list[StorageOpsBucketSummary]:
     if not parsed_filter or not parsed_filter.rules or not buckets:
@@ -502,7 +503,7 @@ def list_storage_ops_context_buckets(
         context_buckets = apply_storage_ops_advanced_filter(
             context_buckets,
             cheap_prefilter,
-            service=service,
+            service=service.configuration,
             account=account,
         )
         if not context_buckets:
@@ -516,7 +517,7 @@ def list_storage_ops_context_buckets(
             context_buckets,
             requested_features,
             include_tags,
-            service,
+            service.configuration,
             account,
         ):
             enriched_payload = enriched.model_dump(mode="json")
@@ -537,7 +538,7 @@ def list_storage_ops_context_buckets(
     context_buckets = apply_storage_ops_advanced_filter(
         context_buckets,
         effective_filter,
-        service=service,
+        service=service.configuration,
         account=account,
     )
     if normalized_search:

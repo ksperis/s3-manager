@@ -11,7 +11,7 @@ from app.main import app
 from app.models.bucket import BucketReplicationConfiguration
 from app.routers.ceph_admin import bucket_config as ceph_admin_buckets_router
 from app.routers.manager import buckets as manager_buckets_router
-from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 
 
 class _FakeAuditService:
@@ -57,7 +57,7 @@ def test_manager_put_bucket_replication_returns_200(client: TestClient):
             return BucketReplicationConfiguration(configuration=payload.configuration)
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = _build_account
-    app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeService()
+    app.dependency_overrides[manager_buckets_router.get_bucket_configuration_service] = lambda: FakeService()
     app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
 
     payload = {
@@ -92,7 +92,7 @@ def test_manager_put_bucket_replication_rejects_zone(client: TestClient):
             raise ValueError("Destination.Zone is not supported in V1.")
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = _build_account
-    app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeService()
+    app.dependency_overrides[manager_buckets_router.get_bucket_configuration_service] = lambda: FakeService()
     app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
 
     payload = {
@@ -121,7 +121,7 @@ def test_manager_put_bucket_replication_requires_endpoint_feature(client: TestCl
             raise AssertionError("service should not be called")
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = lambda: _build_account(replication_enabled=False)
-    app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeService()
+    app.dependency_overrides[manager_buckets_router.get_bucket_configuration_service] = lambda: FakeService()
     app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
 
     payload = {
@@ -145,7 +145,7 @@ def test_manager_delete_bucket_replication_returns_204(client: TestClient):
             captured["account_id"] = account.id
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = _build_account
-    app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeService()
+    app.dependency_overrides[manager_buckets_router.get_bucket_configuration_service] = lambda: FakeService()
     app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
 
     response = client.delete("/api/manager/buckets/demo-bucket/replication")
@@ -155,7 +155,7 @@ def test_manager_delete_bucket_replication_returns_204(client: TestClient):
 
 
 def test_buckets_service_set_bucket_replication_rejects_destination_zone():
-    service = BucketsService()
+    service = BucketConfigurationService()
     payload = BucketReplicationConfiguration(
         configuration={
             "Role": "arn:aws:iam::123456789012:role/replication",
@@ -188,7 +188,7 @@ def test_ceph_admin_put_bucket_replication_invalidates_listing_cache(monkeypatch
         assert name == "demo-bucket"
         return BucketReplicationConfiguration(configuration=payload.configuration)
 
-    monkeypatch.setattr(BucketsService, "set_bucket_replication", fake_set_bucket_replication)
+    monkeypatch.setattr(BucketConfigurationService, "set_bucket_replication", fake_set_bucket_replication)
 
     ctx = SimpleNamespace(endpoint=_build_endpoint(endpoint_id=99), access_key="AK", secret_key="SK")
     payload = BucketReplicationConfiguration(
@@ -211,7 +211,7 @@ def test_ceph_admin_put_bucket_replication_requires_endpoint_feature(monkeypatch
         calls["count"] += 1
         return BucketReplicationConfiguration(configuration=payload.configuration)
 
-    monkeypatch.setattr(BucketsService, "set_bucket_replication", fake_set_bucket_replication)
+    monkeypatch.setattr(BucketConfigurationService, "set_bucket_replication", fake_set_bucket_replication)
 
     ctx = SimpleNamespace(
         endpoint=_build_endpoint(endpoint_id=99, replication_enabled=False),
@@ -246,7 +246,7 @@ def test_ceph_admin_delete_bucket_replication_invalidates_listing_cache(monkeypa
     def fake_delete_bucket_replication(self, name: str, account: S3Account) -> None:
         deleted["name"] = name
 
-    monkeypatch.setattr(BucketsService, "delete_bucket_replication", fake_delete_bucket_replication)
+    monkeypatch.setattr(BucketConfigurationService, "delete_bucket_replication", fake_delete_bucket_replication)
 
     ctx = SimpleNamespace(endpoint=_build_endpoint(endpoint_id=100), access_key="AK", secret_key="SK")
     response = ceph_admin_buckets_router.delete_replication("demo-bucket", ctx=ctx)

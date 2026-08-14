@@ -32,6 +32,7 @@ from app.models.bucket import (
 )
 from app.utils.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.services.bucket_listing_shared import parse_includes
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.buckets_service import BucketsService
 from app.services.s3_deletion import BucketNotEmptyError
 
@@ -75,7 +76,7 @@ def no_content_response() -> Response:
 
 def apply_bucket_config_update(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     action: Callable[..., tuple[_T, dict[str, Any]]],
@@ -94,7 +95,7 @@ def apply_bucket_config_update(
 
 def apply_bucket_config_delete(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     action: Callable[..., None],
@@ -180,7 +181,7 @@ def delete_bucket_config(
 
 def update_bucket_quota_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketQuotaUpdate,
@@ -189,18 +190,18 @@ def update_bucket_quota_config(
     return {"message": "Bucket quota updated"}, payload.model_dump(exclude_none=True)
 
 
-def get_bucket_properties_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> BucketProperties:
+def get_bucket_properties_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> BucketProperties:
     return _map_runtime_error(lambda: service.get_bucket_properties(bucket_name, account))
 
 
-def get_bucket_versioning_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> BucketVersioningStatus:
+def get_bucket_versioning_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> BucketVersioningStatus:
     status_value = _map_runtime_error(lambda: service.get_bucket_versioning_status(bucket_name, account))
     return BucketVersioningStatus(status=status_value, enabled=status_value == "Enabled")
 
 
 def update_bucket_versioning_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketVersioningUpdate,
@@ -212,13 +213,13 @@ def update_bucket_versioning_config(
     }, {"enabled": payload.enabled}
 
 
-def get_bucket_object_lock_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> BucketObjectLock:
+def get_bucket_object_lock_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> BucketObjectLock:
     return _map_runtime_error(lambda: service.get_object_lock(bucket_name, account))
 
 
 def put_bucket_object_lock_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketObjectLockUpdate,
@@ -228,14 +229,14 @@ def put_bucket_object_lock_config(
 
 
 def get_bucket_encryption_config(
-    *, service: BucketsService, account: S3ExecutionTarget, bucket_name: str
+    *, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str
 ) -> BucketEncryptionConfiguration:
     return _map_runtime_error(lambda: service.get_bucket_encryption(bucket_name, account))
 
 
 def put_bucket_encryption_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketEncryptionConfiguration,
@@ -244,18 +245,18 @@ def put_bucket_encryption_config(
     return result, {"rules_count": len(payload.rules or [])}
 
 
-def delete_bucket_encryption_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> None:
+def delete_bucket_encryption_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> None:
     _map_runtime_error(lambda: service.delete_bucket_encryption(bucket_name, account))
 
 
-def get_bucket_policy_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> BucketPolicyOut:
+def get_bucket_policy_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> BucketPolicyOut:
     policy = _map_runtime_error(lambda: service.get_policy(bucket_name, account))
     return BucketPolicyOut(policy=policy)
 
 
 def put_bucket_policy_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketPolicyIn,
@@ -264,17 +265,17 @@ def put_bucket_policy_config(
     return BucketPolicyOut(policy=payload.policy), {"policy_length": len(payload.policy or "")}
 
 
-def delete_bucket_policy_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> None:
+def delete_bucket_policy_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> None:
     _map_runtime_error(lambda: service.delete_policy(bucket_name, account))
 
 
-def get_bucket_acl_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> BucketAcl:
+def get_bucket_acl_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> BucketAcl:
     return _map_runtime_error(lambda: service.get_bucket_acl(bucket_name, account))
 
 
 def put_bucket_acl_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketAclUpdate,
@@ -284,14 +285,14 @@ def put_bucket_acl_config(
 
 
 def get_bucket_public_access_block_config(
-    *, service: BucketsService, account: S3ExecutionTarget, bucket_name: str
+    *, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str
 ) -> BucketPublicAccessBlock:
     return _map_runtime_error(lambda: service.get_public_access_block(bucket_name, account))
 
 
 def put_bucket_public_access_block_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketPublicAccessBlock,
@@ -300,13 +301,13 @@ def put_bucket_public_access_block_config(
     return result, payload.model_dump(exclude_none=True)
 
 
-def get_bucket_lifecycle_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> BucketLifecycleConfig:
+def get_bucket_lifecycle_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> BucketLifecycleConfig:
     return _map_runtime_error(lambda: service.get_lifecycle(bucket_name, account))
 
 
 def put_bucket_lifecycle_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketLifecycleConfig,
@@ -315,18 +316,18 @@ def put_bucket_lifecycle_config(
     return result, {"rules_count": len(payload.rules or [])}
 
 
-def delete_bucket_lifecycle_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> None:
+def delete_bucket_lifecycle_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> None:
     _map_runtime_error(lambda: service.delete_lifecycle(bucket_name, account))
 
 
-def get_bucket_cors_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> dict[str, Any]:
+def get_bucket_cors_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> dict[str, Any]:
     cors = _map_runtime_error(lambda: service.get_bucket_cors(bucket_name, account))
     return {"rules": cors or []}
 
 
 def put_bucket_cors_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketCorsUpdate,
@@ -335,19 +336,19 @@ def put_bucket_cors_config(
     return {"rules": payload.rules}, {"rules_count": len(payload.rules or [])}
 
 
-def delete_bucket_cors_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> None:
+def delete_bucket_cors_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> None:
     _map_runtime_error(lambda: service.delete_cors(bucket_name, account))
 
 
 def get_bucket_notifications_config(
-    *, service: BucketsService, account: S3ExecutionTarget, bucket_name: str
+    *, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str
 ) -> BucketNotificationConfiguration:
     return _map_runtime_error(lambda: service.get_bucket_notifications(bucket_name, account))
 
 
 def put_bucket_notifications_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketNotificationConfiguration,
@@ -357,19 +358,19 @@ def put_bucket_notifications_config(
     return result, {"keys": list(configuration.keys())}
 
 
-def delete_bucket_notifications_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> None:
+def delete_bucket_notifications_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> None:
     _map_runtime_error(lambda: service.delete_bucket_notifications(bucket_name, account))
 
 
 def get_bucket_replication_config(
-    *, service: BucketsService, account: S3ExecutionTarget, bucket_name: str
+    *, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str
 ) -> BucketReplicationConfiguration:
     return _map_runtime_error(lambda: service.get_bucket_replication(bucket_name, account))
 
 
 def put_bucket_replication_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketReplicationConfiguration,
@@ -381,17 +382,17 @@ def put_bucket_replication_config(
     return result, {"rules_count": rules_count}
 
 
-def delete_bucket_replication_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> None:
+def delete_bucket_replication_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> None:
     _map_runtime_error(lambda: service.delete_bucket_replication(bucket_name, account))
 
 
-def get_bucket_logging_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> BucketLoggingConfiguration:
+def get_bucket_logging_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> BucketLoggingConfiguration:
     return _map_runtime_error(lambda: service.get_bucket_logging(bucket_name, account))
 
 
 def put_bucket_logging_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketLoggingConfiguration,
@@ -400,17 +401,17 @@ def put_bucket_logging_config(
     return result, payload.model_dump(exclude_none=True)
 
 
-def delete_bucket_logging_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> None:
+def delete_bucket_logging_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> None:
     _map_runtime_error(lambda: service.delete_bucket_logging(bucket_name, account))
 
 
-def get_bucket_website_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> BucketWebsiteConfiguration:
+def get_bucket_website_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> BucketWebsiteConfiguration:
     return _map_runtime_error(lambda: service.get_bucket_website(bucket_name, account))
 
 
 def put_bucket_website_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketWebsiteConfiguration,
@@ -419,18 +420,18 @@ def put_bucket_website_config(
     return result, payload.model_dump(exclude_none=True)
 
 
-def delete_bucket_website_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> None:
+def delete_bucket_website_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> None:
     _map_runtime_error(lambda: service.delete_bucket_website(bucket_name, account))
 
 
-def get_bucket_tags_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> dict[str, Any]:
+def get_bucket_tags_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> dict[str, Any]:
     tags = _map_runtime_error(lambda: service.get_bucket_tags(bucket_name, account))
     return {"tags": [tag.model_dump() for tag in tags]}
 
 
 def put_bucket_tags_config(
     *,
-    service: BucketsService,
+    service: BucketConfigurationService,
     account: S3ExecutionTarget,
     bucket_name: str,
     payload: BucketTagsUpdate,
@@ -440,5 +441,5 @@ def put_bucket_tags_config(
     return {"tags": payload.tags}, {"tags": tags, "count": len(payload.tags or [])}
 
 
-def delete_bucket_tags_config(*, service: BucketsService, account: S3ExecutionTarget, bucket_name: str) -> None:
+def delete_bucket_tags_config(*, service: BucketConfigurationService, account: S3ExecutionTarget, bucket_name: str) -> None:
     _map_runtime_error(lambda: service.delete_bucket_tags(bucket_name, account))

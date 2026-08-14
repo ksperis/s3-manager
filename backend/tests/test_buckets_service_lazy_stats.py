@@ -5,6 +5,7 @@ from app.models.bucket import BucketNotificationConfiguration, BucketProperties,
 from app.services import s3_client
 from app.services import buckets_service as buckets_service_module
 from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 
 
 def _build_account() -> S3Account:
@@ -19,6 +20,22 @@ def _build_account() -> S3Account:
 def test_bucket_feature_enrichment_is_owned_by_dedicated_module():
     assert not hasattr(buckets_service_module, "account_sns_feature_enabled")
     assert not hasattr(buckets_service_module, "is_bucket_notification_configuration_configured")
+
+
+def test_bucket_configuration_is_owned_by_dedicated_service():
+    configuration_methods = {
+        "get_bucket_properties",
+        "set_versioning",
+        "set_bucket_quota",
+        "get_policy",
+        "set_lifecycle",
+        "set_bucket_replication",
+        "set_bucket_notifications",
+        "set_bucket_website",
+        "set_object_lock",
+    }
+    assert all(not hasattr(BucketsService, method) for method in configuration_methods)
+    assert all(hasattr(BucketConfigurationService, method) for method in configuration_methods)
 
 
 def test_list_buckets_skips_admin_stats_when_disabled(monkeypatch):
@@ -121,19 +138,19 @@ def test_list_buckets_versioning_only_avoids_bundle_properties(monkeypatch):
         calls["versioning"] += 1
         return "Enabled"
 
-    monkeypatch.setattr(service, "get_bucket_versioning_status", fake_get_versioning)
+    monkeypatch.setattr(service.configuration, "get_bucket_versioning_status", fake_get_versioning)
     monkeypatch.setattr(
-        service,
+        service.configuration,
         "get_bucket_properties",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("get_bucket_properties should not be called")),
     )
     monkeypatch.setattr(
-        service,
+        service.configuration,
         "get_lifecycle",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("get_lifecycle should not be called")),
     )
     monkeypatch.setattr(
-        service,
+        service.configuration,
         "get_bucket_cors",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("get_bucket_cors should not be called")),
     )
@@ -165,14 +182,14 @@ def test_list_buckets_multiple_prop_features_use_bundle_properties(monkeypatch):
             cors_rules=[],
         )
 
-    monkeypatch.setattr(service, "get_bucket_properties", fake_get_properties)
+    monkeypatch.setattr(service.configuration, "get_bucket_properties", fake_get_properties)
     monkeypatch.setattr(
-        service,
+        service.configuration,
         "get_bucket_versioning_status",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("dedicated versioning API should not be called")),
     )
     monkeypatch.setattr(
-        service,
+        service.configuration,
         "get_bucket_cors",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("dedicated cors API should not be called")),
     )
@@ -212,7 +229,7 @@ def test_list_buckets_notifications_feature_statuses(monkeypatch):
             return BucketNotificationConfiguration(configuration={"TopicConfigurations": [], "QueueConfigurations": [{}]})
         raise RuntimeError("GetBucketNotificationConfiguration failed")
 
-    monkeypatch.setattr(service, "get_bucket_notifications", fake_get_notifications)
+    monkeypatch.setattr(service.configuration, "get_bucket_notifications", fake_get_notifications)
 
     buckets = service.list_buckets(account, include={"notifications"}, with_stats=False)
     features = {bucket.name: bucket.features["notifications"] for bucket in buckets if bucket.features}
@@ -244,7 +261,7 @@ def test_list_buckets_notifications_unavailable_when_sns_disabled(monkeypatch):
         calls["notifications"] += 1
         raise AssertionError("notifications must not be fetched when SNS is disabled")
 
-    monkeypatch.setattr(service, "get_bucket_notifications", fake_get_notifications)
+    monkeypatch.setattr(service.configuration, "get_bucket_notifications", fake_get_notifications)
 
     buckets = service.list_buckets(account, include={"notifications"}, with_stats=False)
 
@@ -255,7 +272,7 @@ def test_list_buckets_notifications_unavailable_when_sns_disabled(monkeypatch):
 
 
 def test_set_bucket_quota_calls_single_scope_without_user_lookup(monkeypatch):
-    service = BucketsService()
+    service = BucketConfigurationService()
     account = S3Account(
         name="quota-owner",
         rgw_account_id=None,
@@ -290,7 +307,7 @@ def test_set_bucket_quota_calls_single_scope_without_user_lookup(monkeypatch):
 
 
 def test_set_bucket_quota_uses_injected_rgw_admin_client(monkeypatch):
-    service = BucketsService()
+    service = BucketConfigurationService()
     account = S3Account(
         name="quota-owner-account",
         rgw_account_id="RGW00000000000000009",
@@ -322,7 +339,7 @@ def test_set_bucket_quota_uses_injected_rgw_admin_client(monkeypatch):
 
 
 def test_set_bucket_quota_uses_endpoint_admin_credentials(monkeypatch):
-    service = BucketsService()
+    service = BucketConfigurationService()
     account = S3Account(
         name="quota-owner-account",
         rgw_account_id="RGW00000000000000009",
@@ -350,7 +367,7 @@ def test_set_bucket_quota_uses_endpoint_admin_credentials(monkeypatch):
         captured["client"] = kwargs
         return FakeRGWAdmin()
 
-    monkeypatch.setattr("app.services.buckets_service.get_rgw_admin_client", fake_get_rgw_admin_client)
+    monkeypatch.setattr("app.services.bucket_configuration_service.get_rgw_admin_client", fake_get_rgw_admin_client)
 
     service.set_bucket_quota(
         "bucket-b",
@@ -366,7 +383,7 @@ def test_set_bucket_quota_uses_endpoint_admin_credentials(monkeypatch):
 
 
 def test_set_bucket_quota_raises_when_rgw_reports_not_found(monkeypatch):
-    service = BucketsService()
+    service = BucketConfigurationService()
     account = S3Account(
         name="quota-owner-account",
         rgw_account_id="RGW00000000000000009",

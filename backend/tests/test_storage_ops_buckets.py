@@ -26,6 +26,12 @@ from app.main import app
 from tests.execution_context_factory import make_execution_context
 
 
+class _CompositeConfigurationStub:
+    @property
+    def configuration(self):  # noqa: ANN201
+        return self
+
+
 def _admin_user() -> User:
     return User(
         id=101,
@@ -247,7 +253,7 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             if account.context_id == "1":
                 return [
@@ -380,7 +386,7 @@ def test_storage_ops_listing_reports_context_progress(monkeypatch):
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             return [Bucket(name=f"{account.context_id}-bucket")]
 
@@ -436,7 +442,7 @@ def test_storage_ops_query_endpoint_matches_get(client, monkeypatch):
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             if account.context_id == "1":
                 return [Bucket(name="alpha", used_bytes=10), Bucket(name="shared", used_bytes=20)]
@@ -509,7 +515,7 @@ def test_storage_ops_listing_fanout_runs_in_parallel(client, monkeypatch):
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def __init__(self) -> None:
             self._lock = threading.Lock()
             self._active = 0
@@ -799,7 +805,7 @@ def test_storage_ops_lifecycle_rule_status_filter_uses_context_lifecycle_lookup(
         }
     )
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def get_lifecycle(self, name: str, account):  # noqa: ARG002
             rules = (
                 [{"ID": "cleanup", "Status": "Disabled"}]
@@ -852,7 +858,7 @@ def test_storage_ops_sse_detail_filter_uses_context_encryption_lookup():
         }
     )
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def get_bucket_encryption(self, name: str, account):  # noqa: ARG002
             rules = (
                 [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
@@ -937,7 +943,7 @@ def test_storage_ops_list_and_stream_apply_context_advanced_filters(client, monk
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             if account.context_id == "1":
                 return [Bucket(name="alpha", used_bytes=10)]
@@ -1011,7 +1017,7 @@ def test_storage_ops_context_prefilter_skips_non_matching_contexts_for_match_all
         resolved_contexts.append(account_ref)
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             return [Bucket(name=f"bucket-{account.context_id}", used_bytes=1)]
 
@@ -1069,7 +1075,7 @@ def test_storage_ops_context_id_prefilter_skips_non_matching_contexts(client, mo
         resolved_contexts.append(account_ref)
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             return [Bucket(name=f"bucket-{account.context_id}", used_bytes=1)]
 
@@ -1127,7 +1133,7 @@ def test_storage_ops_context_prefilter_keeps_other_contexts_for_match_any_mixed_
         resolved_contexts.append(account_ref)
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             if account.context_id == "1":
                 return [Bucket(name="alpha", used_bytes=1)]
@@ -1182,7 +1188,7 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             return [Bucket(name="alpha", used_bytes=1), Bucket(name="beta", used_bytes=1)]
 
@@ -1266,7 +1272,7 @@ def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
         account=account,
     )
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             return [Bucket(name="alpha"), Bucket(name="beta")]
 
@@ -1343,7 +1349,7 @@ def test_storage_ops_notification_param_filter_uses_shared_snapshot_matching(mon
         account=account,
     )
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             return [Bucket(name="alpha"), Bucket(name="beta")]
 
@@ -1424,7 +1430,7 @@ def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_con
             )
         raise AssertionError(f"unexpected context {account_ref}")
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             if account.context_id == "1":
                 return [Bucket(name="alpha", used_bytes=40, object_count=4), Bucket(name="beta", used_bytes=60, object_count=6)]
@@ -1515,7 +1521,7 @@ def test_storage_ops_bucket_quota_usage_percent_filter_forces_stats_and_filters_
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
         return SimpleNamespace(context_id=account_ref)
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             stats_flags.append(with_stats)
             return [
@@ -1576,7 +1582,7 @@ def test_storage_ops_bucket_listing_does_not_expose_quota_write_availability(cli
             ),
         )
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             return [Bucket(name="alpha")]
 
@@ -1638,7 +1644,7 @@ def test_storage_ops_bucket_listing_filters_by_owner_suspended_status(client, mo
             storage_endpoint=SimpleNamespace(id=21),
         )
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             return [Bucket(name=f"bucket-{account.context_id}")]
 
@@ -1708,7 +1714,7 @@ def test_storage_ops_owner_identity_failures_leave_owner_quota_fields_null(clien
             source_connection=SimpleNamespace(id=33),
         )
 
-    class FakeBucketsService:
+    class FakeBucketsService(_CompositeConfigurationStub):
         def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
             return [Bucket(name="orphan", used_bytes=7, object_count=1)]
 

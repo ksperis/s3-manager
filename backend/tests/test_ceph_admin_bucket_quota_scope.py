@@ -37,7 +37,7 @@ def test_update_quota_builds_tenant_qualified_owner_uid(monkeypatch):
         captured["account_id"] = account.rgw_account_id
         captured["has_rgw_admin"] = rgw_admin is not None
 
-    monkeypatch.setattr(buckets_router.BucketsService, "set_bucket_quota", fake_set_bucket_quota)
+    monkeypatch.setattr(buckets_router.BucketConfigurationService, "set_bucket_quota", fake_set_bucket_quota)
 
     response = buckets_router.update_quota(
         "bucket-a",
@@ -69,7 +69,7 @@ def test_update_quota_uses_account_owner_identifier_as_uid(monkeypatch):
         captured["account_id"] = account.rgw_account_id
         captured["has_rgw_admin"] = rgw_admin is not None
 
-    monkeypatch.setattr(buckets_router.BucketsService, "set_bucket_quota", fake_set_bucket_quota)
+    monkeypatch.setattr(buckets_router.BucketConfigurationService, "set_bucket_quota", fake_set_bucket_quota)
 
     response = buckets_router.update_quota(
         "bucket-b",

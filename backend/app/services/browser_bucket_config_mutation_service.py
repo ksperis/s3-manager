@@ -8,7 +8,7 @@ from app.models.access_context import ManagerActor
 from app.services import bucket_config_actions
 from app.services.audit_service import AuditService
 from app.services.browser_service import BrowserService
-from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.s3_execution_context import S3ExecutionContext
 
 _T = TypeVar("_T")
@@ -18,11 +18,11 @@ class BrowserBucketConfigMutationService:
     def __init__(
         self,
         *,
-        buckets_service: BucketsService,
+        configuration_service: BucketConfigurationService,
         browser_service: BrowserService,
         audit_service: AuditService,
     ) -> None:
-        self.buckets_service = buckets_service
+        self.configuration_service = configuration_service
         self.browser_service = browser_service
         self.audit_service = audit_service
 
@@ -58,7 +58,7 @@ class BrowserBucketConfigMutationService:
         **kwargs: Any,
     ) -> _T:
         return bucket_config_actions.apply_bucket_config_update(
-            service=self.buckets_service,
+            service=self.configuration_service,
             account=account,
             bucket_name=bucket_name,
             action=action,
@@ -83,7 +83,7 @@ class BrowserBucketConfigMutationService:
         **kwargs: Any,
     ) -> None:
         bucket_config_actions.apply_bucket_config_delete(
-            service=self.buckets_service,
+            service=self.configuration_service,
             account=account,
             bucket_name=bucket_name,
             action=action,

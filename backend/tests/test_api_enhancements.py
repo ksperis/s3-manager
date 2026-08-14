@@ -192,7 +192,7 @@ def test_manager_get_bucket_versioning_returns_status(client: TestClient):
     account.id = 12
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = lambda: account
-    app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeBucketService()
+    app.dependency_overrides[manager_buckets_router.get_bucket_configuration_service] = lambda: FakeBucketService()
 
     response = client.get("/api/manager/buckets/demo-bucket/versioning")
 

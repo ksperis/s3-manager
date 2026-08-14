@@ -9,7 +9,7 @@ from app.db import S3Account, User
 from app.services.audit_service import AuditService
 from app.services.browser_bucket_config_mutation_service import BrowserBucketConfigMutationService
 from app.services.browser_service import BrowserService
-from app.services.buckets_service import BucketsService
+from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.s3_execution_context import S3ExecutionContext
 
 
@@ -49,7 +49,7 @@ def test_browser_bucket_config_update_runs_action_before_cache_and_audit():
         return "result", {"changed": True}
 
     service = BrowserBucketConfigMutationService(
-        buckets_service=cast(BucketsService, buckets_service),
+            configuration_service=cast(BucketConfigurationService, buckets_service),
         browser_service=cast(BrowserService, FakeBrowserService()),
         audit_service=cast(AuditService, FakeAuditService()),
     )
@@ -99,7 +99,7 @@ def test_browser_bucket_config_delete_does_not_invalidate_or_audit_failed_action
         raise RuntimeError("failed")
 
     service = BrowserBucketConfigMutationService(
-        buckets_service=cast(BucketsService, object()),
+            configuration_service=cast(BucketConfigurationService, object()),
         browser_service=cast(BrowserService, FakeBrowserService()),
         audit_service=cast(AuditService, FakeAuditService()),
     )
@@ -136,7 +136,7 @@ def test_browser_bucket_config_delete_records_no_synthetic_metadata():
         calls.append("action")
 
     service = BrowserBucketConfigMutationService(
-        buckets_service=cast(BucketsService, object()),
+            configuration_service=cast(BucketConfigurationService, object()),
         browser_service=cast(BrowserService, FakeBrowserService()),
         audit_service=cast(AuditService, FakeAuditService()),
     )
