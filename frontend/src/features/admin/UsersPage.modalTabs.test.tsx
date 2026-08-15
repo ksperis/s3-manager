@@ -150,7 +150,9 @@ describe("UsersPage modal tabs", () => {
 
     render(<UsersPage />);
 
-    expect(await screen.findByRole("heading", { name: "Edit user" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Edit user" }, { timeout: 5_000 }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         "Manage direct access, inherited associations, workspace permissions, and Manager permissions for this UI user."

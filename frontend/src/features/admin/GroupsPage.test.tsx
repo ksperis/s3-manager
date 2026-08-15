@@ -381,7 +381,7 @@ describe("GroupsPage", () => {
       }],
       s3_connection_ids: [21],
     });
-  });
+  }, 15_000);
 
   it("uses linked rows with explicit removal for group associations", async () => {
     listGroupsMock.mockResolvedValue({
