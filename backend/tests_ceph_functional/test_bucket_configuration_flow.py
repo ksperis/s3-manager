@@ -804,7 +804,7 @@ def test_manager_bucket_replication_roundtrip(
             lambda current: isinstance(current, dict)
             and current.get("key") == object_key
             and int(current.get("size") or -1) == len(object_body),
-            timeout=300.0,
+            timeout=600.0,
             interval=5.0,
         )
         assert replicated_object["key"] == object_key

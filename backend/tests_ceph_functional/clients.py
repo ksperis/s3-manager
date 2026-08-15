@@ -6,6 +6,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable
+from urllib.parse import urlsplit
 
 import requests
 
@@ -178,10 +179,17 @@ class BackendAuthenticator:
         if not self.bootstrap_access_cookie or not self.bootstrap_csrf_token:
             return None
         session = requests.Session()
-        session.cookies.set(self.access_cookie_name, self.bootstrap_access_cookie, path="/api")
+        cookie_domain = urlsplit(self.base_url).hostname
+        cookie_scope = {"domain": cookie_domain} if cookie_domain else {}
+        session.cookies.set(self.access_cookie_name, self.bootstrap_access_cookie, path="/api", **cookie_scope)
         if self.bootstrap_refresh_cookie:
-            session.cookies.set(self.refresh_cookie_name, self.bootstrap_refresh_cookie, path="/api/auth")
-        session.cookies.set(self.csrf_cookie_name, self.bootstrap_csrf_token, path="/")
+            session.cookies.set(
+                self.refresh_cookie_name,
+                self.bootstrap_refresh_cookie,
+                path="/api/auth",
+                **cookie_scope,
+            )
+        session.cookies.set(self.csrf_cookie_name, self.bootstrap_csrf_token, path="/", **cookie_scope)
         return BackendSession(
             base_url=self.base_url,
             verify=self.verify,
