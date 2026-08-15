@@ -150,6 +150,8 @@ class AuthSessionService:
             created_at=now,
             expires_at=session.absolute_expires_at,
         )
+        self.db.add(next_row)
+        self.db.flush()
         current.replaced_by_id = next_row.id
         session.last_activity_at = now
         session.csrf_token_hash = hash_refresh_token(next_csrf)
@@ -163,7 +165,7 @@ class AuthSessionService:
                 now + timedelta(minutes=self.settings.s3_session_idle_minutes),
                 s3_session.absolute_expires_at,
             )
-        self.db.add_all([current, next_row, session])
+        self.db.add_all([current, session])
         self.db.commit()
         return SessionCredentials(
             access_token=self._access_token(session, user=user, s3_session=s3_session),

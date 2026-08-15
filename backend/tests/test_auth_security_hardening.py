@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from jose import jwt
 from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
+from sqlalchemy import text
 from starlette.requests import Request
 
 from app.core.config import Settings, get_settings
@@ -303,28 +304,33 @@ def test_superadmin_can_inventory_and_revoke_another_users_session(auth_client, 
 
 
 def test_refresh_replay_revokes_the_entire_family(db_session):
-    user = _user(db_session, email="refresh-replay@example.com")
-    service = AuthSessionService(db_session)
-    original = service.create_for_user(
-        user,
-        auth_type="password",
-        ip_address="127.0.0.1",
-        user_agent="pytest",
-        mfa_verified=False,
-    )
-    replacement = service.rotate(original.refresh_token)
-    assert replacement.refresh_token != original.refresh_token
+    db_session.execute(text("PRAGMA foreign_keys = ON"))
+    try:
+        user = _user(db_session, email="refresh-replay@example.com")
+        service = AuthSessionService(db_session)
+        original = service.create_for_user(
+            user,
+            auth_type="password",
+            ip_address="127.0.0.1",
+            user_agent="pytest",
+            mfa_verified=False,
+        )
+        replacement = service.rotate(original.refresh_token)
+        assert replacement.refresh_token != original.refresh_token
 
-    with pytest.raises(RefreshReplayError):
-        service.rotate(original.refresh_token)
+        with pytest.raises(RefreshReplayError):
+            service.rotate(original.refresh_token)
 
-    rows = db_session.query(RefreshToken).filter(RefreshToken.auth_session_id == original.session.id).all()
-    assert len(rows) == 2
-    assert all(row.revoked_at is not None for row in rows)
-    db_session.refresh(original.session)
-    assert original.session.revoked_at is not None
-    with pytest.raises(AuthSessionError):
-        service.rotate(replacement.refresh_token)
+        rows = db_session.query(RefreshToken).filter(RefreshToken.auth_session_id == original.session.id).all()
+        assert len(rows) == 2
+        assert all(row.revoked_at is not None for row in rows)
+        db_session.refresh(original.session)
+        assert original.session.revoked_at is not None
+        with pytest.raises(AuthSessionError):
+            service.rotate(replacement.refresh_token)
+    finally:
+        db_session.rollback()
+        db_session.execute(text("PRAGMA foreign_keys = OFF"))
 
 
 def test_expired_s3_auth_session_erases_persisted_credentials(db_session):

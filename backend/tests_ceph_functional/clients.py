@@ -30,6 +30,8 @@ class BackendAPIError(RuntimeError):
         self.status_code = status_code
         self.payload = payload
         suffix = f" (status={status_code})" if status_code is not None else ""
+        if isinstance(payload, dict) and payload.get("detail"):
+            suffix = f"{suffix}: {payload['detail']}"
         super().__init__(f"{message}{suffix}")
 
 
