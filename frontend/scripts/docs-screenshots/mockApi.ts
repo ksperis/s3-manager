@@ -18,6 +18,33 @@ function serializeBody(body: unknown): string {
 
 export async function registerApiMocks(page: Page, rules: MockRule[], scenarioId: string): Promise<RegisteredApiMocks> {
   const unmatchedRequests: string[] = [];
+  const currentUserRule = rules.find(
+    (candidate) => candidate.id.includes("current-user") && typeof candidate.body !== "function",
+  );
+  const currentUser = currentUserRule?.body;
+  const effectiveRules: MockRule[] = currentUser
+    ? [
+        ...rules,
+        {
+          id: "current-auth-session",
+          path: /^\/auth\/session$/,
+          body: {
+            authenticated: true,
+            user: currentUser,
+            session: null,
+            auth_session: {
+              id: `docs-${scenarioId}`,
+              auth_type: "password",
+              mfa_verified_at: null,
+              idle_expires_at: "2026-08-18T12:00:00Z",
+              absolute_expires_at: "2026-08-24T12:00:00Z",
+            },
+          },
+        },
+        { id: "login-oidc-providers", path: /^\/auth\/oidc\/providers$/, body: [] },
+        { id: "login-ldap-providers", path: /^\/auth\/ldap\/providers$/, body: [] },
+      ]
+    : rules;
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -30,7 +57,7 @@ export async function registerApiMocks(page: Page, rules: MockRule[], scenarioId
     const path = normalizePath(url.pathname);
     const requestBodyText = request.postData() ?? "";
 
-    const rule = rules.find((candidate) => {
+    const rule = effectiveRules.find((candidate) => {
       if (candidate.method && candidate.method !== method) return false;
       return candidate.path.test(path);
     });

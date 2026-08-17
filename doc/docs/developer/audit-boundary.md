@@ -1,6 +1,6 @@
 # Audit Boundary: Control Plane and S3 Data Plane
 
-s3-manager deliberately separates application audit from storage access logs.
+Kaelo deliberately separates application audit from storage access logs.
 
 ## Formal contract
 
@@ -57,4 +57,3 @@ may be needed for historical analysis or legal retention.
 
 Deploy the migration, backend, frontend, and documentation together because
 the Portal access-log route change is intentionally breaking.
-

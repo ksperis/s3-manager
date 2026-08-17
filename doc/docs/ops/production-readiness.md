@@ -1,6 +1,6 @@
 # Production Readiness
 
-Use this checklist before exposing s3-manager to real users.
+Use this checklist before exposing Kaelo to real users.
 
 ## Scope
 

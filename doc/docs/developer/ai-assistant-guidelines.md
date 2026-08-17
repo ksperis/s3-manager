@@ -1,8 +1,8 @@
 # AI Assistant Guidelines
 
 This page defines the architectural and operational guardrails that should
-apply when an AI assistant or contributor prepares non-trivial changes in
-`s3-manager`.
+apply when an AI assistant or contributor prepares non-trivial changes in the
+Kaelo repository.
 
 It is a guidance document for design and implementation decisions. It does not
 replace the code, API contracts, or user and ops documentation.

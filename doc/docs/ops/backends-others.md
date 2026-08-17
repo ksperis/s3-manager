@@ -1,6 +1,6 @@
 # Backends: Other S3 Implementations
 
-s3-manager can integrate with non-Ceph S3-compatible backends such as AWS S3 and MinIO.
+Kaelo can integrate with non-Ceph S3-compatible backends such as AWS S3 and MinIO.
 
 ## AWS
 

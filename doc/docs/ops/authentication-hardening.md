@@ -60,7 +60,7 @@ Migrations `0107`–`0110` are a single compatibility boundary. Existing UI sess
 2. Create and verify a restorable database backup. Keep the old credential-encryption key with it.
 3. Before changing `CREDENTIAL_KEYS`, use the existing Admin key-rotation workflow to re-encrypt every persisted credential with a strong new primary key. Validate reads while the old key remains second in the ring, then retire it.
 4. Generate distinct strong `UI_JWT_KEYS` and `API_JWT_KEYS`, plus strong credential and scheduler keys. Configure TLS, exact origins/hosts, WebAuthn, trusted proxy CIDRs, and registered S3 endpoints.
-5. Set `S3_MANAGER_DB_BACKUP_VERIFIED=true` only for the verified migration run. Deploy backend, frontend, migrations, and configuration together.
+5. Set `KAELO_DB_BACKUP_VERIFIED=true` only for the verified migration run. Deploy backend, frontend, migrations, and configuration together.
 6. Create the first superadmin interactively if the database has no users. Otherwise notify every user that reauthentication is required and every automation owner that API tokens must be recreated with explicit scopes.
 7. Verify passkey enrollment/login, refresh rotation, session inventory/revocation, API scopes, OIDC/LDAP manual linking, S3 expiry, security headers, schedulers, and audit redaction.
 

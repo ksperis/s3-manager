@@ -25,7 +25,7 @@ Use this page when you need to adjust personal UI preferences, manage your own p
    - search by name, endpoint, provider, or tag,
    - enable or disable access for `Manager` and `Browser`.
    - delete a **Server managed** connection from this inventory when you no
-     longer need it; S3-Manager first removes the remote key and dedicated IAM
+     longer need it; Kaelo first removes the remote key and dedicated IAM
      identity, when applicable, before removing the local connection.
 4. Use the **Security** tab to enroll or review passkeys, regenerate ten one-time recovery codes, inspect sessions and external identities, and revoke either. Store newly displayed recovery codes outside the browser. Revoking an external identity signs you out everywhere. Superadmins also see every active UI/S3 session and pending manual identity-link requests.
 5. Superadmins can use the **API tokens** tab for scoped automation tokens after recent passkey verification. Other users do not see this tab.

@@ -57,11 +57,15 @@ async function seedLocalStorage(
 ) {
   await page.addInitScript((storage) => {
     localStorage.clear();
+    sessionStorage.clear();
     localStorage.setItem("token", storage.token);
     localStorage.setItem("user", JSON.stringify(storage.user));
     if (storage.selectedWorkspace) localStorage.setItem("selectedWorkspace", storage.selectedWorkspace);
-    if (storage.selectedExecutionContextId) {
-      localStorage.setItem("selectedExecutionContextId", storage.selectedExecutionContextId);
+    if (storage.selectedManagerExecutionContextId) {
+      localStorage.setItem("selectedManagerExecutionContextId", storage.selectedManagerExecutionContextId);
+    }
+    if (storage.selectedBrowserExecutionContextId) {
+      localStorage.setItem("selectedBrowserExecutionContextId", storage.selectedBrowserExecutionContextId);
     }
     if (storage.selectedPortalAccountId) localStorage.setItem("selectedPortalAccountId", storage.selectedPortalAccountId);
     if (storage.selectedCephAdminEndpointId) {
@@ -69,6 +73,7 @@ async function seedLocalStorage(
     }
     localStorage.setItem("theme", storage.theme);
     Object.entries(storage.extraEntries ?? {}).forEach(([key, value]) => localStorage.setItem(key, value));
+    Object.entries(storage.extraSessionEntries ?? {}).forEach(([key, value]) => sessionStorage.setItem(key, value));
   }, { ...scenario.storage, ...overrides, theme });
 }
 
@@ -354,6 +359,27 @@ async function expectManagerQuotaStatusRows(page: Page) {
 }
 
 test.describe("Workspace visual QA", () => {
+  test("login branding and title", async ({ page }) => {
+    const scenario = scenarioById("user-overview");
+    const mockRegistry = await registerApiMocks(
+      page,
+      [
+        { id: "anonymous-session", path: /^\/auth\/session$/, status: 401, body: { detail: "Not authenticated" } },
+        { id: "anonymous-refresh", method: "POST", path: /^\/auth\/refresh$/, status: 401, body: { detail: "Not authenticated" } },
+        { id: "anonymous-oidc-providers", path: /^\/auth\/oidc\/providers$/, body: [] },
+        { id: "anonymous-ldap-providers", path: /^\/auth\/ldap\/providers$/, body: [] },
+        ...scenario.mockRules,
+      ],
+      "login-branding-and-title",
+    );
+
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveTitle("Kaelo - S3-compatible object storage management");
+    await expect(page.getByText("Kaelo", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "S3-compatible object storage management" })).toBeVisible();
+    mockRegistry.assertNoUnmatched();
+  });
+
   for (const routeCase of ROUTE_CASES) {
     const scenario = scenarioById(routeCase.scenarioId);
     for (const theme of THEMES) {

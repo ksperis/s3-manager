@@ -31,21 +31,27 @@ async function seedLocalStorage(page: Page, storage: {
   token: string;
   user: Record<string, unknown>;
   selectedWorkspace?: string;
-  selectedExecutionContextId?: string;
+  selectedManagerExecutionContextId?: string;
+  selectedBrowserExecutionContextId?: string;
   selectedPortalAccountId?: string;
   selectedCephAdminEndpointId?: string;
   theme?: "light" | "dark";
   extraEntries?: Record<string, string>;
+  extraSessionEntries?: Record<string, string>;
 }) {
   await page.addInitScript((value) => {
     localStorage.clear();
+    sessionStorage.clear();
     localStorage.setItem("token", value.token);
     localStorage.setItem("user", JSON.stringify(value.user));
     if (value.selectedWorkspace) {
       localStorage.setItem("selectedWorkspace", value.selectedWorkspace);
     }
-    if (value.selectedExecutionContextId) {
-      localStorage.setItem("selectedExecutionContextId", value.selectedExecutionContextId);
+    if (value.selectedManagerExecutionContextId) {
+      localStorage.setItem("selectedManagerExecutionContextId", value.selectedManagerExecutionContextId);
+    }
+    if (value.selectedBrowserExecutionContextId) {
+      localStorage.setItem("selectedBrowserExecutionContextId", value.selectedBrowserExecutionContextId);
     }
     if (value.selectedPortalAccountId) {
       localStorage.setItem("selectedPortalAccountId", value.selectedPortalAccountId);
@@ -60,6 +66,9 @@ async function seedLocalStorage(page: Page, storage: {
     }
     Object.entries(value.extraEntries ?? {}).forEach(([key, entryValue]) => {
       localStorage.setItem(key, entryValue);
+    });
+    Object.entries(value.extraSessionEntries ?? {}).forEach(([key, entryValue]) => {
+      sessionStorage.setItem(key, entryValue);
     });
   }, storage);
 }

@@ -1,4 +1,4 @@
-# AI-authored commit template for s3-manager.
+# AI-authored commit template for Kaelo.
 # Use Conventional Commits on the first line.
 # Allowed types: feat, fix, refactor, perf, test, docs, build, ci, chore, revert
 # Recommended scopes when one area clearly dominates:

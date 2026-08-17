@@ -5,11 +5,13 @@ export type LocalStorageSeed = {
   token: string;
   user: Record<string, unknown>;
   selectedWorkspace?: "admin" | "manager" | "portal" | "browser" | "ceph-admin" | "storage-ops";
-  selectedExecutionContextId?: string;
+  selectedManagerExecutionContextId?: string;
+  selectedBrowserExecutionContextId?: string;
   selectedPortalAccountId?: string;
   selectedCephAdminEndpointId?: string;
   theme?: "light" | "dark";
   extraEntries?: Record<string, string>;
+  extraSessionEntries?: Record<string, string>;
 };
 
 export type MockRule = {

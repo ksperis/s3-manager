@@ -24,7 +24,7 @@ Use this page when you are preparing your first code or documentation change.
 - Backend: `cd backend && PYTHONPATH=. ./.venv/bin/pytest tests -q`
 - Frontend: `cd frontend && npm test`
 - Browser E2E: `cd frontend && npm run test:e2e`
-- Docs: `python3 -m mkdocs build --strict --config-file doc/mkdocs.yml --site-dir /tmp/s3-manager-docs-build`
+- Docs: `python3 -m mkdocs build --strict --config-file doc/mkdocs.yml --site-dir /tmp/kaelo-docs-build`
 - User screenshots: `npm --prefix frontend run docs:screenshots:check`
 
 ## Common mistakes

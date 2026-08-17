@@ -1,6 +1,6 @@
 # Architecture Overview
 
-s3-manager uses a standard web-console architecture:
+Kaelo uses a standard web-console architecture:
 
 - **Frontend**: React + Vite UI.
 - **Backend**: FastAPI API.

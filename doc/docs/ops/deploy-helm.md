@@ -4,16 +4,16 @@ Use Helm for Kubernetes deployments.
 
 ## Chart location
 
-- Chart: `helm/s3-manager`
-- Values: `helm/s3-manager/values.yaml`
+- Chart: `helm/kaelo`
+- Values: `helm/kaelo/values.yaml`
 
 ## Minimal install
 
 ```bash
-helm install s3-manager helm/s3-manager \
-  --set backend.existingSecret=s3-manager-auth \
-  --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \
-  --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend
+helm install kaelo helm/kaelo \
+  --set backend.existingSecret=kaelo-auth \
+  --set image.backend.repository=ghcr.io/ksperis/kaelo-backend \
+  --set image.frontend.repository=ghcr.io/ksperis/kaelo-frontend
 ```
 
 ## Current chart characteristics
@@ -72,8 +72,8 @@ SQLite outside Helm safeguards.
 
 Published images:
 
-- `ghcr.io/ksperis/s3-manager-backend`
-- `ghcr.io/ksperis/s3-manager-frontend`
+- `ghcr.io/ksperis/kaelo-backend`
+- `ghcr.io/ksperis/kaelo-frontend`
 
 These images are built, tested, scanned, and published by GitLab CI.
 GitHub is treated as a code mirror and release metadata surface, not as a
@@ -106,33 +106,33 @@ Tag conventions:
 Stable/public examples:
 
 ```bash
-helm upgrade --install s3-manager helm/s3-manager \
-  --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \
+helm upgrade --install kaelo helm/kaelo \
+  --set image.backend.repository=ghcr.io/ksperis/kaelo-backend \
   --set image.backend.tag=latest \
-  --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \
+  --set image.frontend.repository=ghcr.io/ksperis/kaelo-frontend \
   --set image.frontend.tag=latest
 ```
 
 ```bash
-helm upgrade --install s3-manager helm/s3-manager \
-  --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \
+helm upgrade --install kaelo helm/kaelo \
+  --set image.backend.repository=ghcr.io/ksperis/kaelo-backend \
   --set image.backend.tag=0.1.11 \
-  --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \
+  --set image.frontend.repository=ghcr.io/ksperis/kaelo-frontend \
   --set image.frontend.tag=0.1.11
 ```
 
 ```bash
-helm upgrade --install s3-manager helm/s3-manager \
-  --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \
+helm upgrade --install kaelo helm/kaelo \
+  --set image.backend.repository=ghcr.io/ksperis/kaelo-backend \
   --set image.backend.tag=0.1 \
-  --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \
+  --set image.frontend.repository=ghcr.io/ksperis/kaelo-frontend \
   --set image.frontend.tag=0.1
 ```
 
 Lab/dev example with GitLab Container Registry:
 
 ```bash
-helm upgrade --install s3-manager helm/s3-manager \
+helm upgrade --install kaelo helm/kaelo \
   --set image.backend.repository=<gitlab-registry>/<project>/backend \
   --set image.backend.tag=dev \
   --set image.frontend.repository=<gitlab-registry>/<project>/frontend \

@@ -1,7 +1,7 @@
 
 # Documentation (MkDocs + Material)
 
-This folder contains the MkDocs documentation for **s3-manager**.
+This folder contains the MkDocs documentation for **Kaelo**.
 
 ## Quickstart
 

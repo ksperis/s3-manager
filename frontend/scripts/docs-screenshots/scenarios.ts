@@ -75,7 +75,8 @@ function baseStorage(user: Record<string, unknown>) {
     token: "docs-token",
     user,
     selectedWorkspace: "admin" as const,
-    selectedExecutionContextId: "acc-helios",
+    selectedManagerExecutionContextId: "acc-helios",
+    selectedBrowserExecutionContextId: "acc-helios",
     selectedPortalAccountId: "101",
     selectedCephAdminEndpointId: "11",
   };
@@ -85,7 +86,8 @@ function withBaseRules(...extraRules: MockRule[]): MockRule[] {
   return [...extraRules, ...buildBaseRules()];
 }
 
-const BROWSER_ROOT_UI_STATE_STORAGE_KEY = "browser:root-ui-state:v1";
+const BROWSER_ROOT_UI_STATE_STORAGE_KEY = "browser:root-ui-state:v2";
+const BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY = "browser:root-context-selections:v2";
 const BROWSER_FOCUSED_BUCKET = "helios-retail-logs";
 const BROWSER_FOCUSED_PREFIX = "daily/";
 const BROWSER_FOCUSED_OBJECT_KEY = "daily/report-2026-03-08.json";
@@ -96,15 +98,24 @@ function buildBrowserRootUiStateEntry(layout: {
   showActionBar: boolean;
 }) {
   return JSON.stringify({
-    layout,
-    contextSelections: {
-      "acc-helios": {
-        bucketName: BROWSER_FOCUSED_BUCKET,
-        prefix: BROWSER_FOCUSED_PREFIX,
+    activeLayout: "workbench",
+    density: "compact",
+    layouts: {
+      standard: {},
+      workbench: {
+        showFolders: layout.showFolders,
+        showInspector: layout.showInspector,
       },
     },
   });
 }
+
+const browserContextSelectionsEntry = JSON.stringify({
+  "acc-helios": {
+    bucketName: BROWSER_FOCUSED_BUCKET,
+    prefix: BROWSER_FOCUSED_PREFIX,
+  },
+});
 
 const browserAllPanelsStateEntry = buildBrowserRootUiStateEntry({
   showFolders: true,
@@ -848,11 +859,14 @@ export const scenarios: DocScreenshotScenario[] = [
       extraEntries: {
         [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserAllPanelsStateEntry,
       },
+      extraSessionEntries: {
+        [BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY]: browserContextSelectionsEntry,
+      },
     },
     actions: [
       { type: "wait", selector: "text=report-2026-03-08.json" },
       { type: "click", selector: "button:has-text('report-2026-03-08.json')" },
-      { type: "click", selector: "button[role='tab']:has-text('Details')" },
+      { type: "click", selector: "button[role='tab']:has-text('Properties')" },
       { type: "wait", selector: "text=Storage class" },
     ],
     mockRules: withBaseRules(),
@@ -920,9 +934,9 @@ export const scenarios: DocScreenshotScenario[] = [
     docPage: "user/screenshots-gallery.md",
     route: "/admin/storage-endpoints",
     outputBasename: "admin-storage-endpoints",
-    waitFor: "h1:has-text('Storage endpoints')",
+    waitFor: "h1:has-text('S3 Endpoints')",
     storage: { ...baseStorage(superAdminUser), selectedWorkspace: "admin" },
-    actions: [{ type: "wait", selector: "text=S3MADMINDEFAULT" }],
+    actions: [{ type: "wait", selector: "text=KLOADMINDEFAULT" }],
     mockRules: withBaseRules(),
   },
   {
@@ -954,7 +968,7 @@ export const scenarios: DocScreenshotScenario[] = [
     actions: [
       { type: "wait", selector: "text=Storage overview" },
       { type: "wait", selector: "text=genomics-2026" },
-      { type: "wait", selector: "text=Recent transfers" },
+      { type: "wait", selector: "text=Recent activity" },
     ],
     mockRules: withBaseRules(),
   },
@@ -1120,6 +1134,9 @@ export const scenarios: DocScreenshotScenario[] = [
       extraEntries: {
         [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserAllPanelsStateEntry,
       },
+      extraSessionEntries: {
+        [BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY]: browserContextSelectionsEntry,
+      },
     },
     actions: [
       { type: "wait", selector: "text=report-2026-03-08.json" },
@@ -1128,6 +1145,7 @@ export const scenarios: DocScreenshotScenario[] = [
       { type: "wait", selector: "text=Delete objects" },
       { type: "click", selector: "[role='dialog'] button:has-text('Delete')" },
       { type: "wait", selector: "section[aria-label='Operations']" },
+      { type: "click", selector: "section[aria-label='Operations'] button[aria-label='Expand operations']" },
       { type: "click", selector: "section[aria-label='Operations'] button[aria-label='Operations overview']" },
       { type: "wait", selector: "[role='dialog']:has-text('Operations overview')" },
       { type: "click", selector: "button:has-text('Show files')" },
@@ -1151,10 +1169,13 @@ export const scenarios: DocScreenshotScenario[] = [
       extraEntries: {
         [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserAllPanelsStateEntry,
       },
+      extraSessionEntries: {
+        [BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY]: browserContextSelectionsEntry,
+      },
     },
     actions: [
       { type: "wait", selector: "text=report-2026-03-08.json" },
-      { type: "click", selector: "tr:has-text('report-2026-03-08.json') button[aria-label='More actions']" },
+      { type: "click", selector: "button[aria-label='More actions for report-2026-03-08.json']" },
       { type: "click", selector: "[role='menu'] button:has-text('Versions')" },
       { type: "wait", selector: "text=Object details · report-2026-03-08.json" },
       { type: "wait", selector: "[role='tab'][aria-selected='true']:has-text('Versions')" },
@@ -1196,7 +1217,8 @@ export const scenarios: DocScreenshotScenario[] = [
     storage: { ...baseStorage(adminUser), selectedWorkspace: "ceph-admin" },
     actions: [
       { type: "click", selector: "table tbody tr:first-child input[type='checkbox']" },
-      { type: "click", selector: "summary:has-text('Tag selection')" },
+      { type: "click", selector: "button[aria-label='Actions for 1 selected bucket']" },
+      { type: "click", selector: "[role='menuitem']:has-text('Manage UI tags')" },
       { type: "wait", selector: "input[placeholder='new-tag']" },
     ],
     mockRules: withBaseRules(),
@@ -1210,7 +1232,8 @@ export const scenarios: DocScreenshotScenario[] = [
     storage: { ...baseStorage(storageOpsAdminUser), selectedWorkspace: "storage-ops" },
     actions: [
       { type: "click", selector: "table tbody tr:first-child input[type='checkbox']" },
-      { type: "click", selector: "summary:has-text('Tag selection')" },
+      { type: "click", selector: "button[aria-label='Actions for 1 selected bucket']" },
+      { type: "click", selector: "[role='menuitem']:has-text('Manage UI tags')" },
       { type: "wait", selector: "input[placeholder='new-tag']" },
     ],
     mockRules: withBaseRules(storageOpsEnabledGeneralSettingsRule, storageOpsBucketsRule, storageOpsBucketsStreamRule),
@@ -1225,10 +1248,10 @@ export const scenarios: DocScreenshotScenario[] = [
     actions: [
       { type: "click", selector: "table tbody tr:first-child input[type='checkbox']" },
       { type: "click", selector: "button:has-text('Compare selected')" },
-      { type: "wait", selector: "[role='dialog'] select" },
-      { type: "select", selector: "[role='dialog'] select", value: "conn-blueharbor" },
-      { type: "fill", selector: "[role='dialog'] input[type='datetime-local']", value: "2026-03-09T00:00" },
-      { type: "click", selector: "[role='dialog'] button:has-text('Run comparison')" },
+      { type: "wait", selector: "label:has-text('Target context')" },
+      { type: "select", selector: "select", value: "conn-blueharbor" },
+      { type: "fill", selector: "input[type='datetime-local']", value: "2026-03-09T00:00" },
+      { type: "click", selector: "button:has-text('Run comparison')" },
       { type: "wait", selector: "text=With differences: 1" },
     ],
     mockRules: withBaseRules(bucketCompareWithDifferencesRule),
@@ -1285,7 +1308,7 @@ export const scenarios: DocScreenshotScenario[] = [
     route: "/manager/users",
     outputBasename: "troubleshooting",
     waitFor: "h1:has-text('Users')",
-    storage: { ...baseStorage(adminUser), selectedWorkspace: "manager", selectedExecutionContextId: undefined },
+    storage: { ...baseStorage(adminUser), selectedWorkspace: "manager", selectedManagerExecutionContextId: undefined },
     mockRules: withBaseRules(noManagerContextsRule),
   },
 ];

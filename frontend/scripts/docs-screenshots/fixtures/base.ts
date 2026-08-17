@@ -115,11 +115,11 @@ const ADMIN_STORAGE_ENDPOINTS = [
     region: "eu-west-1",
     verify_tls: true,
     provider: "ceph",
-    admin_access_key: "S3MADMINDEFAULT",
+    admin_access_key: "KLOADMINDEFAULT",
     has_admin_secret: true,
-    supervision_access_key: "S3MSUPDEFAULT",
+    supervision_access_key: "KLOSUPDEFAULT",
     has_supervision_secret: true,
-    ceph_admin_access_key: "S3MCEPHDEFAULT",
+    ceph_admin_access_key: "KLOCEPHDEFAULT",
     has_ceph_admin_secret: true,
     capabilities: {
       admin: true,
@@ -1618,6 +1618,18 @@ export function buildBaseRules(): MockRule[] {
       body: LOGIN_SETTINGS,
     },
     {
+      id: "browser-object-presign",
+      method: "POST",
+      path: /^\/browser\/buckets\/[^/]+\/presign$/,
+      body: {
+        url: "data:text/plain,Kaelo%20documentation%20preview",
+        method: "GET",
+        fields: null,
+        headers: null,
+        expires_in: 900,
+      },
+    },
+    {
       id: "user-notifications",
       path: /^\/users\/me\/notifications$/,
       body: { items: [], unread_count: 0 },
@@ -1708,6 +1720,11 @@ export function buildBaseRules(): MockRule[] {
         page_size: 25,
         has_next: false,
       },
+    },
+    {
+      id: "admin-users-minimal",
+      path: /^\/admin\/users\/minimal$/,
+      body: ADMIN_UI_USERS.map(({ id, email, role }) => ({ id, email, role })),
     },
     {
       id: "admin-accounts-minimal",
@@ -2226,6 +2243,39 @@ export function buildBaseRules(): MockRule[] {
           preview_type: key.endsWith(".txt") ? "text" : "unavailable",
           preview_text: key.endsWith(".txt") ? "README for the selected storage space." : null,
           preview_unavailable_reason: key.endsWith(".txt") ? null : "Preview is available only for small text files.",
+        };
+      },
+    },
+    {
+      id: "portal-storage-space-object-versions",
+      path: /^\/portal\/storage-spaces\/[^/]+\/objects\/versions$/,
+      body: ({ url }) => {
+        const key = url.searchParams.get("key") ?? "raw-data/2024/03/sample_001.fastq.gz";
+        return {
+          key,
+          versioning_status: "Enabled",
+          can_restore: true,
+          versions: [
+            {
+              key,
+              version_id: "v-current",
+              is_latest: true,
+              is_delete_marker: false,
+              last_modified: "2024-03-12T10:15:43Z",
+              size: Math.round(2.4 * GB),
+            },
+            {
+              key,
+              version_id: "v-previous",
+              is_latest: false,
+              is_delete_marker: false,
+              last_modified: "2024-03-11T09:30:00Z",
+              size: Math.round(2.3 * GB),
+            },
+          ],
+          is_truncated: false,
+          next_key_marker: null,
+          next_version_id_marker: null,
         };
       },
     },

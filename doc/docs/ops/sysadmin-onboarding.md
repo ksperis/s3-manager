@@ -1,6 +1,6 @@
 # Sysadmin Onboarding
 
-Use this page when you install, take over, or troubleshoot an s3-manager
+Use this page when you install, take over, or troubleshoot a Kaelo
 deployment. It is a routing page: keep it open while you jump to the detailed
 runbooks.
 

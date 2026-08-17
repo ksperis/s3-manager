@@ -1,6 +1,6 @@
-# s3-manager Documentation
+# Kaelo - S3-compatible object storage management
 
-**s3-manager** is an open-source web application for managing **S3-compatible object storage** with IAM-aligned workflows.
+**Kaelo** is an open-source web application for managing **S3-compatible object storage** with IAM-aligned workflows.
 
 > Project status: **Beta**. Suitable for evaluation and controlled deployments.
 

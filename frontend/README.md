@@ -1,4 +1,4 @@
-# s3-manager Frontend (React + Vite + Tailwind)
+# Kaelo Frontend (React + Vite + Tailwind)
 
 ## Quickstart
 

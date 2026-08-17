@@ -5,9 +5,9 @@ Use Docker Compose for quick local or validation deployments.
 ## Prebuilt images
 
 ```bash
-git clone https://github.com/ksperis/s3-manager.git
-cd s3-manager
-S3_MANAGER_TAG=latest docker compose up
+git clone https://github.com/ksperis/kaelo.git
+cd kaelo
+KAELO_TAG=latest docker compose up
 ```
 
 `latest` resolves to the latest stable release published from a Git tag.

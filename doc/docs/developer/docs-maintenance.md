@@ -68,7 +68,7 @@ When adding or changing routes/features:
 4. Run the strict docs build and screenshot reference check before publishing:
 
 ```bash
-python3 -m mkdocs build --strict --config-file doc/mkdocs.yml --site-dir /tmp/s3-manager-docs-build
+python3 -m mkdocs build --strict --config-file doc/mkdocs.yml --site-dir /tmp/kaelo-docs-build
 npm --prefix frontend run docs:screenshots:check
 ```
 

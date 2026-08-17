@@ -1,10 +1,10 @@
-site_name: s3-manager Documentation
-site_description: Explore and manage S3-compatible object storage with IAM-aligned workflows.
-site_author: s3-manager contributors
-repo_name: s3-manager
-repo_url: https://github.com/ksperis/s3-manager
+site_name: Kaelo - S3-compatible object storage management
+site_description: Kaelo - S3-compatible object storage management
+site_author: Kaelo contributors
+repo_name: Kaelo
+repo_url: https://github.com/ksperis/kaelo
 edit_uri: edit/main/doc/docs/
-site_url: https://ksperis.github.io/s3-manager/
+site_url: https://ksperis.github.io/kaelo/
 
 theme:
   name: material
@@ -120,6 +120,7 @@ nav:
       - Overview: ops/index.md
       - Deployment:
           - Sysadmin onboarding: ops/sysadmin-onboarding.md
+          - "Upgrade to Kaelo (v0.2.0)": ops/upgrade-to-kaelo.md
           - Deploy with Docker Compose: ops/deploy-docker-compose.md
           - Deploy with Helm: ops/deploy-helm.md
           - Configuration: ops/configuration.md
