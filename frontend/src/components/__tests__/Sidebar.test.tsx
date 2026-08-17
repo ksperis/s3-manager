@@ -143,7 +143,7 @@ describe("Sidebar", () => {
 
     const sidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
     expect(sidebar).toHaveStyle({ width: `${SIDEBAR_DEFAULT_WIDTH}px` });
-    expect(screen.getByText("S3 Manager")).toBeInTheDocument();
+    expect(screen.getByText("Kaelo")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/profile");
     expect(screen.queryByRole("button", { name: /collapse sidebar|expand sidebar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
@@ -166,8 +166,8 @@ describe("Sidebar", () => {
     );
 
     const collapseButton = screen.getByRole("button", { name: "Collapse sidebar" });
-    expect(screen.getByRole("navigation", { name: "s3-manager navigation" })).toHaveClass("pb-3");
-    expect(screen.getByText("S3 Manager").parentElement).toContainElement(collapseButton);
+    expect(screen.getByRole("navigation", { name: "Kaelo navigation" })).toHaveClass("pb-3");
+    expect(screen.getByText("Kaelo").parentElement).toContainElement(collapseButton);
     expect(container.querySelector('[data-sidebar-variant="desktop"]')?.lastElementChild).toContainElement(
       screen.getByRole("link", { name: "Profile" }),
     );
@@ -218,7 +218,7 @@ describe("Sidebar", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("S3 Manager")).toBeInTheDocument();
+    expect(screen.getByText("Kaelo")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "desktop expanded browser body" }),
     ).toBeInTheDocument();
@@ -248,7 +248,7 @@ describe("Sidebar", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("S3 Manager")).toBeInTheDocument();
+    expect(screen.getByText("Kaelo")).toBeInTheDocument();
     expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "MANAGER navigation" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
@@ -290,7 +290,7 @@ describe("Sidebar", () => {
 
     const sidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
     expect(sidebar).not.toBeNull();
-    const nav = screen.getByRole("navigation", { name: "s3-manager navigation" });
+    const nav = screen.getByRole("navigation", { name: "Kaelo navigation" });
     const footer = screen.getByText("Portal account footer");
     const profile = screen.getByRole("link", { name: "Profile" });
     expect(nav.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

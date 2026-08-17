@@ -172,7 +172,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = Field("s3-manager", description="Application name")
+    app_name: str = Field("Kaelo", description="Application name")
     app_env: AppEnvironment = Field("development", description="Runtime security profile")
     api_v1_prefix: str = "/api"
     jwt_keys: list[str] = Field(
@@ -186,10 +186,10 @@ class Settings(BaseSettings):
     ui_jwt_keys: list[str] = Field(default_factory=list, description="Dedicated UI JWT key ring")
     api_jwt_keys: list[str] = Field(default_factory=list, description="Dedicated API JWT key ring")
     jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
-    jwt_issuer: str = "s3-manager"
-    ui_jwt_audience: str = "s3-manager-ui"
-    api_jwt_audience: str = "s3-manager-api"
-    pre_auth_jwt_audience: str = "s3-manager-pre-auth"
+    jwt_issuer: str = "kaelo"
+    ui_jwt_audience: str = "kaelo-ui"
+    api_jwt_audience: str = "kaelo-api"
+    pre_auth_jwt_audience: str = "kaelo-pre-auth"
     access_token_expire_minutes: int = Field(5, ge=1, le=15)
     refresh_token_expire_minutes: int = Field(60 * 24 * 7, description="Absolute refresh lifetime (minutes)")
     ui_session_idle_minutes: int = Field(60 * 12, ge=5)
@@ -230,7 +230,7 @@ class Settings(BaseSettings):
     trusted_proxy_cidrs: list[str] = Field(default_factory=list)
     require_registered_s3_login_endpoints: bool = False
     webauthn_rp_id: str = "localhost"
-    webauthn_rp_name: str = "S3 Manager"
+    webauthn_rp_name: str = "Kaelo"
     webauthn_origin: str = "http://localhost:5173"
     content_security_policy: str = (
         "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "

@@ -24,11 +24,11 @@ def test_interactive_aws_config_has_bounded_timeouts_and_attempts():
 def test_interactive_aws_config_preserves_service_options():
     config = build_interactive_aws_config(
         s3={"addressing_style": "path"},
-        user_agent_extra="s3-manager-test",
+        user_agent_extra="kaelo-test",
     )
 
     assert config.s3["addressing_style"] == "path"
-    assert config.user_agent_extra == "s3-manager-test"
+    assert config.user_agent_extra == "kaelo-test"
 
 
 def test_s3_iam_sns_and_sts_clients_share_interactive_profile(monkeypatch):

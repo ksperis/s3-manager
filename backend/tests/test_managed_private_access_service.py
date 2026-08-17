@@ -216,8 +216,8 @@ def test_iam_provisioning_never_serializes_or_audits_secret_and_is_idempotent(db
 
     repeated = service.provision_iam(user=user, account=account, payload=_payload())
     assert repeated.connection.id == result.connection.id
-    assert fake.created_users == [f"s3m-private-u{user.id}-acc{account.id}"]
-    assert fake.created_keys == [f"s3m-private-u{user.id}-acc{account.id}"]
+    assert fake.created_users == [f"klo-private-u{user.id}-acc{account.id}"]
+    assert fake.created_keys == [f"klo-private-u{user.id}-acc{account.id}"]
 
 
 def test_iam_provisioning_accepts_builtin_full_access_when_catalog_omits_it(db_session, monkeypatch):
@@ -243,7 +243,7 @@ def test_iam_provisioning_accepts_builtin_full_access_when_catalog_omits_it(db_s
     )
 
     assert result.status == "active"
-    assert fake.attached == [(f"s3m-private-u{user.id}-acc{account.id}", policy_arn)]
+    assert fake.attached == [(f"klo-private-u{user.id}-acc{account.id}", policy_arn)]
 
 
 @pytest.mark.parametrize("shared", [False, True])
@@ -368,7 +368,7 @@ def test_managed_connection_permission_is_inherited_from_group_and_revoked_befor
 
     result = service.provision_iam(user=user, account=account, payload=_payload("Group private access"))
     assert result.status == "active"
-    assert fake.created_keys == [f"s3m-private-u{user.id}-acc{account.id}"]
+    assert fake.created_keys == [f"klo-private-u{user.id}-acc{account.id}"]
 
     db_session.delete(membership)
     db_session.commit()
@@ -432,7 +432,7 @@ def test_iam_provisioning_never_reuses_portal_identity(db_session, monkeypatch):
     result = service.provision_iam(user=user, account=account, payload=_payload())
 
     provisioning = db_session.query(ManagedPrivateAccess).filter_by(s3_connection_id=result.connection.id).one()
-    assert provisioning.iam_username == f"s3m-private-u{user.id}-acc{account.id}"
+    assert provisioning.iam_username == f"klo-private-u{user.id}-acc{account.id}"
     assert not provisioning.iam_username.startswith("portal-")
     assert provisioning.remote_principal_identifier != portal.iam_user_id
     assert portal.active_access_key == "PORTAL-AK"
@@ -669,8 +669,8 @@ def test_managed_iam_connection_delete_cleans_remote_resources_before_local_rows
     deleted = service.delete_owned_connection(user=user, connection_id=result.connection.id)
 
     assert deleted is True
-    assert fake.deleted_keys == [(f"s3m-private-u{user.id}-acc{account.id}", "AK-MANAGED")]
-    assert fake.deleted_users == [f"s3m-private-u{user.id}-acc{account.id}"]
+    assert fake.deleted_keys == [(f"klo-private-u{user.id}-acc{account.id}", "AK-MANAGED")]
+    assert fake.deleted_users == [f"klo-private-u{user.id}-acc{account.id}"]
     assert db_session.query(S3Connection).filter_by(id=result.connection.id).first() is None
     assert db_session.query(ManagedPrivateAccess).filter_by(id=result.provisioning_id).first() is None
 

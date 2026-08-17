@@ -138,7 +138,7 @@ class PortalStorageSpaceVersionCleanupMixin:
 
         emit("prepare", "Preparing Storage Space history cleanup...")
         try:
-            with TemporarySqliteStore(prefix="s3-manager-portal-version-cleanup-") as store:
+            with TemporarySqliteStore(prefix="kaelo-portal-version-cleanup-") as store:
                 conn = store.connection
                 conn.executescript(
                     """

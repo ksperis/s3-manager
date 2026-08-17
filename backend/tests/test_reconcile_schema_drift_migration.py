@@ -85,7 +85,7 @@ def _column_map(connection, table_name: str) -> dict[str, dict]:
 
 
 def test_migration_reconciles_legacy_schema_and_downgrades(monkeypatch):
-    monkeypatch.setenv("S3_MANAGER_DB_BACKUP_VERIFIED", "true")
+    monkeypatch.setenv("KAELO_DB_BACKUP_VERIFIED", "true")
     engine = sa.create_engine("sqlite:///:memory:")
     storage_endpoints, users, ui_groups = _create_schema(
         engine,
@@ -169,7 +169,7 @@ def test_migration_reconciles_legacy_schema_and_downgrades(monkeypatch):
 
 
 def test_migration_requires_backup_before_dropping_orphan_columns(monkeypatch):
-    monkeypatch.delenv("S3_MANAGER_DB_BACKUP_VERIFIED", raising=False)
+    monkeypatch.delenv("KAELO_DB_BACKUP_VERIFIED", raising=False)
     engine = sa.create_engine("sqlite:///:memory:")
     storage_endpoints, _, _ = _create_schema(
         engine,
@@ -189,7 +189,7 @@ def test_migration_requires_backup_before_dropping_orphan_columns(monkeypatch):
         migration = _load_migration()
         _install_operations(monkeypatch, migration, connection)
 
-        with pytest.raises(RuntimeError, match="S3_MANAGER_DB_BACKUP_VERIFIED=true"):
+        with pytest.raises(RuntimeError, match="KAELO_DB_BACKUP_VERIFIED=true"):
             migration.upgrade()
 
         assert "can_access_manager_bucket_usage_stats" in _column_map(

@@ -108,7 +108,7 @@ class _BucketMigrationWebhookDispatcher:
                 allow_redirects=False,
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "s3-manager-migration-webhook/1.0",
+                    "User-Agent": "kaelo-migration-webhook/1.0",
                 },
             )
             if int(getattr(response, "status_code", 0) or 0) >= 400:

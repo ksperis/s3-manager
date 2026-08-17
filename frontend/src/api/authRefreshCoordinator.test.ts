@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { coordinateAuthRefresh } from "./authRefreshCoordinator";
 
-const COMPLETED_KEY = "s3-manager.auth-refresh.completed.v2";
+const COMPLETED_KEY = "kaelo.auth-refresh.completed.v2";
 
 function setLocks(value: unknown): void {
   Object.defineProperty(navigator, "locks", {

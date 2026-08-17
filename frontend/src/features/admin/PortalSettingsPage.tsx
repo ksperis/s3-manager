@@ -411,7 +411,7 @@ export default function PortalSettingsPage() {
                 onChange={(e) => handleBucketCorsOrigins(e.target.value)}
                 className={corsOriginsTextareaClass}
                 rows={4}
-                placeholder="https://s3-manager.example.com"
+                placeholder="https://kaelo.example.com"
                 disabled={!settings || !bucketCorsEnabled}
               />
             </SettingsItem>

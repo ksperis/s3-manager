@@ -1,8 +1,8 @@
-{{- define "s3-manager.name" -}}
+{{- define "kaelo.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "s3-manager.fullname" -}}
+{{- define "kaelo.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -15,8 +15,8 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "s3-manager.labels" -}}
-app.kubernetes.io/name: {{ include "s3-manager.name" . }}
+{{- define "kaelo.labels" -}}
+app.kubernetes.io/name: {{ include "kaelo.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}

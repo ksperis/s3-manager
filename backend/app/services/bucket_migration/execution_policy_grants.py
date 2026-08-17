@@ -489,7 +489,7 @@ class BucketMigrationPolicyGrantsMixin:
 
     def _validate_target_lock_worker_access(self, target_ctx: _ResolvedContext, target_bucket: str) -> None:
         client = self._context_client(target_ctx)
-        test_key = f"__s3-manager-migration-lock-check/{uuid.uuid4().hex}"
+        test_key = f"__kaelo-migration-lock-check/{uuid.uuid4().hex}"
         try:
             client.put_object(Bucket=target_bucket, Key=test_key, Body=b"lock-check")
             client.delete_object(Bucket=target_bucket, Key=test_key)

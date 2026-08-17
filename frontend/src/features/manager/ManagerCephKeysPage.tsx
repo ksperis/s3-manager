@@ -225,7 +225,7 @@ export default function ManagerCephKeysPage() {
       ) : (
         <ListPageSection
           title="Keys"
-          description="S3-Manager interface keys and managed private-access keys are locked; delete a managed key through its private connection."
+          description="Kaelo interface keys and managed private-access keys are locked; delete a managed key through its private connection."
           countLabel={`${filteredKeys.length} result(s)`}
           search={
             <input
@@ -266,7 +266,7 @@ export default function ManagerCephKeysPage() {
                           className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
                           title={managedPrivate ? "Managed private access key" : "Portal key (locked)"}
                         >
-                          {managedPrivate ? "Private access" : "S3M"}
+                          {managedPrivate ? "Private access" : "KLO"}
                         </span>
                       )}
                     </div>

@@ -64,7 +64,7 @@ def test_cutover_migrates_subjects_and_revokes_every_legacy_authenticator(tmp_pa
             ))
         engine.dispose()
 
-        monkeypatch.setenv("S3_MANAGER_DB_BACKUP_VERIFIED", "true")
+        monkeypatch.setenv("KAELO_DB_BACKUP_VERIFIED", "true")
         command.upgrade(_config(), "head")
         engine = sa.create_engine(database_url)
         with engine.connect() as connection:
@@ -103,7 +103,7 @@ def test_cutover_refuses_to_erase_live_authenticators_without_verified_backup(tm
     database_path = tmp_path / "authentication-cutover-backup-guard.sqlite"
     database_url = f"sqlite:///{database_path}"
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.delenv("S3_MANAGER_DB_BACKUP_VERIFIED", raising=False)
+    monkeypatch.delenv("KAELO_DB_BACKUP_VERIFIED", raising=False)
     get_settings.cache_clear()
     try:
         command.upgrade(_config(), "0106_remove_temporary_s3_connections")

@@ -1062,11 +1062,11 @@ def test_apply_target_write_lock_policy_uses_migration_user_agent_condition(db_s
     condition = statement.get("Condition", {})
     user_agent_cond = condition.get("StringNotLike", {}).get("aws:UserAgent")
 
-    assert statement.get("Sid") == "S3ManagerMigrationTargetWriteLockDeny"
+    assert statement.get("Sid") == "KaeloMigrationTargetWriteLockDeny"
     assert "s3:PutObject" in actions
     assert "s3:DeleteObject" in actions
     assert isinstance(user_agent_cond, str)
-    assert "s3-manager-migration-worker" in user_agent_cond
+    assert "kaelo-migration-worker" in user_agent_cond
 
 
 def test_build_source_copy_grant_policy_uses_target_principal(db_session):
@@ -1078,7 +1078,7 @@ def test_build_source_copy_grant_policy_uses_target_principal(db_session):
     )
 
     statement = (policy.get("Statement") or [])[0]
-    assert statement.get("Sid") == "S3ManagerMigrationSourceCopyGrantAllow"
+    assert statement.get("Sid") == "KaeloMigrationSourceCopyGrantAllow"
     assert statement.get("Effect") == "Allow"
     assert statement.get("Principal", {}).get("AWS") == "arn:aws:iam:::user/target-user"
     actions = statement.get("Action", [])
@@ -2893,7 +2893,7 @@ def test_restore_source_policy_replays_backup_policy_as_is(db_session):
         "Version": "2012-10-17",
         "Statement": [
             {
-                "Sid": "S3ManagerMigrationReadOnlyDeny",
+                "Sid": "KaeloMigrationReadOnlyDeny",
                 "Effect": "Deny",
                 "Principal": "*",
                 "Action": ["s3:Put*", "s3:Delete*"],

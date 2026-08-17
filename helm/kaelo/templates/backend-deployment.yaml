@@ -23,9 +23,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "s3-manager.fullname" . }}-backend
+  name: {{ include "kaelo.fullname" . }}-backend
   labels:
-    {{- include "s3-manager.labels" . | nindent 4 }}
+    {{- include "kaelo.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
 spec:
   replicas: {{ .Values.backend.replicas }}
@@ -36,7 +36,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "s3-manager.labels" . | nindent 8 }}
+        {{- include "kaelo.labels" . | nindent 8 }}
         app.kubernetes.io/component: backend
     spec:
       containers:
@@ -111,5 +111,5 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "s3-manager.fullname" . }}-backend
+            claimName: {{ include "kaelo.fullname" . }}-backend
       {{- end }}

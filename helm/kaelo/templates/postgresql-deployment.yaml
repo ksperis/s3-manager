@@ -2,9 +2,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "s3-manager.fullname" . }}-postgresql
+  name: {{ include "kaelo.fullname" . }}-postgresql
   labels:
-    {{- include "s3-manager.labels" . | nindent 4 }}
+    {{- include "kaelo.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgresql
 spec:
   replicas: 1
@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "s3-manager.labels" . | nindent 8 }}
+        {{- include "kaelo.labels" . | nindent 8 }}
         app.kubernetes.io/component: postgresql
     spec:
       containers:
@@ -29,17 +29,17 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "s3-manager.fullname" . }}-postgresql
+                  name: {{ include "kaelo.fullname" . }}-postgresql
                   key: username
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "s3-manager.fullname" . }}-postgresql
+                  name: {{ include "kaelo.fullname" . }}-postgresql
                   key: password
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "s3-manager.fullname" . }}-postgresql
+                  name: {{ include "kaelo.fullname" . }}-postgresql
                   key: database
           {{- if .Values.postgresql.persistence.enabled }}
           volumeMounts:
@@ -60,6 +60,6 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "s3-manager.fullname" . }}-postgresql
+            claimName: {{ include "kaelo.fullname" . }}-postgresql
       {{- end }}
 {{- end }}

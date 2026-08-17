@@ -98,8 +98,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
     const ended = () => clear();
-    window.addEventListener("s3-manager:session-ended", ended);
-    return () => window.removeEventListener("s3-manager:session-ended", ended);
+    window.addEventListener("kaelo:session-ended", ended);
+    return () => window.removeEventListener("kaelo:session-ended", ended);
   }, [clear, refresh]);
 
   const value = useMemo(() => ({

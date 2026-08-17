@@ -853,7 +853,7 @@ class BucketMigrationItemRunnerMixin:
             ) from restore_error
 
     def _precheck_target_lock_with_probe_bucket(self, target_ctx: _ResolvedContext, *, migration_id: int) -> None:
-        probe_bucket = f"s3-manager-mig-precheck-{migration_id}-{uuid.uuid4().hex[:12]}"
+        probe_bucket = f"kaelo-mig-precheck-{migration_id}-{uuid.uuid4().hex[:12]}"
         try:
             self._buckets.create_bucket(
                 probe_bucket,

@@ -172,7 +172,7 @@ function buildLdapProvider(overrides: Partial<LdapProviderAdminItem> = {}): Ldap
     provider_id: "corp",
     display_name: "Corporate LDAP",
     url: "ldaps://ldap.example.test",
-    bind_dn: "cn=s3-manager,ou=svc,dc=example,dc=test",
+    bind_dn: "cn=kaelo,ou=svc,dc=example,dc=test",
     user_base_dn: "ou=people,dc=example,dc=test",
     user_filter: "(uid={username})",
     email_attribute: "mail",
@@ -518,7 +518,7 @@ describe("AuthenticationSettingsPage", () => {
     const urlInput = within(ldapSection).getByLabelText("LDAP URL");
     await user.clear(urlInput);
     await user.type(urlInput, "ldaps://ldap.example.test");
-    await user.type(within(ldapSection).getByLabelText("LDAP Bind DN"), "cn=s3-manager,ou=svc,dc=example,dc=test");
+    await user.type(within(ldapSection).getByLabelText("LDAP Bind DN"), "cn=kaelo,ou=svc,dc=example,dc=test");
     await user.type(within(ldapSection).getByLabelText("LDAP Bind password"), "ldap-secret");
     await user.type(within(ldapSection).getByLabelText("LDAP User base DN"), "ou=people,dc=example,dc=test");
     await user.click(within(ldapSection).getByRole("button", { name: "Save LDAP provider" }));

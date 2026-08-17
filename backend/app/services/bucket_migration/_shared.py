@@ -13,10 +13,10 @@ from app.utils.network_targets import validate_outbound_url
 
 settings = get_settings()
 
-_READ_ONLY_POLICY_SID = "S3ManagerMigrationReadOnlyDeny"
-_TARGET_WRITE_LOCK_POLICY_SID = "S3ManagerMigrationTargetWriteLockDeny"
-_SOURCE_COPY_GRANT_POLICY_SID = "S3ManagerMigrationSourceCopyGrantAllow"
-_MIGRATION_USER_AGENT_MARKER = "s3-manager-migration-worker"
+_READ_ONLY_POLICY_SID = "KaeloMigrationReadOnlyDeny"
+_TARGET_WRITE_LOCK_POLICY_SID = "KaeloMigrationTargetWriteLockDeny"
+_SOURCE_COPY_GRANT_POLICY_SID = "KaeloMigrationSourceCopyGrantAllow"
+_MIGRATION_USER_AGENT_MARKER = "kaelo-migration-worker"
 _WEBHOOK_TIMEOUT_SECONDS = max(0.1, float(settings.bucket_migration_webhook_timeout_seconds or 2.0))
 _WEBHOOK_ALLOW_PRIVATE_TARGETS = bool(settings.bucket_migration_webhook_allow_private_targets)
 _WEBHOOK_ALLOWED_HOSTS = {

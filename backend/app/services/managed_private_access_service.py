@@ -851,7 +851,7 @@ class ManagedPrivateAccessService:
     @staticmethod
     def _iam_username(user_id: int, source_kind: str, source_id: int) -> str:
         kind = "acc" if source_kind == "account" else "conn"
-        return f"s3m-private-u{user_id}-{kind}{source_id}"
+        return f"klo-private-u{user_id}-{kind}{source_id}"
 
     @staticmethod
     def _json_list(value: str) -> list[str]:

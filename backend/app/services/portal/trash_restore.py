@@ -124,7 +124,7 @@ class PortalDeletedPrefixRestoreMixin:
         emit("prepare", "Preparing deleted file restoration...")
         try:
             with TemporarySqliteStore(
-                prefix="s3-manager-portal-deleted-prefix-restore-"
+                prefix="kaelo-portal-deleted-prefix-restore-"
             ) as store:
                 conn = store.connection
                 conn.executescript(

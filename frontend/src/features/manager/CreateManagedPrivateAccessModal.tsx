@@ -151,11 +151,11 @@ export default function CreateManagedPrivateAccessModal({
         <PageBanner tone="info">
           {variant === "iam"
             ? usesDefaultConfiguration
-              ? "S3-Manager creates a dedicated IAM user with AmazonS3FullAccess and a private connection for Browser. The generated secret is stored only on the server and is never sent to this browser."
-              : "S3-Manager creates a dedicated IAM user and private connection using the advanced configuration below. The generated secret is stored only on the server and is never sent to this browser."
+              ? "Kaelo creates a dedicated IAM user with AmazonS3FullAccess and a private connection for Browser. The generated secret is stored only on the server and is never sent to this browser."
+              : "Kaelo creates a dedicated IAM user and private connection using the advanced configuration below. The generated secret is stored only on the server and is never sent to this browser."
             : usesDefaultConfiguration
-              ? "S3-Manager creates a new access key for this RGW user and stores it in a private connection for Browser. The generated secret is stored only on the server and is never sent to this browser."
-              : "S3-Manager creates a new access key for this RGW user and stores it in a private connection using the advanced configuration below. The generated secret is stored only on the server and is never sent to this browser."}
+              ? "Kaelo creates a new access key for this RGW user and stores it in a private connection for Browser. The generated secret is stored only on the server and is never sent to this browser."
+              : "Kaelo creates a new access key for this RGW user and stores it in a private connection using the advanced configuration below. The generated secret is stored only on the server and is never sent to this browser."}
         </PageBanner>
         <label className="block space-y-1">
           <span className="ui-body font-semibold text-[var(--ui-text)]">Connection name</span>

@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "s3-manager.fullname" . }}
+  name: {{ include "kaelo.fullname" . }}
   labels:
-    {{- include "s3-manager.labels" . | nindent 4 }}
+    {{- include "kaelo.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -21,14 +21,14 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "s3-manager.fullname" . }}-backend
+                name: {{ include "kaelo.fullname" . }}-backend
                 port:
                   number: {{ .Values.service.backend.port }}
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ include "s3-manager.fullname" . }}-frontend
+                name: {{ include "kaelo.fullname" . }}-frontend
                 port:
                   number: {{ .Values.service.frontend.port }}
   {{- if .Values.ingress.tls }}

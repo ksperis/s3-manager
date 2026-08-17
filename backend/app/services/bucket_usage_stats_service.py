@@ -328,7 +328,7 @@ class _DistributionBuilder:
 
 
 class BucketUsageStatsService(LongRunningS3ClientService):
-    s3_user_agent_extra = "s3-manager-bucket-usage-stats"
+    s3_user_agent_extra = "kaelo-bucket-usage-stats"
 
     def __init__(self, session_factory: sessionmaker[Session] | Callable[[], Session] | None = None) -> None:
         self.session_factory = session_factory

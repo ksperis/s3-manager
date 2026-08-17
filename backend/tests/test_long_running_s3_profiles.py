@@ -43,7 +43,7 @@ def test_compare_migration_purge_integrity_and_usage_select_long_running_profile
     assert len(captured) == 5
     assert all(call["request_profile"] == "long_running" for call in captured)
     assert [call.get("user_agent_extra") for call in captured[1:4]] == [
-        "s3-manager-bucket-purge",
-        "s3-manager-bucket-integrity",
-        "s3-manager-bucket-usage-stats",
+        "kaelo-bucket-purge",
+        "kaelo-bucket-integrity",
+        "kaelo-bucket-usage-stats",
     ]

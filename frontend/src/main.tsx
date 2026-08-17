@@ -12,8 +12,10 @@ import { LanguageProvider } from "./components/language";
 import { bootstrapBranding } from "./components/ui/brandingRuntime";
 import { installConsoleRedaction } from "./utils/runtimeDiagnostics";
 import { SessionProvider } from "./auth/SessionProvider";
+import { PRODUCT_TITLE } from "./constants/product";
 
 const root = document.getElementById("root");
+document.title = PRODUCT_TITLE;
 installConsoleRedaction();
 void bootstrapBranding();
 

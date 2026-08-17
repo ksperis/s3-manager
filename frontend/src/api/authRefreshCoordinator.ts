@@ -8,9 +8,9 @@ import {
   writeClientStorageKey,
 } from "../utils/clientStorage";
 
-const AUTH_REFRESH_LOCK_NAME = "s3-manager.auth-refresh";
-const AUTH_REFRESH_LEASE_KEY = "s3-manager.auth-refresh.lease.v2";
-const AUTH_REFRESH_COMPLETED_KEY = "s3-manager.auth-refresh.completed.v2";
+const AUTH_REFRESH_LOCK_NAME = "kaelo.auth-refresh";
+const AUTH_REFRESH_LEASE_KEY = "kaelo.auth-refresh.lease.v2";
+const AUTH_REFRESH_COMPLETED_KEY = "kaelo.auth-refresh.completed.v2";
 const AUTH_REFRESH_LEASE_MS = 12_000;
 const AUTH_REFRESH_WAIT_MS = 50;
 

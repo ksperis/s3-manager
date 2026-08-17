@@ -248,7 +248,7 @@ async function expectBrowserSidebarShell(page: Page, viewportName: string) {
     const sidebar = page.locator("aside[data-sidebar-variant='desktop']");
     const profileLink = sidebar.getByRole("link", { name: "Profile" });
     const collapseButton = sidebar.getByRole("button", { name: "Collapse sidebar" });
-    await expect(sidebar.getByText("S3 Manager", { exact: true })).toBeVisible();
+    await expect(sidebar.getByText("Kaelo", { exact: true })).toBeVisible();
     await expect(collapseButton).toBeVisible();
     await expect(profileLink).toBeVisible();
     const geometry = await sidebar.evaluate((element) => {
@@ -274,19 +274,19 @@ async function expectBrowserSidebarShell(page: Page, viewportName: string) {
     await collapseButton.click();
     const expandButton = sidebar.getByRole("button", { name: "Expand sidebar" });
     await expect(expandButton).toBeVisible();
-    await expect(sidebar.getByText("S3 Manager", { exact: true })).toHaveCount(0);
+    await expect(sidebar.getByText("Kaelo", { exact: true })).toHaveCount(0);
     await expect(sidebar).toHaveCSS("width", "56px");
     await expect(profileLink).toHaveAttribute("title", "Profile");
 
     await expandButton.click();
     await expect(collapseButton).toBeVisible();
-    await expect(sidebar.getByText("S3 Manager", { exact: true })).toBeVisible();
+    await expect(sidebar.getByText("Kaelo", { exact: true })).toBeVisible();
     return;
   }
 
   await page.getByRole("button", { name: "Open navigation" }).click();
   const sidebar = page.locator("aside[data-sidebar-variant='mobile']");
-  await expect(sidebar.getByText("S3 Manager", { exact: true })).toBeVisible();
+  await expect(sidebar.getByText("Kaelo", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sidebar).toHaveClass(/-translate-x-full/);
 }

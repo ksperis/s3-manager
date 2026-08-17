@@ -44,7 +44,7 @@ const ldapPayload: LdapProviderAdminPayload = {
   provider_id: "corp",
   display_name: "Corporate LDAP",
   url: "ldaps://ldap.example.test",
-  bind_dn: "cn=s3-manager,ou=svc,dc=example,dc=test",
+  bind_dn: "cn=kaelo,ou=svc,dc=example,dc=test",
   bind_password: "secret",
   user_base_dn: "ou=people,dc=example,dc=test",
   user_filter: "(uid={username})",

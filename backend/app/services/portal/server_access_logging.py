@@ -46,8 +46,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-SERVER_ACCESS_LOGGING_SID = "S3ManagerPortalServerAccessLogging"
-SERVER_ACCESS_LOGGING_MANAGER_DENY_SID = "S3ManagerPortalManagerDeny"
+SERVER_ACCESS_LOGGING_SID = "KaeloPortalServerAccessLogging"
+SERVER_ACCESS_LOGGING_MANAGER_DENY_SID = "KaeloPortalManagerDeny"
 SERVER_ACCESS_LOGGING_PREFIX_ROOT = "portal-server-access/"
 SERVER_ACCESS_LOGGING_RETENTION_RULE_ID = "ExpirePortalServerAccessLogs"
 SERVER_ACCESS_LOGGING_RETENTION_DEFAULT_DAYS = 30
@@ -133,7 +133,7 @@ class PortalServerAccessLoggingMixin:
     def _portal_server_access_log_bucket_name(self, account: S3Account) -> str:
         seed = f"{getattr(account, 'rgw_account_id', None) or ''}{account.name or ''}"
         digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8]
-        return f"s3m-portal-access-logs-{account.id}-{digest}"
+        return f"klo-portal-access-logs-{account.id}-{digest}"
 
     def _portal_server_access_log_source_prefix(self, source_bucket: str) -> str:
         return f"{SERVER_ACCESS_LOGGING_PREFIX_ROOT}{source_bucket}/"

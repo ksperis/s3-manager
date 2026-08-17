@@ -32,7 +32,7 @@ def _storage_space_name(prefix: str) -> str:
 
 def _portal_log_bucket_name(account_id: int, rgw_account_id: str | None, account_name: str) -> str:
     digest = hashlib.sha256(f"{rgw_account_id or ''}{account_name}".encode("utf-8")).hexdigest()[:8]
-    return f"s3m-portal-access-logs-{account_id}-{digest}"
+    return f"klo-portal-access-logs-{account_id}-{digest}"
 
 
 def _statement_by_sid(policy: dict[str, Any], sid: str) -> dict[str, Any] | None:
@@ -254,10 +254,10 @@ def test_portal_storage_space_configures_server_access_logging_on_lab(
                 params=_account_params(account_id),
             ),
             lambda current: bool(
-                _statement_by_sid(current.get("policy") or {}, "S3ManagerPortalServerAccessLogging")
+                _statement_by_sid(current.get("policy") or {}, "KaeloPortalServerAccessLogging")
             ),
         )
-        managed_statement = _statement_by_sid(policy_payload["policy"], "S3ManagerPortalServerAccessLogging")
+        managed_statement = _statement_by_sid(policy_payload["policy"], "KaeloPortalServerAccessLogging")
         assert managed_statement is not None
         assert managed_statement["Principal"] == {"Service": "logging.s3.amazonaws.com"}
         assert managed_statement["Action"] == "s3:PutObject"
@@ -265,7 +265,7 @@ def test_portal_storage_space_configures_server_access_logging_on_lab(
         assert managed_statement["Condition"]["StringEquals"] == {
             "aws:SourceAccount": provisioned_account.rgw_account_id
         }
-        manager_deny = _statement_by_sid(policy_payload["policy"], "S3ManagerPortalManagerDeny")
+        manager_deny = _statement_by_sid(policy_payload["policy"], "KaeloPortalManagerDeny")
         assert manager_deny is not None
         assert manager_deny["Effect"] == "Deny"
         assert manager_deny["Action"] == "s3:*"

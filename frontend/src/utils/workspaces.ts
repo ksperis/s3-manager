@@ -15,7 +15,7 @@ import type {
 import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "./clientStorage";
 
 export const WORKSPACE_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedWorkspace;
-export const SESSION_USER_UPDATED_EVENT = "s3-manager:session-user-updated";
+export const SESSION_USER_UPDATED_EVENT = "kaelo:session-user-updated";
 let sessionUserCache: SessionUser | null = null;
 
 const SUPERADMIN_ROLE = "ui_superadmin";

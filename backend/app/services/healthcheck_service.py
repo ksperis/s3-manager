@@ -165,7 +165,7 @@ class HealthCheckService:
                 timeout=settings.healthcheck_timeout_seconds,
                 verify=self._resolve_verify_ssl(target),
                 allow_redirects=True,
-                headers={"User-Agent": "s3-manager-healthcheck"},
+                headers={"User-Agent": "kaelo-healthcheck"},
             )
             return response.status_code, None
         except requests.RequestException as exc:

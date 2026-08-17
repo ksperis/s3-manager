@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "s3-manager.fullname" . }}-frontend
+  name: {{ include "kaelo.fullname" . }}-frontend
   labels:
-    {{- include "s3-manager.labels" . | nindent 4 }}
+    {{- include "kaelo.labels" . | nindent 4 }}
     app.kubernetes.io/component: frontend
 spec:
   replicas: {{ .Values.frontend.replicas }}
@@ -14,7 +14,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "s3-manager.labels" . | nindent 8 }}
+        {{- include "kaelo.labels" . | nindent 8 }}
         app.kubernetes.io/component: frontend
     spec:
       containers:

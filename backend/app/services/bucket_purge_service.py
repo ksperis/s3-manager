@@ -64,7 +64,7 @@ class BucketPurgeOptions:
 
 
 class BucketPurgeService(LongRunningS3ClientService):
-    s3_user_agent_extra = "s3-manager-bucket-purge"
+    s3_user_agent_extra = "kaelo-bucket-purge"
 
     def _resolve_initial_entry_estimates(self, targets: list[BucketPurgeResolvedTarget]) -> list[int | None]:
         estimates: list[int | None] = [None for _ in targets]

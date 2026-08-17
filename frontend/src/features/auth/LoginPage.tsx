@@ -26,6 +26,7 @@ import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/G
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
+import { PRODUCT_NAME, PRODUCT_SUBTITLE } from "../../constants/product";
 import { CLIENT_STORAGE_KEYS, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 import { useSession } from "../../auth/SessionProvider";
 import { authenticatePasskey, createPasskey } from "../../auth/webauthn";
@@ -434,13 +435,9 @@ export default function LoginPage() {
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-700/80 bg-slate-800/70 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-300">
                 <CubeIcon className="h-3.5 w-3.5 text-primary-300" />
-                S3 Manager
+                {PRODUCT_NAME}
               </div>
-              <h1 className="mt-6 text-3xl font-semibold leading-tight text-white">
-                S3 Management
-                <br />
-                Console
-              </h1>
+              <h1 className="mt-6 max-w-md text-3xl font-semibold leading-tight text-white">{PRODUCT_SUBTITLE}</h1>
               <p className="mt-3 max-w-md ui-body text-slate-300">
                 Sign in to reach the workspace that matches your role and execution context.
               </p>
@@ -484,7 +481,7 @@ export default function LoginPage() {
             <div className="mb-6">
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 lg:hidden">
                 <CubeIcon className="h-3.5 w-3.5 text-primary-600" />
-                S3 Manager
+                {PRODUCT_NAME}
               </div>
               <h2 className="mt-3 text-2xl font-semibold text-slate-900">Sign in</h2>
               <p className="mt-1 ui-body text-slate-500">Use your account credentials.</p>

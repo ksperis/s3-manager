@@ -2,9 +2,9 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "s3-manager.fullname" . }}-usage-history
+  name: {{ include "kaelo.fullname" . }}-usage-history
   labels:
-    {{- include "s3-manager.labels" . | nindent 4 }}
+    {{- include "kaelo.labels" . | nindent 4 }}
     app.kubernetes.io/component: usage-history-cron
 spec:
   schedule: {{ .Values.usageHistoryCronJob.schedule | quote }}
@@ -17,7 +17,7 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "s3-manager.labels" . | nindent 12 }}
+            {{- include "kaelo.labels" . | nindent 12 }}
             app.kubernetes.io/component: usage-history-cron
         spec:
           restartPolicy: OnFailure
@@ -27,7 +27,7 @@ spec:
               imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
               env:
                 - name: USAGE_HISTORY_API_BASE
-                  value: {{ printf "http://%s-backend:%d" (include "s3-manager.fullname" .) (.Values.service.backend.port | int) | quote }}
+                  value: {{ printf "http://%s-backend:%d" (include "kaelo.fullname" .) (.Values.service.backend.port | int) | quote }}
                 - name: INTERNAL_CRON_TOKEN
                   valueFrom:
                     secretKeyRef:

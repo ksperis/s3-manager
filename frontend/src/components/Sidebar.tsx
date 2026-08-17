@@ -4,6 +4,7 @@
  */
 import { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { PRODUCT_NAME } from "../constants/product";
 import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH } from "./sidebarSizing";
 
 const WORKSPACE_ROOTS = ["admin", "ceph-admin", "storage-ops", "manager", "browser", "portal"] as const;
@@ -58,7 +59,7 @@ function isSectionCollapsible(section: SidebarSection) {
 }
 
 export default function Sidebar({
-  title = "s3-manager",
+  title = PRODUCT_NAME,
   sections,
   links = [],
   headerAction,
@@ -188,7 +189,7 @@ export default function Sidebar({
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-[0_10px_20px_rgba(37,99,235,0.22)]">
               <BrandCubeIcon className="h-4 w-4" />
             </span>
-            {!compact && <span className="truncate text-[14px] font-semibold leading-none text-[var(--shell-text)]">S3 Manager</span>}
+            {!compact && <span className="truncate text-[14px] font-semibold leading-none text-[var(--shell-text)]">{PRODUCT_NAME}</span>}
             {variant === "desktop" && onCollapseToggle ? (
               <button
                 type="button"

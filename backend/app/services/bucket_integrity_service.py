@@ -87,7 +87,7 @@ def _object_request_kwargs(bucket_name: str, obj: _ObjectRef) -> dict[str, Any]:
 
 
 class BucketIntegrityCheckService(LongRunningS3ClientService):
-    s3_user_agent_extra = "s3-manager-bucket-integrity"
+    s3_user_agent_extra = "kaelo-bucket-integrity"
 
     def _iter_objects(
         self,
