@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.0 - 2026-08-17
+
+### Added
+
+- Added a dedicated Kaelo upgrade runbook covering backups, key preservation, storage identities, Portal logs, Compose data, and Helm releases.
+- Added CI naming enforcement for tracked paths and contents, with documented exemptions for the upgrade mapping and historical audit evidence.
+- Added Helm lint and template validation to the CI test stage.
+
+### Changed
+
+- Adopted `Kaelo - S3-compatible object storage management` across the UI, API metadata, documentation, packages, repositories, images, Compose, and Helm contracts.
+- Renamed JWT, browser coordination, scheduler, temporary-file, policy SID, Ceph, IAM, and S3 identifiers to the Kaelo namespaces.
+- Regenerated the 72 active documentation captures and moved the public documentation links to the Kaelo GitHub Pages path.
+
+### Breaking changes
+
+- Existing UI sessions and API tokens are invalid because the JWT issuer and audiences changed; users must sign in again and API tokens must be reissued.
+- Deployments must migrate to `KAELO_*` variables, Kaelo image and chart names, and `klo-*` managed storage identities without runtime compatibility aliases.
+- Compose deployments must migrate persisted data into the explicit `kaelo` project, while Helm deployments require a new `kaelo` release with restored or reattached data and secrets.
+
+### Tests
+
+- Passed the complete backend and frontend suites, production build, package budgets, Compose rendering, naming audit, screenshot generation, visual workspace checks, and strict documentation build.
+
 ## 0.1.11 - 2026-07-26
 
 ### Added

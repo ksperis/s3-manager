@@ -84,10 +84,10 @@ Use prebuilt images:
 ```bash
 mkdir kaelo && cd kaelo
 wget https://raw.githubusercontent.com/ksperis/kaelo/refs/heads/main/docker-compose.yml
-KAELO_TAG=0.1 docker compose up -d
+KAELO_TAG=0.2 docker compose up -d
 ```
 
-`0.1` follows the latest stable patch release in the `0.1.x` line. The stack
+`0.2` follows the latest stable patch release in the `0.2.x` line. The stack
 also starts the scheduler for healthchecks, billing, quota monitoring, and
 usage history.
 

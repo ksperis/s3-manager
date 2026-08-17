@@ -116,9 +116,9 @@ helm upgrade --install kaelo helm/kaelo \
 ```bash
 helm upgrade --install kaelo helm/kaelo \
   --set image.backend.repository=ghcr.io/ksperis/kaelo-backend \
-  --set image.backend.tag=0.1.11 \
+  --set image.backend.tag=0.2.0 \
   --set image.frontend.repository=ghcr.io/ksperis/kaelo-frontend \
-  --set image.frontend.tag=0.1.11
+  --set image.frontend.tag=0.2.0
 ```
 
 ```bash
