@@ -44,6 +44,9 @@ project-naming:
   stage: test
   image: python:3.12-slim
   needs: []
+  before_script:
+    - apt-get update
+    - apt-get install --yes --no-install-recommends git
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
