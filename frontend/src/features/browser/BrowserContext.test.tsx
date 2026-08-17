@@ -127,9 +127,11 @@ describe("BrowserContextProvider", () => {
 
     renderProvider("/browser?ctx=conn-forbidden");
 
-    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("null"));
+    await waitFor(() => {
+      expect(screen.getByTestId("selected")).toHaveTextContent("null");
+      expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBeNull();
+    });
     expect(screen.getByTestId("location")).toHaveTextContent("/browser");
-    expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBeNull();
     expect(screen.getByTestId("access-error")).toHaveTextContent("no longer authorized");
   });
 
