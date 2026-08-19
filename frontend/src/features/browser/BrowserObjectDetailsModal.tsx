@@ -186,9 +186,6 @@ export default function BrowserObjectDetailsModal({
   const [presignExpires, setPresignExpires] = useState("");
   const [presignUrl, setPresignUrl] = useState("");
   const [presignMethod, setPresignMethod] = useState("");
-  const [presignFields, setPresignFields] = useState<
-    PresignedUrl["fields"] | null
-  >(null);
   const [presignHeaders, setPresignHeaders] = useState<
     PresignedUrl["headers"] | null
   >(null);
@@ -662,7 +659,6 @@ export default function BrowserObjectDetailsModal({
     );
     setPresignUrl("");
     setPresignMethod("");
-    setPresignFields(null);
     setPresignHeaders(null);
     setPresignError(null);
     setSavingVersionAction(false);
@@ -909,7 +905,6 @@ export default function BrowserObjectDetailsModal({
       );
       setPresignUrl(presigned.url);
       setPresignMethod(presigned.method);
-      setPresignFields(presigned.fields ?? null);
       setPresignHeaders(presigned.headers ?? null);
       pushStatus("Signed URL generated.", "success");
     } catch (err) {
@@ -1587,16 +1582,6 @@ export default function BrowserObjectDetailsModal({
               value={presignUrl}
               spellCheck={false}
             />
-            {presignFields && Object.keys(presignFields).length > 0 && (
-              <div className="space-y-1">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-                  Fields
-                </p>
-                <pre className="overflow-auto rounded-md bg-slate-900/90 p-2 ui-caption text-slate-100">
-                  {JSON.stringify(presignFields, null, 2)}
-                </pre>
-              </div>
-            )}
             {presignHeaders && Object.keys(presignHeaders).length > 0 && (
               <div className="space-y-1">
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">

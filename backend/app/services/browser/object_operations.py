@@ -69,30 +69,6 @@ class BrowserObjectOperationsMixin:
                     ExpiresIn=expires,
                 )
                 return PresignedUrl(url=url, method="PUT", expires_in=expires, headers=headers)
-            if payload.operation == "post_object":
-                if sse_customer:
-                    raise RuntimeError("SSE-C is not supported with post_object presign; use put_object instead.")
-                fields = {}
-                conditions: list[dict | list] = []
-                if payload.content_type:
-                    fields["Content-Type"] = payload.content_type
-                    conditions.append({"Content-Type": payload.content_type})
-                if payload.content_length is not None:
-                    conditions.append(["content-length-range", 0, payload.content_length])
-                result = client.generate_presigned_post(
-                    bucket_name,
-                    payload.key,
-                    Fields=fields or None,
-                    Conditions=conditions or None,
-                    ExpiresIn=expires,
-                )
-                return PresignedUrl(
-                    url=result.get("url") or "",
-                    method="POST",
-                    expires_in=expires,
-                    fields=result.get("fields") or {},
-                    headers=headers,
-                )
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to generate presigned URL for '{payload.operation}': {exc}") from exc
         raise RuntimeError("Unsupported presign operation")

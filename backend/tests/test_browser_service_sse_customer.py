@@ -5,6 +5,7 @@ import hashlib
 from io import BytesIO
 
 import pytest
+from pydantic import ValidationError
 
 from app.db import S3Account, StorageEndpoint
 from app.models.browser import (
@@ -66,16 +67,14 @@ def test_presign_includes_sse_customer_params_and_response_headers(monkeypatch):
     assert "x-amz-server-side-encryption-customer-key-MD5" in result.headers
 
 
-def test_presign_rejects_post_object_when_sse_customer_is_enabled(monkeypatch):
-    service = BrowserService()
-    monkeypatch.setattr(service, "_client", lambda _account: object())
-
-    with pytest.raises(RuntimeError, match="SSE-C is not supported with post_object presign"):
-        service.presign(
-            "bucket-a",
-            _account(),
-            PresignRequest(key="demo.txt", operation="post_object", expires_in=300),
-            sse_customer=_sse_context(),
+def test_presign_request_rejects_removed_post_object_operation():
+    with pytest.raises(ValidationError):
+        PresignRequest.model_validate(
+            {
+                "key": "demo.txt",
+                "operation": "post_object",
+                "expires_in": 300,
+            }
         )
 
 

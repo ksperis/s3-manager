@@ -206,14 +206,13 @@ export type ObjectRestoreRequest = {
   version_id?: string | null;
 };
 
-export type PresignOperation = "get_object" | "put_object" | "delete_object" | "post_object";
+export type PresignOperation = "get_object" | "put_object" | "delete_object";
 
 export type PresignRequest = {
   key: string;
   operation: PresignOperation;
   expires_in?: number;
   content_type?: string | null;
-  content_length?: number | null;
   response_content_disposition?: string | null;
   version_id?: string | null;
 };
@@ -222,7 +221,6 @@ export type PresignedUrl = {
   url: string;
   method: string;
   expires_in: number;
-  fields?: Record<string, string>;
   headers?: Record<string, string>;
 };
 

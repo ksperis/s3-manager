@@ -185,10 +185,9 @@ class ObjectRestoreRequest(ApiModel):
 
 class PresignRequest(ApiModel):
     key: str
-    operation: Literal["get_object", "put_object", "delete_object", "post_object"]
+    operation: Literal["get_object", "put_object", "delete_object"]
     expires_in: int = Field(default=900, ge=60, le=43200)
     content_type: Optional[str] = None
-    content_length: Optional[int] = None
     response_content_disposition: Optional[str] = None
     version_id: Optional[str] = None
 
@@ -197,7 +196,6 @@ class PresignedUrl(ApiModel):
     url: str
     method: str = "GET"
     expires_in: int
-    fields: dict[str, str] = Field(default_factory=dict)
     headers: dict[str, str] = Field(default_factory=dict)
 
 

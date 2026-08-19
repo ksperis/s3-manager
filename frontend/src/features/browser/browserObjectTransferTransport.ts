@@ -167,7 +167,6 @@ export const uploadBrowserTransferBlob = async ({
       key,
       operation: "put_object",
       content_type: contentType ?? undefined,
-      content_length: blob.size,
       expires_in: 1800,
     },
     sseCustomerKeyBase64,

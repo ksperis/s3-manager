@@ -186,7 +186,6 @@ describe("browser object transfer transport", () => {
         key: "copied.txt",
         operation: "put_object",
         content_type: "text/plain",
-        content_length: 7,
         expires_in: 1800,
       },
       "secret",
