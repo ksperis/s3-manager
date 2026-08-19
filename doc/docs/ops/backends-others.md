@@ -1,6 +1,6 @@
 # Backends: Other S3 Implementations
 
-Kaelo can integrate with non-Ceph S3-compatible backends such as AWS S3 and MinIO.
+BucketReef can integrate with non-Ceph S3-compatible backends such as AWS S3 and MinIO.
 
 ## AWS
 

@@ -1,6 +1,6 @@
-# Kaelo - S3-compatible object storage management
+# BucketReef - S3-compatible object storage management
 
-**Kaelo** is an open-source web application for managing **S3-compatible object storage** with IAM-aligned workflows.
+**BucketReef** is an open-source web application for managing **S3-compatible object storage** with IAM-aligned workflows.
 
 > Project status: **Beta**. Suitable for evaluation and controlled deployments.
 

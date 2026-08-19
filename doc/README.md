@@ -1,7 +1,7 @@
 
 # Documentation (MkDocs + Material)
 
-This folder contains the MkDocs documentation for **Kaelo**.
+This folder contains the MkDocs documentation for **BucketReef**.
 
 ## Quickstart
 

@@ -36,7 +36,7 @@ This is different from:
    needed.
 4. Select **New key** only when the caller is ready to store the generated
    secret. The secret is shown once.
-5. Select **Create my private access** to have Kaelo create a distinct RGW
+5. Select **Create my private access** to have BucketReef create a distinct RGW
    User key and private connection without transmitting the secret to the
    browser. This separate workflow requires the UI right
    `can_provision_managed_private_connections` and the S3 User opt-in

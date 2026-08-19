@@ -4,16 +4,16 @@ Use Helm for Kubernetes deployments.
 
 ## Chart location
 
-- Chart: `helm/kaelo`
-- Values: `helm/kaelo/values.yaml`
+- Chart: `helm/bucketreef`
+- Values: `helm/bucketreef/values.yaml`
 
 ## Minimal install
 
 ```bash
-helm install kaelo helm/kaelo \
-  --set backend.existingSecret=kaelo-auth \
-  --set image.backend.repository=ghcr.io/ksperis/kaelo-backend \
-  --set image.frontend.repository=ghcr.io/ksperis/kaelo-frontend
+helm install bucketreef helm/bucketreef \
+  --set backend.existingSecret=bucketreef-auth \
+  --set image.backend.repository=ghcr.io/ksperis/bucketreef-backend \
+  --set image.frontend.repository=ghcr.io/ksperis/bucketreef-frontend
 ```
 
 ## Current chart characteristics
@@ -72,8 +72,8 @@ SQLite outside Helm safeguards.
 
 Published images:
 
-- `ghcr.io/ksperis/kaelo-backend`
-- `ghcr.io/ksperis/kaelo-frontend`
+- `ghcr.io/ksperis/bucketreef-backend`
+- `ghcr.io/ksperis/bucketreef-frontend`
 
 These images are built, tested, scanned, and published by GitLab CI.
 GitHub is treated as a code mirror and release metadata surface, not as a
@@ -106,33 +106,33 @@ Tag conventions:
 Stable/public examples:
 
 ```bash
-helm upgrade --install kaelo helm/kaelo \
-  --set image.backend.repository=ghcr.io/ksperis/kaelo-backend \
+helm upgrade --install bucketreef helm/bucketreef \
+  --set image.backend.repository=ghcr.io/ksperis/bucketreef-backend \
   --set image.backend.tag=latest \
-  --set image.frontend.repository=ghcr.io/ksperis/kaelo-frontend \
+  --set image.frontend.repository=ghcr.io/ksperis/bucketreef-frontend \
   --set image.frontend.tag=latest
 ```
 
 ```bash
-helm upgrade --install kaelo helm/kaelo \
-  --set image.backend.repository=ghcr.io/ksperis/kaelo-backend \
+helm upgrade --install bucketreef helm/bucketreef \
+  --set image.backend.repository=ghcr.io/ksperis/bucketreef-backend \
   --set image.backend.tag=0.2.0 \
-  --set image.frontend.repository=ghcr.io/ksperis/kaelo-frontend \
+  --set image.frontend.repository=ghcr.io/ksperis/bucketreef-frontend \
   --set image.frontend.tag=0.2.0
 ```
 
 ```bash
-helm upgrade --install kaelo helm/kaelo \
-  --set image.backend.repository=ghcr.io/ksperis/kaelo-backend \
+helm upgrade --install bucketreef helm/bucketreef \
+  --set image.backend.repository=ghcr.io/ksperis/bucketreef-backend \
   --set image.backend.tag=0.1 \
-  --set image.frontend.repository=ghcr.io/ksperis/kaelo-frontend \
+  --set image.frontend.repository=ghcr.io/ksperis/bucketreef-frontend \
   --set image.frontend.tag=0.1
 ```
 
 Lab/dev example with GitLab Container Registry:
 
 ```bash
-helm upgrade --install kaelo helm/kaelo \
+helm upgrade --install bucketreef helm/bucketreef \
   --set image.backend.repository=<gitlab-registry>/<project>/backend \
   --set image.backend.tag=dev \
   --set image.frontend.repository=<gitlab-registry>/<project>/frontend \

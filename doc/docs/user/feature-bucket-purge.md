@@ -60,7 +60,7 @@ Check `bucket_purge_enabled`, your Manager tool access, the selected workspace, 
 
 !!! warning
     Bucket purge is destructive. It does not delete buckets, but deleted objects,
-    versions, and delete markers cannot be restored by Kaelo.
+    versions, and delete markers cannot be restored by BucketReef.
 
 !!! warning
     The Manager bucket delete flow can remove large non-empty buckets when the

@@ -645,7 +645,7 @@
       return heading.textContent.trim();
     }
 
-    const title = document.title.replace(/\s*-\s*kaelo Documentation\s*$/u, "").trim();
+    const title = document.title.replace(/\s*-\s*bucketreef Documentation\s*$/u, "").trim();
     return title || "Documentation screenshot";
   }
 

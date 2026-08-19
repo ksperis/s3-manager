@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Kaelo uses a standard web-console architecture:
+BucketReef uses a standard web-console architecture:
 
 - **Frontend**: React + Vite UI.
 - **Backend**: FastAPI API.

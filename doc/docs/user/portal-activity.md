@@ -51,7 +51,7 @@ never appear in Activity.
 
 !!! warning
     Access logs come from the S3 provider. They can be delayed and depend on
-    activation and retention. If provider logging is disabled, Kaelo has
+    activation and retention. If provider logging is disabled, BucketReef has
     no exhaustive audit history for object operations.
 
 ## Related pages

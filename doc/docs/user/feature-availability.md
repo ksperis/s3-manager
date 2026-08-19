@@ -4,7 +4,7 @@ Use this page when a page, action, or menu item is missing or disabled.
 
 ## How availability is decided
 
-Kaelo shows an action only when all required conditions are true:
+BucketReef shows an action only when all required conditions are true:
 
 1. the workspace is enabled;
 2. the UI user has the right role or entitlement;

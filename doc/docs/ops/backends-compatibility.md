@@ -1,6 +1,6 @@
 # Backends: Compatibility Matrix
 
-Kaelo targets S3-compatible backends, with deeper integration for Ceph RGW and a dedicated AWS preset.
+BucketReef targets S3-compatible backends, with deeper integration for Ceph RGW and a dedicated AWS preset.
 
 | Capability | S3 API | IAM API | Admin API | Notes |
 |---|---:|---:|---:|---|

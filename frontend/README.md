@@ -1,4 +1,4 @@
-# Kaelo Frontend (React + Vite + Tailwind)
+# BucketReef Frontend (React + Vite + Tailwind)
 
 ## Quickstart
 

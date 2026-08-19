@@ -1,10 +1,10 @@
-site_name: Kaelo - S3-compatible object storage management
-site_description: Kaelo - S3-compatible object storage management
-site_author: Kaelo contributors
-repo_name: Kaelo
-repo_url: https://github.com/ksperis/kaelo
+site_name: BucketReef - S3-compatible object storage management
+site_description: BucketReef - S3-compatible object storage management
+site_author: BucketReef contributors
+repo_name: BucketReef
+repo_url: https://github.com/ksperis/bucketreef
 edit_uri: edit/main/doc/docs/
-site_url: https://ksperis.github.io/kaelo/
+site_url: https://ksperis.github.io/bucketreef/
 
 theme:
   name: material
@@ -120,7 +120,7 @@ nav:
       - Overview: ops/index.md
       - Deployment:
           - Sysadmin onboarding: ops/sysadmin-onboarding.md
-          - "Upgrade to Kaelo (v0.2.0)": ops/upgrade-to-kaelo.md
+          - "Upgrade to BucketReef (v0.2.0)": ops/upgrade-to-bucketreef.md
           - Deploy with Docker Compose: ops/deploy-docker-compose.md
           - Deploy with Helm: ops/deploy-helm.md
           - Configuration: ops/configuration.md

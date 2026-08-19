@@ -1,7 +1,7 @@
 # Ops / Sysadmin Guide
 
 This section is for operators who deploy, secure, monitor, and recover
-Kaelo.
+BucketReef.
 
 ## Start here
 

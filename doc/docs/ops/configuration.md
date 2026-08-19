@@ -122,7 +122,7 @@ Provider keys must match `[a-z0-9_-]+`. `ALLOW_INSECURE=true`,
 `APP_ENV=production`. Email collisions are never linked automatically.
 
 LDAP only authenticates the UI identity. First LDAP login creates a user with
-`ui_none`; admins still grant roles and storage access in Kaelo.
+`ui_none`; admins still grant roles and storage access in BucketReef.
 
 ## App settings (persisted)
 

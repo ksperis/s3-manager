@@ -1,6 +1,6 @@
 # Audit Boundary: Control Plane and S3 Data Plane
 
-Kaelo deliberately separates application audit from storage access logs.
+BucketReef deliberately separates application audit from storage access logs.
 
 ## Formal contract
 

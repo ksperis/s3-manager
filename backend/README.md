@@ -1,4 +1,4 @@
-# Kaelo Backend (FastAPI)
+# BucketReef Backend (FastAPI)
 
 ## Quickstart
 
@@ -62,7 +62,7 @@ python -m app.scripts.seed_demo_data \
 
 Environment variables (or `.env` file) supported via `pydantic`:
 
-- `APP_NAME` (default: `Kaelo`)
+- `APP_NAME` (default: `BucketReef`)
 - `API_V1_PREFIX` (default: `/api`)
 - `JWT_KEYS` (JSON keyring; first key signs new JWTs)
 - `CREDENTIAL_KEYS` (JSON keyring; first key encrypts new secrets)
@@ -157,7 +157,7 @@ export OIDC_PROVIDERS__google__scopes='["openid","email","profile"]'
 ### LDAP Login
 
 The API can authenticate UI users against one or more LDAP directories. LDAP is an
-identity check only: Kaelo remains the source of truth for UI roles, S3
+identity check only: BucketReef remains the source of truth for UI roles, S3
 account membership, S3 user links, and shared S3 connections.
 
 Providers can be managed from Admin **Settings > Authentication** or defined
@@ -173,7 +173,7 @@ read-only entries in Admin **Settings > Authentication**.
 ```bash
 export LDAP_PROVIDERS__corp__display_name="Corporate LDAP"
 export LDAP_PROVIDERS__corp__url="ldaps://ldap.example.com:636"
-export LDAP_PROVIDERS__corp__bind_dn="cn=kaelo,ou=services,dc=example,dc=com"
+export LDAP_PROVIDERS__corp__bind_dn="cn=bucketreef,ou=services,dc=example,dc=com"
 export LDAP_PROVIDERS__corp__bind_password="service-account-secret"
 export LDAP_PROVIDERS__corp__user_base_dn="ou=people,dc=example,dc=com"
 export LDAP_PROVIDERS__corp__user_filter='(|(mail={username})(uid={username})(sAMAccountName={username})(userPrincipalName={username}))'
@@ -183,7 +183,7 @@ export LDAP_PROVIDERS__corp__subject_attribute="entryUUID"
 ```
 
 - Provider keys must use lowercase letters, digits, `_`, or `-` only, for example `corp` or `openldap-prod`.
-- `bind_dn` and `bind_password` are optional, but must be configured together. When both are omitted, Kaelo searches the directory anonymously before binding as the matched user; the directory ACLs must allow anonymous access to the configured user attributes.
+- `bind_dn` and `bind_password` are optional, but must be configured together. When both are omitted, BucketReef searches the directory anonymously before binding as the matched user; the directory ACLs must allow anonymous access to the configured user attributes.
 - Use `ldaps://` or `ldap://` with `start_tls=true`. Plain LDAP without STARTTLS is rejected unless `allow_insecure=true`, which should be limited to isolated labs.
 - Set `allow_legacy_tls=true` only for LDAP servers that require TLS cipher suites excluded by the modern Python/OpenSSL defaults. This enables the OpenSSL `DEFAULT` cipher set for that provider; enabling modern ECDHE suites on the server remains preferable.
 - `tls_verify=false` and `allow_email_linking=true` are allowed for compatibility and planned migrations, but they emit startup security warnings.

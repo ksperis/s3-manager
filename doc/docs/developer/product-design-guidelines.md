@@ -3,7 +3,7 @@
 ## Purpose
 
 This document captures the product design contract for future interface work in
-Kaelo.
+BucketReef.
 
 Use it to decide:
 
@@ -24,7 +24,7 @@ It complements, but does not replace:
 
 ## Product Direction
 
-Kaelo is a work console for S3-compatible storage. It should feel calm,
+BucketReef is a work console for S3-compatible storage. It should feel calm,
 dense, predictable, and operational. The UI should help users understand what
 identity they are using, what storage scope they are acting on, and whether an
 operation is native S3/IAM, platform governance, or end-user self-service.

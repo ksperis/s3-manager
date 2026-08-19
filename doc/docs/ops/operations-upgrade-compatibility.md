@@ -11,7 +11,7 @@ deletes every S3 session and its credential material, and purges OIDC states.
 This is a backend/frontend/configuration big-bang boundary; there is no legacy
 Bearer compatibility. Verify a restorable backup and complete credential
 re-encryption before deployment, then set
-`KAELO_DB_BACKUP_VERIFIED=true` for the migration run. The `0109`
+`BUCKETREEF_DB_BACKUP_VERIFIED=true` for the migration run. The `0109`
 downgrade deliberately fails because it cannot reconstruct erased secrets.
 Follow [Authentication security and cutover](authentication-hardening.md).
 
@@ -394,7 +394,7 @@ expect the removed columns.
    database, `-wal`, and `-shm` files as one consistent set. For PostgreSQL,
    validate the dump by restoring it to a separate database.
 3. If the migration reports associations without useful rights, set
-   `KAELO_DB_BACKUP_VERIFIED=true` only after that restore verification.
+   `BUCKETREEF_DB_BACKUP_VERIFIED=true` only after that restore verification.
    Empty databases and databases without such associations do not require this
    override.
 4. Run Alembic through revision `0069` while the old processes remain stopped.
@@ -596,7 +596,7 @@ application model, permission check, or API consumes that flag. The migration
 drops the column only when it exists and requires a tested restorable backup:
 
 1. Back up the database and verify a restore.
-2. Set `KAELO_DB_BACKUP_VERIFIED=true` for the migration process.
+2. Set `BUCKETREEF_DB_BACKUP_VERIFIED=true` for the migration process.
 3. Run the Alembic upgrade.
 
 Fresh databases without the orphan columns do not require the backup flag. A

@@ -1,7 +1,7 @@
 # Admin: Audit
 
 Use **Admin > Audit** to review control-plane and security changes made through
-Kaelo.
+BucketReef.
 
 ## What appears here
 
@@ -21,7 +21,7 @@ Use the S3 provider's Server Access Logging or equivalent request logs. Portal
 Managers can use **Portal > History > Access logs** when that integration is
 enabled. These logs can arrive late and are available only for the configured
 retention period. If provider logging is disabled, there is no exhaustive
-object audit history in Kaelo.
+object audit history in BucketReef.
 
 For reliable attribution, every person must use a dedicated IAM identity or
 owned private S3 connection. Keys may overlap briefly during rotation, but

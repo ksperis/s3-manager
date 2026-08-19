@@ -1,11 +1,11 @@
-# Kaelo - S3-compatible object storage management
+# BucketReef - S3-compatible object storage management
 
-[![Docs](https://img.shields.io/badge/docs-github%20pages-0A66C2)](https://ksperis.github.io/kaelo/)
-[![Tag](https://img.shields.io/github/v/tag/ksperis/kaelo?sort=semver)](https://github.com/ksperis/kaelo/tags)
-[![License](https://img.shields.io/github/license/ksperis/kaelo)](./LICENSE)
+[![Docs](https://img.shields.io/badge/docs-github%20pages-0A66C2)](https://ksperis.github.io/bucketreef/)
+[![Tag](https://img.shields.io/github/v/tag/ksperis/bucketreef?sort=semver)](https://github.com/ksperis/bucketreef/tags)
+[![License](https://img.shields.io/github/license/ksperis/bucketreef)](./LICENSE)
 ![Status](https://img.shields.io/badge/status-beta-F28C28)
 
-**Kaelo** is an open-source web application to manage S3-compatible object storage primarily focused on **Ceph RGW**.
+**BucketReef** is an open-source web application to manage S3-compatible object storage primarily focused on **Ceph RGW**.
 
 > Project status: **Beta**. Suitable for evaluation and controlled deployments.
 
@@ -25,7 +25,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Admin
 
-<a href="https://ksperis.github.io/kaelo/user/screenshots-gallery/#admin">
+<a href="https://ksperis.github.io/bucketreef/user/screenshots-gallery/#admin">
   <img src="doc/docs/assets/screenshots/user/user-overview.light.png" alt="Admin dashboard" width="560">
 </a>
 
@@ -36,7 +36,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Manager
 
-<a href="https://ksperis.github.io/kaelo/user/screenshots-gallery/#manager">
+<a href="https://ksperis.github.io/bucketreef/user/screenshots-gallery/#manager">
   <img src="doc/docs/assets/screenshots/user/workspace-manager.light.png" alt="Manager buckets" width="560">
 </a>
 
@@ -47,7 +47,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Browser
 
-<a href="https://ksperis.github.io/kaelo/user/screenshots-gallery/#browser">
+<a href="https://ksperis.github.io/bucketreef/user/screenshots-gallery/#browser">
   <img src="doc/docs/assets/screenshots/user/workspace-browser.light.png" alt="S3 browser" width="560">
 </a>
 
@@ -58,7 +58,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Ceph-admin
 
-<a href="https://ksperis.github.io/kaelo/user/screenshots-gallery/#ceph-admin">
+<a href="https://ksperis.github.io/bucketreef/user/screenshots-gallery/#ceph-admin">
   <img src="doc/docs/assets/screenshots/user/workspace-ceph-admin.light.png" alt="Ceph Admin" width="560">
 </a>
 
@@ -69,7 +69,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Portal
 
-<a href="https://ksperis.github.io/kaelo/user/screenshots-gallery/#portal">
+<a href="https://ksperis.github.io/bucketreef/user/screenshots-gallery/#portal">
   <img src="doc/docs/assets/screenshots/user/workspace-portal.light.png" alt="Portal" width="560">
 </a>
 
@@ -82,9 +82,9 @@ It can also be used solely through the integrated S3 browser for direct object a
 Use prebuilt images:
 
 ```bash
-mkdir kaelo && cd kaelo
-wget https://raw.githubusercontent.com/ksperis/kaelo/refs/heads/main/docker-compose.yml
-KAELO_TAG=0.2 docker compose up -d
+mkdir bucketreef && cd bucketreef
+wget https://raw.githubusercontent.com/ksperis/bucketreef/refs/heads/main/docker-compose.yml
+BUCKETREEF_TAG=0.2 docker compose up -d
 ```
 
 `0.2` follows the latest stable patch release in the `0.2.x` line. The stack
@@ -99,7 +99,7 @@ Default endpoints:
 
 See the published documentation on GitHub Pages:
 
-- https://ksperis.github.io/kaelo/
+- https://ksperis.github.io/bucketreef/
 
 ## License
 
