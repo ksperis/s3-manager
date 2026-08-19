@@ -1622,7 +1622,7 @@ export function buildBaseRules(): MockRule[] {
       method: "POST",
       path: /^\/browser\/buckets\/[^/]+\/presign$/,
       body: {
-        url: "data:text/plain,Kaelo%20documentation%20preview",
+        url: "data:text/plain,BucketReef%20documentation%20preview",
         method: "GET",
         fields: null,
         headers: null,

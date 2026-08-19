@@ -1,12 +1,12 @@
 # Defaults target promoted GHCR images.
-# For lab/dev, override KAELO_BACKEND_IMAGE and KAELO_FRONTEND_IMAGE
-# with GitLab Container Registry image names and set KAELO_TAG to dev or
+# For lab/dev, override BUCKETREEF_BACKEND_IMAGE and BUCKETREEF_FRONTEND_IMAGE
+# with GitLab Container Registry image names and set BUCKETREEF_TAG to dev or
 # dev-<short-sha>.
-name: kaelo
+name: bucketreef
 
 services:
   backend:
-    image: ${KAELO_BACKEND_IMAGE:-ghcr.io/ksperis/kaelo-backend}:${KAELO_TAG:-latest}
+    image: ${BUCKETREEF_BACKEND_IMAGE:-ghcr.io/ksperis/bucketreef-backend}:${BUCKETREEF_TAG:-latest}
     environment:
       APP_ENV: ${APP_ENV:-development}
       UI_JWT_KEYS: '${UI_JWT_KEYS:-["change-me"]}'
@@ -32,7 +32,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
   frontend:
-    image: ${KAELO_FRONTEND_IMAGE:-ghcr.io/ksperis/kaelo-frontend}:${KAELO_TAG:-latest}
+    image: ${BUCKETREEF_FRONTEND_IMAGE:-ghcr.io/ksperis/bucketreef-frontend}:${BUCKETREEF_TAG:-latest}
     ports:
       - "8080:80"
     depends_on:
@@ -52,7 +52,7 @@ services:
       USAGE_HISTORY_CRON_SCHEDULE: ${USAGE_HISTORY_CRON_SCHEDULE:-0 3 * * *}
       BILLING_DAY_OFFSET: ${BILLING_DAY_OFFSET:-1}
       CRON_HTTP_TIMEOUT_SECONDS: ${CRON_HTTP_TIMEOUT_SECONDS:-30}
-      SCHEDULER_RUNTIME_ENV_FILE: /tmp/kaelo-scheduler.env
+      SCHEDULER_RUNTIME_ENV_FILE: /tmp/bucketreef-scheduler.env
       TZ: ${TZ:-UTC}
     volumes:
       - ./ops/cron:/opt/cron:ro

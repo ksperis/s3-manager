@@ -22,8 +22,8 @@ variables:
   DEV_BRANCH: "dev"
   GHCR_REGISTRY: "ghcr.io"
   GHCR_NAMESPACE: "ksperis"
-  GHCR_BACKEND_IMAGE: "ghcr.io/ksperis/kaelo-backend"
-  GHCR_FRONTEND_IMAGE: "ghcr.io/ksperis/kaelo-frontend"
+  GHCR_BACKEND_IMAGE: "ghcr.io/ksperis/bucketreef-backend"
+  GHCR_FRONTEND_IMAGE: "ghcr.io/ksperis/bucketreef-frontend"
 
 .trivy-job:
   image:
@@ -69,9 +69,9 @@ helm-contract:
       when: never
     - when: on_success
   script:
-    - helm lint helm/kaelo
-    - helm template kaelo helm/kaelo --set backend.existingSecret=kaelo-auth > /tmp/kaelo-rendered.yaml
-    - test -s /tmp/kaelo-rendered.yaml
+    - helm lint helm/bucketreef
+    - helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth > /tmp/bucketreef-rendered.yaml
+    - test -s /tmp/bucketreef-rendered.yaml
 
 .promote-internal-image:
   stage: promote

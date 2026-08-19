@@ -23,9 +23,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "kaelo.fullname" . }}-backend
+  name: {{ include "bucketreef.fullname" . }}-backend
   labels:
-    {{- include "kaelo.labels" . | nindent 4 }}
+    {{- include "bucketreef.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
 spec:
   replicas: {{ .Values.backend.replicas }}
@@ -36,7 +36,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "kaelo.labels" . | nindent 8 }}
+        {{- include "bucketreef.labels" . | nindent 8 }}
         app.kubernetes.io/component: backend
     spec:
       containers:
@@ -111,5 +111,5 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "kaelo.fullname" . }}-backend
+            claimName: {{ include "bucketreef.fullname" . }}-backend
       {{- end }}

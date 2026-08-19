@@ -165,7 +165,7 @@ class HealthCheckService:
                 timeout=settings.healthcheck_timeout_seconds,
                 verify=self._resolve_verify_ssl(target),
                 allow_redirects=True,
-                headers={"User-Agent": "kaelo-healthcheck"},
+                headers={"User-Agent": "bucketreef-healthcheck"},
             )
             return response.status_code, None
         except requests.RequestException as exc:

@@ -3,6 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-export const PRODUCT_NAME = "Kaelo";
+export const PRODUCT_NAME = "BucketReef";
 export const PRODUCT_SUBTITLE = "S3-compatible object storage management";
 export const PRODUCT_TITLE = `${PRODUCT_NAME} - ${PRODUCT_SUBTITLE}`;

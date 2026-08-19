@@ -116,7 +116,7 @@ describe("LoginPage LDAP", () => {
     const emailInput = await screen.findByLabelText("Email");
     const passwordInput = screen.getByLabelText("Password");
 
-    expect(screen.getAllByText("Kaelo")).not.toHaveLength(0);
+    expect(screen.getAllByText("BucketReef")).not.toHaveLength(0);
     expect(screen.getByRole("heading", { name: "S3-compatible object storage management" })).toBeInTheDocument();
     expect(emailInput).toHaveAttribute("autocomplete", "username");
     expect(passwordInput).toHaveAttribute("autocomplete", "current-password");

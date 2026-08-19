@@ -159,7 +159,7 @@ describe("Layout", () => {
     );
 
     const desktopSidebar = getDesktopSidebar(container);
-    expect(within(desktopSidebar).getByText("Kaelo")).toBeInTheDocument();
+    expect(within(desktopSidebar).getByText("BucketReef")).toBeInTheDocument();
     expect(
       within(desktopSidebar).getByRole("button", {
         name: "desktop expanded browser body",
@@ -177,7 +177,7 @@ describe("Layout", () => {
     const mobileSidebar = getMobileSidebar(container);
     fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
     expect(mobileSidebar).toHaveClass("translate-x-0");
-    expect(within(mobileSidebar).getByText("Kaelo")).toBeInTheDocument();
+    expect(within(mobileSidebar).getByText("BucketReef")).toBeInTheDocument();
     fireEvent.click(
       within(mobileSidebar).getByRole("button", {
         name: "mobile expanded browser body",

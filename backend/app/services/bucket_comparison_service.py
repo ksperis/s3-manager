@@ -93,7 +93,7 @@ class BucketComparisonService:
         *,
         ignore_modified_after: Optional[datetime] = None,
     ) -> CephAdminBucketContentDiff:
-        with TemporarySqliteStore(prefix="kaelo-bucket-compare-") as store:
+        with TemporarySqliteStore(prefix="bucketreef-bucket-compare-") as store:
             index = bucket_content_comparison.BucketCompareObjectIndex(store.connection)
             source_indexed_count = index.add_objects(
                 "source",

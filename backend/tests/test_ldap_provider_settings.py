@@ -28,7 +28,7 @@ def _provider_settings(*, enabled: bool = True, display_name: str = "Corporate L
     return LDAPProviderSettings(
         display_name=display_name,
         url="ldaps://ldap.example.test",
-        bind_dn="cn=kaelo,ou=svc,dc=example,dc=test",
+        bind_dn="cn=bucketreef,ou=svc,dc=example,dc=test",
         bind_password="env-secret",
         user_base_dn="ou=people,dc=example,dc=test",
         enabled=enabled,
@@ -77,7 +77,7 @@ def _payload(**overrides) -> dict:
         "provider_id": "ui",
         "display_name": "UI LDAP",
         "url": "ldaps://ldap-ui.example.test",
-        "bind_dn": "cn=kaelo,ou=svc,dc=example,dc=test",
+        "bind_dn": "cn=bucketreef,ou=svc,dc=example,dc=test",
         "bind_password": "first-secret",
         "user_base_dn": "ou=people,dc=example,dc=test",
         "user_filter": "(uid={username})",
@@ -346,7 +346,7 @@ def test_admin_ldap_api_supports_anonymous_search_and_clears_stored_credentials(
     response = client.put(
         "/api/admin/settings/ldap/providers/ui",
         json=_payload(
-            bind_dn="cn=kaelo,ou=svc,dc=example,dc=test",
+            bind_dn="cn=bucketreef,ou=svc,dc=example,dc=test",
             bind_password="service-secret",
             allow_legacy_tls=True,
         ),

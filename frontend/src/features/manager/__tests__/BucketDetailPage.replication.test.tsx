@@ -875,7 +875,7 @@ describe("BucketDetailPage replication state", () => {
     expect(screen.queryByRole("heading", { name: "Traffic" })).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "Live endpoint metrics are unavailable. Kaelo usage stats calculated from bucket listings remain available in the Usage stats tab."
+        "Live endpoint metrics are unavailable. BucketReef usage stats calculated from bucket listings remain available in the Usage stats tab."
       )
     ).toBeInTheDocument();
   });
@@ -930,6 +930,6 @@ describe("BucketDetailPage replication state", () => {
 
     expect(screen.getByText("Current usage and quota")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Traffic" })).not.toBeInTheDocument();
-    expect(screen.getByText(/Kaelo usage stats calculated from bucket listings/)).toBeInTheDocument();
+    expect(screen.getByText(/BucketReef usage stats calculated from bucket listings/)).toBeInTheDocument();
   });
 });

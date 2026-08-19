@@ -2,9 +2,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "kaelo.fullname" . }}-postgresql
+  name: {{ include "bucketreef.fullname" . }}-postgresql
   labels:
-    {{- include "kaelo.labels" . | nindent 4 }}
+    {{- include "bucketreef.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgresql
 spec:
   replicas: 1
@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "kaelo.labels" . | nindent 8 }}
+        {{- include "bucketreef.labels" . | nindent 8 }}
         app.kubernetes.io/component: postgresql
     spec:
       containers:
@@ -29,17 +29,17 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "kaelo.fullname" . }}-postgresql
+                  name: {{ include "bucketreef.fullname" . }}-postgresql
                   key: username
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "kaelo.fullname" . }}-postgresql
+                  name: {{ include "bucketreef.fullname" . }}-postgresql
                   key: password
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "kaelo.fullname" . }}-postgresql
+                  name: {{ include "bucketreef.fullname" . }}-postgresql
                   key: database
           {{- if .Values.postgresql.persistence.enabled }}
           volumeMounts:
@@ -60,6 +60,6 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "kaelo.fullname" . }}-postgresql
+            claimName: {{ include "bucketreef.fullname" . }}-postgresql
       {{- end }}
 {{- end }}

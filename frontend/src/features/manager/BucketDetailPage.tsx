@@ -4725,7 +4725,7 @@ export default function BucketDetailPage({
                 </MetricsCard>
                 {!canViewLiveBucketMetrics && (
                   <PageBanner>
-                    Live endpoint metrics are unavailable. Kaelo usage stats calculated from bucket listings remain
+                    Live endpoint metrics are unavailable. BucketReef usage stats calculated from bucket listings remain
                     available in the Usage stats tab.
                   </PageBanner>
                 )}

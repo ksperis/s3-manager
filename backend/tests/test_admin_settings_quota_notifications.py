@@ -39,7 +39,7 @@ def _smtp_payload() -> dict:
         "smtp_port": 587,
         "smtp_username": "smtp-user",
         "smtp_from_email": "alerts@example.test",
-        "smtp_from_name": "Kaelo",
+        "smtp_from_name": "BucketReef",
         "smtp_starttls": True,
         "smtp_timeout_seconds": 15,
     }

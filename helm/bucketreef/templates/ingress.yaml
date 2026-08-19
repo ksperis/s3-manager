@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "kaelo.fullname" . }}
+  name: {{ include "bucketreef.fullname" . }}
   labels:
-    {{- include "kaelo.labels" . | nindent 4 }}
+    {{- include "bucketreef.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -21,14 +21,14 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "kaelo.fullname" . }}-backend
+                name: {{ include "bucketreef.fullname" . }}-backend
                 port:
                   number: {{ .Values.service.backend.port }}
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ include "kaelo.fullname" . }}-frontend
+                name: {{ include "bucketreef.fullname" . }}-frontend
                 port:
                   number: {{ .Values.service.frontend.port }}
   {{- if .Values.ingress.tls }}

@@ -232,7 +232,7 @@ class S3AccountsService:
 
     def _root_display_name(self, account_name: Optional[str], account_identifier: str) -> str:
         base = (account_name or account_identifier or "").strip()
-        return base or "kaelo admin user"
+        return base or "bucketreef admin user"
 
     def _topic_entry_metadata(self, topic: Any) -> tuple[Optional[str], Optional[str]]:
         name: Optional[str] = None
@@ -647,7 +647,7 @@ class S3AccountsService:
                     resp = admin.create_access_key(
                         root_uid,
                         tenant=item.rgw_account_id,
-                        key_name="kaelo",
+                        key_name="bucketreef",
                     )
                     keys = admin._extract_keys(resp)
                     access_key = access_key or (keys[0].get("access_key") if keys else None)

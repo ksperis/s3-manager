@@ -225,7 +225,7 @@ export default function ManagerCephKeysPage() {
       ) : (
         <ListPageSection
           title="Keys"
-          description="Kaelo interface keys and managed private-access keys are locked; delete a managed key through its private connection."
+          description="BucketReef interface keys and managed private-access keys are locked; delete a managed key through its private connection."
           countLabel={`${filteredKeys.length} result(s)`}
           search={
             <input

@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "kaelo.fullname" . }}-backend
+  name: {{ include "bucketreef.fullname" . }}-backend
   labels:
-    {{- include "kaelo.labels" . | nindent 4 }}
+    {{- include "bucketreef.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
 spec:
   type: {{ .Values.service.backend.type }}

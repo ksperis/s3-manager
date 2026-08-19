@@ -1,10 +1,10 @@
 image:
   backend:
-    repository: ghcr.io/ksperis/kaelo-backend
+    repository: ghcr.io/ksperis/bucketreef-backend
     tag: "0.2.0"
     pullPolicy: IfNotPresent
   frontend:
-    repository: ghcr.io/ksperis/kaelo-frontend
+    repository: ghcr.io/ksperis/bucketreef-frontend
     tag: "0.2.0"
     pullPolicy: IfNotPresent
 
@@ -24,14 +24,14 @@ backend:
   env:
     APP_ENV: production
     API_V1_PREFIX: /api
-    PUBLIC_ORIGIN: https://kaelo.local
-    CORS_ORIGINS: '["https://kaelo.local"]'
-    ALLOWED_HOSTS: '["kaelo.local"]'
+    PUBLIC_ORIGIN: https://bucketreef.local
+    CORS_ORIGINS: '["https://bucketreef.local"]'
+    ALLOWED_HOSTS: '["bucketreef.local"]'
     REFRESH_TOKEN_COOKIE_SECURE: "true"
     REQUIRE_REGISTERED_S3_LOGIN_ENDPOINTS: "true"
     SEED_SUPER_ADMIN_MODE: disabled
-    WEBAUTHN_ORIGIN: https://kaelo.local
-    WEBAUTHN_RP_ID: kaelo.local
+    WEBAUTHN_ORIGIN: https://bucketreef.local
+    WEBAUTHN_RP_ID: bucketreef.local
     # No implicit storage seed is created in production. Configure endpoints
     # administratively after startup or provide an explicit HTTPS seed.
     APP_SETTINGS_PATH: /data/app_settings.json
@@ -66,9 +66,9 @@ postgresql:
     tag: "16-alpine"
     pullPolicy: IfNotPresent
   auth:
-    username: kaelo
+    username: bucketreef
     password: ""
-    database: kaelo
+    database: bucketreef
   service:
     port: 5432
   persistence:
@@ -80,11 +80,11 @@ ingress:
   enabled: true
   className: ""
   annotations: {}
-  host: kaelo.local
+  host: bucketreef.local
   tls:
-    - secretName: kaelo-tls
+    - secretName: bucketreef-tls
       hosts:
-        - kaelo.local
+        - bucketreef.local
 
 billingCronJob:
   enabled: false

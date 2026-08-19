@@ -25,7 +25,7 @@ depends_on = None
 
 
 _OBSOLETE_PERMISSION_COLUMN = "can_access_manager_bucket_usage_stats"
-_BACKUP_VERIFIED_ENV = "KAELO_DB_BACKUP_VERIFIED"
+_BACKUP_VERIFIED_ENV = "BUCKETREEF_DB_BACKUP_VERIFIED"
 _storage_endpoints = sa.table(
     "storage_endpoints",
     sa.column("id", sa.Integer()),

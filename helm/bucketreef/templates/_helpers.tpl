@@ -1,8 +1,8 @@
-{{- define "kaelo.name" -}}
+{{- define "bucketreef.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "kaelo.fullname" -}}
+{{- define "bucketreef.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -15,8 +15,8 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "kaelo.labels" -}}
-app.kubernetes.io/name: {{ include "kaelo.name" . }}
+{{- define "bucketreef.labels" -}}
+app.kubernetes.io/name: {{ include "bucketreef.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}

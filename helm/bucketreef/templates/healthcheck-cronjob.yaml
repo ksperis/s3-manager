@@ -1,39 +1,39 @@
-{{- if .Values.quotaMonitorCronJob.enabled }}
+{{- if .Values.healthcheckCronJob.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "kaelo.fullname" . }}-quota-monitor
+  name: {{ include "bucketreef.fullname" . }}-healthcheck
   labels:
-    {{- include "kaelo.labels" . | nindent 4 }}
-    app.kubernetes.io/component: quota-monitor-cron
+    {{- include "bucketreef.labels" . | nindent 4 }}
+    app.kubernetes.io/component: healthcheck-cron
 spec:
-  schedule: {{ .Values.quotaMonitorCronJob.schedule | quote }}
+  schedule: {{ .Values.healthcheckCronJob.schedule | quote }}
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: {{ .Values.quotaMonitorCronJob.successfulJobsHistoryLimit }}
-  failedJobsHistoryLimit: {{ .Values.quotaMonitorCronJob.failedJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ .Values.healthcheckCronJob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.healthcheckCronJob.failedJobsHistoryLimit }}
   jobTemplate:
     spec:
-      backoffLimit: {{ .Values.quotaMonitorCronJob.backoffLimit }}
+      backoffLimit: {{ .Values.healthcheckCronJob.backoffLimit }}
       template:
         metadata:
           labels:
-            {{- include "kaelo.labels" . | nindent 12 }}
-            app.kubernetes.io/component: quota-monitor-cron
+            {{- include "bucketreef.labels" . | nindent 12 }}
+            app.kubernetes.io/component: healthcheck-cron
         spec:
           restartPolicy: OnFailure
           containers:
-            - name: quota-monitor-runner
+            - name: healthcheck-runner
               image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
               imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
               env:
-                - name: QUOTA_MONITOR_API_BASE
-                  value: {{ printf "http://%s-backend:%d" (include "kaelo.fullname" .) (.Values.service.backend.port | int) | quote }}
+                - name: HEALTHCHECK_API_BASE
+                  value: {{ printf "http://%s-backend:%d" (include "bucketreef.fullname" .) (.Values.service.backend.port | int) | quote }}
                 - name: INTERNAL_CRON_TOKEN
                   valueFrom:
                     secretKeyRef:
                       name: {{ .Values.backend.existingSecret | quote }}
                       key: {{ .Values.backend.secretKeys.internalCronToken | quote }}
-                {{- range .Values.quotaMonitorCronJob.extraEnv }}
+                {{- range .Values.healthcheckCronJob.extraEnv }}
                 - name: {{ .name }}
                   value: {{ .value | quote }}
                 {{- end }}
@@ -45,12 +45,12 @@ spec:
                   import sys
                   import requests
 
-                  base = os.environ.get("QUOTA_MONITOR_API_BASE")
+                  base = os.environ.get("HEALTHCHECK_API_BASE")
                   token = os.environ.get("INTERNAL_CRON_TOKEN")
                   if not base or not token:
-                      print("Missing QUOTA_MONITOR_API_BASE or INTERNAL_CRON_TOKEN", file=sys.stderr)
+                      print("Missing HEALTHCHECK_API_BASE or INTERNAL_CRON_TOKEN", file=sys.stderr)
                       sys.exit(1)
-                  url = f"{base}/api/internal/quota-monitor/run"
+                  url = f"{base}/api/internal/healthchecks/run"
                   resp = requests.post(url, headers={"X-Internal-Token": token}, timeout=30)
                   print(resp.status_code, resp.text)
                   resp.raise_for_status()

@@ -47,7 +47,7 @@ class BrowserVersionsMixin:
             return value.astimezone(timezone.utc)
 
         try:
-            with TemporarySqliteStore(prefix="kaelo-browser-version-cleanup-") as store:
+            with TemporarySqliteStore(prefix="bucketreef-browser-version-cleanup-") as store:
                 conn = store.connection
                 conn.executescript(
                     """

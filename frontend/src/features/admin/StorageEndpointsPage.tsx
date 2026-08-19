@@ -167,8 +167,8 @@ const endpointReadOnlyInputClass =
   "read-only:bg-slate-100 read-only:text-slate-600 dark:read-only:bg-slate-900 dark:read-only:text-slate-300";
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
-  '  --uid="klo-admin" \\',
-  '  --display-name="Kaelo Admin Ops" \\',
+  '  --uid="bkr-admin" \\',
+  '  --display-name="BucketReef Admin Ops" \\',
   '  --caps="users=read,write;accounts=read,write"',
 ].join("\n");
 
@@ -218,14 +218,14 @@ function parseCoordinateInput(value: string, label: string, min: number, max: nu
 
 const SUPERVISION_OPS_COMMAND = [
   "radosgw-admin user create \\",
-  '  --uid="klo-supervision" \\',
-  '  --display-name="Kaelo Supervision Ops" \\',
+  '  --uid="bkr-supervision" \\',
+  '  --display-name="BucketReef Supervision Ops" \\',
   '  --caps="usage=read;buckets=read"',
 ].join("\n");
 const CEPH_ADMIN_COMMAND = [
   "radosgw-admin user create \\",
-  '  --uid="klo-ceph-admin" \\',
-  '  --display-name="Kaelo Ceph Admin" \\',
+  '  --uid="bkr-ceph-admin" \\',
+  '  --display-name="BucketReef Ceph Admin" \\',
   '  --admin',
 ].join("\n");
 
@@ -1508,7 +1508,7 @@ export default function StorageEndpointsPage() {
               >
                 <WorkflowSection
                   title="Identity and connection"
-                  description="Name the backend, identify its provider and define how Kaelo reaches it."
+                  description="Name the backend, identify its provider and define how BucketReef reaches it."
                 >
                   <div className="grid gap-4 sm:grid-cols-2">
                     <UiInput
@@ -1758,8 +1758,8 @@ export default function StorageEndpointsPage() {
                   {showOpsHelp && (
                     <>
                       <p className="mt-2">
-                        <span className="font-semibold">Admin Ops</span> keys let Kaelo create RGW accounts and S3 users. If you do not
-                        provide Admin Ops keys, you must create accounts/users outside of Kaelo and import them manually (or
+                        <span className="font-semibold">Admin Ops</span> keys let BucketReef create RGW accounts and S3 users. If you do not
+                        provide Admin Ops keys, you must create accounts/users outside of BucketReef and import them manually (or
                         via the API).
                       </p>
                       <p className="mt-2">
@@ -1835,7 +1835,7 @@ export default function StorageEndpointsPage() {
               <PageBanner tone="info">
                 {form.provider === "aws"
                   ? "AWS endpoints use the active execution identity and do not require dedicated management credentials here."
-                  : "This provider does not use dedicated operational credentials in Kaelo."}
+                  : "This provider does not use dedicated operational credentials in BucketReef."}
               </PageBanner>
             )}
                   </div>

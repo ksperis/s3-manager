@@ -98,8 +98,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
     const ended = () => clear();
-    window.addEventListener("kaelo:session-ended", ended);
-    return () => window.removeEventListener("kaelo:session-ended", ended);
+    window.addEventListener("bucketreef:session-ended", ended);
+    return () => window.removeEventListener("bucketreef:session-ended", ended);
   }, [clear, refresh]);
 
   const value = useMemo(() => ({

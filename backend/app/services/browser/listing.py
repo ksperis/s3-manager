@@ -326,7 +326,7 @@ class BrowserListingMixin:
             query_exact=query_exact,
             query_case_sensitive=query_case_sensitive,
         )
-        store = TemporarySqliteStore(prefix="kaelo-browser-sort-")
+        store = TemporarySqliteStore(prefix="bucketreef-browser-sort-")
         store.connection.execute(
             """
             CREATE TABLE sorted_prefixes (

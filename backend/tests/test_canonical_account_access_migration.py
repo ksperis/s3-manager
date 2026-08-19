@@ -75,7 +75,7 @@ def test_upgrade_requires_verified_backup_before_deleting_no_right_links(monkeyp
         )
         migration = _load_migration()
         _install_operations(monkeypatch, migration, connection)
-        monkeypatch.delenv("KAELO_DB_BACKUP_VERIFIED", raising=False)
+        monkeypatch.delenv("BUCKETREEF_DB_BACKUP_VERIFIED", raising=False)
 
         with pytest.raises(RuntimeError, match="restorable database backup"):
             migration.upgrade()
@@ -91,7 +91,7 @@ def test_upgrade_allows_empty_database_without_backup_override(monkeypatch):
         _create_legacy_schema(connection)
         migration = _load_migration()
         _install_operations(monkeypatch, migration, connection)
-        monkeypatch.delenv("KAELO_DB_BACKUP_VERIFIED", raising=False)
+        monkeypatch.delenv("BUCKETREEF_DB_BACKUP_VERIFIED", raising=False)
 
         migration.upgrade()
 
@@ -129,7 +129,7 @@ def test_upgrade_allows_convertible_links_without_backup_override(monkeypatch):
         )
         migration = _load_migration()
         _install_operations(monkeypatch, migration, connection)
-        monkeypatch.delenv("KAELO_DB_BACKUP_VERIFIED", raising=False)
+        monkeypatch.delenv("BUCKETREEF_DB_BACKUP_VERIFIED", raising=False)
 
         migration.upgrade()
 
@@ -176,7 +176,7 @@ def test_upgrade_deletes_no_right_links_and_quarantines_shared_connections(monke
         )
         migration = _load_migration()
         _install_operations(monkeypatch, migration, connection)
-        monkeypatch.setenv("KAELO_DB_BACKUP_VERIFIED", "true")
+        monkeypatch.setenv("BUCKETREEF_DB_BACKUP_VERIFIED", "true")
 
         migration.upgrade()
 

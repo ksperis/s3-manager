@@ -3026,23 +3026,23 @@ def test_portal_server_access_log_bucket_policy_preserves_existing_statements(db
             "Version": "2012-10-17",
             "Statement": [
                 {"Sid": "KeepMe", "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "*"},
-                {"Sid": "KaeloPortalServerAccessLogging", "Effect": "Deny", "Principal": "*", "Action": "s3:*"},
+                {"Sid": "BucketReefPortalServerAccessLogging", "Effect": "Deny", "Principal": "*", "Action": "s3:*"},
             ],
         },
     )
 
-    assert bucket_name.startswith(f"klo-portal-access-logs-{account.id}-")
+    assert bucket_name.startswith(f"bkr-portal-access-logs-{account.id}-")
     expected_hash = hashlib.sha256(f"{account.rgw_account_id}{account.name}".encode("utf-8")).hexdigest()[:8]
-    assert bucket_name == f"klo-portal-access-logs-{account.id}-{expected_hash}"
+    assert bucket_name == f"bkr-portal-access-logs-{account.id}-{expected_hash}"
     statements = {statement["Sid"]: statement for statement in policy["Statement"]}
     assert "KeepMe" in statements
-    managed = statements["KaeloPortalServerAccessLogging"]
+    managed = statements["BucketReefPortalServerAccessLogging"]
     assert managed["Principal"] == {"Service": "logging.s3.amazonaws.com"}
     assert managed["Action"] == "s3:PutObject"
     assert managed["Resource"] == f"arn:aws:s3:::{bucket_name}/portal-server-access/*"
     assert managed["Condition"]["StringEquals"] == {"aws:SourceAccount": "rgw-policy-account"}
     assert managed["Condition"]["ArnLike"] == {"aws:SourceArn": "arn:aws:s3:::*"}
-    manager_deny = statements["KaeloPortalManagerDeny"]
+    manager_deny = statements["BucketReefPortalManagerDeny"]
     assert manager_deny["Effect"] == "Deny"
     assert manager_deny["Action"] == "s3:*"
     assert manager_deny["Resource"] == [
@@ -3069,7 +3069,7 @@ def test_portal_server_access_log_bucket_policy_removes_manager_deny_when_no_man
             "Version": "2012-10-17",
             "Statement": [
                 {
-                    "Sid": "KaeloPortalManagerDeny",
+                    "Sid": "BucketReefPortalManagerDeny",
                     "Effect": "Deny",
                     "Principal": {"AWS": ["arn:aws:iam::rgw-policy-user:user/former-manager"]},
                     "Action": "s3:*",
@@ -3079,7 +3079,7 @@ def test_portal_server_access_log_bucket_policy_removes_manager_deny_when_no_man
         },
     )
 
-    assert not any(statement.get("Sid") == "KaeloPortalManagerDeny" for statement in policy["Statement"])
+    assert not any(statement.get("Sid") == "BucketReefPortalManagerDeny" for statement in policy["Statement"])
 
 
 def test_portal_server_access_log_bucket_creation_sets_retention_lifecycle(monkeypatch, db_session):
@@ -3215,7 +3215,7 @@ def test_portal_server_access_logs_parse_all_standard_records_and_filters(monkey
         [
             'owner research-data [08/Jul/2026:10:30:00 +0000] 10.0.0.5 external req-1 REST.PUT.OBJECT reports/external.csv "PUT /research-data/reports/external.csv HTTP/1.1" 200 - 512 512 - 3 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
             'owner research-data [08/Jul/2026:10:35:00 +0000] 10.0.0.6 external req-2 REST.DELETE.OBJECT reports/old.csv "DELETE /research-data/reports/old.csv HTTP/1.1" 204 - - 128 - 4 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
-            'owner research-data [08/Jul/2026:10:40:00 +0000] 10.0.0.7 external req-3 REST.POST.OBJECT captures kaelo/maquette/manager_dashboard.png "POST /research-data HTTP/1.1" 204 - 1254754 1252241 - 101ms http://localhost:5173/ "Safari" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+            'owner research-data [08/Jul/2026:10:40:00 +0000] 10.0.0.7 external req-3 REST.POST.OBJECT captures bucketreef/maquette/manager_dashboard.png "POST /research-data HTTP/1.1" 204 - 1254754 1252241 - 101ms http://localhost:5173/ "Safari" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
             'owner research-data [09/Jul/2026:00:10:00 +0000] 10.0.0.8 external req-4 REST.GET.OBJECT reports/tomorrow.csv "GET /research-data/reports/tomorrow.csv HTTP/1.1" 200 - 64 64 - 3 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
         ]
     )
@@ -3275,7 +3275,7 @@ def test_portal_server_access_logs_parse_all_standard_records_and_filters(monkey
     assert client.prefixes
     assert len(operations) == 3
     assert operations[0].direction == "Upload"
-    assert operations[0].object_key == "captures/kaelo/maquette/manager_dashboard.png"
+    assert operations[0].object_key == "captures/bucketreef/maquette/manager_dashboard.png"
     assert operations[0].request_uri == "POST /research-data HTTP/1.1"
     assert operations[2].operation == "REST.PUT.OBJECT"
     assert operations[2].object_key == "reports/external.csv"
@@ -3291,7 +3291,7 @@ def test_portal_server_access_logs_parse_all_standard_records_and_filters(monkey
     assert page.entries[0].operation_category == "delete"
     assert filtered_page.total == 1
     assert filtered_page.entries[0].operation == "REST.POST.OBJECT"
-    assert "REST.POST.OBJECT captures kaelo/maquette/manager_dashboard.png" in raw_logs
+    assert "REST.POST.OBJECT captures bucketreef/maquette/manager_dashboard.png" in raw_logs
     assert "reports/tomorrow.csv" not in raw_logs
 
 

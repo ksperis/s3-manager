@@ -91,7 +91,7 @@ export function timeoutForRequestProfile(profile: ApiRequestProfile): number {
 function handleAuthRedirect() {
   if (typeof window === "undefined") return;
   clearAuthStorage();
-  window.dispatchEvent(new CustomEvent("kaelo:session-ended"));
+  window.dispatchEvent(new CustomEvent("bucketreef:session-ended"));
   if (window.location.pathname !== "/login") window.location.replace("/login");
 }
 

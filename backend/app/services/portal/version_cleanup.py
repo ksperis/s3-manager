@@ -138,7 +138,7 @@ class PortalStorageSpaceVersionCleanupMixin:
 
         emit("prepare", "Preparing Storage Space history cleanup...")
         try:
-            with TemporarySqliteStore(prefix="kaelo-portal-version-cleanup-") as store:
+            with TemporarySqliteStore(prefix="bucketreef-portal-version-cleanup-") as store:
                 conn = store.connection
                 conn.executescript(
                     """

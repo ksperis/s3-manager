@@ -253,7 +253,7 @@ async function expectBrowserSidebarShell(page: Page, viewportName: string) {
     const sidebar = page.locator("aside[data-sidebar-variant='desktop']");
     const profileLink = sidebar.getByRole("link", { name: "Profile" });
     const collapseButton = sidebar.getByRole("button", { name: "Collapse sidebar" });
-    await expect(sidebar.getByText("Kaelo", { exact: true })).toBeVisible();
+    await expect(sidebar.getByText("BucketReef", { exact: true })).toBeVisible();
     await expect(collapseButton).toBeVisible();
     await expect(profileLink).toBeVisible();
     const geometry = await sidebar.evaluate((element) => {
@@ -279,19 +279,19 @@ async function expectBrowserSidebarShell(page: Page, viewportName: string) {
     await collapseButton.click();
     const expandButton = sidebar.getByRole("button", { name: "Expand sidebar" });
     await expect(expandButton).toBeVisible();
-    await expect(sidebar.getByText("Kaelo", { exact: true })).toHaveCount(0);
+    await expect(sidebar.getByText("BucketReef", { exact: true })).toHaveCount(0);
     await expect(sidebar).toHaveCSS("width", "56px");
     await expect(profileLink).toHaveAttribute("title", "Profile");
 
     await expandButton.click();
     await expect(collapseButton).toBeVisible();
-    await expect(sidebar.getByText("Kaelo", { exact: true })).toBeVisible();
+    await expect(sidebar.getByText("BucketReef", { exact: true })).toBeVisible();
     return;
   }
 
   await page.getByRole("button", { name: "Open navigation" }).click();
   const sidebar = page.locator("aside[data-sidebar-variant='mobile']");
-  await expect(sidebar.getByText("Kaelo", { exact: true })).toBeVisible();
+  await expect(sidebar.getByText("BucketReef", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sidebar).toHaveClass(/-translate-x-full/);
 }
@@ -374,8 +374,8 @@ test.describe("Workspace visual QA", () => {
     );
 
     await page.goto("/login", { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveTitle("Kaelo - S3-compatible object storage management");
-    await expect(page.getByText("Kaelo", { exact: true }).first()).toBeVisible();
+    await expect(page).toHaveTitle("BucketReef - S3-compatible object storage management");
+    await expect(page.getByText("BucketReef", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "S3-compatible object storage management" })).toBeVisible();
     mockRegistry.assertNoUnmatched();
   });

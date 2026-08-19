@@ -26,7 +26,7 @@ def _provider(**overrides) -> LDAPProviderSettings:
     data = {
         "display_name": "Corporate LDAP",
         "url": "ldaps://ldap.example.test",
-        "bind_dn": "cn=kaelo,ou=svc,dc=example,dc=test",
+        "bind_dn": "cn=bucketreef,ou=svc,dc=example,dc=test",
         "bind_password": "service-secret",
         "user_base_dn": "ou=people,dc=example,dc=test",
     }

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-runtime_env_file="${SCHEDULER_RUNTIME_ENV_FILE:-/tmp/kaelo-scheduler.env}"
+runtime_env_file="${SCHEDULER_RUNTIME_ENV_FILE:-/tmp/bucketreef-scheduler.env}"
 if [ -f "$runtime_env_file" ]; then
   # shellcheck disable=SC1090
   . "$runtime_env_file"

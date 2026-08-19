@@ -10,12 +10,16 @@ from pathlib import Path
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-ALLOWED_FILES = {Path("doc/docs/ops/upgrade-to-kaelo.md")}
-ALLOWED_PREFIXES = (Path("doc/audits"),)
-FORMER_NAME_PATTERNS = (
+UPGRADE_FILE = Path("doc/docs/ops/upgrade-to-bucketreef.md")
+HISTORICAL_PREFIXES = (Path("doc/audits"),)
+ORIGINAL_NAME_PATTERNS = (
     re.compile("s3" + r"[-_ ]manager", re.IGNORECASE),
     re.compile("s3" + "manager", re.IGNORECASE),
     re.compile("s3" + "m", re.IGNORECASE),
+)
+WITHDRAWN_NAME_PATTERNS = (
+    re.compile("ka" + "elo", re.IGNORECASE),
+    re.compile("kl" + "o-", re.IGNORECASE),
 )
 BASE64_DATA_PAYLOAD = re.compile(r"(?<=base64,)[A-Za-z0-9+/=\r\n]+")
 
@@ -30,22 +34,26 @@ def _tracked_paths() -> list[Path]:
     return [Path(item.decode("utf-8")) for item in result.stdout.split(b"\0") if item]
 
 
-def _allowed(path: Path) -> bool:
-    return path in ALLOWED_FILES or any(path == prefix or prefix in path.parents for prefix in ALLOWED_PREFIXES)
+def _historical(path: Path) -> bool:
+    return any(path == prefix or prefix in path.parents for prefix in HISTORICAL_PREFIXES)
 
 
-def _matches(value: str) -> list[str]:
-    return sorted({match.group(0) for pattern in FORMER_NAME_PATTERNS for match in pattern.finditer(value)})
+def _matches(value: str, patterns: tuple[re.Pattern[str], ...]) -> list[str]:
+    return sorted({match.group(0) for pattern in patterns for match in pattern.finditer(value)})
 
 
 def main() -> int:
     failures: list[str] = []
     for relative_path in _tracked_paths():
         absolute_path = REPOSITORY_ROOT / relative_path
-        if not absolute_path.is_file() or _allowed(relative_path):
+        if not absolute_path.is_file() or _historical(relative_path):
             continue
 
-        path_matches = _matches(relative_path.as_posix())
+        patterns = WITHDRAWN_NAME_PATTERNS
+        if relative_path != UPGRADE_FILE:
+            patterns += ORIGINAL_NAME_PATTERNS
+
+        path_matches = _matches(relative_path.as_posix(), patterns)
         if path_matches:
             failures.append(f"{relative_path}: forbidden former-name path fragment(s): {', '.join(path_matches)}")
 
@@ -54,7 +62,7 @@ def main() -> int:
         except UnicodeDecodeError:
             continue
         searchable_content = BASE64_DATA_PAYLOAD.sub("<binary-payload>", content)
-        content_matches = _matches(searchable_content)
+        content_matches = _matches(searchable_content, patterns)
         if content_matches:
             failures.append(f"{relative_path}: forbidden former-name content fragment(s): {', '.join(content_matches)}")
 

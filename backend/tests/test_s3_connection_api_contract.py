@@ -402,8 +402,8 @@ def test_admin_cannot_mutate_or_delete_a_connection_used_as_managed_access_sourc
             source_context_type="connection",
             source_context_id=source.id,
             remote_principal_type="iam_user",
-            remote_principal_identifier="klo-private-source",
-            iam_username="klo-private-source",
+            remote_principal_identifier="bkr-private-source",
+            iam_username="bkr-private-source",
             state="active",
         )
     )

@@ -20,7 +20,7 @@ depends_on = None
 
 
 def _backup_is_verified() -> bool:
-    value = str(os.getenv("KAELO_DB_BACKUP_VERIFIED") or "").strip().lower()
+    value = str(os.getenv("BUCKETREEF_DB_BACKUP_VERIFIED") or "").strip().lower()
     return value in {"1", "true", "yes"}
 
 
@@ -28,7 +28,7 @@ def _assert_backup_before_irreversible_cleanup() -> None:
     if not _backup_is_verified():
         raise RuntimeError(
             "Migration 0069 will irreversibly delete account associations without rights. "
-            "Verify a restorable database backup, then set KAELO_DB_BACKUP_VERIFIED=true."
+            "Verify a restorable database backup, then set BUCKETREEF_DB_BACKUP_VERIFIED=true."
         )
 
 

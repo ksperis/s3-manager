@@ -116,7 +116,7 @@ describe("PortalLayout", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getAllByText("Kaelo").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("BucketReef").length).toBeGreaterThan(0);
     const topbar = container.querySelector("[data-topbar]") as HTMLElement;
     expect(topbar).not.toBeNull();
     const main = container.querySelector("main");

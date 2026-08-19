@@ -152,7 +152,7 @@ def _allow_server_access_log_delivery(
         "Version": "2012-10-17",
         "Statement": [
             {
-                "Sid": "KaeloCephFunctionalLogDelivery",
+                "Sid": "BucketReefCephFunctionalLogDelivery",
                 "Effect": "Allow",
                 "Principal": {"Service": "logging.s3.amazonaws.com"},
                 "Action": "s3:PutObject",

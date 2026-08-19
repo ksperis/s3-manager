@@ -31,7 +31,7 @@ import { confirmAction } from "../../utils/confirm";
 
 const CEPH_ADMIN_WARNING_MESSAGE =
   "Ceph Admin is an advanced Ceph cluster mass-management feature (accounts, users, buckets). " +
-  "It is not recommended to enable it on the same kaelo instance exposed to end users.";
+  "It is not recommended to enable it on the same bucketreef instance exposed to end users.";
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
 const BRANDING_PRESET_COLORS = [

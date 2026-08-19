@@ -22,7 +22,7 @@ down_revision = "0108_federation_mfa_rate_limits"
 branch_labels = None
 depends_on = None
 
-_BACKUP_VERIFIED_ENV = "KAELO_DB_BACKUP_VERIFIED"
+_BACKUP_VERIFIED_ENV = "BUCKETREEF_DB_BACKUP_VERIFIED"
 
 
 def _require_backup_for_destructive_cutover(bind) -> None:

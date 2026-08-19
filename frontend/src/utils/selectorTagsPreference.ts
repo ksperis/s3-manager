@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "./clientStorage";
 
 export const SELECTOR_TAGS_PREFERENCE_KEY = CLIENT_STORAGE_KEYS.selectorTagsPreference;
-const SELECTOR_TAGS_EVENT = "kaelo:selector-tags-changed";
+const SELECTOR_TAGS_EVENT = "bucketreef:selector-tags-changed";
 
 function resolveWindow(): Window | null {
   return typeof window === "undefined" ? null : window;

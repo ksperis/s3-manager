@@ -1,0 +1,6 @@
+apiVersion: v2
+name: bucketreef
+description: BucketReef - S3-compatible object storage management
+type: application
+version: 0.2.0
+appVersion: "0.2.0"

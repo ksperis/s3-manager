@@ -313,8 +313,8 @@ describe("ManagerUsersPage", () => {
     });
     listIamUsersMock.mockResolvedValue([
       {
-        name: "klo-private-u7-acc1",
-        arn: "arn:aws:iam::acc-1:user/klo-private-u7-acc1",
+        name: "bkr-private-u7-acc1",
+        arn: "arn:aws:iam::acc-1:user/bkr-private-u7-acc1",
         groups: ["operators"],
         policies: [],
         inline_policies: [],
