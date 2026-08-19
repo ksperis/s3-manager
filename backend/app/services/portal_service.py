@@ -9,6 +9,7 @@ from .portal.account_runtime import PortalAccountRuntimeMixin
 from .portal.activity import PortalActivityMixin
 from .portal.buckets_users import PortalBucketsUsersMixin
 from .portal.iam import PortalIamMixin
+from .portal.iam_policy_documents import PortalIamPolicyDocumentsMixin
 from .portal.objects import PortalObjectsMixin
 from .portal.server_access_logging import PortalServerAccessLoggingMixin
 from .portal.settings import PortalSettingsMixin
@@ -23,6 +24,7 @@ from .portal.version_cleanup import PortalStorageSpaceVersionCleanupMixin
 class PortalService(
     PortalSettingsMixin,
     PortalAccountRuntimeMixin,
+    PortalIamPolicyDocumentsMixin,
     PortalIamMixin,
     PortalServerAccessLoggingMixin,
     PortalStorageSpaceVersionCleanupMixin,
