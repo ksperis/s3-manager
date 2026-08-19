@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from .portal.access_keys import PortalAccessKeysMixin
+from .portal.account_runtime import PortalAccountRuntimeMixin
 from .portal.activity import PortalActivityMixin
 from .portal.buckets_users import PortalBucketsUsersMixin
 from .portal.iam import PortalIamMixin
@@ -21,6 +22,7 @@ from .portal.version_cleanup import PortalStorageSpaceVersionCleanupMixin
 
 class PortalService(
     PortalSettingsMixin,
+    PortalAccountRuntimeMixin,
     PortalIamMixin,
     PortalServerAccessLoggingMixin,
     PortalStorageSpaceVersionCleanupMixin,
