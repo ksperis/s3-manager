@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import uuid
-from datetime import timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
@@ -16,7 +14,6 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import constant_time_equal, create_pre_auth_token, decode_typed_token
 from app.db import AuthSession, S3Session, User, WebAuthnCredential, is_admin_ui_role
-from app.models.api_token import ApiTokenCreateRequest, ApiTokenCreateResponse, ApiTokenInfo
 from app.models.auth import (
     AuthenticationResponse,
     CurrentSessionResponse,
@@ -33,6 +30,12 @@ from app.models.ldap import LDAPLoginRequest, LDAPProviderInfo
 from app.models.oidc import OIDCCallbackRequest, OIDCProviderInfo, OIDCStartRequest, OIDCStartResponse
 from app.models.session import ManagerSessionPrincipal, S3KeyLogin, SessionDescriptor
 from app.models.user import UserCreate, UserOut
+from app.routers import auth_api_tokens
+from app.routers.auth_session_guards import (
+    current_auth_session,
+    require_recent_mfa,
+    require_recent_primary_auth,
+)
 from app.routers.dependencies import (
     get_audit_service,
     get_current_actor,
@@ -40,7 +43,6 @@ from app.routers.dependencies import (
     get_current_ui_superadmin,
     get_current_user,
 )
-from app.services.api_token_service import ApiTokenError, ApiTokenNotFoundError, ApiTokenService
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services.auth_rate_limit_service import AuthRateLimitService, LoginRateLimitedError
@@ -69,10 +71,10 @@ from app.services.webauthn_service import WebAuthnSecurityError, WebAuthnService
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.utils.request_security import client_ip, require_trusted_origin
 from app.utils.s3_endpoint import validate_custom_login_s3_endpoint
-from app.utils.time import utcnow
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+router.include_router(auth_api_tokens.router)
 settings = get_settings()
 
 
@@ -170,33 +172,6 @@ def _session_info(row: AuthSession, *, current_id: Optional[str] = None) -> Sess
     )
 
 
-def _current_auth_session(request: Request, db: Session) -> AuthSession:
-    token = request.cookies.get(settings.access_token_cookie_name)
-    claims = decode_typed_token(token or "", expected_type="ui_access")
-    if claims is None:
-        claims = decode_typed_token(token or "", expected_type="s3_access")
-    if claims is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="UI session required")
-    row = db.query(AuthSession).filter(AuthSession.id == claims.get("sid")).first()
-    if not row or row.revoked_at is not None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="UI session required")
-    return row
-
-
-def _require_recent_mfa(request: Request, db: Session) -> AuthSession:
-    row = _current_auth_session(request, db)
-    if not WebAuthnService(db).is_recent(row):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Recent WebAuthn verification required")
-    return row
-
-
-def _require_recent_primary_auth(request: Request, db: Session) -> AuthSession:
-    row = _current_auth_session(request, db)
-    if row.created_at < utcnow() - timedelta(minutes=settings.mfa_recent_minutes):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Recent primary authentication required")
-    return row
-
-
 def _finish_user_primary_auth(
     *,
     request: Request,
@@ -227,81 +202,6 @@ def _finish_user_primary_auth(
     )
 
 
-def _to_api_token_info(row) -> ApiTokenInfo:
-    return ApiTokenInfo(
-        id=row.id,
-        name=row.name,
-        created_at=row.created_at,
-        last_used_at=row.last_used_at,
-        expires_at=row.expires_at,
-        revoked_at=row.revoked_at,
-        scopes=json.loads(row.scopes_json or "[]"),
-    )
-
-
-@router.get("/api-tokens", response_model=list[ApiTokenInfo])
-def list_api_tokens(
-    request: Request,
-    include_revoked: bool = Query(False),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin),
-) -> list[ApiTokenInfo]:
-    _require_recent_mfa(request, db)
-    return [_to_api_token_info(row) for row in ApiTokenService(db).list_for_user(current_user.id, include_revoked=include_revoked)]
-
-
-@router.post("/api-tokens", response_model=ApiTokenCreateResponse, status_code=status.HTTP_201_CREATED)
-def create_api_token(
-    request: Request,
-    payload: ApiTokenCreateRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> ApiTokenCreateResponse:
-    _require_recent_mfa(request, db)
-    try:
-        token, row = ApiTokenService(db).create_for_user(
-            current_user,
-            name=payload.name,
-            scopes=payload.scopes,
-            expires_in_days=payload.expires_in_days,
-        )
-    except ApiTokenError as exc:
-        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
-    audit_service.record_action(
-        user=current_user,
-        scope="auth",
-        action="create_api_token",
-        entity_type="api_token",
-        entity_id=row.id,
-        metadata={"name": row.name, "scopes": payload.scopes, "expires_at": row.expires_at.isoformat()},
-    )
-    return ApiTokenCreateResponse(access_token=token, api_token=_to_api_token_info(row))
-
-
-@router.delete("/api-tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_api_token(
-    request: Request,
-    token_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> None:
-    _require_recent_mfa(request, db)
-    try:
-        row = ApiTokenService(db).revoke_for_user(user_id=current_user.id, token_id=token_id)
-    except ApiTokenNotFoundError as exc:
-        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
-    audit_service.record_action(
-        user=current_user,
-        scope="auth",
-        action="revoke_api_token",
-        entity_type="api_token",
-        entity_id=row.id,
-        metadata={"name": row.name},
-    )
-
-
 @router.post("/register-admin", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register_admin(
     request: Request,
@@ -310,7 +210,7 @@ def register_admin(
     current_user: User = Depends(get_current_ui_superadmin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
-    _require_recent_mfa(request, users_service.db)
+    require_recent_mfa(request, users_service.db)
     try:
         user = users_service.create_super_admin(payload)
     except ValueError as exc:
@@ -969,7 +869,7 @@ def current_session(
     actor=Depends(get_current_actor),
     db: Session = Depends(get_db),
 ) -> CurrentSessionResponse:
-    row = _current_auth_session(request, db)
+    row = current_auth_session(request, db)
     if isinstance(actor, ManagerSessionPrincipal):
         descriptor = SessionDescriptor(
             session_id=actor.session_id,
@@ -992,7 +892,7 @@ def list_sessions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[SessionInfo]:
-    current = _current_auth_session(request, db)
+    current = current_auth_session(request, db)
     return [_session_info(row, current_id=current.id) for row in AuthSessionService(db).list_for_user(current_user.id)]
 
 
@@ -1005,8 +905,8 @@ def revoke_session(
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    _require_recent_mfa(request, db) if is_admin_ui_role(current_user.role) else None
-    current_id = _current_auth_session(request, db).id
+    require_recent_mfa(request, db) if is_admin_ui_role(current_user.role) else None
+    current_id = current_auth_session(request, db).id
     row = db.query(AuthSession).filter(AuthSession.id == session_id, AuthSession.user_id == current_user.id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1079,7 +979,7 @@ def logout_all(
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     if is_admin_ui_role(current_user.role):
-        _require_recent_mfa(request, db)
+        require_recent_mfa(request, db)
     AuthSessionService(db).revoke_all_for_user(current_user, "global_logout")
     audit_service.record_action(
         user=current_user,
@@ -1098,7 +998,7 @@ def list_external_link_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_ui_superadmin),
 ) -> list[dict[str, Any]]:
-    _require_recent_mfa(request, db)
+    require_recent_mfa(request, db)
     rows = ExternalIdentityUserService(db).list_link_requests(include_decided=include_decided)
     return [
         {
@@ -1124,7 +1024,7 @@ def decide_external_link_request(
     current_user: User = Depends(get_current_ui_superadmin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
-    _require_recent_mfa(request, db)
+    require_recent_mfa(request, db)
     try:
         row = ExternalIdentityUserService(db).decide_link_request(
             request_id,
@@ -1189,7 +1089,7 @@ def revoke_external_identity(
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    _require_recent_mfa(request, db)
+    require_recent_mfa(request, db)
     identity = next(
         (row for row in ExternalIdentityUserService(db).list_for_user(current_user.id) if row.id == identity_id),
         None,
@@ -1219,10 +1119,10 @@ def profile_webauthn_registration_options(
 ) -> dict[str, Any]:
     service = WebAuthnService(db)
     if service.has_credentials(current_user.id):
-        _require_recent_mfa(request, db)
+        require_recent_mfa(request, db)
     else:
-        _require_recent_primary_auth(request, db)
-    return service.begin_registration(current_user, binding_sid=_current_auth_session(request, db).id)
+        require_recent_primary_auth(request, db)
+    return service.begin_registration(current_user, binding_sid=current_auth_session(request, db).id)
 
 
 @router.post("/security/webauthn/registration/verify", status_code=status.HTTP_201_CREATED)
@@ -1235,10 +1135,10 @@ def profile_webauthn_registration_verify(
 ) -> dict[str, Any]:
     service = WebAuthnService(db)
     if service.has_credentials(current_user.id):
-        _require_recent_mfa(request, db)
+        require_recent_mfa(request, db)
     else:
-        _require_recent_primary_auth(request, db)
-    current_session_id = _current_auth_session(request, db).id
+        require_recent_primary_auth(request, db)
+    current_session_id = current_auth_session(request, db).id
     try:
         row = service.finish_registration(
             current_user,
@@ -1268,7 +1168,7 @@ def revoke_webauthn_credential(
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    _require_recent_mfa(request, db)
+    require_recent_mfa(request, db)
     try:
         WebAuthnService(db).revoke_credential(current_user, credential_id)
     except WebAuthnSecurityError as exc:
@@ -1292,7 +1192,7 @@ def regenerate_recovery_codes(
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, list[str]]:
-    _require_recent_mfa(request, db)
+    require_recent_mfa(request, db)
     codes = WebAuthnService(db).issue_recovery_codes(current_user)
     AuthSessionService(db).revoke_all_for_user(
         current_user,
@@ -1317,7 +1217,7 @@ def list_all_sessions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_ui_superadmin),
 ) -> list[SessionInfo]:
-    _require_recent_mfa(request, db)
+    require_recent_mfa(request, db)
     query = db.query(AuthSession)
     if not include_revoked:
         query = query.filter(AuthSession.revoked_at.is_(None))
@@ -1332,7 +1232,7 @@ def admin_revoke_session(
     current_user: User = Depends(get_current_ui_superadmin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    _require_recent_mfa(request, db)
+    require_recent_mfa(request, db)
     AuthSessionService(db).revoke_session(session_id, "administrator_revoked")
     audit_service.record_action(
         user=current_user,
