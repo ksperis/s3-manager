@@ -67,23 +67,6 @@ class S3ConnectionUserLinksService:
         self.db.refresh(link)
         return link, user, created
 
-    def touch_for_admin_shared(
-        self,
-        connection_id: int,
-        user_id: int,
-    ) -> tuple[UserS3Connection, User]:
-        self.connections.get_admin_shared(connection_id)
-        user = self.db.query(User).filter(User.id == user_id).first()
-        if user is None:
-            raise S3ConnectionUserNotFoundError("User not found")
-        link = self._find_link(connection_id, user_id)
-        if link is None:
-            raise S3ConnectionUserLinkNotFoundError("Link not found")
-        link.updated_at = utcnow()
-        self.db.commit()
-        self.db.refresh(link)
-        return link, user
-
     def remove_for_admin_shared(
         self,
         connection_id: int,

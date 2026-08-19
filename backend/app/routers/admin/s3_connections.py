@@ -623,47 +623,6 @@ def add_connection_user(
     )
 
 
-@router.put("/{connection_id}/users/{user_id}", response_model=S3ConnectionUserLink)
-def update_connection_user(
-    connection_id: int,
-    user_id: int,
-    payload: S3ConnectionUserLinkUpsert,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_service),
-) -> S3ConnectionUserLink:
-    if payload.user_id != user_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id mismatch")
-    service = S3ConnectionUserLinksService(db)
-    try:
-        link, user = service.touch_for_admin_shared(connection_id, user_id)
-    except S3ConnectionUserLinksError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=sanitize_error_detail(str(exc)),
-        ) from exc
-    except KeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="S3Connection not found",
-        ) from exc
-    audit.record_action(
-        user=current_user,
-        scope="admin",
-        action="connection.user.update",
-        entity_type="s3_connection",
-        entity_id=str(connection_id),
-        metadata={"user_id": user_id},
-    )
-    return S3ConnectionUserLink(
-        user_id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        created_at=link.created_at,
-        updated_at=link.updated_at,
-    )
-
-
 @router.delete("/{connection_id}/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_connection_user(
     connection_id: int,

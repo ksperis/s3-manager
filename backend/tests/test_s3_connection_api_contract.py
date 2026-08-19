@@ -317,7 +317,7 @@ def test_admin_connections_api_returns_404_for_non_shared_targets(contract_clien
     assert private_users.status_code == 404
 
 
-def test_admin_connection_user_links_keep_crud_contract(contract_client):
+def test_admin_connection_user_links_keep_supported_contract(contract_client):
     client, db_session, user = contract_client
     target = User(
         email="contract-linked-user@example.com",
@@ -343,7 +343,7 @@ def test_admin_connection_user_links_keep_crud_contract(contract_client):
 
     created = client.post(path, json={"user_id": target.id})
     upserted = client.post(path, json={"user_id": target.id})
-    touched = client.put(
+    removed_update = client.put(
         f"{path}/{target.id}",
         json={"user_id": target.id},
     )
@@ -351,7 +351,7 @@ def test_admin_connection_user_links_keep_crud_contract(contract_client):
 
     assert created.status_code == 201
     assert upserted.status_code == 201
-    assert touched.status_code == 200
+    assert removed_update.status_code == 405
     assert listed.status_code == 200
     assert listed.json() == [
         {
@@ -359,22 +359,16 @@ def test_admin_connection_user_links_keep_crud_contract(contract_client):
             "email": target.email,
             "full_name": target.full_name,
             "created_at": created.json()["created_at"],
-            "updated_at": touched.json()["updated_at"],
+            "updated_at": upserted.json()["updated_at"],
         }
     ]
 
     removed = client.delete(f"{path}/{target.id}")
-    missing_touch = client.put(
-        f"{path}/{target.id}",
-        json={"user_id": target.id},
-    )
     missing_delete = client.delete(f"{path}/{target.id}")
     missing_user = client.post(path, json={"user_id": 999_999})
 
     assert removed.status_code == 204
     assert client.get(path).json() == []
-    assert missing_touch.status_code == 404
-    assert missing_touch.json()["detail"] == "Link not found"
     assert missing_delete.status_code == 404
     assert missing_delete.json()["detail"] == "Link not found"
     assert missing_user.status_code == 404
