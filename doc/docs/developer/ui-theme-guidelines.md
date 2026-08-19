@@ -6,6 +6,14 @@ The frontend theme is anchored by the shared shell and UI tokens in
 
 ## Tokens
 
+- The default brand color is Reef Blue `#0569f8`. Runtime branding derives the
+  complete light and dark primary scales from the configured Admin color.
+- Reef Coral `#fc572c` is a decorative brand accent reserved for
+  authentication backgrounds. It is not a warning, error, or destructive
+  action color; keep success, warning, and danger on their semantic tokens.
+- Use primary shade `700` for foreground links and accents in light mode and
+  shade `200` in dark mode. Primary buttons may use the base or strong primary
+  token with white text.
 - Use `shell-*` tokens only for the app shell, topbar, sidebar, and their
   controls.
 - Use `ui-*` tokens for workspace content, cards, panels, forms, tables,
@@ -66,6 +74,8 @@ surfaces, not like a separate marketing site.
 - Do not introduce one-off documentation palettes such as separate blue,
   purple, teal, or gradient systems. If the app primary color changes, update
   the mirrored docs token scale in the same pass.
+- Changing the default does not rewrite already persisted Admin branding
+  values. Resetting settings loads the current default palette.
 - Validate meaningful documentation theme changes with a strict MkDocs build,
   the screenshot reference check, and at least one desktop/mobile render smoke
   of a table-heavy docs page.

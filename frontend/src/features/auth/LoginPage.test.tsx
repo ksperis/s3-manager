@@ -60,11 +60,11 @@ const generalSettings = {
   allow_login_custom_endpoint: false,
 };
 
-function renderLoginPage() {
+function renderLoginPage(initialEntry = "/login") {
   return render(
     <LanguageProvider>
       <ThemeProvider>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[initialEntry]}>
           <LoginPage />
         </MemoryRouter>
       </ThemeProvider>
@@ -74,6 +74,7 @@ function renderLoginPage() {
 
 describe("LoginPage LDAP", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "/login");
     window.localStorage.clear();
     vi.clearAllMocks();
     mocks.fetchOidcProviders.mockResolvedValue([]);
@@ -111,15 +112,51 @@ describe("LoginPage LDAP", () => {
   });
 
   it("associates password sign-in labels and autocomplete hints", async () => {
-    renderLoginPage();
+    const { container } = renderLoginPage();
 
     const emailInput = await screen.findByLabelText("Email");
     const passwordInput = screen.getByLabelText("Password");
 
     expect(screen.getAllByText("BucketReef")).not.toHaveLength(0);
+    expect(container.querySelectorAll('img[src="/brand/bucketreef-mark-256.png"]')).toHaveLength(2);
+    expect(container.querySelector('img[src="/brand/bucketreef-mark-256.png"]')).toHaveClass("h-7", "w-7");
+    expect(container.querySelector('img[src="/brand/bucketreef-mark-256.png"]')).toHaveAttribute("alt", "");
     expect(screen.getByRole("heading", { name: "S3-compatible object storage management" })).toBeInTheDocument();
     expect(emailInput).toHaveAttribute("autocomplete", "username");
     expect(passwordInput).toHaveAttribute("autocomplete", "current-password");
+  });
+
+  it("keeps BucketReef visible when a secondary customer logo is configured", async () => {
+    mocks.fetchLoginSettings.mockResolvedValueOnce({
+      allow_login_access_keys: false,
+      allow_login_endpoint_list: false,
+      allow_login_custom_endpoint: false,
+      default_endpoint_url: null,
+      endpoints: [],
+      login_logo_url: "https://cdn.example.test/customer-logo.png",
+    });
+
+    const { container } = renderLoginPage();
+
+    expect(await screen.findByAltText("Company logo")).toHaveAttribute(
+      "src",
+      "https://cdn.example.test/customer-logo.png",
+    );
+    expect(screen.getAllByText("BucketReef")).not.toHaveLength(0);
+    expect(container.querySelectorAll('img[src="/brand/bucketreef-mark-256.png"]')).toHaveLength(2);
+  });
+
+  it("gives the standalone MFA mark an accessible name", () => {
+    window.history.replaceState({}, "", "/login?mfa=mfa_required");
+    mocks.fetchOidcProviders.mockReturnValueOnce(new Promise(() => undefined));
+    mocks.fetchLdapProviders.mockReturnValueOnce(new Promise(() => undefined));
+    mocks.fetchLoginSettings.mockReturnValueOnce(new Promise(() => undefined));
+    renderLoginPage();
+
+    expect(screen.getByRole("img", { name: "BucketReef" })).toHaveAttribute(
+      "src",
+      "/brand/bucketreef-mark-256.png",
+    );
   });
 
   it("shows directory login without persisting browser credentials", async () => {

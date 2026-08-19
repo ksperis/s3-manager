@@ -742,7 +742,7 @@ export default function BillingPage() {
                               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                               <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatBytes(Number(value) || 0)} />
                               <Tooltip formatter={(value) => formatBytes(value as number)} />
-                              <Bar dataKey="traffic_bytes" fill="#0ea5e9" />
+                              <Bar dataKey="traffic_bytes" fill="#0569f8" />
                             </BarChart>
                           </ResponsiveContainer>
                         </div>

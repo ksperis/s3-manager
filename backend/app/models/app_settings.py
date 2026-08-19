@@ -96,19 +96,19 @@ class GeneralFeatureLocks(ApiModel):
 
 
 class BrandingSettings(ApiModel):
-    primary_color: str = "#0ea5e9"
+    primary_color: str = "#0569f8"
     login_logo_url: Optional[str] = None
 
     @field_validator("primary_color", mode="before")
     @classmethod
     def normalize_primary_color(cls, value: Optional[str]) -> str:
         if value is None:
-            return "#0ea5e9"
+            return "#0569f8"
         if not isinstance(value, str):
             raise ValueError("primary_color must be a string")
         normalized = value.strip().lower()
         if not normalized:
-            return "#0ea5e9"
+            return "#0569f8"
         if not re.fullmatch(r"#[0-9a-f]{6}", normalized):
             raise ValueError("primary_color must be a hex color in #rrggbb format")
         return normalized

@@ -9,6 +9,8 @@ site_url: https://ksperis.github.io/bucketreef/
 theme:
   name: material
   language: en
+  logo: assets/brand/bucketreef-mark-256.png
+  favicon: assets/brand/bucketreef-mark-256.png
   features:
     - navigation.instant
     - navigation.tracking

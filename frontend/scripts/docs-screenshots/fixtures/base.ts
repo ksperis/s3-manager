@@ -1605,7 +1605,7 @@ export function buildBaseRules(): MockRule[] {
     {
       id: "branding",
       path: /^\/settings\/branding$/,
-      body: { primary_color: "#0ea5e9", login_logo_url: null },
+      body: { primary_color: "#0569f8", login_logo_url: null },
     },
     {
       id: "settings-general",

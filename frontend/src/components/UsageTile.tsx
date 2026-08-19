@@ -95,7 +95,7 @@ function UsageGauge({ ratio }: { ratio: number }) {
 function getAccentColor(ratio: number) {
   if (ratio >= 90) return "#f43f5e";
   if (ratio >= 75) return "#f97316";
-  return "#0ea5e9";
+  return "#0569f8";
 }
 
 function getBarColor(ratio: number) {

@@ -186,12 +186,12 @@ def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
 
 
 def test_branding_settings_defaults_and_normalizes_hex():
-    assert BrandingSettings().primary_color == "#0ea5e9"
+    assert BrandingSettings().primary_color == "#0569f8"
     assert BrandingSettings().login_logo_url is None
     assert BrandingSettings(primary_color="  #A1B2C3 ").primary_color == "#a1b2c3"
     assert BrandingSettings(login_logo_url="  https://cdn.example.com/logo.svg ").login_logo_url == "https://cdn.example.com/logo.svg"
     assert BrandingSettings(login_logo_url="   ").login_logo_url is None
-    assert AppSettings(branding={"primary_color": ""}).branding.primary_color == "#0ea5e9"
+    assert AppSettings(branding={"primary_color": ""}).branding.primary_color == "#0569f8"
 
 
 def test_branding_settings_reject_invalid_hex():

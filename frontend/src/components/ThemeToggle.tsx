@@ -12,7 +12,7 @@ export default function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="shell-icon-button inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      className="shell-icon-button inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
       aria-label="Toggle theme"
       title="Toggle theme"
     >

@@ -5,7 +5,7 @@ vi.mock("../../api/appSettings", () => ({
 }));
 
 import { fetchBrandingSettings } from "../../api/appSettings";
-import { applyBranding, bootstrapBranding, generatePrimaryScale } from "./brandingRuntime";
+import { DEFAULT_PRIMARY_COLOR, applyBranding, bootstrapBranding, generatePrimaryScale } from "./brandingRuntime";
 
 const fetchBrandingSettingsMock = vi.mocked(fetchBrandingSettings);
 
@@ -17,10 +17,13 @@ describe("brandingRuntime", () => {
   });
 
   it("generates a full scale for a valid color", () => {
-    const scale = generatePrimaryScale("#0ea5e9", "light");
+    const scale = generatePrimaryScale(DEFAULT_PRIMARY_COLOR, "light");
     expect(Object.keys(scale)).toHaveLength(11);
-    expect(scale[50]).toMatch(/^\d+ \d+ \d+$/);
-    expect(scale[950]).toMatch(/^\d+ \d+ \d+$/);
+    expect(scale[50]).toBe("218 231 249");
+    expect(scale[500]).toBe("5 105 248");
+    expect(scale[700]).toBe("3 71 168");
+    expect(scale[950]).toBe("1 25 58");
+    expect(generatePrimaryScale(DEFAULT_PRIMARY_COLOR, "dark")[200]).toBe("94 154 241");
   });
 
   it("applies branding variables and persists the selected color", () => {

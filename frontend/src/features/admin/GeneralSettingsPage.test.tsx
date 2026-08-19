@@ -100,7 +100,7 @@ function buildSettings(): AppSettings {
       dismissed: false,
     },
     branding: {
-      primary_color: "#0ea5e9",
+      primary_color: "#0569f8",
       login_logo_url: null,
     },
   };
@@ -137,6 +137,7 @@ describe("GeneralSettingsPage branding", () => {
     render(<GeneralSettingsPage />);
     expect(await screen.findByLabelText("Primary color picker")).toBeInTheDocument();
     expect(screen.queryByLabelText("Primary color hex")).not.toBeInTheDocument();
+    expect(screen.getByText(/BucketReef branding always remains visible/i)).toBeInTheDocument();
   });
 
   it("saves branding color and applies it immediately", async () => {
@@ -225,6 +226,7 @@ describe("GeneralSettingsPage branding", () => {
     expect(payload.general.allow_login_endpoint_list).toBe(true);
     expect(payload.general.allow_login_custom_endpoint).toBe(true);
     expect(payload.general).not.toHaveProperty("allow_user_private_connections");
+    expect(payload.branding.primary_color).toBe("#0569f8");
   });
 
   it("shows backend detail when initial settings load fails with detail", async () => {

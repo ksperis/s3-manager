@@ -25,33 +25,33 @@
   --ui-border-soft: #e8eef6;
   --ui-text: #0b1f3a;
   --ui-text-muted: #51617c;
-  --ui-hover: rgb(14 165 233 / 0.08);
-  --ui-selected-bg: rgb(14 165 233 / 0.12);
-  --ui-focus-ring: rgb(14 165 233 / 0.28);
+  --ui-hover: rgb(5 105 248 / 0.08);
+  --ui-selected-bg: rgb(5 105 248 / 0.12);
+  --ui-focus-ring: rgb(5 105 248 / 0.28);
   --ui-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.03);
   --ui-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --ui-primary-light-50-rgb: 240 249 255;
-  --ui-primary-light-100-rgb: 224 242 254;
-  --ui-primary-light-200-rgb: 186 230 253;
-  --ui-primary-light-300-rgb: 125 211 252;
-  --ui-primary-light-400-rgb: 56 189 248;
-  --ui-primary-light-500-rgb: 14 165 233;
-  --ui-primary-light-600-rgb: 2 132 199;
-  --ui-primary-light-700-rgb: 3 105 161;
-  --ui-primary-light-800-rgb: 7 89 133;
-  --ui-primary-light-900-rgb: 12 74 110;
-  --ui-primary-light-950-rgb: 8 47 73;
-  --ui-primary-dark-50-rgb: 240 249 255;
-  --ui-primary-dark-100-rgb: 224 242 254;
-  --ui-primary-dark-200-rgb: 186 230 253;
-  --ui-primary-dark-300-rgb: 125 211 252;
-  --ui-primary-dark-400-rgb: 56 189 248;
-  --ui-primary-dark-500-rgb: 14 165 233;
-  --ui-primary-dark-600-rgb: 2 132 199;
-  --ui-primary-dark-700-rgb: 3 105 161;
-  --ui-primary-dark-800-rgb: 7 89 133;
-  --ui-primary-dark-900-rgb: 12 74 110;
-  --ui-primary-dark-950-rgb: 8 47 73;
+  --ui-primary-light-50-rgb: 218 231 249;
+  --ui-primary-light-100-rgb: 190 213 247;
+  --ui-primary-light-200-rgb: 141 184 245;
+  --ui-primary-light-300-rgb: 90 154 245;
+  --ui-primary-light-400-rgb: 47 129 246;
+  --ui-primary-light-500-rgb: 5 105 248;
+  --ui-primary-light-600-rgb: 4 88 208;
+  --ui-primary-light-700-rgb: 3 71 168;
+  --ui-primary-light-800-rgb: 3 54 128;
+  --ui-primary-light-900-rgb: 2 37 88;
+  --ui-primary-light-950-rgb: 1 25 58;
+  --ui-primary-dark-50-rgb: 164 196 242;
+  --ui-primary-dark-100-rgb: 135 178 240;
+  --ui-primary-dark-200-rgb: 94 154 241;
+  --ui-primary-dark-300-rgb: 52 130 242;
+  --ui-primary-dark-400-rgb: 18 112 245;
+  --ui-primary-dark-500-rgb: 5 97 228;
+  --ui-primary-dark-600-rgb: 4 84 198;
+  --ui-primary-dark-700-rgb: 3 71 168;
+  --ui-primary-dark-800-rgb: 3 54 128;
+  --ui-primary-dark-900-rgb: 2 42 98;
+  --ui-primary-dark-950-rgb: 1 29 68;
   --ui-primary-50-rgb: var(--ui-primary-light-50-rgb);
   --ui-primary-100-rgb: var(--ui-primary-light-100-rgb);
   --ui-primary-200-rgb: var(--ui-primary-light-200-rgb);
@@ -65,6 +65,8 @@
   --ui-primary-950-rgb: var(--ui-primary-light-950-rgb);
   --ui-primary: rgb(var(--ui-primary-500-rgb));
   --ui-primary-strong: rgb(var(--ui-primary-600-rgb));
+  --ui-brand-coral-rgb: 252 87 44;
+  --ui-brand-coral: rgb(var(--ui-brand-coral-rgb));
   --ui-success: #059669;
   --ui-warning: #d97706;
   --ui-danger: #e11d48;
@@ -146,6 +148,26 @@ body {
   background: var(--ui-bg);
   color: var(--ui-text);
   @apply text-sm antialiased;
+}
+
+.auth-brand-glow-coral {
+  background: rgb(var(--ui-brand-coral-rgb) / 0.2);
+}
+
+.auth-brand-radial {
+  background: radial-gradient(circle at top, rgb(var(--ui-primary-500-rgb) / 0.18), transparent 40%);
+}
+
+/* Foreground accents use contrast-safe shades while backgrounds continue to
+ * use the configurable primary base/strong tokens. */
+.text-primary,
+.hover\:text-primary:hover {
+  color: rgb(var(--ui-primary-700-rgb));
+}
+
+:root.dark .text-primary,
+:root.dark .hover\:text-primary:hover {
+  color: rgb(var(--ui-primary-200-rgb));
 }
 
 @layer base {

@@ -526,7 +526,7 @@ export default function Topbar({
               event.preventDefault();
               setWorkspaceMenuOpen(true);
             }}
-            className={`shell-control inline-flex min-w-0 items-center rounded-lg border text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+            className={`shell-control inline-flex min-w-0 items-center rounded-lg border text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
               sidebarPlacement
                 ? "h-10 w-full px-3"
                 : "h-10 w-[140px] px-3"
@@ -710,7 +710,7 @@ export default function Topbar({
                 aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
                 aria-controls="mobile-navigation-panel"
                 aria-expanded={mobileMenuOpen}
-                className="shell-control inline-flex h-9 w-9 items-center justify-center rounded-lg border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:hidden"
+                className="shell-control inline-flex h-9 w-9 items-center justify-center rounded-lg border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 md:hidden"
               >
                 <HamburgerIcon className="h-4 w-4" />
               </button>
@@ -748,7 +748,7 @@ export default function Topbar({
                   aria-haspopup="menu"
                   aria-expanded={notificationsOpen}
                   aria-controls={notificationsOpen ? notificationsMenuId : undefined}
-                  className={`shell-control relative inline-flex h-9 w-9 items-center justify-center rounded-lg border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                  className={`shell-control relative inline-flex h-9 w-9 items-center justify-center rounded-lg border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                     notificationsOpen ? "shell-control-active" : ""
                   }`}
                 >
@@ -828,7 +828,7 @@ export default function Topbar({
                   event.preventDefault();
                   setAccountMenuOpen(true);
                 }}
-                className="inline-flex h-9 items-center gap-0 rounded-lg border border-transparent bg-transparent px-1 text-left transition hover:bg-[var(--shell-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:gap-2 sm:px-1.5"
+                className="inline-flex h-9 items-center gap-0 rounded-lg border border-transparent bg-transparent px-1 text-left transition hover:bg-[var(--shell-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 sm:gap-2 sm:px-1.5"
               >
                 <UserAvatar
                   avatar={storedUser?.avatar}

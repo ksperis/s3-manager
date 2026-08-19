@@ -144,6 +144,10 @@ describe("Sidebar", () => {
     const sidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
     expect(sidebar).toHaveStyle({ width: `${SIDEBAR_DEFAULT_WIDTH}px` });
     expect(screen.getByText("BucketReef")).toBeInTheDocument();
+    expect(screen.getByText("BucketReef").parentElement?.querySelector("img")).toHaveAttribute(
+      "src",
+      "/brand/bucketreef-mark-256.png",
+    );
     expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/profile");
     expect(screen.queryByRole("button", { name: /collapse sidebar|expand sidebar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
@@ -189,7 +193,8 @@ describe("Sidebar", () => {
 
     const expandButton = screen.getByRole("button", { name: "Expand sidebar" });
     expect(expandButton).toHaveAttribute("title", "Expand sidebar");
-    expect(expandButton).toHaveClass("bg-primary");
+    expect(expandButton.querySelector("img")).toHaveAttribute("src", "/brand/bucketreef-mark-256.png");
+    expect(expandButton).not.toHaveClass("bg-primary");
     expect(container.querySelector('[data-sidebar-variant="desktop"]')?.firstElementChild).toContainElement(expandButton);
     fireEvent.click(expandButton);
     expect(onCollapseToggle).toHaveBeenCalledTimes(1);

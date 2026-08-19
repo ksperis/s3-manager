@@ -23,6 +23,7 @@ import {
 import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type LoginSettings } from "../../api/appSettings";
 import { getWorkspaceAccess } from "../../api/executionContexts";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
+import BrandMark from "../../components/BrandMark";
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
@@ -358,7 +359,7 @@ export default function LoginPage() {
   const buttonClasses =
     "w-full rounded-xl bg-primary px-4 py-2.5 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60";
   const providerButtonClasses =
-    "flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 ui-body font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50";
+    "flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 ui-body font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-50";
 
   useEffect(() => {
     if (!allowAccessKeys && mode === "keys") {
@@ -371,8 +372,13 @@ export default function LoginPage() {
 
   if (mfaStage) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
-        <section className="w-full max-w-md rounded-3xl bg-white p-8 text-slate-900 shadow-2xl">
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-4">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -left-24 top-[-7rem] h-80 w-80 rounded-full bg-primary-500/20 blur-3xl" />
+          <div className="auth-brand-glow-coral absolute -right-24 bottom-[-7rem] h-96 w-96 rounded-full blur-3xl" />
+        </div>
+        <section className="relative w-full max-w-md rounded-3xl bg-white p-8 text-slate-900 shadow-2xl">
+          <BrandMark alt={PRODUCT_NAME} className="mb-5 h-16 w-16" />
           <h1 className="text-2xl font-semibold">
             {mfaStage === "mfa_enrollment_required" ? "Create your administrator passkey" : "Verify your passkey"}
           </h1>
@@ -395,7 +401,7 @@ export default function LoginPage() {
                 onChange={(event) => setRecoveryCode(event.target.value)}
                 autoComplete="one-time-code"
               />
-              <button type="button" className="mt-3 ui-body font-semibold text-primary" disabled={loading || !recoveryCode.trim()} onClick={() => void completeRecovery()}>
+              <button type="button" className="mt-3 ui-body font-semibold text-primary-700" disabled={loading || !recoveryCode.trim()} onClick={() => void completeRecovery()}>
                 Use recovery code
               </button>
             </div>
@@ -425,8 +431,8 @@ export default function LoginPage() {
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-24 top-[-7rem] h-80 w-80 rounded-full bg-primary-500/20 blur-3xl" />
-        <div className="absolute -right-24 bottom-[-7rem] h-96 w-96 rounded-full bg-cyan-500/20 blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.18),_transparent_40%)]" />
+        <div className="auth-brand-glow-coral absolute -right-24 bottom-[-7rem] h-96 w-96 rounded-full blur-3xl" />
+        <div className="auth-brand-radial absolute inset-0" />
       </div>
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 sm:px-6">
@@ -434,7 +440,7 @@ export default function LoginPage() {
           <section className="hidden rounded-3xl border border-slate-700/50 bg-slate-900/55 p-8 shadow-2xl backdrop-blur lg:flex lg:flex-col lg:justify-between">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-700/80 bg-slate-800/70 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-300">
-                <CubeIcon className="h-3.5 w-3.5 text-primary-300" />
+                <BrandMark className="h-7 w-7" />
                 {PRODUCT_NAME}
               </div>
               <h1 className="mt-6 max-w-md text-3xl font-semibold leading-tight text-white">{PRODUCT_SUBTITLE}</h1>
@@ -480,7 +486,7 @@ export default function LoginPage() {
           <section className="rounded-3xl border border-white/70 bg-white/95 p-6 shadow-2xl sm:p-8">
             <div className="mb-6">
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 lg:hidden">
-                <CubeIcon className="h-3.5 w-3.5 text-primary-600" />
+                <BrandMark className="h-7 w-7" />
                 {PRODUCT_NAME}
               </div>
               <h2 className="mt-3 text-2xl font-semibold text-slate-900">Sign in</h2>
@@ -715,14 +721,5 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function CubeIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m12 12 8-4.5M12 12 4 7.5M12 12v9" />
-    </svg>
   );
 }

@@ -35,7 +35,7 @@ const CEPH_ADMIN_WARNING_MESSAGE =
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
 const BRANDING_PRESET_COLORS = [
-  "#0ea5e9",
+  "#0569f8",
   "#2563eb",
   "#0f766e",
   "#16a34a",
@@ -669,6 +669,9 @@ export default function GeneralSettingsPage() {
                       placeholder="https://cdn.example.com/logo.svg"
                       className={settingsInputClassName}
                     />
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      BucketReef branding always remains visible. This optional image appears as a secondary customer logo on the sign-in screen.
+                    </p>
                     {!isLogoUrlValid && (
                       <p className="ui-caption text-rose-700 dark:text-rose-200">
                         Use an `http(s)` URL, a root-relative URL (`/logo.svg`) or a `data:image/...` URL.

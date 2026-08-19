@@ -340,7 +340,7 @@ export default function TopbarDropdownSelect({
         }}
         className={
           compactOnNarrow && !iconOnly
-            ? `shell-control inline-flex h-10 items-center gap-2.5 rounded-lg border px-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 ${open ? "shell-control-active" : ""}`
+            ? `shell-control inline-flex h-10 items-center gap-2.5 rounded-lg border px-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 disabled:cursor-not-allowed disabled:opacity-60 ${open ? "shell-control-active" : ""}`
             : undefined
         }
       />

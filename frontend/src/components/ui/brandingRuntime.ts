@@ -10,7 +10,7 @@ const LIGHTNESS_OFFSETS_LIGHT = [42, 36, 26, 16, 8, 0, -8, -16, -24, -32, -38] a
 const LIGHTNESS_OFFSETS_DARK = [30, 24, 16, 8, 2, -4, -10, -16, -24, -30, -36] as const;
 const SATURATION_OFFSETS = [-22, -18, -12, -8, -4, 0, 2, 4, 6, 8, 10] as const;
 const BRANDING_STORAGE_KEY = CLIENT_STORAGE_KEYS.brandingPrimaryColor;
-const DEFAULT_PRIMARY_COLOR = "#0ea5e9";
+export const DEFAULT_PRIMARY_COLOR = "#0569f8";
 
 type ThemeMode = "light" | "dark";
 type PrimaryShade = (typeof PRIMARY_SHADES)[number];

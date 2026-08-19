@@ -90,7 +90,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
     },
     onboarding: { dismissed: false },
     branding: {
-      primary_color: "#0ea5e9",
+      primary_color: "#0569f8",
       login_logo_url: null,
     },
   };

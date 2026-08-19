@@ -8,9 +8,11 @@ import { completeOidcLogin } from "../../api/auth";
 import { fetchGeneralSettings } from "../../api/appSettings";
 import { getWorkspaceAccess } from "../../api/executionContexts";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
+import BrandMark from "../../components/BrandMark";
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
+import { PRODUCT_NAME } from "../../constants/product";
 import { useSession } from "../../auth/SessionProvider";
 import { coordinateOidcCallback } from "./oidcCallbackCoordinator";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
@@ -115,14 +117,12 @@ export default function OidcCallbackPage() {
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-24 top-[-7rem] h-80 w-80 rounded-full bg-primary-500/20 blur-3xl" />
-        <div className="absolute -right-24 bottom-[-7rem] h-96 w-96 rounded-full bg-cyan-500/20 blur-3xl" />
+        <div className="auth-brand-glow-coral absolute -right-24 bottom-[-7rem] h-96 w-96 rounded-full blur-3xl" />
       </div>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
         <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white/95 p-8 text-center shadow-2xl">
-          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100 text-primary-700">
-            <CubeIcon className="h-5 w-5" />
-          </div>
+          <BrandMark alt={PRODUCT_NAME} className="mx-auto mb-5 h-16 w-16" />
           <h1 className="mb-2 text-2xl font-semibold text-slate-900">Signing you in</h1>
           {processing && <p className="ui-body text-slate-500">Please wait...</p>}
           {error && (
@@ -140,14 +140,5 @@ export default function OidcCallbackPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function CubeIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m12 12 8-4.5M12 12 4 7.5M12 12v9" />
-    </svg>
   );
 }

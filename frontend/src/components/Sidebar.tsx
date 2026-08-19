@@ -5,6 +5,7 @@
 import { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { PRODUCT_NAME } from "../constants/product";
+import BrandMark from "./BrandMark";
 import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH } from "./sidebarSizing";
 
 const WORKSPACE_ROOTS = ["admin", "ceph-admin", "storage-ops", "manager", "browser", "portal"] as const;
@@ -180,15 +181,13 @@ export default function Sidebar({
             onClick={onCollapseToggle}
             aria-label="Expand sidebar"
             title="Expand sidebar"
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white shadow-[0_8px_18px_rgba(37,99,235,0.2)] transition-colors hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--shell-sidebar-bg)]"
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-transparent transition-colors hover:bg-[var(--shell-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--shell-sidebar-bg)]"
           >
-            <CollapseIcon className="h-4 w-4 rotate-180" />
+            <BrandMark className="h-9 w-9" />
           </button>
         ) : (
           <>
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-[0_10px_20px_rgba(37,99,235,0.22)]">
-              <BrandCubeIcon className="h-4 w-4" />
-            </span>
+            <BrandMark className="h-9 w-9" />
             {!compact && <span className="truncate text-[14px] font-semibold leading-none text-[var(--shell-text)]">{PRODUCT_NAME}</span>}
             {variant === "desktop" && onCollapseToggle ? (
               <button
@@ -196,7 +195,7 @@ export default function Sidebar({
                 onClick={onCollapseToggle}
                 aria-label="Collapse sidebar"
                 title="Collapse sidebar"
-                className="shell-sidebar-item ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--shell-muted)] transition-colors hover:text-[var(--shell-text)] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="shell-sidebar-item ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--shell-muted)] transition-colors hover:text-[var(--shell-text)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
               >
                 <CollapseIcon className="h-4 w-4" />
               </button>
@@ -313,7 +312,7 @@ export default function Sidebar({
           aria-label={compact ? "Profile" : undefined}
           title={compact ? "Profile" : undefined}
           className={({ isActive }) =>
-            `group flex h-9 w-full items-center rounded-md text-[12px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+            `group flex h-9 w-full items-center rounded-md text-[12px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
               compact ? "justify-center px-2" : "gap-2 px-2.5"
             } ${isActive ? "shell-sidebar-item-active" : "shell-sidebar-item"}`
           }
@@ -323,15 +322,6 @@ export default function Sidebar({
         </NavLink>
       </div>
     </aside>
-  );
-}
-
-function BrandCubeIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="m12 4.5 6 3.4v6.8l-6 3.8-6-3.8V7.9l6-3.4Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M12 12.1 18 7.9M12 12.1 6 7.9M12 12.1v6.4" />
-    </svg>
   );
 }
 

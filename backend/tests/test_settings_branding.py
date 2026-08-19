@@ -36,17 +36,17 @@ def _raw_db_settings(db_session) -> dict:
     return json.loads(row.payload_json)
 
 
-def test_get_public_branding_settings_without_auth(client, monkeypatch, tmp_path, db_session):
+def test_get_public_branding_settings_preserves_legacy_color_without_auth(client, monkeypatch, tmp_path, db_session):
     settings_path = tmp_path / "app_settings.json"
     persisted = AppSettings()
-    persisted.branding.primary_color = "#123abc"
+    persisted.branding.primary_color = "#0ea5e9"
     settings_path.write_text(persisted.model_dump_json(indent=2), encoding="utf-8")
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
     _use_settings_db(monkeypatch, db_session)
 
     response = client.get("/api/settings/branding")
     assert response.status_code == 200, response.text
-    assert response.json() == {"primary_color": "#123abc", "login_logo_url": None}
+    assert response.json() == {"primary_color": "#0ea5e9", "login_logo_url": None}
 
 
 def test_put_admin_settings_rejects_invalid_branding_color(client, monkeypatch, tmp_path):
