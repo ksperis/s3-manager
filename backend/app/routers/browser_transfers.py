@@ -22,7 +22,8 @@ from app.models.browser import (
     SseCustomerContext,
     StsStatus,
 )
-from app.routers.browser_common import ProxyUploadResponse, require_sse_feature
+from app.models.object import ObjectUploadResponse
+from app.routers.browser_common import require_sse_feature
 from app.routers.dependencies import (
     get_account_context,
     get_current_account_admin,
@@ -57,7 +58,7 @@ def get_sts_credentials(
         raise_bad_gateway_from_runtime(exc)
 
 
-@router.post("/buckets/{bucket_name}/proxy-upload", response_model=ProxyUploadResponse)
+@router.post("/buckets/{bucket_name}/proxy-upload", response_model=ObjectUploadResponse)
 def upload_via_proxy(
     bucket_name: str,
     file: UploadFile = File(...),
@@ -67,7 +68,7 @@ def upload_via_proxy(
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: ManagerActor = Depends(get_current_account_admin),
-) -> ProxyUploadResponse:
+) -> ObjectUploadResponse:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
@@ -81,7 +82,7 @@ def upload_via_proxy(
             content_type=content_type,
             sse_customer=sse_customer,
         )
-        return ProxyUploadResponse(message="Upload completed", key=key)
+        return ObjectUploadResponse(message="Upload completed", key=key)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 

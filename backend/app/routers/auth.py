@@ -5,12 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime, timedelta
-from typing import Any, Literal, Optional
+from datetime import timedelta
+from typing import Any, Optional
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import Field
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -18,7 +17,18 @@ from app.core.database import get_db
 from app.core.security import constant_time_equal, create_pre_auth_token, decode_typed_token
 from app.db import AuthSession, S3Session, User, WebAuthnCredential, is_admin_ui_role
 from app.models.api_token import ApiTokenCreateRequest, ApiTokenCreateResponse, ApiTokenInfo
-from app.models.base import ApiModel
+from app.models.auth import (
+    AuthenticationResponse,
+    CurrentSessionResponse,
+    ExternalIdentityInfo,
+    LinkDecisionRequest,
+    RecoveryCodeRequest,
+    RefreshResponse,
+    SessionInfo,
+    WebAuthnAuthenticationRequest,
+    WebAuthnCredentialInfo,
+    WebAuthnCredentialRequest,
+)
 from app.models.ldap import LDAPLoginRequest, LDAPProviderInfo
 from app.models.oidc import OIDCCallbackRequest, OIDCProviderInfo, OIDCStartRequest, OIDCStartResponse
 from app.models.session import ManagerSessionPrincipal, S3KeyLogin, SessionDescriptor
@@ -64,84 +74,6 @@ from app.utils.time import utcnow
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
-
-
-class AuthenticationResponse(ApiModel):
-    status: Literal[
-        "authenticated",
-        "mfa_required",
-        "mfa_enrollment_required",
-        "link_approval_required",
-    ]
-    user: Optional[UserOut] = None
-    session: Optional[SessionDescriptor] = None
-    redirect_path: Optional[str] = None
-    link_request_id: Optional[str] = None
-    recovery_codes: Optional[list[str]] = None
-
-
-class RefreshResponse(ApiModel):
-    status: Literal["authenticated"] = "authenticated"
-
-
-class SessionInfo(ApiModel):
-    id: str
-    principal_type: str
-    auth_type: str
-    created_at: datetime
-    last_activity_at: datetime
-    idle_expires_at: datetime
-    absolute_expires_at: datetime
-    mfa_verified_at: Optional[datetime] = None
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
-    revoked_at: Optional[datetime] = None
-    revoke_reason: Optional[str] = None
-    current: bool = False
-    user_id: Optional[int] = None
-    s3_session_id: Optional[str] = None
-
-
-class CurrentSessionResponse(ApiModel):
-    authenticated: Literal[True] = True
-    user: Optional[UserOut] = None
-    session: Optional[SessionDescriptor] = None
-    auth_session: SessionInfo
-
-
-class WebAuthnCredentialRequest(ApiModel):
-    credential: dict[str, Any]
-    name: str = Field(default="Passkey", min_length=1, max_length=128)
-
-
-class WebAuthnAuthenticationRequest(ApiModel):
-    credential: dict[str, Any]
-
-
-class RecoveryCodeRequest(ApiModel):
-    code: str = Field(min_length=8, max_length=128)
-
-
-class LinkDecisionRequest(ApiModel):
-    approve: bool
-    reason: Optional[str] = Field(default=None, max_length=500)
-
-
-class WebAuthnCredentialInfo(ApiModel):
-    id: str
-    name: str
-    created_at: datetime
-    last_used_at: Optional[datetime] = None
-
-
-class ExternalIdentityInfo(ApiModel):
-    id: str
-    provider_type: str
-    provider_id: str
-    email: Optional[str] = None
-    email_verified: bool
-    created_at: datetime
-    last_login_at: Optional[datetime] = None
 
 
 def _set_auth_cookies(response: Response, credentials: SessionCredentials) -> None:

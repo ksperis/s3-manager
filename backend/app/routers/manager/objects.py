@@ -3,35 +3,21 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from pydantic import Field
 
+from app.core.sensitive_data import sanitize_error_detail
 from app.models.access_context import ManagerActor
-from app.models.base import ApiModel
-from app.services.s3_execution_context import S3ExecutionContext
-from app.models.object import ListObjectsResponse
+from app.models.object import (
+    CreateFolderPayload,
+    DeleteObjectKeysPayload,
+    ListObjectsResponse,
+    ObjectDownloadResponse,
+    ObjectUploadResponse,
+)
 from app.routers.dependencies import get_account_context, get_current_account_admin
 from app.services.objects_service import ObjectsService, get_objects_service
-from app.core.sensitive_data import sanitize_error_detail
+from app.services.s3_execution_context import S3ExecutionContext
 
 router = APIRouter(prefix="/manager/buckets/{bucket_name}/objects", tags=["manager-objects"])
-
-
-class CreateFolderPayload(ApiModel):
-    prefix: str = Field(..., description="Folder prefix, trailing slash optional")
-
-
-class DeleteObjectsPayload(ApiModel):
-    keys: list[str]
-
-
-class UploadResponse(ApiModel):
-    key: str
-    message: str
-
-
-class DownloadResponse(ApiModel):
-    url: str
-    expires_in: int
 
 
 @router.get("", response_model=ListObjectsResponse)
@@ -49,7 +35,7 @@ def list_objects(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
 
 
-@router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/upload", response_model=ObjectUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_object(
     bucket_name: str,
     file: UploadFile = File(...),
@@ -72,7 +58,7 @@ async def upload_object(
     try:
         contents = await file.read()
         service.upload_object(bucket_name, account, target_key, file_obj=contents, content_type=file.content_type)
-        return UploadResponse(key=target_key, message="Uploaded")
+        return ObjectUploadResponse(key=target_key, message="Uploaded")
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
 
@@ -95,7 +81,7 @@ def create_folder(
 @router.post("/delete")
 def delete_objects(
     bucket_name: str,
-    payload: DeleteObjectsPayload,
+    payload: DeleteObjectKeysPayload,
     account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
     _: ManagerActor = Depends(get_current_account_admin),
@@ -109,7 +95,7 @@ def delete_objects(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
 
 
-@router.get("/download", response_model=DownloadResponse)
+@router.get("/download", response_model=ObjectDownloadResponse)
 def get_download_url(
     bucket_name: str,
     key: str,
@@ -122,6 +108,6 @@ def get_download_url(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         url = service.generate_download_url(bucket_name, account, key, expires_in=expires_in)
-        return DownloadResponse(url=url, expires_in=expires_in)
+        return ObjectDownloadResponse(url=url, expires_in=expires_in)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc

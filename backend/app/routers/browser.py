@@ -24,7 +24,6 @@ from app.core.database import get_db
 from app.db import User
 from app.models.access_context import ManagerActor
 from app.models.app_settings import BrowserSettings
-from app.models.base import ApiModel
 from app.models.bucket import BucketVersioningStatus
 from app.models.browser import (
     BrowserBucket,
@@ -32,6 +31,8 @@ from app.models.browser import (
     BrowserUsageSummary,
     BrowserObjectSortDir,
     BucketCorsStatus,
+    CreateBucketPayload,
+    EnsureCorsPayload,
     ListBrowserObjectsResponse,
     ObjectColumnsRequest,
     ObjectColumnsResponse,
@@ -39,8 +40,6 @@ from app.models.browser import (
     SseCustomerContext,
 )
 from app.routers import browser_bucket_config, browser_objects, browser_transfers
-from app.routers.browser_common import EnsureCorsPayload
-from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.routers.dependencies import (
     get_account_context,
     get_audit_service,
@@ -57,6 +56,7 @@ from app.services.browser_usage_summary_service import (
     get_browser_usage_summary_service,
 )
 from app.services.s3_execution_context import S3ExecutionContext
+from app.utils.http_errors import raise_bad_gateway_from_runtime
 
 router = APIRouter(
     prefix="/browser",
@@ -69,11 +69,6 @@ router = APIRouter(
 router.include_router(browser_bucket_config.router)
 router.include_router(browser_objects.router)
 router.include_router(browser_transfers.router)
-
-
-class CreateBucketPayload(ApiModel):
-    name: str
-    versioning: bool = False
 
 
 @router.get("/settings", response_model=BrowserSettings)

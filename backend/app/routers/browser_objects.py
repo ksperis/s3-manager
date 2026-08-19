@@ -22,7 +22,8 @@ from app.models.browser import (
     ObjectTags,
     SseCustomerContext,
 )
-from app.routers.browser_common import CreateFolderPayload, require_sse_feature
+from app.models.object import CreateFolderPayload
+from app.routers.browser_common import require_sse_feature
 from app.routers.dependencies import (
     get_account_context,
     get_current_account_admin,

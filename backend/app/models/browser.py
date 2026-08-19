@@ -25,6 +25,15 @@ class BrowserBucket(ApiModel):
     icon: Optional[PortalStorageSpaceIcon] = None
 
 
+class CreateBucketPayload(ApiModel):
+    name: str
+    versioning: bool = False
+
+
+class EnsureCorsPayload(ApiModel):
+    origin: Optional[str] = None
+
+
 class BrowserObject(ApiModel):
     key: str
     size: int

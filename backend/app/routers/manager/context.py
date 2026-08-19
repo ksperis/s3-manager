@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import S3Account, S3Connection, S3User, User
 from app.models.access_context import ManagerActor
-from app.models.base import ApiModel
+from app.models.execution_context import ManagerContext
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import (
     get_account_context,
@@ -27,25 +27,6 @@ from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags
 
 router = APIRouter(prefix="/manager", tags=["manager-context"])
-
-
-class ManagerContext(ApiModel):
-    access_mode: str
-    context_kind: str = "account"
-    iam_identity: Optional[str] = None
-    manager_stats_enabled: bool = False
-    manager_stats_message: Optional[str] = None
-    manager_browser_enabled: bool
-    manager_browser_message: Optional[str] = None
-    manager_bucket_quota_enabled: bool = False
-    manager_ceph_keys_enabled: bool = False
-    manager_private_access_enabled: bool = False
-    quota_max_size_gb: Optional[float] = None
-    quota_max_objects: Optional[int] = None
-    max_buckets: Optional[int] = None
-    max_users: Optional[int] = None
-    max_roles: Optional[int] = None
-    max_groups: Optional[int] = None
 
 
 def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[str]]:

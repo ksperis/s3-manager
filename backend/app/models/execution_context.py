@@ -38,6 +38,25 @@ class ExecutionContext(ApiModel):
     capabilities: ExecutionContextCapabilities
 
 
+class ManagerContext(ApiModel):
+    access_mode: str
+    context_kind: str = "account"
+    iam_identity: Optional[str] = None
+    manager_stats_enabled: bool = False
+    manager_stats_message: Optional[str] = None
+    manager_browser_enabled: bool
+    manager_browser_message: Optional[str] = None
+    manager_bucket_quota_enabled: bool = False
+    manager_ceph_keys_enabled: bool = False
+    manager_private_access_enabled: bool = False
+    quota_max_size_gb: Optional[float] = None
+    quota_max_objects: Optional[int] = None
+    max_buckets: Optional[int] = None
+    max_users: Optional[int] = None
+    max_roles: Optional[int] = None
+    max_groups: Optional[int] = None
+
+
 class WorkspaceAvailability(ApiModel):
     available: bool = False
     context_count: int = 0

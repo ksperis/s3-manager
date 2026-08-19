@@ -2,9 +2,29 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 from typing import Any
 
 from app.main import app
+
+
+def test_routers_do_not_define_api_models():
+    backend_root = Path(__file__).resolve().parents[1]
+    offenders: list[str] = []
+    for path in sorted((backend_root / "app" / "routers").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            if any(
+                (isinstance(base, ast.Name) and base.id == "ApiModel")
+                or (isinstance(base, ast.Attribute) and base.attr == "ApiModel")
+                for base in node.bases
+            ):
+                offenders.append(f"{path.relative_to(backend_root)}:{node.name}")
+
+    assert offenders == []
 
 
 def _collect_schema_refs(value: Any, refs: set[str]) -> None:

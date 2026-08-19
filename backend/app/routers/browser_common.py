@@ -2,26 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import HTTPException, status
 
-from app.models.base import ApiModel
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.storage_endpoint_features import resolve_feature_flags
-
-
-class CreateFolderPayload(ApiModel):
-    prefix: str
-
-
-class ProxyUploadResponse(ApiModel):
-    message: str
-    key: str
-
-
-class EnsureCorsPayload(ApiModel):
-    origin: Optional[str] = None
 
 
 def require_sse_feature(account: S3ExecutionTarget) -> None:
