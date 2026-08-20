@@ -4,7 +4,8 @@ This page audits the main UI listing surfaces in the repository and records whic
 
 ## Legend & Methodology
 
-- Audit basis: repository state reviewed on March 21, 2026.
+- Audit basis: the repository routes and API modules cited by each row. Update
+  the affected rows whenever those contracts change.
 - Scope: visible collection surfaces backed by frontend `list*`, `search*`, or `stream*` APIs. This includes routed pages and secondary list panels inside modals or assistants when they expose a real repeated-item workflow.
 - Included UI shapes: tables, card lists, checkbox selection panels, and reusable modal pickers.
 - Excluded: tests, non-visible components, detail-only views, static option lists, simple one-off selectors that do not behave like a listing surface, and pages not backed by `list*`, `search*`, or `stream*` APIs.
@@ -17,7 +18,6 @@ This page audits the main UI listing surfaces in the repository and records whic
 - `Multi-select BE` follows a strict rule: `Yes` only when one backend request accepts multiple selected items at once. FE fan-out over many single-item requests is `No`. Mixed cases are marked `Partial`.
 - Out of scope under this method:
   - `/admin/billing`, `/admin/endpoint-status`, and metrics pages because they are not backed by `list*`, `search*`, or `stream*` FE APIs.
-  - `frontend/src/features/admin/ApiTokensPage.tsx` because the page is not routed.
 
 ## Admin
 
@@ -33,6 +33,7 @@ This page audits the main UI listing surfaces in the repository and records whic
 | `Admin` `/admin/users` | UI users table | UI users | `listUsers -> GET /admin/users` | `Yes (BE)` | `No` | `Yes (BE)` | `Yes (BE Offset)` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | Primary admin user inventory is fully server-driven for search, sort, and paging. |
 | `Admin` `/admin/users` | UI user modal association pickers | RGW accounts, RGW users, shared S3 connections | `listMinimalS3Accounts -> GET /admin/accounts/minimal`<br>`listMinimalS3Users -> GET /admin/s3-users/minimal`<br>`listMinimalS3Connections -> GET /admin/s3-connections/minimal` | `Yes (FE)` | `No` | `No` | `No` | `No` | `Yes` | `Yes (FE)` | `No` | `Partial (BE)` | `Yes (mixed)` | `No` | Selection survives modal tab and query changes inside the form, but it is not restored from browser storage. |
 | `Admin` `/admin/audit` | Audit trail table | Audit log entries | `listAuditLogs -> GET /admin/audit/logs` | `Yes (BE)` | `Yes (FE+BE)` | `No` | `Yes (BE Cursor)` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | Role and scope filter server-side; action and status chips filter only the currently loaded window client-side. |
+| `Admin` `/admin/profile?tab=api-tokens`<br>`/admin/api-tokens` | API tokens table | Long-lived Admin API tokens | `listApiTokens -> GET /auth/api-tokens` | `No` | `Yes (FE control + BE query)` | `Yes (FE)` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | Superadmin-only listing. The backend optionally includes revoked and expired tokens; the frontend sorts the full result by creation time. Create and revoke actions remain unitary. |
 | `Admin` `/admin/storage-endpoints` | Storage endpoint card list | Storage endpoints | `listStorageEndpoints -> GET /admin/storage-endpoints` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | Full list is fetched once and rendered as cards. No dedicated listing controls exist. |
 | `Admin` `/admin/key-rotation` | Endpoint selection panel | Eligible storage endpoints | `listStorageEndpoints -> GET /admin/storage-endpoints`<br>`rotateS3Keys -> POST /admin/key-rotation` | `No` | `No` | `No` | `No` | `No` | `Yes` | `Yes (FE)` | `No` | `Yes (BE)` | `Yes (BE batch)` | `No` | Selection remains in the current panel state until submission or dismissal. One request carries `endpoint_ids[]` and `key_types[]`. |
 
