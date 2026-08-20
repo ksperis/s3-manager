@@ -115,7 +115,7 @@ class S3UsersService:
             logger.warning("Unable to list buckets for user %s: %s", s3_user.rgw_user_uid, exc)
             return None
 
-    def _user_usage(self, s3_user: S3UserModel) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    def get_user_usage(self, s3_user: S3UserModel) -> tuple[Optional[int], Optional[int], Optional[int]]:
         try:
             endpoint = self._endpoint_for_user(s3_user)
             if not resolve_feature_flags(endpoint).metrics_enabled:
@@ -146,10 +146,7 @@ class S3UsersService:
             bucket_count,
         )
 
-    def get_user_usage(self, s3_user: S3UserModel) -> tuple[Optional[int], Optional[int], Optional[int]]:
-        return self._user_usage(s3_user)
-
-    def _user_quota(
+    def get_user_quota(
         self,
         s3_user: S3UserModel,
         admin: Optional[RGWAdminClient] = None,
@@ -165,9 +162,6 @@ class S3UsersService:
             logger.warning("Unable to fetch S3 user quota for %s: %s", s3_user.rgw_user_uid, exc)
             return None, None
         return bytes_to_gb(max_size_bytes), max_objects
-
-    def get_user_quota(self, s3_user: S3UserModel) -> tuple[Optional[float], Optional[int]]:
-        return self._user_quota(s3_user)
 
     def get_user_limits(self, s3_user: S3UserModel) -> tuple[Optional[float], Optional[int], Optional[int]]:
         try:
@@ -350,7 +344,7 @@ class S3UsersService:
         quota_max_size_gb = None
         quota_max_objects = None
         if include_quota:
-            quota_max_size_gb, quota_max_objects = self._user_quota(row)
+            quota_max_size_gb, quota_max_objects = self.get_user_quota(row)
         return s3_user_from_db(
             row,
             user_links=user_links_map.get(row.id, []),
@@ -476,7 +470,7 @@ class S3UsersService:
         quota_max_size_gb = None
         quota_max_objects = None
         if include_quota:
-            quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
+            quota_max_size_gb, quota_max_objects = self.get_user_quota(s3_user)
         bucket_count = self._interface_bucket_count(s3_user) if include_buckets else None
         return s3_user_from_db(
             s3_user,
@@ -539,7 +533,7 @@ class S3UsersService:
 
         self.db.commit()
         self.db.refresh(s3_user)
-        quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
+        quota_max_size_gb, quota_max_objects = self.get_user_quota(s3_user, admin)
         return s3_user_from_db(
             s3_user,
             user_links=[],
@@ -590,7 +584,7 @@ class S3UsersService:
             )
             self.db.add(s3_user)
             self.db.flush()
-            quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
+            quota_max_size_gb, quota_max_objects = self.get_user_quota(s3_user, admin)
             created.append(
                 s3_user_from_db(
                     s3_user,
@@ -642,7 +636,7 @@ class S3UsersService:
         self.db.refresh(s3_user)
         user_links_map, group_links_map = self.associations.load_links([s3_user.id])
         endpoint = self._endpoint_for_user(s3_user)
-        quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
+        quota_max_size_gb, quota_max_objects = self.get_user_quota(s3_user)
         return s3_user_from_db(
             s3_user,
             user_links=user_links_map.get(s3_user.id, []),
@@ -693,7 +687,7 @@ class S3UsersService:
         self.db.refresh(s3_user)
         endpoint = self._endpoint_for_user(s3_user)
         user_links_map, group_links_map = self.associations.load_links([s3_user.id])
-        quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
+        quota_max_size_gb, quota_max_objects = self.get_user_quota(s3_user, admin)
         return s3_user_from_db(
             s3_user,
             user_links=user_links_map.get(s3_user.id, []),

@@ -191,7 +191,7 @@ def test_update_account_user_links_missing_user(db_session, monkeypatch):
     db_session.commit()
 
     service, _ = _service(db_session)
-    monkeypatch.setattr(service, "_account_quota", lambda *args, **kwargs: (None, None))
+    monkeypatch.setattr(service, "get_account_quota", lambda *args, **kwargs: (None, None))
 
     with pytest.raises(ValueError, match="User not found"):
         service.update_account(
@@ -249,7 +249,7 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
 
     quota_calls: list[tuple] = []
     monkeypatch.setattr(service, "_apply_account_quota", lambda *args, **kwargs: quota_calls.append(args))
-    monkeypatch.setattr(service, "_account_quota", lambda *args, **kwargs: (12.5, 42))
+    monkeypatch.setattr(service, "get_account_quota", lambda *args, **kwargs: (12.5, 42))
 
     updated = service.update_account(
         account.id,
@@ -284,7 +284,7 @@ def test_update_account_persists_privileged_bucket_quota_grant(db_session, monke
     assert account.allow_bucket_quota_management is False
 
     service, _ = _service(db_session)
-    monkeypatch.setattr(service, "_account_quota", lambda *args, **kwargs: (None, None))
+    monkeypatch.setattr(service, "get_account_quota", lambda *args, **kwargs: (None, None))
 
     updated = service.update_account(
         account.id,
@@ -301,7 +301,7 @@ def test_delete_account_guardrails_and_success(db_session, monkeypatch):
     account = _seed_account(db_session, endpoint.id, name="delete-acc", rgw_account_id="RGW-DEL-1")
     service, admin = _service(db_session)
 
-    monkeypatch.setattr(service, "_account_usage", lambda *args, **kwargs: (0, 0, 1))
+    monkeypatch.setattr(service, "get_account_usage", lambda *args, **kwargs: (0, 0, 1))
     monkeypatch.setattr(service, "_account_rgw_users", lambda *args, **kwargs: (0, []))
     monkeypatch.setattr(service, "_account_topics_info", lambda *args, **kwargs: (0, []))
     monkeypatch.setattr(service, "_admin_for_account", lambda *args, **kwargs: admin)
@@ -310,7 +310,7 @@ def test_delete_account_guardrails_and_success(db_session, monkeypatch):
     with pytest.raises(ValueError, match="still has attached resources"):
         service.delete_account(account.id, delete_rgw=True)
 
-    monkeypatch.setattr(service, "_account_usage", lambda *args, **kwargs: (0, 0, 0))
+    monkeypatch.setattr(service, "get_account_usage", lambda *args, **kwargs: (0, 0, 0))
     service.delete_account(account.id, delete_rgw=True)
     assert admin.deleted_accounts == ["RGW-DEL-1"]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None

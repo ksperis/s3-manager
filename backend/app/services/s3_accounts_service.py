@@ -131,17 +131,17 @@ class S3AccountsService:
         if response.get("not_implemented"):
             raise ValueError("RGW account quota update is not supported on this cluster.")
 
-    def _account_usage(self, acc: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
-        endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
+    def get_account_usage(self, account: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
+        endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
         if not resolve_feature_flags(endpoint).metrics_enabled:
             return None, None, None
-        admin = self._admin_for_account(acc, allow_missing=True)
+        admin = self._admin_for_account(account, allow_missing=True)
         if not admin:
             return None, None, None
         try:
-            payload = admin.get_all_buckets(uid=acc.rgw_user_uid, with_stats=True)
+            payload = admin.get_all_buckets(uid=account.rgw_user_uid, with_stats=True)
         except RGWAdminError as exc:
-            logger.warning("Unable to list buckets for account %s: %s", acc.rgw_account_id, exc)
+            logger.warning("Unable to list buckets for account %s: %s", account.rgw_account_id, exc)
             return None, None, None
         buckets = extract_bucket_list(payload)
         bucket_count: int = len(buckets)
@@ -164,26 +164,20 @@ class S3AccountsService:
             bucket_count,
         )
 
-    def get_account_usage(self, account: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
-        return self._account_usage(account)
-
-    def _account_quota(
+    def get_account_quota(
         self,
-        acc: S3Account,
+        account: S3Account,
         admin: Optional[RGWAdminClient] = None,
     ) -> tuple[Optional[float], Optional[int]]:
-        rgw_admin = admin or self._admin_for_account(acc, allow_missing=True)
+        rgw_admin = admin or self._admin_for_account(account, allow_missing=True)
         if not rgw_admin:
             return None, None
         try:
-            max_size_bytes, max_objects = rgw_admin.get_account_quota(acc.rgw_account_id)
+            max_size_bytes, max_objects = rgw_admin.get_account_quota(account.rgw_account_id)
         except RGWAdminError as exc:
-            logger.warning("Unable to fetch account quota for %s: %s", acc.rgw_account_id, exc)
+            logger.warning("Unable to fetch account quota for %s: %s", account.rgw_account_id, exc)
             return None, None
         return bytes_to_gb(max_size_bytes), max_objects
-
-    def get_account_quota(self, account: S3Account) -> tuple[Optional[float], Optional[int]]:
-        return self._account_quota(account)
 
     def get_account_limits(
         self,
@@ -486,13 +480,13 @@ class S3AccountsService:
             quota_max_size_gb = None
             quota_max_objects = None
             if include_usage_stats:
-                used_bytes, used_objects, bucket_count = self._account_usage(acc)
+                used_bytes, used_objects, bucket_count = self.get_account_usage(acc)
             account_identifier = acc.rgw_account_id
             admin = None
             if include_quota or include_rgw_details:
                 admin = self._admin_for_account(acc, allow_missing=True)
             if include_quota and admin:
-                quota_max_size_gb, quota_max_objects = self._account_quota(acc, admin)
+                quota_max_size_gb, quota_max_objects = self.get_account_quota(acc, admin)
             if include_rgw_details and admin:
                 rgw_user_count, rgw_user_uids = self._account_rgw_users(
                     account_identifier,
@@ -554,11 +548,11 @@ class S3AccountsService:
         group_links = self._load_group_links([account.id]).get(account.id, [])
         used_bytes = used_objects = bucket_count = None
         if include_usage:
-            used_bytes, used_objects, bucket_count = self._account_usage(account)
+            used_bytes, used_objects, bucket_count = self.get_account_usage(account)
         account_identifier = account.rgw_account_id
         admin = self._admin_for_account(account, allow_missing=True)
         rgw_user_count = rgw_user_uids = rgw_topic_count = rgw_topics = None
-        quota_max_size_gb, quota_max_objects = self._account_quota(account, admin)
+        quota_max_size_gb, quota_max_objects = self.get_account_quota(account, admin)
         endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
         endpoint_capabilities = self._endpoint_capabilities(endpoint)
         if admin:
@@ -741,7 +735,7 @@ class S3AccountsService:
                 payload.quota_max_objects,
                 payload.quota_max_size_unit,
             )
-        quota_max_size_gb, quota_max_objects = self._account_quota(account, admin)
+        quota_max_size_gb, quota_max_objects = self.get_account_quota(account, admin)
 
         self.db.commit()
         self.db.refresh(account)
@@ -839,7 +833,7 @@ class S3AccountsService:
         user_links = self._load_non_root_user_links([account.id]).get(account.id, [])
         group_links = self._load_group_links([account.id]).get(account.id, [])
         endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
-        quota_max_size_gb, quota_max_objects = self._account_quota(account)
+        quota_max_size_gb, quota_max_objects = self.get_account_quota(account)
 
         return s3_account_from_db(
             account,
@@ -863,7 +857,7 @@ class S3AccountsService:
             endpoint_capabilities = self._endpoint_capabilities(endpoint)
 
             # Safety: only allow RGW deletion when we can prove the tenant is empty.
-            _, _, bucket_count = self._account_usage(account)
+            _, _, bucket_count = self.get_account_usage(account)
             if bucket_count is None:
                 raise ValueError("Unable to verify bucket existence; cannot delete the RGW tenant.")
             rgw_user_count, _ = self._account_rgw_users(
