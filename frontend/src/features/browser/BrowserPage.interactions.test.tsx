@@ -37,6 +37,7 @@ const fetchBrowserObjectColumnsMock = vi.fn();
 const getBucketVersioningMock = vi.fn();
 const getBucketCorsStatusMock = vi.fn();
 const ensureBucketCorsMock = vi.fn();
+const createBrowserBucketMock = vi.fn();
 const listObjectVersionsMock = vi.fn();
 const fetchObjectMetadataMock = vi.fn();
 const getObjectTagsMock = vi.fn();
@@ -151,6 +152,8 @@ vi.mock("../../api/browser", async () => {
     getBucketCorsStatus: (...args: unknown[]) =>
       getBucketCorsStatusMock(...args),
     ensureBucketCors: (...args: unknown[]) => ensureBucketCorsMock(...args),
+    createBrowserBucket: (...args: unknown[]) =>
+      createBrowserBucketMock(...args),
     listObjectVersions: (...args: unknown[]) => listObjectVersionsMock(...args),
     fetchObjectMetadata: (...args: unknown[]) =>
       fetchObjectMetadataMock(...args),
@@ -769,6 +772,7 @@ describe("BrowserPage interactions", () => {
     });
     getBucketCorsStatusMock.mockResolvedValue({ enabled: true, rules: [] });
     ensureBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
+    createBrowserBucketMock.mockResolvedValue(undefined);
     listObjectVersionsMock.mockResolvedValue({
       versions: [],
       delete_markers: [],
@@ -2206,6 +2210,44 @@ describe("BrowserPage interactions", () => {
     expect(
       within(dialog).getByRole("button", { name: "Create bucket" }),
     ).toHaveClass("ui-button-base");
+  });
+
+  it("creates a bucket and applies browser CORS from the create modal", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    await user.click(
+      within(getContextToolbar()).getByRole("button", { name: "Select bucket" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Create bucket" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "Create bucket" });
+    await user.type(within(dialog).getByLabelText("Bucket name"), "created-bucket");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create bucket" }),
+    );
+
+    await waitFor(() => {
+      expect(createBrowserBucketMock).toHaveBeenCalledWith(
+        "acc-1",
+        "created-bucket",
+        { versioning: false },
+      );
+      expect(ensureBucketCorsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "created-bucket",
+        window.location.origin,
+        undefined,
+      );
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "Create bucket" }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("renders a passive Presign badge in the More status section", async () => {

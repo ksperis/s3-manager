@@ -47,10 +47,6 @@ import {
   CLIENT_STORAGE_KEYS,
   writeClientStorage,
 } from "../../utils/clientStorage";
-import {
-  isValidS3BucketName,
-  normalizeS3BucketName,
-} from "../../utils/s3BucketName";
 import { stableSignature } from "../../utils/stableSignature";
 import { readStoredUser } from "../../utils/workspaces";
 import type { S3AccountSelector } from "../../api/accountParams";
@@ -92,7 +88,6 @@ import {
   presignObject,
   proxyUpload,
   completeMultipartUpload,
-  createBrowserBucket,
   abortMultipartUpload,
 } from "../../api/browser";
 import { useBrowserContext } from "./BrowserContext";
@@ -104,6 +99,7 @@ import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
+import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
@@ -886,18 +882,6 @@ export default function BrowserPage({
   const [objectDetailsTarget, setObjectDetailsTarget] =
     useState<ObjectDetailsTarget | null>(null);
   const [configBucketName, setConfigBucketName] = useState<string | null>(null);
-  const [showCreateBucketModal, setShowCreateBucketModal] = useState(false);
-  const [createBucketNameValue, setCreateBucketNameValue] = useState("");
-  const [createBucketVersioning, setCreateBucketVersioning] = useState(false);
-  const [createBucketInitialSignature, setCreateBucketInitialSignature] = useState(() =>
-    stableSignature({ createBucketNameValue: "", createBucketVersioning: false })
-  );
-  const [createBucketLoading, setCreateBucketLoading] = useState(false);
-  const [createBucketError, setCreateBucketError] = useState<string | null>(
-    null,
-  );
-  const invalidBucketNameMessage =
-    "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.";
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderInitialSignature, setNewFolderInitialSignature] = useState(() =>
@@ -5602,16 +5586,45 @@ export default function BrowserPage({
     }
   };
 
+  const handleBrowserBucketCreated = useCallback(
+    async (createdBucketName: string) => {
+      await refreshBucketList({ preferredBucket: createdBucketName });
+      void loadBucketInspectorData(true);
+    },
+    [loadBucketInspectorData, refreshBucketList],
+  );
+  const {
+    showModal: showCreateBucketModal,
+    name: createBucketNameValue,
+    versioning: createBucketVersioning,
+    loading: createBucketLoading,
+    error: createBucketError,
+    isNameValid: isCreateBucketNameValid,
+    invalidNameMessage: invalidBucketNameMessage,
+    open: openCreateBucketForm,
+    updateName: updateCreateBucketName,
+    setVersioning: setCreateBucketVersioning,
+    submit: submitCreateBucket,
+    requestClose: requestCreateBucketClose,
+    confirmationDialog: createBucketConfirmationDialog,
+  } = useBrowserCreateBucket({
+    accountIdForApi,
+    currentBucketName: bucketName,
+    enabled: bucketManagementEnabled,
+    hasContext: hasS3AccountContext,
+    requestOptions: browserRequestOptions,
+    uiOrigin,
+    onCreated: handleBrowserBucketCreated,
+    setCorsError: setCorsFixError,
+    setCorsStatus,
+    setStatusMessage,
+  });
   const openCreateBucketDialog = useCallback(() => {
     if (!bucketManagementEnabled) return;
     setShowBucketMenu(false);
     setBucketFilter("");
-    setCreateBucketNameValue("");
-    setCreateBucketVersioning(false);
-    setCreateBucketInitialSignature(stableSignature({ createBucketNameValue: "", createBucketVersioning: false }));
-    setCreateBucketError(null);
-    setShowCreateBucketModal(true);
-  }, [bucketManagementEnabled]);
+    openCreateBucketForm();
+  }, [bucketManagementEnabled, openCreateBucketForm]);
 
   const renderWorkspaceSidebarBody = useCallback<BrowserSidebarBodyRenderer>(
     ({ compact, variant, closeMobile }) => (
@@ -5682,76 +5695,6 @@ export default function BrowserPage({
       setSidebarBody(null);
     };
   }, [renderWorkspaceSidebarBody, setSidebarBody, showWorkspaceSidebar]);
-
-  const closeCreateBucketDialog = () => {
-    if (createBucketLoading) return;
-    setShowCreateBucketModal(false);
-    setCreateBucketNameValue("");
-    setCreateBucketVersioning(false);
-    setCreateBucketInitialSignature(stableSignature({ createBucketNameValue: "", createBucketVersioning: false }));
-    setCreateBucketError(null);
-  };
-
-  const handleCreateBucketSubmit = async () => {
-    if (!hasS3AccountContext || !bucketManagementEnabled || createBucketLoading)
-      return;
-    const bucketNameInput = normalizeS3BucketName(createBucketNameValue);
-    if (!bucketNameInput) {
-      setCreateBucketError("Bucket name is required.");
-      return;
-    }
-    if (!isValidS3BucketName(bucketNameInput)) {
-      setCreateBucketError(invalidBucketNameMessage);
-      return;
-    }
-    setCreateBucketLoading(true);
-    setCreateBucketError(null);
-    setCorsFixError(null);
-    try {
-      await createBrowserBucket(accountIdForApi, bucketNameInput, {
-        versioning: createBucketVersioning,
-        ...browserRequestOptions,
-      });
-      let corsApplied = false;
-      if (uiOrigin) {
-        try {
-          const status = await ensureBucketCors(
-            accountIdForApi,
-            bucketNameInput,
-            uiOrigin,
-            browserRequestOptions,
-          );
-          corsApplied = status.enabled;
-          if (bucketName === bucketNameInput) {
-            setCorsStatus(status);
-          }
-          if (!status.enabled && status.error) {
-            setCorsFixError(status.error);
-          }
-        } catch {
-          setCorsFixError("Bucket created, but unable to auto-apply CORS.");
-        }
-      }
-      setShowCreateBucketModal(false);
-      setCreateBucketNameValue("");
-      setCreateBucketVersioning(false);
-      setCreateBucketInitialSignature(stableSignature({ createBucketNameValue: "", createBucketVersioning: false }));
-      setStatusMessage(
-        uiOrigin
-          ? corsApplied
-            ? `Bucket ${bucketNameInput} created with CORS enabled.`
-            : `Bucket ${bucketNameInput} created. CORS could not be auto-enabled.`
-          : `Bucket ${bucketNameInput} created.`,
-      );
-      await refreshBucketList({ preferredBucket: bucketNameInput });
-      void loadBucketInspectorData(true);
-    } catch (err) {
-      const message = extractApiError(err, "Unable to create bucket.");
-      setCreateBucketError(message);
-    } finally {
-      setCreateBucketLoading(false);
-    }
-  };
 
   const resetAllColumnWidths = useCallback(() => {
     setColumnWidths({});
@@ -9701,12 +9644,6 @@ export default function BrowserPage({
   const chromeToolbarIconButtonClasses = toolbarIconButtonClasses;
   const chromeBulkActionClasses = bulkActionClasses;
   const chromeDangerActionClasses = bulkDangerClasses;
-  const isCreateBucketNameValid =
-    !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
-  const createBucketCurrentSignature = useMemo(
-    () => stableSignature({ createBucketNameValue, createBucketVersioning }),
-    [createBucketNameValue, createBucketVersioning],
-  );
   const newFolderCurrentSignature = useMemo(
     () => stableSignature({ newFolderName }),
     [newFolderName],
@@ -9724,11 +9661,6 @@ export default function BrowserPage({
     setSseCustomerKeyNotice(null);
     setSseCustomerKeyVisible(false);
   };
-  const createBucketCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: showCreateBucketModal && createBucketCurrentSignature !== createBucketInitialSignature,
-    onClose: closeCreateBucketDialog,
-    disabled: createBucketLoading,
-  });
   const newFolderCloseGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: showNewFolderModal && newFolderCurrentSignature !== newFolderInitialSignature,
     onClose: closeNewFolderDialog,
@@ -12633,16 +12565,11 @@ export default function BrowserPage({
           isNameValid={isCreateBucketNameValid}
           invalidNameMessage={invalidBucketNameMessage}
           hasS3AccountContext={hasS3AccountContext}
-          confirmationDialog={createBucketCloseGuard.confirmationDialog}
-          onNameChange={(value) => {
-            setCreateBucketNameValue(value);
-            if (createBucketError) {
-              setCreateBucketError(null);
-            }
-          }}
+          confirmationDialog={createBucketConfirmationDialog}
+          onNameChange={updateCreateBucketName}
           onVersioningChange={setCreateBucketVersioning}
-          onSubmit={() => void handleCreateBucketSubmit()}
-          onClose={createBucketCloseGuard.requestClose}
+          onSubmit={() => void submitCreateBucket()}
+          onClose={requestCreateBucketClose}
         />
       )}
       {showSseCustomerModal && (
