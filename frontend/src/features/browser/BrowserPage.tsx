@@ -54,7 +54,6 @@ import {
 import { stableSignature } from "../../utils/stableSignature";
 import { readStoredUser } from "../../utils/workspaces";
 import type { S3AccountSelector } from "../../api/accountParams";
-import type { ExecutionContextKind } from "../../api/executionContexts";
 import {
   BrowserBucket,
   type BrowserUsageSummary,
@@ -62,7 +61,6 @@ import {
   BrowserObject,
   BrowserObjectVersion,
   BrowserSettings,
-  type BrowserWorkspaceSurface,
   BucketCorsStatus,
   MultipartUploadItem,
   PresignPartRequest,
@@ -107,6 +105,7 @@ import {
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
+import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
@@ -261,6 +260,7 @@ import {
   toolbarIconButtonClasses,
   toolbarPrimaryClasses,
 } from "./browserConstants";
+import type { BrowserPageProps } from "./browserPageContract";
 import {
   buildTreeNodes,
   buildUploadCandidates,
@@ -396,118 +396,10 @@ import type {
 
 const MOBILE_OBJECT_LIST_MEDIA_QUERY = "(max-width: 767px)";
 
-type BrowserPageProps = {
-  accountIdForApi?: S3AccountSelector;
-  executionContextKind?: BrowserExecutionContextKind | null;
-  hasContext?: boolean;
-  workspaceSurface?: BrowserWorkspaceSurface;
-  functionalProfile?: BrowserFunctionalProfile;
-  layoutMode?: BrowserLayoutMode;
-  density?: BrowserDensity;
-  capabilityFacts?: BrowserCapabilityFacts;
-  lockedBucketName?: string;
-  lockedBucketLabel?: string;
-  storageEndpointCapabilities?: Record<string, boolean> | null;
-  contextEndpointProvider?: "ceph" | "aws" | "other" | null;
-  contextQuotaMaxSizeGb?: number | null;
-  contextQuotaMaxObjects?: number | null;
-  allowFoldersPanel?: boolean;
-  allowInspectorPanel?: boolean;
-  showPanelToggles?: boolean;
-  defaultShowFolders?: boolean;
-  defaultShowInspector?: boolean;
-  onSelectedBucketNameChange?: (bucketName: string) => void;
-  onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
-  onCreatePublicLinkForObject?: (target: BrowserObjectDetailsRouteTarget) => void;
-  deletedObjectsOptions?: BrowserDeletedObjectsOptions;
-  refreshToken?: number;
-  transferReporter?: BrowserTransferReporter;
-};
-
-export type BrowserExecutionContextKind = ExecutionContextKind | "ceph_admin";
-
-export type BrowserObjectDetailsRouteTarget = {
-  bucketName: string;
-  key: string;
-  name: string;
-  initialTab?: "preview" | "properties" | "versions";
-  isDeleted?: boolean;
-};
-
-export type BrowserDeletedObjectTarget = BrowserObjectDetailsRouteTarget & {
-  deletedAt?: string | null;
-  deleteMarkerVersionId?: string | null;
-};
-
-export type BrowserDeletedObjectsOptions = {
-  visible?: boolean;
-  showToggle?: boolean;
-  canRestore?: boolean;
-  onVisibilityChange?: (visible: boolean) => void;
-  onRestoreObject?: (target: BrowserDeletedObjectTarget) => void;
-  onRestorePrefix?: (target: BrowserObjectDetailsRouteTarget) => void;
-};
-
-export type BrowserTransferReporter = {
-  start: (transfer: {
-    direction: "Upload" | "Download";
-    bucketName: string;
-    key: string;
-    name: string;
-    sizeBytes?: number | null;
-  }) => string | null | undefined;
-  complete: (id: string, name?: string) => void;
-  fail: (id: string, message: string) => void;
-};
-
 type ObjectDetailsTarget = {
   item: BrowserItem;
   initialTab: ObjectDetailsTabId;
 };
-
-type ToolbarToggleMenuItemProps = {
-  label: string;
-  icon: ReactNode;
-  checked: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-};
-
-function ToolbarToggleMenuItem({
-  label,
-  icon,
-  checked,
-  onToggle,
-  disabled = false,
-}: ToolbarToggleMenuItemProps) {
-  return (
-    <button
-      type="button"
-      role="menuitemcheckbox"
-      aria-checked={checked}
-      className={`${contextMenuItemClasses} ${disabled ? contextMenuItemDisabledClasses : ""}`}
-      onClick={onToggle}
-      disabled={disabled}
-    >
-      <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">{label}</span>
-      <span
-        aria-hidden="true"
-        className={`relative ml-auto inline-flex h-5 w-9 shrink-0 rounded-full transition ${
-          checked ? "bg-emerald-500" : "bg-slate-200 dark:bg-slate-700"
-        }`}
-      >
-        <span
-          className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition ${
-            checked ? "translate-x-4" : ""
-          }`}
-        />
-      </span>
-    </button>
-  );
-}
 
 type SearchScope = "prefix" | "bucket";
 type BrowserConfirmDialogState = {
@@ -11236,7 +11128,7 @@ export default function BrowserPage({
                         Layout
                       </p>
                       {showFolderToggle && (
-                        <ToolbarToggleMenuItem
+                        <BrowserToolbarToggleMenuItem
                           label="Folders panel"
                           icon={<FolderIcon className="h-3.5 w-3.5" />}
                           checked={showFolders}
@@ -11244,7 +11136,7 @@ export default function BrowserPage({
                         />
                       )}
                       {showInspectorToggle && (
-                        <ToolbarToggleMenuItem
+                        <BrowserToolbarToggleMenuItem
                           label="Inspector panel"
                           icon={<InfoIcon className="h-3.5 w-3.5" />}
                           checked={showInspector}
@@ -11252,7 +11144,7 @@ export default function BrowserPage({
                         />
                       )}
                       {showLayoutModeToggle && (
-                        <ToolbarToggleMenuItem
+                        <BrowserToolbarToggleMenuItem
                           label="Workbench layout"
                           icon={<SlidersIcon className="h-3.5 w-3.5" />}
                           checked={activeLayoutMode === "workbench"}

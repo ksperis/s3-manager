@@ -10,12 +10,13 @@ import type {
   BrowserFunctionalProfile,
   BrowserLayoutMode,
 } from "./browserActions";
-import BrowserPage, {
-  type BrowserExecutionContextKind,
-  type BrowserDeletedObjectsOptions,
-  type BrowserObjectDetailsRouteTarget,
-  type BrowserTransferReporter,
-} from "./BrowserPage";
+import BrowserPage from "./BrowserPage";
+import type {
+  BrowserExecutionContextKind,
+  BrowserDeletedObjectsOptions,
+  BrowserObjectDetailsRouteTarget,
+  BrowserTransferReporter,
+} from "./browserPageContract";
 
 type BrowserEmbedProps = {
   accountIdForApi: S3AccountSelector;

@@ -64,7 +64,7 @@ import BrowserEmbed from "../browser/BrowserEmbed";
 import type {
   BrowserDeletedObjectTarget,
   BrowserObjectDetailsRouteTarget,
-} from "../browser/BrowserPage";
+} from "../browser/browserPageContract";
 import {
   PortalAccessModeFields,
   PortalRoleBadge,
