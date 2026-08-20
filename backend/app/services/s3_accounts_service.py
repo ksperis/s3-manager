@@ -46,7 +46,7 @@ from app.utils.storage_endpoint_features import (
 )
 from app.utils.rgw_identifiers import normalize_rgw_identifier
 from app.utils.rgw_payloads import extract_bucket_list
-from app.utils.usage_stats import extract_usage_stats
+from app.utils.usage_stats import aggregate_bucket_usage
 from app.utils.quota_stats import bytes_to_gb, extract_positive_limit, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.name_ordering import name_order_by
@@ -143,26 +143,7 @@ class S3AccountsService:
         except RGWAdminError as exc:
             logger.warning("Unable to list buckets for account %s: %s", account.rgw_account_id, exc)
             return None, None, None
-        buckets = extract_bucket_list(payload)
-        bucket_count: int = len(buckets)
-        total_bytes: int = 0
-        total_objects: int = 0
-        has_any = False
-        has_objects = False
-        for b in buckets:
-            usage = b.get("usage") if isinstance(b, dict) else None
-            usage_bytes, usage_objects = extract_usage_stats(usage)
-            if usage_bytes is not None:
-                total_bytes += usage_bytes
-                has_any = True
-            if usage_objects is not None:
-                total_objects += usage_objects
-                has_objects = True
-        return (
-            total_bytes if has_any else None,
-            total_objects if has_objects else None,
-            bucket_count,
-        )
+        return aggregate_bucket_usage(extract_bucket_list(payload))
 
     def get_account_quota(
         self,

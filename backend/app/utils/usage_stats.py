@@ -86,6 +86,31 @@ def compute_usage_ratio_percent(used: object, quota: object) -> float | None:
     return max(0.0, percent)
 
 
+def aggregate_bucket_usage(entries: Iterable[Any]) -> tuple[Optional[int], Optional[int], int]:
+    total_bytes = 0
+    total_objects = 0
+    has_bytes = False
+    has_objects = False
+    bucket_count = 0
+
+    for entry in entries:
+        bucket_count += 1
+        usage = entry.get("usage") if isinstance(entry, dict) else None
+        used_bytes, object_count = extract_usage_stats(usage)
+        if used_bytes is not None:
+            total_bytes += used_bytes
+            has_bytes = True
+        if object_count is not None:
+            total_objects += object_count
+            has_objects = True
+
+    return (
+        total_bytes if has_bytes else None,
+        total_objects if has_objects else None,
+        bucket_count,
+    )
+
+
 def summarize_bucket_usage(
     entries: Iterable[Any],
 ) -> tuple[list[dict[str, Any]], Optional[int], Optional[int], int]:

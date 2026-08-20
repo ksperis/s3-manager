@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.utils.usage_stats import build_bucket_overview, extract_usage_stats, summarize_bucket_usage
+from app.utils.usage_stats import aggregate_bucket_usage, build_bucket_overview, extract_usage_stats, summarize_bucket_usage
 
 
 def test_extract_usage_stats_keeps_zero_total_objects() -> None:
@@ -72,6 +72,17 @@ def test_extract_usage_stats_ignores_invalid_categorized_values() -> None:
 
     assert used_bytes == 2048
     assert object_count == 3
+
+
+def test_aggregate_bucket_usage_preserves_partial_totals_and_entry_count() -> None:
+    assert aggregate_bucket_usage(
+        [
+            {"usage": {"total_bytes": 100}},
+            {"usage": {"total_objects": 3}},
+            {"name": "unmeasured"},
+        ]
+    ) == (100, 3, 3)
+    assert aggregate_bucket_usage([{"name": "unmeasured"}]) == (None, None, 1)
 
 
 def test_summarize_bucket_usage_and_overview_share_canonical_calculations() -> None:

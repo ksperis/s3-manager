@@ -17,11 +17,9 @@ from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import PortalAccessKey
 from app.services import s3_client
 from app.services.mappers.portal import portal_access_key_from_active_link, portal_access_key_from_iam_metadata
-from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_feature_flags
-from app.utils.usage_stats import extract_usage_stats
 
 if TYPE_CHECKING:
     from app.models.access_context import AccountAccess
@@ -249,30 +247,6 @@ class PortalIamMixin:
         )
         self._sync_user_storage_space_projection(user, account, account_role, iam_service, link.iam_username)
         return self._active_credentials(link, iam_service)
-
-    def _account_usage(
-        self,
-        account: S3Account,
-        usage_map: Optional[dict[str, tuple[Optional[int], Optional[int]]]] = None,
-    ) -> tuple[Optional[int], Optional[int], Optional[int]]:
-        try:
-            rgw_admin = self._supervision_admin_for_account(account)
-            buckets = self._admin_bucket_list(account, admin=rgw_admin)
-        except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
-            logger.warning("Unable to list buckets for portal usage %s: %s", account.rgw_account_id, exc)
-            return None, None, None
-        used_bytes, used_objects, bucket_count = self._bucket_usage_from_list(buckets)
-        if usage_map is not None:
-            for bucket in buckets:
-                if not isinstance(bucket, dict):
-                    continue
-                name = bucket.get("bucket") or bucket.get("name")
-                if not name:
-                    continue
-                usage = bucket.get("usage")
-                usage_bytes, usage_objects = extract_usage_stats(usage)
-                usage_map[name] = (usage_bytes, usage_objects)
-        return used_bytes, used_objects, bucket_count
 
     def _ensure_active_key(self, link: AccountIAMUser, iam_service: RGWIAMService) -> PortalAccessKey:
         if not link.iam_username:

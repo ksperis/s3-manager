@@ -12,7 +12,6 @@ from app.utils.quota_stats import extract_positive_limit, extract_quota_limits
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.s3_endpoint import resolve_s3_client_kwargs
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
-from app.utils.usage_stats import extract_usage_stats
 
 
 logger = logging.getLogger(__name__)
@@ -136,23 +135,3 @@ class PortalAccountRuntimeMixin:
         if bucket_info is None:
             bucket_info = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True)
         return bucket_info
-
-    def _bucket_usage_from_list(self, buckets: list[dict]) -> tuple[Optional[int], Optional[int], int]:
-        total_bytes = 0
-        total_objects = 0
-        has_bytes = False
-        has_objects = False
-        for bucket in buckets:
-            usage = bucket.get("usage") if isinstance(bucket, dict) else None
-            usage_bytes, usage_objects = extract_usage_stats(usage)
-            if usage_bytes is not None:
-                total_bytes += usage_bytes
-                has_bytes = True
-            if usage_objects is not None:
-                total_objects += usage_objects
-                has_objects = True
-        return (
-            total_bytes if has_bytes else None,
-            total_objects if has_objects else None,
-            len(buckets),
-        )

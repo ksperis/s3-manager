@@ -30,7 +30,7 @@ from app.services.traffic_service import (
 )
 from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.rgw_payloads import extract_bucket_list
-from app.utils.usage_stats import extract_usage_stats
+from app.utils.usage_stats import aggregate_bucket_usage, extract_usage_stats
 
 logger = logging.getLogger(__name__)
 
@@ -487,28 +487,7 @@ class AdminMetricsService:
         except RGWAdminError as exc:
             logger.warning("%s unable to list buckets for admin overview: %s", context, exc)
             return None, None, None
-        buckets = extract_bucket_list(payload)
-
-        total_bytes = 0
-        total_objects = 0
-        has_bytes = False
-        has_objects = False
-
-        for bucket in buckets:
-            usage_payload = bucket.get("usage") if isinstance(bucket, dict) else None
-            used_bytes, used_objects = extract_usage_stats(usage_payload)
-            if used_bytes is not None:
-                total_bytes += used_bytes
-                has_bytes = True
-            if used_objects is not None:
-                total_objects += used_objects
-                has_objects = True
-
-        return (
-            total_bytes if has_bytes else None,
-            total_objects if has_objects else None,
-            len(buckets),
-        )
+        return aggregate_bucket_usage(extract_bucket_list(payload))
 
     def _fetch_all_buckets(self) -> list[dict]:
         payload = self.rgw_admin.get_all_buckets(with_stats=True)
