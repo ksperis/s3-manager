@@ -62,7 +62,6 @@ import {
   BrowserObjectVersion,
   BrowserSettings,
   BucketCorsStatus,
-  MultipartUploadItem,
   PresignPartRequest,
   PresignRequest,
   StsCredentials,
@@ -80,7 +79,6 @@ import {
   getStsStatus,
   initiateMultipartUpload,
   listBrowserObjects,
-  listMultipartUploads,
   listObjectVersions,
   searchBrowserBuckets,
   fetchBrowserUsageSummary,
@@ -106,6 +104,7 @@ import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
+import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
@@ -235,8 +234,6 @@ import {
   DELETED_VERSIONS_SCAN_LIMIT,
   DEFAULT_QUEUED_VISIBLE_COUNT,
   MULTIPART_CONCURRENCY,
-  MULTIPART_UPLOADS_HARD_LIMIT,
-  MULTIPART_UPLOADS_PAGE_SIZE,
   MULTIPART_THRESHOLD,
   OBJECTS_LIST_HARD_LIMIT,
   OBJECTS_PAGE_SIZE,
@@ -357,7 +354,6 @@ import {
   type BucketAccessEntry,
 } from "./browserBucketsPanelHelpers";
 import {
-  getMultipartUploadEntryId,
   mergeDeletedObjectsWithLimit,
   mergeUniqueStringsWithLimit,
 } from "./browserListingState";
@@ -752,27 +748,6 @@ export default function BrowserPage({
   >(null);
   const [bucketVersioningAvailable, setBucketVersioningAvailable] =
     useState(false);
-  const [showMultipartUploadsModal, setShowMultipartUploadsModal] =
-    useState(false);
-  const [multipartUploads, setMultipartUploads] = useState<
-    MultipartUploadItem[]
-  >([]);
-  const [multipartUploadsLoading, setMultipartUploadsLoading] = useState(false);
-  const [multipartUploadsLoadingMore, setMultipartUploadsLoadingMore] =
-    useState(false);
-  const [multipartUploadsError, setMultipartUploadsError] = useState<
-    string | null
-  >(null);
-  const [multipartUploadsNextKey, setMultipartUploadsNextKey] = useState<
-    string | null
-  >(null);
-  const [multipartUploadsNextUploadId, setMultipartUploadsNextUploadId] =
-    useState<string | null>(null);
-  const [multipartUploadsIsTruncated, setMultipartUploadsIsTruncated] =
-    useState(false);
-  const [abortingMultipartUploadIds, setAbortingMultipartUploadIds] = useState<
-    Set<string>
-  >(new Set());
   const [loadingBuckets, setLoadingBuckets] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
@@ -5627,169 +5602,6 @@ export default function BrowserPage({
     }
   };
 
-  const resetMultipartUploadsState = () => {
-    setMultipartUploads([]);
-    setMultipartUploadsLoading(false);
-    setMultipartUploadsLoadingMore(false);
-    setMultipartUploadsError(null);
-    setMultipartUploadsNextKey(null);
-    setMultipartUploadsNextUploadId(null);
-    setMultipartUploadsIsTruncated(false);
-    setAbortingMultipartUploadIds(new Set());
-  };
-
-  const loadMultipartUploadsPage = async (options?: {
-    append?: boolean;
-    keyMarker?: string | null;
-    uploadIdMarker?: string | null;
-  }) => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const append = Boolean(options?.append);
-    if (append) {
-      if (!multipartUploadsIsTruncated || multipartUploadsLoadingMore) return;
-      setMultipartUploadsLoadingMore(true);
-    } else {
-      setMultipartUploadsLoading(true);
-      setMultipartUploadsError(null);
-    }
-    try {
-      const data = await listMultipartUploads(accountIdForApi, bucketName, {
-        keyMarker: append ? (options?.keyMarker ?? undefined) : undefined,
-        uploadIdMarker: append
-          ? (options?.uploadIdMarker ?? undefined)
-          : undefined,
-        maxUploads: MULTIPART_UPLOADS_PAGE_SIZE,
-        ...browserRequestOptions,
-      });
-      const baseUploads = append ? multipartUploads : [];
-      const knownIds = new Set(
-        baseUploads.map((upload) => getMultipartUploadEntryId(upload)),
-      );
-      const incomingUploads = append
-        ? data.uploads.filter(
-            (upload) => !knownIds.has(getMultipartUploadEntryId(upload)),
-          )
-        : data.uploads;
-      const mergedUploads = append
-        ? [...baseUploads, ...incomingUploads]
-        : incomingUploads;
-      const limitReached = mergedUploads.length > MULTIPART_UPLOADS_HARD_LIMIT;
-      setMultipartUploads(mergedUploads.slice(0, MULTIPART_UPLOADS_HARD_LIMIT));
-      setMultipartUploadsError(null);
-      if (limitReached) {
-        setMultipartUploadsNextKey(null);
-        setMultipartUploadsNextUploadId(null);
-        setMultipartUploadsIsTruncated(false);
-        setWarningMessage(
-          `Multipart uploads listing is limited to ${MULTIPART_UPLOADS_HARD_LIMIT.toLocaleString()} entries. Narrow your scope to continue.`,
-        );
-      } else {
-        setMultipartUploadsNextKey(data.next_key ?? null);
-        setMultipartUploadsNextUploadId(data.next_upload_id ?? null);
-        setMultipartUploadsIsTruncated(Boolean(data.is_truncated));
-      }
-    } catch (err) {
-      setMultipartUploadsError(
-        extractApiError(err, "Unable to list multipart uploads."),
-      );
-      if (!append) {
-        setMultipartUploads([]);
-        setMultipartUploadsNextKey(null);
-        setMultipartUploadsNextUploadId(null);
-        setMultipartUploadsIsTruncated(false);
-      }
-    } finally {
-      if (append) {
-        setMultipartUploadsLoadingMore(false);
-      } else {
-        setMultipartUploadsLoading(false);
-      }
-    }
-  };
-
-  const openMultipartUploadsModal = () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    setShowMultipartUploadsModal(true);
-    resetMultipartUploadsState();
-    void loadMultipartUploadsPage();
-  };
-
-  const refreshMultipartUploads = () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    void loadMultipartUploadsPage();
-  };
-
-  const loadMoreMultipartUploads = () => {
-    if (!bucketName || !hasS3AccountContext || !multipartUploadsIsTruncated)
-      return;
-    void loadMultipartUploadsPage({
-      append: true,
-      keyMarker: multipartUploadsNextKey,
-      uploadIdMarker: multipartUploadsNextUploadId,
-    });
-  };
-
-  const closeMultipartUploadsModal = () => {
-    setShowMultipartUploadsModal(false);
-  };
-
-  const confirmAbortMultipartUpload = async (upload: MultipartUploadItem) => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const uploadRowId = getMultipartUploadEntryId(upload);
-    setAbortingMultipartUploadIds((prev) => {
-      const next = new Set(prev);
-      next.add(uploadRowId);
-      return next;
-    });
-    try {
-      await abortMultipartUpload(
-        accountIdForApi,
-        bucketName,
-        upload.upload_id,
-        upload.key,
-        browserRequestOptions,
-      );
-      setMultipartUploads((prev) =>
-        prev.filter(
-          (entry) => getMultipartUploadEntryId(entry) !== uploadRowId,
-        ),
-      );
-      setStatusMessage(`Multipart upload aborted for ${upload.key}.`);
-    } catch (err) {
-      const message = extractApiError(err, "Unable to abort multipart upload.");
-      setMultipartUploadsError(message);
-      setStatusMessage(message);
-    } finally {
-      setAbortingMultipartUploadIds((prev) => {
-        const next = new Set(prev);
-        next.delete(uploadRowId);
-        return next;
-      });
-    }
-  };
-
-  const requestAbortMultipartUpload = (upload: MultipartUploadItem) => {
-    openConfirmDialog({
-      title: "Abort multipart upload",
-      message: `Abort multipart upload for ${upload.key}?`,
-      confirmLabel: "Abort",
-      tone: "danger",
-      onConfirm: () => confirmAbortMultipartUpload(upload),
-    });
-  };
-
-  useEffect(() => {
-    setShowMultipartUploadsModal(false);
-    setMultipartUploads([]);
-    setMultipartUploadsLoading(false);
-    setMultipartUploadsLoadingMore(false);
-    setMultipartUploadsError(null);
-    setMultipartUploadsNextKey(null);
-    setMultipartUploadsNextUploadId(null);
-    setMultipartUploadsIsTruncated(false);
-    setAbortingMultipartUploadIds(new Set());
-  }, [bucketName, hasS3AccountContext]);
-
   const openCreateBucketDialog = useCallback(() => {
     if (!bucketManagementEnabled) return;
     setShowBucketMenu(false);
@@ -6753,6 +6565,29 @@ export default function BrowserPage({
     setConfirmDialog(dialog);
     setConfirmDialogLoading(false);
   };
+
+  const {
+    showModal: showMultipartUploadsModal,
+    uploads: multipartUploads,
+    loading: multipartUploadsLoading,
+    loadingMore: multipartUploadsLoadingMore,
+    error: multipartUploadsError,
+    canLoadMore: canLoadMoreMultipartUploads,
+    abortingUploadIds: abortingMultipartUploadIds,
+    open: openMultipartUploadsModal,
+    refresh: refreshMultipartUploads,
+    loadMore: loadMoreMultipartUploads,
+    close: closeMultipartUploadsModal,
+    requestAbort: requestAbortMultipartUpload,
+  } = useBrowserMultipartUploads({
+    accountIdForApi,
+    bucketName,
+    hasContext: hasS3AccountContext,
+    requestOptions: browserRequestOptions,
+    requestConfirmation: openConfirmDialog,
+    setStatusMessage,
+    setWarningMessage,
+  });
 
   const closeConfirmDialog = () => {
     if (confirmDialogLoading) return;
@@ -12842,10 +12677,7 @@ export default function BrowserPage({
           loading={multipartUploadsLoading}
           loadingMore={multipartUploadsLoadingMore}
           error={multipartUploadsError}
-          canLoadMore={
-            multipartUploadsIsTruncated &&
-            Boolean(multipartUploadsNextKey || multipartUploadsNextUploadId)
-          }
+          canLoadMore={canLoadMoreMultipartUploads}
           abortingUploadIds={abortingMultipartUploadIds}
           onRefresh={refreshMultipartUploads}
           onLoadMore={loadMoreMultipartUploads}
