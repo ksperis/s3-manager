@@ -70,40 +70,6 @@ class SessionService:
         self.db.commit()
         return self._to_principal(session)
 
-    def get_principal(self, session_id: str) -> Optional[ManagerSessionPrincipal]:
-        session = self.db.query(S3Session).filter(S3Session.id == session_id).first()
-        now = utcnow()
-        if (
-            not session
-            or session.revoked_at is not None
-            or not session.access_key_enc
-            or not session.secret_key_enc
-            or session.idle_expires_at <= now
-            or session.absolute_expires_at <= now
-        ):
-            if session and session.revoked_at is None:
-                self.revoke(session.id, "expired")
-            return None
-        session.last_used_at = now
-        session.idle_expires_at = min(
-            now + timedelta(minutes=get_settings().s3_session_idle_minutes),
-            session.absolute_expires_at,
-        )
-        self.db.add(session)
-        self.db.commit()
-        return self._to_principal(session)
-
-    def revoke(self, session_id: str, reason: str = "revoked") -> None:
-        session = self.db.query(S3Session).filter(S3Session.id == session_id).first()
-        if not session:
-            return
-        session.access_key_enc = None
-        session.secret_key_enc = None
-        session.revoked_at = session.revoked_at or utcnow()
-        session.revoke_reason = session.revoke_reason or reason
-        self.db.add(session)
-        self.db.commit()
-
     def introspect_credentials(
         self,
         access_key: str,
