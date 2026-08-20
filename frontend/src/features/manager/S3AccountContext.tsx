@@ -2,17 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { S3AccountSelector } from "../../api/accountParams";
-import { ExecutionContext, listExecutionContexts } from "../../api/executionContexts";
+import { ExecutionContext } from "../../api/executionContexts";
 import { fetchManagerContext, type ManagerAccessMode } from "../../api/managerContext";
-import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
-import { readStoredUser } from "../../utils/workspaces";
-import { EXECUTION_CONTEXTS_REFRESH_EVENT } from "../../utils/executionContextRefresh";
-import { resolveUrlScopedSelection } from "../../utils/urlScopedSelection";
-
-const EXECUTION_CONTEXT_URL_PARAM = "ctx";
+import { useExecutionContextCatalog } from "../../hooks/useExecutionContextCatalog";
+import { CLIENT_STORAGE_KEYS } from "../../utils/clientStorage";
 
 type S3AccountContextType = {
   accounts: ExecutionContext[];
@@ -58,11 +53,6 @@ const S3AccountContext = createContext<S3AccountContextType>({
   managerPrivateAccessEnabled: null,
 });
 
-type SessionInfo = {
-  isSession: boolean;
-  accountName: string | null;
-};
-
 type S3AccountProviderScope = "manager" | "browser";
 
 type S3AccountProviderProps = {
@@ -81,29 +71,28 @@ function deriveS3AccountType(context: ExecutionContext | null | undefined): stri
   return "tenant";
 }
 
-function readSessionInfo(): SessionInfo {
-  if (typeof window === "undefined") {
-    return { isSession: false, accountName: null };
-  }
-  const parsed = readStoredUser();
-  if (!parsed) {
-    return { isSession: false, accountName: null };
-  }
-  const isSession = parsed.authType === "s3_session";
-  const accountName = parsed.accountName ?? parsed.accountId ?? null;
-  return { isSession, accountName };
-}
-
 export function S3AccountProvider({ children, scope = "manager" }: S3AccountProviderProps) {
   const executionContextStorageKey = scope === "browser"
     ? CLIENT_STORAGE_KEYS.selectedBrowserExecutionContext
     : CLIENT_STORAGE_KEYS.selectedManagerExecutionContext;
-  const sessionInfo = useMemo(() => readSessionInfo(), []);
-  const requiresS3AccountSelection = !sessionInfo.isSession;
-  const [accounts, setS3Accounts] = useState<ExecutionContext[]>([]);
-  const [contextsRefreshToken, setContextsRefreshToken] = useState(0);
-  const [selectedS3AccountId, setSelectedS3AccountId] = useState<string | null>(null);
-  const [accessError, setAccessError] = useState<string | null>(null);
+  const {
+    contexts: accounts,
+    selectedContextId: selectedS3AccountId,
+    selectedContext: selectedS3Account,
+    setSelectedContextId: updateSelected,
+    requiresSelection: requiresS3AccountSelection,
+    accessError,
+    sessionAccountName,
+  } = useExecutionContextCatalog({
+    scope,
+    storageKey: executionContextStorageKey,
+    selectionPolicy: "first-available",
+    accessDeniedMessage:
+      scope === "browser"
+        ? "Access to browser contexts is denied for this user."
+        : "Access to manager is denied for this user.",
+    revokedSelectionMessage: "The previously selected Manager context is no longer authorized.",
+  });
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [accessMode, setAccessModeState] = useState<ManagerAccessMode | null>(null);
   const [managerStatsEnabled, setManagerStatsEnabled] = useState<boolean | null>(null);
@@ -113,96 +102,9 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   const [managerBucketQuotaEnabled, setManagerBucketQuotaEnabled] = useState<boolean | null>(null);
   const [managerCephKeysEnabled, setManagerCephKeysEnabled] = useState<boolean | null>(null);
   const [managerPrivateAccessEnabled, setManagerPrivateAccessEnabled] = useState<boolean | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleRefresh = () => setContextsRefreshToken((value) => value + 1);
-    window.addEventListener(EXECUTION_CONTEXTS_REFRESH_EVENT, handleRefresh);
-    return () => window.removeEventListener(EXECUTION_CONTEXTS_REFRESH_EVENT, handleRefresh);
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const load = async () => {
-      setAccessError(null);
-      if (!requiresS3AccountSelection) {
-        setS3Accounts([]);
-        return;
-      }
-      try {
-        const data = await listExecutionContexts(scope, { signal: controller.signal });
-        if (controller.signal.aborted) return;
-        setS3Accounts(Array.isArray(data) ? data : []);
-      } catch {
-        if (controller.signal.aborted) return;
-        setS3Accounts([]);
-        setAccessError(
-          scope === "browser"
-            ? "Access to browser contexts is denied for this user."
-            : "Access to manager is denied for this user."
-        );
-      }
-    };
-    void load();
-    return () => controller.abort();
-  }, [contextsRefreshToken, requiresS3AccountSelection, scope]);
-
-  useEffect(() => {
-    if (!requiresS3AccountSelection) {
-      setSelectedS3AccountId(null);
-      removeClientStorage(executionContextStorageKey);
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete(EXECUTION_CONTEXT_URL_PARAM);
-      setSearchParams(nextParams, { replace: true });
-      return;
-    }
-    if (accounts.length === 0) return;
-    const urlContext = searchParams.get(EXECUTION_CONTEXT_URL_PARAM);
-    const nextId = resolveUrlScopedSelection({
-      availableIds: accounts.map((context) => context.id),
-      urlValue: urlContext,
-      currentValue: selectedS3AccountId,
-      fallbackValues: [readClientStorage(executionContextStorageKey)],
-    });
-    if (!nextId) return;
-    if (nextId !== selectedS3AccountId) {
-      setSelectedS3AccountId(nextId);
-    }
-    writeClientStorage(executionContextStorageKey, nextId);
-    if (urlContext !== nextId) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set(EXECUTION_CONTEXT_URL_PARAM, nextId);
-      setSearchParams(nextParams, { replace: true });
-    }
-  }, [accounts, executionContextStorageKey, requiresS3AccountSelection, searchParams, selectedS3AccountId, setSearchParams]);
-
-  const updateSelected = (id: string | null) => {
-    setSelectedS3AccountId(id);
-    if (!requiresS3AccountSelection) {
-      return;
-    }
-    if (id === null) {
-      removeClientStorage(executionContextStorageKey);
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete(EXECUTION_CONTEXT_URL_PARAM);
-      setSearchParams(nextParams, { replace: true });
-    } else {
-      writeClientStorage(executionContextStorageKey, id);
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set(EXECUTION_CONTEXT_URL_PARAM, id);
-      setSearchParams(nextParams, { replace: true });
-    }
-  };
-
-  const selectedS3Account = useMemo(
-    () => accounts.find((account) => account.id === selectedS3AccountId),
-    [accounts, selectedS3AccountId]
-  );
-
-  const hasS3AccountContext = requiresS3AccountSelection ? selectedS3AccountId !== null && selectedS3Account !== undefined : true;
+  const hasS3AccountContext = requiresS3AccountSelection ? selectedS3Account !== null : true;
   const accountIdForApi: S3AccountSelector = requiresS3AccountSelection ? selectedS3AccountId : null;
-  const selectedS3AccountName = selectedS3Account?.display_name ?? sessionInfo.accountName;
+  const selectedS3AccountName = selectedS3Account?.display_name ?? sessionAccountName;
   const selectedS3AccountType = deriveS3AccountType(selectedS3Account);
 
   useEffect(() => {
@@ -265,7 +167,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         requiresS3AccountSelection,
         hasS3AccountContext,
         accountIdForApi,
-        sessionS3AccountName: sessionInfo.accountName,
+        sessionS3AccountName: sessionAccountName,
         selectedS3AccountName,
         selectedS3AccountType,
         accessError,

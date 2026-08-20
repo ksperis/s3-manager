@@ -190,4 +190,21 @@ describe("S3AccountProvider", () => {
     expect(screen.getByTestId("selected")).toHaveTextContent("conn-1");
     expect(screen.getByTestId("location")).toHaveTextContent("/manager?ctx=conn-1");
   });
+
+  it("clears a selected context when a refresh removes every authorized context", async () => {
+    listExecutionContextsMock
+      .mockResolvedValueOnce(CONTEXTS)
+      .mockResolvedValueOnce([]);
+
+    renderProvider("/manager?ctx=s3u-2");
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("s3u-2"));
+
+    act(() => {
+      window.dispatchEvent(new Event(EXECUTION_CONTEXTS_REFRESH_EVENT));
+    });
+
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("null"));
+    expect(localStorage.getItem("selectedManagerExecutionContextId")).toBeNull();
+    expect(screen.getByTestId("location")).toHaveTextContent("/manager");
+  });
 });
