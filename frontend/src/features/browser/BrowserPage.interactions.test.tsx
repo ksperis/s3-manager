@@ -2191,6 +2191,34 @@ describe("BrowserPage interactions", () => {
     ).toHaveClass("ui-button-base");
   });
 
+  it("creates a folder from the create folder modal", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    await user.click(
+      within(getContextToolbar()).getByRole("button", { name: "New folder" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "Create folder" });
+    await user.type(within(dialog).getByLabelText("Folder name"), "reports");
+    await user.click(within(dialog).getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createFolderMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        "reports/",
+        undefined,
+      );
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "Create folder" }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("uses shared controls in the create bucket modal", async () => {
     const user = userEvent.setup();
     renderPage();

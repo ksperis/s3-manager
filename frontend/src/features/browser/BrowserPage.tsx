@@ -100,6 +100,7 @@ import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
+import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
@@ -882,13 +883,6 @@ export default function BrowserPage({
   const [objectDetailsTarget, setObjectDetailsTarget] =
     useState<ObjectDetailsTarget | null>(null);
   const [configBucketName, setConfigBucketName] = useState<string | null>(null);
-  const [showNewFolderModal, setShowNewFolderModal] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
-  const [newFolderInitialSignature, setNewFolderInitialSignature] = useState(() =>
-    stableSignature({ newFolderName: "" })
-  );
-  const [newFolderError, setNewFolderError] = useState<string | null>(null);
-  const [newFolderLoading, setNewFolderLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] =
     useState<BrowserConfirmDialogState | null>(null);
   const [confirmDialogLoading, setConfirmDialogLoading] = useState(false);
@@ -1007,7 +1001,6 @@ export default function BrowserPage({
   const layoutContainerRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
-  const newFolderInputRef = useRef<HTMLInputElement>(null);
   const columnWidthsRef = useRef(columnWidths);
   const pathSuggestionsDebounceRef = useRef<number | null>(null);
   const bucketSearchDebounceRef = useRef<number | null>(null);
@@ -6235,6 +6228,38 @@ export default function BrowserPage({
     );
   };
 
+  const handleBrowserFolderCreated = async ({
+    name,
+    prefix: createdFolderPrefix,
+  }: {
+    name: string;
+    prefix: string;
+  }) => {
+    addActivity("Created", `${bucketName}/${createdFolderPrefix}`);
+    setStatusMessage(`Folder ${name} created`);
+    await loadObjects({ prefixOverride: prefix });
+    loadTreeChildren(prefix);
+  };
+  const {
+    showModal: showNewFolderModal,
+    inputRef: newFolderInputRef,
+    name: newFolderName,
+    loading: newFolderLoading,
+    error: newFolderError,
+    open: handleNewFolder,
+    setName: setNewFolderName,
+    submit: submitNewFolder,
+    requestClose: requestNewFolderClose,
+    confirmationDialog: newFolderConfirmationDialog,
+  } = useBrowserCreateFolder({
+    accountIdForApi,
+    bucketName,
+    hasContext: hasS3AccountContext,
+    parentPrefix: normalizedPrefix,
+    requestOptions: browserRequestOptions,
+    onCreated: handleBrowserFolderCreated,
+  });
+
   const resetBulkAttributesDraft = () => {
     setBulkApplyMetadata(false);
     setBulkApplyTags(false);
@@ -6545,49 +6570,6 @@ export default function BrowserPage({
       setConfirmDialog(null);
     } finally {
       setConfirmDialogLoading(false);
-    }
-  };
-
-  const closeNewFolderDialog = () => {
-    if (newFolderLoading) return;
-    setShowNewFolderModal(false);
-    setNewFolderName("");
-    setNewFolderInitialSignature(stableSignature({ newFolderName: "" }));
-    setNewFolderError(null);
-  };
-
-  const handleNewFolder = () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    setNewFolderName("");
-    setNewFolderInitialSignature(stableSignature({ newFolderName: "" }));
-    setNewFolderError(null);
-    setNewFolderLoading(false);
-    setShowNewFolderModal(true);
-  };
-
-  const handleCreateFolderFromModal = async () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const clean = newFolderName.replace(/^\/+|\/+$/g, "");
-    if (!clean) {
-      setNewFolderError("Folder name is required.");
-      return;
-    }
-    const folderPrefix = `${normalizedPrefix}${clean}/`;
-    setNewFolderLoading(true);
-    setNewFolderError(null);
-    try {
-      await createFolder(accountIdForApi, bucketName, folderPrefix, browserRequestOptions);
-      addActivity("Created", `${bucketName}/${folderPrefix}`);
-      setStatusMessage(`Folder ${clean} created`);
-      setShowNewFolderModal(false);
-      setNewFolderName("");
-      setNewFolderInitialSignature(stableSignature({ newFolderName: "" }));
-      await loadObjects({ prefixOverride: prefix });
-      loadTreeChildren(prefix);
-    } catch {
-      setNewFolderError("Unable to create folder.");
-    } finally {
-      setNewFolderLoading(false);
     }
   };
 
@@ -9644,10 +9626,6 @@ export default function BrowserPage({
   const chromeToolbarIconButtonClasses = toolbarIconButtonClasses;
   const chromeBulkActionClasses = bulkActionClasses;
   const chromeDangerActionClasses = bulkDangerClasses;
-  const newFolderCurrentSignature = useMemo(
-    () => stableSignature({ newFolderName }),
-    [newFolderName],
-  );
   const sseCustomerCurrentSignature = useMemo(
     () => stableSignature({ sseCustomerKeyInput }),
     [sseCustomerKeyInput],
@@ -9661,11 +9639,6 @@ export default function BrowserPage({
     setSseCustomerKeyNotice(null);
     setSseCustomerKeyVisible(false);
   };
-  const newFolderCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: showNewFolderModal && newFolderCurrentSignature !== newFolderInitialSignature,
-    onClose: closeNewFolderDialog,
-    disabled: newFolderLoading,
-  });
   const sseCustomerCloseGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: showSseCustomerModal && sseCustomerCurrentSignature !== sseCustomerInitialSignature,
     onClose: closeSseCustomerModal,
@@ -12721,10 +12694,10 @@ export default function BrowserPage({
           currentPath={currentPath}
           bucketName={bucketName}
           hasS3AccountContext={hasS3AccountContext}
-          confirmationDialog={newFolderCloseGuard.confirmationDialog}
+          confirmationDialog={newFolderConfirmationDialog}
           onNameChange={setNewFolderName}
-          onSubmit={() => void handleCreateFolderFromModal()}
-          onClose={newFolderCloseGuard.requestClose}
+          onSubmit={() => void submitNewFolder()}
+          onClose={requestNewFolderClose}
         />
       )}
       {confirmDialog && (
