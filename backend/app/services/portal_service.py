@@ -11,6 +11,7 @@ from .portal.buckets_users import PortalBucketsUsersMixin
 from .portal.iam import PortalIamMixin
 from .portal.iam_policy_documents import PortalIamPolicyDocumentsMixin
 from .portal.objects import PortalObjectsMixin
+from .portal.public_links import PortalPublicLinksMixin
 from .portal.server_access_logging import PortalServerAccessLoggingMixin
 from .portal.settings import PortalSettingsMixin
 from .portal.sharing import PortalSharingMixin
@@ -33,6 +34,7 @@ class PortalService(
     PortalStorageSpacesMixin,
     PortalObjectsMixin,
     PortalSharingMixin,
+    PortalPublicLinksMixin,
     PortalActivityMixin,
     PortalStateUsageMixin,
     PortalAccessKeysMixin,
