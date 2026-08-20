@@ -603,7 +603,6 @@ class PortalStorageSpacesMixin:
             iam_service,
             link.iam_username,
             access.role,
-            portal_settings=portal_settings,
             account=access.account,
         )
         self._ensure_policy_and_key(link, iam_service)

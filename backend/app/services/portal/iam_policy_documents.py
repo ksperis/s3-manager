@@ -6,14 +6,12 @@ import copy
 from typing import Any, Optional
 
 from app.db import PortalStorageSpaceMetadata, S3Account
-from app.models.app_settings import PortalSettings
 from app.models.portal import PortalStorageSpaceRole
 
 
 class PortalIamPolicyDocumentsMixin:
     def _resolve_group_policy(
         self,
-        portal_settings: PortalSettings,
         group_key: str,
     ) -> Optional[dict]:
         if group_key == "manager":

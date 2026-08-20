@@ -38,7 +38,6 @@ class PortalBucketsUsersMixin:
             iam_service,
             link.iam_username,
             access.role,
-            portal_settings=portal_defaults,
             account=account,
         )
         # Keep the Portal identity ready for subsequent object access; bucket
@@ -100,14 +99,12 @@ class PortalBucketsUsersMixin:
         if use_root:
             access_key, secret_key = self._account_credentials(account)
         else:
-            portal_settings = self._effective_portal_settings(account)
             iam_service = self._get_iam_service(account)
             link, _, _ = self._ensure_portal_user(user, account, iam_service)
             self._sync_user_group_membership(
                 iam_service,
                 link.iam_username,
                 access.role,
-                portal_settings=portal_settings,
                 account=account,
             )
             access_key, secret_key = self._active_credentials(link, iam_service)
@@ -124,12 +121,10 @@ class PortalBucketsUsersMixin:
         if account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
             iam_service = self._get_iam_service(account)
             link, _, _ = self._ensure_portal_user(target, account, iam_service)
-            portal_settings = self._effective_portal_settings(account)
             self._sync_user_group_membership(
                 iam_service,
                 link.iam_username,
                 account_role,
-                portal_settings=portal_settings,
                 account=account,
             )
             self._sync_user_storage_space_projection(target, account, account_role, iam_service, link.iam_username)
@@ -180,12 +175,10 @@ class PortalBucketsUsersMixin:
 
         iam_service = self._get_iam_service(account)
         if account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
-            portal_settings = self._effective_portal_settings(account)
             self._sync_user_group_membership(
                 iam_service,
                 link.iam_username,
                 account_role,
-                portal_settings=portal_settings,
                 account=account,
             )
             self._sync_user_storage_space_projection(

@@ -467,10 +467,7 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
 
 def test_portal_user_group_policy_is_fixed_and_does_not_grant_direct_bucket_creation(db_session):
     service = PortalService(db_session)
-    portal_settings = PortalSettings()
-    portal_settings.allow_private_storage_space_create = True
-
-    policy = service._resolve_group_policy(portal_settings, "user")
+    policy = service._resolve_group_policy("user")
 
     assert isinstance(policy, dict)
     statements = policy.get("Statement") or []
@@ -483,7 +480,7 @@ def test_portal_user_group_policy_is_fixed_and_does_not_grant_direct_bucket_crea
 
 def test_portal_manager_group_policy_defaults_to_minimal_global_actions(db_session):
     service = PortalService(db_session)
-    policy = service._resolve_group_policy(PortalSettings(), "manager")
+    policy = service._resolve_group_policy("manager")
 
     assert isinstance(policy, dict)
     statements = policy.get("Statement") or []
@@ -500,7 +497,7 @@ def test_portal_manager_group_policy_defaults_to_minimal_global_actions(db_sessi
 
 def test_portal_manager_group_policy_uses_fixed_account_access(db_session):
     service = PortalService(db_session)
-    policy = service._resolve_group_policy(PortalSettings(), "manager")
+    policy = service._resolve_group_policy("manager")
 
     assert isinstance(policy, dict)
     statements = policy.get("Statement") or []

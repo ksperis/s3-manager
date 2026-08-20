@@ -180,7 +180,6 @@ class PortalAccessKeysMixin:
             iam_service,
             link.iam_username,
             access.role,
-            portal_settings=portal_settings,
             account=access.account,
         )
         if not link.iam_username:
@@ -330,7 +329,6 @@ class PortalAccessKeysMixin:
             iam_service,
             link.iam_username,
             access.role,
-            portal_settings=portal_settings,
             account=access.account,
         )
         if not link.iam_username:
@@ -381,7 +379,6 @@ class PortalAccessKeysMixin:
             iam_service,
             link.iam_username,
             access.role,
-            portal_settings=portal_settings,
             account=access.account,
         )
         if access_key_id == link.active_access_key:

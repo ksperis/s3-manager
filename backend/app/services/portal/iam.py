@@ -20,7 +20,6 @@ from app.db import (
     UserS3Account,
     UserUiGroup,
 )
-from app.models.app_settings import PortalSettings
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
@@ -590,7 +589,6 @@ class PortalIamMixin:
                 iam_service,
                 iam_username,
                 account_role,
-                portal_settings=self._effective_portal_settings(account),
                 account=account,
             )
             self._sync_user_storage_space_projection(target, account, account_role, iam_service, iam_username)
@@ -739,10 +737,8 @@ class PortalIamMixin:
     def _ensure_portal_groups(
         self,
         iam_service: RGWIAMService,
-        portal_settings: Optional[PortalSettings] = None,
     ) -> None:
         """Ensure portal groups exist and carry the expected policies."""
-        settings = portal_settings or self._portal_settings()
         groups = {g.name for g in iam_service.list_groups()}
         if self._manager_group_name not in groups:
             iam_service.create_group(self._manager_group_name)
@@ -755,13 +751,13 @@ class PortalIamMixin:
                 if policy.arn:
                     iam_service.detach_group_policy(group_name, policy.arn)
 
-        manager_policy = self._resolve_group_policy(settings, "manager")
+        manager_policy = self._resolve_group_policy("manager")
         if manager_policy:
             iam_service.put_group_inline_policy(self._manager_group_name, self._manager_group_policy_name, manager_policy)
         else:
             iam_service.delete_group_inline_policy(self._manager_group_name, self._manager_group_policy_name)
 
-        user_policy = self._resolve_group_policy(settings, "user")
+        user_policy = self._resolve_group_policy("user")
         if user_policy:
             iam_service.put_group_inline_policy(self._user_group_name, self._inline_policy_name, user_policy)
         else:
@@ -772,7 +768,6 @@ class PortalIamMixin:
         iam_service: RGWIAMService,
         iam_username: Optional[str],
         account_role: Optional[str],
-        portal_settings: Optional[PortalSettings] = None,
         *,
         account: Optional[S3Account] = None,
     ) -> None:
@@ -792,8 +787,7 @@ class PortalIamMixin:
         if account is not None and account_role == AccountRole.PORTAL_MANAGER.value:
             self._sync_portal_server_access_log_bucket_policy_if_present(account)
 
-        settings = portal_settings or self._portal_settings()
-        self._ensure_portal_groups(iam_service, settings)
+        self._ensure_portal_groups(iam_service)
         target_group = self._manager_group_name if account_role == AccountRole.PORTAL_MANAGER.value else self._user_group_name
         other_group = self._user_group_name if target_group == self._manager_group_name else self._manager_group_name
 
@@ -834,12 +828,10 @@ class PortalIamMixin:
         """Expose portal IAM credentials for manager access."""
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(user, account, iam_service)
-        portal_settings = self._effective_portal_settings(account)
         self._sync_user_group_membership(
             iam_service,
             link.iam_username,
             account_role,
-            portal_settings=portal_settings,
             account=account,
         )
         self._sync_user_storage_space_projection(user, account, account_role, iam_service, link.iam_username)
