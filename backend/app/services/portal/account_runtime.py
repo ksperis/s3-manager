@@ -98,11 +98,6 @@ class PortalAccountRuntimeMixin:
             logger.warning("Unable to fetch portal account limits for %s: %s", account.rgw_account_id, exc)
             return None, None, None
         max_size_bytes, max_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
-        if max_size_bytes is None and max_objects is None:
-            try:
-                max_size_bytes, max_objects = admin.get_account_quota(account.rgw_account_id)
-            except RGWAdminError as exc:
-                logger.warning("Unable to fetch portal quota fallback for %s: %s", account.rgw_account_id, exc)
         return max_size_bytes, max_objects, extract_positive_limit(payload, "max_buckets")
 
     def _admin_bucket_list(self, account: S3Account, admin: Optional[RGWAdminClient] = None) -> list[dict]:

@@ -187,26 +187,26 @@ def test_get_account_limits_returns_quota_and_entity_limits(db_session, monkeypa
     assert svc.get_account_limits(account) == (10, 2_000, 8, 20, 12, 6)
 
 
-def test_get_account_limits_falls_back_to_quota_endpoint(db_session, monkeypatch):
+def test_get_account_limits_does_not_repeat_lookup_without_embedded_quota(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
     account = S3Account(
-        name="FallbackAccount",
-        rgw_account_id="RGW-FALLBACK",
-        rgw_user_uid="rgw-fallback-admin",
+        name="LimitsWithoutQuota",
+        rgw_account_id="RGW-LIMITS-NO-QUOTA",
+        rgw_user_uid="rgw-limits-no-quota-admin",
         storage_endpoint_id=endpoint.id,
     )
     db_session.add(account)
     db_session.commit()
     fake_admin = FakeRGWAdmin(
         {
-            "id": "RGW-FALLBACK",
+            "id": "RGW-LIMITS-NO-QUOTA",
             "limits": {"max_buckets": 5},
         }
     )
-    fake_admin.get_account_quota = lambda _account_id: (3 * 1024 ** 3, 750)
+    fake_admin.get_account_quota = lambda _account_id: pytest.fail("account payload must not be loaded twice")
     svc = _build_service(db_session, monkeypatch, fake_admin)
 
-    assert svc.get_account_limits(account) == (3, 750, 5, None, None, None)
+    assert svc.get_account_limits(account) == (None, None, 5, None, None, None)
 
 
 class FakeRGWAdminImport:

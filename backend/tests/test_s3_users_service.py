@@ -73,6 +73,9 @@ class FakeRGWAdmin:
         caps = payload.get("caps")
         if caps:
             result["caps"] = [dict(entry) for entry in caps]
+        quota = payload.get("user_quota")
+        if quota:
+            result["user_quota"] = dict(quota)
         return result
 
     def create_access_key(self, uid: str, tenant: Optional[str] = None):
@@ -281,21 +284,26 @@ def test_get_user_usage_hides_when_endpoint_metrics_are_disabled(db_session, mon
     assert fake.bucket_list_calls == []
 
 
-def test_get_user_limits_falls_back_to_quota_endpoint(db_session, monkeypatch):
+def test_get_user_limits_reads_embedded_quota_without_repeating_lookup(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session)
     s3_user = _seed_local_user(
         db_session,
-        name="Quota Fallback User",
-        uid="quota-fallback-user",
+        name="Embedded Quota User",
+        uid="embedded-quota-user",
         endpoint_id=endpoint.id,
     )
     fake = FakeRGWAdmin()
-    fake.remote_users["quota-fallback-user"] = {
-        "display_name": "Quota Fallback User",
-        "email": "quota-fallback-user@example.com",
+    fake.remote_users["embedded-quota-user"] = {
+        "display_name": "Embedded Quota User",
+        "email": "embedded-quota-user@example.com",
         "keys": [],
+        "user_quota": {
+            "enabled": True,
+            "max_size": 2 * 1024 ** 3,
+            "max_objects": 500,
+        },
     }
-    fake.quota_by_uid["quota-fallback-user"] = (2 * 1024 ** 3, 500)
+    fake.get_user_quota = lambda *_args, **_kwargs: pytest.fail("user payload must not be loaded twice")
     service = _build_service(db_session, monkeypatch, fake)
 
     assert service.get_user_limits(s3_user) == (2, 500, None)

@@ -156,11 +156,6 @@ class S3UsersService:
             logger.warning("Unable to fetch S3 user limits for %s: %s", s3_user.rgw_user_uid, exc)
             return None, None, None
         max_size_bytes, max_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
-        if max_size_bytes is None and max_objects is None:
-            try:
-                max_size_bytes, max_objects = rgw_admin.get_user_quota(s3_user.rgw_user_uid)
-            except RGWAdminError as exc:
-                logger.warning("Unable to fetch S3 user quota fallback for %s: %s", s3_user.rgw_user_uid, exc)
         return bytes_to_gb(max_size_bytes), max_objects, _extract_max_buckets(payload)
 
     def _apply_user_quota(
