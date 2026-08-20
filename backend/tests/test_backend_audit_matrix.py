@@ -93,7 +93,7 @@ def test_backend_audit_matrix_tracks_portal_stream_delegation():
     ]
 
 
-def test_backend_audit_matrix_tracks_browser_bucket_config_mutation_delegation():
+def test_backend_audit_matrix_tracks_shared_bucket_config_mutation_delegation():
     backend_root = Path(__file__).resolve().parents[1]
     rows_by_function = {row.function: row for row in collect_rows(backend_root)}
 
@@ -101,22 +101,16 @@ def test_backend_audit_matrix_tracks_browser_bucket_config_mutation_delegation()
         "app/routers/browser_bucket_config.py"
     )
     assert rows_by_function["update_bucket_versioning_config"].signals[
-        "delegated_browser_bucket_config_mutation_audit"
+        "delegated_bucket_config_mutation_audit"
     ]
     assert rows_by_function["delete_bucket_encryption_config"].signals[
-        "delegated_browser_bucket_config_mutation_audit"
+        "delegated_bucket_config_mutation_audit"
     ]
-
-
-def test_backend_audit_matrix_tracks_manager_bucket_config_mutation_delegation():
-    backend_root = Path(__file__).resolve().parents[1]
-    rows_by_function = {row.function: row for row in collect_rows(backend_root)}
-
     assert rows_by_function["put_bucket_encryption"].file.relative_to(backend_root) == Path(
         "app/routers/manager/bucket_config.py"
     )
-    assert rows_by_function["put_bucket_encryption"].signals["delegated_manager_bucket_config_audit"]
-    assert rows_by_function["delete_bucket_encryption"].signals["delegated_manager_bucket_config_audit"]
+    assert rows_by_function["put_bucket_encryption"].signals["delegated_bucket_config_mutation_audit"]
+    assert rows_by_function["delete_bucket_encryption"].signals["delegated_bucket_config_mutation_audit"]
 
 
 def test_backend_audit_matrix_classifies_every_mutating_route():

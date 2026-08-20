@@ -2,29 +2,32 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Literal, TypeVar
 
 from app.models.access_context import ManagerActor
 from app.services import bucket_config_actions
 from app.services.audit_service import AuditService
-from app.services.browser_service import BrowserService
 from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.s3_execution_context import S3ExecutionContext
 
 _T = TypeVar("_T")
+BucketConfigAuditScope = Literal["browser", "manager"]
+BucketConfigCacheInvalidator = Callable[[S3ExecutionContext, str], None]
 
 
-class BrowserBucketConfigMutationService:
+class BucketConfigMutationService:
     def __init__(
         self,
         *,
         configuration_service: BucketConfigurationService,
-        browser_service: BrowserService,
         audit_service: AuditService,
+        audit_scope: BucketConfigAuditScope,
+        cache_invalidator: BucketConfigCacheInvalidator,
     ) -> None:
         self.configuration_service = configuration_service
-        self.browser_service = browser_service
         self.audit_service = audit_service
+        self.audit_scope = audit_scope
+        self.cache_invalidator = cache_invalidator
 
     def _record(
         self,
@@ -35,11 +38,10 @@ class BrowserBucketConfigMutationService:
         audit_action: str,
         metadata: dict[str, Any] | None,
     ) -> None:
-        self.browser_service.invalidate_bucket_list_cache_for_account(account)
-        self.browser_service.invalidate_object_list_cache_for_account(account, bucket_name)
+        self.cache_invalidator(account, bucket_name)
         self.audit_service.record_action(
             user=actor,
-            scope="browser",
+            scope=self.audit_scope,
             action=audit_action,
             entity_type="bucket",
             entity_id=bucket_name,

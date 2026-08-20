@@ -38,9 +38,7 @@ from app.routers.dependencies import (
 )
 from app.services import bucket_config_actions
 from app.services.audit_service import AuditService
-from app.services.browser_bucket_config_mutation_service import (
-    BrowserBucketConfigMutationService,
-)
+from app.services.bucket_config_mutation_service import BucketConfigMutationService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.bucket_configuration_service import (
     BucketConfigurationService,
@@ -67,11 +65,16 @@ def get_browser_bucket_config_mutation_service(
     configuration_service: BucketConfigurationService = Depends(get_bucket_configuration_service),
     browser_service: BrowserService = Depends(get_browser_service),
     audit_service: AuditService = Depends(get_audit_service),
-) -> BrowserBucketConfigMutationService:
-    return BrowserBucketConfigMutationService(
+) -> BucketConfigMutationService:
+    return BucketConfigMutationService(
         configuration_service=configuration_service,
-        browser_service=browser_service,
         audit_service=audit_service,
+        audit_scope="browser",
+        cache_invalidator=lambda account, bucket_name: _invalidate_browser_listing_cache(
+            browser_service,
+            account,
+            bucket_name=bucket_name,
+        ),
     )
 
 
@@ -191,7 +194,7 @@ def update_bucket_versioning_config(
     payload: BucketVersioningUpdate,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> dict[str, Any]:
     return mutation.update(
         actor=actor,
@@ -223,7 +226,7 @@ def put_bucket_object_lock_config(
     payload: BucketObjectLockUpdate,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketObjectLock:
     return mutation.update(
         actor=actor,
@@ -256,7 +259,7 @@ def put_bucket_encryption_config(
     payload: BucketEncryptionConfiguration,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketEncryptionConfiguration:
     require_sse_feature(account)
     return mutation.update(
@@ -274,7 +277,7 @@ def delete_bucket_encryption_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> None:
     require_sse_feature(account)
     mutation.delete(
@@ -306,7 +309,7 @@ def put_bucket_policy_config(
     payload: BucketPolicyIn,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketPolicyOut:
     return mutation.update(
         actor=actor,
@@ -323,7 +326,7 @@ def delete_bucket_policy_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> None:
     mutation.delete(
         actor=actor,
@@ -354,7 +357,7 @@ def put_bucket_acl_config(
     payload: BucketAclUpdate,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketAcl:
     return mutation.update(
         actor=actor,
@@ -386,7 +389,7 @@ def put_bucket_public_access_block_config(
     payload: BucketPublicAccessBlock,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketPublicAccessBlock:
     return mutation.update(
         actor=actor,
@@ -418,7 +421,7 @@ def put_bucket_lifecycle_config(
     payload: BucketLifecycleConfig,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketLifecycleConfig:
     return mutation.update(
         actor=actor,
@@ -435,7 +438,7 @@ def delete_bucket_lifecycle_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> None:
     mutation.delete(
         actor=actor,
@@ -466,7 +469,7 @@ def put_bucket_cors_config(
     payload: BucketCorsUpdate,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> dict[str, Any]:
     return mutation.update(
         actor=actor,
@@ -483,7 +486,7 @@ def delete_bucket_cors_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> None:
     mutation.delete(
         actor=actor,
@@ -514,7 +517,7 @@ def put_bucket_notifications_config(
     payload: BucketNotificationConfiguration,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketNotificationConfiguration:
     return mutation.update(
         actor=actor,
@@ -531,7 +534,7 @@ def delete_bucket_notifications_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> None:
     mutation.delete(
         actor=actor,
@@ -563,7 +566,7 @@ def put_bucket_replication_config(
     payload: BucketReplicationConfiguration,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketReplicationConfiguration:
     require_replication_feature(account)
     return mutation.update(
@@ -581,7 +584,7 @@ def delete_bucket_replication_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> None:
     require_replication_feature(account)
     mutation.delete(
@@ -613,7 +616,7 @@ def put_bucket_logging_config(
     payload: BucketLoggingConfiguration,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketLoggingConfiguration:
     return mutation.update(
         actor=actor,
@@ -630,7 +633,7 @@ def delete_bucket_logging_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> None:
     mutation.delete(
         actor=actor,
@@ -661,7 +664,7 @@ def put_bucket_website_config(
     payload: BucketWebsiteConfiguration,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> BucketWebsiteConfiguration:
     return mutation.update(
         actor=actor,
@@ -678,7 +681,7 @@ def delete_bucket_website_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> None:
     mutation.delete(
         actor=actor,
@@ -709,7 +712,7 @@ def put_bucket_tags_config(
     payload: BucketTagsUpdate,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> dict[str, Any]:
     return mutation.update(
         actor=actor,
@@ -726,7 +729,7 @@ def delete_bucket_tags_config(
     bucket_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_account_admin),
-    mutation: BrowserBucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
+    mutation: BucketConfigMutationService = Depends(get_browser_bucket_config_mutation_service),
 ) -> None:
     mutation.delete(
         actor=actor,
