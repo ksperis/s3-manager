@@ -50,6 +50,32 @@ STORAGE_SPACE_ICON_PRESETS = {"bucket", "folder", "archive", "database", "media"
 
 
 class PortalStorageSpacesMixin:
+    def _normalize_storage_space_sharing(
+        self,
+        visibility: PortalStorageSpaceVisibility,
+        share_scope: Optional[PortalStorageSpaceShareScope],
+        account_member_role: Optional[PortalStorageSpaceRole],
+    ) -> tuple[PortalStorageSpaceShareScope, Optional[PortalStorageSpaceRole]]:
+        if visibility != "shared":
+            return "restricted", None
+        scope = "account" if share_scope == "account" else "restricted"
+        if scope != "account":
+            return scope, None
+        if account_member_role in {"Viewer", "Editor"}:
+            return scope, account_member_role
+        return scope, "Editor"
+
+    def _storage_space_owner_label(
+        self,
+        account: S3Account,
+        metadata: PortalStorageSpaceMetadata | None,
+    ) -> str:
+        if metadata and metadata.owner_user_id:
+            owner = self.db.query(User).filter(User.id == metadata.owner_user_id).first()
+            if owner and owner.email:
+                return owner.email
+        return account.name if self._metadata_visibility(metadata) == "private" else ""
+
     def _storage_space_label(self, bucket_name: str) -> str:
         cleaned = " ".join(bucket_name.replace("_", " ").replace("-", " ").split())
         if not cleaned:

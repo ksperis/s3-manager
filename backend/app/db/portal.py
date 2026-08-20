@@ -14,12 +14,13 @@ class PortalStorageSpaceMetadata(Base):
     __table_args__ = (
         UniqueConstraint("account_id", "bucket_name", name="uq_portal_storage_space_metadata_account_bucket"),
         CheckConstraint(
-            "share_scope IN ('restricted', 'account')",
-            name="ck_portal_storage_space_metadata_share_scope",
-        ),
-        CheckConstraint(
-            "account_member_role IS NULL OR account_member_role IN ('Viewer', 'Editor')",
-            name="ck_portal_storage_space_metadata_account_member_role",
+            "(visibility = 'private' AND share_scope = 'restricted' AND account_member_role IS NULL) OR "
+            "(visibility = 'shared' AND ("
+            "(share_scope = 'restricted' AND account_member_role IS NULL) OR "
+            "(share_scope = 'account' AND account_member_role IS NOT NULL "
+            "AND account_member_role IN ('Viewer', 'Editor'))"
+            "))",
+            name="ck_portal_storage_space_metadata_canonical_sharing",
         ),
         CheckConstraint(
             "icon_source IN ('preset', 'uploaded')",

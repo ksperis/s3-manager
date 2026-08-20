@@ -3,32 +3,22 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional, Tuple, TypeGuard
+from typing import TYPE_CHECKING, Optional, Tuple
 
 from sqlalchemy.exc import IntegrityError
 
 from app.db import (
     AccountIAMUser,
     AccountRole,
-    PortalStorageSpaceMetadata,
     S3Account,
-    UiGroupS3Account,
     User,
-    UserS3Account,
-    UserUiGroup,
 )
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
-from app.models.portal import (
-    PortalAccessKey,
-    PortalStorageSpaceRole,
-    PortalStorageSpaceShareScope,
-    PortalStorageSpaceVisibility,
-)
+from app.models.portal import PortalAccessKey
 from app.services import s3_client
 from app.services.mappers.portal import portal_access_key_from_active_link, portal_access_key_from_iam_metadata
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import RGWIAMService, get_iam_service
-from app.utils.account_roles import portal_role_for
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
@@ -41,142 +31,6 @@ logger = logging.getLogger(__name__)
 
 
 class PortalIamMixin:
-    def _metadata_visibility(
-        self,
-        metadata: PortalStorageSpaceMetadata | None,
-    ) -> PortalStorageSpaceVisibility:
-        if metadata and metadata.visibility == "shared":
-            return "shared"
-        return "private"
-
-    def _metadata_share_scope(
-        self,
-        metadata: PortalStorageSpaceMetadata | None,
-    ) -> PortalStorageSpaceShareScope:
-        if self._metadata_visibility(metadata) != "shared":
-            return "restricted"
-        if metadata and metadata.share_scope == "account":
-            return "account"
-        return "restricted"
-
-    def _metadata_account_member_role(
-        self,
-        metadata: PortalStorageSpaceMetadata | None,
-    ) -> Optional[PortalStorageSpaceRole]:
-        if self._metadata_share_scope(metadata) != "account":
-            return None
-        if metadata and metadata.account_member_role == "Viewer":
-            return "Viewer"
-        return "Editor"
-
-    def _storage_space_role_is_valid(
-        self,
-        role: Optional[str],
-    ) -> TypeGuard[PortalStorageSpaceRole]:
-        return role in {"Viewer", "Editor", "Owner", "Manager"}
-
-    def _best_storage_space_role(self, *roles: Optional[str]) -> Optional[PortalStorageSpaceRole]:
-        best: Optional[PortalStorageSpaceRole] = None
-        for role in roles:
-            if not self._storage_space_role_is_valid(role):
-                continue
-            if best is None or self._role_precedence(role) > self._role_precedence(best):
-                best = role
-        return best
-
-    def _normalize_storage_space_sharing(
-        self,
-        visibility: PortalStorageSpaceVisibility,
-        share_scope: Optional[PortalStorageSpaceShareScope],
-        account_member_role: Optional[PortalStorageSpaceRole],
-    ) -> tuple[PortalStorageSpaceShareScope, Optional[PortalStorageSpaceRole]]:
-        if visibility != "shared":
-            return "restricted", None
-        scope = "account" if share_scope == "account" else "restricted"
-        if scope != "account":
-            return scope, None
-        if account_member_role in {"Viewer", "Editor"}:
-            return scope, account_member_role
-        return scope, "Editor"
-
-    def _portal_account_member_map(self, account: S3Account) -> dict[int, tuple[User, str, set[str]]]:
-        role_rank = {
-            AccountRole.PORTAL_USER.value: 1,
-            AccountRole.PORTAL_MANAGER.value: 2,
-        }
-        rank_role = {
-            1: AccountRole.PORTAL_USER.value,
-            2: AccountRole.PORTAL_MANAGER.value,
-        }
-        rows_by_user: dict[int, tuple[User, str, set[str]]] = {}
-
-        def merge(user: User, role: Optional[str], source: str) -> None:
-            if role not in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
-                return
-            if not bool(user.is_active):
-                return
-            current = rows_by_user.get(user.id)
-            current_rank = role_rank.get(current[1], 0) if current else 0
-            next_rank = max(current_rank, role_rank.get(role or "", 0))
-            sources = set(current[2]) if current else set()
-            sources.add(source)
-            rows_by_user[user.id] = (user, rank_role.get(next_rank, AccountRole.PORTAL_USER.value), sources)
-
-        direct_rows = (
-            self.db.query(User, UserS3Account.role)
-            .join(UserS3Account, UserS3Account.user_id == User.id)
-            .filter(UserS3Account.account_id == account.id)
-            .all()
-        )
-        for user, role in direct_rows:
-            merge(user, portal_role_for(role), "direct")
-
-        group_rows = (
-            self.db.query(User, UiGroupS3Account.role)
-            .join(UserUiGroup, UserUiGroup.user_id == User.id)
-            .join(UiGroupS3Account, UiGroupS3Account.group_id == UserUiGroup.group_id)
-            .filter(UiGroupS3Account.account_id == account.id)
-            .all()
-        )
-        for user, role in group_rows:
-            merge(user, portal_role_for(role), "group")
-
-        return rows_by_user
-
-    def _storage_space_owner_label(
-        self,
-        account: S3Account,
-        metadata: PortalStorageSpaceMetadata | None,
-    ) -> str:
-        if metadata and metadata.owner_user_id:
-            owner = self.db.query(User).filter(User.id == metadata.owner_user_id).first()
-            if owner and owner.email:
-                return owner.email
-        return account.name if self._metadata_visibility(metadata) == "private" else ""
-
-    def _storage_space_effective_role(
-        self,
-        user: User,
-        access: "AccountAccess",
-        metadata: PortalStorageSpaceMetadata | None,
-        role: Optional[PortalStorageSpaceRole],
-        *,
-        include_archived: bool = False,
-    ) -> Optional[PortalStorageSpaceRole]:
-        if metadata is None:
-            return None
-        if metadata.archived_at and not include_archived:
-            return None
-        if metadata.owner_user_id == user.id:
-            return "Owner"
-        if access.role == AccountRole.PORTAL_MANAGER.value:
-            return "Manager"
-        if metadata.archived_at:
-            return role if include_archived and role in {"Owner", "Manager"} else None
-        if self._metadata_visibility(metadata) != "shared":
-            return None
-        return role
-
     def _get_iam_service(self, account: S3Account) -> RGWIAMService:
         access_key, secret_key = self._account_credentials(account)
         endpoint, region, _, verify_tls = resolve_s3_client_options(account)
@@ -479,16 +333,3 @@ class PortalIamMixin:
                 portal_access_key_from_active_link(link, include_secret=True),
             )
         return keys
-
-    def list_existing_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
-        """Read bucket permissions without provisioning IAM user/key side effects."""
-        return sorted(self.list_existing_user_storage_space_access(target, account, account_role).keys())
-
-    def list_existing_user_storage_space_access(
-        self,
-        target: User,
-        account: S3Account,
-        account_role: str,
-    ) -> dict[str, PortalStorageSpaceRole]:
-        """Read active Storage Space permissions from DB without IAM side effects."""
-        return self._storage_space_roles_by_bucket(target, account, account_role)

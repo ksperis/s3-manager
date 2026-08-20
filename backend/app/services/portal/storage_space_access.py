@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Optional
+from typing import TYPE_CHECKING, cast, Optional, TypeGuard
 
 from app.db import (
     AccountIAMUser,
@@ -11,13 +11,130 @@ from app.db import (
     PortalStorageSpaceGrant,
     PortalStorageSpaceMetadata,
     S3Account,
+    UiGroupS3Account,
     User,
+    UserS3Account,
+    UserUiGroup,
 )
-from app.models.portal import PortalStorageSpaceRole
+from app.models.portal import (
+    PortalStorageSpaceRole,
+    PortalStorageSpaceShareScope,
+    PortalStorageSpaceVisibility,
+)
 from app.services.rgw_iam import RGWIAMService
+from app.utils.account_roles import portal_role_for
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
 
 
 class PortalStorageSpaceAccessMixin:
+    def _metadata_visibility(
+        self,
+        metadata: PortalStorageSpaceMetadata | None,
+    ) -> PortalStorageSpaceVisibility:
+        if metadata is None:
+            return "private"
+        return cast(PortalStorageSpaceVisibility, metadata.visibility)
+
+    def _metadata_share_scope(
+        self,
+        metadata: PortalStorageSpaceMetadata | None,
+    ) -> PortalStorageSpaceShareScope:
+        if metadata is None:
+            return "restricted"
+        return cast(PortalStorageSpaceShareScope, metadata.share_scope)
+
+    def _metadata_account_member_role(
+        self,
+        metadata: PortalStorageSpaceMetadata | None,
+    ) -> Optional[PortalStorageSpaceRole]:
+        if metadata is None:
+            return None
+        return cast(Optional[PortalStorageSpaceRole], metadata.account_member_role)
+
+    def _storage_space_role_is_valid(
+        self,
+        role: Optional[str],
+    ) -> TypeGuard[PortalStorageSpaceRole]:
+        return role in {"Viewer", "Editor", "Owner", "Manager"}
+
+    def _best_storage_space_role(self, *roles: Optional[str]) -> Optional[PortalStorageSpaceRole]:
+        best: Optional[PortalStorageSpaceRole] = None
+        for role in roles:
+            if not self._storage_space_role_is_valid(role):
+                continue
+            if best is None or self._role_precedence(role) > self._role_precedence(best):
+                best = role
+        return best
+
+    def _portal_account_member_map(self, account: S3Account) -> dict[int, tuple[User, str, set[str]]]:
+        role_rank = {
+            AccountRole.PORTAL_USER.value: 1,
+            AccountRole.PORTAL_MANAGER.value: 2,
+        }
+        rank_role = {
+            1: AccountRole.PORTAL_USER.value,
+            2: AccountRole.PORTAL_MANAGER.value,
+        }
+        rows_by_user: dict[int, tuple[User, str, set[str]]] = {}
+
+        def merge(user: User, role: Optional[str], source: str) -> None:
+            if role not in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
+                return
+            if not bool(user.is_active):
+                return
+            current = rows_by_user.get(user.id)
+            current_rank = role_rank.get(current[1], 0) if current else 0
+            next_rank = max(current_rank, role_rank.get(role or "", 0))
+            sources = set(current[2]) if current else set()
+            sources.add(source)
+            rows_by_user[user.id] = (user, rank_role.get(next_rank, AccountRole.PORTAL_USER.value), sources)
+
+        direct_rows = (
+            self.db.query(User, UserS3Account.role)
+            .join(UserS3Account, UserS3Account.user_id == User.id)
+            .filter(UserS3Account.account_id == account.id)
+            .all()
+        )
+        for user, role in direct_rows:
+            merge(user, portal_role_for(role), "direct")
+
+        group_rows = (
+            self.db.query(User, UiGroupS3Account.role)
+            .join(UserUiGroup, UserUiGroup.user_id == User.id)
+            .join(UiGroupS3Account, UiGroupS3Account.group_id == UserUiGroup.group_id)
+            .filter(UiGroupS3Account.account_id == account.id)
+            .all()
+        )
+        for user, role in group_rows:
+            merge(user, portal_role_for(role), "group")
+
+        return rows_by_user
+
+    def _storage_space_effective_role(
+        self,
+        user: User,
+        access: "AccountAccess",
+        metadata: PortalStorageSpaceMetadata | None,
+        role: Optional[PortalStorageSpaceRole],
+        *,
+        include_archived: bool = False,
+    ) -> Optional[PortalStorageSpaceRole]:
+        if metadata is None:
+            return None
+        if metadata.archived_at and not include_archived:
+            return None
+        if metadata.owner_user_id == user.id:
+            return "Owner"
+        if access.role == AccountRole.PORTAL_MANAGER.value:
+            return "Manager"
+        if metadata.archived_at:
+            return role if include_archived and role in {"Owner", "Manager"} else None
+        if self._metadata_visibility(metadata) != "shared":
+            return None
+        return role
+
     def _storage_space_roles_by_bucket(
         self,
         target: User,
@@ -64,6 +181,19 @@ class PortalStorageSpaceAccessMixin:
             return None
         row = self._portal_account_member_map(account).get(user_id)
         return row[1] if row else None
+
+    def list_existing_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
+        """Read bucket permissions without provisioning IAM user/key side effects."""
+        return sorted(self.list_existing_user_storage_space_access(target, account, account_role).keys())
+
+    def list_existing_user_storage_space_access(
+        self,
+        target: User,
+        account: S3Account,
+        account_role: str,
+    ) -> dict[str, PortalStorageSpaceRole]:
+        """Read active Storage Space permissions from DB without IAM side effects."""
+        return self._storage_space_roles_by_bucket(target, account, account_role)
 
     def _sync_user_storage_space_policy_projection(
         self,
