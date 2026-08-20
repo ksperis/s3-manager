@@ -473,19 +473,14 @@ def test_update_connection_supports_active_flag_and_keeps_inactive_visible_in_ma
     assert "active-flag-conn" in owned_private_names
 
 
-def test_get_capabilities_and_delete(db_session):
+def test_delete(db_session):
     owner = _user(db_session, "owner5@example.test")
     row = _create_row(
         db_session,
         created_by_user_id=owner.id,
         name="caps-conn",
-        capabilities_json='{"can_manage_iam": false, "x": 1}',
     )
     service = S3ConnectionsService(db_session)
-
-    caps = service.get_capabilities(owner.id, row.id)
-    assert caps["x"] == 1
-    assert caps["can_manage_iam"] is False
 
     service.delete(owner.id, row.id)
     assert db_session.query(S3Connection).filter(S3Connection.id == row.id).first() is None

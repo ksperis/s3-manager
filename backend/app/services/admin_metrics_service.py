@@ -144,17 +144,6 @@ class AdminMetricsService:
     def traffic(self, window: TrafficWindow) -> dict:
         return self._traffic(window=window)
 
-    def metrics(self, window: TrafficWindow) -> dict:
-        snapshot = self.storage()
-        try:
-            traffic = self._traffic(window=window)
-        except RGWAdminError as exc:
-            logger.warning("Unable to fetch RGW usage for admin metrics: %s", exc)
-            traffic = None
-            snapshot["traffic_error"] = "RGW usage logs are not available."
-        snapshot["traffic"] = traffic
-        return snapshot
-
     def _storage_snapshot(self) -> dict:
         summary = self.build_summary_payload(self.db, endpoint_id=self.endpoint_id)
         accounts, s3_users, allowed_identifiers = self._load_scope_targets()

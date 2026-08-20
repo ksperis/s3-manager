@@ -292,15 +292,3 @@ def delete_connection(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=sanitize_error_detail(str(exc))) from exc
     return None
 
-
-@router.get("/{connection_id}/capabilities", response_model=dict)
-def get_connection_capabilities(
-    connection_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_account_user),
-):
-    service = S3ConnectionsService(db)
-    try:
-        return service.get_capabilities(user.id, connection_id)
-    except KeyError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")

@@ -156,23 +156,6 @@ def s3_user_stats(
     return _load_principal_bucket_stats(rgw_admin, s3_user.rgw_user_uid)
 
 
-@router.get("/overview")
-def global_stats(
-    _: User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db),
-    window: TrafficWindow = Query(TrafficWindow.WEEK),
-    endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
-) -> dict:
-    endpoint = _resolve_endpoint(db, endpoint_id, require_storage_metrics=True, require_usage_logs=True)
-    rgw_admin = _build_rgw_client(endpoint)
-    service = AdminMetricsService(
-        db=db,
-        rgw_admin=rgw_admin,
-        endpoint_id=endpoint.id,
-    )
-    return service.metrics(window=window)
-
-
 @router.get("/storage")
 def storage_stats(
     _: User = Depends(get_current_super_admin),

@@ -10,7 +10,6 @@ from app.db import User as DbUser
 from app.db import UserRole, is_superadmin_ui_role
 from app.models.user import (
     PaginatedUsersResponse,
-    UserAssignS3Account,
     UserCreate,
     UserOut,
     UserSummary,
@@ -188,33 +187,3 @@ def delete_user(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
 
-
-@router.post("/{user_id}/assign-account", response_model=UserOut)
-def assign_account(
-    user_id: int,
-    payload: UserAssignS3Account,
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    current_user: DbUser = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> UserOut:
-    try:
-        user = users_service.assign_user_to_account(
-            user_id,
-            payload.account_id,
-            role=payload.role,
-        )
-        audit_service.record_action(
-            user=current_user,
-            scope="admin",
-            action="assign_user_account",
-            entity_type="ui_user",
-            entity_id=str(user_id),
-            account_id=payload.account_id,
-            metadata={
-                "role": payload.role,
-                "assigned_user_id": user_id,
-            },
-        )
-        return users_service.user_to_out(user)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc

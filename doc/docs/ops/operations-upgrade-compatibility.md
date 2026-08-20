@@ -574,6 +574,24 @@ the only response representation. The `group_ids` update field remains the
 canonical write contract for replacing group links. Deploy the backend and
 frontend together.
 
+## 2026-08 redundant API route removal
+
+Four backend routes that had no frontend consumer are removed without runtime
+aliases:
+
+- `GET /api/admin/stats/overview`: use the canonical
+  `/api/admin/stats/summary`, `/api/admin/stats/storage`, and
+  `/api/admin/stats/traffic` resources.
+- `POST /api/admin/users/{user_id}/assign-account`: replace account links
+  atomically through `PUT /api/admin/users/{user_id}` with `account_links`.
+- `GET /api/connections/{connection_id}/capabilities`: consume the
+  `capabilities` field returned by the connection list and write resources.
+- `GET /api/portal/eligibility`: load `/api/portal/state`, which enforces the
+  same eligibility check and returns `403` when Portal is unavailable.
+
+Requests to the removed paths return `404`. Deploy the backend and frontend
+together.
+
 ## 2026-08 canonical RGW account principal links
 
 Admin RGW account responses and minimal summaries now expose UI-user and

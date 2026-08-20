@@ -673,7 +673,3 @@ class PortalProjectSettings(ApiModel):
     delegated_to_portal_managers: bool = False
     can_update: bool = False
 
-
-class PortalEligibility(ApiModel):
-    eligible: bool
-    reasons: list[str] = Field(default_factory=list)

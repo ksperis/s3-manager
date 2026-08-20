@@ -484,10 +484,6 @@ class S3ConnectionsService:
         self.tags.cleanup_orphan_definitions()
         self.db.commit()
 
-    def get_capabilities(self, user_id: int, connection_id: int) -> dict[str, Any]:
-        row = self.get_visible(user_id, connection_id)
-        return self._capabilities(row)
-
     def _resolve_access_flags(self, *, access_manager: Optional[bool], access_browser: Optional[bool]) -> tuple[bool, bool]:
         manager = bool(access_manager)
         browser = bool(access_browser)

@@ -189,11 +189,6 @@ class UserSelfUpdate(ApiModel):
     new_password: Optional[str] = None
 
 
-class UserAssignS3Account(ApiModel):
-    account_id: int
-    role: CanonicalAccountRole
-
-
 class EffectiveUserAccess(ApiModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False

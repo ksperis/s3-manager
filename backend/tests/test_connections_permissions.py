@@ -133,7 +133,6 @@ def test_revocation_keeps_owned_connection_lifecycle_but_rejects_sensitive_forge
 
     with _client_for(db_session, user) as client:
         assert client.get("/api/connections").status_code == 200
-        assert client.get(f"/api/connections/{connection.id}/capabilities").status_code == 200
         safe_update = client.put(
             f"/api/connections/{connection.id}",
             json={

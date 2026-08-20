@@ -5950,7 +5950,6 @@ def test_portal_collaboration_routes_are_owned_by_dedicated_router():
 def test_portal_context_routes_are_owned_by_dedicated_router():
     expected_paths = {
         "/portal/accounts",
-        "/portal/eligibility",
         "/portal/state",
         "/portal/settings",
     }

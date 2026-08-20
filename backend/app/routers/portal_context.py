@@ -12,7 +12,6 @@ from app.models.access_context import AccountAccess
 from app.models.app_settings import PortalSettingsOverride
 from app.models.portal import (
     PortalAccount,
-    PortalEligibility,
     PortalProjectSettings,
     PortalState,
 )
@@ -67,18 +66,6 @@ def list_portal_accounts(
         )
         for account in accounts
     ]
-
-
-@router.get("/eligibility", response_model=PortalEligibility)
-def portal_eligibility(
-    access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalEligibility:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    eligible, reasons = service.check_eligibility(actor, access)
-    return PortalEligibility(eligible=eligible, reasons=reasons)
 
 
 @router.get("/state", response_model=PortalState)
