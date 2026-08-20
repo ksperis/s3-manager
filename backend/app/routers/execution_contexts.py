@@ -1,185 +1,29 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.utils.time import utcnow
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import S3Account, S3Connection, S3User, User, is_admin_ui_role
 from app.models.execution_context import (
     ExecutionContext,
-    ExecutionContextCapabilities,
     WorkspaceAccess,
     WorkspaceAvailability,
 )
 from app.routers.dependencies import get_current_account_user
 from app.services import app_settings_service
 from app.services.effective_access_service import EffectiveAccessService
+from app.services.mappers.execution_context import (
+    account_execution_context_from_db,
+    connection_execution_context_from_db,
+    portal_account_execution_context_from_db,
+    s3_user_execution_context_from_db,
+)
 from app.services.tags_service import TagsService
-from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
-from app.utils.s3_connection_endpoint import resolve_connection_details
-from app.utils.storage_endpoint_features import features_to_capabilities, normalize_features_config
 
 router = APIRouter(prefix="/me", tags=["me"])
-
-
-def _provider_value(provider: object | None) -> Optional[str]:
-    if provider is None:
-        return None
-    value = getattr(provider, "value", provider)
-    text = str(value).strip().lower()
-    return text or None
-
-
-def _connection_can_manage_iam(connection: S3Connection) -> bool:
-    return s3_connection_can_manage_iam(connection.capabilities_json)
-
-
-def _build_account_context(
-    account: S3Account,
-    *,
-    tags_service: TagsService,
-    role: Optional[str] = None,
-    manager_account_is_admin: Optional[bool] = None,
-) -> ExecutionContext:
-    endpoint = account.storage_endpoint
-    endpoint_caps = features_to_capabilities(
-        normalize_features_config(endpoint.provider, endpoint.features_config)
-    )
-    sts_capable = bool(endpoint_caps.get("sts"))
-    return ExecutionContext(
-        kind="account",
-        id=str(account.id),
-        display_name=account.name,
-        role=role,
-        manager_account_is_admin=manager_account_is_admin,
-        rgw_account_id=account.rgw_account_id,
-        endpoint_id=endpoint.id,
-        endpoint_name=endpoint.name,
-        endpoint_is_default=bool(endpoint.is_default),
-        endpoint_provider=_provider_value(endpoint.provider),
-        endpoint_url=endpoint.endpoint_url,
-        storage_endpoint_capabilities=endpoint_caps,
-        tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
-        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)),
-        capabilities=ExecutionContextCapabilities(
-            can_manage_iam=True,
-            sts_capable=sts_capable,
-            admin_api_capable=True,
-        ),
-    )
-
-
-def _build_portal_account_context(
-    account: S3Account,
-    *,
-    tags_service: TagsService,
-    role: str,
-    manager_account_is_admin: bool,
-) -> ExecutionContext:
-    endpoint = account.storage_endpoint
-    endpoint_caps = features_to_capabilities(
-        normalize_features_config(endpoint.provider, endpoint.features_config)
-    )
-    return ExecutionContext(
-        kind="portal_account",
-        id=str(account.id),
-        display_name=account.name,
-        role=role,
-        manager_account_is_admin=manager_account_is_admin,
-        rgw_account_id=account.rgw_account_id,
-        endpoint_id=endpoint.id,
-        endpoint_name=endpoint.name,
-        endpoint_is_default=bool(endpoint.is_default),
-        endpoint_provider=_provider_value(endpoint.provider),
-        endpoint_url=endpoint.endpoint_url,
-        storage_endpoint_capabilities=endpoint_caps,
-        tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
-        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)),
-        capabilities=ExecutionContextCapabilities(
-            can_manage_iam=False,
-            sts_capable=False,
-            admin_api_capable=False,
-        ),
-    )
-
-
-def _build_s3_user_context(
-    s3_user: S3User,
-    *,
-    tags_service: TagsService,
-) -> ExecutionContext:
-    endpoint = s3_user.storage_endpoint
-    endpoint_caps = features_to_capabilities(
-        normalize_features_config(endpoint.provider, endpoint.features_config)
-    )
-    return ExecutionContext(
-        kind="s3_user",
-        id=f"s3u-{s3_user.id}",
-        display_name=s3_user.name,
-        endpoint_id=endpoint.id,
-        endpoint_name=endpoint.name,
-        endpoint_is_default=bool(endpoint.is_default),
-        endpoint_provider=_provider_value(endpoint.provider),
-        endpoint_url=endpoint.endpoint_url,
-        storage_endpoint_capabilities=endpoint_caps,
-        tags=tags_service.filter_selector_visible(tags_service.get_s3_user_tags(s3_user)),
-        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)),
-        capabilities=ExecutionContextCapabilities(
-            can_manage_iam=False,
-            sts_capable=False,
-            admin_api_capable=False,
-        ),
-    )
-
-
-def _build_connection_context(
-    connection: S3Connection,
-    *,
-    tags_service: TagsService,
-) -> ExecutionContext:
-    details = resolve_connection_details(connection)
-    can_manage_iam = _connection_can_manage_iam(connection)
-    endpoint = connection.storage_endpoint
-    endpoint_caps = None
-    if endpoint:
-        endpoint_caps = features_to_capabilities(
-            normalize_features_config(endpoint.provider, endpoint.features_config)
-        )
-        endpoint_caps["iam"] = can_manage_iam
-    else:
-        endpoint_caps = {
-            "admin": False,
-            "sts": False,
-            "usage": False,
-            "metrics": False,
-            "static_website": False,
-            "iam": can_manage_iam,
-            "sns": False,
-            "sse": False,
-            "replication": False,
-        }
-
-    return ExecutionContext(
-        kind="connection",
-        id=f"conn-{connection.id}",
-        display_name=connection.name,
-        endpoint_id=endpoint.id if endpoint else None,
-        endpoint_name=(endpoint.name if endpoint else (details.endpoint_name or details.provider or "Custom endpoint")),
-        endpoint_is_default=bool(endpoint.is_default) if endpoint else False,
-        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
-        endpoint_url=details.endpoint_url,
-        storage_endpoint_capabilities=endpoint_caps,
-        tags=tags_service.filter_selector_visible(tags_service.get_connection_tags(connection)),
-        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
-        capabilities=ExecutionContextCapabilities(
-            can_manage_iam=can_manage_iam,
-            sts_capable=False,
-            admin_api_capable=False,
-        ),
-    )
 
 
 @router.get("/execution-contexts", response_model=list[ExecutionContext])
@@ -222,7 +66,7 @@ def list_execution_contexts(
             account = account_by_id.get(link.account_id)
             if account is not None:
                 results.append(
-                    _build_account_context(
+                    account_execution_context_from_db(
                         account,
                         tags_service=tags_service,
                         role=link.role,
@@ -232,7 +76,7 @@ def list_execution_contexts(
     elif workspace is None:
         for account in accounts:
             results.append(
-                _build_account_context(
+                account_execution_context_from_db(
                     account,
                     tags_service=tags_service,
                 )
@@ -246,7 +90,7 @@ def list_execution_contexts(
             if portal_role is None:  # pragma: no cover - filtered by the service
                 continue
             results.append(
-                _build_portal_account_context(
+                portal_account_execution_context_from_db(
                     account,
                     tags_service=tags_service,
                     role=portal_role,
@@ -256,7 +100,7 @@ def list_execution_contexts(
     if workspace in {None, "manager"}:
         for s3_user in s3_users:
             results.append(
-                _build_s3_user_context(
+                s3_user_execution_context_from_db(
                     s3_user,
                     tags_service=tags_service,
                 )
@@ -268,7 +112,7 @@ def list_execution_contexts(
         if workspace == "browser" and not bool(connection.access_browser):
             continue
         results.append(
-            _build_connection_context(
+            connection_execution_context_from_db(
                 connection,
                 tags_service=tags_service,
             )
