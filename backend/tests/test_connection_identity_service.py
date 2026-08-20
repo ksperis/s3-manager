@@ -7,7 +7,7 @@ import json
 from app.db import S3Connection, StorageEndpoint
 from app.services.connection_identity_service import (
     ConnectionIdentityService,
-    reset_connection_identity_cache,
+    reset_connection_identity_cache_for_tests,
 )
 
 
@@ -57,7 +57,7 @@ def _connection(
 
 
 def test_resolve_metrics_identity_uses_owner_metadata_first():
-    reset_connection_identity_cache()
+    reset_connection_identity_cache_for_tests()
     endpoint = _ceph_endpoint()
     connection = _connection(
         endpoint,
@@ -74,7 +74,7 @@ def test_resolve_metrics_identity_uses_owner_metadata_first():
 
 
 def test_resolve_metrics_identity_uses_admin_lookup_and_caches(monkeypatch):
-    reset_connection_identity_cache()
+    reset_connection_identity_cache_for_tests()
     endpoint = _ceph_endpoint(name="ceph-cache")
     connection = _connection(endpoint, owner_type=None, owner_identifier=None)
     calls = {"count": 0}
@@ -102,7 +102,7 @@ def test_resolve_metrics_identity_uses_admin_lookup_and_caches(monkeypatch):
 
 
 def test_resolve_metrics_identity_returns_reason_when_identity_missing(monkeypatch):
-    reset_connection_identity_cache()
+    reset_connection_identity_cache_for_tests()
     endpoint = _ceph_endpoint(name="ceph-missing-id")
     connection = _connection(endpoint, owner_type="account_user", owner_identifier="RGW00000000000000099")
 

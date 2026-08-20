@@ -96,10 +96,10 @@ def test_rgw_bucket_metadata_is_not_reexported_from_listing_enrichment():
 
 @pytest.fixture(autouse=True)
 def clear_buckets_listing_cache():
-    bucket_listing_cache.clear_bucket_listing_caches()
+    bucket_listing_cache.reset_ceph_admin_bucket_listing_caches_for_tests()
     invalidate_bucket_owner_metadata_cache()
     yield
-    bucket_listing_cache.clear_bucket_listing_caches()
+    bucket_listing_cache.reset_ceph_admin_bucket_listing_caches_for_tests()
     invalidate_bucket_owner_metadata_cache()
 
 

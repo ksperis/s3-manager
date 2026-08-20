@@ -43,7 +43,7 @@ _CACHE: dict[tuple, _CacheEntry] = {}
 _CACHE_LOCK = Lock()
 
 
-def reset_connection_identity_cache() -> None:
+def reset_connection_identity_cache_for_tests() -> None:
     with _CACHE_LOCK:
         _CACHE.clear()
 

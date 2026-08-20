@@ -31,7 +31,7 @@ def clear_ceph_admin_caches():
         user_listing_cache.USERS_LIST_CACHE.clear()
     with user_listing_cache.RGW_USERS_PAYLOAD_CACHE_LOCK:
         user_listing_cache.RGW_USERS_PAYLOAD_CACHE.clear()
-    ceph_admin_bucket_listing_cache.clear_bucket_listing_caches()
+    ceph_admin_bucket_listing_cache.reset_ceph_admin_bucket_listing_caches_for_tests()
     yield
     with account_listing_cache.ACCOUNTS_LIST_CACHE_LOCK:
         account_listing_cache.ACCOUNTS_LIST_CACHE.clear()
@@ -41,7 +41,7 @@ def clear_ceph_admin_caches():
         user_listing_cache.USERS_LIST_CACHE.clear()
     with user_listing_cache.RGW_USERS_PAYLOAD_CACHE_LOCK:
         user_listing_cache.RGW_USERS_PAYLOAD_CACHE.clear()
-    ceph_admin_bucket_listing_cache.clear_bucket_listing_caches()
+    ceph_admin_bucket_listing_cache.reset_ceph_admin_bucket_listing_caches_for_tests()
 
 
 class FakeAccountsAdmin:

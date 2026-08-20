@@ -213,7 +213,7 @@ def invalidate_bucket_listing_cache(endpoint_id: int) -> None:
             _RGW_BUCKET_PAYLOAD_CACHE.pop(key, None)
 
 
-def clear_bucket_listing_caches() -> None:
+def reset_ceph_admin_bucket_listing_caches_for_tests() -> None:
     with _BUCKET_LIST_CACHE_LOCK:
         _BUCKET_LIST_CACHE.clear()
         _BUCKET_LIST_INFLIGHT.clear()

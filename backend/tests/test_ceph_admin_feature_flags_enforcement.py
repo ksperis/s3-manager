@@ -28,9 +28,9 @@ class FakeRGWAdmin:
 
 @pytest.fixture(autouse=True)
 def _clear_buckets_caches():
-    ceph_admin_bucket_listing_cache.clear_bucket_listing_caches()
+    ceph_admin_bucket_listing_cache.reset_ceph_admin_bucket_listing_caches_for_tests()
     yield
-    ceph_admin_bucket_listing_cache.clear_bucket_listing_caches()
+    ceph_admin_bucket_listing_cache.reset_ceph_admin_bucket_listing_caches_for_tests()
 
 
 def _build_endpoint(*, endpoint_id: int = 1, metrics_enabled: bool = True, sse_enabled: bool = False):
