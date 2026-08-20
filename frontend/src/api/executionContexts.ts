@@ -23,12 +23,6 @@ export type ExecutionContext = {
   role?: AccountAccessRole | null;
   manager_account_is_admin?: boolean | null;
   rgw_account_id?: string | null;
-  max_buckets?: number | null;
-  max_users?: number | null;
-  max_roles?: number | null;
-  max_groups?: number | null;
-  quota_max_size_gb?: number | null;
-  quota_max_objects?: number | null;
   endpoint_id?: number | null;
   endpoint_name: string;
   endpoint_is_default: boolean;

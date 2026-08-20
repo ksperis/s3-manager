@@ -204,7 +204,7 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
 def test_manager_workspace_catalog_omits_dynamic_quota_limits(db_session):
     user = _create_user(db_session)
     account = _create_account(db_session, name="quota-account", rgw_account_id="RGWQUOTA0001")
-    s3_user = _create_s3_user(db_session, name="quota-legacy", uid="quota-legacy-uid")
+    s3_user = _create_s3_user(db_session, name="quota-user", uid="quota-user-uid")
     manager_connection = _create_connection(
         db_session,
         created_by_user_id=user.id,
@@ -228,27 +228,19 @@ def test_manager_workspace_catalog_omits_dynamic_quota_limits(db_session):
 
     contexts = execution_contexts.list_execution_contexts(workspace="manager", user=user, db=db_session)
     account_context = next(context for context in contexts if context.id == str(account.id))
-    legacy_context = next(context for context in contexts if context.id == f"s3u-{s3_user.id}")
+    s3_user_context = next(context for context in contexts if context.id == f"s3u-{s3_user.id}")
     connection_context = next(context for context in contexts if context.id == f"conn-{manager_connection.id}")
 
-    assert account_context.quota_max_size_gb is None
-    assert account_context.quota_max_objects is None
-    assert account_context.max_buckets is None
-    assert account_context.max_users is None
-    assert account_context.max_roles is None
-    assert account_context.max_groups is None
-    assert legacy_context.quota_max_size_gb is None
-    assert legacy_context.quota_max_objects is None
-    assert legacy_context.max_buckets is None
-    assert legacy_context.max_users is None
-    assert legacy_context.max_roles is None
-    assert legacy_context.max_groups is None
-    assert connection_context.quota_max_size_gb is None
-    assert connection_context.quota_max_objects is None
-    assert connection_context.max_buckets is None
-    assert connection_context.max_users is None
-    assert connection_context.max_roles is None
-    assert connection_context.max_groups is None
+    removed_limit_fields = {
+        "quota_max_size_gb",
+        "quota_max_objects",
+        "max_buckets",
+        "max_users",
+        "max_roles",
+        "max_groups",
+    }
+    for context in (account_context, s3_user_context, connection_context):
+        assert removed_limit_fields.isdisjoint(context.model_dump())
 
 
 def test_browser_workspace_returns_only_owned_private_connections(db_session):

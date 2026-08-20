@@ -981,6 +981,16 @@ describe("manager shell pages", () => {
 
   it("renders a bucket metric card and bucket ranking link", async () => {
     listBucketsMock.mockResolvedValue([{ name: "bucket-a" }, { name: "bucket-b" }]);
+    fetchManagerContextMock.mockResolvedValue({
+      access_mode: "admin",
+      manager_stats_enabled: true,
+      max_buckets: 4,
+      max_users: 5,
+      max_roles: 6,
+      max_groups: 4,
+      quota_max_size_gb: 10,
+      quota_max_objects: 24,
+    });
     fetchManagerUsageTrendsMock.mockResolvedValue({
       storage: { window: "month", label: "last 30 days", period_start: "2026-05-10", used_bytes: 4 * 1024 ** 3 },
       buckets: { window: "month", label: "last 30 days", period_start: "2026-05-10", bucket_count: 1 },
@@ -1009,12 +1019,6 @@ describe("manager shell pages", () => {
           id: "account-1",
           name: "User9001",
           type: "account",
-          max_buckets: 4,
-          max_users: 5,
-          max_roles: 6,
-          max_groups: 4,
-          quota_max_size_gb: 10,
-          quota_max_objects: 24,
           storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
           capabilities: { can_manage_iam: true },
         },

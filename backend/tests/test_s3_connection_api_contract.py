@@ -475,7 +475,16 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
     assert response.status_code == 200
     payload = response.json()
     assert payload
+    removed_limit_fields = {
+        "quota_max_size_gb",
+        "quota_max_objects",
+        "max_buckets",
+        "max_users",
+        "max_roles",
+        "max_groups",
+    }
     for item in payload:
+        assert removed_limit_fields.isdisjoint(item)
         capabilities = item.get("capabilities", {})
         assert "can_manage_iam" in capabilities
         assert "iam_capable" not in capabilities

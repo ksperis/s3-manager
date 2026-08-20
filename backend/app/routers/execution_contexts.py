@@ -39,12 +39,6 @@ def _connection_can_manage_iam(connection: S3Connection) -> bool:
 
 def _build_account_context(
     account: S3Account,
-    quota_max_size_gb: Optional[float],
-    quota_max_objects: Optional[int],
-    max_buckets: Optional[int],
-    max_users: Optional[int],
-    max_roles: Optional[int],
-    max_groups: Optional[int],
     *,
     tags_service: TagsService,
     role: Optional[str] = None,
@@ -62,12 +56,6 @@ def _build_account_context(
         role=role,
         manager_account_is_admin=manager_account_is_admin,
         rgw_account_id=account.rgw_account_id,
-        max_buckets=max_buckets,
-        max_users=max_users,
-        max_roles=max_roles,
-        max_groups=max_groups,
-        quota_max_size_gb=quota_max_size_gb,
-        quota_max_objects=quota_max_objects,
         endpoint_id=endpoint.id,
         endpoint_name=endpoint.name,
         endpoint_is_default=bool(endpoint.is_default),
@@ -120,9 +108,6 @@ def _build_portal_account_context(
 
 def _build_s3_user_context(
     s3_user: S3User,
-    quota_max_size_gb: Optional[float],
-    quota_max_objects: Optional[int],
-    max_buckets: Optional[int],
     *,
     tags_service: TagsService,
 ) -> ExecutionContext:
@@ -134,9 +119,6 @@ def _build_s3_user_context(
         kind="s3_user",
         id=f"s3u-{s3_user.id}",
         display_name=s3_user.name,
-        max_buckets=max_buckets,
-        quota_max_size_gb=quota_max_size_gb,
-        quota_max_objects=quota_max_objects,
         endpoint_id=endpoint.id,
         endpoint_name=endpoint.name,
         endpoint_is_default=bool(endpoint.is_default),
@@ -242,12 +224,6 @@ def list_execution_contexts(
                 results.append(
                     _build_account_context(
                         account,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
                         tags_service=tags_service,
                         role=link.role,
                         manager_account_is_admin=True,
@@ -258,12 +234,6 @@ def list_execution_contexts(
             results.append(
                 _build_account_context(
                     account,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
                     tags_service=tags_service,
                 )
             )
@@ -288,9 +258,6 @@ def list_execution_contexts(
             results.append(
                 _build_s3_user_context(
                     s3_user,
-                    None,
-                    None,
-                    None,
                     tags_service=tags_service,
                 )
             )

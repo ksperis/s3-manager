@@ -1078,27 +1078,22 @@ export default function ManagerDashboard() {
   const activityUnavailableReason = noContextReason || activityError;
   const trafficUnavailableReason = noContextReason || (!trafficFeatureEnabled ? "Traffic usage is not available for this context." : trafficError);
   const storageUsedBytes = metricsUnavailableReason ? null : stats?.total_bytes ?? null;
-  const storageQuotaSizeGb = managerLimits?.quota_max_size_gb ?? selected?.quota_max_size_gb ?? null;
+  const storageQuotaSizeGb = managerLimits?.quota_max_size_gb ?? null;
   const storageQuotaBytes =
     storageQuotaSizeGb != null
       ? storageQuotaSizeGb * 1024 ** 3
       : null;
   const objectCount = metricsUnavailableReason ? null : stats?.total_objects ?? null;
-  const objectQuota =
-    managerLimits?.quota_max_objects ?? selected?.quota_max_objects ?? null;
+  const objectQuota = managerLimits?.quota_max_objects ?? null;
   const visibleBucketCount = bucketUnavailableReason ? null : bucketCount;
-  const bucketQuota =
-    managerLimits?.max_buckets ?? selected?.max_buckets ?? null;
+  const bucketQuota = managerLimits?.max_buckets ?? null;
   const iamUserCount = iamUnavailableReason ? null : iamOverview?.iam_users ?? stats?.total_iam_users ?? null;
   const iamGroupCount = iamUnavailableReason ? null : iamOverview?.iam_groups ?? stats?.total_iam_groups ?? null;
   const iamRoleCount = iamUnavailableReason ? null : iamOverview?.iam_roles ?? stats?.total_iam_roles ?? null;
   const iamPolicyCount = iamUnavailableReason ? null : iamOverview?.iam_policies ?? stats?.total_iam_policies ?? null;
-  const userQuota =
-    managerLimits?.max_users ?? selected?.max_users ?? null;
-  const roleQuota =
-    managerLimits?.max_roles ?? selected?.max_roles ?? null;
-  const groupQuota =
-    managerLimits?.max_groups ?? selected?.max_groups ?? null;
+  const userQuota = managerLimits?.max_users ?? null;
+  const roleQuota = managerLimits?.max_roles ?? null;
+  const groupQuota = managerLimits?.max_groups ?? null;
   const uploadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_in ?? null;
   const downloadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_out ?? null;
   const transferBytes = uploadBytes == null || downloadBytes == null ? null : uploadBytes + downloadBytes;

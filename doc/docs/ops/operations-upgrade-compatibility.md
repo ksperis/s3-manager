@@ -89,6 +89,10 @@ responses now always include a non-null Storage Endpoint ID, name, URL, and
 capability map, plus an explicit default-endpoint flag. Execution-context
 responses likewise always include endpoint name, URL, default flag, and
 capabilities; only the endpoint ID remains nullable for custom connections.
+The catalogue no longer returns `quota_max_size_gb`, `quota_max_objects`,
+`max_buckets`, `max_users`, `max_roles`, or `max_groups`: these fields were
+always `null` after dynamic RGW limit lookups moved to the dedicated Manager
+context endpoint. Deploy the backend and frontend together.
 
 ## 2026-08 removal of the dead Portal key setting
 

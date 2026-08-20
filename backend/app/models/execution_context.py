@@ -21,12 +21,6 @@ class ExecutionContext(ApiModel):
     role: Optional[str] = None
     manager_account_is_admin: Optional[bool] = None
     rgw_account_id: Optional[str] = None
-    max_buckets: Optional[int] = None
-    max_users: Optional[int] = None
-    max_roles: Optional[int] = None
-    max_groups: Optional[int] = None
-    quota_max_size_gb: Optional[float] = None
-    quota_max_objects: Optional[int] = None
     endpoint_id: Optional[int] = None
     endpoint_name: str
     endpoint_is_default: bool

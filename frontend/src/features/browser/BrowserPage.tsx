@@ -1253,17 +1253,8 @@ export default function BrowserPage({
     contextEndpointProvider === undefined
       ? selectedContextEndpointProvider
       : contextEndpointProvider;
-  const selectedContextQuotaSizeGb = selectedContext?.quota_max_size_gb ?? null;
-  const selectedContextQuotaObjects =
-    selectedContext?.quota_max_objects ?? null;
-  const effectiveContextQuotaSizeGb =
-    contextQuotaMaxSizeGb === undefined
-      ? selectedContextQuotaSizeGb
-      : contextQuotaMaxSizeGb;
-  const effectiveContextQuotaObjects =
-    contextQuotaMaxObjects === undefined
-      ? selectedContextQuotaObjects
-      : contextQuotaMaxObjects;
+  const effectiveContextQuotaSizeGb = contextQuotaMaxSizeGb ?? null;
+  const effectiveContextQuotaObjects = contextQuotaMaxObjects ?? null;
   const {
     quotaSizeBytes: cephContextQuotaSizeBytes,
     quotaObjects: cephContextQuotaObjects,

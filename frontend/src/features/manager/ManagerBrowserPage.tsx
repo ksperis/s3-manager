@@ -91,8 +91,6 @@ export default function ManagerBrowserPage() {
                 }}
                 storageEndpointCapabilities={selectedContext?.storage_endpoint_capabilities ?? null}
                 endpointProvider={selectedContext?.endpoint_provider ?? null}
-                quotaMaxSizeGb={selectedContext?.quota_max_size_gb ?? null}
-                quotaMaxObjects={selectedContext?.quota_max_objects ?? null}
                 onSelectedBucketNameChange={setSelectedBrowserBucketName}
               />
             </div>
