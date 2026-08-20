@@ -9,6 +9,7 @@ from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
 from app.services import s3_bucket_access, s3_bucket_metadata, s3_client, s3_deletion
 from app.services.rgw_iam import RGWIAMService
+from app.utils.normalize import normalize_string_list
 
 if TYPE_CHECKING:
     from app.models.access_context import AccountAccess
@@ -69,7 +70,7 @@ class PortalBucketsUsersMixin:
                 **self._s3_client_kwargs(account),
             )
         if portal_defaults.bucket_defaults.enable_cors:
-            origins = self._normalize_origins(portal_defaults.bucket_defaults.cors_allowed_origins)
+            origins = normalize_string_list(portal_defaults.bucket_defaults.cors_allowed_origins)
             if origins:
                 s3_bucket_access.put_bucket_cors(
                     bucket_name,

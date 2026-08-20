@@ -2698,7 +2698,7 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings(allow_private_storage_space_create=True))
     monkeypatch.setattr(service, "_ensure_portal_user", lambda *_args, **_kwargs: (link, IAMUser(name="portal-iam"), False))
     monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_ensure_active_key", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
         "_sync_storage_space_access_projection",
@@ -2751,7 +2751,7 @@ def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
     monkeypatch.setattr(service, "_ensure_portal_user", lambda *_args, **_kwargs: (link, IAMUser(name="portal-iam"), False))
     monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_ensure_active_key", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,

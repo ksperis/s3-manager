@@ -605,7 +605,7 @@ class PortalStorageSpacesMixin:
             access.role,
             account=access.account,
         )
-        self._ensure_policy_and_key(link, iam_service)
+        self._ensure_active_key(link, iam_service)
         try:
             metadata = PortalStorageSpaceMetadata(account_id=access.account.id, bucket_name=cleaned_bucket_name)
             self.db.add(metadata)

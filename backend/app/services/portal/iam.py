@@ -29,7 +29,6 @@ from app.services.mappers.portal import portal_access_key_from_active_link, port
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.account_roles import portal_role_for
-from app.utils.normalize import normalize_string_list
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
@@ -42,9 +41,6 @@ logger = logging.getLogger(__name__)
 
 
 class PortalIamMixin:
-    def _normalize_origins(self, origins: Optional[list[str]]) -> list[str]:
-        return normalize_string_list(origins)
-
     def _metadata_visibility(
         self,
         metadata: PortalStorageSpaceMetadata | None,
@@ -147,9 +143,6 @@ class PortalIamMixin:
 
         return rows_by_user
 
-    def _is_portal_manager_access(self, access: "AccountAccess") -> bool:
-        return access.role == AccountRole.PORTAL_MANAGER.value
-
     def _storage_space_owner_label(
         self,
         account: S3Account,
@@ -176,7 +169,7 @@ class PortalIamMixin:
             return None
         if metadata.owner_user_id == user.id:
             return "Owner"
-        if self._is_portal_manager_access(access):
+        if access.role == AccountRole.PORTAL_MANAGER.value:
             return "Manager"
         if metadata.archived_at:
             return role if include_archived and role in {"Owner", "Manager"} else None
@@ -195,7 +188,7 @@ class PortalIamMixin:
             return None
         if metadata.owner_user_id == user.id:
             return "Owner"
-        if self._is_portal_manager_access(access):
+        if access.role == AccountRole.PORTAL_MANAGER.value:
             return "Manager"
         if self._metadata_visibility(metadata) != "shared":
             return None
@@ -231,10 +224,6 @@ class PortalIamMixin:
             reasons.append("IAM is not enabled for this endpoint")
 
         return (len(reasons) == 0), reasons
-
-    def _generate_username(self, account: S3Account, user: User) -> str:
-        base = f"portal-{account.id}-{user.id}"
-        return base[:63]
 
     def _persist_portal_key(self, link: AccountIAMUser, key: ModelAccessKey) -> PortalAccessKey:
         link.active_access_key = key.access_key_id
@@ -272,7 +261,7 @@ class PortalIamMixin:
             iam_user = iam_service.get_user(link.iam_username)
 
         if link is None or iam_user is None:
-            username = link.iam_username if link and link.iam_username else self._generate_username(account, user)
+            username = link.iam_username if link and link.iam_username else f"portal-{account.id}-{user.id}"[:63]
             iam_user, created_key = iam_service.create_user(
                 username,
                 create_key=True,
@@ -395,9 +384,6 @@ class PortalIamMixin:
         if account is not None and account_role == AccountRole.PORTAL_USER.value:
             self._sync_portal_server_access_log_bucket_policy_if_present(account)
 
-    def _ensure_policy_and_key(self, link: AccountIAMUser, iam_service: RGWIAMService) -> PortalAccessKey:
-        return self._ensure_active_key(link, iam_service)
-
     def _existing_portal_link(self, user: User, account: S3Account) -> Optional[AccountIAMUser]:
         return (
             self.db.query(AccountIAMUser)
@@ -409,7 +395,7 @@ class PortalIamMixin:
         )
 
     def _active_credentials(self, link: AccountIAMUser, iam_service: RGWIAMService) -> tuple[str, str]:
-        active = self._ensure_policy_and_key(link, iam_service)
+        active = self._ensure_active_key(link, iam_service)
         if not active.access_key_id or not active.secret_access_key:
             raise RuntimeError("Active access key is missing for this portal user")
         return active.access_key_id, active.secret_access_key
