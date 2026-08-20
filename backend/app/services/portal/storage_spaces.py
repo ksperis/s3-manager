@@ -162,7 +162,7 @@ class PortalStorageSpacesMixin:
         metadata = self._storage_space_metadata(access.account, space_id)
         if metadata is None:
             raise RuntimeError("Storage space icon not found or not allowed.")
-        visible = self._db_storage_space_access(
+        visible = self._storage_space_roles_by_bucket(
             user,
             access.account,
             access.role,
@@ -334,17 +334,11 @@ class PortalStorageSpacesMixin:
         sort: str = "name",
         include_archived: bool = False,
     ) -> list[PortalStorageSpaceSummary]:
-        role_by_bucket = self._db_storage_space_access(
+        role_by_bucket = self._storage_space_roles_by_bucket(
             user,
             access.account,
             access.role,
             include_archived=include_archived,
-        )
-        deletion_role_by_bucket = self._db_storage_space_content_access(
-            user,
-            access.account,
-            access.role,
-            include_archived=True,
         )
         metadata_by_bucket = self._storage_space_metadata_map(access.account)
         collaborator_previews = self._storage_space_collaborator_previews(
@@ -375,7 +369,7 @@ class PortalStorageSpacesMixin:
                     bucket,
                     access,
                     role=role_for_bucket,
-                    can_delete=deletion_role_by_bucket.get(metadata.bucket_name) in {"Owner", "Manager"},
+                    can_delete=role_by_bucket.get(metadata.bucket_name) in {"Owner", "Manager"},
                     metadata=metadata,
                     collaborators=collaborator_previews.get(metadata.bucket_name, ([], 0))[0],
                     collaborator_count=collaborator_previews.get(metadata.bucket_name, ([], 0))[1],
@@ -768,13 +762,13 @@ class PortalStorageSpacesMixin:
         metadata = self._storage_space_metadata(access.account, bucket_name)
         if metadata is None:
             raise RuntimeError("Storage space not found or not allowed.")
-        deletion_roles = self._db_storage_space_content_access(
+        roles_by_bucket = self._storage_space_roles_by_bucket(
             user,
             access.account,
             access.role,
             include_archived=True,
         )
-        if deletion_roles.get(bucket_name) not in {"Owner", "Manager"}:
+        if roles_by_bucket.get(bucket_name) not in {"Owner", "Manager"}:
             raise RuntimeError("Full content access required for this storage space.")
 
         bucket_exists, used_bytes, object_count = self._storage_space_deletion_usage(

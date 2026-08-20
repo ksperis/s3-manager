@@ -3690,7 +3690,7 @@ def test_object_detail_and_delete_use_safe_portal_operations(monkeypatch, db_ses
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
-    monkeypatch.setattr(service, "_user_storage_space_content_role", lambda *_args, **_kwargs: "Editor")
+    monkeypatch.setattr(service, "_user_storage_space_role", lambda *_args, **_kwargs: "Editor")
     monkeypatch.setattr(
         service,
         "list_storage_spaces",
@@ -4241,12 +4241,12 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
 
     service = PortalService(db_session)
 
-    assert service.list_existing_user_storage_space_content_access(
+    assert service.list_existing_user_storage_space_access(
         member,
         account,
         AccountRole.PORTAL_USER.value,
     ) == {"team-data": "Viewer"}
-    assert service.list_existing_user_storage_space_content_access(
+    assert service.list_existing_user_storage_space_access(
         manager,
         account,
         AccountRole.PORTAL_MANAGER.value,
@@ -4262,7 +4262,7 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
     )
     db_session.commit()
 
-    assert service.list_existing_user_storage_space_content_access(
+    assert service.list_existing_user_storage_space_access(
         member,
         account,
         AccountRole.PORTAL_USER.value,
@@ -4707,7 +4707,6 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
         ]
 
     monkeypatch.setattr(service, "list_storage_spaces", fake_list_storage_spaces)
-    monkeypatch.setattr(service, "_user_storage_space_content_role", lambda *_args, **_kwargs: "Owner")
     owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     manager_access = _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
@@ -6098,7 +6097,7 @@ def test_download_storage_space_object_streams_visible_object(monkeypatch, db_se
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
-    monkeypatch.setattr(service, "_user_storage_space_content_role", lambda *_args, **_kwargs: "Editor")
+    monkeypatch.setattr(service, "_user_storage_space_role", lambda *_args, **_kwargs: "Editor")
     monkeypatch.setattr(
         service,
         "list_storage_spaces",

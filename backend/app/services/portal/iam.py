@@ -177,23 +177,6 @@ class PortalIamMixin:
             return None
         return role
 
-    def _storage_space_effective_content_role(
-        self,
-        user: User,
-        access: "AccountAccess",
-        metadata: PortalStorageSpaceMetadata | None,
-        role: Optional[PortalStorageSpaceRole],
-    ) -> Optional[PortalStorageSpaceRole]:
-        if metadata is None or metadata.archived_at:
-            return None
-        if metadata.owner_user_id == user.id:
-            return "Owner"
-        if access.role == AccountRole.PORTAL_MANAGER.value:
-            return "Manager"
-        if self._metadata_visibility(metadata) != "shared":
-            return None
-        return role
-
     def _get_iam_service(self, account: S3Account) -> RGWIAMService:
         access_key, secret_key = self._account_credentials(account)
         endpoint, region, _, verify_tls = resolve_s3_client_options(account)
@@ -508,17 +491,4 @@ class PortalIamMixin:
         account_role: str,
     ) -> dict[str, PortalStorageSpaceRole]:
         """Read active Storage Space permissions from DB without IAM side effects."""
-        return self._db_storage_space_access(target, account, account_role)
-
-    def list_existing_user_content_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
-        """Read buckets where Portal credentials may access object content."""
-        return sorted(self.list_existing_user_storage_space_content_access(target, account, account_role).keys())
-
-    def list_existing_user_storage_space_content_access(
-        self,
-        target: User,
-        account: S3Account,
-        account_role: str,
-    ) -> dict[str, PortalStorageSpaceRole]:
-        """Read active Storage Space content permissions from DB without IAM side effects."""
-        return self._db_storage_space_content_access(target, account, account_role)
+        return self._storage_space_roles_by_bucket(target, account, account_role)

@@ -39,7 +39,7 @@ class PortalObjectsMixin:
         include_archived: bool = False,
     ) -> Optional[PortalStorageSpaceRole]:
         metadata = self._storage_space_metadata(access.account, bucket_name)
-        role_by_bucket = self._db_storage_space_access(
+        role_by_bucket = self._storage_space_roles_by_bucket(
             user,
             access.account,
             access.role,
@@ -53,28 +53,13 @@ class PortalObjectsMixin:
             include_archived=include_archived,
         )
 
-    def _user_storage_space_content_role(
-        self,
-        user: User,
-        access: "AccountAccess",
-        bucket_name: str,
-    ) -> Optional[PortalStorageSpaceRole]:
-        metadata = self._storage_space_metadata(access.account, bucket_name)
-        role_by_bucket = self._db_storage_space_content_access(user, access.account, access.role)
-        return self._storage_space_effective_content_role(
-            user,
-            access,
-            metadata,
-            role_by_bucket.get(bucket_name),
-        )
-
     def _require_storage_space_content_role(
         self,
         user: User,
         access: "AccountAccess",
         bucket_name: str,
     ) -> PortalStorageSpaceRole:
-        role = self._user_storage_space_content_role(user, access, bucket_name)
+        role = self._user_storage_space_role(user, access, bucket_name)
         if role is None:
             raise RuntimeError("Storage Space content access not allowed for this role.")
         return role

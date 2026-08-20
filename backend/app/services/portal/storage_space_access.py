@@ -18,47 +18,7 @@ from app.services.rgw_iam import RGWIAMService
 
 
 class PortalStorageSpaceAccessMixin:
-    def _db_storage_space_access(
-        self,
-        target: User,
-        account: S3Account,
-        account_role: str,
-        *,
-        include_archived: bool = False,
-    ) -> dict[str, PortalStorageSpaceRole]:
-        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
-            return {}
-        rows = (
-            self.db.query(PortalStorageSpaceMetadata, PortalStorageSpaceGrant.role)
-            .outerjoin(
-                PortalStorageSpaceGrant,
-                (PortalStorageSpaceGrant.storage_space_metadata_id == PortalStorageSpaceMetadata.id)
-                & (PortalStorageSpaceGrant.user_id == target.id),
-            )
-            .filter(PortalStorageSpaceMetadata.account_id == account.id)
-            .all()
-        )
-        access_by_bucket: dict[str, PortalStorageSpaceRole] = {}
-        for metadata, grant_role in rows:
-            if metadata.archived_at and not include_archived:
-                continue
-            if account_role == AccountRole.PORTAL_MANAGER.value:
-                access_by_bucket[metadata.bucket_name] = "Manager"
-                continue
-            if metadata.owner_user_id == target.id:
-                access_by_bucket[metadata.bucket_name] = "Owner"
-                continue
-            if (metadata.archived_at and not include_archived) or self._metadata_visibility(metadata) != "shared":
-                continue
-            role = self._best_storage_space_role(
-                self._metadata_account_member_role(metadata),
-                grant_role,
-            )
-            if role:
-                access_by_bucket[metadata.bucket_name] = role
-        return access_by_bucket
-
-    def _db_storage_space_content_access(
+    def _storage_space_roles_by_bucket(
         self,
         target: User,
         account: S3Account,
@@ -161,7 +121,7 @@ class PortalStorageSpaceAccessMixin:
         access_by_bucket = (
             {}
             if account_role == AccountRole.PORTAL_MANAGER.value
-            else self._db_storage_space_content_access(user, account, account_role)
+            else self._storage_space_roles_by_bucket(user, account, account_role)
         )
         self._sync_user_storage_space_policy_projection(iam_service, iam_username, access_by_bucket)
 

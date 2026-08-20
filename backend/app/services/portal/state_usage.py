@@ -94,10 +94,7 @@ class PortalStateUsageMixin:
         account = access.account
         quota_max_size_bytes, quota_max_objects, max_buckets = self._account_limits(account)
         is_portal_user = access.role == AccountRole.PORTAL_USER.value
-        if is_portal_user:
-            allowed = set(self.list_existing_user_content_bucket_access(user, account, access.role))
-        else:
-            allowed = set(self.list_existing_user_bucket_access(user, account, access.role))
+        allowed = set(self.list_existing_user_bucket_access(user, account, access.role))
         if not allowed and not is_portal_user:
             return PortalUsage(
                 used_bytes=None,
