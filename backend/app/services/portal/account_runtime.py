@@ -84,16 +84,6 @@ class PortalAccountRuntimeMixin:
             logger.warning("Unable to build admin client for quota lookup: %s", exc)
             return None
 
-    def _account_quota(self, account: S3Account) -> tuple[Optional[int], Optional[int]]:
-        admin = self._quota_admin_for_account(account)
-        if not admin:
-            return None, None
-        try:
-            return admin.get_account_quota(account.rgw_account_id)
-        except RGWAdminError as exc:
-            logger.warning("Unable to fetch portal quota for %s: %s", account.rgw_account_id, exc)
-            return None, None
-
     def _account_limits(self, account: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
         admin = self._quota_admin_for_account(account)
         if not admin:

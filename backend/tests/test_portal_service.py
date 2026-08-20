@@ -839,7 +839,6 @@ def test_get_state_does_not_load_portal_identity_metadata(monkeypatch, db_sessio
 
     monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings())
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: pytest.fail("PortalState must not initialize IAM"))
-    monkeypatch.setattr(service, "_account_quota", lambda acc: pytest.fail("PortalState must not load quotas"))
 
     state = service.get_state(access)
 
@@ -945,7 +944,6 @@ def test_get_state_does_not_list_buckets_for_portal_manager(monkeypatch, db_sess
     service = PortalService(db_session)
 
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: pytest.fail("PortalState must not initialize IAM"))
-    monkeypatch.setattr(service, "_account_quota", lambda acc: pytest.fail("PortalState must not load quotas"))
     monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: pytest.fail("PortalState must not list buckets"))
 
     state = service.get_state(access)
@@ -5346,7 +5344,6 @@ def test_portal_user_usage_omits_other_when_all_usage_is_visible(monkeypatch, db
     service = PortalService(db_session)
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
-    monkeypatch.setattr(service, "_account_quota", lambda _account: (1_000, 100))
     monkeypatch.setattr(service, "_supervision_admin_for_account", lambda _account: object())
     monkeypatch.setattr(
         service,
@@ -5845,7 +5842,6 @@ def test_portal_alerts_are_derived_from_quota_and_public_sharing(monkeypatch, db
             PortalStorageSpaceSummary(id="public-data", name="Public Data", role="Owner", internal_bucket_name="public-data")
         ],
     )
-    monkeypatch.setattr(service, "_account_quota", lambda _account: (100, None))
     monkeypatch.setattr(
         service,
         "get_usage",
