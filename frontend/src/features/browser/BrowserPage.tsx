@@ -61,8 +61,6 @@ import {
   BucketCorsStatus,
   PresignPartRequest,
   PresignRequest,
-  StsCredentials,
-  StsStatus,
   copyObject,
   cleanupObjectVersions,
   createFolder,
@@ -72,8 +70,6 @@ import {
   fetchObjectMetadata,
   getBucketCorsStatus,
   ensureBucketCors,
-  getStsCredentials,
-  getStsStatus,
   initiateMultipartUpload,
   listBrowserObjects,
   listObjectVersions,
@@ -104,6 +100,7 @@ import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
+import { useBrowserStsSession } from "./useBrowserStsSession";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
@@ -279,7 +276,6 @@ import {
 import {
   CORS_DIRECT_TRANSFER_WARNING,
   buildBrowserTransferWarnings,
-  isStsCredentialsExpiring,
   resolveBrowserTransferAccessBadge,
   resolveBrowserTransferParallelism,
   resolveDirectCredentialStsTooltip,
@@ -576,8 +572,6 @@ export default function BrowserPage({
     [capabilityFactsOverride, onCreatePublicLinkForObject],
   );
   const isPortalProfile = resolvedFunctionalProfile === "portal";
-  // /browser is credential-first.
-  const accessMode = null;
   const [bucketName, setBucketName] = useState("");
   const [showBucketMenu, setShowBucketMenu] = useState(false);
   const [bucketFilter, setBucketFilter] = useState("");
@@ -756,13 +750,6 @@ export default function BrowserPage({
   const [browserSettings, setBrowserSettings] =
     useState<BrowserSettings | null>(null);
   const [corsStatus, setCorsStatus] = useState<BucketCorsStatus | null>(null);
-  const [stsStatus, setStsStatus] = useState<StsStatus | null>(null);
-  const [stsCredentials, setStsCredentials] = useState<StsCredentials | null>(
-    null,
-  );
-  const [stsCredentialsError, setStsCredentialsError] = useState<string | null>(
-    null,
-  );
   const [useProxyTransfers, setUseProxyTransfers] = useState(false);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [corsFixing, setCorsFixing] = useState(false);
@@ -838,8 +825,6 @@ export default function BrowserPage({
   const uploadQueueRef = useRef<UploadQueueItem[]>([]);
   const activeUploadsRef = useRef(0);
   const operationControllersRef = useRef(new Map<string, AbortController>());
-  const stsCredentialsRef = useRef<StsCredentials | null>(null);
-  const stsRefreshRef = useRef<Promise<StsCredentials | null> | null>(null);
   const [showActiveOperations, setShowActiveOperations] = useState(false);
   const [showQueuedOperations, setShowQueuedOperations] = useState(false);
   const [showCompletedOperations, setShowCompletedOperations] = useState(false);
@@ -1112,6 +1097,17 @@ export default function BrowserPage({
     Boolean(effectiveCaps?.sts) &&
     directCredentialContextKind === null &&
     !isPortalProfile;
+  const {
+    available: stsAvailable,
+    credentials: stsCredentials,
+    credentialsError: stsCredentialsError,
+    ensureCredentials: ensureStsCredentials,
+  } = useBrowserStsSession({
+    accountIdForApi,
+    enabled: stsEnabled,
+    hasContext: hasS3AccountContext,
+    requestOptions: browserRequestOptions,
+  });
   const sseFeatureEnabled =
     Boolean(effectiveCaps?.sse) && resolvedFunctionalProfile === "advanced";
   const bucketInspectorUsageEnabled = effectiveCaps
@@ -1637,61 +1633,12 @@ export default function BrowserPage({
   useEffect(() => {
     downloadParallelismRef.current = downloadParallelism;
   }, [downloadParallelism]);
-  useEffect(() => {
-    stsCredentialsRef.current = stsCredentials;
-  }, [stsCredentials]);
   const otherOperationsParallelism = transferParallelism.otherOperations;
   const otherOperationsParallelismRef = useRef(otherOperationsParallelism);
   useEffect(() => {
     otherOperationsParallelismRef.current = otherOperationsParallelism;
   }, [otherOperationsParallelism]);
   const proxyAllowed = browserSettings?.allow_proxy_transfers ?? false;
-  const ensureStsCredentials = useCallback(
-    async (force = false) => {
-      if (!hasS3AccountContext || !stsEnabled || !stsStatus?.available) {
-        setStsCredentials(null);
-        setStsCredentialsError(null);
-        return null;
-      }
-      const current = stsCredentialsRef.current;
-      if (
-        !force &&
-        current &&
-        !isStsCredentialsExpiring(current.expiration)
-      ) {
-        return current;
-      }
-      if (stsRefreshRef.current) {
-        return stsRefreshRef.current;
-      }
-      const request = getStsCredentials(accountIdForApi, browserRequestOptions)
-        .then((creds) => {
-          setStsCredentials(creds);
-          setStsCredentialsError(null);
-          return creds;
-        })
-        .catch((err) => {
-          setStsCredentials(null);
-          setStsCredentialsError(
-            extractApiError(err, "Unable to load STS credentials."),
-          );
-          return null;
-        })
-        .finally(() => {
-          stsRefreshRef.current = null;
-        });
-      stsRefreshRef.current = request;
-      return request;
-    },
-    [
-      accountIdForApi,
-      browserRequestOptions,
-      hasS3AccountContext,
-      stsEnabled,
-      stsStatus?.available,
-    ],
-  );
-  const stsAvailable = Boolean(stsEnabled && stsStatus?.available);
   const useStsPresigner = shouldUseStsPresigner({ stsAvailable, sseActive });
   const presignObjectRequest = useCallback(
     async (targetBucket: string, payload: PresignRequest) => {
@@ -2444,7 +2391,7 @@ export default function BrowserPage({
 
   useEffect(() => {
     void refreshBucketList();
-  }, [accessMode, refreshBucketList]);
+  }, [refreshBucketList]);
 
   const loadBucketSearchPage = useCallback(
     async (options?: { search?: string; page?: number; append?: boolean }) => {
@@ -2583,7 +2530,7 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, accessMode, browserRequestOptions, hasS3AccountContext]);
+  }, [accountIdForApi, browserRequestOptions, hasS3AccountContext]);
 
   useEffect(() => {
     if (!showWorkspaceSidebar || !hasS3AccountContext || !accountIdForApi) {
@@ -3305,7 +3252,7 @@ export default function BrowserPage({
       setObjectsLoading(false);
       return;
     }
-    const navigationKey = `${String(accountIdForApi ?? "")}::${String(accessMode ?? "")}::${bucketName}::${normalizedPrefix}::${sortId}`;
+    const navigationKey = `${String(accountIdForApi ?? "")}::${bucketName}::${normalizedPrefix}::${sortId}`;
     const shouldLoadImmediately =
       objectsNavigationKeyRef.current !== navigationKey;
     objectsNavigationKeyRef.current = navigationKey;
@@ -3326,7 +3273,6 @@ export default function BrowserPage({
     };
   }, [
     accountIdForApi,
-    accessMode,
     accountSwitchInFlight,
     browserRequestOptions,
     bucketName,
@@ -3415,7 +3361,6 @@ export default function BrowserPage({
     });
   }, [
     accountIdForApi,
-    accessMode,
     bucketName,
     hasS3AccountContext,
     isVersioningEnabled,
@@ -3651,7 +3596,6 @@ export default function BrowserPage({
       isMounted = false;
     };
   }, [
-    accessMode,
     accountSwitchInFlight,
     bucketName,
     currentBucketUnavailable,
@@ -3716,7 +3660,6 @@ export default function BrowserPage({
       return next;
     });
   }, [
-    accessMode,
     bucketName,
     currentBucketUnavailable,
     hasS3AccountContext,
@@ -3751,53 +3694,11 @@ export default function BrowserPage({
     };
   }, [
     accountIdForApi,
-    accessMode,
     accountSwitchInFlight,
     bucketName,
     browserRequestOptions,
     hasS3AccountContext,
     uiOrigin,
-  ]);
-
-  useEffect(() => {
-    if (!hasS3AccountContext || !stsEnabled) {
-      setStsStatus(null);
-      setStsCredentials(null);
-      setStsCredentialsError(null);
-      return;
-    }
-    let isMounted = true;
-    getStsStatus(accountIdForApi, browserRequestOptions)
-      .then((status) => {
-        if (!isMounted) return;
-        setStsStatus(status);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setStsStatus({
-          available: false,
-          error: extractApiError(err, "Unable to reach STS endpoint."),
-        });
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [accountIdForApi, accessMode, browserRequestOptions, hasS3AccountContext, stsEnabled]);
-
-  useEffect(() => {
-    if (!hasS3AccountContext || !stsEnabled || !stsStatus?.available) {
-      setStsCredentials(null);
-      setStsCredentialsError(null);
-      return;
-    }
-    ensureStsCredentials(true);
-  }, [
-    accountIdForApi,
-    accessMode,
-    ensureStsCredentials,
-    hasS3AccountContext,
-    stsEnabled,
-    stsStatus?.available,
   ]);
 
   useEffect(() => {
