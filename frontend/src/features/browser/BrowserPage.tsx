@@ -9265,6 +9265,7 @@ export default function BrowserPage({
     uploadBlobForTransfer,
     uploadMultipartStreamForTransfer,
     updateCopyDetailStatus,
+    updateOperation,
   ]);
 
   useEffect(() => {
