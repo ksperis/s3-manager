@@ -8,9 +8,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.object import ListObjectsResponse, S3Object
-from app.services.aws_client_config import StorageRequestProfile
 from app.services.s3_client import get_s3_client
-from app.services.s3_deletion import delete_objects
 from app.services.s3_execution_client import (
     require_s3_execution_credentials,
     s3_execution_client_kwargs,
@@ -20,17 +18,16 @@ logger = logging.getLogger(__name__)
 
 
 class ObjectsService:
-    def _client(self, account: S3ExecutionTarget, *, request_profile: StorageRequestProfile = "interactive"):
+    def _client(self, account: S3ExecutionTarget):
         access_key, secret_key = require_s3_execution_credentials(
             account,
             error_message="Execution context credentials are missing",
         )
         client_options = s3_execution_client_kwargs(account)
-        if request_profile != "interactive":
-            client_options["request_profile"] = request_profile
         return get_s3_client(
             access_key,
             secret_key,
+            request_profile="long_running",
             **client_options,
         )
 
@@ -42,7 +39,7 @@ class ObjectsService:
         continuation_token: Optional[str] = None,
         max_keys: int = 1000,
     ) -> ListObjectsResponse:
-        client = self._client(account, request_profile="long_running")
+        client = self._client(account)
         kwargs = {
             "Bucket": bucket_name,
             "Prefix": prefix or "",
@@ -84,25 +81,6 @@ class ObjectsService:
             next_continuation_token=resp.get("NextContinuationToken"),
         )
 
-    def create_folder(self, bucket_name: str, account: S3ExecutionTarget, folder_prefix: str) -> None:
-        client = self._client(account)
-        key = folder_prefix if folder_prefix.endswith("/") else f"{folder_prefix}/"
-        try:
-            client.put_object(Bucket=bucket_name, Key=key, Body=b"")
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to create folder '{key}' in bucket '{bucket_name}': {exc}") from exc
-        logger.debug("Created folder %s in bucket %s", key, bucket_name)
-
-    def delete_objects(self, bucket_name: str, account: S3ExecutionTarget, keys: List[str]) -> None:
-        if not keys:
-            return
-        client = self._client(account)
-        try:
-            delete_objects(client, bucket_name, [{"Key": key} for key in keys])
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to delete objects in bucket '{bucket_name}': {exc}") from exc
-        logger.debug("Deleted %s objects from bucket %s", len(keys), bucket_name)
-
     def upload_object(
         self,
         bucket_name: str,
@@ -111,7 +89,7 @@ class ObjectsService:
         file_obj,
         content_type: Optional[str] = None,
     ) -> None:
-        client = self._client(account, request_profile="long_running")
+        client = self._client(account)
         extra_args = {}
         if content_type:
             extra_args["ContentType"] = content_type
@@ -121,24 +99,6 @@ class ObjectsService:
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to upload object '{key}' in bucket '{bucket_name}': {exc}") from exc
         logger.debug("Uploaded object %s to bucket %s", key, bucket_name)
-
-    def generate_download_url(
-        self,
-        bucket_name: str,
-        account: S3ExecutionTarget,
-        key: str,
-        expires_in: int = 300,
-    ) -> str:
-        client = self._client(account)
-        try:
-            return client.generate_presigned_url(
-                "get_object",
-                Params={"Bucket": bucket_name, "Key": key},
-                ExpiresIn=expires_in,
-            )
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to generate download URL for '{key}': {exc}") from exc
-
 
 def get_objects_service() -> ObjectsService:
     return ObjectsService()

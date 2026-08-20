@@ -29,32 +29,12 @@ class _FakeS3Client:
             raise err
         return self.list_payload
 
-    def put_object(self, **kwargs):
-        self.calls.append(("put_object", kwargs))
-        err = self.raise_on.get("put_object")
-        if err:
-            raise err
-        return {}
-
     def upload_fileobj(self, fileobj, bucket, key, ExtraArgs=None):
         self.calls.append(("upload_fileobj", {"bucket": bucket, "key": key, "extra": ExtraArgs, "has_read": hasattr(fileobj, "read")}))
         err = self.raise_on.get("upload_fileobj")
         if err:
             raise err
         return {}
-
-    def generate_presigned_url(self, operation_name, Params=None, ExpiresIn=None):
-        self.calls.append(
-            (
-                "generate_presigned_url",
-                {"operation_name": operation_name, "params": Params, "expires_in": ExpiresIn},
-            )
-        )
-        err = self.raise_on.get("generate_presigned_url")
-        if err:
-            raise err
-        return "https://download.example.test/presigned"
-
 
 def _account() -> S3Account:
     account = S3Account(name="objects-account", rgw_access_key="AKIA-OBJ", rgw_secret_key="SECRET-OBJ")
@@ -100,30 +80,7 @@ def test_list_objects_wraps_errors(monkeypatch):
         service.list_objects("bucket-1", _account())
 
 
-def test_create_folder_and_delete_objects(monkeypatch):
-    service = ObjectsService()
-    fake = _FakeS3Client()
-    deleted_payloads: list[tuple] = []
-
-    monkeypatch.setattr("app.services.objects_service.get_s3_client", lambda *args, **kwargs: fake)
-    monkeypatch.setattr("app.services.objects_service.delete_objects", lambda *args: deleted_payloads.append(args))
-
-    service.create_folder("bucket-1", _account(), "path/to/folder")
-    assert ("put_object", {"Bucket": "bucket-1", "Key": "path/to/folder/", "Body": b""}) in fake.calls
-
-    service.delete_objects("bucket-1", _account(), ["a.txt", "b.txt"])
-    assert deleted_payloads
-    _, bucket_name, objects = deleted_payloads[0]
-    assert bucket_name == "bucket-1"
-    assert objects == [{"Key": "a.txt"}, {"Key": "b.txt"}]
-
-    # No-op path
-    deleted_payloads.clear()
-    service.delete_objects("bucket-1", _account(), [])
-    assert deleted_payloads == []
-
-
-def test_upload_object_and_presigned_url(monkeypatch):
+def test_upload_object(monkeypatch):
     service = ObjectsService()
     fake = _FakeS3Client()
     monkeypatch.setattr("app.services.objects_service.get_s3_client", lambda *args, **kwargs: fake)
@@ -140,11 +97,8 @@ def test_upload_object_and_presigned_url(monkeypatch):
     service.upload_object("bucket-1", _account(), "stream.bin", stream)
     assert any(call[0] == "upload_fileobj" and call[1]["key"] == "stream.bin" for call in fake.calls)
 
-    url = service.generate_download_url("bucket-1", _account(), "file.bin", expires_in=120)
-    assert url.startswith("https://download.example.test/")
 
-
-def test_upload_and_download_wrap_errors(monkeypatch):
+def test_upload_wraps_errors(monkeypatch):
     service = ObjectsService()
     fake = _FakeS3Client()
     monkeypatch.setattr("app.services.objects_service.get_s3_client", lambda *args, **kwargs: fake)
@@ -152,11 +106,6 @@ def test_upload_and_download_wrap_errors(monkeypatch):
     fake.raise_on["upload_fileobj"] = _client_error("InternalError")
     with pytest.raises(RuntimeError, match="Unable to upload object"):
         service.upload_object("bucket-1", _account(), "file.bin", b"payload")
-
-    fake.raise_on["upload_fileobj"] = None
-    fake.raise_on["generate_presigned_url"] = _client_error("AccessDenied")
-    with pytest.raises(RuntimeError, match="Unable to generate download URL"):
-        service.generate_download_url("bucket-1", _account(), "file.bin")
 
 
 def test_get_objects_service_factory():

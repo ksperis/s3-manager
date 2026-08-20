@@ -58,11 +58,11 @@ def test_ceph_admin_bucket_configuration_and_compare(
     object_key = f"ceph-admin/{uuid.uuid4().hex}.txt"
     manager_session.request(
         "POST",
-        f"/manager/buckets/{main_bucket}/objects/upload",
+        f"/browser/buckets/{main_bucket}/proxy-upload",
         params={"account_id": account_id},
-        data={"prefix": "", "key": object_key},
+        data={"key": object_key, "content_type": "text/plain"},
         files={"file": ("payload.txt", io.BytesIO(b"ceph-admin compare payload"), "text/plain")},
-        expected_status=201,
+        expected_status=200,
     )
 
     try:
@@ -264,11 +264,11 @@ def test_ceph_admin_bucket_configuration_and_compare(
         )
     finally:
         _optional(
-            "manager object cleanup",
+            "browser object cleanup",
             lambda: manager_session.post(
-                f"/manager/buckets/{main_bucket}/objects/delete",
+                f"/browser/buckets/{main_bucket}/delete",
                 params={"account_id": account_id},
-                json={"keys": [object_key]},
+                json={"objects": [{"key": object_key}]},
                 expected_status=(200, 404),
             ),
         )

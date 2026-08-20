@@ -27,15 +27,6 @@ class CreateFolderPayload(ApiModel):
     prefix: str = Field(..., description="Folder prefix, trailing slash optional")
 
 
-class DeleteObjectKeysPayload(ApiModel):
-    keys: list[str]
-
-
 class ObjectUploadResponse(ApiModel):
     key: str
     message: str
-
-
-class ObjectDownloadResponse(ApiModel):
-    url: str
-    expires_in: int

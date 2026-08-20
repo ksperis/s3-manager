@@ -7,7 +7,6 @@ from inspect import signature
 import pytest
 
 from app.routers import browser, browser_objects, browser_transfers, portal_objects
-from app.routers.manager import objects as manager_objects
 
 
 @pytest.mark.parametrize(
@@ -31,9 +30,6 @@ from app.routers.manager import objects as manager_objects
         portal_objects.portal_restore_storage_space_object,
         portal_objects.portal_delete_storage_space_object,
         portal_objects.portal_download_storage_space_object,
-        manager_objects.upload_object,
-        manager_objects.create_folder,
-        manager_objects.delete_objects,
     ],
 )
 def test_data_plane_endpoints_do_not_resolve_application_audit(endpoint) -> None:

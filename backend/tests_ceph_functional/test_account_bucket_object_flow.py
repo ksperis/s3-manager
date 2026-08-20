@@ -171,11 +171,11 @@ def test_account_bucket_object_flow(
 
     upload_response = manager_session.request(
         "POST",
-        f"/manager/buckets/{bucket_name}/objects/upload",
+        f"/browser/buckets/{bucket_name}/proxy-upload",
         params={"account_id": account_id},
-        data={"prefix": "", "key": object_key},
+        data={"key": object_key, "content_type": "text/plain"},
         files={"file": ("payload.txt", io.BytesIO(object_body), "text/plain")},
-        expected_status=201,
+        expected_status=200,
     ).json()
 
     assert upload_response["key"] == object_key
@@ -186,16 +186,21 @@ def test_account_bucket_object_flow(
     )
     assert any(obj["key"] == object_key for obj in listed_objects["objects"]), "Object not found in listing"
 
-    download_info = manager_session.get(
-        f"/manager/buckets/{bucket_name}/objects/download",
+    download_response = manager_session.request(
+        "GET",
+        f"/browser/buckets/{bucket_name}/download",
         params={"account_id": account_id, "key": object_key},
+        stream=True,
     )
-    assert download_info["url"].startswith("http")
+    try:
+        assert download_response.content == object_body
+    finally:
+        download_response.close()
 
     manager_session.post(
-        f"/manager/buckets/{bucket_name}/objects/delete",
+        f"/browser/buckets/{bucket_name}/delete",
         params={"account_id": account_id},
-        json={"keys": [object_key]},
+        json={"objects": [{"key": object_key}]},
         expected_status=200,
     )
     _wait_for_object_absence(

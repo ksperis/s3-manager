@@ -23,6 +23,15 @@ still sends a removed field now receives `422` instead of silently discarding
 it. Deploy the backend and frontend together, and remove obsolete properties
 from any local scripts before upgrading.
 
+## 2026-08 canonical object data plane
+
+The unused Manager object upload, folder creation, deletion, and presigned
+download routes under `/api/manager/buckets/{bucket_name}/objects/*` have been
+removed. The Manager bucket detail keeps its read-only object listing endpoint.
+Use the Browser object endpoints for data-plane operations; there is no Manager
+compatibility alias. Deploy the backend and frontend together, and migrate any
+local functional tooling to the Browser routes before upgrading.
+
 ## 2026-08 strict environment-managed provider configuration
 
 Entries nested under `OIDC_PROVIDERS`, `LDAP_PROVIDERS`, and

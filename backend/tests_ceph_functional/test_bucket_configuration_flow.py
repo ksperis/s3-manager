@@ -786,11 +786,11 @@ def test_manager_bucket_replication_roundtrip(
         object_body = f"same-zonegroup {uuid.uuid4().hex}\n".encode("utf-8")
         upload_response = manager_session.request(
             "POST",
-            f"/manager/buckets/{bucket_name}/objects/upload",
+            f"/browser/buckets/{bucket_name}/proxy-upload",
             params=_account_params(account_ref),
-            data={"prefix": "", "key": object_key},
+            data={"key": object_key, "content_type": "text/plain"},
             files={"file": ("replication.txt", io.BytesIO(object_body), "text/plain")},
-            expected_status=201,
+            expected_status=200,
         ).json()
         assert upload_response["key"] == object_key
 

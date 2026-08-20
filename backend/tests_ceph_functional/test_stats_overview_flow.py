@@ -39,11 +39,11 @@ def test_manager_stats_overview_and_traffic(
     object_key = f"stats/{uuid.uuid4().hex}.txt"
     manager_session.request(
         "POST",
-        f"/manager/buckets/{bucket_name}/objects/upload",
+        f"/browser/buckets/{bucket_name}/proxy-upload",
         params={"account_id": account_id},
-        data={"prefix": "", "key": object_key},
+        data={"key": object_key, "content_type": "text/plain"},
         files={"file": ("info.txt", b"usage sample", "text/plain")},
-        expected_status=201,
+        expected_status=200,
     )
 
     overview = manager_session.get(
@@ -64,9 +64,9 @@ def test_manager_stats_overview_and_traffic(
         assert traffic["window"] in {"day", "DAY"}
 
     manager_session.post(
-        f"/manager/buckets/{bucket_name}/objects/delete",
+        f"/browser/buckets/{bucket_name}/delete",
         params={"account_id": account_id},
-        json={"keys": [object_key]},
+        json={"objects": [{"key": object_key}]},
     )
     manager_session.delete(
         f"/manager/buckets/{bucket_name}",

@@ -38,11 +38,11 @@ def _parse_sse_result(text: str) -> dict[str, Any]:
 def _upload(session: BackendSession, account_id: int, bucket_name: str, key: str, payload: bytes, filename: str) -> None:
     session.request(
         "POST",
-        f"/manager/buckets/{bucket_name}/objects/upload",
+        f"/browser/buckets/{bucket_name}/proxy-upload",
         params={"account_id": account_id},
-        data={"prefix": "", "key": key},
+        data={"key": key, "content_type": "application/octet-stream"},
         files={"file": (filename, payload, "application/octet-stream")},
-        expected_status=201,
+        expected_status=200,
     )
 
 
@@ -164,9 +164,9 @@ def test_bucket_usage_stats_counts_current_and_noncurrent_version_bytes(
     _upload(manager_session, account_id, bucket_name, "docs/report.pdf", b"01234567890123456789", "report-v2.pdf")
     _upload(manager_session, account_id, bucket_name, "images/logo.png", b"12345", "logo.png")
     manager_session.post(
-        f"/manager/buckets/{bucket_name}/objects/delete",
+        f"/browser/buckets/{bucket_name}/delete",
         params={"account_id": account_id},
-        json={"keys": ["images/logo.png"]},
+        json={"objects": [{"key": "images/logo.png"}]},
     )
 
     result = _run_manager_usage_stats(manager_session, account_id, bucket_name)
