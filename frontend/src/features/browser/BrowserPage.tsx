@@ -24,7 +24,6 @@ import {
 } from "react-router-dom";
 import type { UploadProgressEvent } from "../../api/browser";
 import TableEmptyState from "../../components/TableEmptyState";
-import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import {
   toolbarCompactInputClasses,
   toolbarCompactSelectClasses,
@@ -47,9 +46,11 @@ import {
   CLIENT_STORAGE_KEYS,
   writeClientStorage,
 } from "../../utils/clientStorage";
-import { stableSignature } from "../../utils/stableSignature";
 import { readStoredUser } from "../../utils/workspaces";
-import type { S3AccountSelector } from "../../api/accountParams";
+import {
+  normalizeS3AccountSelectorId,
+  type S3AccountSelector,
+} from "../../api/accountParams";
 import {
   BrowserBucket,
   type BrowserUsageSummary,
@@ -102,6 +103,7 @@ import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
+import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
@@ -191,11 +193,6 @@ import {
 } from "./browserRootUiState";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
-import {
-  activateSseCustomerKeyForScope,
-  copySseCustomerKeyWithFallback,
-  generateAndActivateSseCustomerKeyForScope,
-} from "./sseCustomerKeyActions";
 import { resolveBrowserPanelVisibility } from "./browserResponsivePanels";
 import {
   BucketIcon,
@@ -766,21 +763,6 @@ export default function BrowserPage({
   const [stsCredentialsError, setStsCredentialsError] = useState<string | null>(
     null,
   );
-  const [sseCustomerKeysByScope, setSseCustomerKeysByScope] = useState<
-    Record<string, string>
-  >({});
-  const [showSseCustomerModal, setShowSseCustomerModal] = useState(false);
-  const [sseCustomerKeyInput, setSseCustomerKeyInput] = useState("");
-  const [sseCustomerInitialSignature, setSseCustomerInitialSignature] = useState(() =>
-    stableSignature({ sseCustomerKeyInput: "" })
-  );
-  const [sseCustomerKeyError, setSseCustomerKeyError] = useState<string | null>(
-    null,
-  );
-  const [sseCustomerKeyNotice, setSseCustomerKeyNotice] = useState<
-    string | null
-  >(null);
-  const [sseCustomerKeyVisible, setSseCustomerKeyVisible] = useState(false);
   const [useProxyTransfers, setUseProxyTransfers] = useState(false);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [corsFixing, setCorsFixing] = useState(false);
@@ -1137,40 +1119,46 @@ export default function BrowserPage({
     : true;
   const bucketInspectorStaticWebsiteEnabled =
     effectiveCaps?.static_website ?? true;
-  const normalizeSelectorId = useCallback(
-    (value: S3AccountSelector | null | undefined) => {
-      if (value == null) return null;
-      return String(value);
-    },
-    [],
-  );
-  const currentAccountId = normalizeSelectorId(accountIdForApi);
+  const currentAccountId = normalizeS3AccountSelectorId(accountIdForApi);
   const accountSwitchInFlight =
     previousAccountIdRef.current !== accountIdForApi;
-  const sseCustomerScopeKey = useMemo(() => {
-    if (!currentAccountId || !bucketName) return null;
-    return `${currentAccountId}::${bucketName}`;
-  }, [bucketName, currentAccountId]);
-  const sseCustomerKeyBase64Raw = useMemo(() => {
-    if (!sseCustomerScopeKey) return null;
-    return sseCustomerKeysByScope[sseCustomerScopeKey] ?? null;
-  }, [sseCustomerKeysByScope, sseCustomerScopeKey]);
-  const sseCustomerKeyBase64 = sseFeatureEnabled
-    ? sseCustomerKeyBase64Raw
-    : null;
-  const getSseCustomerKeyForScope = useCallback(
-    (selector: S3AccountSelector | null | undefined, bucket: string) => {
-      const normalizedSelector = normalizeSelectorId(selector);
-      if (!normalizedSelector || !bucket) return null;
-      return sseCustomerKeysByScope[`${normalizedSelector}::${bucket}`] ?? null;
-    },
-    [normalizeSelectorId, sseCustomerKeysByScope],
-  );
-  const sseActive = Boolean(sseCustomerKeyBase64);
+  const openSseCustomerKeyCopyDialog = useCallback((keyBase64: string) => {
+    setCopyDialog({
+      title: "Copy SSE-C key",
+      label: "SSE-C key",
+      value: keyBase64,
+      successMessage: "SSE-C key copied to clipboard.",
+    });
+  }, []);
+  const {
+    keyBase64: sseCustomerKeyBase64,
+    active: sseActive,
+    getKeyForScope: getSseCustomerKeyForScope,
+    showModal: showSseCustomerModal,
+    input: sseCustomerKeyInput,
+    visible: sseCustomerKeyVisible,
+    error: sseCustomerKeyError,
+    notice: sseCustomerKeyNotice,
+    canGenerate: canGenerateSseCustomerKey,
+    open: openSseCustomerModal,
+    updateInput: updateSseCustomerKeyInput,
+    toggleVisibility: toggleSseCustomerKeyVisibility,
+    generate: generateSseCustomerKey,
+    clear: clearSseCustomerKey,
+    activate: activateSseCustomerKey,
+    requestClose: requestSseCustomerModalClose,
+    confirmationDialog: sseCustomerConfirmationDialog,
+  } = useBrowserSseCustomerKeys({
+    accountIdForApi,
+    bucketName,
+    enabled: sseFeatureEnabled,
+    onManualCopyRequired: openSseCustomerKeyCopyDialog,
+    setStatusMessage,
+  });
   const showSseControls = Boolean(
     sseFeatureEnabled && hasS3AccountContext && bucketName,
   );
-  const clipboardAccountId = normalizeSelectorId(
+  const clipboardAccountId = normalizeS3AccountSelectorId(
     clipboard?.sourceSelector ?? null,
   );
   const clipboardMatchesContext = Boolean(
@@ -1598,110 +1586,6 @@ export default function BrowserPage({
     bucketAccessCacheRef.current.set(bucketAccessContextKey, cached);
     setBucketAccessByName(cached);
   }, [bucketAccessContextKey, hasS3AccountContext, resetBucketAccessQueue]);
-
-  const openSseCustomerModal = useCallback(() => {
-    if (!sseFeatureEnabled || !sseCustomerScopeKey) return;
-    const nextInput = sseCustomerKeyBase64 ?? "";
-    setSseCustomerKeyInput(nextInput);
-    setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput: nextInput }));
-    setSseCustomerKeyError(null);
-    setSseCustomerKeyNotice(null);
-    setSseCustomerKeyVisible(false);
-    setShowSseCustomerModal(true);
-  }, [sseCustomerKeyBase64, sseCustomerScopeKey, sseFeatureEnabled]);
-  const handleActivateSseCustomerKey = useCallback(() => {
-    if (!sseCustomerScopeKey) return;
-    try {
-      const result = activateSseCustomerKeyForScope(
-        sseCustomerKeysByScope,
-        sseCustomerScopeKey,
-        sseCustomerKeyInput,
-      );
-      setSseCustomerKeysByScope(result.next);
-      setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput }));
-      setSseCustomerKeyError(null);
-      setSseCustomerKeyNotice(null);
-      setShowSseCustomerModal(false);
-      setStatusMessage("SSE-C key enabled for this bucket.");
-    } catch (err) {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : "Unable to activate SSE-C key.";
-      setSseCustomerKeyError(message);
-    }
-  }, [sseCustomerKeyInput, sseCustomerKeysByScope, sseCustomerScopeKey]);
-  const handleGenerateSseCustomerKey = useCallback(async () => {
-    if (!sseCustomerScopeKey) return;
-    let generatedKey = "";
-    try {
-      const result = generateAndActivateSseCustomerKeyForScope(
-        sseCustomerKeysByScope,
-        sseCustomerScopeKey,
-      );
-      generatedKey = result.normalizedKey;
-      setSseCustomerKeysByScope(result.next);
-      setSseCustomerKeyInput(generatedKey);
-      setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput: generatedKey }));
-      setSseCustomerKeyError(null);
-      setSseCustomerKeyVisible(false);
-    } catch (err) {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : "Unable to generate SSE-C key.";
-      setSseCustomerKeyError(message);
-      setSseCustomerKeyNotice(null);
-      return;
-    }
-    const copyOutcome = await copySseCustomerKeyWithFallback(
-      generatedKey,
-      navigator.clipboard?.writeText?.bind(navigator.clipboard),
-      () => {
-        setCopyDialog({
-          title: "Copy SSE-C key",
-          label: "SSE-C key",
-          value: generatedKey,
-          successMessage: "SSE-C key copied to clipboard.",
-        });
-      },
-    );
-    if (copyOutcome === "copied") {
-      setSseCustomerKeyNotice(
-        "SSE-C key generated and enabled. Copy and save this key now; it will be lost on browser refresh.",
-      );
-      setStatusMessage(
-        "SSE-C key generated, enabled, and copied to clipboard.",
-      );
-      return;
-    }
-    setSseCustomerKeyNotice(
-      "SSE-C key generated and enabled. Clipboard access failed: copy and save the key now using the manual dialog.",
-    );
-    setStatusMessage(
-      "SSE-C key generated and enabled. Copy it manually from the dialog.",
-    );
-  }, [sseCustomerKeysByScope, sseCustomerScopeKey]);
-  const handleClearSseCustomerKey = useCallback(() => {
-    if (!sseCustomerScopeKey) return;
-    setSseCustomerKeysByScope((prev) => {
-      const next = { ...prev };
-      delete next[sseCustomerScopeKey];
-      return next;
-    });
-    setSseCustomerKeyInput("");
-    setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput: "" }));
-    setSseCustomerKeyError(null);
-    setSseCustomerKeyNotice(null);
-    setSseCustomerKeyVisible(false);
-    setShowSseCustomerModal(false);
-    setStatusMessage("SSE-C key cleared for this bucket.");
-  }, [sseCustomerScopeKey]);
-  useEffect(() => {
-    if (!sseFeatureEnabled && showSseCustomerModal) {
-      setShowSseCustomerModal(false);
-    }
-  }, [showSseCustomerModal, sseFeatureEnabled]);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   const isVersioningEnabled = bucketVersioningAvailable;
@@ -8723,7 +8607,7 @@ export default function BrowserPage({
         selector: S3AccountSelector,
         targetBucket: string,
       ) => {
-        const cacheKey = `${normalizeSelectorId(selector) ?? ""}::${targetBucket}`;
+        const cacheKey = `${normalizeS3AccountSelectorId(selector) ?? ""}::${targetBucket}`;
         const cached = transferModeCache.get(cacheKey);
         if (cached) {
           return cached;
@@ -8903,7 +8787,6 @@ export default function BrowserPage({
     refreshObjectsNow,
     resolveClipboardTransferMode,
     resolvedFunctionalProfile,
-    normalizeSelectorId,
     startOperation,
     uploadBlobForTransfer,
     uploadMultipartStreamForTransfer,
@@ -9626,23 +9509,6 @@ export default function BrowserPage({
   const chromeToolbarIconButtonClasses = toolbarIconButtonClasses;
   const chromeBulkActionClasses = bulkActionClasses;
   const chromeDangerActionClasses = bulkDangerClasses;
-  const sseCustomerCurrentSignature = useMemo(
-    () => stableSignature({ sseCustomerKeyInput }),
-    [sseCustomerKeyInput],
-  );
-  const closeSseCustomerModal = () => {
-    const nextInput = sseCustomerKeyBase64 ?? "";
-    setShowSseCustomerModal(false);
-    setSseCustomerKeyInput(nextInput);
-    setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput: nextInput }));
-    setSseCustomerKeyError(null);
-    setSseCustomerKeyNotice(null);
-    setSseCustomerKeyVisible(false);
-  };
-  const sseCustomerCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: showSseCustomerModal && sseCustomerCurrentSignature !== sseCustomerInitialSignature,
-    onClose: closeSseCustomerModal,
-  });
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
   const isActionBarVisible = selectedCount > 0;
@@ -12552,22 +12418,14 @@ export default function BrowserPage({
           error={sseCustomerKeyError}
           notice={sseCustomerKeyNotice}
           active={sseActive}
-          canGenerate={Boolean(sseCustomerScopeKey)}
-          confirmationDialog={sseCustomerCloseGuard.confirmationDialog}
-          onValueChange={(value) => {
-            setSseCustomerKeyInput(value);
-            if (sseCustomerKeyError) {
-              setSseCustomerKeyError(null);
-            }
-            if (sseCustomerKeyNotice) {
-              setSseCustomerKeyNotice(null);
-            }
-          }}
-          onToggleVisibility={() => setSseCustomerKeyVisible((prev) => !prev)}
-          onGenerate={() => void handleGenerateSseCustomerKey()}
-          onClear={handleClearSseCustomerKey}
-          onActivate={handleActivateSseCustomerKey}
-          onClose={sseCustomerCloseGuard.requestClose}
+          canGenerate={canGenerateSseCustomerKey}
+          confirmationDialog={sseCustomerConfirmationDialog}
+          onValueChange={updateSseCustomerKeyInput}
+          onToggleVisibility={toggleSseCustomerKeyVisibility}
+          onGenerate={() => void generateSseCustomerKey()}
+          onClear={clearSseCustomerKey}
+          onActivate={activateSseCustomerKey}
+          onClose={requestSseCustomerModalClose}
         />
       )}
       {showMultipartUploadsModal && bucketName && hasS3AccountContext && (

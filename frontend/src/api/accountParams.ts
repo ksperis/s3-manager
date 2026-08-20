@@ -4,6 +4,12 @@
  */
 export type S3AccountSelector = number | string | null | undefined;
 
+export function normalizeS3AccountSelectorId(
+  accountId: S3AccountSelector,
+): string | null {
+  return accountId == null ? null : String(accountId);
+}
+
 export function withS3AccountParam(
   params?: Record<string, unknown> | null,
   accountId?: S3AccountSelector

@@ -3634,6 +3634,37 @@ describe("BrowserPage interactions", () => {
     expect(within(dialog).getByRole("button", { name: "Hide" })).toHaveClass("ui-button-base");
   });
 
+  it("activates an SSE-C key for the current browser scope", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      accountIdForApi: "acc-1",
+      initialEntry: "/browser?bucket=bucket-1",
+      storageEndpointCapabilities: { sse: true },
+    });
+    await findRowByLabel("a.txt");
+
+    const moreMenu = await openContextMoreMenu(user);
+    await user.click(within(moreMenu).getByRole("menuitem", { name: /SSE-C/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: "SSE-C key" });
+    const keyBase64 = btoa("a".repeat(32));
+    await user.type(
+      within(dialog).getByLabelText("Customer key (base64, 32 bytes)"),
+      keyBase64,
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Enable" }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "SSE-C key" }),
+      ).not.toBeInTheDocument();
+    });
+    const enabledMenu = await openContextMoreMenu(user);
+    expect(
+      within(enabledMenu).getByText("Enabled for this bucket"),
+    ).toBeInTheDocument();
+  });
+
   it("hides the selection bar on Escape and keeps Paste as a context action", async () => {
     const user = userEvent.setup();
     renderPage();
