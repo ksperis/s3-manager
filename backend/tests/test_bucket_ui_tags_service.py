@@ -234,6 +234,21 @@ def test_bucket_ui_tag_routes_persist_ceph_visibility_and_reject_forged_storage_
         == 1
     )
 
+    remove_all = client.patch(
+        f"/api/ceph-admin/endpoints/{endpoint.id}/bucket-ui-tags",
+        json={
+            "targets": [{"name": "bucket-a", "tenant": ""}],
+            "remove_all": True,
+        },
+    )
+    assert remove_all.status_code == 200, remove_all.text
+    assert (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "bucket_ui_tags.update_shared")
+        .count()
+        == 2
+    )
+
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = lambda: owner
     app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     monkeypatch.setattr(storage_bucket_ui_tags_router, "_collect_context_refs", lambda _user, _db: [])

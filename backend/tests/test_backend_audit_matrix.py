@@ -113,6 +113,19 @@ def test_backend_audit_matrix_tracks_shared_bucket_config_mutation_delegation():
     assert rows_by_function["delete_bucket_encryption"].signals["delegated_bucket_config_mutation_audit"]
 
 
+def test_backend_audit_matrix_tracks_ceph_admin_bucket_ui_tag_delegation():
+    backend_root = Path(__file__).resolve().parents[1]
+    row = next(
+        row
+        for row in collect_rows(backend_root)
+        if row.function == "patch_bucket_ui_tags"
+        and row.file.relative_to(backend_root)
+        == Path("app/routers/ceph_admin/bucket_ui_tags.py")
+    )
+
+    assert row.signals["delegated_ceph_admin_bucket_ui_tags_audit"]
+
+
 def test_backend_audit_matrix_classifies_every_mutating_route():
     backend_root = Path(__file__).resolve().parents[1]
 
