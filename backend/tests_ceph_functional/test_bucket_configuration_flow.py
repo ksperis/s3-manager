@@ -705,6 +705,7 @@ def test_manager_bucket_replication_roundtrip(
     )
     manager_session: BackendSession = context["manager_session"]
     account_ref = context["account_ref"]
+    source_endpoint_id = int(source_endpoint["id"])
     target_endpoint_id = int(target_endpoint["id"])
 
     bucket_name = _bucket_name(ceph_test_settings.test_prefix, "replication")
@@ -784,10 +785,11 @@ def test_manager_bucket_replication_roundtrip(
 
         object_key = f"replication/{uuid.uuid4().hex}.txt"
         object_body = f"same-zonegroup {uuid.uuid4().hex}\n".encode("utf-8")
-        upload_response = manager_session.request(
+        upload_response = super_admin_session.request(
             "POST",
             f"/browser/buckets/{bucket_name}/proxy-upload",
-            params=_account_params(account_ref),
+            params={"account_id": f"ceph-admin-{source_endpoint_id}"},
+            headers={"X-S3-Workspace": ""},
             data={"key": object_key, "content_type": "text/plain"},
             files={"file": ("replication.txt", io.BytesIO(object_body), "text/plain")},
             expected_status=200,
