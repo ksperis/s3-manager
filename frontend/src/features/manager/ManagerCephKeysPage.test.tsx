@@ -22,10 +22,6 @@ vi.mock("../../api/managerCephKeys", () => ({
   deleteManagerCephAccessKey: (...args: unknown[]) => deleteManagerCephAccessKeyMock(...args),
 }));
 
-vi.mock("../../utils/confirm", () => ({
-  confirmAction: () => true,
-}));
-
 function buildContext(overrides?: Record<string, unknown>) {
   return {
     hasS3AccountContext: true,
@@ -166,6 +162,10 @@ describe("ManagerCephKeysPage", () => {
     if (!enabledDeleteButton) throw new Error("Expected an enabled delete button");
 
     await user.click(enabledDeleteButton);
+    expect(screen.getByRole("heading", { name: "Delete Ceph access key?" })).toBeInTheDocument();
+    expect(screen.getAllByText("AK-SECONDARY").length).toBeGreaterThan(1);
+    expect(deleteManagerCephAccessKeyMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Delete key" }));
     await waitFor(() => {
       expect(deleteManagerCephAccessKeyMock).toHaveBeenCalledWith("s3u-11", "AK-SECONDARY");
     });

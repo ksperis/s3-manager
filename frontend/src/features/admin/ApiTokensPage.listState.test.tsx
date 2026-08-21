@@ -4,17 +4,19 @@ import ApiTokensPage from "./ApiTokensPage";
 
 const listApiTokensMock = vi.fn();
 const createApiTokenMock = vi.fn();
+const revokeApiTokenMock = vi.fn();
 
 vi.mock("../../api/apiTokens", () => ({
   listApiTokens: (includeRevoked?: boolean) => listApiTokensMock(includeRevoked),
   createApiToken: (...args: unknown[]) => createApiTokenMock(...args),
-  revokeApiToken: vi.fn(),
+  revokeApiToken: (...args: unknown[]) => revokeApiTokenMock(...args),
 }));
 
 describe("ApiTokensPage list states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listApiTokensMock.mockResolvedValue([]);
+    revokeApiTokenMock.mockResolvedValue(undefined);
   });
 
   it("shows the load error once in the table when no rows are available", async () => {
@@ -85,5 +87,30 @@ describe("ApiTokensPage list states", () => {
     expect(screen.getByText("secret-token-value")).toHaveClass("font-mono");
     expect(screen.getByText("secret-token-value")).toHaveClass("border-amber-200");
     expect(screen.getByRole("button", { name: "Copy auth header" })).toBeInTheDocument();
+  });
+
+  it("confirms token revocation with its scopes before calling the API", async () => {
+    listApiTokensMock.mockResolvedValue([
+      {
+        id: "tok-1",
+        name: "deployment-bot",
+        scopes: ["manager:read", "manager:write"],
+        created_at: "2026-03-01T00:00:00.000Z",
+        expires_at: "2099-06-01T00:00:00.000Z",
+        last_used_at: null,
+        revoked_at: null,
+      },
+    ]);
+
+    render(<ApiTokensPage />);
+    await screen.findByText("deployment-bot");
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+    expect(screen.getByRole("heading", { name: "Revoke API token?" })).toBeInTheDocument();
+    expect(screen.getByText("manager:read, manager:write")).toBeInTheDocument();
+    expect(revokeApiTokenMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Revoke token" }));
+    await waitFor(() => expect(revokeApiTokenMock).toHaveBeenCalledWith("tok-1"));
   });
 });

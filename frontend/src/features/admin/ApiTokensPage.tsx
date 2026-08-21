@@ -17,6 +17,7 @@ import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -24,7 +25,6 @@ import { toolbarCompactToggleClasses } from "../../components/toolbarControlClas
 import { cx, uiButtonBaseClass, uiButtonVariants, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
-import { confirmAction } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 
 type TokenStatus = "active" | "expired" | "revoked";
@@ -103,6 +103,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
   const [busyTokenId, setBusyTokenId] = useState<string | null>(null);
   const [revealedToken, setRevealedToken] = useState<RevealedToken | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const revokeConfirmation = useConfirmActionDialog();
 
   const apiBase = useMemo(() => {
     const configured = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
@@ -218,10 +219,9 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
     }
   };
 
-  const handleRevoke = async (token: ApiTokenInfo) => {
+  const revokeToken = async (token: ApiTokenInfo) => {
     const status = resolveTokenStatus(token);
     if (status !== "active") return;
-    if (!confirmAction(`Revoke API token '${token.name}'?`)) return;
     setBusyTokenId(token.id);
     setActionMessage(null);
     setActionError(null);
@@ -234,6 +234,21 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
     } finally {
       setBusyTokenId(null);
     }
+  };
+
+  const handleRevoke = (token: ApiTokenInfo) => {
+    if (resolveTokenStatus(token) !== "active") return;
+    revokeConfirmation.requestConfirmation({
+      title: "Revoke API token?",
+      description: "Immediately invalidate this automation token.",
+      confirmLabel: "Revoke token",
+      details: [
+        { label: "Token", value: token.name },
+        { label: "Scopes", value: token.scopes.join(", "), mono: true },
+      ],
+      impacts: ["Existing scripts and integrations using this token will stop authenticating."],
+      onConfirm: () => revokeToken(token),
+    });
   };
 
   const copyAndNotify = async (value: string, message: string) => {
@@ -422,6 +437,8 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
           responsiveCards
         />
       </ListPageSection>
+
+      {revokeConfirmation.confirmationDialog}
 
       {showCreateModal && (
         <Modal title="Create API token" onClose={createCloseGuard.requestClose} maxWidthClass="max-w-xl">

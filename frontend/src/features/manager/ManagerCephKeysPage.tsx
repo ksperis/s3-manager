@@ -27,7 +27,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { cx } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 import CreateManagedPrivateAccessModal from "./CreateManagedPrivateAccessModal";
@@ -61,6 +61,7 @@ export default function ManagerCephKeysPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [keyFilter, setKeyFilter] = useState("");
   const [showPrivateAccessModal, setShowPrivateAccessModal] = useState(false);
+  const keyConfirmation = useConfirmActionDialog();
 
   const isS3UserContext = selectedS3AccountType === "s3_user";
   const canManageCephKeys = Boolean(hasS3AccountContext && isS3UserContext && managerCephKeysEnabled);
@@ -109,11 +110,9 @@ export default function ManagerCephKeysPage() {
     }
   };
 
-  const handleToggleKey = async (key: ManagerCephAccessKey) => {
+  const toggleKey = async (key: ManagerCephAccessKey) => {
     if (!canManageCephKeys || key.is_ui_managed) return;
     const currentlyActive = key.is_active;
-    if (currentlyActive && !confirmAction(`Disable key ${key.access_key_id}?`)) return;
-
     setBusy(`toggle:${key.access_key_id}`);
     setError(null);
     setActionMessage(null);
@@ -128,10 +127,8 @@ export default function ManagerCephKeysPage() {
     }
   };
 
-  const handleDeleteKey = async (key: ManagerCephAccessKey) => {
+  const deleteKey = async (key: ManagerCephAccessKey) => {
     if (!canManageCephKeys || key.is_ui_managed) return;
-    if (!confirmAction(`Delete key ${key.access_key_id}?`)) return;
-
     setBusy(`delete:${key.access_key_id}`);
     setError(null);
     setActionMessage(null);
@@ -144,6 +141,35 @@ export default function ManagerCephKeysPage() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleToggleKey = (key: ManagerCephAccessKey) => {
+    if (!key.is_active) {
+      void toggleKey(key);
+      return;
+    }
+    keyConfirmation.requestConfirmation({
+      title: "Disable Ceph access key?",
+      description: "Temporarily prevent this RGW access key from authenticating.",
+      confirmLabel: "Disable key",
+      details: [{ label: "Access key", value: key.access_key_id, mono: true }],
+      impacts: ["Applications using this key will lose access until the key is enabled again."],
+      onConfirm: () => toggleKey(key),
+    });
+  };
+
+  const handleDeleteKey = (key: ManagerCephAccessKey) => {
+    keyConfirmation.requestConfirmation({
+      title: "Delete Ceph access key?",
+      description: "Permanently remove this RGW access key from the current S3 User context.",
+      confirmLabel: "Delete key",
+      details: [
+        { label: "Context", value: selectedS3AccountName || "Current S3 User" },
+        { label: "Access key", value: key.access_key_id, mono: true },
+      ],
+      impacts: ["Applications using this key will immediately lose access."],
+      onConfirm: () => deleteKey(key),
+    });
   };
 
   const filteredKeys = keys.filter((key) => {
@@ -303,6 +329,7 @@ export default function ManagerCephKeysPage() {
           </ManagerTable>
         </ListPageSection>
       )}
+      {keyConfirmation.confirmationDialog}
       {canProvisionManagedPrivateAccess && showPrivateAccessModal && (
         <CreateManagedPrivateAccessModal
           variant="rgw_user"

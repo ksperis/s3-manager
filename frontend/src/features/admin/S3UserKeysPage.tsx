@@ -30,7 +30,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { cx } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 
 export default function S3UserKeysPage() {
   const { userId } = useParams<{ userId: string }>();
@@ -42,6 +42,7 @@ export default function S3UserKeysPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<CreatedS3UserAccessKey | null>(null);
+  const keyConfirmation = useConfirmActionDialog();
 
   const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
@@ -101,9 +102,8 @@ export default function S3UserKeysPage() {
     }
   };
 
-  const handleDeleteKey = async (accessKeyId: string) => {
+  const deleteKey = async (accessKeyId: string) => {
     if (!Number.isFinite(numericUserId)) return;
-    if (!confirmAction(`Delete key ${accessKeyId}?`)) return;
     setBusy(`delete:${accessKeyId}`);
     setError(null);
     setActionMessage(null);
@@ -118,9 +118,8 @@ export default function S3UserKeysPage() {
     }
   };
 
-  const handleToggleKey = async (accessKeyId: string, nextActive: boolean) => {
+  const toggleKey = async (accessKeyId: string, nextActive: boolean) => {
     if (!Number.isFinite(numericUserId)) return;
-    if (!nextActive && !confirmAction(`Disable key ${accessKeyId}?`)) return;
     setBusy(`toggle:${accessKeyId}`);
     setError(null);
     setActionMessage(null);
@@ -133,6 +132,38 @@ export default function S3UserKeysPage() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleDeleteKey = (accessKeyId: string) => {
+    keyConfirmation.requestConfirmation({
+      title: "Delete access key?",
+      description: "Permanently remove this RGW access key from the selected user.",
+      confirmLabel: "Delete key",
+      details: [
+        { label: "User", value: pageTitle },
+        { label: "Access key", value: accessKeyId, mono: true },
+      ],
+      impacts: ["Applications using this key will immediately lose access."],
+      onConfirm: () => deleteKey(accessKeyId),
+    });
+  };
+
+  const handleToggleKey = (accessKeyId: string, nextActive: boolean) => {
+    if (nextActive) {
+      void toggleKey(accessKeyId, true);
+      return;
+    }
+    keyConfirmation.requestConfirmation({
+      title: "Disable access key?",
+      description: "Temporarily prevent this RGW access key from authenticating.",
+      confirmLabel: "Disable key",
+      details: [
+        { label: "User", value: pageTitle },
+        { label: "Access key", value: accessKeyId, mono: true },
+      ],
+      impacts: ["Applications using this key will lose access until the key is enabled again."],
+      onConfirm: () => toggleKey(accessKeyId, false),
+    });
   };
 
   const handleRotateUiKey = async () => {
@@ -290,6 +321,7 @@ export default function S3UserKeysPage() {
           })}
         </ManagerTable>
       </ListSectionCard>
+      {keyConfirmation.confirmationDialog}
     </PageShell>
   );
 }

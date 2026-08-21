@@ -28,7 +28,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { cx } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 
 function extractError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
@@ -45,6 +45,7 @@ export default function ManagerUserKeysPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<AccessKey | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const keyConfirmation = useConfirmActionDialog();
 
   const formatDate = (value?: string) => {
     if (!value) return "-";
@@ -102,9 +103,8 @@ export default function ManagerUserKeysPage() {
     }
   };
 
-  const handleDeleteKey = async (keyId: string) => {
+  const deleteKey = async (keyId: string) => {
     if (needsS3AccountSelection || !userName) return;
-    if (!confirmAction(`Delete key ${keyId}?`)) return;
     setBusy(`delete:${keyId}`);
     setError(null);
     setActionMessage(null);
@@ -119,9 +119,8 @@ export default function ManagerUserKeysPage() {
     }
   };
 
-  const handleToggleKey = async (keyId: string, nextActive: boolean) => {
+  const toggleKey = async (keyId: string, nextActive: boolean) => {
     if (needsS3AccountSelection || !userName) return;
-    if (!nextActive && !confirmAction(`Disable key ${keyId}?`)) return;
     setBusy(`toggle:${keyId}`);
     setError(null);
     setActionMessage(null);
@@ -134,6 +133,38 @@ export default function ManagerUserKeysPage() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleDeleteKey = (keyId: string) => {
+    keyConfirmation.requestConfirmation({
+      title: "Delete IAM access key?",
+      description: "Permanently remove this access key from the IAM user.",
+      confirmLabel: "Delete key",
+      details: [
+        { label: "User", value: pageTitle },
+        { label: "Access key", value: keyId, mono: true },
+      ],
+      impacts: ["Applications using this key will immediately lose access."],
+      onConfirm: () => deleteKey(keyId),
+    });
+  };
+
+  const handleToggleKey = (keyId: string, nextActive: boolean) => {
+    if (nextActive) {
+      void toggleKey(keyId, true);
+      return;
+    }
+    keyConfirmation.requestConfirmation({
+      title: "Disable IAM access key?",
+      description: "Temporarily prevent this access key from authenticating.",
+      confirmLabel: "Disable key",
+      details: [
+        { label: "User", value: pageTitle },
+        { label: "Access key", value: keyId, mono: true },
+      ],
+      impacts: ["Applications using this key will lose access until the key is enabled again."],
+      onConfirm: () => toggleKey(keyId, false),
+    });
   };
 
   const pageTitle = useMemo(() => {
@@ -272,6 +303,8 @@ export default function ManagerUserKeysPage() {
           })}
         </ManagerTable>
       </ListPageSection>
+
+      {keyConfirmation.confirmationDialog}
 
     </PageShell>
   );
