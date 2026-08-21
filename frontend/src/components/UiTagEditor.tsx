@@ -10,6 +10,7 @@ import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
 import UiBadge from "./ui/UiBadge";
 import UiRemoveIcon from "./ui/UiRemoveIcon";
 import { cx, uiLabelClass } from "./ui/styles";
+import { useDismissibleLayer } from "./ui/useDismissibleLayer";
 
 type UiTagEditorProps = {
   label?: string;
@@ -97,30 +98,11 @@ export default function UiTagEditor({
     }
   }, [activeTagKey, normalizedTags]);
 
-  useEffect(() => {
-    if (!activeTagKey) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (activeTagAnchorRef.current?.contains(target)) return;
-      if (popoverRef.current?.contains(target)) return;
-      setActiveTagKey(null);
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setActiveTagKey(null);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown as unknown as EventListener);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown as unknown as EventListener);
-    };
-  }, [activeTagKey]);
+  useDismissibleLayer({
+    open: Boolean(activeTagKey),
+    insideRefs: [activeTagAnchorRef, popoverRef],
+    onDismiss: () => setActiveTagKey(null),
+  });
 
   const addTag = (tag: UiTagDefinition) => {
     onChange(normalizeUiTags([...normalizedTags, tag]));

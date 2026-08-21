@@ -29,6 +29,7 @@ import {
 } from "../../components/toolbarControlClasses";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import UiBadge from "../../components/ui/UiBadge";
+import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import {
   cx,
   uiCardClass,
@@ -1653,28 +1654,11 @@ export default function BrowserPage({
     setBucketInspectorError(null);
   }, [bucketName, hasS3AccountContext]);
 
-  useEffect(() => {
-    if (!showBucketMenu) return;
-    const handleMouseDown = (event: MouseEvent) => {
-      if (
-        bucketMenuRef.current &&
-        !bucketMenuRef.current.contains(event.target as Node)
-      ) {
-        setShowBucketMenu(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowBucketMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showBucketMenu]);
+  useDismissibleLayer({
+    open: showBucketMenu,
+    insideRefs: [bucketMenuRef],
+    onDismiss: () => setShowBucketMenu(false),
+  });
 
   useEffect(() => {
     if (showBucketMenu) {
@@ -1705,56 +1689,25 @@ export default function BrowserPage({
     };
   }, []);
 
-  useEffect(() => {
-    if (!showSearchOptionsMenu) return;
-    const handleMouseDown = (event: MouseEvent) => {
-      if (searchOptionsButtonRef.current?.contains(event.target as Node)) {
-        return;
-      }
-      if (
-        searchOptionsMenuRef.current &&
-        !searchOptionsMenuRef.current.contains(event.target as Node)
-      ) {
-        setShowSearchOptionsMenu(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowSearchOptionsMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showSearchOptionsMenu]);
+  useDismissibleLayer({
+    open: showSearchOptionsMenu,
+    insideRefs: [searchOptionsButtonRef, searchOptionsMenuRef],
+    onDismiss: () => setShowSearchOptionsMenu(false),
+  });
 
-  useEffect(() => {
-    if (!showToolbarMoreMenu) return;
-    const handleMouseDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (toolbarMoreButtonRef.current?.contains(target)) return;
-      if (toolbarMoreMenuRef.current?.contains(target)) return;
-      if (toolbarColumnsButtonRef.current?.contains(target)) return;
-      if (toolbarColumnsMenuRef.current?.contains(target)) return;
+  useDismissibleLayer({
+    open: showToolbarMoreMenu,
+    insideRefs: [
+      toolbarMoreButtonRef,
+      toolbarMoreMenuRef,
+      toolbarColumnsButtonRef,
+      toolbarColumnsMenuRef,
+    ],
+    onDismiss: () => {
       setShowToolbarColumnsMenu(false);
       setShowToolbarMoreMenu(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowToolbarColumnsMenu(false);
-        setShowToolbarMoreMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showToolbarMoreMenu]);
+    },
+  });
 
   useEffect(() => {
     if (!showMobileActionsSheet) return;
@@ -1799,26 +1752,11 @@ export default function BrowserPage({
     }
   }, [isMobileViewport, selectedIds.length]);
 
-  useEffect(() => {
-    if (!showUploadQuickMenu) return;
-    const handleMouseDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (uploadQuickButtonRef.current?.contains(target)) return;
-      if (uploadQuickMenuRef.current?.contains(target)) return;
-      setShowUploadQuickMenu(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowUploadQuickMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showUploadQuickMenu]);
+  useDismissibleLayer({
+    open: showUploadQuickMenu,
+    insideRefs: [uploadQuickButtonRef, uploadQuickMenuRef],
+    onDismiss: () => setShowUploadQuickMenu(false),
+  });
 
   useEffect(() => {
     if (operations.length === 0) return;

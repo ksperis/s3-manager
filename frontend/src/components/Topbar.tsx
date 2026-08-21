@@ -19,6 +19,7 @@ import type { WorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import ThemeToggle from "./ThemeToggle";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
+import { useDismissibleLayer } from "./ui/useDismissibleLayer";
 import UserAvatar from "./UserAvatar";
 
 type TopbarProps = {
@@ -173,6 +174,34 @@ export default function Topbar({
   const accountAvatarName = accountName === accountDisplay ? null : accountName;
   const showNotifications = !isS3Session;
 
+  useDismissibleLayer({
+    open: workspaceMenuOpen,
+    insideRefs: [workspaceTriggerRef, workspaceMenuSurfaceRef],
+    onDismiss: (reason) => {
+      setWorkspaceMenuOpen(false);
+      if (reason === "escape") workspaceTriggerRef.current?.focus();
+    },
+    preventEscapeDefault: true,
+  });
+  useDismissibleLayer({
+    open: accountMenuOpen,
+    insideRefs: [accountMenuRootRef, accountMenuSurfaceRef],
+    onDismiss: (reason) => {
+      setAccountMenuOpen(false);
+      if (reason === "escape") accountMenuTriggerRef.current?.focus();
+    },
+    preventEscapeDefault: true,
+  });
+  useDismissibleLayer({
+    open: notificationsOpen,
+    insideRefs: [notificationsRootRef, notificationsSurfaceRef],
+    onDismiss: (reason) => {
+      setNotificationsOpen(false);
+      if (reason === "escape") notificationsTriggerRef.current?.focus();
+    },
+    preventEscapeDefault: true,
+  });
+
   useEffect(() => {
     const syncStoredUser = () => {
       setStoredUser(readStoredUser() as StoredTopbarUser | null);
@@ -308,31 +337,6 @@ export default function Topbar({
 
   useEffect(() => {
     if (!workspaceMenuOpen) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (workspaceTriggerRef.current?.contains(target)) return;
-      if (workspaceMenuSurfaceRef.current?.contains(target)) return;
-      setWorkspaceMenuOpen(false);
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      setWorkspaceMenuOpen(false);
-      workspaceTriggerRef.current?.focus();
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [workspaceMenuOpen]);
-
-  useEffect(() => {
-    if (!workspaceMenuOpen) return;
     setWorkspaceActiveIndex(workspaceSelectedIndex >= 0 ? workspaceSelectedIndex : workspaceOptions.length > 0 ? 0 : -1);
     requestAnimationFrame(() => {
       workspaceListboxRef.current?.focus();
@@ -363,20 +367,7 @@ export default function Topbar({
       items[normalizedIndex].focus();
     };
 
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (accountMenuRootRef.current?.contains(target)) return;
-      if (accountMenuSurfaceRef.current?.contains(target)) return;
-      setAccountMenuOpen(false);
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setAccountMenuOpen(false);
-        accountMenuTriggerRef.current?.focus();
-        return;
-      }
+    const handleMenuKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Tab") {
         setAccountMenuOpen(false);
         return;
@@ -412,38 +403,11 @@ export default function Topbar({
       focusMenuItem(0);
     });
 
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", handleMenuKeyDown);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleMenuKeyDown);
     };
   }, [accountMenuOpen]);
-
-  useEffect(() => {
-    if (!notificationsOpen) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (notificationsRootRef.current?.contains(target)) return;
-      if (notificationsSurfaceRef.current?.contains(target)) return;
-      setNotificationsOpen(false);
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      setNotificationsOpen(false);
-      notificationsTriggerRef.current?.focus();
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [notificationsOpen]);
 
   const triggerLogout = () => {
     setAccountMenuOpen(false);

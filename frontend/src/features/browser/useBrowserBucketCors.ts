@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
+import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import {
   ensureBucketCors,
   getBucketCorsStatus,
@@ -167,26 +168,11 @@ export function useBrowserBucketCors({
     };
   }, [accountIdForApi, bucketName, origin, requestOptions, scopeKey]);
 
-  useEffect(() => {
-    if (!popoverOpen) return;
-    const handleMouseDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (triggerRef.current?.contains(target)) return;
-      if (popoverRef.current?.contains(target)) return;
-      setPopoverOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setPopoverOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [popoverOpen]);
+  useDismissibleLayer({
+    open: popoverOpen,
+    insideRefs: [triggerRef, popoverRef],
+    onDismiss: () => setPopoverOpen(false),
+  });
 
   useEffect(() => {
     if (!actionAvailable) {

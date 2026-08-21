@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
+import { useDismissibleLayer } from "./ui/useDismissibleLayer";
 import TopbarControlTrigger from "./TopbarControlTrigger";
 
 export type TopbarDropdownOption = {
@@ -120,27 +121,15 @@ export default function TopbarDropdownSelect({
     triggerRef.current?.focus();
   };
 
-  useEffect(() => {
-    if (!open) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (rootRef.current?.contains(target)) return;
-      if (menuSurfaceRef.current?.contains(target)) return;
+  useDismissibleLayer({
+    open,
+    insideRefs: [rootRef, menuSurfaceRef],
+    onDismiss: (reason) => {
       setOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [open]);
+      if (reason === "escape") triggerRef.current?.focus();
+    },
+    preventEscapeDefault: true,
+  });
 
   useEffect(() => {
     if (!open) setQuery("");

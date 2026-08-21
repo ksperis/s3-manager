@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import type { ContextMenuState } from "./browserTypes";
 
 const CONTEXT_MENU_PADDING_PX = 8;
@@ -85,26 +86,17 @@ export function useBrowserContextMenu() {
     });
   }, []);
 
+  useDismissibleLayer({
+    open: Boolean(contextMenu),
+    insideRefs: [contextMenuRef],
+    onDismiss: closeContextMenu,
+  });
+
   useEffect(() => {
     if (!contextMenu) return;
-    const handleMouseDown = (event: MouseEvent) => {
-      if (
-        contextMenuRef.current &&
-        !contextMenuRef.current.contains(event.target as Node)
-      ) {
-        closeContextMenu();
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeContextMenu();
-    };
     const handleScroll = () => closeContextMenu();
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
     window.addEventListener("scroll", handleScroll, true);
     return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("scroll", handleScroll, true);
     };
   }, [closeContextMenu, contextMenu]);
