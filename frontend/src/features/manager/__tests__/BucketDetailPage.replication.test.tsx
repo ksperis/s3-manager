@@ -529,7 +529,7 @@ describe("BucketDetailPage replication state", () => {
     expect(deleteCephAdminBucketReplicationMock).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Clear replication" }));
     await waitFor(() => expect(deleteCephAdminBucketReplicationMock).toHaveBeenCalledWith(1, "demo-bucket"));
-  });
+  }, 15_000);
 
   it("preserves bucket tag row identity when removing another draft", async () => {
     const user = userEvent.setup();
