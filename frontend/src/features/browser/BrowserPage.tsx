@@ -99,6 +99,7 @@ import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
+import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
@@ -186,11 +187,9 @@ import {
   writeBrowserRootDensity,
   writeBrowserRootContextSelection,
   writeBrowserRootUiLayout,
-  writeBrowserRootUiPanelWidths,
 } from "./browserRootUiState";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
-import { resolveBrowserPanelVisibility } from "./browserResponsivePanels";
 import {
   BucketIcon,
   ChevronDownIcon,
@@ -289,8 +288,6 @@ import {
 import {
   PANEL_LAYOUT_GAP_PX,
   PANEL_RESIZER_HITBOX_WIDTH_PX,
-  PANELS_DISABLE_MEDIA_QUERY,
-  resolveBrowserPanelWidths,
 } from "./browserPanelLayout";
 import {
   COLUMN_DEFINITIONS,
@@ -627,20 +624,6 @@ export default function BrowserPage({
   );
   const [activeLayoutMode, setActiveLayoutMode] =
     useState<BrowserLayoutMode>(initialLayoutMode);
-  const [foldersPanelWidthPx, setFoldersPanelWidthPx] = useState(
-    () =>
-      initialRootUiLayout?.foldersPanelWidthPx ??
-      DEFAULT_FOLDERS_PANEL_WIDTH_PX,
-  );
-  const [inspectorPanelWidthPx, setInspectorPanelWidthPx] = useState(
-    () =>
-      initialRootUiLayout?.inspectorPanelWidthPx ??
-      DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-  );
-  const [layoutContainerWidthPx, setLayoutContainerWidthPx] = useState(0);
-  const [activePanelResize, setActivePanelResize] = useState<
-    "folders" | "inspector" | null
-  >(null);
   const [columnWidths, setColumnWidths] = useState<BrowserObjectColumnWidths>(
     () => loadColumnWidthsForSurface(isMainBrowserPath, initialLayoutMode),
   );
@@ -649,10 +632,6 @@ export default function BrowserPage({
     startX: number;
     startWidthPx: number;
   } | null>(null);
-  const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
-  });
   const [isMobileViewport, setIsMobileViewport] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia(MOBILE_OBJECT_LIST_MEDIA_QUERY).matches;
@@ -959,7 +938,6 @@ export default function BrowserPage({
   const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
   const bucketPanelViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketPanelLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-  const layoutContainerRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const columnWidthsRef = useRef(columnWidths);
@@ -1000,15 +978,11 @@ export default function BrowserPage({
   const prefixDeleteMarkersRef = useRef(prefixDeleteMarkers);
   const prefixVersionKeyMarkerRef = useRef(prefixVersionKeyMarker);
   const prefixVersionIdMarkerRef = useRef(prefixVersionIdMarker);
-  const foldersPanelWidthRef = useRef(foldersPanelWidthPx);
-  const inspectorPanelWidthRef = useRef(inspectorPanelWidthPx);
   const objectVersionsRef = useRef(objectVersions);
   const objectDeleteMarkersRef = useRef(objectDeleteMarkers);
   const objectVersionKeyMarkerRef = useRef(objectVersionKeyMarker);
   const objectVersionIdMarkerRef = useRef(objectVersionIdMarker);
   const objectVersionsTargetKeyRef = useRef(objectVersionsTargetKey);
-  const isFoldersPanelVisibleRef = useRef(false);
-  const isInspectorPanelVisibleRef = useRef(false);
   const lazyColumnCacheRef = useRef<Record<string, LazyColumnCacheEntry>>({});
   const lazyListItemsByIdRef = useRef<Map<string, BrowserItem>>(new Map());
   const lazyQueueRef = useRef<string[]>([]);
@@ -1155,11 +1129,20 @@ export default function BrowserPage({
     canPaste &&
     (resolvedFunctionalProfile === "advanced" || clipboardMatchesContext);
   const {
+    activePanelResize,
     canUseFoldersPanel,
     canUseInspectorPanel,
     isFoldersPanelVisible,
     isInspectorPanelVisible,
-  } = resolveBrowserPanelVisibility({
+    layoutContainerRef,
+    layoutTemplateColumns,
+    resolvedFoldersWidth,
+    resolvedInspectorWidth,
+    resetFoldersPanelWidth,
+    resetInspectorPanelWidth,
+    setPanelWidths,
+    startPanelResize,
+  } = useBrowserPanelLayout({
     allowFoldersPanel:
       allowFoldersPanel &&
       activeLayoutMode === "workbench" &&
@@ -1168,29 +1151,17 @@ export default function BrowserPage({
       allowInspectorPanel &&
       activeLayoutMode === "workbench" &&
       resolvedFunctionalProfile === "advanced",
-    isNarrowViewport,
+    initialFoldersPanelWidthPx:
+      initialRootUiLayout?.foldersPanelWidthPx ??
+      DEFAULT_FOLDERS_PANEL_WIDTH_PX,
+    initialInspectorPanelWidthPx:
+      initialRootUiLayout?.inspectorPanelWidthPx ??
+      DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
+    layoutMode: activeLayoutMode,
+    persistWidths: isMainBrowserPath,
     showFolders,
     showInspector,
   });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mediaQuery = window.matchMedia(PANELS_DISABLE_MEDIA_QUERY);
-    const syncViewportWidth = () => {
-      setIsNarrowViewport(mediaQuery.matches);
-    };
-    syncViewportWidth();
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", syncViewportWidth);
-      return () => {
-        mediaQuery.removeEventListener("change", syncViewportWidth);
-      };
-    }
-    mediaQuery.addListener(syncViewportWidth);
-    return () => {
-      mediaQuery.removeListener(syncViewportWidth);
-    };
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1224,98 +1195,8 @@ export default function BrowserPage({
   }, [density, isMainBrowserPath, resolvedFunctionalProfile]);
 
   useEffect(() => {
-    foldersPanelWidthRef.current = foldersPanelWidthPx;
-    inspectorPanelWidthRef.current = inspectorPanelWidthPx;
-  }, [foldersPanelWidthPx, inspectorPanelWidthPx]);
-
-  useEffect(() => {
     columnWidthsRef.current = columnWidths;
   }, [columnWidths]);
-
-  useEffect(() => {
-    isFoldersPanelVisibleRef.current = isFoldersPanelVisible;
-    isInspectorPanelVisibleRef.current = isInspectorPanelVisible;
-  }, [isFoldersPanelVisible, isInspectorPanelVisible]);
-
-  useLayoutEffect(() => {
-    const updateLayoutContainerWidth = () => {
-      setLayoutContainerWidthPx(
-        Math.round(layoutContainerRef.current?.getBoundingClientRect().width ?? 0),
-      );
-    };
-    updateLayoutContainerWidth();
-    if (typeof window === "undefined") return;
-    window.addEventListener("resize", updateLayoutContainerWidth);
-    if (typeof ResizeObserver === "undefined" || !layoutContainerRef.current) {
-      return () => {
-        window.removeEventListener("resize", updateLayoutContainerWidth);
-      };
-    }
-    const observer = new ResizeObserver(() => {
-      updateLayoutContainerWidth();
-    });
-    observer.observe(layoutContainerRef.current);
-    return () => {
-      window.removeEventListener("resize", updateLayoutContainerWidth);
-      observer.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (activePanelResize) return;
-    if (!isMainBrowserPath) return;
-    writeBrowserRootUiPanelWidths({
-      foldersPanelWidthPx,
-      inspectorPanelWidthPx,
-    });
-  }, [activePanelResize, foldersPanelWidthPx, inspectorPanelWidthPx, isMainBrowserPath]);
-
-  useEffect(() => {
-    if (!activePanelResize) return;
-    const handlePointerMove = (event: PointerEvent) => {
-      const rect = layoutContainerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      if (activePanelResize === "folders") {
-        if (!isFoldersPanelVisibleRef.current) return;
-        const nextWidth =
-          event.clientX - rect.left - PANEL_LAYOUT_GAP_PX / 2;
-        const { resolvedFoldersWidth } = resolveBrowserPanelWidths({
-          containerWidth: rect.width,
-          foldersPanelWidthPx: nextWidth,
-          inspectorPanelWidthPx: inspectorPanelWidthRef.current,
-          isFoldersPanelVisible: isFoldersPanelVisibleRef.current,
-          isInspectorPanelVisible: isInspectorPanelVisibleRef.current,
-        });
-        setFoldersPanelWidthPx(resolvedFoldersWidth);
-        return;
-      }
-      if (!isInspectorPanelVisibleRef.current) return;
-      const nextWidth = rect.right - event.clientX - PANEL_LAYOUT_GAP_PX / 2;
-      const { resolvedInspectorWidth } = resolveBrowserPanelWidths({
-        containerWidth: rect.width,
-        foldersPanelWidthPx: foldersPanelWidthRef.current,
-        inspectorPanelWidthPx: nextWidth,
-        isFoldersPanelVisible: isFoldersPanelVisibleRef.current,
-        isInspectorPanelVisible: isInspectorPanelVisibleRef.current,
-      });
-      setInspectorPanelWidthPx(resolvedInspectorWidth);
-    };
-    const stopPanelResize = () => {
-      setActivePanelResize(null);
-    };
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("pointermove", handlePointerMove);
-    document.addEventListener("pointerup", stopPanelResize);
-    document.addEventListener("pointercancel", stopPanelResize);
-    return () => {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      document.removeEventListener("pointermove", handlePointerMove);
-      document.removeEventListener("pointerup", stopPanelResize);
-      document.removeEventListener("pointercancel", stopPanelResize);
-    };
-  }, [activePanelResize]);
 
   useEffect(() => {
     setVisibleColumns(loadVisibleColumnsForSurface(isMainBrowserPath, activeLayoutMode));
@@ -1380,13 +1261,15 @@ export default function BrowserPage({
       const nextLayout = readBrowserRootUiState().layouts[nextMode];
       setShowFolders(nextLayout.showFolders);
       setShowInspector(nextLayout.showInspector);
-      setFoldersPanelWidthPx(nextLayout.foldersPanelWidthPx);
-      setInspectorPanelWidthPx(nextLayout.inspectorPanelWidthPx);
+      setPanelWidths(
+        nextLayout.foldersPanelWidthPx,
+        nextLayout.inspectorPanelWidthPx,
+      );
       setVisibleColumns(loadVisibleColumnsForSurface(true, nextMode));
       setColumnWidths(loadColumnWidthsForSurface(true, nextMode));
       setActiveLayoutMode(nextMode);
     },
-    [isMainBrowserPath, resolvedFunctionalProfile],
+    [isMainBrowserPath, resolvedFunctionalProfile, setPanelWidths],
   );
 
   const updateBucketAccessEntry = useCallback(
@@ -4144,40 +4027,6 @@ export default function BrowserPage({
   const selectionHasDeleted = selectionInfo.hasDeleted;
   const canSelectionActions = selectionInfo.items.length > 0;
 
-  const { resolvedFoldersWidth, resolvedInspectorWidth } = useMemo(
-    () =>
-      resolveBrowserPanelWidths({
-        containerWidth: layoutContainerWidthPx,
-        foldersPanelWidthPx,
-        inspectorPanelWidthPx,
-        isFoldersPanelVisible,
-        isInspectorPanelVisible,
-      }),
-    [
-      foldersPanelWidthPx,
-      inspectorPanelWidthPx,
-      isFoldersPanelVisible,
-      isInspectorPanelVisible,
-      layoutContainerWidthPx,
-    ],
-  );
-  const layoutTemplateColumns = useMemo(() => {
-    if (isFoldersPanelVisible && isInspectorPanelVisible) {
-      return `${resolvedFoldersWidth}px minmax(0, 1fr) ${resolvedInspectorWidth}px`;
-    }
-    if (isFoldersPanelVisible) {
-      return `${resolvedFoldersWidth}px minmax(0, 1fr)`;
-    }
-    if (isInspectorPanelVisible) {
-      return `minmax(0, 1fr) ${resolvedInspectorWidth}px`;
-    }
-    return "minmax(0, 1fr)";
-  }, [
-    isFoldersPanelVisible,
-    isInspectorPanelVisible,
-    resolvedFoldersWidth,
-    resolvedInspectorWidth,
-  ]);
   const rowPadding = compactMode ? "!py-0.5" : "py-2.5";
   const rowHeightClasses = compactMode ? "h-9" : "h-16";
   const rowCellClasses = rowPadding;
@@ -4407,21 +4256,6 @@ export default function BrowserPage({
     });
   };
 
-  const startPanelResize = useCallback(
-    (side: "folders" | "inspector") =>
-      (event: ReactPointerEvent<HTMLDivElement>) => {
-        if (
-          (side === "folders" && !isFoldersPanelVisibleRef.current) ||
-          (side === "inspector" && !isInspectorPanelVisibleRef.current)
-        ) {
-          return;
-        }
-        event.preventDefault();
-        setActivePanelResize(side);
-      },
-    [],
-  );
-
   const startColumnResize = useCallback(
     (columnId: BrowserResizableColumnId) =>
       (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -4443,14 +4277,6 @@ export default function BrowserPage({
       delete next[columnId];
       return next;
     });
-  }, []);
-
-  const resetFoldersPanelWidth = useCallback(() => {
-    setFoldersPanelWidthPx(DEFAULT_FOLDERS_PANEL_WIDTH_PX);
-  }, []);
-
-  const resetInspectorPanelWidth = useCallback(() => {
-    setInspectorPanelWidthPx(DEFAULT_INSPECTOR_PANEL_WIDTH_PX);
   }, []);
 
   const openItemDetails = (item: BrowserItem) => {

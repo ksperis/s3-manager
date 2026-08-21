@@ -218,20 +218,6 @@ export const writeBrowserRootUiLayout = (
   }));
 };
 
-export const writeBrowserRootUiPanelWidths = ({
-  foldersPanelWidthPx,
-  inspectorPanelWidthPx,
-}: {
-  foldersPanelWidthPx?: number;
-  inspectorPanelWidthPx?: number;
-}) => {
-  const current = readBrowserRootUiState();
-  writeBrowserRootUiState(updateMode(current, current.activeLayout, {
-    foldersPanelWidthPx,
-    inspectorPanelWidthPx,
-  }));
-};
-
 export const readBrowserRootContextSelection = (contextId: string | null): BrowserRootUiContextSelection | null => {
   if (!contextId) return null;
   const selections = normalizeContextSelections(
