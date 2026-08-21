@@ -57,6 +57,12 @@ class _TargetInspection:
     profile: dict[str, Any] | None
 
 
+@dataclass(frozen=True)
+class _SourcePlan:
+    strategy: str
+    unsupported_features: frozenset[str]
+
+
 def _check_entry(
     *,
     code: str,
@@ -334,6 +340,169 @@ class BucketMigrationPrecheckPlanner:
             )
         return _TargetInspection(exists=True, object_count=object_count, profile=profile)
 
+    def _plan_source_bucket(
+        self,
+        context: Any,
+        item: Any,
+        migration: Any,
+        *,
+        profile: dict[str, Any] | None,
+        object_count: int | None,
+        initial_strategy: str,
+        add_check: Callable[..., None],
+    ) -> _SourcePlan:
+        if profile is None:
+            return _SourcePlan(strategy=initial_strategy, unsupported_features=frozenset())
+
+        profile["current_object_count"] = object_count
+        unsupported_settings = list(profile.get("unsupported_settings") or [])
+        unsupported_features = frozenset(str(setting) for setting in unsupported_settings)
+        if initial_strategy == "skip_existing":
+            return _SourcePlan(strategy=initial_strategy, unsupported_features=unsupported_features)
+
+        versioning = profile.get("versioning") or {}
+        version_scan = profile.get("version_scan") or {}
+        object_lock = profile.get("object_lock") or {}
+        encryption = profile.get("encryption") or {}
+        requires_version_aware = bool(
+            versioning.get("enabled")
+            or versioning.get("suspended")
+            or version_scan.get("has_noncurrent_versions")
+            or version_scan.get("has_delete_markers")
+        )
+        requires_object_lock_governance = bool(
+            object_lock.get("enabled")
+            or object_lock.get("mode")
+            or object_lock.get("days") is not None
+            or object_lock.get("years") is not None
+        )
+        strategy = "version_aware" if requires_version_aware or requires_object_lock_governance else initial_strategy
+
+        if requires_object_lock_governance:
+            add_check(
+                code="object_lock_governance_not_supported",
+                severity="error",
+                blocking=True,
+                scope="source_bucket",
+                message=(
+                    "Source bucket uses object-lock governance semantics that are outside the "
+                    "supported perimeter of version-aware migration."
+                ),
+                details={
+                    "versioning_status": versioning.get("status"),
+                    "has_noncurrent_versions": bool(version_scan.get("has_noncurrent_versions")),
+                    "has_delete_markers": bool(version_scan.get("has_delete_markers")),
+                    "object_lock_enabled": bool(object_lock.get("enabled")),
+                    "object_lock_mode": object_lock.get("mode"),
+                    "object_lock_days": object_lock.get("days"),
+                    "object_lock_years": object_lock.get("years"),
+                },
+            )
+        elif requires_version_aware:
+            add_check(
+                code="version_aware_supported",
+                severity="info",
+                blocking=False,
+                scope="source_bucket",
+                message=(
+                    "Source bucket requires version-aware migration and will replicate object "
+                    "history and delete markers."
+                ),
+                details={
+                    "versioning_status": versioning.get("status"),
+                    "has_noncurrent_versions": bool(version_scan.get("has_noncurrent_versions")),
+                    "has_delete_markers": bool(version_scan.get("has_delete_markers")),
+                },
+            )
+
+        encryption_enabled = bool(encryption.get("enabled"))
+        encryption_supported = bool(encryption.get("supported"))
+        if encryption_enabled and not encryption_supported:
+            add_check(
+                code="unsupported_default_encryption",
+                severity="error",
+                blocking=True,
+                scope="source_bucket",
+                message="Source bucket default encryption is not supported by the migration worker.",
+                details={
+                    "algorithms": encryption.get("algorithms"),
+                    "kms_key_ids": encryption.get("kms_key_ids"),
+                    "reason": encryption.get("unsupported_reason"),
+                },
+            )
+        if encryption_enabled and encryption_supported:
+            if migration.copy_bucket_settings:
+                add_check(
+                    code="default_encryption_supported",
+                    severity="info",
+                    blocking=False,
+                    scope="source_bucket",
+                    message="Default SSE-S3 bucket encryption is supported for bucket settings copy.",
+                    details={"algorithms": encryption.get("algorithms")},
+                )
+            else:
+                add_check(
+                    code="default_encryption_not_copied",
+                    severity="warning",
+                    blocking=False,
+                    scope="source_bucket",
+                    message="Source bucket uses default SSE-S3 encryption, but bucket settings copy is disabled.",
+                    details={"algorithms": encryption.get("algorithms")},
+                )
+
+        if migration.copy_bucket_settings and unsupported_settings:
+            add_check(
+                code="unsupported_bucket_settings_configured",
+                severity="error",
+                blocking=True,
+                scope="source_bucket",
+                message=(
+                    "Source bucket uses settings that are outside the supported migration perimeter "
+                    "for bucket settings copy."
+                ),
+                details={"unsupported_settings": unsupported_settings},
+            )
+        elif unsupported_settings:
+            add_check(
+                code="unsupported_bucket_settings_ignored",
+                severity="warning",
+                blocking=False,
+                scope="source_bucket",
+                message=(
+                    "Source bucket uses settings outside the supported migration perimeter, "
+                    "but bucket settings copy is disabled."
+                ),
+                details={"unsupported_settings": unsupported_settings},
+            )
+
+        if strategy == "version_aware" and not requires_object_lock_governance:
+            try:
+                self._service._precheck_version_aware_source_access(
+                    context,
+                    item.source_bucket,
+                    profile,
+                )
+                add_check(
+                    code="version_aware_source_access_validated",
+                    severity="info",
+                    blocking=False,
+                    scope="source_bucket",
+                    message=(
+                        "Version-aware source access is validated for explicit version reads "
+                        "and version tags."
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                add_check(
+                    code="version_aware_source_access_failed",
+                    severity="error",
+                    blocking=True,
+                    scope="source_bucket",
+                    message=f"Version-aware source access precheck failed: {exc}",
+                )
+
+        return _SourcePlan(strategy=strategy, unsupported_features=unsupported_features)
+
     def run(self, migration: Any, *, checked_at: Any) -> dict[str, Any]:
         report: dict[str, Any] = {
             "report_version": _PRECHECK_REPORT_VERSION,
@@ -483,156 +652,17 @@ class BucketMigrationPrecheckPlanner:
             item.source_count = source_count
             item.target_count = target_count
 
-            if source_profile is not None:
-                source_profile["current_object_count"] = source_count
-                versioning = source_profile.get("versioning") or {}
-                version_scan = source_profile.get("version_scan") or {}
-                object_lock = source_profile.get("object_lock") or {}
-                encryption = source_profile.get("encryption") or {}
-                unsupported_settings = list(source_profile.get("unsupported_settings") or [])
-                global_unsupported_features.update(unsupported_settings)
-
-                if strategy != "skip_existing":
-                    requires_version_aware = bool(
-                        versioning.get("enabled")
-                        or versioning.get("suspended")
-                        or version_scan.get("has_noncurrent_versions")
-                        or version_scan.get("has_delete_markers")
-                    )
-                    requires_object_lock_governance = bool(
-                        object_lock.get("enabled")
-                        or object_lock.get("mode")
-                        or object_lock.get("days") is not None
-                        or object_lock.get("years") is not None
-                    )
-                    if requires_version_aware:
-                        strategy = "version_aware"
-                    if requires_object_lock_governance:
-                        strategy = "version_aware"
-                        add_check(
-                            code="object_lock_governance_not_supported",
-                            severity="error",
-                            blocking=True,
-                            scope="source_bucket",
-                            message=(
-                                "Source bucket uses object-lock governance semantics that are outside the "
-                                "supported perimeter of version-aware migration."
-                            ),
-                            details={
-                                "versioning_status": versioning.get("status"),
-                                "has_noncurrent_versions": bool(version_scan.get("has_noncurrent_versions")),
-                                "has_delete_markers": bool(version_scan.get("has_delete_markers")),
-                                "object_lock_enabled": bool(object_lock.get("enabled")),
-                                "object_lock_mode": object_lock.get("mode"),
-                                "object_lock_days": object_lock.get("days"),
-                                "object_lock_years": object_lock.get("years"),
-                            },
-                        )
-                    elif requires_version_aware:
-                        add_check(
-                            code="version_aware_supported",
-                            severity="info",
-                            blocking=False,
-                            scope="source_bucket",
-                            message=(
-                                "Source bucket requires version-aware migration and will replicate object "
-                                "history and delete markers."
-                            ),
-                            details={
-                                "versioning_status": versioning.get("status"),
-                                "has_noncurrent_versions": bool(version_scan.get("has_noncurrent_versions")),
-                                "has_delete_markers": bool(version_scan.get("has_delete_markers")),
-                            },
-                        )
-
-                    if bool(encryption.get("enabled")) and not bool(encryption.get("supported")):
-                        add_check(
-                            code="unsupported_default_encryption",
-                            severity="error",
-                            blocking=True,
-                            scope="source_bucket",
-                            message=(
-                                "Source bucket default encryption is not supported by the migration worker."
-                            ),
-                            details={
-                                "algorithms": encryption.get("algorithms"),
-                                "kms_key_ids": encryption.get("kms_key_ids"),
-                                "reason": encryption.get("unsupported_reason"),
-                            },
-                        )
-
-                    if bool(encryption.get("enabled")) and bool(encryption.get("supported")):
-                        if migration.copy_bucket_settings:
-                            add_check(
-                                code="default_encryption_supported",
-                                severity="info",
-                                blocking=False,
-                                scope="source_bucket",
-                                message="Default SSE-S3 bucket encryption is supported for bucket settings copy.",
-                                details={"algorithms": encryption.get("algorithms")},
-                            )
-                        else:
-                            add_check(
-                                code="default_encryption_not_copied",
-                                severity="warning",
-                                blocking=False,
-                                scope="source_bucket",
-                                message=(
-                                    "Source bucket uses default SSE-S3 encryption, but bucket settings copy is disabled."
-                                ),
-                                details={"algorithms": encryption.get("algorithms")},
-                            )
-
-                    if migration.copy_bucket_settings and unsupported_settings:
-                        add_check(
-                            code="unsupported_bucket_settings_configured",
-                            severity="error",
-                            blocking=True,
-                            scope="source_bucket",
-                            message=(
-                                "Source bucket uses settings that are outside the supported migration perimeter "
-                                "for bucket settings copy."
-                            ),
-                            details={"unsupported_settings": unsupported_settings},
-                        )
-                    elif unsupported_settings:
-                        add_check(
-                            code="unsupported_bucket_settings_ignored",
-                            severity="warning",
-                            blocking=False,
-                            scope="source_bucket",
-                            message=(
-                                "Source bucket uses settings outside the supported migration perimeter, "
-                                "but bucket settings copy is disabled."
-                            ),
-                            details={"unsupported_settings": unsupported_settings},
-                        )
-
-                    if strategy == "version_aware" and not requires_object_lock_governance:
-                        try:
-                            self._service._precheck_version_aware_source_access(
-                                source_ctx,
-                                item.source_bucket,
-                                source_profile,
-                            )
-                            add_check(
-                                code="version_aware_source_access_validated",
-                                severity="info",
-                                blocking=False,
-                                scope="source_bucket",
-                                message=(
-                                    "Version-aware source access is validated for explicit version reads "
-                                    "and version tags."
-                                ),
-                            )
-                        except Exception as exc:  # noqa: BLE001
-                            add_check(
-                                code="version_aware_source_access_failed",
-                                severity="error",
-                                blocking=True,
-                                scope="source_bucket",
-                                message=f"Version-aware source access precheck failed: {exc}",
-                            )
+            source_plan = self._plan_source_bucket(
+                source_ctx,
+                item,
+                migration,
+                profile=source_profile,
+                object_count=source_count,
+                initial_strategy=strategy,
+                add_check=add_check,
+            )
+            strategy = source_plan.strategy
+            global_unsupported_features.update(source_plan.unsupported_features)
 
             same_endpoint_copy_safe = not same_endpoint_copy_enabled
             if same_endpoint_copy_enabled and target_exists is not True and source_access_ok:
