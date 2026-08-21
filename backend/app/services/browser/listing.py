@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
 from time import monotonic
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -32,6 +33,102 @@ from ._shared import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _FilteredObjectListing:
+    normalized_prefix: str
+    max_keys: int
+    matches_query: Callable[[str], bool]
+    type_filter: str
+    storage_filter: str | None
+    recursive: bool
+    objects: list[BrowserObject] = field(default_factory=list)
+    prefixes: list[str] = field(default_factory=list)
+    seen_prefixes: set[str] = field(default_factory=set)
+
+    @property
+    def item_count(self) -> int:
+        return len(self.objects) + len(self.prefixes)
+
+    @property
+    def is_full(self) -> bool:
+        return self.item_count >= self.max_keys
+
+    def add_page(self, response: dict[str, Any], clean_etag: Callable[[Any], str | None]) -> None:
+        recursive_prefixes = self._add_objects(response.get("Contents", []), clean_etag)
+        if not self.recursive and self.type_filter != "file":
+            common_prefixes = [
+                prefix
+                for entry in (response.get("CommonPrefixes", []) or [])
+                if (prefix := entry.get("Prefix"))
+            ]
+            self._add_prefixes(common_prefixes)
+        elif self.recursive and self.type_filter != "file":
+            self._add_prefixes(sorted(recursive_prefixes))
+
+    def _add_objects(
+        self,
+        entries: list[dict[str, Any]],
+        clean_etag: Callable[[Any], str | None],
+    ) -> set[str]:
+        recursive_prefixes: set[str] = set()
+        for entry in entries:
+            key = entry.get("Key")
+            if not key:
+                continue
+            size = int(entry.get("Size") or 0)
+            if self.normalized_prefix and key.rstrip("/") == self.normalized_prefix.rstrip("/") and size == 0:
+                continue
+            is_folder_marker = key.endswith("/") and size == 0
+
+            if self.recursive and self.type_filter != "file":
+                recursive_prefixes.update(self._recursive_prefixes_for_key(key, is_folder_marker))
+
+            if self.type_filter == "folder" or (self.recursive and is_folder_marker):
+                continue
+            if not self.matches_query(key):
+                continue
+            storage_class = entry.get("StorageClass")
+            if self.storage_filter and storage_class != self.storage_filter:
+                continue
+            if self.is_full:
+                continue
+            self.objects.append(
+                BrowserObject(
+                    key=key,
+                    size=size,
+                    last_modified=entry.get("LastModified"),
+                    storage_class=storage_class,
+                    etag=clean_etag(entry.get("ETag")),
+                )
+            )
+        return recursive_prefixes
+
+    def _recursive_prefixes_for_key(self, key: str, is_folder_marker: bool) -> set[str]:
+        prefixes: set[str] = set()
+        if is_folder_marker and key != self.normalized_prefix:
+            prefixes.add(key)
+        relative = (
+            key[len(self.normalized_prefix):]
+            if self.normalized_prefix and key.startswith(self.normalized_prefix)
+            else key
+        )
+        segments = [segment for segment in relative.split("/") if segment]
+        running = self.normalized_prefix
+        for segment in segments[:-1]:
+            running = f"{running}{segment}/"
+            prefixes.add(running)
+        return prefixes
+
+    def _add_prefixes(self, candidates: list[str]) -> None:
+        for prefix in candidates:
+            if prefix in self.seen_prefixes or not self.matches_query(prefix):
+                continue
+            if self.is_full:
+                break
+            self.seen_prefixes.add(prefix)
+            self.prefixes.append(prefix)
 
 
 class BrowserListingMixin:
@@ -155,21 +252,24 @@ class BrowserListingMixin:
             logger.debug("Browser object cache miss: account=%s bucket=%s", account_cache_key, bucket_name)
             return result
 
-        objects: list[BrowserObject] = []
-        prefixes: list[str] = []
-        seen_prefixes: set[str] = set()
+        listing = _FilteredObjectListing(
+            normalized_prefix=normalized_prefix,
+            max_keys=normalized_max_keys,
+            matches_query=matches_query,
+            type_filter=type_filter,
+            storage_filter=storage_filter,
+            recursive=recursive,
+        )
         scan_token = continuation_token
         scan_start = monotonic()
         pages_scanned = 0
-        budget_exceeded = False
 
         while True:
             elapsed_ms = int((monotonic() - scan_start) * 1000)
             if pages_scanned >= OBJECT_LIST_SCAN_PAGE_BUDGET or elapsed_ms >= OBJECT_LIST_SCAN_TIME_BUDGET_MS:
-                budget_exceeded = True
                 break
 
-            remaining = max(normalized_max_keys - (len(objects) + len(prefixes)), 1)
+            remaining = max(normalized_max_keys - listing.item_count, 1)
             kwargs = {
                 "Bucket": bucket_name,
                 "Prefix": normalized_prefix,
@@ -185,96 +285,21 @@ class BrowserListingMixin:
                 raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
 
             pages_scanned += 1
-            page_recursive_prefixes: set[str] = set()
-            for obj in resp.get("Contents", []):
-                key = obj.get("Key")
-                if not key:
-                    continue
-                size = int(obj.get("Size") or 0)
-                if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
-                    continue
-                is_folder_marker = key.endswith("/") and size == 0
-
-                if recursive and type_filter != "file":
-                    if is_folder_marker and key != normalized_prefix:
-                        page_recursive_prefixes.add(key)
-                    if normalized_prefix and key.startswith(normalized_prefix):
-                        relative = key[len(normalized_prefix):]
-                    else:
-                        relative = key
-                    segments = [segment for segment in relative.split("/") if segment]
-                    if len(segments) > 1:
-                        running = normalized_prefix
-                        for segment in segments[:-1]:
-                            running = f"{running}{segment}/"
-                            page_recursive_prefixes.add(running)
-
-                if type_filter == "folder":
-                    continue
-                if recursive and is_folder_marker:
-                    continue
-                if not matches_query(key):
-                    continue
-                storage = obj.get("StorageClass")
-                if storage_filter and storage != storage_filter:
-                    continue
-                if len(objects) + len(prefixes) >= normalized_max_keys:
-                    continue
-                objects.append(
-                    BrowserObject(
-                        key=key,
-                        size=size,
-                        last_modified=obj.get("LastModified"),
-                        storage_class=storage,
-                        etag=self._clean_etag(obj.get("ETag")),
-                    )
-                )
-
-            if not recursive and type_filter != "file":
-                for entry in resp.get("CommonPrefixes", []) or []:
-                    prefix_value = entry.get("Prefix")
-                    if not prefix_value or prefix_value in seen_prefixes:
-                        continue
-                    if not matches_query(prefix_value):
-                        continue
-                    if len(objects) + len(prefixes) >= normalized_max_keys:
-                        break
-                    seen_prefixes.add(prefix_value)
-                    prefixes.append(prefix_value)
-
-            if recursive and type_filter != "file":
-                for prefix_value in sorted(page_recursive_prefixes):
-                    if prefix_value in seen_prefixes:
-                        continue
-                    if not matches_query(prefix_value):
-                        continue
-                    if len(objects) + len(prefixes) >= normalized_max_keys:
-                        break
-                    seen_prefixes.add(prefix_value)
-                    prefixes.append(prefix_value)
+            listing.add_page(resp, self._clean_etag)
 
             is_truncated = bool(resp.get("IsTruncated"))
             scan_token = resp.get("NextContinuationToken") if is_truncated else None
-            if len(objects) + len(prefixes) >= normalized_max_keys:
+            if listing.is_full:
                 break
             if not is_truncated:
                 break
 
-        response_is_truncated = False
-        response_next_token: Optional[str] = None
-        if budget_exceeded and scan_token:
-            response_is_truncated = True
-            response_next_token = scan_token
-        elif scan_token:
-            response_is_truncated = True
-            response_next_token = scan_token
-
         result = ListBrowserObjectsResponse(
             prefix=prefix,
-            objects=objects,
-            prefixes=prefixes,
-            is_truncated=response_is_truncated,
-            next_continuation_token=response_next_token,
+            objects=listing.objects,
+            prefixes=listing.prefixes,
+            is_truncated=bool(scan_token),
+            next_continuation_token=scan_token,
         )
         _OBJECT_LIST_CACHE.set(object_cache_key, result.model_copy(deep=True))
         logger.debug("Browser object cache miss: account=%s bucket=%s", account_cache_key, bucket_name)
