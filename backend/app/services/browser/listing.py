@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from time import monotonic
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.models.browser import (
-    BrowserObject,
     BrowserObjectSortBy,
     BrowserObjectSortDir,
     BrowserObjectVersion,
@@ -20,14 +17,13 @@ from app.models.browser import (
 from app.services.s3_execution_context import S3ExecutionTarget
 
 from ._shared import (
-    OBJECT_LIST_SCAN_PAGE_BUDGET,
-    OBJECT_LIST_SCAN_TIME_BUDGET_MS,
     _OBJECT_LIST_CACHE,
     _OBJECT_SORT_SNAPSHOT_CACHE,
     _decode_sorted_cursor,
     _encode_sorted_cursor,
     _sorted_snapshot_signature,
 )
+from .default_listing import DefaultObjectListingLoader, DefaultObjectScanOptions
 from .sorted_listing import (
     SortedObjectScanOptions,
     SortedObjectSnapshot,
@@ -35,102 +31,6 @@ from .sorted_listing import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class _FilteredObjectListing:
-    normalized_prefix: str
-    max_keys: int
-    matches_query: Callable[[str], bool]
-    type_filter: str
-    storage_filter: str | None
-    recursive: bool
-    objects: list[BrowserObject] = field(default_factory=list)
-    prefixes: list[str] = field(default_factory=list)
-    seen_prefixes: set[str] = field(default_factory=set)
-
-    @property
-    def item_count(self) -> int:
-        return len(self.objects) + len(self.prefixes)
-
-    @property
-    def is_full(self) -> bool:
-        return self.item_count >= self.max_keys
-
-    def add_page(self, response: dict[str, Any], clean_etag: Callable[[Any], str | None]) -> None:
-        recursive_prefixes = self._add_objects(response.get("Contents", []), clean_etag)
-        if not self.recursive and self.type_filter != "file":
-            common_prefixes = [
-                prefix
-                for entry in (response.get("CommonPrefixes", []) or [])
-                if (prefix := entry.get("Prefix"))
-            ]
-            self._add_prefixes(common_prefixes)
-        elif self.recursive and self.type_filter != "file":
-            self._add_prefixes(sorted(recursive_prefixes))
-
-    def _add_objects(
-        self,
-        entries: list[dict[str, Any]],
-        clean_etag: Callable[[Any], str | None],
-    ) -> set[str]:
-        recursive_prefixes: set[str] = set()
-        for entry in entries:
-            key = entry.get("Key")
-            if not key:
-                continue
-            size = int(entry.get("Size") or 0)
-            if self.normalized_prefix and key.rstrip("/") == self.normalized_prefix.rstrip("/") and size == 0:
-                continue
-            is_folder_marker = key.endswith("/") and size == 0
-
-            if self.recursive and self.type_filter != "file":
-                recursive_prefixes.update(self._recursive_prefixes_for_key(key, is_folder_marker))
-
-            if self.type_filter == "folder" or (self.recursive and is_folder_marker):
-                continue
-            if not self.matches_query(key):
-                continue
-            storage_class = entry.get("StorageClass")
-            if self.storage_filter and storage_class != self.storage_filter:
-                continue
-            if self.is_full:
-                continue
-            self.objects.append(
-                BrowserObject(
-                    key=key,
-                    size=size,
-                    last_modified=entry.get("LastModified"),
-                    storage_class=storage_class,
-                    etag=clean_etag(entry.get("ETag")),
-                )
-            )
-        return recursive_prefixes
-
-    def _recursive_prefixes_for_key(self, key: str, is_folder_marker: bool) -> set[str]:
-        prefixes: set[str] = set()
-        if is_folder_marker and key != self.normalized_prefix:
-            prefixes.add(key)
-        relative = (
-            key[len(self.normalized_prefix):]
-            if self.normalized_prefix and key.startswith(self.normalized_prefix)
-            else key
-        )
-        segments = [segment for segment in relative.split("/") if segment]
-        running = self.normalized_prefix
-        for segment in segments[:-1]:
-            running = f"{running}{segment}/"
-            prefixes.add(running)
-        return prefixes
-
-    def _add_prefixes(self, candidates: list[str]) -> None:
-        for prefix in candidates:
-            if prefix in self.seen_prefixes or not self.matches_query(prefix):
-                continue
-            if self.is_full:
-                break
-            self.seen_prefixes.add(prefix)
-            self.prefixes.append(prefix)
 
 
 class BrowserListingMixin:
@@ -199,109 +99,31 @@ class BrowserListingMixin:
         if cached is not None:
             logger.debug("Browser object cache hit: account=%s bucket=%s", account_cache_key, bucket_name)
             return cached.model_copy(deep=True)
-        client = self._client(account)
-        matches_query = self._build_query_matcher(
-            normalized_prefix=normalized_prefix,
-            query_value_raw=query_value_raw,
-            query_exact=query_exact,
-            query_case_sensitive=query_case_sensitive,
-        )
-        filtered_mode = bool(query_value_raw) or type_filter != "all" or storage_filter is not None or recursive
-
-        if not filtered_mode:
-            kwargs = {
-                "Bucket": bucket_name,
-                "Prefix": normalized_prefix,
-                "MaxKeys": normalized_max_keys,
-                "Delimiter": "/",
-            }
-            if continuation_token:
-                kwargs["ContinuationToken"] = continuation_token
-            try:
-                resp = client.list_objects_v2(**kwargs)
-            except (ClientError, BotoCoreError) as exc:
-                raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
-            objects: list[BrowserObject] = []
-            for obj in resp.get("Contents", []):
-                key = obj.get("Key")
-                if not key:
-                    continue
-                size = int(obj.get("Size") or 0)
-                if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
-                    continue
-                objects.append(
-                    BrowserObject(
-                        key=key,
-                        size=size,
-                        last_modified=obj.get("LastModified"),
-                        storage_class=obj.get("StorageClass"),
-                        etag=self._clean_etag(obj.get("ETag")),
-                    )
-                )
-            prefixes = [
-                prefix_value
-                for entry in (resp.get("CommonPrefixes", []) or [])
-                if (prefix_value := entry.get("Prefix"))
-            ]
-            result = ListBrowserObjectsResponse(
-                prefix=prefix,
-                objects=objects,
-                prefixes=prefixes,
-                is_truncated=bool(resp.get("IsTruncated")),
-                next_continuation_token=resp.get("NextContinuationToken"),
-            )
-            _OBJECT_LIST_CACHE.set(object_cache_key, result.model_copy(deep=True))
-            logger.debug("Browser object cache miss: account=%s bucket=%s", account_cache_key, bucket_name)
-            return result
-
-        listing = _FilteredObjectListing(
-            normalized_prefix=normalized_prefix,
-            max_keys=normalized_max_keys,
-            matches_query=matches_query,
-            type_filter=type_filter,
-            storage_filter=storage_filter,
-            recursive=recursive,
-        )
-        scan_token = continuation_token
-        scan_start = monotonic()
-        pages_scanned = 0
-
-        while True:
-            elapsed_ms = int((monotonic() - scan_start) * 1000)
-            if pages_scanned >= OBJECT_LIST_SCAN_PAGE_BUDGET or elapsed_ms >= OBJECT_LIST_SCAN_TIME_BUDGET_MS:
-                break
-
-            remaining = max(normalized_max_keys - listing.item_count, 1)
-            kwargs = {
-                "Bucket": bucket_name,
-                "Prefix": normalized_prefix,
-                "MaxKeys": remaining,
-            }
-            if not recursive:
-                kwargs["Delimiter"] = "/"
-            if scan_token:
-                kwargs["ContinuationToken"] = scan_token
-            try:
-                resp = client.list_objects_v2(**kwargs)
-            except (ClientError, BotoCoreError) as exc:
-                raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
-
-            pages_scanned += 1
-            listing.add_page(resp, self._clean_etag)
-
-            is_truncated = bool(resp.get("IsTruncated"))
-            scan_token = resp.get("NextContinuationToken") if is_truncated else None
-            if listing.is_full:
-                break
-            if not is_truncated:
-                break
-
-        result = ListBrowserObjectsResponse(
-            prefix=prefix,
-            objects=listing.objects,
-            prefixes=listing.prefixes,
-            is_truncated=bool(scan_token),
-            next_continuation_token=scan_token,
+        result = DefaultObjectListingLoader(
+            client=self._client(account),
+            options=DefaultObjectScanOptions(
+                bucket_name=bucket_name,
+                prefix=normalized_prefix,
+                max_keys=normalized_max_keys,
+                item_type=type_filter,
+                storage_class=storage_filter,
+                recursive=recursive,
+            ),
+            matches_query=self._build_query_matcher(
+                normalized_prefix=normalized_prefix,
+                query_value_raw=query_value_raw,
+                query_exact=query_exact,
+                query_case_sensitive=query_case_sensitive,
+            ),
+            clean_etag=self._clean_etag,
+        ).load(
+            continuation_token=continuation_token,
+            filtered=(
+                bool(query_value_raw)
+                or type_filter != "all"
+                or storage_filter is not None
+                or recursive
+            ),
         )
         _OBJECT_LIST_CACHE.set(object_cache_key, result.model_copy(deep=True))
         logger.debug("Browser object cache miss: account=%s bucket=%s", account_cache_key, bucket_name)
