@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from typing import Any, Callable, Literal, Protocol
 
 from app.db import StorageEndpoint
@@ -782,6 +783,120 @@ def _enrich_encryption_configuration(
         column_details["sse_kms_key_ids"] = extract_sse_values(encryption, "sse_kms_key_id")
 
 
+@dataclass(frozen=True)
+class _BucketPropertiesContext:
+    bucket_name: str
+    service: BucketConfigurationService
+    account: S3ExecutionTarget
+    uses_bundle: bool
+    properties: BucketProperties | None
+    unavailable: bool
+
+
+def _enrich_versioning(
+    context: _BucketPropertiesContext,
+    feature_map: dict[str, BucketFeatureStatus],
+) -> None:
+    raw_versioning: str | None = None
+    if context.uses_bundle:
+        if context.unavailable:
+            feature_map["versioning"] = _feature_status_unavailable()
+            return
+        raw_versioning = context.properties.versioning_status if context.properties else None
+    else:
+        try:
+            raw_versioning = context.service.get_bucket_versioning_status(context.bucket_name, context.account)
+        except RuntimeError:
+            feature_map["versioning"] = _feature_status_unavailable()
+            return
+
+    raw = raw_versioning or "Disabled"
+    normalized = str(raw).strip().lower()
+    if normalized == "enabled":
+        feature_map["versioning"] = _feature_status_active(raw)
+    elif normalized == "suspended":
+        feature_map["versioning"] = BucketFeatureStatus(state=raw, tone="unknown")
+    else:
+        feature_map["versioning"] = _feature_status_inactive(raw)
+
+
+def _enrich_object_lock(
+    context: _BucketPropertiesContext,
+    feature_map: dict[str, BucketFeatureStatus],
+) -> None:
+    if context.uses_bundle:
+        if context.unavailable:
+            feature_map["object_lock"] = _feature_status_unavailable()
+            return
+        enabled = bool((context.properties.object_lock_enabled if context.properties else None) is True)
+    else:
+        try:
+            object_lock = context.service.get_bucket_object_lock(context.bucket_name, context.account)
+        except RuntimeError:
+            feature_map["object_lock"] = _feature_status_unavailable()
+            return
+        enabled = bool(object_lock and object_lock.enabled is True)
+
+    feature_map["object_lock"] = (
+        _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
+    )
+
+
+def _enrich_public_access_block(
+    context: _BucketPropertiesContext,
+    feature_map: dict[str, BucketFeatureStatus],
+) -> None:
+    if context.uses_bundle:
+        if context.unavailable:
+            feature_map["block_public_access"] = _feature_status_unavailable()
+            return
+        config = context.properties.public_access_block if context.properties else None
+    else:
+        try:
+            config = context.service.get_public_access_block(context.bucket_name, context.account)
+        except RuntimeError:
+            feature_map["block_public_access"] = _feature_status_unavailable()
+            return
+
+    if not config:
+        feature_map["block_public_access"] = _feature_status_inactive("Disabled")
+        return
+
+    values = (
+        config.block_public_acls,
+        config.ignore_public_acls,
+        config.block_public_policy,
+        config.restrict_public_buckets,
+    )
+    if all(value is True for value in values):
+        feature_map["block_public_access"] = _feature_status_active("Enabled")
+    elif any(value is True for value in values):
+        feature_map["block_public_access"] = _feature_status_active("Partial")
+    else:
+        feature_map["block_public_access"] = _feature_status_inactive("Disabled")
+
+
+def _enrich_cors(
+    context: _BucketPropertiesContext,
+    feature_map: dict[str, BucketFeatureStatus],
+) -> None:
+    if context.uses_bundle:
+        if context.unavailable:
+            feature_map["cors"] = _feature_status_unavailable()
+            return
+        rules = context.properties.cors_rules if context.properties else []
+    else:
+        try:
+            rules = context.service.get_bucket_cors(context.bucket_name, context.account) or []
+        except RuntimeError:
+            feature_map["cors"] = _feature_status_unavailable()
+            return
+
+    feature_map["cors"] = (
+        _feature_status_active("Configured") if rules else _feature_status_inactive("Not set")
+    )
+
+
 def _project_lifecycle_details(
     rules: list[dict[str, Any]],
     detail_keys: set[str],
@@ -810,15 +925,10 @@ def _project_lifecycle_details(
 
 
 def _enrich_lifecycle_configuration(
-    bucket: CephAdminBucketSummary,
-    service: BucketConfigurationService,
-    account: S3ExecutionTarget,
+    context: _BucketPropertiesContext,
     *,
     wants_feature: bool,
     detail_keys: set[str],
-    use_properties: bool,
-    properties: BucketProperties | None,
-    properties_unavailable: bool,
     feature_map: dict[str, BucketFeatureStatus],
     column_details: dict[str, Any],
 ) -> None:
@@ -828,18 +938,18 @@ def _enrich_lifecycle_configuration(
 
     if detail_keys:
         try:
-            raw_rules = service.get_lifecycle(bucket.name, account).rules or []
+            raw_rules = context.service.get_lifecycle(context.bucket_name, context.account).rules or []
             rules_for_state = raw_rules
         except RuntimeError:
             unavailable = True
-    elif use_properties:
-        if properties_unavailable:
+    elif context.uses_bundle:
+        if context.unavailable:
             unavailable = True
         else:
-            rules_for_state = properties.lifecycle_rules if properties else []
+            rules_for_state = context.properties.lifecycle_rules if context.properties else []
     else:
         try:
-            raw_rules = service.get_lifecycle(bucket.name, account).rules or []
+            raw_rules = context.service.get_lifecycle(context.bucket_name, context.account).rules or []
             rules_for_state = raw_rules
         except RuntimeError:
             unavailable = True
@@ -864,15 +974,15 @@ def _enrich_lifecycle_configuration(
 
 
 def _project_property_details(
-    properties: BucketProperties | None,
-    properties_unavailable: bool,
+    context: _BucketPropertiesContext,
     detail_keys: set[str],
     column_details: dict[str, Any],
 ) -> None:
-    if properties_unavailable or properties is None:
+    if context.unavailable or context.properties is None:
         _mark_details_unavailable(column_details, detail_keys)
         return
 
+    properties = context.properties
     object_lock = properties.object_lock
     if "object_lock_mode" in detail_keys:
         column_details["object_lock_mode"] = object_lock.mode if object_lock else None
@@ -961,107 +1071,38 @@ def enrich_buckets(
                 props = service.get_bucket_properties(bucket.name, account)
             except RuntimeError:
                 props_error = True
+        properties_context = _BucketPropertiesContext(
+            bucket_name=bucket.name,
+            service=service,
+            account=account,
+            uses_bundle=use_props_bundle,
+            properties=props,
+            unavailable=props_error,
+        )
 
         if "versioning" in requested:
-            raw_versioning: str | None = None
-            if use_props_bundle:
-                if props_error:
-                    feature_map["versioning"] = _feature_status_unavailable()
-                else:
-                    raw_versioning = props.versioning_status if props else None
-            else:
-                try:
-                    raw_versioning = service.get_bucket_versioning_status(bucket.name, account)
-                except RuntimeError:
-                    feature_map["versioning"] = _feature_status_unavailable()
-            if "versioning" not in feature_map:
-                raw = raw_versioning or "Disabled"
-                normalized = str(raw).strip().lower()
-                if normalized == "enabled":
-                    feature_map["versioning"] = _feature_status_active(raw)
-                elif normalized == "suspended":
-                    feature_map["versioning"] = BucketFeatureStatus(state=raw, tone="unknown")
-                else:
-                    feature_map["versioning"] = _feature_status_inactive(raw)
+            _enrich_versioning(properties_context, feature_map)
 
         if "object_lock" in requested:
-            if use_props_bundle:
-                if props_error:
-                    feature_map["object_lock"] = _feature_status_unavailable()
-                else:
-                    enabled = bool((props.object_lock_enabled if props else None) is True)
-                    feature_map["object_lock"] = _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
-            else:
-                try:
-                    object_lock = service.get_bucket_object_lock(bucket.name, account)
-                    enabled = bool(object_lock and object_lock.enabled is True)
-                    feature_map["object_lock"] = _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
-                except RuntimeError:
-                    feature_map["object_lock"] = _feature_status_unavailable()
+            _enrich_object_lock(properties_context, feature_map)
 
         if "block_public_access" in requested:
-            cfg = None
-            if use_props_bundle:
-                if props_error:
-                    feature_map["block_public_access"] = _feature_status_unavailable()
-                else:
-                    cfg = props.public_access_block if props else None
-            else:
-                try:
-                    cfg = service.get_public_access_block(bucket.name, account)
-                except RuntimeError:
-                    feature_map["block_public_access"] = _feature_status_unavailable()
-            if "block_public_access" not in feature_map:
-                if not cfg:
-                    feature_map["block_public_access"] = _feature_status_inactive("Disabled")
-                else:
-                    keys = [
-                        cfg.block_public_acls,
-                        cfg.ignore_public_acls,
-                        cfg.block_public_policy,
-                        cfg.restrict_public_buckets,
-                    ]
-                    fully_enabled = all(val is True for val in keys)
-                    partially_enabled = not fully_enabled and any(val is True for val in keys)
-                    if fully_enabled:
-                        feature_map["block_public_access"] = _feature_status_active("Enabled")
-                    elif partially_enabled:
-                        feature_map["block_public_access"] = _feature_status_active("Partial")
-                    else:
-                        feature_map["block_public_access"] = _feature_status_inactive("Disabled")
+            _enrich_public_access_block(properties_context, feature_map)
 
         if "lifecycle_rules" in requested or wants_lifecycle_details:
             _enrich_lifecycle_configuration(
-                bucket,
-                service,
-                account,
+                properties_context,
                 wants_feature="lifecycle_rules" in requested,
                 detail_keys=lifecycle_detail_keys,
-                use_properties=use_props_bundle,
-                properties=props,
-                properties_unavailable=props_error,
                 feature_map=feature_map,
                 column_details=column_details,
             )
 
         if "cors" in requested:
-            rules = None
-            if use_props_bundle:
-                if props_error:
-                    feature_map["cors"] = _feature_status_unavailable()
-                else:
-                    rules = props.cors_rules if props else []
-            else:
-                try:
-                    rules = service.get_bucket_cors(bucket.name, account) or []
-                except RuntimeError:
-                    feature_map["cors"] = _feature_status_unavailable()
-            if "cors" not in feature_map:
-                has_rules = bool(rules and len(rules) > 0)
-                feature_map["cors"] = _feature_status_active("Configured") if has_rules else _feature_status_inactive("Not set")
+            _enrich_cors(properties_context, feature_map)
 
         if wants_props_details:
-            _project_property_details(props, props_error, props_detail_keys, column_details)
+            _project_property_details(properties_context, props_detail_keys, column_details)
 
         if wants_website or wants_website_details:
             _enrich_website_configuration(
