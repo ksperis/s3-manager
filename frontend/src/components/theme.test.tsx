@@ -36,8 +36,6 @@ function installSystemTheme(initialMatches = false) {
           listeners.add(listener),
         removeEventListener: (_event: string, listener: () => void) =>
           listeners.delete(listener),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
         dispatchEvent: vi.fn(),
       }) as MediaQueryList,
   });

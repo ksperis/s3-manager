@@ -2765,8 +2765,6 @@ describe("BrowserPage interactions", () => {
           onchange: null,
           addEventListener: vi.fn(),
           removeEventListener: vi.fn(),
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
           dispatchEvent: vi.fn(),
         }) as MediaQueryList,
     );
@@ -2794,8 +2792,6 @@ describe("BrowserPage interactions", () => {
           onchange: null,
           addEventListener: vi.fn(),
           removeEventListener: vi.fn(),
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
           dispatchEvent: vi.fn(),
         }) as MediaQueryList,
     );

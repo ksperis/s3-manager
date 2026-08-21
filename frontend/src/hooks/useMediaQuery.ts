@@ -14,12 +14,8 @@ function subscribeToMediaQuery(
   onStoreChange: () => void,
 ) {
   if (!mediaQuery) return () => undefined;
-  if (typeof mediaQuery.addEventListener === "function") {
-    mediaQuery.addEventListener("change", onStoreChange);
-    return () => mediaQuery.removeEventListener("change", onStoreChange);
-  }
-  mediaQuery.addListener(onStoreChange);
-  return () => mediaQuery.removeListener(onStoreChange);
+  mediaQuery.addEventListener("change", onStoreChange);
+  return () => mediaQuery.removeEventListener("change", onStoreChange);
 }
 
 export function useMediaQuery(

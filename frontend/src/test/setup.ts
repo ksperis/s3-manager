@@ -11,10 +11,8 @@ if (typeof window !== "undefined" && !window.matchMedia) {
       onchange: null,
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
-      addListener: () => undefined,
-      removeListener: () => undefined,
       dispatchEvent: () => false,
-    }) as MediaQueryList;
+    }) as unknown as MediaQueryList;
 }
 
 if (typeof window !== "undefined") {
