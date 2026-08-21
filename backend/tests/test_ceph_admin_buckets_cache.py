@@ -160,6 +160,9 @@ def test_ceph_admin_bucket_listing_cache_is_reused_across_pages():
 
     assert [item.name for item in first.items] == ["bucket-a", "bucket-b"]
     assert [item.name for item in second.items] == ["bucket-c", "bucket-d"]
+    assert first.total == second.total == 4
+    assert first.has_next is True
+    assert second.has_next is False
     assert rgw_admin.get_all_buckets_calls == 1
 
 
@@ -707,6 +710,10 @@ def test_ceph_admin_bucket_listing_cache_is_reused_for_quick_filter_changes():
 
     assert [item.name for item in first.items] == ["alpha-bucket", "beta-bucket", "gamma-bucket"]
     assert [item.name for item in second.items] == ["alpha-bucket"]
+    assert first.total == 3
+    assert second.total == 1
+    assert first.has_next is False
+    assert second.has_next is False
     assert rgw_admin.get_all_buckets_calls == 1
 
 

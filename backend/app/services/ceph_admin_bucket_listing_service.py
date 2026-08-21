@@ -63,6 +63,21 @@ _BUCKET_STATS_UNAVAILABLE_WARNING = (
     "Bucket stats are unavailable via Ceph Admin credentials on this endpoint. "
     "Showing owner metadata without usage or quota values."
 )
+_REQUESTED_BUCKET_FEATURES = frozenset(
+    {
+        "tags",
+        "versioning",
+        "object_lock",
+        "block_public_access",
+        "lifecycle_rules",
+        "static_website",
+        "bucket_policy",
+        "cors",
+        "access_logging",
+        "notifications",
+        "server_side_encryption",
+    }
+)
 
 
 class CephAdminBucketListingContext(Protocol):
@@ -82,6 +97,116 @@ def _build_s3_context(ctx: CephAdminBucketListingContext) -> S3ExecutionContext:
         access_key=ctx.access_key,
         secret_key=ctx.secret_key,
     )
+
+
+def _progress_options(
+    *,
+    progress: ListingProgressEmitter,
+    include_progress_hooks: bool,
+    cancel_check: Callable[[], None] | None,
+    stage: str,
+    message: str,
+    start: int,
+    end: int,
+) -> dict[str, Any]:
+    if not include_progress_hooks:
+        return {}
+    return {
+        "progress": progress,
+        "progress_stage": stage,
+        "progress_message": message,
+        "progress_start": start,
+        "progress_end": end,
+        "cancel_check": cancel_check,
+    }
+
+
+@dataclass(frozen=True)
+class _CephAdminBucketListingRequest:
+    simple_filter: str | None
+    advanced_filter: CephAdminBucketFilterQuery | None
+    sort_by: str
+    sort_dir: str
+    with_stats: bool
+    stats_required: bool
+    wants_owner_name: bool
+    wants_owner_suspended: bool
+    wants_owner_quota: bool
+    wants_owner_quota_usage: bool
+    owner_usage_required: bool
+    needs_owner_metadata: bool
+    needs_tenant_metadata: bool
+    requested_features: frozenset[str]
+    requested_detail_fields: frozenset[str]
+
+    @classmethod
+    def parse(
+        cls,
+        *,
+        raw_filter: str | None,
+        raw_advanced_filter: str | None,
+        sort_by: str,
+        sort_dir: str,
+        include: list[str],
+        with_stats: bool,
+    ) -> _CephAdminBucketListingRequest:
+        if raw_advanced_filter:
+            simple_filter = (
+                raw_filter.strip()
+                if isinstance(raw_filter, str) and raw_filter.strip()
+                else None
+            )
+            _, advanced_filter = parse_filter(raw_advanced_filter)
+        else:
+            simple_filter, advanced_filter = parse_filter(raw_filter)
+        simple_filter = (
+            simple_filter.strip()
+            if isinstance(simple_filter, str) and simple_filter.strip()
+            else None
+        )
+        stats_required = request_requires_bucket_stats(advanced_filter, sort_by)
+        include_set = parse_includes(include)
+        wants_owner_name = "owner_name" in include_set
+        wants_owner_suspended = "owner_suspended" in include_set
+        wants_owner_quota = "owner_quota" in include_set
+        wants_owner_quota_usage = "owner_quota_usage" in include_set
+        owner_usage_required = wants_owner_quota_usage or filter_requires_owner_usage(advanced_filter)
+        return cls(
+            simple_filter=simple_filter,
+            advanced_filter=advanced_filter,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            with_stats=with_stats or stats_required,
+            stats_required=stats_required,
+            wants_owner_name=wants_owner_name,
+            wants_owner_suspended=wants_owner_suspended,
+            wants_owner_quota=wants_owner_quota,
+            wants_owner_quota_usage=wants_owner_quota_usage,
+            owner_usage_required=owner_usage_required,
+            needs_owner_metadata=request_requires_owner_metadata(
+                advanced_filter,
+                sort_by,
+                simple_filter if not advanced_filter else None,
+            ),
+            needs_tenant_metadata=request_requires_tenant_metadata(
+                advanced_filter,
+                sort_by,
+                simple_filter if not advanced_filter else None,
+            ),
+            requested_features=frozenset(include_set & _REQUESTED_BUCKET_FEATURES),
+            requested_detail_fields=frozenset(include_set & COLUMN_DETAIL_KEYS),
+        )
+
+    def cache_key(self, ctx: CephAdminBucketListingContext) -> CephAdminBucketListCacheKey:
+        return CephAdminBucketListCacheKey(
+            endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
+            advanced_filter=serialize_filter(self.advanced_filter),
+            sort_by=self.sort_by,
+            sort_dir=self.sort_dir,
+            with_stats=self.with_stats,
+            with_owner_metadata=self.needs_owner_metadata,
+            with_owner_usage=self.owner_usage_required,
+        )
 
 
 @dataclass(frozen=True)
@@ -145,27 +270,13 @@ class _CephAdminBucketSnapshotBuilder:
         self,
         *,
         ctx: CephAdminBucketListingContext,
-        advanced_filter: CephAdminBucketFilterQuery | None,
-        sort_by: str,
-        sort_dir: str,
-        with_stats: bool,
-        stats_required_for_request: bool,
-        needs_owner_metadata: bool,
-        needs_tenant_metadata: bool,
-        owner_usage_required_for_request: bool,
+        request: _CephAdminBucketListingRequest,
         progress: ListingProgressEmitter,
         include_progress_hooks: bool,
         cancel_check: Callable[[], None] | None,
     ) -> None:
         self.ctx = ctx
-        self.advanced_filter = advanced_filter
-        self.sort_by = sort_by
-        self.sort_dir = sort_dir
-        self.with_stats = with_stats
-        self.stats_required_for_request = stats_required_for_request
-        self.needs_owner_metadata = needs_owner_metadata
-        self.needs_tenant_metadata = needs_tenant_metadata
-        self.owner_usage_required_for_request = owner_usage_required_for_request
+        self.request = request
         self.progress = progress
         self.include_progress_hooks = include_progress_hooks
         self.cancel_check = cancel_check
@@ -193,15 +304,15 @@ class _CephAdminBucketSnapshotBuilder:
     def _load_entries(self) -> _LoadedBucketEntries:
         name_candidates = (
             None
-            if self.owner_usage_required_for_request
-            else extract_name_candidates(self.advanced_filter)
+            if self.request.owner_usage_required
+            else extract_name_candidates(self.request.advanced_filter)
         )
         try:
-            entries = self._fetch_entries(self.with_stats, name_candidates)
+            entries = self._fetch_entries(self.request.with_stats, name_candidates)
         except RGWAdminError as exc:
-            if not self.with_stats:
+            if not self.request.with_stats:
                 raise
-            if self.stats_required_for_request:
+            if self.request.stats_required:
                 raise RequiredBucketStatsUnavailableError(
                     "Bucket stats are unavailable via Ceph Admin credentials for this request"
                 ) from exc
@@ -225,7 +336,7 @@ class _CephAdminBucketSnapshotBuilder:
             )
         return _LoadedBucketEntries(
             entries=entries,
-            effective_with_stats=self.with_stats,
+            effective_with_stats=self.request.with_stats,
             stats_available=True,
             stats_warning=None,
         )
@@ -292,7 +403,7 @@ class _CephAdminBucketSnapshotBuilder:
         self,
         results: list[CephAdminBucketSummary],
     ) -> list[CephAdminBucketSummary]:
-        if not self.needs_owner_metadata or not results:
+        if not self.request.needs_owner_metadata or not results:
             return results
         self.progress.emit(
             percent=63,
@@ -305,8 +416,11 @@ class _CephAdminBucketSnapshotBuilder:
         return backfill_bucket_owner_metadata(
             self.ctx,
             results,
-            include_tenant=self.needs_tenant_metadata,
-            **self._progress_options(
+            include_tenant=self.request.needs_tenant_metadata,
+            **_progress_options(
+                progress=self.progress,
+                include_progress_hooks=self.include_progress_hooks,
+                cancel_check=self.cancel_check,
                 stage="owner_backfill",
                 message="Loading bucket owner metadata",
                 start=63,
@@ -319,7 +433,7 @@ class _CephAdminBucketSnapshotBuilder:
         results: list[CephAdminBucketSummary],
         owner_usage_by_key: dict[str, BucketOwnerUsage] | None,
     ) -> list[CephAdminBucketSummary]:
-        if not self.advanced_filter or not self.advanced_filter.rules:
+        if not self.request.advanced_filter or not self.request.advanced_filter.rules:
             self.progress.emit(
                 percent=90,
                 stage="expensive_filters",
@@ -334,7 +448,7 @@ class _CephAdminBucketSnapshotBuilder:
             message="Applying advanced filters",
             force=True,
         )
-        plan = _AdvancedFilterPlan.from_query(self.advanced_filter)
+        plan = _AdvancedFilterPlan.from_query(self.request.advanced_filter)
         results = self._apply_cheap_field_rules(results, plan)
         if plan.has_expensive_rules:
             results = self._apply_expensive_rules(results, plan, owner_usage_by_key)
@@ -447,7 +561,10 @@ class _CephAdminBucketSnapshotBuilder:
             include_tags=plan.requires_tag_lookup or ("tags" in plan.filter_features),
             service=service,
             account=account,
-            **self._progress_options(
+            **_progress_options(
+                progress=self.progress,
+                include_progress_hooks=self.include_progress_hooks,
+                cancel_check=self.cancel_check,
                 stage="bucket_enrichment",
                 message="Loading bucket details",
                 start=75,
@@ -456,7 +573,7 @@ class _CephAdminBucketSnapshotBuilder:
         )
 
     def _enrich_owner_names(self, candidates: list[CephAdminBucketSummary]) -> None:
-        owner_scope = determine_owner_name_lookup_scope(self.advanced_filter)
+        owner_scope = determine_owner_name_lookup_scope(self.request.advanced_filter)
         owner_name_by_key = resolve_owner_names_for_buckets(
             self.ctx,
             candidates,
@@ -490,7 +607,10 @@ class _CephAdminBucketSnapshotBuilder:
             plan.feature_param_rules,
             service=service,
             account=account,
-            **self._progress_options(
+            **_progress_options(
+                progress=self.progress,
+                include_progress_hooks=self.include_progress_hooks,
+                cancel_check=self.cancel_check,
                 stage="feature_param_enrichment",
                 message="Loading bucket feature parameters",
                 start=82,
@@ -588,33 +708,14 @@ class _CephAdminBucketSnapshotBuilder:
             bucket.tags = None
             bucket.column_details = None
 
-    def _progress_options(
-        self,
-        *,
-        stage: str,
-        message: str,
-        start: int,
-        end: int,
-    ) -> dict[str, Any]:
-        if not self.include_progress_hooks:
-            return {}
-        return {
-            "progress": self.progress,
-            "progress_stage": stage,
-            "progress_message": message,
-            "progress_start": start,
-            "progress_end": end,
-            "cancel_check": self.cancel_check,
-        }
-
     def _sort_value(self, bucket: CephAdminBucketSummary) -> str | int | None:
-        if self.sort_by == "tenant":
+        if self.request.sort_by == "tenant":
             value: str | int | None = bucket.tenant or ""
-        elif self.sort_by == "owner":
+        elif self.request.sort_by == "owner":
             value = bucket.owner or ""
-        elif self.sort_by == "used_bytes":
+        elif self.request.sort_by == "used_bytes":
             value = bucket.used_bytes if bucket.used_bytes is not None else 0
-        elif self.sort_by == "object_count":
+        elif self.request.sort_by == "object_count":
             value = bucket.object_count if bucket.object_count is not None else 0
         else:
             value = bucket.name
@@ -632,8 +733,180 @@ class _CephAdminBucketSnapshotBuilder:
                 missing_values.append(bucket)
             else:
                 sortable.append((value, bucket))
-        sortable.sort(key=lambda item: item[0], reverse=self.sort_dir == "desc")
+        sortable.sort(key=lambda item: item[0], reverse=self.request.sort_dir == "desc")
         return [bucket for _, bucket in sortable] + missing_values
+
+
+class _CephAdminBucketPageBuilder:
+    def __init__(
+        self,
+        *,
+        ctx: CephAdminBucketListingContext,
+        request: _CephAdminBucketListingRequest,
+        listing: CephAdminBucketListingSnapshot,
+        progress: ListingProgressEmitter,
+        include_progress_hooks: bool,
+        cancel_check: Callable[[], None] | None,
+    ) -> None:
+        self.ctx = ctx
+        self.request = request
+        self.listing = listing
+        self.progress = progress
+        self.include_progress_hooks = include_progress_hooks
+        self.cancel_check = cancel_check
+
+    def build(self, *, page: int, page_size: int) -> PaginatedCephAdminBucketsResponse:
+        self.progress.emit(
+            percent=92,
+            stage="sort_paginate",
+            message="Sorting and paginating results",
+            force=True,
+        )
+        filtered_results = self._apply_simple_filter(self.listing.items)
+        invoke_cancel_check(self.cancel_check)
+        total = len(filtered_results)
+        start = max(page - 1, 0) * page_size
+        end = start + page_size
+        page_items = clone_ceph_admin_bucket_list(filtered_results[start:end])
+        page_items = self._backfill_owner_metadata(page_items)
+        page_items = self._enrich_bucket_details(page_items)
+        self._enrich_owner_names(page_items)
+        page_items = self._enrich_owner_attributes(page_items)
+        invoke_cancel_check(self.cancel_check)
+        response = PaginatedCephAdminBucketsResponse(
+            items=page_items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_next=end < total,
+            stats_available=self.listing.stats_available,
+            stats_warning=self.listing.stats_warning,
+        )
+        self.progress.emit(
+            percent=100,
+            stage="finalize",
+            processed=total,
+            total=total,
+            message="Search completed",
+            force=True,
+        )
+        return response
+
+    def _apply_simple_filter(
+        self,
+        results: list[CephAdminBucketSummary],
+    ) -> list[CephAdminBucketSummary]:
+        if not self.request.simple_filter:
+            return results
+        filter_value = self.request.simple_filter.lower()
+        if self.request.advanced_filter:
+            return [bucket for bucket in results if filter_value in bucket.name.lower()]
+        return [
+            bucket
+            for bucket in results
+            if filter_value in bucket.name.lower()
+            or filter_value in (bucket.tenant or "").lower()
+            or filter_value in (bucket.owner or "").lower()
+        ]
+
+    def _backfill_owner_metadata(
+        self,
+        page_items: list[CephAdminBucketSummary],
+    ) -> list[CephAdminBucketSummary]:
+        if not page_items:
+            return page_items
+        self.progress.emit(
+            percent=94,
+            stage="page_enrichment",
+            processed=0,
+            total=len(page_items),
+            message="Loading page bucket metadata",
+            force=True,
+        )
+        return backfill_bucket_owner_metadata(
+            self.ctx,
+            page_items,
+            include_tenant=(
+                self.request.wants_owner_name
+                or self.request.wants_owner_suspended
+                or self.request.wants_owner_quota
+                or self.request.wants_owner_quota_usage
+            ),
+            **_progress_options(
+                progress=self.progress,
+                include_progress_hooks=self.include_progress_hooks,
+                cancel_check=self.cancel_check,
+                stage="page_enrichment",
+                message="Loading page bucket metadata",
+                start=94,
+                end=96,
+            ),
+        )
+
+    def _enrich_bucket_details(
+        self,
+        page_items: list[CephAdminBucketSummary],
+    ) -> list[CephAdminBucketSummary]:
+        requested = (
+            {feature for feature in self.request.requested_features if feature != "tags"}
+            | set(self.request.requested_detail_fields)
+        )
+        if not requested and "tags" not in self.request.requested_features:
+            return page_items
+        self.progress.emit(
+            percent=96,
+            stage="page_enrichment",
+            processed=0,
+            total=len(page_items),
+            message="Loading page bucket details",
+            force=True,
+        )
+        return enrich_buckets(
+            page_items,
+            requested,
+            include_tags="tags" in self.request.requested_features,
+            service=BucketConfigurationService(),
+            account=_build_s3_context(self.ctx),
+            **_progress_options(
+                progress=self.progress,
+                include_progress_hooks=self.include_progress_hooks,
+                cancel_check=self.cancel_check,
+                stage="page_enrichment",
+                message="Loading page bucket details",
+                start=96,
+                end=99,
+            ),
+        )
+
+    def _enrich_owner_names(self, page_items: list[CephAdminBucketSummary]) -> None:
+        if not self.request.wants_owner_name or not page_items:
+            return
+        owner_name_by_key = resolve_owner_names_for_buckets(self.ctx, page_items, owner_scope="any")
+        for bucket in page_items:
+            if not bucket.owner:
+                bucket.owner_name = None
+                continue
+            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
+            bucket.owner_name = owner_name_by_key.get(owner_key, bucket.owner_name)
+
+    def _enrich_owner_attributes(
+        self,
+        page_items: list[CephAdminBucketSummary],
+    ) -> list[CephAdminBucketSummary]:
+        if not page_items or not (
+            self.request.wants_owner_suspended
+            or self.request.wants_owner_quota
+            or self.request.wants_owner_quota_usage
+        ):
+            return page_items
+        return apply_owner_enrichment(
+            self.ctx,
+            page_items,
+            include_suspended=self.request.wants_owner_suspended,
+            include_quota=self.request.wants_owner_quota or self.request.wants_owner_quota_usage,
+            include_usage=self.request.wants_owner_quota_usage,
+            usage_by_key=self.listing.owner_usage_by_key,
+        )
 
 
 def compute_ceph_admin_bucket_listing(
@@ -654,184 +927,29 @@ def compute_ceph_admin_bucket_listing(
     include_progress_hooks = progress_callback is not None or cancel_check is not None
     invoke_cancel_check(cancel_check)
     progress.emit(percent=5, stage="prepare", message="Preparing advanced search", force=True)
-
-    if advanced_filter:
-        simple_filter = filter.strip() if isinstance(filter, str) and filter.strip() else None
-        _, advanced_filter = parse_filter(advanced_filter)
-    else:
-        simple_filter, advanced_filter = parse_filter(filter)
-    simple_filter = simple_filter.strip() if isinstance(simple_filter, str) and simple_filter.strip() else None
-    stats_required_for_request = request_requires_bucket_stats(advanced_filter, sort_by)
-    if stats_required_for_request:
-        with_stats = True
-
-    include_set = parse_includes(include)
-    wants_owner_name = "owner_name" in include_set
-    wants_owner_suspended = "owner_suspended" in include_set
-    wants_owner_quota = "owner_quota" in include_set
-    wants_owner_quota_usage = "owner_quota_usage" in include_set
-    owner_usage_required_for_request = wants_owner_quota_usage or filter_requires_owner_usage(advanced_filter)
-    needs_owner_metadata = request_requires_owner_metadata(
-        advanced_filter,
-        sort_by,
-        simple_filter if not advanced_filter else None,
-    )
-    needs_tenant_metadata = request_requires_tenant_metadata(
-        advanced_filter,
-        sort_by,
-        simple_filter if not advanced_filter else None,
-    )
-    requested_features = include_set & {
-        "tags",
-        "versioning",
-        "object_lock",
-        "block_public_access",
-        "lifecycle_rules",
-        "static_website",
-        "bucket_policy",
-        "cors",
-        "access_logging",
-        "notifications",
-        "server_side_encryption",
-    }
-    requested_detail_fields = include_set & COLUMN_DETAIL_KEYS
-
-    cache_key = CephAdminBucketListCacheKey(
-        endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
-        advanced_filter=serialize_filter(advanced_filter),
+    listing_request = _CephAdminBucketListingRequest.parse(
+        raw_filter=filter,
+        raw_advanced_filter=advanced_filter,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        include=include,
         with_stats=with_stats,
-        with_owner_metadata=needs_owner_metadata,
-        with_owner_usage=owner_usage_required_for_request,
     )
     invoke_cancel_check(cancel_check)
-
     snapshot_builder = _CephAdminBucketSnapshotBuilder(
         ctx=ctx,
-        advanced_filter=advanced_filter,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-        with_stats=with_stats,
-        stats_required_for_request=stats_required_for_request,
-        needs_owner_metadata=needs_owner_metadata,
-        needs_tenant_metadata=needs_tenant_metadata,
-        owner_usage_required_for_request=owner_usage_required_for_request,
+        request=listing_request,
         progress=progress,
         include_progress_hooks=include_progress_hooks,
         cancel_check=cancel_check,
     )
     invoke_cancel_check(cancel_check)
-    listing = get_cached_bucket_listing(cache_key, snapshot_builder.build)
-    results = listing.items
-    progress.emit(percent=92, stage="sort_paginate", message="Sorting and paginating results", force=True)
-
-    filtered_results = results
-    if simple_filter:
-        filter_value = simple_filter.lower()
-        if advanced_filter:
-            filtered_results = [bucket for bucket in filtered_results if filter_value in bucket.name.lower()]
-        else:
-            filtered_results = [
-                bucket
-                for bucket in filtered_results
-                if filter_value in bucket.name.lower()
-                or filter_value in (bucket.tenant or "").lower()
-                or filter_value in (bucket.owner or "").lower()
-            ]
-
-    invoke_cancel_check(cancel_check)
-    total = len(filtered_results)
-    start = max(page - 1, 0) * page_size
-    end = start + page_size
-    page_items = clone_ceph_admin_bucket_list(filtered_results[start:end])
-    if page_items:
-        progress.emit(
-            percent=94,
-            stage="page_enrichment",
-            processed=0,
-            total=len(page_items),
-            message="Loading page bucket metadata",
-            force=True,
-        )
-        page_items = backfill_bucket_owner_metadata(
-            ctx,
-            page_items,
-            include_tenant=wants_owner_name or wants_owner_suspended or wants_owner_quota or wants_owner_quota_usage,
-            **(
-                {
-                    "progress": progress,
-                    "progress_stage": "page_enrichment",
-                    "progress_message": "Loading page bucket metadata",
-                    "progress_start": 94,
-                    "progress_end": 96,
-                    "cancel_check": cancel_check,
-                }
-                if include_progress_hooks
-                else {}
-            ),
-        )
-
-    requested = ({feature for feature in requested_features if feature != "tags"} | requested_detail_fields)
-    if requested or ("tags" in requested_features):
-        service = BucketConfigurationService()
-        account = _build_s3_context(ctx)
-        progress.emit(
-            percent=96,
-            stage="page_enrichment",
-            processed=0,
-            total=len(page_items),
-            message="Loading page bucket details",
-            force=True,
-        )
-        page_items = enrich_buckets(
-            page_items,
-            requested,
-            include_tags="tags" in requested_features,
-            service=service,
-            account=account,
-            **(
-                {
-                    "progress": progress,
-                    "progress_stage": "page_enrichment",
-                    "progress_message": "Loading page bucket details",
-                    "progress_start": 96,
-                    "progress_end": 99,
-                    "cancel_check": cancel_check,
-                }
-                if include_progress_hooks
-                else {}
-            ),
-        )
-
-    if wants_owner_name and page_items:
-        owner_name_by_key = resolve_owner_names_for_buckets(ctx, page_items, owner_scope="any")
-        for bucket in page_items:
-            if not bucket.owner:
-                bucket.owner_name = None
-                continue
-            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
-            bucket.owner_name = owner_name_by_key.get(owner_key, bucket.owner_name)
-    if page_items and (wants_owner_suspended or wants_owner_quota or wants_owner_quota_usage):
-        page_items = apply_owner_enrichment(
-            ctx,
-            page_items,
-            include_suspended=wants_owner_suspended,
-            include_quota=wants_owner_quota or wants_owner_quota_usage,
-            include_usage=wants_owner_quota_usage,
-            usage_by_key=listing.owner_usage_by_key,
-        )
-
-    invoke_cancel_check(cancel_check)
-    has_next = end < total
-    response = PaginatedCephAdminBucketsResponse(
-        items=page_items,
-        total=total,
-        page=page,
-        page_size=page_size,
-        has_next=has_next,
-        stats_available=listing.stats_available,
-        stats_warning=listing.stats_warning,
-    )
-    progress.emit(percent=100, stage="finalize", processed=total, total=total, message="Search completed", force=True)
-    return response
+    listing = get_cached_bucket_listing(listing_request.cache_key(ctx), snapshot_builder.build)
+    return _CephAdminBucketPageBuilder(
+        ctx=ctx,
+        request=listing_request,
+        listing=listing,
+        progress=progress,
+        include_progress_hooks=include_progress_hooks,
+        cancel_check=cancel_check,
+    ).build(page=page, page_size=page_size)
