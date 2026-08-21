@@ -442,6 +442,62 @@ def test_storage_orphan_cleanup_revalidates_outside_the_shared_listing_cache(
     assert len(remaining.assignments) == 1
 
 
+def test_storage_ops_target_validation_returns_sanitized_bad_gateway(
+    client,
+    db_session,
+    monkeypatch,
+):
+    owner = _user(8245, "storage-upstream-owner@example.test")
+    endpoint = _endpoint(db_session, "ui-tags-storage-upstream")
+    account_row = S3Account(
+        name="storage-upstream-account",
+        rgw_account_id="RGW-UPSTREAM",
+        rgw_user_uid="storage-upstream-user",
+        rgw_access_key="AK-UPSTREAM",
+        rgw_secret_key="SK-UPSTREAM",
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add_all([owner, account_row])
+    db_session.commit()
+    account = S3ExecutionContext.from_account(account_row)
+    ref = StorageOpsContextRef(
+        context_id=str(account_row.id),
+        context_name=account_row.name,
+        context_kind="account",
+        endpoint_id=endpoint.id,
+        endpoint_name=endpoint.name,
+    )
+
+    class FailingBucketsService:
+        def list_buckets(self, _account, include=None, with_stats=False):  # noqa: ARG002
+            raise RuntimeError("storage unavailable token=leaked")
+
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = lambda: owner
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[get_buckets_service] = FailingBucketsService
+    monkeypatch.setattr(
+        storage_bucket_ui_tags_router,
+        "_collect_context_refs",
+        lambda _user, _db: [ref],
+    )
+    monkeypatch.setattr(
+        storage_bucket_ui_tags_router,
+        "_resolve_context_account",
+        lambda _ref, **_kwargs: account,
+    )
+
+    response = client.patch(
+        "/api/storage-ops/bucket-ui-tags",
+        json={
+            "targets": [{"context_id": ref.context_id, "name": "bucket-a"}],
+            "create_tags": [{"label": "Private"}],
+        },
+    )
+
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"] == "storage unavailable token=<redacted>"
+
+
 def test_deleting_user_removes_private_bucket_definitions_without_promoting_them(db_session):
     owner = _user(8251, "deleted-owner@example.test")
     endpoint = _endpoint(db_session, "ui-tags-user-delete")
