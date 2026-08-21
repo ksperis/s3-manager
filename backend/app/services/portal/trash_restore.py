@@ -2,8 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, TYPE_CHECKING
 
@@ -19,6 +19,10 @@ from app.models.portal import (
 )
 from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.object_listing_temp_store import TemporarySqliteStore
+from app.services.object_restore_store import (
+    ObjectRestoreScanCounts,
+    ObjectRestoreStore,
+)
 
 if TYPE_CHECKING:
     from app.models.access_context import AccountAccess
@@ -39,6 +43,161 @@ class PortalDeletedPrefixRestoreTarget:
     storage_space_id: str
     storage_space_name: str
     prefix: str
+
+
+@dataclass
+class _PortalDeletedPrefixRestoreState:
+    started_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    scanned_versions: int = 0
+    scanned_delete_markers: int = 0
+    restore_candidates: int = 0
+    restored_objects: int = 0
+    failed_objects: int = 0
+    failures: list[PortalDeletedPrefixRestoreFailure] = field(default_factory=list)
+
+
+class _PortalDeletedPrefixRestoreRunner:
+    def __init__(
+        self,
+        *,
+        target: PortalDeletedPrefixRestoreTarget,
+        restore_version: Callable[..., Any],
+        progress_callback: PortalDeletedPrefixRestoreProgressCallback | None,
+        cancel_check: PortalDeletedPrefixRestoreCancelCheck | None,
+    ) -> None:
+        self.target = target
+        self.restore_version = restore_version
+        self.progress_callback = progress_callback
+        self.cancel_check = cancel_check
+        self.state = _PortalDeletedPrefixRestoreState()
+
+    def run(self) -> PortalDeletedPrefixRestoreResult:
+        self._emit("prepare", "Preparing deleted file restoration...")
+        with TemporarySqliteStore(
+            prefix="bucketreef-portal-deleted-prefix-restore-"
+        ) as temporary_store:
+            store = ObjectRestoreStore(temporary_store.connection)
+            self._scan_candidates(store)
+            self._restore_candidates(store)
+        self._emit(
+            "completed",
+            "Deleted file restoration completed.",
+            total_candidates_final=True,
+        )
+        return self._result()
+
+    def _scan_candidates(self, store: ObjectRestoreStore) -> None:
+        self._emit("list", "Scanning deleted files in this folder...")
+
+        def update_progress(counts: ObjectRestoreScanCounts) -> None:
+            self.state.scanned_versions = counts.versions
+            self.state.scanned_delete_markers = counts.delete_markers
+            self._emit("list", "Scanning deleted files in this folder...")
+
+        store.scan(
+            self.target.client,
+            self.target.bucket_name,
+            self.target.prefix,
+            before_page=self._check_cancel,
+            after_page=update_progress,
+        )
+
+    def _restore_candidates(self, store: ObjectRestoreStore) -> None:
+        self.state.restore_candidates = store.count_candidates()
+        self._emit(
+            "restore",
+            "Restoring deleted files...",
+            total_candidates_final=True,
+        )
+        with ThreadPoolExecutor(max_workers=_RESTORE_CONCURRENCY) as executor:
+            self._check_cancel()
+            for batch in store.iter_candidate_batches(_RESTORE_CONCURRENCY):
+                futures = {
+                    executor.submit(
+                        self.restore_version,
+                        self.target.client,
+                        self.target.bucket_name,
+                        str(row["key"]),
+                        str(row["version_id"]),
+                        space_id=self.target.storage_space_id,
+                    ): str(row["key"])
+                    for row in batch
+                }
+                for future in as_completed(futures):
+                    key = futures[future]
+                    self._record_restore_result(future, key)
+                    self._emit(
+                        "restore",
+                        "Restoring deleted files...",
+                        total_candidates_final=True,
+                        current_key=key,
+                    )
+                self._check_cancel()
+
+    def _record_restore_result(self, future: Future[Any], key: str) -> None:
+        try:
+            future.result()
+            self.state.restored_objects += 1
+        except Exception as exc:
+            self.state.failed_objects += 1
+            if len(self.state.failures) < _FAILURE_DETAIL_LIMIT:
+                self.state.failures.append(
+                    PortalDeletedPrefixRestoreFailure(
+                        key=key,
+                        detail=str(sanitize_error_detail(str(exc))),
+                    )
+                )
+
+    def _check_cancel(self) -> None:
+        if self.cancel_check:
+            self.cancel_check()
+
+    def _emit(
+        self,
+        stage: PortalDeletedPrefixRestoreStage,
+        message: str,
+        *,
+        total_candidates_final: bool = False,
+        current_key: str | None = None,
+    ) -> None:
+        if self.progress_callback is None:
+            return
+        self.progress_callback(
+            PortalDeletedPrefixRestoreProgress(
+                stage=stage,
+                storage_space_id=self.target.storage_space_id,
+                storage_space_name=self.target.storage_space_name,
+                prefix=self.target.prefix,
+                scanned_versions=self.state.scanned_versions,
+                scanned_delete_markers=self.state.scanned_delete_markers,
+                restore_candidates=self.state.restore_candidates,
+                restored_objects=self.state.restored_objects,
+                failed_objects=self.state.failed_objects,
+                total_candidates_final=total_candidates_final,
+                current_key=current_key,
+                message=message,
+            )
+        )
+
+    def _result(self) -> PortalDeletedPrefixRestoreResult:
+        state = self.state
+        return PortalDeletedPrefixRestoreResult(
+            status="partial" if state.failed_objects else "completed",
+            storage_space_id=self.target.storage_space_id,
+            storage_space_name=self.target.storage_space_name,
+            prefix=self.target.prefix,
+            scanned_versions=state.scanned_versions,
+            scanned_delete_markers=state.scanned_delete_markers,
+            restore_candidates=state.restore_candidates,
+            restored_objects=state.restored_objects,
+            failed_objects=state.failed_objects,
+            failures=state.failures,
+            failures_truncated=state.failed_objects > len(state.failures),
+            started_at=state.started_at,
+            finished_at=datetime.now(timezone.utc),
+        )
 
 
 class PortalDeletedPrefixRestoreMixin:
@@ -84,198 +243,13 @@ class PortalDeletedPrefixRestoreMixin:
         progress_callback: PortalDeletedPrefixRestoreProgressCallback | None = None,
         cancel_check: PortalDeletedPrefixRestoreCancelCheck | None = None,
     ) -> PortalDeletedPrefixRestoreResult:
-        started_at = datetime.now(timezone.utc)
-        scanned_versions = 0
-        scanned_delete_markers = 0
-        restore_candidates = 0
-        restored_objects = 0
-        failed_objects = 0
-        failures: list[PortalDeletedPrefixRestoreFailure] = []
-
-        def check_cancel() -> None:
-            if cancel_check:
-                cancel_check()
-
-        def emit(
-            stage: PortalDeletedPrefixRestoreStage,
-            message: str,
-            *,
-            total_candidates_final: bool = False,
-            current_key: str | None = None,
-        ) -> None:
-            if progress_callback:
-                progress_callback(
-                    PortalDeletedPrefixRestoreProgress(
-                        stage=stage,
-                        storage_space_id=target.storage_space_id,
-                        storage_space_name=target.storage_space_name,
-                        prefix=target.prefix,
-                        scanned_versions=scanned_versions,
-                        scanned_delete_markers=scanned_delete_markers,
-                        restore_candidates=restore_candidates,
-                        restored_objects=restored_objects,
-                        failed_objects=failed_objects,
-                        total_candidates_final=total_candidates_final,
-                        current_key=current_key,
-                        message=message,
-                    )
-                )
-
-        emit("prepare", "Preparing deleted file restoration...")
         try:
-            with TemporarySqliteStore(
-                prefix="bucketreef-portal-deleted-prefix-restore-"
-            ) as store:
-                conn = store.connection
-                conn.executescript(
-                    """
-                    CREATE TABLE deleted_keys (
-                        key TEXT PRIMARY KEY
-                    );
-                    CREATE TABLE latest_versions (
-                        key TEXT PRIMARY KEY,
-                        version_id TEXT NOT NULL
-                    );
-                    """
-                )
-                key_marker = None
-                version_id_marker = None
-                emit("list", "Scanning deleted files in this folder...")
-                while True:
-                    check_cancel()
-                    kwargs: dict[str, object] = {
-                        "Bucket": target.bucket_name,
-                        "Prefix": target.prefix,
-                        "MaxKeys": 1000,
-                    }
-                    if key_marker:
-                        kwargs["KeyMarker"] = key_marker
-                    if version_id_marker:
-                        kwargs["VersionIdMarker"] = version_id_marker
-                    page = target.client.list_object_versions(**kwargs)
-                    version_rows: list[tuple[str, str]] = []
-                    deleted_rows: list[tuple[str]] = []
-                    for entry in page.get("Versions", []) or []:
-                        key = entry.get("Key")
-                        version_id = entry.get("VersionId")
-                        if not key or not version_id:
-                            continue
-                        version_rows.append((str(key), str(version_id)))
-                        scanned_versions += 1
-                    for marker in page.get("DeleteMarkers", []) or []:
-                        key = marker.get("Key")
-                        if not key:
-                            continue
-                        scanned_delete_markers += 1
-                        if marker.get("IsLatest"):
-                            deleted_rows.append((str(key),))
-                    if version_rows:
-                        conn.executemany(
-                            """
-                            INSERT OR IGNORE INTO latest_versions (key, version_id)
-                            VALUES (?, ?)
-                            """,
-                            version_rows,
-                        )
-                    if deleted_rows:
-                        conn.executemany(
-                            "INSERT OR IGNORE INTO deleted_keys (key) VALUES (?)",
-                            deleted_rows,
-                        )
-                    conn.commit()
-                    emit("list", "Scanning deleted files in this folder...")
-                    key_marker = page.get("NextKeyMarker")
-                    version_id_marker = page.get("NextVersionIdMarker")
-                    if not page.get("IsTruncated") or (
-                        not key_marker and not version_id_marker
-                    ):
-                        break
-
-                count_row = conn.execute(
-                    """
-                    SELECT COUNT(*)
-                    FROM deleted_keys AS deleted
-                    JOIN latest_versions AS version ON version.key = deleted.key
-                    """
-                ).fetchone()
-                restore_candidates = int(count_row[0] or 0) if count_row else 0
-                candidate_cursor = conn.execute(
-                    """
-                    SELECT deleted.key, version.version_id
-                    FROM deleted_keys AS deleted
-                    JOIN latest_versions AS version ON version.key = deleted.key
-                    ORDER BY deleted.key ASC
-                    """
-                )
-                emit(
-                    "restore",
-                    "Restoring deleted files...",
-                    total_candidates_final=True,
-                )
-
-                with ThreadPoolExecutor(
-                    max_workers=_RESTORE_CONCURRENCY
-                ) as executor:
-                    while True:
-                        check_cancel()
-                        batch = candidate_cursor.fetchmany(_RESTORE_CONCURRENCY)
-                        if not batch:
-                            break
-                        futures = {
-                            executor.submit(
-                                self._restore_storage_space_object_version_with_client,
-                                target.client,
-                                target.bucket_name,
-                                str(row["key"]),
-                                str(row["version_id"]),
-                                space_id=target.storage_space_id,
-                            ): str(row["key"])
-                            for row in batch
-                        }
-                        for future in as_completed(futures):
-                            key = futures[future]
-                            try:
-                                future.result()
-                                restored_objects += 1
-                            except Exception as exc:  # Per-object failures are reported and do not stop the batch.
-                                failed_objects += 1
-                                if len(failures) < _FAILURE_DETAIL_LIMIT:
-                                    failures.append(
-                                        PortalDeletedPrefixRestoreFailure(
-                                            key=key,
-                                            detail=str(
-                                                sanitize_error_detail(str(exc))
-                                            ),
-                                        )
-                                    )
-                            emit(
-                                "restore",
-                                "Restoring deleted files...",
-                                total_candidates_final=True,
-                                current_key=key,
-                            )
-
-            status = "partial" if failed_objects else "completed"
-            emit(
-                "completed",
-                "Deleted file restoration completed.",
-                total_candidates_final=True,
-            )
-            return PortalDeletedPrefixRestoreResult(
-                status=status,
-                storage_space_id=target.storage_space_id,
-                storage_space_name=target.storage_space_name,
-                prefix=target.prefix,
-                scanned_versions=scanned_versions,
-                scanned_delete_markers=scanned_delete_markers,
-                restore_candidates=restore_candidates,
-                restored_objects=restored_objects,
-                failed_objects=failed_objects,
-                failures=failures,
-                failures_truncated=failed_objects > len(failures),
-                started_at=started_at,
-                finished_at=datetime.now(timezone.utc),
-            )
+            return _PortalDeletedPrefixRestoreRunner(
+                target=target,
+                restore_version=self._restore_storage_space_object_version_with_client,
+                progress_callback=progress_callback,
+                cancel_check=cancel_check,
+            ).run()
         except BucketPurgeCancelled:
             raise
         except (ClientError, BotoCoreError, RuntimeError) as exc:
