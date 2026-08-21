@@ -279,6 +279,66 @@ def test_usage_history_prefers_supervision_client_and_keeps_quota_optional(db_se
     assert hourly.usage_ratio_pct is None
 
 
+def test_usage_collection_failure_does_not_block_remaining_subjects(
+    db_session,
+    monkeypatch,
+):
+    endpoint = _seed_endpoint(db_session)
+    account = _seed_account(db_session, endpoint)
+    s3_user = _seed_s3_user(db_session, endpoint)
+    fake_admin = _FakeAdminClient(
+        usage_bytes=25,
+        usage_objects=2,
+        quota_bytes=100,
+        quota_objects=10,
+    )
+
+    def collect_usage(self, admin, usage_uid):  # noqa: ARG001
+        if usage_uid == account.rgw_user_uid:
+            raise RuntimeError("account usage unavailable")
+        return 25, 2, 1
+
+    monkeypatch.setattr(
+        quota_monitoring_service,
+        "load_app_settings",
+        lambda: _settings(
+            quota_alerts_enabled=False,
+            usage_history_enabled=True,
+        ),
+    )
+    monkeypatch.setattr(
+        quota_monitoring_service.DataRetentionService,
+        "purge_all",
+        lambda self: {},
+    )
+    monkeypatch.setattr(
+        QuotaMonitoringService,
+        "_resolve_usage_client",
+        lambda self, endpoint, cache, admin_cache: fake_admin,
+    )
+    monkeypatch.setattr(
+        QuotaMonitoringService,
+        "_resolve_admin_client",
+        lambda self, endpoint, cache: fake_admin,
+    )
+    monkeypatch.setattr(QuotaMonitoringService, "_collect_usage", collect_usage)
+
+    result = QuotaMonitoringService(db_session).run_monitor()
+
+    assert result["subjects_total"] == 2
+    assert result["subjects_processed"] == 1
+    assert result["history_hourly_upserts"] == 1
+    assert result["history_daily_upserts"] == 1
+    assert result["errors"] == [
+        {
+            "subject_type": "account",
+            "subject_id": account.id,
+            "error": "Usage collection failed: account usage unavailable",
+        }
+    ]
+    assert db_session.query(QuotaUsageHourly).one().s3_user_id == s3_user.id
+
+
 def test_alert_crossing_first_run_no_duplicate_and_reset(db_session, monkeypatch):
     endpoint = _seed_endpoint(db_session)
     account = _seed_account(db_session, endpoint)
