@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from typing import Any, Callable, Literal, Protocol
 
 from app.db import StorageEndpoint
@@ -889,6 +890,199 @@ def _project_property_details(
         column_details["cors_allowed_origins"] = extract_cors_allowed_values(cors_rules, "cors_allowed_origin")
 
 
+@dataclass(frozen=True)
+class _BucketEnrichmentPlan:
+    requested: set[str]
+    include_tags: bool
+    sns_feature_enabled: bool
+    lifecycle_details: set[str]
+    property_details: set[str]
+    logging_details: set[str]
+    website_details: set[str]
+    policy_details: set[str]
+    notification_details: set[str]
+    encryption_details: set[str]
+    use_properties_bundle: bool
+
+    @classmethod
+    def build(
+        cls,
+        requested: set[str],
+        *,
+        include_tags: bool,
+        account: S3ExecutionTarget,
+    ) -> "_BucketEnrichmentPlan":
+        selected = set(requested)
+        property_details = selected & _COLUMN_DETAIL_PROPS_KEYS
+        requested_property_features = selected & BUCKET_PROPERTY_FEATURES
+        return cls(
+            requested=selected,
+            include_tags=include_tags,
+            sns_feature_enabled=account_sns_feature_enabled(account),
+            lifecycle_details=selected & _COLUMN_DETAIL_LIFECYCLE_KEYS,
+            property_details=property_details,
+            logging_details=selected & _COLUMN_DETAIL_LOGGING_KEYS,
+            website_details=selected & _COLUMN_DETAIL_WEBSITE_KEYS,
+            policy_details=selected & _COLUMN_DETAIL_POLICY_KEYS,
+            notification_details=selected & _COLUMN_DETAIL_NOTIFICATION_KEYS,
+            encryption_details=selected & _COLUMN_DETAIL_SSE_KEYS,
+            use_properties_bundle=(
+                len(requested_property_features) > 1 or bool(property_details)
+            ),
+        )
+
+    def wants(self, feature: str) -> bool:
+        return feature in self.requested
+
+
+class _BucketEnricher:
+    def __init__(
+        self,
+        *,
+        plan: _BucketEnrichmentPlan,
+        service: BucketConfigurationService,
+        account: S3ExecutionTarget,
+    ) -> None:
+        self.plan = plan
+        self.service = service
+        self.account = account
+
+    def enrich(self, bucket: CephAdminBucketSummary) -> CephAdminBucketSummary:
+        tags = self._load_tags(bucket)
+        feature_map: dict[str, BucketFeatureStatus] = {}
+        column_details: dict[str, Any] = {}
+        properties = load_bucket_properties_context(
+            self.service,
+            bucket.name,
+            self.account,
+            uses_bundle=self.plan.use_properties_bundle,
+        )
+        self._enrich_property_features(properties, feature_map, column_details)
+        self._enrich_configuration_features(bucket, feature_map, column_details)
+        return self._project_bucket(bucket, tags, feature_map, column_details)
+
+    def _load_tags(
+        self,
+        bucket: CephAdminBucketSummary,
+    ) -> list[BucketTag] | None:
+        if not self.plan.include_tags:
+            return None
+        try:
+            return self.service.get_bucket_tags(bucket.name, self.account)
+        except RuntimeError:
+            return []
+
+    def _enrich_property_features(
+        self,
+        context: _BucketPropertiesContext,
+        feature_map: dict[str, BucketFeatureStatus],
+        column_details: dict[str, Any],
+    ) -> None:
+        if self.plan.wants("versioning"):
+            _enrich_versioning(context, feature_map)
+        if self.plan.wants("object_lock"):
+            _enrich_object_lock(context, feature_map)
+        if self.plan.wants("block_public_access"):
+            _enrich_public_access_block(context, feature_map)
+        if self.plan.wants("lifecycle_rules") or self.plan.lifecycle_details:
+            _enrich_lifecycle_configuration(
+                context,
+                wants_feature=self.plan.wants("lifecycle_rules"),
+                detail_keys=self.plan.lifecycle_details,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
+        if self.plan.wants("cors"):
+            _enrich_cors(context, feature_map)
+        if self.plan.property_details:
+            _project_property_details(
+                context,
+                self.plan.property_details,
+                column_details,
+            )
+
+    def _enrich_configuration_features(
+        self,
+        bucket: CephAdminBucketSummary,
+        feature_map: dict[str, BucketFeatureStatus],
+        column_details: dict[str, Any],
+    ) -> None:
+        if self.plan.wants("static_website") or self.plan.website_details:
+            _enrich_website_configuration(
+                bucket,
+                self.service,
+                self.account,
+                wants_feature=self.plan.wants("static_website"),
+                detail_keys=self.plan.website_details,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
+        if self.plan.wants("bucket_policy") or self.plan.policy_details:
+            _enrich_policy_configuration(
+                bucket,
+                self.service,
+                self.account,
+                wants_feature=self.plan.wants("bucket_policy"),
+                detail_keys=self.plan.policy_details,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
+        if self.plan.wants("access_logging") or self.plan.logging_details:
+            _enrich_logging_configuration(
+                bucket,
+                self.service,
+                self.account,
+                wants_feature=self.plan.wants("access_logging"),
+                detail_keys=self.plan.logging_details,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
+        if self.plan.wants("notifications") or self.plan.notification_details:
+            _enrich_notification_configuration(
+                bucket,
+                self.service,
+                self.account,
+                sns_feature_enabled=self.plan.sns_feature_enabled,
+                wants_feature=self.plan.wants("notifications"),
+                detail_keys=self.plan.notification_details,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
+        if self.plan.wants("server_side_encryption") or self.plan.encryption_details:
+            _enrich_encryption_configuration(
+                bucket,
+                self.service,
+                self.account,
+                wants_feature=self.plan.wants("server_side_encryption"),
+                detail_keys=self.plan.encryption_details,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
+
+    @staticmethod
+    def _project_bucket(
+        bucket: CephAdminBucketSummary,
+        tags: list[BucketTag] | None,
+        feature_map: dict[str, BucketFeatureStatus],
+        column_details: dict[str, Any],
+    ) -> CephAdminBucketSummary:
+        update: dict[str, Any] = {}
+        if tags is not None:
+            update["tags"] = tags
+        if feature_map:
+            update["features"] = feature_map
+        if column_details:
+            update["column_details"] = column_details
+        if not update:
+            return bucket
+        return CephAdminBucketSummary(
+            **{
+                **bucket.model_dump(),
+                **update,
+            }
+        )
+
+
 def enrich_buckets(
     buckets: list[CephAdminBucketSummary],
     requested: set[str],
@@ -905,139 +1099,16 @@ def enrich_buckets(
 ) -> list[CephAdminBucketSummary]:
     if not buckets or (not requested and not include_tags):
         return buckets
-
-    wants_tags = include_tags
-    wants_website = "static_website" in requested
-    wants_policy = "bucket_policy" in requested
-    wants_logging = "access_logging" in requested
-    wants_encryption = "server_side_encryption" in requested
-    wants_notifications = "notifications" in requested
-    sns_feature_enabled = account_sns_feature_enabled(account)
-    lifecycle_detail_keys = requested & _COLUMN_DETAIL_LIFECYCLE_KEYS
-    wants_lifecycle_details = bool(lifecycle_detail_keys)
-    props_detail_keys = requested & _COLUMN_DETAIL_PROPS_KEYS
-    wants_props_details = bool(props_detail_keys)
-    logging_detail_keys = requested & _COLUMN_DETAIL_LOGGING_KEYS
-    wants_logging_details = bool(logging_detail_keys)
-    website_detail_keys = requested & _COLUMN_DETAIL_WEBSITE_KEYS
-    wants_website_details = bool(website_detail_keys)
-    policy_detail_keys = requested & _COLUMN_DETAIL_POLICY_KEYS
-    wants_policy_details = bool(policy_detail_keys)
-    notification_detail_keys = requested & _COLUMN_DETAIL_NOTIFICATION_KEYS
-    wants_notification_details = bool(notification_detail_keys)
-    sse_detail_keys = requested & _COLUMN_DETAIL_SSE_KEYS
-    wants_sse_details = bool(sse_detail_keys)
-    requested_props_features = requested & BUCKET_PROPERTY_FEATURES
-    use_props_bundle = len(requested_props_features) > 1 or wants_props_details
-
-    def enrich_one(bucket: CephAdminBucketSummary) -> CephAdminBucketSummary:
-        tags: list[BucketTag] | None = None
-        if wants_tags:
-            try:
-                tags = service.get_bucket_tags(bucket.name, account)
-            except RuntimeError:
-                tags = []
-
-        feature_map: dict[str, BucketFeatureStatus] = {}
-        column_details: dict[str, Any] = {}
-        properties_context = load_bucket_properties_context(
-            service,
-            bucket.name,
-            account,
-            uses_bundle=use_props_bundle,
-        )
-
-        if "versioning" in requested:
-            _enrich_versioning(properties_context, feature_map)
-
-        if "object_lock" in requested:
-            _enrich_object_lock(properties_context, feature_map)
-
-        if "block_public_access" in requested:
-            _enrich_public_access_block(properties_context, feature_map)
-
-        if "lifecycle_rules" in requested or wants_lifecycle_details:
-            _enrich_lifecycle_configuration(
-                properties_context,
-                wants_feature="lifecycle_rules" in requested,
-                detail_keys=lifecycle_detail_keys,
-                feature_map=feature_map,
-                column_details=column_details,
-            )
-
-        if "cors" in requested:
-            _enrich_cors(properties_context, feature_map)
-
-        if wants_props_details:
-            _project_property_details(properties_context, props_detail_keys, column_details)
-
-        if wants_website or wants_website_details:
-            _enrich_website_configuration(
-                bucket,
-                service,
-                account,
-                wants_feature=wants_website,
-                detail_keys=website_detail_keys,
-                feature_map=feature_map,
-                column_details=column_details,
-            )
-
-        if wants_policy or wants_policy_details:
-            _enrich_policy_configuration(
-                bucket,
-                service,
-                account,
-                wants_feature=wants_policy,
-                detail_keys=policy_detail_keys,
-                feature_map=feature_map,
-                column_details=column_details,
-            )
-
-        if wants_logging or wants_logging_details:
-            _enrich_logging_configuration(
-                bucket,
-                service,
-                account,
-                wants_feature=wants_logging,
-                detail_keys=logging_detail_keys,
-                feature_map=feature_map,
-                column_details=column_details,
-            )
-
-        if wants_notifications or wants_notification_details:
-            _enrich_notification_configuration(
-                bucket,
-                service,
-                account,
-                sns_feature_enabled=sns_feature_enabled,
-                wants_feature=wants_notifications,
-                detail_keys=notification_detail_keys,
-                feature_map=feature_map,
-                column_details=column_details,
-            )
-
-        if wants_encryption or wants_sse_details:
-            _enrich_encryption_configuration(
-                bucket,
-                service,
-                account,
-                wants_feature=wants_encryption,
-                detail_keys=sse_detail_keys,
-                feature_map=feature_map,
-                column_details=column_details,
-            )
-
-        update = {}
-        if tags is not None:
-            update["tags"] = tags
-        if feature_map:
-            update["features"] = feature_map
-        if column_details:
-            update["column_details"] = column_details
-        if update:
-            base = bucket.model_dump()
-            return CephAdminBucketSummary(**{**base, **update})
-        return bucket
+    plan = _BucketEnrichmentPlan.build(
+        requested,
+        include_tags=include_tags,
+        account=account,
+    )
+    enricher = _BucketEnricher(
+        plan=plan,
+        service=service,
+        account=account,
+    )
 
     max_workers = min(BUCKET_ENRICH_MAX_WORKERS, len(buckets))
     total = len(buckets)
@@ -1054,14 +1125,17 @@ def enrich_buckets(
         enriched = []
         for index, bucket in enumerate(buckets, start=1):
             invoke_cancel_check(cancel_check)
-            enriched.append(enrich_one(bucket))
+            enriched.append(enricher.enrich(bucket))
             emit_progress(index)
             invoke_cancel_check(cancel_check)
         return enriched
 
     # Bucket-level S3 reads are network-bound and independent; run a bounded parallel fan-out.
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(enrich_one, bucket): index for index, bucket in enumerate(buckets)}
+        futures = {
+            executor.submit(enricher.enrich, bucket): index
+            for index, bucket in enumerate(buckets)
+        }
         enriched: list[CephAdminBucketSummary | None] = [None] * len(buckets)
         for processed, future in enumerate(as_completed(futures), start=1):
             invoke_cancel_check(cancel_check)
