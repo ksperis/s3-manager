@@ -116,6 +116,7 @@ import {
   streamManagerBucketUsageStatsForBucket,
   type BucketUsageStatsSnapshot,
 } from "../../api/bucketUsageStats";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
@@ -172,6 +173,70 @@ import type { UiRole } from "../../api/users";
 
 type ReplicationRuleDraft = GraphicalReplicationRule & { uiId: string };
 type BucketTagDraft = BucketTag & { uiId: string };
+
+type BucketConfigurationDeleteKind =
+  | "cors"
+  | "encryption"
+  | "tags"
+  | "notifications"
+  | "replication"
+  | "website"
+  | "policy"
+  | "access-logging";
+
+const bucketConfigurationDeleteCopy: Record<
+  BucketConfigurationDeleteKind,
+  { title: string; description: string; confirmLabel: string; impacts: string[] }
+> = {
+  cors: {
+    title: "Delete CORS configuration?",
+    description: "Remove all cross-origin access rules from this bucket.",
+    confirmLabel: "Delete CORS configuration",
+    impacts: ["Browser-based clients may no longer be able to access objects across origins."],
+  },
+  encryption: {
+    title: "Disable default bucket encryption?",
+    description: "Remove the default server-side encryption rules for new objects.",
+    confirmLabel: "Disable encryption",
+    impacts: ["Existing objects remain encrypted. New objects will no longer inherit this bucket default."],
+  },
+  tags: {
+    title: "Clear all bucket tags?",
+    description: "Remove every key/value tag attached to this bucket.",
+    confirmLabel: "Clear tags",
+    impacts: ["Automation or access rules that rely on bucket tags may stop matching this bucket."],
+  },
+  notifications: {
+    title: "Clear notification configuration?",
+    description: "Remove every event notification configured for this bucket.",
+    confirmLabel: "Clear notifications",
+    impacts: ["New bucket events will no longer be delivered to the configured destinations."],
+  },
+  replication: {
+    title: "Clear replication configuration?",
+    description: "Remove the replication rules configured for this bucket.",
+    confirmLabel: "Clear replication",
+    impacts: ["New object changes will stop replicating. Existing destination objects will remain."],
+  },
+  website: {
+    title: "Delete static website configuration?",
+    description: "Stop hosting or redirecting requests through this bucket's website endpoint.",
+    confirmLabel: "Delete website configuration",
+    impacts: ["Website routing will stop. Objects stored in the bucket will not be deleted."],
+  },
+  policy: {
+    title: "Delete bucket policy?",
+    description: "Remove the IAM-style resource policy attached directly to this bucket.",
+    confirmLabel: "Delete bucket policy",
+    impacts: ["Access granted only by this policy will be revoked. IAM and ACL permissions remain unchanged."],
+  },
+  "access-logging": {
+    title: "Disable server access logging?",
+    description: "Stop delivering new server access logs for this bucket.",
+    confirmLabel: "Disable access logging",
+    impacts: ["Existing log objects remain in the target bucket, but no new access logs will be delivered."],
+  },
+};
 
 function createReplicationRuleDraft(
   rule: GraphicalReplicationRule = createEmptyGraphicalReplicationRule()
@@ -535,6 +600,7 @@ export default function BucketDetailPage({
   const [bucketTagsStatus, setBucketTagsStatus] = useState<string | null>(null);
   const [savingBucketTags, setSavingBucketTags] = useState(false);
   const [deletingBucketTags, setDeletingBucketTags] = useState(false);
+  const [pendingConfigurationDelete, setPendingConfigurationDelete] = useState<BucketConfigurationDeleteKind | null>(null);
 
   const [objects, setObjects] = useState<S3Object[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
@@ -2234,8 +2300,6 @@ export default function BucketDetailPage({
 
   const removeCors = async () => {
     if (!bucketName || !hasContext) return;
-    const confirmDelete = window.confirm("Delete the CORS configuration?");
-    if (!confirmDelete) return;
     setDeletingCors(true);
     setCorsError(null);
     try {
@@ -2282,8 +2346,6 @@ export default function BucketDetailPage({
 
   const clearEncryption = async () => {
     if (!bucketName || !hasContext || !sseFeatureEnabled) return;
-    const confirmDelete = window.confirm("Disable bucket encryption?");
-    if (!confirmDelete) return;
     setDeletingEncryption(true);
     setEncryptionError(null);
     setEncryptionStatus(null);
@@ -2374,8 +2436,6 @@ export default function BucketDetailPage({
 
   const clearBucketTags = async () => {
     if (!bucketName || !hasContext) return;
-    const confirmDelete = window.confirm("Delete all bucket tags?");
-    if (!confirmDelete) return;
     setDeletingBucketTags(true);
     setBucketTagsError(null);
     setBucketTagsStatus(null);
@@ -2477,8 +2537,6 @@ export default function BucketDetailPage({
 
   const clearNotifications = async () => {
     if (!bucketName || !hasContext) return;
-    const confirmDelete = window.confirm("Delete the notification configuration?");
-    if (!confirmDelete) return;
     setClearingNotifications(true);
     setNotificationsError(null);
     setNotificationsStatus(null);
@@ -2582,8 +2640,6 @@ export default function BucketDetailPage({
 
   const clearReplication = async () => {
     if (!bucketName || !hasContext || !isCephEndpoint || !replicationFeatureEnabled) return;
-    const confirmDelete = window.confirm("Delete the bucket replication configuration?");
-    if (!confirmDelete) return;
     setClearingReplication(true);
     setReplicationError(null);
     setReplicationStatus(null);
@@ -2707,8 +2763,6 @@ export default function BucketDetailPage({
 
   const clearWebsite = async () => {
     if (!bucketName || !hasContext || !staticWebsiteEnabled) return;
-    const confirmDelete = window.confirm("Delete the static website configuration?");
-    if (!confirmDelete) return;
     setClearingWebsite(true);
     setWebsiteError(null);
     setWebsiteStatus(null);
@@ -2730,8 +2784,6 @@ export default function BucketDetailPage({
 
   const removePolicy = async () => {
     if (!bucketName || !hasContext) return;
-    const confirmDelete = window.confirm("Delete the bucket policy?");
-    if (!confirmDelete) return;
     setDeletingPolicy(true);
     setPolicyError(null);
     try {
@@ -2747,6 +2799,22 @@ export default function BucketDetailPage({
       setPolicyError(extractApiError(err, "Unable to delete the bucket policy."));
     } finally {
       setDeletingPolicy(false);
+    }
+  };
+
+  const confirmPendingConfigurationDelete = async () => {
+    if (!pendingConfigurationDelete) return;
+    try {
+      if (pendingConfigurationDelete === "cors") await removeCors();
+      if (pendingConfigurationDelete === "encryption") await clearEncryption();
+      if (pendingConfigurationDelete === "tags") await clearBucketTags();
+      if (pendingConfigurationDelete === "notifications") await clearNotifications();
+      if (pendingConfigurationDelete === "replication") await clearReplication();
+      if (pendingConfigurationDelete === "website") await clearWebsite();
+      if (pendingConfigurationDelete === "policy") await removePolicy();
+      if (pendingConfigurationDelete === "access-logging") await clearAccessLogging();
+    } finally {
+      setPendingConfigurationDelete(null);
     }
   };
 
@@ -2946,6 +3014,25 @@ export default function BucketDetailPage({
       setSavingObjectLock(false);
     }
   };
+
+  const configurationDeleteLoading =
+    pendingConfigurationDelete === "cors"
+      ? deletingCors
+      : pendingConfigurationDelete === "encryption"
+        ? deletingEncryption
+        : pendingConfigurationDelete === "tags"
+          ? deletingBucketTags
+          : pendingConfigurationDelete === "notifications"
+            ? clearingNotifications
+            : pendingConfigurationDelete === "replication"
+              ? clearingReplication
+              : pendingConfigurationDelete === "website"
+                ? clearingWebsite
+                : pendingConfigurationDelete === "policy"
+                  ? deletingPolicy
+                  : pendingConfigurationDelete === "access-logging"
+                    ? clearingAccessLogging
+                    : false;
 
   return (
     <div className="space-y-4">
@@ -3266,8 +3353,8 @@ export default function BucketDetailPage({
                       <div className="flex gap-2">
                         <button
                           type="button"
-                          onClick={clearEncryption}
-                          disabled={!sseFeatureEnabled || encryptionNotImplemented || deletingEncryption}
+                          onClick={() => setPendingConfigurationDelete("encryption")}
+                          disabled={!sseFeatureEnabled || encryptionNotImplemented || deletingEncryption || !encryptionConfigured}
                           className={bucketFeatureDangerActionClass}
                         >
                           {deletingEncryption ? "Disabling..." : "Disable"}
@@ -3770,7 +3857,7 @@ export default function BucketDetailPage({
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={clearBucketTags}
+                            onClick={() => setPendingConfigurationDelete("tags")}
                             className={bucketFeatureDangerActionClass}
                             disabled={tagsNotImplemented || bucketTagsLoading || savingBucketTags || deletingBucketTags || bucketTags.length === 0}
                           >
@@ -4020,8 +4107,8 @@ export default function BucketDetailPage({
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={removePolicy}
-                        disabled={policyNotImplemented || deletingPolicy}
+                        onClick={() => setPendingConfigurationDelete("policy")}
+                        disabled={policyNotImplemented || deletingPolicy || !policyConfigured}
                         className={bucketFeatureDangerActionClass}
                       >
                         {deletingPolicy ? "Deleting..." : "Delete"}
@@ -4090,8 +4177,8 @@ export default function BucketDetailPage({
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={removeCors}
-                        disabled={corsNotImplemented || deletingCors}
+                        onClick={() => setPendingConfigurationDelete("cors")}
+                        disabled={corsNotImplemented || deletingCors || !corsConfigured}
                         className={bucketFeatureDangerActionClass}
                       >
                         {deletingCors ? "Deleting..." : "Delete"}
@@ -4146,8 +4233,8 @@ export default function BucketDetailPage({
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={clearWebsite}
-                        disabled={websiteNotImplemented || clearingWebsite || staticWebsiteBlocked}
+                        onClick={() => setPendingConfigurationDelete("website")}
+                        disabled={websiteNotImplemented || clearingWebsite || staticWebsiteBlocked || !websiteConfigured}
                         className={bucketFeatureDangerActionClass}
                       >
                         {clearingWebsite ? "Deleting..." : "Delete"}
@@ -4321,8 +4408,8 @@ export default function BucketDetailPage({
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={clearReplication}
-                          disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
+                          onClick={() => setPendingConfigurationDelete("replication")}
+                          disabled={replicationBlocked || replicationNotImplemented || replicationBusy || !replicationConfigured}
                           className={bucketFeatureDangerActionClass}
                         >
                           {clearingReplication ? "Clearing..." : "Clear"}
@@ -4530,8 +4617,8 @@ export default function BucketDetailPage({
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={clearAccessLogging}
-                        disabled={accessLoggingNotImplemented || clearingAccessLogging}
+                        onClick={() => setPendingConfigurationDelete("access-logging")}
+                        disabled={accessLoggingNotImplemented || clearingAccessLogging || !accessLoggingConfigured}
                         className={bucketFeatureDangerActionClass}
                       >
                         {clearingAccessLogging ? "Disabling..." : "Disable"}
@@ -4617,8 +4704,8 @@ export default function BucketDetailPage({
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={clearNotifications}
-                        disabled={notificationsNotImplemented || clearingNotifications}
+                        onClick={() => setPendingConfigurationDelete("notifications")}
+                        disabled={notificationsNotImplemented || clearingNotifications || !notificationsConfigured}
                         className={bucketFeatureDangerActionClass}
                       >
                         {clearingNotifications ? "Clearing..." : "Clear"}
@@ -4847,6 +4934,19 @@ export default function BucketDetailPage({
             : []),
         ].sort((a, b) => availableTabs.indexOf(a.id as BucketDetailTabId) - availableTabs.indexOf(b.id as BucketDetailTabId))}
       />
+
+      {pendingConfigurationDelete && (
+        <ConfirmActionDialog
+          title={bucketConfigurationDeleteCopy[pendingConfigurationDelete].title}
+          description={bucketConfigurationDeleteCopy[pendingConfigurationDelete].description}
+          confirmLabel={bucketConfigurationDeleteCopy[pendingConfigurationDelete].confirmLabel}
+          details={[{ label: "Bucket", value: bucketName ?? "Unknown", mono: true }]}
+          impacts={bucketConfigurationDeleteCopy[pendingConfigurationDelete].impacts}
+          loading={configurationDeleteLoading}
+          onCancel={() => setPendingConfigurationDelete(null)}
+          onConfirm={() => void confirmPendingConfigurationDelete()}
+        />
+      )}
 
     </div>
   );

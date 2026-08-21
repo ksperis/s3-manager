@@ -43,6 +43,7 @@ const putCephAdminBucketLifecycleMock = vi.fn();
 const setCephAdminBucketVersioningMock = vi.fn();
 const updateCephAdminBucketObjectLockMock = vi.fn();
 const fetchCephAdminClusterTrafficMock = vi.fn();
+const deleteCephAdminBucketReplicationMock = vi.fn();
 
 vi.mock("../../../api/buckets", async () => {
   const actual = await vi.importActual<typeof import("../../../api/buckets")>("../../../api/buckets");
@@ -90,6 +91,7 @@ vi.mock("../../../api/cephAdmin", async () => {
     setCephAdminBucketVersioning: (...args: unknown[]) => setCephAdminBucketVersioningMock(...args),
     updateCephAdminBucketObjectLock: (...args: unknown[]) => updateCephAdminBucketObjectLockMock(...args),
     fetchCephAdminClusterTraffic: (...args: unknown[]) => fetchCephAdminClusterTrafficMock(...args),
+    deleteCephAdminBucketReplication: (...args: unknown[]) => deleteCephAdminBucketReplicationMock(...args),
   };
 });
 
@@ -211,6 +213,7 @@ describe("BucketDetailPage replication state", () => {
       request_breakdown: [],
       category_breakdown: [],
     });
+    deleteCephAdminBucketReplicationMock.mockResolvedValue(undefined);
   });
 
   it("renders the Manager bucket detail header with a working buckets return action", () => {
@@ -464,6 +467,68 @@ describe("BucketDetailPage replication state", () => {
     expect(ruleIdInput).toHaveFocus();
     expect(within(replicationCard).getByRole("textbox", { name: "ID" })).toBe(ruleIdInput);
     expect(ruleIdInput).toHaveValue("rule-1-updated");
+  });
+
+  it("uses contextual shared confirmations for destructive bucket configuration actions", async () => {
+    const user = userEvent.setup();
+    getCephAdminBucketEncryptionMock.mockResolvedValue({ rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }] });
+    getCephAdminBucketTagsMock.mockResolvedValue({ tags: [{ key: "environment", value: "test" }] });
+    getCephAdminBucketPolicyMock.mockResolvedValue({ policy: { Version: "2012-10-17", Statement: [] } });
+    getCephAdminBucketCorsMock.mockResolvedValue({ rules: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"] }] });
+    getCephAdminBucketWebsiteMock.mockResolvedValue({
+      index_document: "index.html",
+      error_document: null,
+      redirect_all_requests_to: null,
+      routing_rules: [],
+    });
+    getCephAdminBucketReplicationMock.mockResolvedValue({
+      configuration: {
+        Role: "arn:aws:iam::123456789012:role/replication",
+        Rules: [{ ID: "rule-1", Status: "Enabled", Destination: { Bucket: "arn:aws:s3:::target" } }],
+      },
+    });
+    getCephAdminBucketLoggingMock.mockResolvedValue({ enabled: true, target_bucket: "logs", target_prefix: "demo/" });
+    getCephAdminBucketNotificationsMock.mockResolvedValue({
+      configuration: { TopicConfigurations: [{ Id: "topic-1", TopicArn: "arn:aws:sns:::events", Events: ["s3:ObjectCreated:*"] }] },
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    const assertConfirmation = async (cardTestId: string, buttonName: string, headingName: string) => {
+      const card = await screen.findByTestId(cardTestId);
+      const button = within(card.parentElement?.parentElement as HTMLElement).getByRole("button", { name: buttonName });
+      await waitFor(() => expect(button).toBeEnabled());
+      await user.click(button);
+      expect(screen.getByRole("heading", { name: headingName })).toBeInTheDocument();
+      expect(screen.getByText("demo-bucket")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+    };
+
+    await user.click(screen.getByRole("button", { name: "Properties" }));
+    await assertConfirmation("bucket-feature-encryption", "Disable", "Disable default bucket encryption?");
+    await assertConfirmation("bucket-feature-tags", "Clear", "Clear all bucket tags?");
+
+    await user.click(screen.getByRole("button", { name: "Permissions" }));
+    await assertConfirmation("bucket-feature-policy", "Delete", "Delete bucket policy?");
+    await assertConfirmation("bucket-feature-cors", "Delete", "Delete CORS configuration?");
+
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await assertConfirmation("bucket-feature-website", "Delete", "Delete static website configuration?");
+    await assertConfirmation("bucket-feature-access-logging", "Disable", "Disable server access logging?");
+    await assertConfirmation("bucket-feature-notifications", "Clear", "Clear notification configuration?");
+
+    const replicationCard = await screen.findByTestId("bucket-feature-replication");
+    const clearReplicationButton = within(replicationCard.parentElement?.parentElement as HTMLElement).getByRole("button", { name: "Clear" });
+    await waitFor(() => expect(clearReplicationButton).toBeEnabled());
+    await user.click(clearReplicationButton);
+    expect(screen.getByRole("heading", { name: "Clear replication configuration?" })).toBeInTheDocument();
+    expect(deleteCephAdminBucketReplicationMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Clear replication" }));
+    await waitFor(() => expect(deleteCephAdminBucketReplicationMock).toHaveBeenCalledWith(1, "demo-bucket"));
   });
 
   it("preserves bucket tag row identity when removing another draft", async () => {
