@@ -2160,6 +2160,122 @@ def test_sync_bucket_uses_stream_copy_when_same_endpoint_copy_option_is_disabled
     assert captured_event_metadata[0]["same_endpoint_copy"] is False
 
 
+def test_sync_bucket_classifies_diff_and_runs_copy_and_delete_batches(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace(endpoint="https://source.example.test", context_id="src", account=SimpleNamespace())
+    target_ctx = SimpleNamespace(endpoint="https://target.example.test", context_id="dst", account=SimpleNamespace())
+    migration = SimpleNamespace(
+        use_same_endpoint_copy=False,
+        auto_grant_source_read_for_copy=False,
+        updated_at=None,
+        last_heartbeat_at=None,
+    )
+    item = SimpleNamespace(objects_copied=0, objects_deleted=0, updated_at=None)
+    entries = [
+        SimpleNamespace(
+            kind="only_source",
+            key="source-only",
+            source_size=1,
+            target_size=0,
+            source_etag="source-etag",
+            target_etag=None,
+            compare_by="presence",
+        ),
+        SimpleNamespace(
+            kind="only_target",
+            key="target-only",
+            source_size=0,
+            target_size=2,
+            source_etag=None,
+            target_etag="target-etag",
+            compare_by="presence",
+        ),
+        SimpleNamespace(
+            kind="matched",
+            key="matched",
+            source_size=3,
+            target_size=3,
+            source_etag="same",
+            target_etag="same",
+            compare_by="etag",
+        ),
+        SimpleNamespace(
+            kind="different",
+            key="different",
+            source_size=4,
+            target_size=5,
+            source_etag="source-different",
+            target_etag="target-different",
+            compare_by="size",
+        ),
+    ]
+    copied_batches: list[list[str]] = []
+    deleted_batches: list[list[str]] = []
+    event_metadata: list[dict[str, object]] = []
+
+    service._context_client = lambda *_args, **_kwargs: SimpleNamespace()  # type: ignore[method-assign]
+    service._iter_bucket_diff_entries = lambda *_args, **_kwargs: iter(entries)  # type: ignore[method-assign]
+
+    def _run_copy_actions(*args, **kwargs):
+        keys = list(args[4])
+        copied_batches.append(keys)
+        kwargs["on_progress"](copied_inc=len(keys))
+        return len(keys)
+
+    def _run_delete_actions(*args, **kwargs):
+        keys = list(args[2])
+        deleted_batches.append(keys)
+        kwargs["on_progress"](deleted_inc=len(keys))
+        return len(keys)
+
+    service._run_copy_actions = _run_copy_actions  # type: ignore[method-assign]
+    service._run_delete_actions = _run_delete_actions  # type: ignore[method-assign]
+    service._add_event = (  # type: ignore[method-assign]
+        lambda *_args, **kwargs: event_metadata.append(kwargs["metadata"])
+    )
+
+    copied, deleted, diff = service._sync_bucket(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        allow_delete=True,
+        parallelism_max=4,
+        migration=migration,
+        item=item,
+        control_check=lambda: "run",
+    )
+
+    assert copied == 2
+    assert deleted == 1
+    assert copied_batches == [["source-only", "different"]]
+    assert deleted_batches == [["target-only"]]
+    assert (diff.source_count, diff.target_count, diff.matched_count) == (3, 3, 1)
+    assert (diff.only_source_count, diff.only_target_count, diff.different_count) == (1, 1, 1)
+    assert diff.sample["only_source_sample"] == ["source-only"]
+    assert diff.sample["only_target_sample"] == ["target-only"]
+    assert diff.sample["different_sample"] == [
+        {
+            "key": "different",
+            "source_size": 4,
+            "target_size": 5,
+            "source_etag": "source-different",
+            "target_etag": "target-different",
+            "compare_by": "size",
+        }
+    ]
+    assert item.objects_copied == 2
+    assert item.objects_deleted == 1
+    assert event_metadata == [
+        {
+            "copied": 2,
+            "deleted": 1,
+            "allow_delete": True,
+            "same_endpoint_copy": False,
+        }
+    ]
+
+
 def test_sync_bucket_version_aware_cross_endpoint_replays_versions_and_delete_markers(db_session):
     service = BucketMigrationService(db_session)
     source_ctx = SimpleNamespace(context_id="src", endpoint="https://source.example.test", account=SimpleNamespace())

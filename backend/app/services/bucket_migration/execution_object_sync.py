@@ -18,6 +18,7 @@ from ._shared import (
     _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER,
     _SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS,
     _SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD,
+    _BucketDiffEntry,
     _ResolvedContext,
     _SyncDiff,
     _VersionReplayWatermarkBuilder,
@@ -116,170 +117,18 @@ class BucketMigrationObjectSyncMixin:
                 control_check=control_check,
             )
 
-        diff = self._new_empty_sync_diff()
-        same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
-        same_endpoint_copy = bool(same_endpoint and migration.use_same_endpoint_copy)
-        progress = _SyncProgressTracker(migration=migration, item=item, commit=self._commit)
-        copied = 0
-        deleted = 0
-        copy_batch: list[str] = []
-        delete_batch: list[str] = []
-        scan_count_since_control = 0
-        worker_count = max(1, int(parallelism_max))
-        action_batch_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
-
-        def flush_copy_batch() -> bool:
-            nonlocal copied, copy_batch
-            if not copy_batch:
-                return True
-            copied_now = self._run_copy_actions(
-                source_ctx,
-                target_ctx,
-                source_bucket,
-                target_bucket,
-                copy_batch,
-                parallelism_max=parallelism_max,
-                same_endpoint=same_endpoint_copy,
-                control_check=control_check,
-                on_progress=progress.record,
-            )
-            copy_batch = []
-            if copied_now < 0:
-                return False
-            copied += copied_now
-            return True
-
-        def flush_delete_batch() -> bool:
-            nonlocal deleted, delete_batch
-            if not delete_batch:
-                return True
-            deleted_now = self._run_delete_actions(
-                target_ctx,
-                target_bucket,
-                delete_batch,
-                parallelism_max=parallelism_max,
-                control_check=control_check,
-                on_progress=progress.record,
-            )
-            delete_batch = []
-            if deleted_now < 0:
-                return False
-            deleted += deleted_now
-            return True
-
-        source_client = self._context_client(source_ctx)
-        target_client = self._context_client(target_ctx)
-
-        with ExitStack() as copy_grant_stack:
-            copy_grant_enabled = False
-            for entry in self._iter_bucket_diff_entries(
-                source_ctx,
-                target_ctx,
-                source_bucket=source_bucket,
-                target_bucket=target_bucket,
-                source_client=source_client,
-                target_client=target_client,
-            ):
-                scan_count_since_control += 1
-                if scan_count_since_control >= _DIFF_CONTROL_CHECK_INTERVAL_OBJECTS:
-                    state = progress.check_control(control_check)
-                    if state in {"pause", "cancel"}:
-                        return -1, -1, diff
-                    scan_count_since_control = 0
-
-                copy_required = False
-                delete_required = False
-                if entry.kind == "only_source":
-                    diff.source_count += 1
-                    diff.only_source_count += 1
-                    if len(diff.sample["only_source_sample"]) < 200:
-                        diff.sample["only_source_sample"].append(entry.key)
-                    copy_required = True
-                elif entry.kind == "only_target":
-                    diff.target_count += 1
-                    diff.only_target_count += 1
-                    if len(diff.sample["only_target_sample"]) < 200:
-                        diff.sample["only_target_sample"].append(entry.key)
-                    delete_required = allow_delete
-                elif entry.kind == "matched":
-                    diff.source_count += 1
-                    diff.target_count += 1
-                    diff.matched_count += 1
-                elif entry.kind == "different":
-                    diff.source_count += 1
-                    diff.target_count += 1
-                    diff.different_count += 1
-                    if len(diff.sample["different_sample"]) < 200:
-                        diff.sample["different_sample"].append(
-                            {
-                                "key": entry.key,
-                                "source_size": entry.source_size,
-                                "target_size": entry.target_size,
-                                "source_etag": entry.source_etag,
-                                "target_etag": entry.target_etag,
-                                "compare_by": entry.compare_by,
-                            }
-                    )
-                    copy_required = True
-
-                if copy_required:
-                    if (
-                        same_endpoint_copy
-                        and bool(migration.auto_grant_source_read_for_copy)
-                        and not copy_grant_enabled
-                    ):
-                        copy_grant_stack.enter_context(
-                            self._temporary_source_copy_grant(
-                                source_ctx,
-                                target_ctx,
-                                source_bucket=source_bucket,
-                                sample_key=entry.key,
-                            )
-                        )
-                        copy_grant_enabled = True
-                    copy_batch.append(entry.key)
-                    if len(copy_batch) >= action_batch_size:
-                        state = progress.check_control(control_check)
-                        if state in {"pause", "cancel"}:
-                            return -1, -1, diff
-                        if not flush_copy_batch():
-                            return -1, -1, diff
-
-                if delete_required:
-                    delete_batch.append(entry.key)
-                    if len(delete_batch) >= action_batch_size:
-                        state = progress.check_control(control_check)
-                        if state in {"pause", "cancel"}:
-                            return -1, -1, diff
-                        if not flush_delete_batch():
-                            return -1, -1, diff
-
-            state = progress.check_control(control_check)
-            if state in {"pause", "cancel"}:
-                return -1, -1, diff
-            if not flush_copy_batch():
-                return -1, -1, diff
-            if not flush_delete_batch():
-                return -1, -1, diff
-
-        if copied == 0 and deleted == 0:
-            return 0, 0, diff
-
-        progress.flush(force=True)
-        self._add_event(
-            migration,
+        return _CurrentObjectSyncRunner(
+            service=self,
+            source_ctx=source_ctx,
+            target_ctx=target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            allow_delete=allow_delete,
+            parallelism_max=parallelism_max,
+            migration=migration,
             item=item,
-            level="info",
-            message="Sync batch completed.",
-            metadata={
-                "copied": copied,
-                "deleted": deleted,
-                "allow_delete": allow_delete,
-                "same_endpoint_copy": same_endpoint_copy,
-            },
-        )
-        self._commit()
-        return copied, deleted, diff
+            control_check=control_check,
+        ).run()
 
     def _sync_bucket_version_aware(
         self,
@@ -517,3 +366,219 @@ class BucketMigrationObjectSyncMixin:
         source_endpoint = normalize_s3_endpoint(source_ctx.endpoint)
         target_endpoint = normalize_s3_endpoint(target_ctx.endpoint)
         return bool(source_endpoint and target_endpoint and source_endpoint == target_endpoint)
+
+
+class _CurrentObjectSyncRunner:
+    _SAMPLE_LIMIT = 200
+
+    def __init__(
+        self,
+        *,
+        service: BucketMigrationObjectSyncMixin,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        source_bucket: str,
+        target_bucket: str,
+        allow_delete: bool,
+        parallelism_max: int,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        control_check: Callable[[], str],
+    ) -> None:
+        self.service = service
+        self.source_ctx = source_ctx
+        self.target_ctx = target_ctx
+        self.source_bucket = source_bucket
+        self.target_bucket = target_bucket
+        self.allow_delete = allow_delete
+        self.parallelism_max = parallelism_max
+        self.migration = migration
+        self.item = item
+        self.control_check = control_check
+        self.diff = service._new_empty_sync_diff()
+        same_endpoint = service._is_same_endpoint(source_ctx, target_ctx)
+        self.same_endpoint_copy = bool(same_endpoint and migration.use_same_endpoint_copy)
+        self.progress = _SyncProgressTracker(migration=migration, item=item, commit=service._commit)
+        self.copied = 0
+        self.deleted = 0
+        self.copy_batch: list[str] = []
+        self.delete_batch: list[str] = []
+        self.scan_count_since_control = 0
+        worker_count = max(1, int(parallelism_max))
+        self.action_batch_size = max(
+            worker_count,
+            worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER,
+        )
+        self.copy_grant_stack: ExitStack | None = None
+        self.copy_grant_enabled = False
+
+    def run(self) -> tuple[int, int, _SyncDiff]:
+        source_client = self.service._context_client(self.source_ctx)
+        target_client = self.service._context_client(self.target_ctx)
+        with ExitStack() as copy_grant_stack:
+            self.copy_grant_stack = copy_grant_stack
+            entries = self.service._iter_bucket_diff_entries(
+                self.source_ctx,
+                self.target_ctx,
+                source_bucket=self.source_bucket,
+                target_bucket=self.target_bucket,
+                source_client=source_client,
+                target_client=target_client,
+            )
+            for entry in entries:
+                if not self._process_entry(entry):
+                    return self._interrupted_result()
+            if not self._finish_batches():
+                return self._interrupted_result()
+
+        if self.copied == 0 and self.deleted == 0:
+            return 0, 0, self.diff
+        self.progress.flush(force=True)
+        self.service._add_event(
+            self.migration,
+            item=self.item,
+            level="info",
+            message="Sync batch completed.",
+            metadata={
+                "copied": self.copied,
+                "deleted": self.deleted,
+                "allow_delete": self.allow_delete,
+                "same_endpoint_copy": self.same_endpoint_copy,
+            },
+        )
+        self.service._commit()
+        return self.copied, self.deleted, self.diff
+
+    def _process_entry(self, entry: _BucketDiffEntry) -> bool:
+        self.scan_count_since_control += 1
+        if self.scan_count_since_control >= _DIFF_CONTROL_CHECK_INTERVAL_OBJECTS:
+            if not self._may_continue():
+                return False
+            self.scan_count_since_control = 0
+
+        copy_required, delete_required = self._record_diff_entry(entry)
+        if copy_required and not self._queue_copy(entry.key):
+            return False
+        if delete_required and not self._queue_delete(entry.key):
+            return False
+        return True
+
+    def _record_diff_entry(self, entry: _BucketDiffEntry) -> tuple[bool, bool]:
+        if entry.kind == "only_source":
+            self.diff.source_count += 1
+            self.diff.only_source_count += 1
+            self._append_key_sample("only_source_sample", entry.key)
+            return True, False
+        if entry.kind == "only_target":
+            self.diff.target_count += 1
+            self.diff.only_target_count += 1
+            self._append_key_sample("only_target_sample", entry.key)
+            return False, self.allow_delete
+        if entry.kind == "matched":
+            self.diff.source_count += 1
+            self.diff.target_count += 1
+            self.diff.matched_count += 1
+            return False, False
+        if entry.kind == "different":
+            self.diff.source_count += 1
+            self.diff.target_count += 1
+            self.diff.different_count += 1
+            sample = self.diff.sample["different_sample"]
+            if len(sample) < self._SAMPLE_LIMIT:
+                sample.append(
+                    {
+                        "key": entry.key,
+                        "source_size": entry.source_size,
+                        "target_size": entry.target_size,
+                        "source_etag": entry.source_etag,
+                        "target_etag": entry.target_etag,
+                        "compare_by": entry.compare_by,
+                    }
+                )
+            return True, False
+        return False, False
+
+    def _append_key_sample(self, sample_name: str, key: str) -> None:
+        sample = self.diff.sample[sample_name]
+        if len(sample) < self._SAMPLE_LIMIT:
+            sample.append(key)
+
+    def _queue_copy(self, key: str) -> bool:
+        self._ensure_copy_grant(key)
+        self.copy_batch.append(key)
+        if len(self.copy_batch) < self.action_batch_size:
+            return True
+        return self._may_continue() and self._flush_copy_batch()
+
+    def _queue_delete(self, key: str) -> bool:
+        self.delete_batch.append(key)
+        if len(self.delete_batch) < self.action_batch_size:
+            return True
+        return self._may_continue() and self._flush_delete_batch()
+
+    def _ensure_copy_grant(self, sample_key: str) -> None:
+        if (
+            not self.same_endpoint_copy
+            or not bool(self.migration.auto_grant_source_read_for_copy)
+            or self.copy_grant_enabled
+        ):
+            return
+        if self.copy_grant_stack is None:
+            raise RuntimeError("Copy grant stack is not initialized")
+        self.copy_grant_stack.enter_context(
+            self.service._temporary_source_copy_grant(
+                self.source_ctx,
+                self.target_ctx,
+                source_bucket=self.source_bucket,
+                sample_key=sample_key,
+            )
+        )
+        self.copy_grant_enabled = True
+
+    def _finish_batches(self) -> bool:
+        if not self._may_continue():
+            return False
+        return self._flush_copy_batch() and self._flush_delete_batch()
+
+    def _may_continue(self) -> bool:
+        return self.progress.check_control(self.control_check) not in {"pause", "cancel"}
+
+    def _flush_copy_batch(self) -> bool:
+        if not self.copy_batch:
+            return True
+        copied_now = self.service._run_copy_actions(
+            self.source_ctx,
+            self.target_ctx,
+            self.source_bucket,
+            self.target_bucket,
+            self.copy_batch,
+            parallelism_max=self.parallelism_max,
+            same_endpoint=self.same_endpoint_copy,
+            control_check=self.control_check,
+            on_progress=self.progress.record,
+        )
+        self.copy_batch = []
+        if copied_now < 0:
+            return False
+        self.copied += copied_now
+        return True
+
+    def _flush_delete_batch(self) -> bool:
+        if not self.delete_batch:
+            return True
+        deleted_now = self.service._run_delete_actions(
+            self.target_ctx,
+            self.target_bucket,
+            self.delete_batch,
+            parallelism_max=self.parallelism_max,
+            control_check=self.control_check,
+            on_progress=self.progress.record,
+        )
+        self.delete_batch = []
+        if deleted_now < 0:
+            return False
+        self.deleted += deleted_now
+        return True
+
+    def _interrupted_result(self) -> tuple[int, int, _SyncDiff]:
+        return -1, -1, self.diff
