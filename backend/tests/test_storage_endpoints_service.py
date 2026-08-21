@@ -644,6 +644,73 @@ def test_detect_features_warns_when_usage_log_endpoint_is_unavailable(db_session
     assert "Usage logs do not appear enabled" in result.warnings[0]
 
 
+def test_detect_features_reports_incomplete_credential_pairs(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.get_rgw_admin_client",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("Incomplete credentials must not be used")),
+    )
+
+    result = StorageEndpointsService(db_session).detect_features(
+        StorageEndpointFeatureDetectionRequest(
+            endpoint_url="https://ceph.example.test",
+            admin_access_key="AKIA-ADMIN",
+            supervision_secret_key="SECRET-SUPERVISION",
+        )
+    )
+
+    assert result.admin is False
+    assert result.admin_error == "Admin detection requires both access key and secret key."
+    assert result.account is False
+    assert result.metrics is False
+    assert result.usage is False
+    assert result.metrics_error == "Supervision detection requires both access key and secret key."
+    assert result.usage_error == result.metrics_error
+
+
+def test_detect_features_keeps_account_and_usage_probes_independent(db_session, monkeypatch):
+    class FakeRGWClient:
+        def __init__(self, access_key: str):
+            self.access_key = access_key
+            self.account_api_supported = None
+
+        def get_user_by_access_key(self, *_args, **_kwargs):
+            raise RGWAdminError("admin probe failed")
+
+        def get_account(self, *_args, **_kwargs):
+            self.account_api_supported = True
+
+        def get_all_buckets(self, **_kwargs):
+            raise RGWAdminError("metrics probe failed")
+
+        def get_usage(self, **_kwargs):
+            return {"entries": [], "summary": []}
+
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.get_rgw_admin_client",
+        lambda **kwargs: FakeRGWClient(kwargs["access_key"]),
+    )
+
+    result = StorageEndpointsService(db_session).detect_features(
+        StorageEndpointFeatureDetectionRequest(
+            endpoint_url="https://ceph.example.test",
+            admin_access_key="AKIA-ADMIN",
+            admin_secret_key="SECRET-ADMIN",
+            supervision_access_key="AKIA-SUPERVISION",
+            supervision_secret_key="SECRET-SUPERVISION",
+        )
+    )
+
+    assert result.admin is False
+    assert result.admin_error == "admin probe failed"
+    assert result.account is True
+    assert result.account_error is None
+    assert result.metrics is False
+    assert result.metrics_error == "metrics probe failed"
+    assert result.usage is True
+    assert result.usage_error is None
+    assert result.warnings == []
+
+
 def test_delete_endpoint_blocks_when_references_exist(db_session):
     endpoint = _create_ceph_endpoint(db_session, name="ceph-delete-blocked")
     creator = User(
