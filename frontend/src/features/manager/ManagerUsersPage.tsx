@@ -29,12 +29,12 @@ import ManagerTable, {
   type ManagerTableColumn,
 } from "../../components/list/ManagerTable";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { extractApiError } from "../../utils/apiError";
-import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
@@ -46,6 +46,7 @@ const extractError = (err: unknown): string => extractApiError(err, "Unexpected 
 
 export default function ManagerUsersPage() {
   type SortField = SortableField<IAMUser>;
+  const deleteConfirmation = useConfirmActionDialog();
 
   const {
     selectedS3AccountType,
@@ -276,9 +277,8 @@ export default function ManagerUsersPage() {
     }
   };
 
-  const handleDelete = async (name: string) => {
+  const deleteUser = async (name: string) => {
     if (needsS3AccountSelection) return;
-    if (!confirmDeletion("user", name)) return;
     setBusy(name);
     setError(null);
     setActionMessage(null);
@@ -291,6 +291,18 @@ export default function ManagerUsersPage() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleDelete = (name: string) => {
+    if (needsS3AccountSelection) return;
+    deleteConfirmation.requestConfirmation({
+      title: "Delete IAM user?",
+      description: "Permanently remove this IAM user from the selected account.",
+      confirmLabel: "Delete user",
+      details: [{ label: "IAM user", value: name }],
+      impacts: ["Credentials and permissions attached to this user will no longer grant access."],
+      onConfirm: () => deleteUser(name),
+    });
   };
 
   const openAdvancedModal = () => {
@@ -817,6 +829,8 @@ export default function ManagerUsersPage() {
           }}
         />
       )}
+
+      {deleteConfirmation.confirmationDialog}
 
     </div>
   );

@@ -30,11 +30,11 @@ import ManagerTable, {
   type ManagerTableColumn,
 } from "../../components/list/ManagerTable";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { extractApiError } from "../../utils/apiError";
-import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
@@ -67,6 +67,7 @@ const roleTableColumns: ManagerTableColumn[] = [
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 export default function ManagerRolesPage() {
+  const deleteConfirmation = useConfirmActionDialog();
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
@@ -244,9 +245,8 @@ export default function ManagerRolesPage() {
     }
   };
 
-  const handleDelete = async (name: string) => {
+  const deleteRole = async (name: string) => {
     if (needsS3AccountSelection) return;
-    if (!confirmDeletion("role", name)) return;
     setDeletingRole(name);
     setError(null);
     setActionMessage(null);
@@ -259,6 +259,18 @@ export default function ManagerRolesPage() {
     } finally {
       setDeletingRole(null);
     }
+  };
+
+  const handleDelete = (name: string) => {
+    if (needsS3AccountSelection) return;
+    deleteConfirmation.requestConfirmation({
+      title: "Delete IAM role?",
+      description: "Permanently remove this IAM role from the selected account.",
+      confirmLabel: "Delete role",
+      details: [{ label: "IAM role", value: name }],
+      impacts: ["Workloads that assume this role will no longer receive its permissions."],
+      onConfirm: () => deleteRole(name),
+    });
   };
 
   const openAdvancedModal = () => {
@@ -820,6 +832,7 @@ export default function ManagerRolesPage() {
           {editCloseGuard.confirmationDialog}
         </WorkflowPage>
       )}
+      {deleteConfirmation.confirmationDialog}
     </div>
   );
 }

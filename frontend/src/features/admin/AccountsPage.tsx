@@ -81,8 +81,8 @@ import {
 } from "./AdminAssociationPicker";
 import AdminAssociationAdvancedSettings from "./AdminAssociationAdvancedSettings";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
@@ -129,6 +129,7 @@ const buildPortalOverrideFormSignature = (snapshot: PortalOverrideFormSnapshot) 
 
 export default function S3AccountsPage() {
   const { generalSettings } = useGeneralSettings();
+  const portalOverrideConfirmation = useConfirmActionDialog();
   const portalEnabled = generalSettings.portal_enabled;
   const [accounts, setS3Accounts] = useState<S3Account[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -1126,9 +1127,8 @@ export default function S3AccountsPage() {
     }
   };
 
-  const handleResetAdminOverrides = async () => {
+  const resetAdminOverrides = async () => {
     if (!editingAccountId || portalSettingsSaving) return;
-    if (!confirmAction("Reset portal overrides for this account?")) return;
     setPortalSettingsSaving(true);
     setPortalSettingsError(null);
     setPortalSettingsMessage(null);
@@ -1142,6 +1142,18 @@ export default function S3AccountsPage() {
     } finally {
       setPortalSettingsSaving(false);
     }
+  };
+
+  const handleResetAdminOverrides = () => {
+    if (!editingS3Account || portalSettingsSaving) return;
+    portalOverrideConfirmation.requestConfirmation({
+      title: "Reset Portal overrides?",
+      description: "Remove the account-specific Portal settings for this RGW account.",
+      confirmLabel: "Reset overrides",
+      details: [{ label: "RGW account", value: editingS3Account.name }],
+      impacts: ["The inherited platform Portal settings will take effect for this account."],
+      onConfirm: resetAdminOverrides,
+    });
   };
 
   const openDeleteS3AccountModal = async (account: S3Account | S3AccountSummary) => {
@@ -2298,6 +2310,7 @@ export default function S3AccountsPage() {
               </UiButton>
             </WorkflowActions>
             {editCloseGuard.confirmationDialog}
+            {portalOverrideConfirmation.confirmationDialog}
           </form>
         </WorkflowPage>
       )}

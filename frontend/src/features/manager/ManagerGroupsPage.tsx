@@ -21,11 +21,11 @@ import ManagerTable, {
   type ManagerTableColumn,
 } from "../../components/list/ManagerTable";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { extractApiError } from "../../utils/apiError";
-import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { uiCheckboxClass } from "../../components/ui/styles";
@@ -42,6 +42,7 @@ const groupTableColumns: ManagerTableColumn[] = [
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 export default function ManagerGroupsPage() {
+  const deleteConfirmation = useConfirmActionDialog();
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, selectedS3AccountId, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
@@ -176,9 +177,8 @@ export default function ManagerGroupsPage() {
     }
   };
 
-  const handleDelete = async (name: string) => {
+  const deleteGroup = async (name: string) => {
     if (needsS3AccountSelection) return;
-    if (!confirmDeletion("group", name)) return;
     setBusy(name);
     setError(null);
     setActionMessage(null);
@@ -191,6 +191,18 @@ export default function ManagerGroupsPage() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleDelete = (name: string) => {
+    if (needsS3AccountSelection) return;
+    deleteConfirmation.requestConfirmation({
+      title: "Delete IAM group?",
+      description: "Permanently remove this IAM group from the selected account.",
+      confirmLabel: "Delete group",
+      details: [{ label: "IAM group", value: name }],
+      impacts: ["Members will lose permissions inherited only through this group."],
+      onConfirm: () => deleteGroup(name),
+    });
   };
 
   const openAdvancedModal = () => {
@@ -561,6 +573,7 @@ export default function ManagerGroupsPage() {
           {advancedCloseGuard.confirmationDialog}
         </WorkflowPage>
       )}
+      {deleteConfirmation.confirmationDialog}
     </div>
   );
 }

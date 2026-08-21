@@ -9,6 +9,7 @@ const useS3AccountContextMock = vi.fn();
 const listTopicsMock = vi.fn();
 const getTopicConfigurationMock = vi.fn();
 const updateTopicConfigurationMock = vi.fn();
+const deleteTopicMock = vi.fn();
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
@@ -20,7 +21,7 @@ vi.mock("../../api/topics", async () => {
     ...actual,
     listTopics: (...args: unknown[]) => listTopicsMock(...args),
     createTopic: vi.fn(),
-    deleteTopic: vi.fn(),
+    deleteTopic: (...args: unknown[]) => deleteTopicMock(...args),
     getTopicConfiguration: (...args: unknown[]) => getTopicConfigurationMock(...args),
     getTopicPolicy: vi.fn(),
     updateTopicConfiguration: (...args: unknown[]) => updateTopicConfigurationMock(...args),
@@ -34,6 +35,7 @@ describe("TopicsPage", () => {
     listTopicsMock.mockReset();
     getTopicConfigurationMock.mockReset();
     updateTopicConfigurationMock.mockReset();
+    deleteTopicMock.mockReset();
     useS3AccountContextMock.mockReturnValue({
       accounts: [],
       selectedS3AccountId: null,
@@ -60,6 +62,34 @@ describe("TopicsPage", () => {
     expect(screen.getByText("Select an account before managing SNS topics")).toBeInTheDocument();
     expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
     expect(screen.queryByText("Select an account to manage its topics.")).not.toBeInTheDocument();
+  });
+
+  it("confirms before deleting a notification topic", async () => {
+    const user = userEvent.setup();
+    const topicArn = "arn:aws:sns:us-east-1:lab:topic-events";
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [{ id: 7, display_name: "Lab account", storage_endpoint_capabilities: { sns: true } }],
+      selectedS3AccountId: 7,
+      accountIdForApi: 7,
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      accessMode: "default",
+      iamIdentity: null,
+    });
+    listTopicsMock.mockResolvedValue([{ name: "topic-events", arn: topicArn, configuration: {} }]);
+
+    render(
+      <MemoryRouter>
+        <TopicsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("topic-events")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(deleteTopicMock).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Delete notification topic?" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete topic" }));
+    await waitFor(() => expect(deleteTopicMock).toHaveBeenCalledWith(7, topicArn));
   });
 
   it("loads normalized Ceph topic configuration into the attributes modal and saves the edited payload", async () => {

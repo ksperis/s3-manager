@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,8 @@ const useS3AccountContextMock = vi.fn();
 const listIamGroupsMock = vi.fn();
 const listIamRolesMock = vi.fn();
 const listIamPoliciesMock = vi.fn();
+const deleteIamGroupMock = vi.fn();
+const deleteIamRoleMock = vi.fn();
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
@@ -22,7 +24,7 @@ vi.mock("../../api/managerIamGroups", async () => {
     ...actual,
     attachGroupPolicy: vi.fn(),
     createIamGroup: vi.fn(),
-    deleteIamGroup: vi.fn(),
+    deleteIamGroup: (...args: unknown[]) => deleteIamGroupMock(...args),
     listIamGroups: (...args: unknown[]) => listIamGroupsMock(...args),
   };
 });
@@ -33,7 +35,7 @@ vi.mock("../../api/managerIamRoles", async () => {
     ...actual,
     attachRolePolicy: vi.fn(),
     createIamRole: vi.fn(),
-    deleteIamRole: vi.fn(),
+    deleteIamRole: (...args: unknown[]) => deleteIamRoleMock(...args),
     getIamRole: vi.fn(),
     listIamRoles: (...args: unknown[]) => listIamRolesMock(...args),
     updateIamRole: vi.fn(),
@@ -59,6 +61,8 @@ describe("Manager IAM inventory tables", () => {
     listIamGroupsMock.mockReset();
     listIamRolesMock.mockReset();
     listIamPoliciesMock.mockReset();
+    deleteIamGroupMock.mockReset();
+    deleteIamRoleMock.mockReset();
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
@@ -105,6 +109,12 @@ describe("Manager IAM inventory tables", () => {
       expect(listIamGroupsMock).toHaveBeenCalledWith("acc-1");
       expect(listIamPoliciesMock).toHaveBeenCalledWith("acc-1");
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(deleteIamGroupMock).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Delete IAM group?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete group" }));
+    await waitFor(() => expect(deleteIamGroupMock).toHaveBeenCalledWith("acc-1", "operators"));
   });
 
   it("renders roles through the shared responsive inventory table", async () => {
@@ -133,6 +143,12 @@ describe("Manager IAM inventory tables", () => {
       expect(listIamRolesMock).toHaveBeenCalledWith("acc-1");
       expect(listIamPoliciesMock).toHaveBeenCalledWith("acc-1");
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(deleteIamRoleMock).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Delete IAM role?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete role" }));
+    await waitFor(() => expect(deleteIamRoleMock).toHaveBeenCalledWith("acc-1", "app-reader"));
   });
 
   it("renders policies through the shared responsive inventory table", async () => {

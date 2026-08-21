@@ -22,11 +22,11 @@ import Modal from "../../components/Modal";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { extractApiError } from "../../utils/apiError";
-import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { createUiDraftId } from "../../utils/uiDraftId";
 import { useS3AccountContext } from "./S3AccountContext";
@@ -121,6 +121,7 @@ function extractError(err: unknown): string {
 }
 
 export default function TopicsPage() {
+  const deleteConfirmation = useConfirmActionDialog();
   const {
     accounts,
     selectedS3AccountId,
@@ -246,9 +247,8 @@ export default function TopicsPage() {
     }
   };
 
-  const handleDeleteTopic = async (topicArn: string, name: string) => {
+  const deleteSelectedTopic = async (topicArn: string, name: string) => {
     if (needsS3AccountSelection) return;
-    if (!confirmDeletion("topic", name)) return;
     try {
       await deleteTopic(accountIdForApi ?? null, topicArn);
       setActionMessage(`Topic '${name}' deleted.`);
@@ -256,6 +256,21 @@ export default function TopicsPage() {
     } catch (err) {
       setError(extractError(err));
     }
+  };
+
+  const handleDeleteTopic = (topicArn: string, name: string) => {
+    if (needsS3AccountSelection) return;
+    deleteConfirmation.requestConfirmation({
+      title: "Delete notification topic?",
+      description: "Permanently remove this SNS topic from the selected account.",
+      confirmLabel: "Delete topic",
+      details: [
+        { label: "Topic", value: name },
+        { label: "ARN", value: topicArn, mono: true },
+      ],
+      impacts: ["Bucket notifications targeting this topic will no longer be delivered."],
+      onConfirm: () => deleteSelectedTopic(topicArn, name),
+    });
   };
 
   const openPolicyModal = async (topicArn: string, name: string) => {
@@ -899,6 +914,7 @@ export default function TopicsPage() {
           {policyCloseGuard.confirmationDialog}
         </WorkflowPage>
       )}
+      {deleteConfirmation.confirmationDialog}
     </div>
   );
 }

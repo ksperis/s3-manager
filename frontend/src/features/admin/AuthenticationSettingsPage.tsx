@@ -36,8 +36,8 @@ import {
   type OidcProviderAdminPayload,
 } from "../../api/authSettings";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
 
 const CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE =
   "Warning: custom endpoints are restricted to public HTTPS targets. Private/local hosts and insecure transport are rejected by the backend. Admin-managed HTTP endpoints remain possible only through the admin surfaces.";
@@ -258,6 +258,7 @@ function statusBadge(provider: ProviderBadgeInput) {
 
 export default function AuthenticationSettingsPage() {
   const { setGeneralSettings } = useGeneralSettings();
+  const authenticationConfirmation = useConfirmActionDialog();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -342,9 +343,8 @@ export default function AuthenticationSettingsPage() {
     }
   };
 
-  const handleResetDefaults = async () => {
+  const resetDefaults = async () => {
     if (!settings) return;
-    if (!confirmAction("Reset authentication settings to defaults? Save changes to apply.")) return;
     setResetting(true);
     setError(null);
     setSavedMessage(null);
@@ -369,6 +369,19 @@ export default function AuthenticationSettingsPage() {
     } finally {
       setResetting(false);
     }
+  };
+
+  const handleResetDefaults = () => {
+    if (!settings) return;
+    authenticationConfirmation.requestConfirmation({
+      title: "Reset authentication settings draft?",
+      description: "Load the default login options into this form.",
+      confirmLabel: "Load defaults",
+      tone: "primary",
+      impacts: ["Your current login option edits will be replaced by the defaults."],
+      warning: "The defaults are not applied until you save the form.",
+      onConfirm: resetDefaults,
+    });
   };
 
   const resetOidcProviderForm = () => {
@@ -447,9 +460,8 @@ export default function AuthenticationSettingsPage() {
     }
   };
 
-  const handleDeleteOidcProvider = async (provider: OidcProviderAdminItem) => {
+  const deleteOidcProvider = async (provider: OidcProviderAdminItem) => {
     if (!provider.editable) return;
-    if (!confirmAction(`Delete OIDC provider ${provider.provider_id}?`)) return;
     setOidcSaving(true);
     setOidcError(null);
     try {
@@ -465,6 +477,21 @@ export default function AuthenticationSettingsPage() {
     } finally {
       setOidcSaving(false);
     }
+  };
+
+  const handleDeleteOidcProvider = (provider: OidcProviderAdminItem) => {
+    if (!provider.editable) return;
+    authenticationConfirmation.requestConfirmation({
+      title: "Delete OIDC provider?",
+      description: "Remove this UI-managed identity provider from the application.",
+      confirmLabel: "Delete provider",
+      details: [
+        { label: "Provider", value: provider.display_name },
+        { label: "Provider ID", value: provider.provider_id, mono: true },
+      ],
+      impacts: ["Users will no longer be able to start new sign-ins with this provider."],
+      onConfirm: () => deleteOidcProvider(provider),
+    });
   };
 
   const startCreateLdapProvider = () => {
@@ -529,9 +556,8 @@ export default function AuthenticationSettingsPage() {
     }
   };
 
-  const handleDeleteLdapProvider = async (provider: LdapProviderAdminItem) => {
+  const deleteLdapProvider = async (provider: LdapProviderAdminItem) => {
     if (!provider.editable) return;
-    if (!confirmAction(`Delete LDAP provider ${provider.provider_id}?`)) return;
     setLdapSaving(true);
     setLdapError(null);
     try {
@@ -547,6 +573,21 @@ export default function AuthenticationSettingsPage() {
     } finally {
       setLdapSaving(false);
     }
+  };
+
+  const handleDeleteLdapProvider = (provider: LdapProviderAdminItem) => {
+    if (!provider.editable) return;
+    authenticationConfirmation.requestConfirmation({
+      title: "Delete LDAP provider?",
+      description: "Remove this UI-managed directory provider from the application.",
+      confirmLabel: "Delete provider",
+      details: [
+        { label: "Provider", value: provider.display_name },
+        { label: "Provider ID", value: provider.provider_id, mono: true },
+      ],
+      impacts: ["Users will no longer be able to start new sign-ins with this provider."],
+      onConfirm: () => deleteLdapProvider(provider),
+    });
   };
 
   return (
@@ -1345,6 +1386,7 @@ export default function AuthenticationSettingsPage() {
           </form>
         )}
       </SettingsCard>
+      {authenticationConfirmation.confirmationDialog}
     </PageShell>
   );
 }

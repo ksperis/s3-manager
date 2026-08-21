@@ -30,9 +30,9 @@ import UiSelect from "../../components/ui/UiSelect";
 import UiTextarea from "../../components/ui/UiTextarea";
 import UsageTile from "../../components/UsageTile";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
 import { canCreateManualPrivateConnections, readStoredUser } from "../../utils/workspaces";
@@ -117,6 +117,7 @@ export default function CephAdminUserEditModal({
   onClose,
   onSaved,
 }: Props) {
+  const keyConfirmation = useConfirmActionDialog();
   const canAddAsS3Connection = useMemo(
     () => canCreateManualPrivateConnections(readStoredUser()),
     []
@@ -432,9 +433,8 @@ export default function CephAdminUserEditModal({
     }
   };
 
-  const handleDeleteKey = async (key: CephAdminRgwAccessKey) => {
+  const deleteKey = async (key: CephAdminRgwAccessKey) => {
     if (key.is_private_access_managed) return;
-    if (!confirmAction(`Delete key ${key.access_key}?`)) return;
     const marker = `delete:${key.access_key}`;
     setKeysBusy(marker);
     setKeysError(null);
@@ -454,6 +454,21 @@ export default function CephAdminUserEditModal({
     if (tenant) return `${tenant}$${uid}`;
     return uid;
   }, [tenant, uid]);
+
+  const handleDeleteKey = (key: CephAdminRgwAccessKey) => {
+    if (key.is_private_access_managed) return;
+    keyConfirmation.requestConfirmation({
+      title: "Delete access key?",
+      description: "Permanently remove this S3 access key from the Ceph user.",
+      confirmLabel: "Delete key",
+      details: [
+        { label: "Ceph user", value: identityLabel },
+        { label: "Access key", value: key.access_key, mono: true },
+      ],
+      impacts: ["Applications using this key will immediately lose access."],
+      onConfirm: () => deleteKey(key),
+    });
+  };
 
   const overviewTab = (
     <section className="space-y-4">
@@ -896,6 +911,7 @@ export default function CephAdminUserEditModal({
         />
       )}
       {closeGuard.confirmationDialog}
+      {keyConfirmation.confirmationDialog}
     </WorkflowPage>
   );
 }

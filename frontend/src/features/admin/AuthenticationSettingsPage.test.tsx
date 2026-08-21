@@ -52,10 +52,6 @@ vi.mock("../../api/authSettings", () => ({
   deleteLdapAdminProvider: (providerId: string) => deleteLdapAdminProviderMock(providerId),
 }));
 
-vi.mock("../../utils/confirm", () => ({
-  confirmAction: () => true,
-}));
-
 function buildSettings(): AppSettings {
   return {
     general: {
@@ -336,6 +332,9 @@ describe("AuthenticationSettingsPage", () => {
 
     await screen.findByLabelText("Access-key login");
     await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+    expect(fetchDefaultAppSettingsMock).not.toHaveBeenCalled();
+    const resetDialog = screen.getByRole("dialog", { name: "Reset authentication settings draft?" });
+    await user.click(within(resetDialog).getByRole("button", { name: "Load defaults" }));
     await waitFor(() => {
       expect(fetchDefaultAppSettingsMock).toHaveBeenCalledTimes(1);
     });
@@ -462,6 +461,9 @@ describe("AuthenticationSettingsPage", () => {
     const uiProviderRow = screen.getAllByText("UI Provider")[0].closest("tr") as HTMLElement;
     expect(within(googleRow).queryByRole("button", { name: "Delete OIDC provider google" })).toBeNull();
     await user.click(within(uiProviderRow).getByRole("button", { name: "Delete OIDC provider ui" }));
+    expect(deleteOidcAdminProviderMock).not.toHaveBeenCalled();
+    const deleteDialog = screen.getByRole("dialog", { name: "Delete OIDC provider?" });
+    await user.click(within(deleteDialog).getByRole("button", { name: "Delete provider" }));
 
     await waitFor(() => {
       expect(deleteOidcAdminProviderMock).toHaveBeenCalledWith("ui");
@@ -618,6 +620,9 @@ describe("AuthenticationSettingsPage", () => {
         name: "Delete LDAP provider ui-ldap",
       })
     );
+    expect(deleteLdapAdminProviderMock).not.toHaveBeenCalled();
+    const deleteDialog = screen.getByRole("dialog", { name: "Delete LDAP provider?" });
+    await user.click(within(deleteDialog).getByRole("button", { name: "Delete provider" }));
 
     await waitFor(() => {
       expect(deleteLdapAdminProviderMock).toHaveBeenCalledWith("ui-ldap");

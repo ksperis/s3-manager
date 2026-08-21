@@ -9,6 +9,7 @@ const listIamUsersMock = vi.fn();
 const listIamGroupsMock = vi.fn();
 const listIamPoliciesMock = vi.fn();
 const createIamUserMock = vi.fn();
+const deleteIamUserMock = vi.fn();
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
@@ -20,7 +21,7 @@ vi.mock("../../api/managerIamUsers", async () => {
     ...actual,
     listIamUsers: (...args: unknown[]) => listIamUsersMock(...args),
     createIamUser: (...args: unknown[]) => createIamUserMock(...args),
-    deleteIamUser: vi.fn(),
+    deleteIamUser: (...args: unknown[]) => deleteIamUserMock(...args),
   };
 });
 
@@ -47,6 +48,7 @@ describe("ManagerUsersPage", () => {
     listIamGroupsMock.mockReset();
     listIamPoliciesMock.mockReset();
     createIamUserMock.mockReset();
+    deleteIamUserMock.mockReset();
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
@@ -135,6 +137,12 @@ describe("ManagerUsersPage", () => {
     expect(screen.getByText("operators").closest("td")).toHaveAttribute("data-label", "Groups");
     expect(screen.getByText("ReadOnlyAccess").closest("td")).toHaveAttribute("data-label", "Policies");
     expect(screen.getByRole("link", { name: "Keys" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(deleteIamUserMock).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Delete IAM user?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete user" }));
+    await waitFor(() => expect(deleteIamUserMock).toHaveBeenCalledWith("acc-1", "alice"));
   });
 
   it("keeps saved inline policy drafts visible in the create user modal", async () => {

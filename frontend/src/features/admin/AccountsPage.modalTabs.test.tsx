@@ -102,8 +102,6 @@ describe("AccountsPage modal tabs", () => {
 
     portalEnabled = false;
     localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
     listS3AccountsMock.mockResolvedValue({
       items: [
         {
@@ -653,6 +651,9 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("Private Storage Space creation");
 
     fireEvent.click(screen.getByRole("button", { name: "Reset overrides" }));
+    expect(updateAccountPortalSettingsMock).not.toHaveBeenCalled();
+    const resetDialog = screen.getByRole("dialog", { name: "Reset Portal overrides?" });
+    fireEvent.click(within(resetDialog).getByRole("button", { name: "Reset overrides" }));
 
     await waitFor(() => {
       expect(updateAccountPortalSettingsMock).toHaveBeenCalledWith(1, {});
