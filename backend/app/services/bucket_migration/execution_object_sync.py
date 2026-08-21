@@ -144,113 +144,16 @@ class BucketMigrationObjectSyncMixin:
         control_check: Callable[[], str],
     ) -> tuple[int, int, _SyncDiff]:
         del allow_delete, parallelism_max
-        same_endpoint_copy = bool(self._is_same_endpoint(source_ctx, target_ctx) and migration.use_same_endpoint_copy)
-        progress = _SyncProgressTracker(migration=migration, item=item, commit=self._commit)
-
-        replication_state = self._load_item_replication_state(item)
-        raw_watermark = replication_state.get("pre_sync_watermark")
-        watermark = raw_watermark if isinstance(raw_watermark, dict) else None
-        purge_before_replay = False
-        replay_mode = "one_shot_full"
-
-        if migration.mode == "pre_sync" and not item.pre_sync_done:
-            purge_before_replay = True
-            replay_mode = "pre_sync_full"
-            replication_state.pop("cutover_attempted", None)
-        elif migration.mode == "pre_sync" and item.pre_sync_done and item.read_only_applied:
-            if not isinstance(watermark, dict):
-                purge_before_replay = True
-                replay_mode = "cutover_full_missing_watermark"
-            elif bool(replication_state.get("cutover_attempted")):
-                purge_before_replay = True
-                replay_mode = "cutover_full_retry"
-                watermark = None
-            else:
-                replay_mode = "cutover_delta"
-                replication_state["cutover_attempted"] = True
-                self._store_item_replication_state(item, replication_state)
-                item.updated_at = utcnow()
-                self._commit()
-        else:
-            purge_before_replay = True
-            replay_mode = "one_shot_full"
-
-        self._configuration.set_versioning(target_bucket, target_ctx.account, enabled=True)
-
-        deleted = 0
-        if purge_before_replay:
-            purged_current, purged_versions = self._purge_target_bucket(target_ctx, target_bucket)
-            deleted = purged_current + purged_versions
-            if deleted > 0:
-                progress.record(deleted_inc=deleted, force=True)
-
-        source_profile = _json_loads(item.source_snapshot_json)
-        copied = 0
-        pre_sync_watermark: Optional[dict[str, Any]] = None
-
-        with ExitStack() as copy_grant_stack:
-            if same_endpoint_copy and bool(migration.auto_grant_source_read_for_copy):
-                candidate = self._sample_version_probe_candidate(
-                    source_bucket,
-                    source_profile=source_profile if isinstance(source_profile, dict) else None,
-                )
-                if candidate is not None:
-                    sample_key, sample_version_id = candidate
-                    copy_grant_stack.enter_context(
-                        self._temporary_source_copy_grant(
-                            source_ctx,
-                            target_ctx,
-                            source_bucket=source_bucket,
-                            sample_key=sample_key,
-                            sample_version_id=sample_version_id,
-                        )
-                    )
-
-            copied, pre_sync_watermark = self._replay_bucket_versions(
-                source_ctx,
-                target_ctx,
-                source_bucket=source_bucket,
-                target_bucket=target_bucket,
-                same_endpoint_copy=same_endpoint_copy,
-                watermark=watermark,
-                control_check=control_check,
-                on_progress=progress.record,
-            )
-        if copied < 0:
-            return -1, -1, self._new_empty_sync_diff()
-
-        if replay_mode == "pre_sync_full":
-            replication_state["pre_sync_watermark"] = pre_sync_watermark
-            replication_state["cutover_attempted"] = False
-            self._store_item_replication_state(item, replication_state)
-        progress.flush(force=True)
-
-        compared = self._compare_versioned_timelines(
-            source_ctx,
-            target_ctx,
+        return _VersionAwareObjectSyncRunner(
+            service=self,
+            source_ctx=source_ctx,
+            target_ctx=target_ctx,
             source_bucket=source_bucket,
             target_bucket=target_bucket,
-            control_check=control_check,
-        )
-        if compared is None:
-            return -1, -1, self._new_empty_sync_diff()
-        diff = self._version_aware_diff_to_sync_diff(compared)
-
-        self._add_event(
-            migration,
+            migration=migration,
             item=item,
-            level="info",
-            message="Sync batch completed.",
-            metadata={
-                "copied": copied,
-                "deleted": deleted,
-                "same_endpoint_copy": same_endpoint_copy,
-                "replay_mode": replay_mode,
-                "version_aware": True,
-            },
-        )
-        self._commit()
-        return copied, deleted, diff
+            control_check=control_check,
+        ).run()
 
     def _replay_bucket_versions(
         self,
@@ -366,6 +269,186 @@ class BucketMigrationObjectSyncMixin:
         source_endpoint = normalize_s3_endpoint(source_ctx.endpoint)
         target_endpoint = normalize_s3_endpoint(target_ctx.endpoint)
         return bool(source_endpoint and target_endpoint and source_endpoint == target_endpoint)
+
+
+class _VersionAwareObjectSyncRunner:
+    def __init__(
+        self,
+        *,
+        service: BucketMigrationObjectSyncMixin,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        source_bucket: str,
+        target_bucket: str,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        control_check: Callable[[], str],
+    ) -> None:
+        self.service = service
+        self.source_ctx = source_ctx
+        self.target_ctx = target_ctx
+        self.source_bucket = source_bucket
+        self.target_bucket = target_bucket
+        self.migration = migration
+        self.item = item
+        self.control_check = control_check
+        self.same_endpoint_copy = bool(
+            service._is_same_endpoint(source_ctx, target_ctx)
+            and migration.use_same_endpoint_copy
+        )
+        self.progress = _SyncProgressTracker(
+            migration=migration,
+            item=item,
+            commit=service._commit,
+        )
+        self.replication_state = service._load_item_replication_state(item)
+        raw_watermark = self.replication_state.get("pre_sync_watermark")
+        self.watermark = raw_watermark if isinstance(raw_watermark, dict) else None
+        self.purge_before_replay = False
+        self.replay_mode = "one_shot_full"
+        self.copied = 0
+        self.deleted = 0
+
+    def run(self) -> tuple[int, int, _SyncDiff]:
+        self._select_replay_plan()
+        self.service._configuration.set_versioning(
+            self.target_bucket,
+            self.target_ctx.account,
+            enabled=True,
+        )
+        self._purge_target_if_needed()
+
+        self.copied, pre_sync_watermark = self._replay_versions()
+        if self.copied < 0:
+            return self._interrupted_result()
+        self._store_pre_sync_watermark(pre_sync_watermark)
+        self.progress.flush(force=True)
+
+        compared = self.service._compare_versioned_timelines(
+            self.source_ctx,
+            self.target_ctx,
+            source_bucket=self.source_bucket,
+            target_bucket=self.target_bucket,
+            control_check=self.control_check,
+        )
+        if compared is None:
+            return self._interrupted_result()
+        diff = self.service._version_aware_diff_to_sync_diff(compared)
+        self._record_completion()
+        return self.copied, self.deleted, diff
+
+    def _select_replay_plan(self) -> None:
+        if self.migration.mode == "pre_sync" and not self.item.pre_sync_done:
+            self.purge_before_replay = True
+            self.replay_mode = "pre_sync_full"
+            self.replication_state.pop("cutover_attempted", None)
+            return
+
+        if (
+            self.migration.mode != "pre_sync"
+            or not self.item.pre_sync_done
+            or not self.item.read_only_applied
+        ):
+            self.purge_before_replay = True
+            return
+
+        if self.watermark is None:
+            self.purge_before_replay = True
+            self.replay_mode = "cutover_full_missing_watermark"
+            return
+        if bool(self.replication_state.get("cutover_attempted")):
+            self.purge_before_replay = True
+            self.replay_mode = "cutover_full_retry"
+            self.watermark = None
+            return
+
+        self.replay_mode = "cutover_delta"
+        self.replication_state["cutover_attempted"] = True
+        self.service._store_item_replication_state(
+            self.item,
+            self.replication_state,
+        )
+        self.item.updated_at = utcnow()
+        self.service._commit()
+
+    def _purge_target_if_needed(self) -> None:
+        if not self.purge_before_replay:
+            return
+        purged_current, purged_versions = self.service._purge_target_bucket(
+            self.target_ctx,
+            self.target_bucket,
+        )
+        self.deleted = purged_current + purged_versions
+        if self.deleted > 0:
+            self.progress.record(deleted_inc=self.deleted, force=True)
+
+    def _replay_versions(self) -> tuple[int, Optional[dict[str, Any]]]:
+        source_profile = _json_loads(self.item.source_snapshot_json)
+        with ExitStack() as copy_grant_stack:
+            if (
+                self.same_endpoint_copy
+                and bool(self.migration.auto_grant_source_read_for_copy)
+            ):
+                candidate = self.service._sample_version_probe_candidate(
+                    self.source_bucket,
+                    source_profile=(
+                        source_profile if isinstance(source_profile, dict) else None
+                    ),
+                )
+                if candidate is not None:
+                    sample_key, sample_version_id = candidate
+                    copy_grant_stack.enter_context(
+                        self.service._temporary_source_copy_grant(
+                            self.source_ctx,
+                            self.target_ctx,
+                            source_bucket=self.source_bucket,
+                            sample_key=sample_key,
+                            sample_version_id=sample_version_id,
+                        )
+                    )
+
+            return self.service._replay_bucket_versions(
+                self.source_ctx,
+                self.target_ctx,
+                source_bucket=self.source_bucket,
+                target_bucket=self.target_bucket,
+                same_endpoint_copy=self.same_endpoint_copy,
+                watermark=self.watermark,
+                control_check=self.control_check,
+                on_progress=self.progress.record,
+            )
+
+    def _store_pre_sync_watermark(
+        self,
+        pre_sync_watermark: Optional[dict[str, Any]],
+    ) -> None:
+        if self.replay_mode != "pre_sync_full":
+            return
+        self.replication_state["pre_sync_watermark"] = pre_sync_watermark
+        self.replication_state["cutover_attempted"] = False
+        self.service._store_item_replication_state(
+            self.item,
+            self.replication_state,
+        )
+
+    def _record_completion(self) -> None:
+        self.service._add_event(
+            self.migration,
+            item=self.item,
+            level="info",
+            message="Sync batch completed.",
+            metadata={
+                "copied": self.copied,
+                "deleted": self.deleted,
+                "same_endpoint_copy": self.same_endpoint_copy,
+                "replay_mode": self.replay_mode,
+                "version_aware": True,
+            },
+        )
+        self.service._commit()
+
+    def _interrupted_result(self) -> tuple[int, int, _SyncDiff]:
+        return -1, -1, self.service._new_empty_sync_diff()
 
 
 class _CurrentObjectSyncRunner:

@@ -2763,6 +2763,118 @@ def test_sync_bucket_version_aware_presync_stores_watermark_and_cutover_replays_
     assert set_versioning_calls == [True, True]
 
 
+def test_sync_bucket_version_aware_cutover_fallbacks_purge_before_full_replay(
+    db_session,
+):
+    cases = [
+        (None, "cutover_full_missing_watermark"),
+        (
+            json.dumps(
+                {
+                    "cutover_attempted": True,
+                    "pre_sync_watermark": {
+                        "last_modified": "2026-01-01T10:00:00Z"
+                    },
+                }
+            ),
+            "cutover_full_retry",
+        ),
+    ]
+
+    for replication_state_json, expected_replay_mode in cases:
+        service = BucketMigrationService(db_session)
+        source_ctx = SimpleNamespace(
+            context_id="src",
+            endpoint="https://source.example.test",
+            account=SimpleNamespace(),
+        )
+        target_ctx = SimpleNamespace(
+            context_id="dst",
+            endpoint="https://target.example.test",
+            account=SimpleNamespace(),
+        )
+        migration = SimpleNamespace(
+            mode="pre_sync",
+            use_same_endpoint_copy=False,
+            auto_grant_source_read_for_copy=False,
+            updated_at=None,
+            last_heartbeat_at=None,
+        )
+        item = SimpleNamespace(
+            execution_plan_json=_version_aware_execution_plan(),
+            source_snapshot_json=json.dumps({"versioning": {"status": "Enabled"}}),
+            replication_state_json=replication_state_json,
+            objects_copied=0,
+            objects_deleted=0,
+            updated_at=None,
+            pre_sync_done=True,
+            read_only_applied=True,
+        )
+        purge_calls: list[str] = []
+        replay_watermarks: list[object] = []
+        event_metadata: list[dict[str, object]] = []
+
+        service._configuration = SimpleNamespace(  # type: ignore[assignment]
+            set_versioning=lambda *_args, **_kwargs: None
+        )
+
+        def purge_target(*_args, **_kwargs):
+            purge_calls.append("purged")
+            return 2, 1
+
+        def replay_versions(*_args, **kwargs):
+            replay_watermarks.append(kwargs["watermark"])
+            return 0, None
+
+        def compare_timelines(*_args, **_kwargs):
+            return SimpleNamespace(
+                source_count=0,
+                target_count=0,
+                matched_count=0,
+                different_count=0,
+                only_source_count=0,
+                only_target_count=0,
+                sample={
+                    "only_source_sample": [],
+                    "only_target_sample": [],
+                    "different_sample": [],
+                },
+            )
+
+        def add_event(*_args, **kwargs):
+            event_metadata.append(kwargs["metadata"])
+
+        service._purge_target_bucket = purge_target  # type: ignore[method-assign]
+        service._replay_bucket_versions = replay_versions  # type: ignore[method-assign]
+        service._compare_versioned_timelines = compare_timelines  # type: ignore[method-assign]
+        service._add_event = add_event  # type: ignore[method-assign]
+
+        copied, deleted, _diff = service._sync_bucket(
+            source_ctx,
+            target_ctx,
+            source_bucket="bucket-a",
+            target_bucket="bucket-b",
+            allow_delete=True,
+            parallelism_max=4,
+            migration=migration,
+            item=item,
+            control_check=lambda: "run",
+        )
+
+        assert (copied, deleted) == (0, 3)
+        assert purge_calls == ["purged"]
+        assert replay_watermarks == [None]
+        assert event_metadata == [
+            {
+                "copied": 0,
+                "deleted": 3,
+                "same_endpoint_copy": False,
+                "replay_mode": expected_replay_mode,
+                "version_aware": True,
+            }
+        ]
+
+
 def test_compare_versioned_timelines_streams_large_key_sets_and_limits_samples(db_session):
     service = BucketMigrationService(db_session)
     source_ctx = SimpleNamespace(context_id="src")
