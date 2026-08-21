@@ -22,6 +22,7 @@ from app.routers.ceph_admin import user_keys
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.ceph_admin.listing_common import fields_set, parse_int
+from app.routers.ceph_admin.profile_common import nullable_update, raise_if_unsupported
 from app.routers.ceph_admin.user_common import (
     coerce_bool,
     extract_access_key,
@@ -42,6 +43,25 @@ from app.utils.usage_stats import summarize_bucket_usage
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/users", tags=["ceph-admin-users"])
 router.include_router(user_keys.router)
+
+USER_UPDATE_FIELDS = (
+    "display_name",
+    "email",
+    "suspended",
+    "max_buckets",
+    "op_mask",
+    "admin",
+    "system",
+    "account_root",
+)
+USER_UPDATE_FIELD_SET = frozenset(USER_UPDATE_FIELDS)
+USER_UPDATE_CLEAR_VALUES: dict[str, Any] = {
+    "display_name": "",
+    "email": "",
+    "max_buckets": 0,
+    "op_mask": "",
+}
+USER_QUOTA_FIELDS = frozenset({"quota_enabled", "quota_max_size_bytes", "quota_max_objects"})
 
 
 def _extract_user_setting(payload: dict[str, Any], user_payload: dict[str, Any], *keys: str) -> Optional[str]:
@@ -157,6 +177,81 @@ def _build_user_detail(
     )
 
 
+def _load_user_detail(uid: str, tenant: Optional[str], ctx: CephAdminContext) -> CephAdminRgwUserDetail:
+    payload = load_user_payload(uid, tenant, ctx)
+    user_values = extract_rgw_user_payload(payload)
+    account_id = normalize_optional_scalar(payload.get("account_id") or user_values.get("account_id"))
+    account_name = _resolve_account_name(
+        account_id,
+        ctx,
+        payload_account_name=normalize_optional_scalar(payload.get("account_name") or user_values.get("account_name")),
+    )
+    return _build_user_detail(
+        payload,
+        uid_fallback=uid,
+        tenant_fallback=tenant,
+        account_name=account_name,
+        keys=serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=tenant)),
+    )
+
+
+def _user_update_params(
+    update: CephAdminRgwUserCreate | CephAdminRgwUserConfigUpdate,
+    field_set: set[str],
+    *,
+    clear_nulls: bool,
+) -> dict[str, Any]:
+    if not clear_nulls:
+        return {
+            field: getattr(update, field) if field in field_set else None
+            for field in USER_UPDATE_FIELDS
+        }
+    return {
+        field: nullable_update(
+            getattr(update, field),
+            field,
+            field_set,
+            USER_UPDATE_CLEAR_VALUES.get(field),
+        )
+        for field in USER_UPDATE_FIELDS
+    }
+
+
+def _apply_user_update(
+    uid: str,
+    tenant: Optional[str],
+    params: dict[str, Any],
+    ctx: CephAdminContext,
+) -> None:
+    try:
+        result = ctx.rgw_admin.update_user(uid, tenant=tenant, **params)
+    except RGWAdminError as exc:
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
+    raise_if_unsupported(result, "RGW user update is not supported on this cluster")
+
+
+def _apply_user_quota_update(
+    uid: str,
+    tenant: Optional[str],
+    *,
+    max_size_bytes: Optional[int],
+    max_objects: Optional[int],
+    enabled: Optional[bool],
+    ctx: CephAdminContext,
+) -> None:
+    try:
+        result = ctx.rgw_admin.set_user_quota(
+            uid,
+            tenant=tenant,
+            max_size_bytes=max_size_bytes,
+            max_objects=max_objects,
+            enabled=bool(enabled) if enabled is not None else True,
+        )
+    except RGWAdminError as exc:
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
+    raise_if_unsupported(result, "RGW user quota update is not supported on this cluster")
+
+
 def _resolve_account_name(
     account_id: Optional[str],
     ctx: CephAdminContext,
@@ -228,7 +323,10 @@ def create_rgw_user(
     account_id = payload.account_id.strip() if isinstance(payload.account_id, str) else None
     account_id = account_id or None
     if account_id and tenant:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="tenant cannot be combined with account_id")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="tenant cannot be combined with account_id",
+        )
 
     try:
         if account_id:
@@ -255,80 +353,34 @@ def create_rgw_user(
     except RGWAdminError as exc:
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
-    if isinstance(create_result, dict):
-        if create_result.get("conflict"):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="RGW user already exists")
-        if create_result.get("not_found") or create_result.get("not_implemented"):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="RGW user creation is not supported on this cluster",
-            )
+    if isinstance(create_result, dict) and create_result.get("conflict"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="RGW user already exists")
+    raise_if_unsupported(create_result, "RGW user creation is not supported on this cluster")
 
     field_set = fields_set(payload)
-    should_update_user = bool(
-        {"display_name", "email", "suspended", "max_buckets", "op_mask", "admin", "system", "account_root"}
-        & field_set
-    )
-    if should_update_user:
-        try:
-            update_result = ctx.rgw_admin.update_user(
-                uid,
-                tenant=lookup_tenant,
-                display_name=payload.display_name if "display_name" in field_set else None,
-                email=payload.email if "email" in field_set else None,
-                suspended=payload.suspended if "suspended" in field_set else None,
-                max_buckets=payload.max_buckets if "max_buckets" in field_set else None,
-                op_mask=payload.op_mask if "op_mask" in field_set else None,
-                admin=payload.admin if "admin" in field_set else None,
-                system=payload.system if "system" in field_set else None,
-                account_root=payload.account_root if "account_root" in field_set else None,
-            )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-        if isinstance(update_result, dict) and (update_result.get("not_found") or update_result.get("not_implemented")):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="RGW user update is not supported on this cluster",
-            )
+    if USER_UPDATE_FIELD_SET & field_set:
+        _apply_user_update(
+            uid,
+            lookup_tenant,
+            _user_update_params(payload, field_set, clear_nulls=False),
+            ctx,
+        )
 
     if payload.caps is not None:
         _apply_caps_update(uid, lookup_tenant, payload.caps.mode, payload.caps.values, ctx)
 
-    if payload.quota_enabled is not None or payload.quota_max_size_bytes is not None or payload.quota_max_objects is not None:
-        try:
-            quota_result = ctx.rgw_admin.set_user_quota(
-                uid,
-                tenant=lookup_tenant,
-                max_size_bytes=payload.quota_max_size_bytes,
-                max_objects=payload.quota_max_objects,
-                enabled=bool(payload.quota_enabled) if payload.quota_enabled is not None else True,
-            )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-        if isinstance(quota_result, dict) and (quota_result.get("not_found") or quota_result.get("not_implemented")):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="RGW user quota update is not supported on this cluster",
-            )
+    if any(getattr(payload, field) is not None for field in USER_QUOTA_FIELDS):
+        _apply_user_quota_update(
+            uid,
+            lookup_tenant,
+            max_size_bytes=payload.quota_max_size_bytes,
+            max_objects=payload.quota_max_objects,
+            enabled=payload.quota_enabled,
+            ctx=ctx,
+        )
 
     invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
-    user_payload = load_user_payload(uid, lookup_tenant, ctx)
-    user_values = extract_rgw_user_payload(user_payload)
-    resolved_account_id = normalize_optional_scalar(user_payload.get("account_id") or user_values.get("account_id"))
-    account_name = _resolve_account_name(
-        resolved_account_id,
-        ctx,
-        payload_account_name=normalize_optional_scalar(
-            user_payload.get("account_name") or user_values.get("account_name")
-        ),
-    )
-    detail = _build_user_detail(
-        user_payload,
-        uid_fallback=uid,
-        tenant_fallback=lookup_tenant,
-        account_name=account_name,
-        keys=serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=lookup_tenant)),
-    )
+    detail = _load_user_detail(uid, lookup_tenant, ctx)
     generated_key = _extract_generated_key_from_payload(create_result, ctx.rgw_admin)
     record_ceph_admin_action(
         ctx,
@@ -360,21 +412,7 @@ def get_rgw_user_detail(
     tenant: Optional[str] = None,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> CephAdminRgwUserDetail:
-    payload = load_user_payload(user_id, tenant, ctx)
-    user_values = extract_rgw_user_payload(payload)
-    account_id = normalize_optional_scalar(payload.get("account_id") or user_values.get("account_id"))
-    account_name = _resolve_account_name(
-        account_id,
-        ctx,
-        payload_account_name=normalize_optional_scalar(payload.get("account_name") or user_values.get("account_name")),
-    )
-    return _build_user_detail(
-        payload,
-        uid_fallback=user_id.strip(),
-        tenant_fallback=tenant,
-        account_name=account_name,
-        keys=serialize_access_keys(ctx.rgw_admin.list_user_keys(user_id.strip(), tenant=tenant)),
-    )
+    return _load_user_detail(user_id.strip(), tenant, ctx)
 
 
 @router.put("/{user_id}/config", response_model=CephAdminRgwUserDetail)
@@ -388,93 +426,30 @@ def update_rgw_user_config(
     if not uid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="uid is required")
     field_set = fields_set(update)
-    should_update_user = bool(
-        {"display_name", "email", "suspended", "max_buckets", "op_mask", "admin", "system", "account_root"}
-        & field_set
-    ) or bool(update.extra_params)
-    if should_update_user:
-        try:
-            update_result = ctx.rgw_admin.update_user(
-                uid,
-                tenant=tenant,
-                display_name=(
-                    update.display_name
-                    if "display_name" in field_set and update.display_name is not None
-                    else ("" if "display_name" in field_set else None)
-                ),
-                email=(
-                    update.email
-                    if "email" in field_set and update.email is not None
-                    else ("" if "email" in field_set else None)
-                ),
-                suspended=update.suspended if "suspended" in field_set else None,
-                max_buckets=(
-                    update.max_buckets
-                    if "max_buckets" in field_set and update.max_buckets is not None
-                    else (0 if "max_buckets" in field_set else None)
-                ),
-                op_mask=(
-                    update.op_mask
-                    if "op_mask" in field_set and update.op_mask is not None
-                    else ("" if "op_mask" in field_set else None)
-                ),
-                admin=update.admin if "admin" in field_set else None,
-                system=update.system if "system" in field_set else None,
-                account_root=update.account_root if "account_root" in field_set else None,
-                extra_params=update.extra_params or None,
-            )
-            if isinstance(update_result, dict) and (
-                update_result.get("not_found") or update_result.get("not_implemented")
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="RGW user update is not supported on this cluster",
-                )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
+    if USER_UPDATE_FIELD_SET & field_set or update.extra_params:
+        params = _user_update_params(update, field_set, clear_nulls=True)
+        params["extra_params"] = update.extra_params or None
+        _apply_user_update(uid, tenant, params, ctx)
 
     if "caps" in field_set and update.caps is not None:
         _apply_caps_update(uid, tenant, update.caps.mode, update.caps.values, ctx)
 
-    if {"quota_enabled", "quota_max_size_bytes", "quota_max_objects"} & field_set:
-        enabled = update.quota_enabled if "quota_enabled" in field_set else True
-        max_size_bytes = (
-            update.quota_max_size_bytes
-            if "quota_max_size_bytes" in field_set and update.quota_max_size_bytes is not None
-            else (0 if "quota_max_size_bytes" in field_set else None)
+    if USER_QUOTA_FIELDS & field_set:
+        _apply_user_quota_update(
+            uid,
+            tenant,
+            max_size_bytes=nullable_update(
+                update.quota_max_size_bytes,
+                "quota_max_size_bytes",
+                field_set,
+                0,
+            ),
+            max_objects=nullable_update(update.quota_max_objects, "quota_max_objects", field_set, 0),
+            enabled=update.quota_enabled if "quota_enabled" in field_set else True,
+            ctx=ctx,
         )
-        max_objects = (
-            update.quota_max_objects
-            if "quota_max_objects" in field_set and update.quota_max_objects is not None
-            else (0 if "quota_max_objects" in field_set else None)
-        )
-        try:
-            quota_result = ctx.rgw_admin.set_user_quota(
-                uid,
-                tenant=tenant,
-                max_size_bytes=max_size_bytes,
-                max_objects=max_objects,
-                enabled=bool(enabled) if enabled is not None else True,
-            )
-            if isinstance(quota_result, dict) and (
-                quota_result.get("not_found") or quota_result.get("not_implemented")
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="RGW user quota update is not supported on this cluster",
-                )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
-    payload = load_user_payload(uid, tenant, ctx)
-    user_values = extract_rgw_user_payload(payload)
-    account_id = normalize_optional_scalar(payload.get("account_id") or user_values.get("account_id"))
-    account_name = _resolve_account_name(
-        account_id,
-        ctx,
-        payload_account_name=normalize_optional_scalar(payload.get("account_name") or user_values.get("account_name")),
-    )
     record_ceph_admin_action(
         ctx,
         action="rgw_user.update",
@@ -482,13 +457,7 @@ def update_rgw_user_config(
         entity_id=f"{tenant}${uid}" if tenant else uid,
         metadata={"fields": sorted(field_set)},
     )
-    return _build_user_detail(
-        payload,
-        uid_fallback=uid,
-        tenant_fallback=tenant,
-        account_name=account_name,
-        keys=serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=tenant)),
-    )
+    return _load_user_detail(uid, tenant, ctx)
 
 
 @router.get("/{user_id}/metrics", response_model=CephAdminEntityMetrics)

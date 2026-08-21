@@ -358,6 +358,18 @@ def test_create_rgw_user_with_account_scope_returns_generated_key():
     assert len(fake_rgw.create_user_with_account_id_calls) == 1
     assert fake_rgw.create_user_with_account_id_calls[0]["account_root"] is True
     assert len(fake_rgw.update_user_calls) == 1
+    assert fake_rgw.update_user_calls[0] == {
+        "uid": "billing-user",
+        "tenant": None,
+        "display_name": "Billing user",
+        "email": "billing@example.test",
+        "suspended": False,
+        "max_buckets": 15,
+        "op_mask": None,
+        "admin": True,
+        "system": False,
+        "account_root": True,
+    }
     assert len(fake_rgw.set_user_caps_calls) == 1
     assert fake_rgw.set_user_caps_calls[0]["caps"] == ["usage=read"]
     assert len(fake_rgw.set_user_quota_calls) == 1
@@ -382,6 +394,38 @@ def test_update_rgw_user_quota_omits_unset_object_limit():
         "max_size_bytes": 2048,
         "max_objects": None,
         "enabled": True,
+    }
+
+
+def test_update_rgw_user_config_preserves_null_clearing_semantics():
+    fake_rgw = FakeUsersAdmin()
+    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=902), rgw_admin=fake_rgw)
+
+    user_profiles_router.update_rgw_user_config(
+        "billing-user",
+        CephAdminRgwUserConfigUpdate(
+            display_name=None,
+            email=None,
+            max_buckets=None,
+            op_mask=None,
+            admin=False,
+        ),
+        tenant="tenant-a",
+        ctx=ctx,
+    )
+
+    assert fake_rgw.update_user_calls[-1] == {
+        "uid": "billing-user",
+        "tenant": "tenant-a",
+        "display_name": "",
+        "email": "",
+        "suspended": None,
+        "max_buckets": 0,
+        "op_mask": "",
+        "admin": False,
+        "system": None,
+        "account_root": None,
+        "extra_params": None,
     }
 
 
