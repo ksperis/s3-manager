@@ -526,27 +526,46 @@ describe("ProfilePage live validation", () => {
   });
 
   it("bulk deletes selected private connections after confirmation", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    try {
-      listConnectionsMock.mockResolvedValue([
-        makeConnection({ id: 41, name: "connection-a" }),
-        makeConnection({ id: 42, name: "connection-b" }),
-      ]);
+    listConnectionsMock.mockResolvedValue([
+      makeConnection({ id: 41, name: "connection-a" }),
+      makeConnection({ id: 42, name: "connection-b" }),
+    ]);
 
-      render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
-      await screen.findByText("connection-a");
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("connection-a");
 
-      fireEvent.click(screen.getByLabelText("Select all filtered private connections"));
-      fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+    fireEvent.click(screen.getByLabelText("Select all filtered private connections"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
 
-      await waitFor(() => {
-        expect(deleteConnectionMock).toHaveBeenCalledTimes(2);
-      });
-      expect(deleteConnectionMock).toHaveBeenCalledWith(41);
-      expect(deleteConnectionMock).toHaveBeenCalledWith(42);
-    } finally {
-      confirmSpy.mockRestore();
-    }
+    expect(screen.getByRole("heading", { name: "Delete selected private S3 connections?" })).toBeInTheDocument();
+    expect(screen.getByText("Remote buckets and their objects will not be deleted.")).toBeInTheDocument();
+    expect(deleteConnectionMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected connections" }));
+    await waitFor(() => {
+      expect(deleteConnectionMock).toHaveBeenCalledTimes(2);
+    });
+    expect(deleteConnectionMock).toHaveBeenCalledWith(41);
+    expect(deleteConnectionMock).toHaveBeenCalledWith(42);
+  });
+
+  it("confirms a single private connection deletion with its context", async () => {
+    listConnectionsMock.mockResolvedValue([
+      makeConnection({ id: 41, name: "connection-a", endpoint_url: "https://s3.example.test" }),
+    ]);
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    const connectionName = await screen.findByText("connection-a");
+    const row = connectionName.closest("tr");
+    expect(row).not.toBeNull();
+
+    fireEvent.click(within(row!).getByRole("button", { name: "Delete" }));
+    expect(screen.getByRole("heading", { name: "Delete private S3 connection?" })).toBeInTheDocument();
+    expect(screen.getByText("https://s3.example.test")).toBeInTheDocument();
+    expect(deleteConnectionMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("heading", { name: "Delete private S3 connection?" })).not.toBeInTheDocument();
   });
 
   it("saves the selector-tags preference to localStorage", async () => {

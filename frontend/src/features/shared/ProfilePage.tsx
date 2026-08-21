@@ -5,6 +5,7 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isApiError } from "../../api/client";
 import { useSearchParams } from "react-router-dom";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
@@ -102,6 +103,11 @@ type ConnectionDraft = {
 type ConnectionCredentialDraft = {
   access_key_id: string;
   secret_access_key: string;
+};
+
+type PendingPrivateConnectionDelete = {
+  scope: "single" | "bulk";
+  connections: S3Connection[];
 };
 
 const privateConnectionsTableClass = cx(uiDataTableClass, "compact-table min-w-full");
@@ -258,6 +264,7 @@ export default function ProfilePage({
   const [bulkActivatingConnections, setBulkActivatingConnections] = useState(false);
   const [bulkDisablingConnections, setBulkDisablingConnections] = useState(false);
   const [bulkDeletingConnections, setBulkDeletingConnections] = useState(false);
+  const [pendingConnectionDelete, setPendingConnectionDelete] = useState<PendingPrivateConnectionDelete | null>(null);
   const [editingConnectionId, setEditingConnectionId] = useState<number | null>(null);
   const [createConnectionForm, setCreateConnectionForm] = useState(defaultCreateConnectionForm);
   const [createConnectionEndpointMode, setCreateConnectionEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
@@ -1173,9 +1180,12 @@ export default function ProfilePage({
     debounceMs: 450,
   });
 
-  const handleDeletePrivateConnection = async (connectionId: number) => {
+  const handleDeletePrivateConnection = (connection: S3Connection) => {
     if (!canAccessConnectionsSection) return;
-    if (!window.confirm("Delete this private S3 connection?")) return;
+    setPendingConnectionDelete({ scope: "single", connections: [connection] });
+  };
+
+  const confirmDeletePrivateConnection = async (connectionId: number) => {
     setConnectionsError(null);
     setConnectionsMessage(null);
     setDeletingConnectionBusyId(connectionId);
@@ -1292,31 +1302,52 @@ export default function ProfilePage({
     setBulkDisablingConnections(false);
   };
 
-  const handleBulkDeletePrivateConnections = async () => {
+  const handleBulkDeletePrivateConnections = () => {
     if (!canAccessConnectionsSection || selectedFilteredConnectionIds.length === 0) return;
-    const count = selectedFilteredConnectionIds.length;
-    if (!window.confirm(`Delete ${count} selected private S3 connection${count > 1 ? "s" : ""}?`)) return;
+    const selectedIdSet = new Set(selectedFilteredConnectionIds);
+    setPendingConnectionDelete({
+      scope: "bulk",
+      connections: connections.filter((connection) => selectedIdSet.has(connection.id)),
+    });
+  };
+
+  const confirmBulkDeletePrivateConnections = async (connectionIds: number[]) => {
     setConnectionsError(null);
     setConnectionsMessage(null);
     setBulkDeletingConnections(true);
-    const results = await Promise.allSettled(
-      selectedFilteredConnectionIds.map((connectionId) => deleteConnection(connectionId))
-    );
-    const failedIds = selectedFilteredConnectionIds.filter((_, index) => results[index].status === "rejected");
-    const successCount = selectedFilteredConnectionIds.length - failedIds.length;
-    setSelectedConnectionIds(failedIds);
-    if (successCount > 0) {
-      await refreshConnections();
-      notifyExecutionContextsRefresh();
+    try {
+      const results = await Promise.allSettled(connectionIds.map((connectionId) => deleteConnection(connectionId)));
+      const failedIds = connectionIds.filter((_, index) => results[index].status === "rejected");
+      const successCount = connectionIds.length - failedIds.length;
+      setSelectedConnectionIds(failedIds);
+      if (successCount > 0) {
+        await refreshConnections();
+        notifyExecutionContextsRefresh();
+      }
+      if (failedIds.length > 0) {
+        setConnectionsError(`${failedIds.length} private connection${failedIds.length > 1 ? "s" : ""} failed to delete.`);
+      }
+      setConnectionsMessage(
+        `${successCount} private connection${successCount > 1 ? "s" : ""} deleted.` +
+          (failedIds.length > 0 ? ` ${failedIds.length} failed.` : "")
+      );
+    } finally {
+      setBulkDeletingConnections(false);
     }
-    if (failedIds.length > 0) {
-      setConnectionsError(`${failedIds.length} private connection${failedIds.length > 1 ? "s" : ""} failed to delete.`);
+  };
+
+  const confirmPendingConnectionDelete = async () => {
+    if (!pendingConnectionDelete) return;
+    try {
+      if (pendingConnectionDelete.scope === "single") {
+        const connection = pendingConnectionDelete.connections[0];
+        if (connection) await confirmDeletePrivateConnection(connection.id);
+      } else {
+        await confirmBulkDeletePrivateConnections(pendingConnectionDelete.connections.map((connection) => connection.id));
+      }
+    } finally {
+      setPendingConnectionDelete(null);
     }
-    setConnectionsMessage(
-      `${successCount} private connection${successCount > 1 ? "s" : ""} deleted.` +
-        (failedIds.length > 0 ? ` ${failedIds.length} failed.` : "")
-    );
-    setBulkDeletingConnections(false);
   };
 
   const handleConnectionsFilterChange = (value: string) => {
@@ -1675,7 +1706,7 @@ export default function ProfilePage({
                       <button
                         type="button"
                         className={tableDeleteActionClasses}
-                        onClick={() => void handleBulkDeletePrivateConnections()}
+                        onClick={handleBulkDeletePrivateConnections}
                         disabled={bulkActivatingConnections || bulkDisablingConnections || bulkDeletingConnections}
                       >
                         {bulkDeletingConnections ? "Deleting..." : "Delete selected"}
@@ -1846,7 +1877,7 @@ export default function ProfilePage({
                                       bulkDisablingConnections ||
                                       bulkDeletingConnections
                                     }
-                                    onClick={() => void handleDeletePrivateConnection(connection.id)}
+                                    onClick={() => handleDeletePrivateConnection(connection)}
                                   >
                                     {deletingConnectionBusyId === connection.id ? "Deleting..." : "Delete"}
                                   </button>
@@ -1879,6 +1910,44 @@ export default function ProfilePage({
             </>
         </div>
       </section>}
+
+      {pendingConnectionDelete && (
+        <ConfirmActionDialog
+          title={pendingConnectionDelete.scope === "single" ? "Delete private S3 connection?" : "Delete selected private S3 connections?"}
+          description={
+            pendingConnectionDelete.scope === "single"
+              ? "Remove this private connection from your profile."
+              : "Remove all selected private connections from your profile."
+          }
+          confirmLabel={pendingConnectionDelete.scope === "single" ? "Delete connection" : "Delete selected connections"}
+          details={
+            pendingConnectionDelete.scope === "single"
+              ? [
+                  {
+                    label: "Connection",
+                    value: pendingConnectionDelete.connections[0]?.name || `#${pendingConnectionDelete.connections[0]?.id}`,
+                  },
+                  {
+                    label: "Endpoint",
+                    value: pendingConnectionDelete.connections[0]?.endpoint_url || "Managed endpoint",
+                    mono: true,
+                  },
+                ]
+              : [{ label: "Connections", value: pendingConnectionDelete.connections.length }]
+          }
+          impacts={[
+            "Access through the selected connection will be removed from Manager and Browser.",
+            "Remote buckets and their objects will not be deleted.",
+          ]}
+          loading={
+            pendingConnectionDelete.scope === "bulk"
+              ? bulkDeletingConnections
+              : deletingConnectionBusyId === pendingConnectionDelete.connections[0]?.id
+          }
+          onCancel={() => setPendingConnectionDelete(null)}
+          onConfirm={() => void confirmPendingConnectionDelete()}
+        />
+      )}
 
       {showConnectionsSection && canCreateManualConnections && showCreateConnectionModal && (
         <WorkflowPage
