@@ -65,6 +65,16 @@ _FEATURE_PARAM_SOURCE_BY_PARAM: dict[str, str] = {
     "sse_algorithm": "encryption",
     "sse_kms_key_id": "encryption",
 }
+
+
+def _params_for_source(source: str) -> frozenset[str]:
+    return frozenset(param for param, candidate in _FEATURE_PARAM_SOURCE_BY_PARAM.items() if candidate == source)
+
+
+_LIFECYCLE_PARAMS = _params_for_source("lifecycle")
+_CORS_PARAMS = frozenset(param for param in _params_for_source("props") if param.startswith("cors_"))
+_NOTIFICATION_ENTRY_PARAMS = _params_for_source("notifications") - {"notification_eventbridge_present"}
+_SSE_PARAMS = _params_for_source("encryption")
 _NOTIFICATION_CONFIGURATION_SPECS = (
     ("topic", "TopicConfigurations", "TopicArn"),
     ("queue", "QueueConfigurations", "QueueArn"),
@@ -714,11 +724,140 @@ def extract_policy_statement_summary(policy: dict | None) -> tuple[int, bool]:
     return len(statements), has_conditions
 
 
+def _apply_scalar_quantifier(rule: CephAdminBucketFilterRule, result: bool) -> bool:
+    return result if _feature_param_quantifier(rule) == "any" else not result
+
+
+def _match_properties_param_rule(
+    rule: CephAdminBucketFilterRule,
+    source_data: object,
+    op: str,
+) -> bool:
+    if not isinstance(source_data, BucketProperties):
+        return False
+    props = source_data
+    param = rule.param
+    if param == "object_lock_mode":
+        value = props.object_lock.mode if props.object_lock else None
+        result = _match_text_value(value, op, rule.value)
+    elif param == "object_lock_retention_days":
+        value = props.object_lock.days if props.object_lock else None
+        result = _match_numeric_value(coerce_filter_number(value), op, rule.value)
+    elif param == "object_lock_retention_years":
+        value = props.object_lock.years if props.object_lock else None
+        result = _match_numeric_value(coerce_filter_number(value), op, rule.value)
+    elif param == "bpa_block_public_acls":
+        value = props.public_access_block.block_public_acls if props.public_access_block else None
+        result = _match_bool_value(value, op, rule.value)
+    elif param == "bpa_ignore_public_acls":
+        value = props.public_access_block.ignore_public_acls if props.public_access_block else None
+        result = _match_bool_value(value, op, rule.value)
+    elif param == "bpa_block_public_policy":
+        value = props.public_access_block.block_public_policy if props.public_access_block else None
+        result = _match_bool_value(value, op, rule.value)
+    elif param == "bpa_restrict_public_buckets":
+        value = props.public_access_block.restrict_public_buckets if props.public_access_block else None
+        result = _match_bool_value(value, op, rule.value)
+    elif param in _CORS_PARAMS:
+        rules = props.cors_rules if isinstance(props.cors_rules, list) else []
+        return _match_cors_param_rule_individual(rule, [item for item in rules if isinstance(item, dict)])
+    else:
+        return False
+    return _apply_scalar_quantifier(rule, result)
+
+
+def _match_logging_param_rule(
+    rule: CephAdminBucketFilterRule,
+    source_data: object,
+    op: str,
+) -> bool:
+    if not isinstance(source_data, BucketLoggingConfiguration):
+        return False
+    target_bucket = (source_data.target_bucket or "").strip()
+    target_prefix = (source_data.target_prefix or "").strip()
+    if rule.param == "logging_enabled":
+        result = _match_bool_value(bool(source_data.enabled and target_bucket), op, rule.value)
+    elif rule.param == "logging_target_bucket":
+        result = _match_text_value(target_bucket or None, op, rule.value)
+    elif rule.param == "logging_target_prefix":
+        result = _match_text_value(target_prefix or None, op, rule.value)
+    else:
+        return False
+    return _apply_scalar_quantifier(rule, result)
+
+
+def _match_website_param_rule(
+    rule: CephAdminBucketFilterRule,
+    source_data: object,
+    op: str,
+) -> bool:
+    if not isinstance(source_data, BucketWebsiteConfiguration):
+        return False
+    index_document = (source_data.index_document or "").strip()
+    error_document = (source_data.error_document or "").strip()
+    redirect_host = (
+        (source_data.redirect_all_requests_to.host_name or "").strip()
+        if source_data.redirect_all_requests_to
+        else ""
+    )
+    routing_rules = source_data.routing_rules if isinstance(source_data.routing_rules, list) else []
+    if rule.param == "website_index_present":
+        result = _match_bool_value(bool(index_document), op, rule.value)
+    elif rule.param == "website_index_document":
+        result = _match_text_value(index_document or None, op, rule.value)
+    elif rule.param == "website_error_document":
+        result = _match_text_value(error_document or None, op, rule.value)
+    elif rule.param == "website_redirect_host_present":
+        result = _match_bool_value(bool(redirect_host), op, rule.value)
+    elif rule.param == "website_redirect_host":
+        result = _match_text_value(redirect_host or None, op, rule.value)
+    elif rule.param == "website_routing_rule_count":
+        result = _match_numeric_value(float(len(routing_rules)), op, rule.value)
+    else:
+        return False
+    return _apply_scalar_quantifier(rule, result)
+
+
+def _match_policy_param_rule(
+    rule: CephAdminBucketFilterRule,
+    source_data: object,
+    op: str,
+) -> bool:
+    policy = source_data if isinstance(source_data, dict) else None
+    statement_count, has_conditions = extract_policy_statement_summary(policy)
+    if rule.param == "policy_statement_count":
+        result = _match_numeric_value(float(statement_count), op, rule.value)
+    elif rule.param == "policy_has_conditions":
+        result = _match_bool_value(has_conditions, op, rule.value)
+    else:
+        return False
+    return _apply_scalar_quantifier(rule, result)
+
+
+def _match_notification_scalar_param_rule(
+    rule: CephAdminBucketFilterRule,
+    source_data: object,
+    op: str,
+) -> bool:
+    if rule.param != "notification_eventbridge_present":
+        return False
+    result = _match_bool_value(_extract_notification_eventbridge_present(source_data), op, rule.value)
+    return _apply_scalar_quantifier(rule, result)
+
+
+_SCALAR_SOURCE_MATCHERS: dict[str, Callable[[CephAdminBucketFilterRule, object, str], bool]] = {
+    "props": _match_properties_param_rule,
+    "logging": _match_logging_param_rule,
+    "website": _match_website_param_rule,
+    "policy": _match_policy_param_rule,
+    "notifications": _match_notification_scalar_param_rule,
+}
+
+
 def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[str, object]) -> bool:
-    feature = rule.feature
     param = rule.param
     op = (rule.op or "").strip().lower()
-    if not feature or not param or not op:
+    if not rule.feature or not param or not op:
         return False
     source = _FEATURE_PARAM_SOURCE_BY_PARAM.get(param)
     if not source:
@@ -727,121 +866,17 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
     if source_data is _FEATURE_PARAM_UNAVAILABLE:
         return False
 
-    if param in {
-        "lifecycle_rule_id",
-        "lifecycle_rule_status",
-        "lifecycle_rule_type",
-        "lifecycle_expiration_days",
-        "lifecycle_noncurrent_expiration_days",
-        "lifecycle_transition_days",
-        "lifecycle_abort_multipart_present",
-        "lifecycle_abort_multipart_days",
-    }:
+    if param in _LIFECYCLE_PARAMS:
         lifecycle_rules = source_data if isinstance(source_data, list) else []
-        return _match_lifecycle_param_rule_individual(rule, [item for item in lifecycle_rules if isinstance(item, dict)])
-    if param in {
-        "notification_rule_id",
-        "notification_rule_type",
-        "notification_topic_name",
-        "notification_event",
-        "notification_filter_prefix",
-        "notification_filter_suffix",
-    }:
+        normalized_rules = [item for item in lifecycle_rules if isinstance(item, dict)]
+        return _match_lifecycle_param_rule_individual(rule, normalized_rules)
+    if param in _NOTIFICATION_ENTRY_PARAMS:
         return _match_notification_param_rule_individual(rule, source_data)
-    if param in {"sse_algorithm", "sse_kms_key_id"}:
+    if param in _SSE_PARAMS:
         return _match_sse_param_rule_individual(rule, source_data)
 
-    quantifier = _feature_param_quantifier(rule)
-
-    def apply_scalar(result: bool) -> bool:
-        return result if quantifier == "any" else (not result)
-
-    if not isinstance(source_data, BucketProperties) and source == "props":
-        return False
-    if source == "props":
-        props = source_data if isinstance(source_data, BucketProperties) else None
-        if props is None:
-            return False
-        if param == "object_lock_mode":
-            value = props.object_lock.mode if props.object_lock else None
-            return apply_scalar(_match_text_value(value, op, rule.value))
-        if param == "object_lock_retention_days":
-            days = props.object_lock.days if props.object_lock else None
-            return apply_scalar(_match_numeric_value(coerce_filter_number(days), op, rule.value))
-        if param == "object_lock_retention_years":
-            years = props.object_lock.years if props.object_lock else None
-            return apply_scalar(_match_numeric_value(coerce_filter_number(years), op, rule.value))
-        if param == "bpa_block_public_acls":
-            value = props.public_access_block.block_public_acls if props.public_access_block else None
-            return apply_scalar(_match_bool_value(value, op, rule.value))
-        if param == "bpa_ignore_public_acls":
-            value = props.public_access_block.ignore_public_acls if props.public_access_block else None
-            return apply_scalar(_match_bool_value(value, op, rule.value))
-        if param == "bpa_block_public_policy":
-            value = props.public_access_block.block_public_policy if props.public_access_block else None
-            return apply_scalar(_match_bool_value(value, op, rule.value))
-        if param == "bpa_restrict_public_buckets":
-            value = props.public_access_block.restrict_public_buckets if props.public_access_block else None
-            return apply_scalar(_match_bool_value(value, op, rule.value))
-        if param in {"cors_allowed_method", "cors_allowed_origin"}:
-            rules = props.cors_rules if isinstance(props.cors_rules, list) else []
-            return _match_cors_param_rule_individual(rule, [item for item in rules if isinstance(item, dict)])
-        return False
-
-    if source == "logging":
-        if not isinstance(source_data, BucketLoggingConfiguration):
-            return False
-        target_bucket = (source_data.target_bucket or "").strip() if source_data.target_bucket else ""
-        target_prefix = (source_data.target_prefix or "").strip() if source_data.target_prefix else ""
-        if param == "logging_enabled":
-            enabled = bool(source_data.enabled and target_bucket)
-            return apply_scalar(_match_bool_value(enabled, op, rule.value))
-        if param == "logging_target_bucket":
-            return apply_scalar(_match_text_value(target_bucket or None, op, rule.value))
-        if param == "logging_target_prefix":
-            return apply_scalar(_match_text_value(target_prefix or None, op, rule.value))
-        return False
-
-    if source == "website":
-        if not isinstance(source_data, BucketWebsiteConfiguration):
-            return False
-        index_document = (source_data.index_document or "").strip() if source_data.index_document else ""
-        error_document = (source_data.error_document or "").strip() if source_data.error_document else ""
-        redirect_host = ""
-        if source_data.redirect_all_requests_to and source_data.redirect_all_requests_to.host_name:
-            redirect_host = source_data.redirect_all_requests_to.host_name.strip()
-        routing_rules = source_data.routing_rules if isinstance(source_data.routing_rules, list) else []
-        if param == "website_index_present":
-            index_present = bool(index_document)
-            return apply_scalar(_match_bool_value(index_present, op, rule.value))
-        if param == "website_index_document":
-            return apply_scalar(_match_text_value(index_document or None, op, rule.value))
-        if param == "website_error_document":
-            return apply_scalar(_match_text_value(error_document or None, op, rule.value))
-        if param == "website_redirect_host_present":
-            redirect_present = bool(redirect_host)
-            return apply_scalar(_match_bool_value(redirect_present, op, rule.value))
-        if param == "website_redirect_host":
-            return apply_scalar(_match_text_value(redirect_host or None, op, rule.value))
-        if param == "website_routing_rule_count":
-            return apply_scalar(_match_numeric_value(float(len(routing_rules)), op, rule.value))
-        return False
-
-    if source == "policy":
-        policy = source_data if isinstance(source_data, dict) else None
-        statement_count, has_conditions = extract_policy_statement_summary(policy)
-        if param == "policy_statement_count":
-            return apply_scalar(_match_numeric_value(float(statement_count), op, rule.value))
-        if param == "policy_has_conditions":
-            return apply_scalar(_match_bool_value(has_conditions, op, rule.value))
-        return False
-
-    if source == "notifications":
-        if param == "notification_eventbridge_present":
-            return apply_scalar(_match_bool_value(_extract_notification_eventbridge_present(source_data), op, rule.value))
-        return False
-
-    return False
+    matcher = _SCALAR_SOURCE_MATCHERS.get(source)
+    return matcher(rule, source_data, op) if matcher else False
 
 
 def match_bucket_feature_param_rules(
@@ -852,20 +887,20 @@ def match_bucket_feature_param_rules(
     if not rules:
         return True
     lifecycle_rules = [rule for rule in rules if rule.feature == "lifecycle_rules"]
-    cors_rules = [rule for rule in rules if rule.feature == "cors" and rule.param in {"cors_allowed_method", "cors_allowed_origin"}]
+    cors_rules = [rule for rule in rules if rule.feature == "cors" and rule.param in _CORS_PARAMS]
     notification_entry_rules = [
         rule
         for rule in rules
-        if rule.feature == "notifications" and rule.param != "notification_eventbridge_present"
+        if rule.feature == "notifications" and rule.param in _NOTIFICATION_ENTRY_PARAMS
     ]
-    sse_rules = [rule for rule in rules if rule.feature == "server_side_encryption"]
+    sse_rules = [rule for rule in rules if rule.feature == "server_side_encryption" and rule.param in _SSE_PARAMS]
     non_grouped_rules = [
         rule
         for rule in rules
         if rule.feature != "lifecycle_rules"
-        and not (rule.feature == "cors" and rule.param in {"cors_allowed_method", "cors_allowed_origin"})
-        and not (rule.feature == "notifications" and rule.param != "notification_eventbridge_present")
-        and rule.feature != "server_side_encryption"
+        and not (rule.feature == "cors" and rule.param in _CORS_PARAMS)
+        and not (rule.feature == "notifications" and rule.param in _NOTIFICATION_ENTRY_PARAMS)
+        and not (rule.feature == "server_side_encryption" and rule.param in _SSE_PARAMS)
     ]
     results: list[bool] = []
 
