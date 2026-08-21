@@ -64,6 +64,18 @@ MANAGER_TOOL_ROLES = {
     UserRole.UI_ADMIN.value,
     UserRole.UI_USER.value,
 }
+MANAGER_ROLE_SCOPED_FIELDS = (
+    "can_access_storage_ops",
+    "can_create_manual_private_connections",
+    "can_provision_managed_private_connections",
+)
+MANAGER_TOOL_COLUMNS = {
+    "bucket_compare": "can_access_manager_bucket_compare",
+    "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
+    "bucket_migration": "can_access_manager_bucket_migration",
+    "feature_rules": "can_access_manager_feature_rules",
+    "bucket_purge": "can_access_manager_bucket_purge",
+}
 
 
 def _dump_ui_preferences(preferences: UiPreferences) -> str:
@@ -72,6 +84,13 @@ def _dump_ui_preferences(preferences: UiPreferences) -> str:
         ensure_ascii=True,
         sort_keys=True,
     )
+
+
+def _manager_tool_column_values(access: ManagerToolAccess, *, enabled: bool) -> dict[str, bool]:
+    return {
+        column: enabled and bool(getattr(access, field))
+        for field, column in MANAGER_TOOL_COLUMNS.items()
+    }
 
 
 class UsersService:
@@ -142,22 +161,8 @@ class UsersService:
             can_provision_managed_private_connections=(
                 bool(payload.can_provision_managed_private_connections) if manager_tools_supported else False
             ),
-            can_access_manager_bucket_compare=(
-                bool(manager_tool_access.bucket_compare) if manager_tools_supported else False
-            ),
-            can_access_manager_bucket_integrity_check=(
-                bool(manager_tool_access.bucket_integrity_check) if manager_tools_supported else False
-            ),
-            can_access_manager_bucket_migration=(
-                bool(manager_tool_access.bucket_migration) if manager_tools_supported else False
-            ),
-            can_access_manager_feature_rules=(
-                bool(manager_tool_access.feature_rules) if manager_tools_supported else False
-            ),
-            can_access_manager_bucket_purge=(
-                bool(manager_tool_access.bucket_purge) if manager_tools_supported else False
-            ),
             browser_advanced_features_enabled=bool(payload.browser_advanced_features_enabled),
+            **_manager_tool_column_values(manager_tool_access, enabled=manager_tools_supported),
         )
         self.db.add(user)
         self.db.flush()
@@ -171,20 +176,7 @@ class UsersService:
         logger.debug("Created user id=%s email=%s role=%s", user.id, user.email, role)
         return user
 
-    def update_user(self, user_id: int, payload: UserUpdate) -> User:
-        user = self.db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise ValueError("User not found")
-        associations = UserAssociationsService(self.db)
-        affected_portal_account_ids = associations.affected_portal_account_ids(
-            user,
-            payload,
-        )
-        portal_roles_before = capture_effective_portal_roles(
-            self.db,
-            user_ids=[user.id],
-            account_ids=affected_portal_account_ids,
-        )
+    def _apply_identity_updates(self, user: User, payload: UserUpdate) -> bool:
         security_changed = False
         if payload.email and payload.email != user.email:
             existing = self.get_by_email(payload.email)
@@ -200,78 +192,81 @@ class UsersService:
             validate_password_policy(payload.password)
             user.hashed_password = get_password_hash(payload.password)
             security_changed = True
+        return security_changed
+
+    @staticmethod
+    def _apply_role_updates(user: User, payload: UserUpdate) -> tuple[str, bool]:
+        security_changed = False
         next_role = payload.role or user.role
         if payload.role:
-            security_changed = security_changed or payload.role != user.role
+            security_changed = payload.role != user.role
             user.role = payload.role
         if payload.is_active is not None:
             security_changed = security_changed or payload.is_active != user.is_active
             user.is_active = payload.is_active
         if payload.is_root is not None:
             user.is_root = payload.is_root
-        if payload.can_access_ceph_admin is not None:
-            user.can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(next_role) else False
-        elif not is_admin_ui_role(next_role):
-            user.can_access_ceph_admin = False
-        if payload.can_access_storage_ops is not None:
-            user.can_access_storage_ops = (
-                bool(payload.can_access_storage_ops)
-                if next_role in MANAGER_TOOL_ROLES
-                else False
+        return next_role, security_changed
+
+    @staticmethod
+    def _apply_access_updates(user: User, payload: UserUpdate, *, role: str) -> None:
+        admin_role = is_admin_ui_role(role)
+        if payload.can_access_ceph_admin is not None or not admin_role:
+            user.can_access_ceph_admin = bool(payload.can_access_ceph_admin) if admin_role else False
+
+        manager_role = role in MANAGER_TOOL_ROLES
+        for field in MANAGER_ROLE_SCOPED_FIELDS:
+            requested = getattr(payload, field)
+            if requested is not None or not manager_role:
+                setattr(user, field, bool(requested) if manager_role else False)
+
+        if payload.manager_tool_access is not None or not manager_role:
+            values = _manager_tool_column_values(
+                payload.manager_tool_access or ManagerToolAccess(),
+                enabled=manager_role,
             )
-        elif next_role not in MANAGER_TOOL_ROLES:
-            user.can_access_storage_ops = False
-        if payload.can_create_manual_private_connections is not None:
-            user.can_create_manual_private_connections = (
-                bool(payload.can_create_manual_private_connections)
-                if next_role in MANAGER_TOOL_ROLES
-                else False
-            )
-        elif next_role not in MANAGER_TOOL_ROLES:
-            user.can_create_manual_private_connections = False
-        if payload.can_provision_managed_private_connections is not None:
-            user.can_provision_managed_private_connections = (
-                bool(payload.can_provision_managed_private_connections)
-                if next_role in MANAGER_TOOL_ROLES
-                else False
-            )
-        elif next_role not in MANAGER_TOOL_ROLES:
-            user.can_provision_managed_private_connections = False
-        if payload.manager_tool_access is not None:
-            manager_tool_access = payload.manager_tool_access
-            if next_role in MANAGER_TOOL_ROLES:
-                user.can_access_manager_bucket_compare = bool(manager_tool_access.bucket_compare)
-                user.can_access_manager_bucket_integrity_check = bool(manager_tool_access.bucket_integrity_check)
-                user.can_access_manager_bucket_migration = bool(manager_tool_access.bucket_migration)
-                user.can_access_manager_feature_rules = bool(manager_tool_access.feature_rules)
-                user.can_access_manager_bucket_purge = bool(manager_tool_access.bucket_purge)
-            else:
-                user.can_access_manager_bucket_compare = False
-                user.can_access_manager_bucket_integrity_check = False
-                user.can_access_manager_bucket_migration = False
-                user.can_access_manager_feature_rules = False
-                user.can_access_manager_bucket_purge = False
-        elif next_role not in MANAGER_TOOL_ROLES:
-            user.can_access_manager_bucket_compare = False
-            user.can_access_manager_bucket_integrity_check = False
-            user.can_access_manager_bucket_migration = False
-            user.can_access_manager_feature_rules = False
-            user.can_access_manager_bucket_purge = False
+            for column, value in values.items():
+                setattr(user, column, value)
+
         if payload.browser_advanced_features_enabled is not None:
             user.browser_advanced_features_enabled = bool(payload.browser_advanced_features_enabled)
-        if not is_admin_ui_role(next_role):
+        if not admin_role:
             user.quota_alerts_global_watch = False
+
+    @staticmethod
+    def _apply_association_updates(
+        user: User,
+        payload: UserUpdate,
+        associations: UserAssociationsService,
+    ) -> None:
         if payload.account_links is not None:
             associations.set_account_links(user, payload.account_links)
         if payload.s3_user_links is not None:
             associations.set_s3_user_links(user, payload.s3_user_links)
         if payload.s3_connection_ids is not None:
-            associations.set_s3_connection_links(
-                user,
-                payload.s3_connection_ids,
-            )
+            associations.set_s3_connection_links(user, payload.s3_connection_ids)
         if payload.group_ids is not None:
             associations.set_group_links(user, payload.group_ids)
+
+    def update_user(self, user_id: int, payload: UserUpdate) -> User:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise ValueError("User not found")
+        associations = UserAssociationsService(self.db)
+        affected_portal_account_ids = associations.affected_portal_account_ids(
+            user,
+            payload,
+        )
+        portal_roles_before = capture_effective_portal_roles(
+            self.db,
+            user_ids=[user.id],
+            account_ids=affected_portal_account_ids,
+        )
+        security_changed = self._apply_identity_updates(user, payload)
+        next_role, role_security_changed = self._apply_role_updates(user, payload)
+        security_changed = security_changed or role_security_changed
+        self._apply_access_updates(user, payload, role=next_role)
+        self._apply_association_updates(user, payload, associations)
         if security_changed:
             user.auth_version += 1
         self.db.add(user)

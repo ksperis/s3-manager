@@ -149,6 +149,7 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
                 "bucket_integrity_check": True,
                 "bucket_migration": True,
                 "feature_rules": True,
+                "bucket_purge": True,
             },
         )
     )
@@ -159,6 +160,7 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     assert created.can_access_manager_bucket_integrity_check is True
     assert created.can_access_manager_bucket_migration is True
     assert created.can_access_manager_feature_rules is True
+    assert created.can_access_manager_bucket_purge is True
     assert created.can_create_manual_private_connections is True
     assert created.can_provision_managed_private_connections is True
 
@@ -338,6 +340,7 @@ def test_update_user_clears_manager_tools_for_no_access_role(db_session):
         user.id,
         UserUpdate(
             role=UserRole.UI_NONE.value,
+            can_access_storage_ops=True,
             can_create_manual_private_connections=True,
             can_provision_managed_private_connections=True,
             manager_tool_access={
@@ -345,6 +348,7 @@ def test_update_user_clears_manager_tools_for_no_access_role(db_session):
                 "bucket_integrity_check": True,
                 "bucket_migration": True,
                 "feature_rules": True,
+                "bucket_purge": True,
             },
         ),
     )
@@ -354,8 +358,36 @@ def test_update_user_clears_manager_tools_for_no_access_role(db_session):
     assert updated.can_access_manager_bucket_integrity_check is False
     assert updated.can_access_manager_bucket_migration is False
     assert updated.can_access_manager_feature_rules is False
+    assert updated.can_access_manager_bucket_purge is False
+    assert updated.can_access_storage_ops is False
     assert updated.can_create_manual_private_connections is False
     assert updated.can_provision_managed_private_connections is False
+
+
+def test_update_user_preserves_manager_access_when_not_requested(db_session):
+    service = UsersService(db_session)
+    user = _seed_user(db_session, "manager-tools-preserve@example.com", role=UserRole.UI_USER.value)
+    user.can_access_storage_ops = True
+    user.can_create_manual_private_connections = True
+    user.can_provision_managed_private_connections = True
+    user.can_access_manager_bucket_compare = True
+    user.can_access_manager_bucket_integrity_check = True
+    user.can_access_manager_bucket_migration = True
+    user.can_access_manager_feature_rules = True
+    user.can_access_manager_bucket_purge = True
+    db_session.add(user)
+    db_session.commit()
+
+    updated = service.update_user(user.id, UserUpdate(full_name="Updated manager"))
+
+    assert updated.can_access_storage_ops is True
+    assert updated.can_create_manual_private_connections is True
+    assert updated.can_provision_managed_private_connections is True
+    assert updated.can_access_manager_bucket_compare is True
+    assert updated.can_access_manager_bucket_integrity_check is True
+    assert updated.can_access_manager_bucket_migration is True
+    assert updated.can_access_manager_feature_rules is True
+    assert updated.can_access_manager_bucket_purge is True
 
 
 def test_update_user_allows_storage_ops_for_admin_like_role(db_session):
