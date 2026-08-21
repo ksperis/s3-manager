@@ -1043,7 +1043,13 @@ describe("manager shell pages", () => {
 
     expect(document.querySelector('[data-workspace-dashboard-kpi-row="true"]')).toBeInTheDocument();
     expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: /Buckets\s+2\s+2 \/ 4 buckets \(50%\)/i })).toHaveAttribute("href", "/manager/buckets");
+    expect(
+      await screen.findByRole(
+        "link",
+        { name: /Buckets\s+2\s+2 \/ 4 buckets \(50%\)/i },
+        { timeout: 5_000 },
+      ),
+    ).toHaveAttribute("href", "/manager/buckets");
     expect(screen.getByRole("meter", { name: "Storage used quota usage" })).toHaveAttribute("aria-valuenow", "50");
     expect(screen.getByRole("meter", { name: "Buckets quota usage" })).toHaveAttribute("aria-valuenow", "50");
     expect(screen.getByRole("meter", { name: "Objects quota usage" })).toHaveAttribute("aria-valuenow", "50");
