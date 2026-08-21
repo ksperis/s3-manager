@@ -75,6 +75,12 @@ _LIFECYCLE_PARAMS = _params_for_source("lifecycle")
 _CORS_PARAMS = frozenset(param for param in _params_for_source("props") if param.startswith("cors_"))
 _NOTIFICATION_ENTRY_PARAMS = _params_for_source("notifications") - {"notification_eventbridge_present"}
 _SSE_PARAMS = _params_for_source("encryption")
+_GROUPED_PARAMS_BY_FEATURE = {
+    "lifecycle_rules": _LIFECYCLE_PARAMS,
+    "cors": _CORS_PARAMS,
+    "notifications": _NOTIFICATION_ENTRY_PARAMS,
+    "server_side_encryption": _SSE_PARAMS,
+}
 _NOTIFICATION_CONFIGURATION_SPECS = (
     ("topic", "TopicConfigurations", "TopicArn"),
     ("queue", "QueueConfigurations", "QueueArn"),
@@ -879,6 +885,81 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
     return matcher(rule, source_data, op) if matcher else False
 
 
+def _normalize_lifecycle_group_source(source_data: object) -> object:
+    if not isinstance(source_data, list):
+        return _FEATURE_PARAM_UNAVAILABLE
+    return [item for item in source_data if isinstance(item, dict)]
+
+
+def _normalize_cors_group_source(source_data: object) -> object:
+    if not isinstance(source_data, BucketProperties):
+        return _FEATURE_PARAM_UNAVAILABLE
+    raw_rules = source_data.cors_rules if isinstance(source_data.cors_rules, list) else []
+    return [item for item in raw_rules if isinstance(item, dict)]
+
+
+def _normalize_notification_group_source(source_data: object) -> object:
+    return source_data if isinstance(source_data, dict) else _FEATURE_PARAM_UNAVAILABLE
+
+
+def _identity_group_source(source_data: object) -> object:
+    return source_data
+
+
+_GroupedRulesMatcher = Callable[[list[CephAdminBucketFilterRule], Any], bool]
+_GroupedRuleMatcher = Callable[[CephAdminBucketFilterRule, Any], bool]
+_GroupedRuleSpec = tuple[
+    str,
+    Callable[[object], object],
+    _GroupedRulesMatcher,
+    _GroupedRuleMatcher,
+]
+_GROUPED_RULE_SPECS: dict[str, _GroupedRuleSpec] = {
+    "lifecycle_rules": (
+        "lifecycle",
+        _normalize_lifecycle_group_source,
+        _match_lifecycle_param_rules_all,
+        _match_lifecycle_param_rule_individual,
+    ),
+    "cors": (
+        "props",
+        _normalize_cors_group_source,
+        _match_cors_param_rules_all,
+        _match_cors_param_rule_individual,
+    ),
+    "notifications": (
+        "notifications",
+        _normalize_notification_group_source,
+        _match_notification_param_rules_all,
+        _match_notification_param_rule_individual,
+    ),
+    "server_side_encryption": (
+        "encryption",
+        _identity_group_source,
+        _match_sse_param_rules_all,
+        _match_sse_param_rule_individual,
+    ),
+}
+
+
+def _match_grouped_param_rules(
+    rules: list[CephAdminBucketFilterRule],
+    match_mode: str,
+    source_data: object,
+    normalize_source: Callable[[object], object],
+    match_all: _GroupedRulesMatcher,
+    match_one: _GroupedRuleMatcher,
+) -> list[bool]:
+    if not rules or source_data is _FEATURE_PARAM_UNAVAILABLE:
+        return [] if not rules else [False]
+    normalized_source = normalize_source(source_data)
+    if normalized_source is _FEATURE_PARAM_UNAVAILABLE:
+        return [False]
+    if match_mode == "all":
+        return [match_all(rules, normalized_source)]
+    return [match_one(rule, normalized_source) for rule in rules]
+
+
 def match_bucket_feature_param_rules(
     rules: list[CephAdminBucketFilterRule],
     match_mode: str,
@@ -886,76 +967,31 @@ def match_bucket_feature_param_rules(
 ) -> bool:
     if not rules:
         return True
-    lifecycle_rules = [rule for rule in rules if rule.feature == "lifecycle_rules"]
-    cors_rules = [rule for rule in rules if rule.feature == "cors" and rule.param in _CORS_PARAMS]
-    notification_entry_rules = [
-        rule
-        for rule in rules
-        if rule.feature == "notifications" and rule.param in _NOTIFICATION_ENTRY_PARAMS
-    ]
-    sse_rules = [rule for rule in rules if rule.feature == "server_side_encryption" and rule.param in _SSE_PARAMS]
-    non_grouped_rules = [
-        rule
-        for rule in rules
-        if rule.feature != "lifecycle_rules"
-        and not (rule.feature == "cors" and rule.param in _CORS_PARAMS)
-        and not (rule.feature == "notifications" and rule.param in _NOTIFICATION_ENTRY_PARAMS)
-        and not (rule.feature == "server_side_encryption" and rule.param in _SSE_PARAMS)
-    ]
+    grouped_rules: dict[str, list[CephAdminBucketFilterRule]] = {
+        feature: [] for feature in _GROUPED_RULE_SPECS
+    }
+    non_grouped_rules: list[CephAdminBucketFilterRule] = []
+    for rule in rules:
+        feature = rule.feature or ""
+        grouped_params = _GROUPED_PARAMS_BY_FEATURE.get(feature)
+        if grouped_params and rule.param in grouped_params:
+            grouped_rules[feature].append(rule)
+        else:
+            non_grouped_rules.append(rule)
+
     results: list[bool] = []
 
-    if lifecycle_rules:
-        lifecycle_source = snapshot.get("lifecycle", _FEATURE_PARAM_UNAVAILABLE)
-        if lifecycle_source is _FEATURE_PARAM_UNAVAILABLE or not isinstance(lifecycle_source, list):
-            lifecycle_result = False if match_mode == "all" else False
-            if match_mode == "all":
-                return False
-            results.append(lifecycle_result)
-        else:
-            normalized = [item for item in lifecycle_source if isinstance(item, dict)]
-            if match_mode == "all":
-                results.append(_match_lifecycle_param_rules_all(lifecycle_rules, normalized))
-            else:
-                results.extend(_match_lifecycle_param_rule_individual(rule, normalized) for rule in lifecycle_rules)
-
-    if cors_rules:
-        props_source = snapshot.get("props", _FEATURE_PARAM_UNAVAILABLE)
-        if props_source is _FEATURE_PARAM_UNAVAILABLE or not isinstance(props_source, BucketProperties):
-            cors_result = False if match_mode == "all" else False
-            if match_mode == "all":
-                return False
-            results.append(cors_result)
-        else:
-            raw_rules = props_source.cors_rules if isinstance(props_source.cors_rules, list) else []
-            normalized = [item for item in raw_rules if isinstance(item, dict)]
-            if match_mode == "all":
-                results.append(_match_cors_param_rules_all(cors_rules, normalized))
-            else:
-                results.extend(_match_cors_param_rule_individual(rule, normalized) for rule in cors_rules)
-
-    if notification_entry_rules:
-        notification_source = snapshot.get("notifications", _FEATURE_PARAM_UNAVAILABLE)
-        if notification_source is _FEATURE_PARAM_UNAVAILABLE or not isinstance(notification_source, dict):
-            notification_result = False if match_mode == "all" else False
-            if match_mode == "all":
-                return False
-            results.append(notification_result)
-        elif match_mode == "all":
-            results.append(_match_notification_param_rules_all(notification_entry_rules, notification_source))
-        else:
-            results.extend(_match_notification_param_rule_individual(rule, notification_source) for rule in notification_entry_rules)
-
-    if sse_rules:
-        encryption_source = snapshot.get("encryption", _FEATURE_PARAM_UNAVAILABLE)
-        if encryption_source is _FEATURE_PARAM_UNAVAILABLE:
-            sse_result = False if match_mode == "all" else False
-            if match_mode == "all":
-                return False
-            results.append(sse_result)
-        elif match_mode == "all":
-            results.append(_match_sse_param_rules_all(sse_rules, encryption_source))
-        else:
-            results.extend(_match_sse_param_rule_individual(rule, encryption_source) for rule in sse_rules)
+    for feature, (source, normalize_source, match_all, match_one) in _GROUPED_RULE_SPECS.items():
+        results.extend(
+            _match_grouped_param_rules(
+                grouped_rules[feature],
+                match_mode,
+                snapshot.get(source, _FEATURE_PARAM_UNAVAILABLE),
+                normalize_source,
+                match_all,
+                match_one,
+            )
+        )
 
     results.extend(_match_feature_param_rule(rule, snapshot) for rule in non_grouped_rules)
     return all(results) if match_mode == "all" else any(results)
