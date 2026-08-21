@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlencode
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -31,6 +31,164 @@ from ._shared import (
     _ObjectLazyTagsCacheValue,
     _is_missing_object_lock_configuration,
 )
+
+
+_METADATA_COPY_STRING_FIELDS = (
+    ("content_type", "ContentType"),
+    ("cache_control", "CacheControl"),
+    ("content_disposition", "ContentDisposition"),
+    ("content_encoding", "ContentEncoding"),
+    ("content_language", "ContentLanguage"),
+    ("storage_class", "StorageClass"),
+)
+
+
+def _object_version_reference(
+    bucket_name: str,
+    key: str,
+    version_id: Optional[str],
+) -> dict[str, str]:
+    reference = {"Bucket": bucket_name, "Key": key}
+    if version_id:
+        reference["VersionId"] = version_id
+    return reference
+
+
+def _load_metadata_copy_state(
+    client: Any,
+    bucket_name: str,
+    payload: ObjectMetadataUpdate,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    source = _object_version_reference(bucket_name, payload.key, payload.version_id)
+    try:
+        current = client.head_object(**source)
+    except (ClientError, BotoCoreError) as exc:
+        raise RuntimeError(f"Unable to fetch metadata for '{payload.key}': {exc}") from exc
+    try:
+        current_tagging = client.get_object_tagging(**source)
+    except (ClientError, BotoCoreError) as exc:
+        raise RuntimeError(f"Unable to fetch tags for '{payload.key}': {exc}") from exc
+    return current, current_tagging.get("TagSet") or []
+
+
+def _normalized_copy_metadata(
+    current: dict[str, Any],
+    replacement: Optional[dict[str, str]],
+) -> dict[str, str]:
+    source = (current.get("Metadata") or {}) if replacement is None else replacement
+    return {
+        key: value
+        for key, value in source.items()
+        if key is not None and str(key).strip() and value is not None
+    }
+
+
+def _resolved_copy_value(value: Optional[str], current_value: Any) -> Any:
+    if value is None:
+        return current_value
+    if not str(value).strip():
+        return None
+    return value
+
+
+def _parsed_iso_datetime(value: str) -> datetime:
+    cleaned = value.strip()
+    if cleaned.endswith("Z"):
+        cleaned = f"{cleaned[:-1]}+00:00"
+    return datetime.fromisoformat(cleaned)
+
+
+def _resolved_copy_expiration(
+    current_value: Any,
+    replacement: Optional[str],
+) -> Optional[datetime]:
+    if isinstance(current_value, datetime):
+        current_expiration = current_value
+    elif isinstance(current_value, str) and current_value.strip():
+        try:
+            current_expiration = _parsed_iso_datetime(current_value)
+        except ValueError:
+            current_expiration = None
+    else:
+        current_expiration = None
+
+    if replacement is None:
+        return current_expiration
+    if not replacement.strip():
+        return None
+    try:
+        return _parsed_iso_datetime(replacement)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid expires value: {replacement}") from exc
+
+
+def _metadata_copy_request(
+    bucket_name: str,
+    payload: ObjectMetadataUpdate,
+    current: dict[str, Any],
+    current_tag_set: list[dict[str, Any]],
+) -> dict[str, object]:
+    kwargs: dict[str, object] = {
+        "Bucket": bucket_name,
+        "Key": payload.key,
+        "CopySource": _object_version_reference(bucket_name, payload.key, payload.version_id),
+        "MetadataDirective": "REPLACE",
+        "Metadata": _normalized_copy_metadata(current, payload.metadata),
+    }
+    if current_tag_set:
+        kwargs["TaggingDirective"] = "REPLACE"
+        kwargs["Tagging"] = urlencode(
+            [
+                (str(tag.get("Key") or ""), str(tag.get("Value") or ""))
+                for tag in current_tag_set
+                if str(tag.get("Key") or "").strip()
+            ]
+        )
+    else:
+        kwargs["TaggingDirective"] = "COPY"
+
+    for payload_field, request_field in _METADATA_COPY_STRING_FIELDS:
+        value = _resolved_copy_value(getattr(payload, payload_field), current.get(request_field))
+        if value is not None:
+            kwargs[request_field] = value
+    expires = _resolved_copy_expiration(current.get("Expires"), payload.expires)
+    if expires is not None:
+        kwargs["Expires"] = expires
+    return kwargs
+
+
+def _copy_metadata(
+    client: Any,
+    payload: ObjectMetadataUpdate,
+    kwargs: dict[str, object],
+) -> Optional[str]:
+    try:
+        response = client.copy_object(**kwargs)
+    except (ClientError, BotoCoreError) as exc:
+        raise RuntimeError(f"Unable to update metadata for '{payload.key}': {exc}") from exc
+    return response.get("VersionId") if isinstance(response, dict) else None
+
+
+def _restore_copied_tags(
+    client: Any,
+    bucket_name: str,
+    key: str,
+    tag_set: list[dict[str, Any]],
+    copied_version_id: Optional[str],
+) -> None:
+    if not tag_set:
+        return
+    kwargs: dict[str, object] = {
+        "Bucket": bucket_name,
+        "Key": key,
+        "Tagging": {"TagSet": tag_set},
+    }
+    if copied_version_id:
+        kwargs["VersionId"] = copied_version_id
+    try:
+        client.put_object_tagging(**kwargs)
+    except (ClientError, BotoCoreError) as exc:
+        raise RuntimeError(f"Unable to restore tags for '{key}': {exc}") from exc
 
 
 class BrowserObjectDetailsMixin:
@@ -250,121 +408,16 @@ class BrowserObjectDetailsMixin:
         payload: ObjectMetadataUpdate,
     ) -> ObjectMetadata:
         client = self._client(account)
-        head_kwargs = {"Bucket": bucket_name, "Key": payload.key}
-        if payload.version_id:
-            head_kwargs["VersionId"] = payload.version_id
-        try:
-            current = client.head_object(**head_kwargs)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to fetch metadata for '{payload.key}': {exc}") from exc
-        tag_kwargs = {"Bucket": bucket_name, "Key": payload.key}
-        if payload.version_id:
-            tag_kwargs["VersionId"] = payload.version_id
-        try:
-            current_tagging = client.get_object_tagging(**tag_kwargs)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to fetch tags for '{payload.key}': {exc}") from exc
-        current_tag_set = current_tagging.get("TagSet") or []
-
-        current_metadata = current.get("Metadata") or {}
-        metadata_source = current_metadata if payload.metadata is None else payload.metadata
-        metadata = {
-            key: value
-            for key, value in (metadata_source or {}).items()
-            if key is not None and str(key).strip() and value is not None
-        }
-
-        def resolve(value: Optional[str], current_value: Optional[str]) -> Optional[str]:
-            if value is None:
-                return current_value
-            if str(value).strip() == "":
-                return None
-            return value
-
-        content_type = resolve(payload.content_type, current.get("ContentType"))
-        cache_control = resolve(payload.cache_control, current.get("CacheControl"))
-        content_disposition = resolve(payload.content_disposition, current.get("ContentDisposition"))
-        content_encoding = resolve(payload.content_encoding, current.get("ContentEncoding"))
-        content_language = resolve(payload.content_language, current.get("ContentLanguage"))
-        storage_class = resolve(payload.storage_class, current.get("StorageClass"))
-
-        expires_value: Optional[datetime] = None
-        current_expires = current.get("Expires")
-        if isinstance(current_expires, datetime):
-            expires_value = current_expires
-        elif isinstance(current_expires, str) and current_expires.strip():
-            try:
-                cleaned = current_expires.strip()
-                if cleaned.endswith("Z"):
-                    cleaned = f"{cleaned[:-1]}+00:00"
-                expires_value = datetime.fromisoformat(cleaned)
-            except ValueError:
-                expires_value = None
-        if payload.expires is not None:
-            if str(payload.expires).strip() == "":
-                expires_value = None
-            else:
-                try:
-                    cleaned = str(payload.expires).strip()
-                    if cleaned.endswith("Z"):
-                        cleaned = f"{cleaned[:-1]}+00:00"
-                    expires_value = datetime.fromisoformat(cleaned)
-                except ValueError as exc:
-                    raise RuntimeError(f"Invalid expires value: {payload.expires}") from exc
-
-        copy_source: dict[str, str] = {"Bucket": bucket_name, "Key": payload.key}
-        if payload.version_id:
-            copy_source["VersionId"] = payload.version_id
-        kwargs: dict[str, object] = {
-            "Bucket": bucket_name,
-            "Key": payload.key,
-            "CopySource": copy_source,
-            "MetadataDirective": "REPLACE",
-            "Metadata": metadata,
-        }
-        if current_tag_set:
-            kwargs["TaggingDirective"] = "REPLACE"
-            kwargs["Tagging"] = urlencode(
-                [
-                    (str(tag.get("Key") or ""), str(tag.get("Value") or ""))
-                    for tag in current_tag_set
-                    if str(tag.get("Key") or "").strip()
-                ]
-            )
-        else:
-            kwargs["TaggingDirective"] = "COPY"
-        if content_type is not None:
-            kwargs["ContentType"] = content_type
-        if cache_control is not None:
-            kwargs["CacheControl"] = cache_control
-        if content_disposition is not None:
-            kwargs["ContentDisposition"] = content_disposition
-        if content_encoding is not None:
-            kwargs["ContentEncoding"] = content_encoding
-        if content_language is not None:
-            kwargs["ContentLanguage"] = content_language
-        if expires_value is not None:
-            kwargs["Expires"] = expires_value
-        if storage_class is not None:
-            kwargs["StorageClass"] = storage_class
-
-        try:
-            copy_response = client.copy_object(**kwargs)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to update metadata for '{payload.key}': {exc}") from exc
-        copied_version_id = copy_response.get("VersionId") if isinstance(copy_response, dict) else None
-        if current_tag_set:
-            tagging_kwargs: dict[str, object] = {
-                "Bucket": bucket_name,
-                "Key": payload.key,
-                "Tagging": {"TagSet": current_tag_set},
-            }
-            if copied_version_id:
-                tagging_kwargs["VersionId"] = copied_version_id
-            try:
-                client.put_object_tagging(**tagging_kwargs)
-            except (ClientError, BotoCoreError) as exc:
-                raise RuntimeError(f"Unable to restore tags for '{payload.key}': {exc}") from exc
+        current, current_tag_set = _load_metadata_copy_state(client, bucket_name, payload)
+        copy_request = _metadata_copy_request(bucket_name, payload, current, current_tag_set)
+        copied_version_id = _copy_metadata(client, payload, copy_request)
+        _restore_copied_tags(
+            client,
+            bucket_name,
+            payload.key,
+            current_tag_set,
+            copied_version_id,
+        )
 
         self.invalidate_object_list_cache_for_account(account, bucket_name)
         return self.head_object(bucket_name, account, payload.key, version_id=None)
