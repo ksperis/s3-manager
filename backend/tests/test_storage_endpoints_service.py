@@ -529,6 +529,102 @@ def test_sync_env_endpoints_retries_after_concurrent_unique_conflict(db_session,
     assert calls["count"] == 2
 
 
+def test_sync_env_endpoints_updates_in_place_and_uses_first_default(db_session, monkeypatch):
+    existing = StorageEndpoint(
+        name="old-env-name",
+        endpoint_url="https://env-a.example.test",
+        provider=StorageProvider.OTHER.value,
+        is_default=False,
+        is_editable=True,
+    )
+    previous_default = StorageEndpoint(
+        name="database-default",
+        endpoint_url="https://database-default.example.test",
+        provider=StorageProvider.OTHER.value,
+        is_default=True,
+        is_editable=True,
+    )
+    db_session.add_all([existing, previous_default])
+    db_session.commit()
+    existing_id = existing.id
+
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.settings.env_storage_endpoints",
+        json.dumps(
+            [
+                {
+                    "name": "env-a",
+                    "endpoint_url": "https://env-a.example.test/",
+                    "provider": "ceph",
+                    "force_path_style": True,
+                    "verify_tls": False,
+                    "features_config": "features:\n  admin:\n    enabled: false\n",
+                },
+                {
+                    "name": "env-b",
+                    "endpoint_url": "https://env-b.example.test",
+                    "provider": "other",
+                },
+            ]
+        ),
+        raising=False,
+    )
+
+    synced = StorageEndpointsService(db_session).sync_env_endpoints()
+
+    assert [endpoint.name for endpoint in synced] == ["env-a", "env-b"]
+    assert [endpoint.is_default for endpoint in synced] == [True, False]
+    db_session.expire_all()
+    updated = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == existing_id).one()
+    assert updated.name == "env-a"
+    assert updated.force_path_style is True
+    assert updated.verify_tls is False
+    assert updated.is_editable is False
+    assert previous_default.is_default is False
+
+
+@pytest.mark.parametrize(
+    ("entries", "message"),
+    [
+        (
+            [
+                {"name": "env-a", "endpoint_url": "https://same.example.test"},
+                {"name": "env-b", "endpoint_url": "https://same.example.test/"},
+            ],
+            "duplicate endpoint_url",
+        ),
+        (
+            [
+                {"name": "same", "endpoint_url": "https://a.example.test"},
+                {"name": "same", "endpoint_url": "https://b.example.test"},
+            ],
+            "duplicate name",
+        ),
+        (
+            [
+                {"name": "env-a", "endpoint_url": "https://a.example.test", "is_default": True},
+                {"name": "env-b", "endpoint_url": "https://b.example.test", "is_default": True},
+            ],
+            "only define one default endpoint",
+        ),
+    ],
+)
+def test_sync_env_endpoints_rejects_ambiguous_inventory(
+    db_session,
+    monkeypatch,
+    entries,
+    message,
+):
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.settings.env_storage_endpoints",
+        json.dumps(entries),
+        raising=False,
+    )
+
+    with pytest.raises(ValueError, match=message):
+        StorageEndpointsService(db_session).sync_env_endpoints()
+
+
 def test_update_endpoint_clearing_access_keys_also_clears_secrets(db_session):
     endpoint = _create_ceph_endpoint_with_full_credentials(db_session)
     service = StorageEndpointsService(db_session)
