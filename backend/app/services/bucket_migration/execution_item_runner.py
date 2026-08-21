@@ -109,96 +109,153 @@ class BucketMigrationItemRunnerMixin:
             return False
 
         self._store_item_diff(item, diff)
-        has_diff = bool(diff.different_count or diff.only_source_count or diff.only_target_count)
-        if has_diff:
-            item.status = "failed"
-            item.error_message = "Final diff is not clean"
-            item.finished_at = utcnow()
-            item.updated_at = utcnow()
-            self._add_event(
-                migration,
-                item=item,
-                level="error",
-                message="Final diff detected differences.",
-                metadata={
-                    "different_count": diff.different_count,
-                    "only_source_count": diff.only_source_count,
-                    "only_target_count": diff.only_target_count,
-                },
-            )
-            self._commit()
+        if bool(diff.different_count or diff.only_source_count or diff.only_target_count):
+            self._fail_item_for_final_diff(migration, item, diff)
             return False
 
         if migration.delete_source:
-            if bool(getattr(migration, "strong_integrity_check", False)):
-                (
-                    size_only_count,
-                    verified_count,
-                    failed_keys,
-                    method_counts,
-                ) = self._strong_verify_size_only_candidates_streamed(
-                    source_ctx,
-                    target_ctx,
-                    source_bucket=item.source_bucket,
-                    target_bucket=item.target_bucket,
-                    strategy=strategy,
-                    parallelism_max=max(1, min(int(migration.parallelism_max), 4)),
-                    control_check=control_check,
-                )
-                if size_only_count < 0:
-                    self._stop_interrupted_item(migration, item, control_check)
-                    return False
-
-                if failed_keys:
-                    failed_sample = failed_keys[:20]
-                    item.status = "failed"
-                    item.error_message = (
-                        "Final strong verification failed for "
-                        f"{len(failed_keys)} object(s) out of {size_only_count} size-only candidate(s); "
-                        "automatic source deletion is blocked to prevent data loss."
-                    )
-                    item.finished_at = utcnow()
-                    item.updated_at = utcnow()
-                    self._add_event(
-                        migration,
-                        item=item,
-                        level="error",
-                        message="Source deletion blocked due to strong verification failures.",
-                        metadata={
-                            "size_only_count": size_only_count,
-                            "verified_count": verified_count,
-                            "failed_count": len(failed_keys),
-                            "failed_sample": failed_sample,
-                            "method_counts": method_counts,
-                        },
-                    )
-                    self._commit()
-                    return False
-
-                self._add_event(
-                    migration,
-                    item=item,
-                    level="info",
-                    message="Strong verification completed for size-only candidates.",
-                    metadata={
-                        "size_only_count": size_only_count,
-                        "verified_count": verified_count,
-                        "method_counts": method_counts,
-                    },
-                )
-            else:
-                self._add_event(
-                    migration,
-                    item=item,
-                    level="warning",
-                    message="Strong integrity check is disabled; source deletion relies on md5/size diff only.",
-                )
-
+            if not self._verify_source_deletion_safety(
+                migration,
+                item,
+                source_ctx,
+                target_ctx,
+                strategy=strategy,
+                control_check=control_check,
+            ):
+                return False
             item.step = "delete_source"
             item.updated_at = utcnow()
             self._commit()
             return True
 
+        self._complete_item_after_verification(migration, item, target_ctx)
+        return False
+
+    def _fail_item_for_final_diff(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        diff: Any,
+    ) -> None:
+        item.status = "failed"
+        item.error_message = "Final diff is not clean"
+        item.finished_at = utcnow()
+        item.updated_at = utcnow()
+        self._add_event(
+            migration,
+            item=item,
+            level="error",
+            message="Final diff detected differences.",
+            metadata={
+                "different_count": diff.different_count,
+                "only_source_count": diff.only_source_count,
+                "only_target_count": diff.only_target_count,
+            },
+        )
+        self._commit()
+
+    def _verify_source_deletion_safety(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        strategy: str,
+        control_check: Callable[[], str],
+    ) -> bool:
+        if not bool(getattr(migration, "strong_integrity_check", False)):
+            self._add_event(
+                migration,
+                item=item,
+                level="warning",
+                message=(
+                    "Strong integrity check is disabled; source deletion relies on "
+                    "md5/size diff only."
+                ),
+            )
+            return True
+
+        (
+            size_only_count,
+            verified_count,
+            failed_keys,
+            method_counts,
+        ) = self._strong_verify_size_only_candidates_streamed(
+            source_ctx,
+            target_ctx,
+            source_bucket=item.source_bucket,
+            target_bucket=item.target_bucket,
+            strategy=strategy,
+            parallelism_max=max(1, min(int(migration.parallelism_max), 4)),
+            control_check=control_check,
+        )
+        if size_only_count < 0:
+            self._stop_interrupted_item(migration, item, control_check)
+            return False
+        if failed_keys:
+            self._fail_item_for_strong_verification(
+                migration,
+                item,
+                size_only_count=size_only_count,
+                verified_count=verified_count,
+                failed_keys=failed_keys,
+                method_counts=method_counts,
+            )
+            return False
+
+        self._add_event(
+            migration,
+            item=item,
+            level="info",
+            message="Strong verification completed for size-only candidates.",
+            metadata={
+                "size_only_count": size_only_count,
+                "verified_count": verified_count,
+                "method_counts": method_counts,
+            },
+        )
+        return True
+
+    def _fail_item_for_strong_verification(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        *,
+        size_only_count: int,
+        verified_count: int,
+        failed_keys: list[str],
+        method_counts: dict[str, int],
+    ) -> None:
+        item.status = "failed"
+        item.error_message = (
+            "Final strong verification failed for "
+            f"{len(failed_keys)} object(s) out of {size_only_count} size-only candidate(s); "
+            "automatic source deletion is blocked to prevent data loss."
+        )
+        item.finished_at = utcnow()
+        item.updated_at = utcnow()
+        self._add_event(
+            migration,
+            item=item,
+            level="error",
+            message="Source deletion blocked due to strong verification failures.",
+            metadata={
+                "size_only_count": size_only_count,
+                "verified_count": verified_count,
+                "failed_count": len(failed_keys),
+                "failed_sample": failed_keys[:20],
+                "method_counts": method_counts,
+            },
+        )
+        self._commit()
+
+    def _complete_item_after_verification(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        target_ctx: _ResolvedContext,
+    ) -> None:
         self._finalize_target_versioning_state(
             target_ctx.account,
             item.target_bucket,
@@ -211,7 +268,6 @@ class BucketMigrationItemRunnerMixin:
         item.updated_at = utcnow()
         self._add_event(migration, item=item, level="info", message="Item completed with clean diff.")
         self._commit()
-        return False
 
     def _run_create_bucket_step(
         self,
