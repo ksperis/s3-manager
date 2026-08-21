@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../utils/clientStorage";
 import { readStoredUser } from "../utils/workspaces";
 
@@ -37,8 +38,15 @@ function getPreferredTheme(): { theme: Theme; source: ThemeSource } {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const preferred = useMemo(() => getPreferredTheme(), []);
-  const [theme, setThemeState] = useState<Theme>(preferred.theme);
-  const [themeSource, setThemeSource] = useState<ThemeSource>(preferred.source);
+  const [userTheme, setUserTheme] = useState<Theme | null>(() =>
+    preferred.source === "user" ? preferred.theme : null,
+  );
+  const systemPrefersDark = useMediaQuery("(prefers-color-scheme: dark)", {
+    defaultMatches: preferred.theme === "dark",
+    enabled: userTheme === null,
+  });
+  const theme = userTheme ?? (systemPrefersDark ? "dark" : "light");
+  const themeSource: ThemeSource = userTheme === null ? "system" : "user";
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -55,32 +63,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [theme, themeSource]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (themeSource !== "system") return;
-    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!media) return;
-    const handleChange = (event?: MediaQueryListEvent) => {
-      const prefersDark = event?.matches ?? media.matches;
-      setThemeState(prefersDark ? "dark" : "light");
-    };
-    handleChange();
-    if (media.addEventListener) {
-      media.addEventListener("change", handleChange);
-      return () => media.removeEventListener("change", handleChange);
-    }
-    media.addListener(handleChange);
-    return () => media.removeListener(handleChange);
-  }, [themeSource]);
-
   const setTheme = useCallback((next: Theme) => {
-    setThemeSource("user");
-    setThemeState(next);
+    setUserTheme(next);
   }, []);
   const toggle = useCallback(() => {
-    setThemeSource("user");
-    setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
-  }, []);
+    setUserTheme(theme === "dark" ? "light" : "dark");
+  }, [theme]);
 
   const value = useMemo(() => ({ theme, setTheme, toggle }), [theme, setTheme, toggle]);
 

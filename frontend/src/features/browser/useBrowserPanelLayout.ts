@@ -23,6 +23,7 @@ import {
   DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
   writeBrowserRootUiLayout,
 } from "./browserRootUiState";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 type PanelSide = "folders" | "inspector";
 
@@ -56,10 +57,7 @@ export function useBrowserPanelLayout({
   const [layoutContainerWidthPx, setLayoutContainerWidthPx] = useState(0);
   const [activePanelResize, setActivePanelResize] =
     useState<PanelSide | null>(null);
-  const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
-  });
+  const isNarrowViewport = useMediaQuery(PANELS_DISABLE_MEDIA_QUERY);
   const layoutContainerRef = useRef<HTMLDivElement | null>(null);
   const foldersPanelWidthRef = useRef(foldersPanelWidthPx);
   const inspectorPanelWidthRef = useRef(inspectorPanelWidthPx);
@@ -117,19 +115,6 @@ export function useBrowserPanelLayout({
     resolvedFoldersWidth,
     resolvedInspectorWidth,
   ]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mediaQuery = window.matchMedia(PANELS_DISABLE_MEDIA_QUERY);
-    const syncViewportWidth = () => setIsNarrowViewport(mediaQuery.matches);
-    syncViewportWidth();
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", syncViewportWidth);
-      return () => mediaQuery.removeEventListener("change", syncViewportWidth);
-    }
-    mediaQuery.addListener(syncViewportWidth);
-    return () => mediaQuery.removeListener(syncViewportWidth);
-  }, []);
 
   useLayoutEffect(() => {
     const updateLayoutContainerWidth = () => {

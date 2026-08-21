@@ -47,6 +47,7 @@ import {
   writeClientStorage,
 } from "../../utils/clientStorage";
 import { readStoredUser } from "../../utils/workspaces";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import {
   normalizeS3AccountSelectorId,
   type S3AccountSelector,
@@ -627,10 +628,7 @@ export default function BrowserPage({
     isMainBrowserPath,
     layoutMode: activeLayoutMode,
   });
-  const [isMobileViewport, setIsMobileViewport] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia(MOBILE_OBJECT_LIST_MEDIA_QUERY).matches;
-  });
+  const isMobileViewport = useMediaQuery(MOBILE_OBJECT_LIST_MEDIA_QUERY);
   const [inspectorTab, setInspectorTab] = useState<
     "context" | "bucket" | "selection" | "details"
   >("context");
@@ -1157,19 +1155,6 @@ export default function BrowserPage({
     showFolders,
     showInspector,
   });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mediaQuery = window.matchMedia(MOBILE_OBJECT_LIST_MEDIA_QUERY);
-    const syncViewportWidth = () => setIsMobileViewport(mediaQuery.matches);
-    syncViewportWidth();
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", syncViewportWidth);
-      return () => mediaQuery.removeEventListener("change", syncViewportWidth);
-    }
-    mediaQuery.addListener(syncViewportWidth);
-    return () => mediaQuery.removeListener(syncViewportWidth);
-  }, []);
 
   useEffect(() => {
     if (!isMainBrowserPath) return;

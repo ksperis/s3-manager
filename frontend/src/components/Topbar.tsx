@@ -9,6 +9,7 @@ import {
   type UserNotification,
 } from "../api/userNotifications";
 import type { EffectiveUserAccess, UiRole, UserAvatarDescriptor } from "../api/users";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import {
   canAccessPrivateConnectionsSection,
   isSuperAdminRole,
@@ -136,9 +137,7 @@ export default function Topbar({
   const canManageApiTokens = !isS3Session && isSuperAdminRole(storedUser?.role);
   const uiRoleLabel = useMemo(() => resolveUiRoleLabel(storedUser), [storedUser]);
 
-  const [isMobileViewport, setIsMobileViewport] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth < 768 : false
-  );
+  const isMobileViewport = useMediaQuery("(max-width: 767px)");
   const [controlsAvailableWidth, setControlsAvailableWidth] = useState<number>(Number.POSITIVE_INFINITY);
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -274,20 +273,6 @@ export default function Topbar({
     if (!workspaceSwitcher) return -1;
     return workspaceOptions.findIndex((option) => option.value === workspaceSwitcher.currentWorkspaceId);
   }, [workspaceOptions, workspaceSwitcher]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const updateViewport = () => {
-      setIsMobileViewport(window.innerWidth < 768);
-    };
-    updateViewport();
-    window.addEventListener("resize", updateViewport);
-    window.addEventListener("orientationchange", updateViewport);
-    return () => {
-      window.removeEventListener("resize", updateViewport);
-      window.removeEventListener("orientationchange", updateViewport);
-    };
-  }, []);
 
   useEffect(() => {
     if (!showNotifications) return;
