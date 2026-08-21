@@ -26,6 +26,69 @@ from ._shared import (
 )
 
 
+class _SyncProgressTracker:
+    def __init__(
+        self,
+        *,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        commit: Callable[[], None],
+    ) -> None:
+        self.migration = migration
+        self.item = item
+        self.commit = commit
+        self.pending_copied = 0
+        self.pending_deleted = 0
+        self.last_flush = time.monotonic()
+
+    def record(
+        self,
+        *,
+        copied_inc: int = 0,
+        deleted_inc: int = 0,
+        force: bool = False,
+    ) -> None:
+        if copied_inc > 0:
+            self.pending_copied += int(copied_inc)
+        if deleted_inc > 0:
+            self.pending_deleted += int(deleted_inc)
+        self.flush(force=force)
+
+    def flush(self, *, force: bool = False) -> None:
+        total_pending = self.pending_copied + self.pending_deleted
+        if total_pending <= 0:
+            return
+        now = time.monotonic()
+        if not force and total_pending < _SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD:
+            if (now - self.last_flush) < _SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS:
+                return
+
+        self.item.objects_copied = int(self.item.objects_copied or 0) + self.pending_copied
+        self.item.objects_deleted = int(self.item.objects_deleted or 0) + self.pending_deleted
+        heartbeat_at = utcnow()
+        self.item.updated_at = heartbeat_at
+        self.migration.updated_at = heartbeat_at
+        self.migration.last_heartbeat_at = heartbeat_at
+        self.commit()
+        self.pending_copied = 0
+        self.pending_deleted = 0
+        self.last_flush = now
+
+    def check_control(
+        self,
+        control_check: Callable[[], str],
+        *,
+        lost_lease_message: str = "Worker lease lost while processing bucket diff",
+    ) -> str:
+        state = control_check()
+        if state == "lost_lease":
+            self.flush(force=True)
+            raise _WorkerLeaseLostError(lost_lease_message)
+        if state in {"pause", "cancel"}:
+            self.flush(force=True)
+        return state
+
+
 class BucketMigrationObjectSyncMixin:
     def _sync_bucket(
         self,
@@ -56,9 +119,7 @@ class BucketMigrationObjectSyncMixin:
         diff = self._new_empty_sync_diff()
         same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
         same_endpoint_copy = bool(same_endpoint and migration.use_same_endpoint_copy)
-        pending_copied = 0
-        pending_deleted = 0
-        last_progress_flush = time.monotonic()
+        progress = _SyncProgressTracker(migration=migration, item=item, commit=self._commit)
         copied = 0
         deleted = 0
         copy_batch: list[str] = []
@@ -66,51 +127,6 @@ class BucketMigrationObjectSyncMixin:
         scan_count_since_control = 0
         worker_count = max(1, int(parallelism_max))
         action_batch_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
-
-        def flush_progress(*, force: bool = False) -> None:
-            nonlocal pending_copied, pending_deleted, last_progress_flush
-            now = time.monotonic()
-            total_pending = pending_copied + pending_deleted
-            if total_pending <= 0:
-                return
-
-            should_flush = force
-            if not should_flush:
-                if total_pending >= _SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD:
-                    should_flush = True
-                elif (now - last_progress_flush) >= _SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS:
-                    should_flush = True
-            if not should_flush:
-                return
-
-            item.objects_copied = int(item.objects_copied or 0) + int(pending_copied)
-            item.objects_deleted = int(item.objects_deleted or 0) + int(pending_deleted)
-            heartbeat_at = utcnow()
-            item.updated_at = heartbeat_at
-            migration.updated_at = heartbeat_at
-            migration.last_heartbeat_at = heartbeat_at
-            self._commit()
-            pending_copied = 0
-            pending_deleted = 0
-            last_progress_flush = now
-
-        def on_object_progress(*, copied_inc: int = 0, deleted_inc: int = 0, force: bool = False) -> None:
-            nonlocal pending_copied, pending_deleted
-            if copied_inc > 0:
-                pending_copied += int(copied_inc)
-            if deleted_inc > 0:
-                pending_deleted += int(deleted_inc)
-            flush_progress(force=force)
-
-        def check_control_state(*, force_flush: bool) -> str:
-            state = control_check()
-            if state == "lost_lease":
-                if force_flush:
-                    on_object_progress(force=True)
-                raise _WorkerLeaseLostError("Worker lease lost while processing bucket diff")
-            if state in {"pause", "cancel"} and force_flush:
-                on_object_progress(force=True)
-            return state
 
         def flush_copy_batch() -> bool:
             nonlocal copied, copy_batch
@@ -125,7 +141,7 @@ class BucketMigrationObjectSyncMixin:
                 parallelism_max=parallelism_max,
                 same_endpoint=same_endpoint_copy,
                 control_check=control_check,
-                on_progress=on_object_progress,
+                on_progress=progress.record,
             )
             copy_batch = []
             if copied_now < 0:
@@ -143,7 +159,7 @@ class BucketMigrationObjectSyncMixin:
                 delete_batch,
                 parallelism_max=parallelism_max,
                 control_check=control_check,
-                on_progress=on_object_progress,
+                on_progress=progress.record,
             )
             delete_batch = []
             if deleted_now < 0:
@@ -166,7 +182,7 @@ class BucketMigrationObjectSyncMixin:
             ):
                 scan_count_since_control += 1
                 if scan_count_since_control >= _DIFF_CONTROL_CHECK_INTERVAL_OBJECTS:
-                    state = check_control_state(force_flush=True)
+                    state = progress.check_control(control_check)
                     if state in {"pause", "cancel"}:
                         return -1, -1, diff
                     scan_count_since_control = 0
@@ -203,11 +219,15 @@ class BucketMigrationObjectSyncMixin:
                                 "target_etag": entry.target_etag,
                                 "compare_by": entry.compare_by,
                             }
-                        )
+                    )
                     copy_required = True
 
                 if copy_required:
-                    if same_endpoint_copy and bool(migration.auto_grant_source_read_for_copy) and not copy_grant_enabled:
+                    if (
+                        same_endpoint_copy
+                        and bool(migration.auto_grant_source_read_for_copy)
+                        and not copy_grant_enabled
+                    ):
                         copy_grant_stack.enter_context(
                             self._temporary_source_copy_grant(
                                 source_ctx,
@@ -219,7 +239,7 @@ class BucketMigrationObjectSyncMixin:
                         copy_grant_enabled = True
                     copy_batch.append(entry.key)
                     if len(copy_batch) >= action_batch_size:
-                        state = check_control_state(force_flush=True)
+                        state = progress.check_control(control_check)
                         if state in {"pause", "cancel"}:
                             return -1, -1, diff
                         if not flush_copy_batch():
@@ -228,13 +248,13 @@ class BucketMigrationObjectSyncMixin:
                 if delete_required:
                     delete_batch.append(entry.key)
                     if len(delete_batch) >= action_batch_size:
-                        state = check_control_state(force_flush=True)
+                        state = progress.check_control(control_check)
                         if state in {"pause", "cancel"}:
                             return -1, -1, diff
                         if not flush_delete_batch():
                             return -1, -1, diff
 
-            state = check_control_state(force_flush=True)
+            state = progress.check_control(control_check)
             if state in {"pause", "cancel"}:
                 return -1, -1, diff
             if not flush_copy_batch():
@@ -245,7 +265,7 @@ class BucketMigrationObjectSyncMixin:
         if copied == 0 and deleted == 0:
             return 0, 0, diff
 
-        on_object_progress(force=True)
+        progress.flush(force=True)
         self._add_event(
             migration,
             item=item,
@@ -276,45 +296,11 @@ class BucketMigrationObjectSyncMixin:
     ) -> tuple[int, int, _SyncDiff]:
         del allow_delete, parallelism_max
         same_endpoint_copy = bool(self._is_same_endpoint(source_ctx, target_ctx) and migration.use_same_endpoint_copy)
-        pending_copied = 0
-        pending_deleted = 0
-        last_progress_flush = time.monotonic()
-
-        def flush_progress(*, force: bool = False) -> None:
-            nonlocal pending_copied, pending_deleted, last_progress_flush
-            now = time.monotonic()
-            total_pending = pending_copied + pending_deleted
-            if total_pending <= 0:
-                return
-            should_flush = force
-            if not should_flush:
-                if total_pending >= _SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD:
-                    should_flush = True
-                elif (now - last_progress_flush) >= _SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS:
-                    should_flush = True
-            if not should_flush:
-                return
-            item.objects_copied = int(item.objects_copied or 0) + int(pending_copied)
-            item.objects_deleted = int(item.objects_deleted or 0) + int(pending_deleted)
-            heartbeat_at = utcnow()
-            item.updated_at = heartbeat_at
-            migration.updated_at = heartbeat_at
-            migration.last_heartbeat_at = heartbeat_at
-            self._commit()
-            pending_copied = 0
-            pending_deleted = 0
-            last_progress_flush = now
-
-        def on_object_progress(*, copied_inc: int = 0, deleted_inc: int = 0, force: bool = False) -> None:
-            nonlocal pending_copied, pending_deleted
-            if copied_inc > 0:
-                pending_copied += int(copied_inc)
-            if deleted_inc > 0:
-                pending_deleted += int(deleted_inc)
-            flush_progress(force=force)
+        progress = _SyncProgressTracker(migration=migration, item=item, commit=self._commit)
 
         replication_state = self._load_item_replication_state(item)
-        watermark = replication_state.get("pre_sync_watermark") if isinstance(replication_state.get("pre_sync_watermark"), dict) else None
+        raw_watermark = replication_state.get("pre_sync_watermark")
+        watermark = raw_watermark if isinstance(raw_watermark, dict) else None
         purge_before_replay = False
         replay_mode = "one_shot_full"
 
@@ -347,7 +333,7 @@ class BucketMigrationObjectSyncMixin:
             purged_current, purged_versions = self._purge_target_bucket(target_ctx, target_bucket)
             deleted = purged_current + purged_versions
             if deleted > 0:
-                on_object_progress(deleted_inc=deleted, force=True)
+                progress.record(deleted_inc=deleted, force=True)
 
         source_profile = _json_loads(item.source_snapshot_json)
         copied = 0
@@ -379,7 +365,7 @@ class BucketMigrationObjectSyncMixin:
                 same_endpoint_copy=same_endpoint_copy,
                 watermark=watermark,
                 control_check=control_check,
-                on_progress=on_object_progress,
+                on_progress=progress.record,
             )
         if copied < 0:
             return -1, -1, self._new_empty_sync_diff()
@@ -388,7 +374,7 @@ class BucketMigrationObjectSyncMixin:
             replication_state["pre_sync_watermark"] = pre_sync_watermark
             replication_state["cutover_attempted"] = False
             self._store_item_replication_state(item, replication_state)
-        on_object_progress(force=True)
+        progress.flush(force=True)
 
         compared = self._compare_versioned_timelines(
             source_ctx,

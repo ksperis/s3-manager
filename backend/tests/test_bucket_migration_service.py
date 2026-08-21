@@ -2272,7 +2272,7 @@ def test_sync_bucket_version_aware_cross_endpoint_replays_versions_and_delete_ma
         only_target_count=0,
         sample={"only_source_sample": [], "only_target_sample": [], "different_sample": []},
     )
-    service._purge_target_bucket = lambda *_args, **_kwargs: (0, 0)  # type: ignore[method-assign]
+    service._purge_target_bucket = lambda *_args, **_kwargs: (2, 1)  # type: ignore[method-assign]
     service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
 
     copied, deleted, diff = service._sync_bucket(
@@ -2288,7 +2288,11 @@ def test_sync_bucket_version_aware_cross_endpoint_replays_versions_and_delete_ma
     )
 
     assert copied == 3
-    assert deleted == 0
+    assert deleted == 3
+    assert item.objects_copied == 3
+    assert item.objects_deleted == 3
+    assert item.updated_at is not None
+    assert migration.last_heartbeat_at is not None
     assert diff.matched_count == 1
     assert [entry[0] for entry in target_client.actions] == ["upload", "upload", "delete_marker"]
     assert target_client.actions[0][1]["body"] == b"old-version"
