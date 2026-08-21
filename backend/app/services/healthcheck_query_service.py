@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -333,6 +334,113 @@ class HealthCheckQueryService:
             "incidents": incidents,
         }
 
+    @staticmethod
+    def _workspace_endpoint_snapshot(
+        *,
+        endpoint: StorageEndpoint,
+        latest_scope: EndpointHealthLatest | None,
+        now: datetime,
+        stale_after_seconds: int,
+    ) -> tuple[dict[str, Any], str]:
+        profile = resolve_healthcheck_profile(endpoint)
+        if latest_scope is not None:
+            status = str(latest_scope.status or HealthCheckStatus.UNKNOWN.value)
+            checked_at = latest_scope.checked_at.isoformat()
+            latency_ms = latest_scope.latency_ms
+            check_mode = _coerce_check_mode(latest_scope.check_mode)
+        else:
+            status = HealthCheckStatus.UNKNOWN.value
+            checked_at = now.isoformat()
+            latency_ms = None
+            check_mode = profile.mode
+
+        is_stale = latest_scope is None or (
+            now - latest_scope.checked_at > timedelta(seconds=stale_after_seconds)
+        )
+        counted_statuses = {
+            HealthCheckStatus.UP.value,
+            HealthCheckStatus.DEGRADED.value,
+            HealthCheckStatus.DOWN.value,
+        }
+        effective_status = (
+            status
+            if not is_stale and status in counted_statuses
+            else HealthCheckStatus.UNKNOWN.value
+        )
+        return (
+            {
+                "endpoint_id": endpoint.id,
+                "name": endpoint.name,
+                "endpoint_url": endpoint.endpoint_url,
+                "status": status,
+                "checked_at": checked_at,
+                "latency_ms": latency_ms,
+                "check_mode": check_mode,
+                "check_target_url": profile.target_url,
+                "is_stale": is_stale,
+            },
+            effective_status,
+        )
+
+    def _workspace_incident_rows(
+        self,
+        *,
+        endpoint_ids: list[int],
+        now: datetime,
+        incident_cutoff: datetime,
+    ) -> list[EndpointHealthStatusSegment]:
+        if not endpoint_ids:
+            return []
+        return (
+            self.db.query(EndpointHealthStatusSegment)
+            .filter(
+                EndpointHealthStatusSegment.storage_endpoint_id.in_(endpoint_ids),
+                EndpointHealthStatusSegment.check_type == DEFAULT_CHECK_TYPE,
+                EndpointHealthStatusSegment.scope == DEFAULT_SCOPE,
+                EndpointHealthStatusSegment.status.in_(
+                    [
+                        HealthCheckStatus.DEGRADED.value,
+                        HealthCheckStatus.DOWN.value,
+                    ]
+                ),
+                EndpointHealthStatusSegment.started_at <= now,
+                or_(
+                    EndpointHealthStatusSegment.ended_at.is_(None),
+                    EndpointHealthStatusSegment.ended_at >= incident_cutoff,
+                ),
+            )
+            .order_by(EndpointHealthStatusSegment.started_at.desc())
+            .all()
+        )
+
+    @staticmethod
+    def _workspace_incident_payload(
+        row: EndpointHealthStatusSegment,
+        *,
+        endpoint_meta: dict[int, dict[str, Any]],
+        incident_cutoff: datetime,
+    ) -> dict[str, Any]:
+        end_time = row.ended_at
+        duration_minutes = (
+            int((end_time - row.started_at).total_seconds() / 60)
+            if end_time is not None
+            else None
+        )
+        endpoint_info = endpoint_meta.get(int(row.storage_endpoint_id), {})
+        return {
+            "endpoint_id": int(row.storage_endpoint_id),
+            "endpoint_name": endpoint_info.get("name")
+            or f"Endpoint {row.storage_endpoint_id}",
+            "endpoint_url": endpoint_info.get("url"),
+            "status": row.status,
+            "start": row.started_at.isoformat(),
+            "end": end_time.isoformat() if end_time else None,
+            "duration_minutes": duration_minutes,
+            "check_mode": _coerce_check_mode(row.check_mode),
+            "ongoing": end_time is None,
+            "recent": end_time is not None and end_time >= incident_cutoff,
+        }
+
     def build_workspace_health_overview(
         self,
         *,
@@ -350,54 +458,17 @@ class HealthCheckQueryService:
         stale_after_seconds = max(1, int(settings.healthcheck_interval_seconds)) * 2
         endpoint_ids = [int(endpoint.id) for endpoint in endpoints]
         latest_scope_by_endpoint = self._load_latest_scope_by_endpoint(endpoint_ids)
-
-        payload_endpoints: list[dict[str, Any]] = []
-        up_count = 0
-        degraded_count = 0
-        down_count = 0
-        unknown_count = 0
-
-        for endpoint in endpoints:
-            profile = resolve_healthcheck_profile(endpoint)
-            latest_scope = latest_scope_by_endpoint.get(endpoint.id)
-            if latest_scope is not None:
-                status = str(latest_scope.status or HealthCheckStatus.UNKNOWN.value)
-                checked_at = latest_scope.checked_at.isoformat()
-                latency_ms = latest_scope.latency_ms
-                check_mode = _coerce_check_mode(latest_scope.check_mode)
-            else:
-                status = HealthCheckStatus.UNKNOWN.value
-                checked_at = now.isoformat()
-                latency_ms = None
-                check_mode = profile.mode
-
-            is_stale = latest_scope is None or (
-                now - latest_scope.checked_at > timedelta(seconds=stale_after_seconds)
+        endpoint_snapshots = [
+            self._workspace_endpoint_snapshot(
+                endpoint=endpoint,
+                latest_scope=latest_scope_by_endpoint.get(endpoint.id),
+                now=now,
+                stale_after_seconds=stale_after_seconds,
             )
-            effective_status = HealthCheckStatus.UNKNOWN.value if is_stale else status
-
-            if effective_status == HealthCheckStatus.UP.value:
-                up_count += 1
-            elif effective_status == HealthCheckStatus.DEGRADED.value:
-                degraded_count += 1
-            elif effective_status == HealthCheckStatus.DOWN.value:
-                down_count += 1
-            else:
-                unknown_count += 1
-
-            payload_endpoints.append(
-                {
-                    "endpoint_id": endpoint.id,
-                    "name": endpoint.name,
-                    "endpoint_url": endpoint.endpoint_url,
-                    "status": status,
-                    "checked_at": checked_at,
-                    "latency_ms": latency_ms,
-                    "check_mode": check_mode,
-                    "check_target_url": profile.target_url,
-                    "is_stale": is_stale,
-                }
-            )
+            for endpoint in endpoints
+        ]
+        payload_endpoints = [payload for payload, _status in endpoint_snapshots]
+        status_counts = Counter(status for _payload, status in endpoint_snapshots)
 
         highlight_minutes = max(
             1,
@@ -405,68 +476,35 @@ class HealthCheckQueryService:
         )
         incident_cutoff = now - timedelta(minutes=highlight_minutes)
 
-        payload_incidents: list[dict[str, Any]] = []
-        if endpoint_ids:
-            endpoint_meta = {
-                int(endpoint.id): {
-                    "name": endpoint.name,
-                    "url": endpoint.endpoint_url,
-                }
-                for endpoint in endpoints
+        endpoint_meta = {
+            int(endpoint.id): {
+                "name": endpoint.name,
+                "url": endpoint.endpoint_url,
             }
-            incident_rows = (
-                self.db.query(EndpointHealthStatusSegment)
-                .filter(
-                    EndpointHealthStatusSegment.storage_endpoint_id.in_(endpoint_ids),
-                    EndpointHealthStatusSegment.check_type == DEFAULT_CHECK_TYPE,
-                    EndpointHealthStatusSegment.scope == DEFAULT_SCOPE,
-                    EndpointHealthStatusSegment.status.in_(
-                        [
-                            HealthCheckStatus.DEGRADED.value,
-                            HealthCheckStatus.DOWN.value,
-                        ]
-                    ),
-                    EndpointHealthStatusSegment.started_at <= now,
-                    or_(
-                        EndpointHealthStatusSegment.ended_at.is_(None),
-                        EndpointHealthStatusSegment.ended_at >= incident_cutoff,
-                    ),
-                )
-                .order_by(EndpointHealthStatusSegment.started_at.desc())
-                .all()
+            for endpoint in endpoints
+        }
+        payload_incidents = [
+            self._workspace_incident_payload(
+                row,
+                endpoint_meta=endpoint_meta,
+                incident_cutoff=incident_cutoff,
             )
-            for row in incident_rows:
-                end_time = row.ended_at
-                duration_minutes = None
-                if end_time is not None:
-                    duration_minutes = int((end_time - row.started_at).total_seconds() / 60)
-                endpoint_info = endpoint_meta.get(int(row.storage_endpoint_id), {})
-                ongoing = end_time is None
-                recent = end_time is not None and end_time >= incident_cutoff
-                payload_incidents.append(
-                    {
-                        "endpoint_id": int(row.storage_endpoint_id),
-                        "endpoint_name": endpoint_info.get("name") or f"Endpoint {row.storage_endpoint_id}",
-                        "endpoint_url": endpoint_info.get("url"),
-                        "status": row.status,
-                        "start": row.started_at.isoformat(),
-                        "end": end_time.isoformat() if end_time else None,
-                        "duration_minutes": duration_minutes,
-                        "check_mode": _coerce_check_mode(row.check_mode),
-                        "ongoing": ongoing,
-                        "recent": recent,
-                    }
-                )
+            for row in self._workspace_incident_rows(
+                endpoint_ids=endpoint_ids,
+                now=now,
+                incident_cutoff=incident_cutoff,
+            )
+        ]
 
         return {
             "generated_at": now.isoformat(),
             "stale_after_seconds": stale_after_seconds,
             "incident_highlight_minutes": highlight_minutes,
             "endpoint_count": len(payload_endpoints),
-            "up_count": up_count,
-            "degraded_count": degraded_count,
-            "down_count": down_count,
-            "unknown_count": unknown_count,
+            "up_count": status_counts[HealthCheckStatus.UP.value],
+            "degraded_count": status_counts[HealthCheckStatus.DEGRADED.value],
+            "down_count": status_counts[HealthCheckStatus.DOWN.value],
+            "unknown_count": status_counts[HealthCheckStatus.UNKNOWN.value],
             "endpoints": payload_endpoints,
             "incidents": payload_incidents,
         }

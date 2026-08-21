@@ -3,7 +3,13 @@
 import requests
 from datetime import timedelta
 
-from app.db import EndpointHealthLatest, HealthCheckStatus, StorageEndpoint, StorageProvider
+from app.db import (
+    EndpointHealthLatest,
+    EndpointHealthStatusSegment,
+    HealthCheckStatus,
+    StorageEndpoint,
+    StorageProvider,
+)
 from app.services import healthcheck_query_service, healthcheck_service
 from app.services.healthcheck_common import EndpointCheckTarget, HealthCheckProfile, HealthWindow
 from app.services.healthcheck_query_service import HealthCheckQueryService
@@ -173,3 +179,54 @@ def test_workspace_health_overview_uses_configured_interval_for_stale_counts(db_
     assert payload["endpoints"][0]["is_stale"] is True
     assert payload["up_count"] == 0
     assert payload["unknown_count"] == 1
+
+
+def test_workspace_health_overview_projects_ongoing_and_recent_incidents(db_session):
+    _seed_endpoint(
+        db_session,
+        name="Incident endpoint",
+        endpoint_url="https://incident.example.test",
+        is_default=True,
+    )
+    db_session.flush()
+    endpoint = db_session.query(StorageEndpoint).filter(
+        StorageEndpoint.name == "Incident endpoint"
+    ).one()
+    now = utcnow()
+    db_session.add_all(
+        [
+            EndpointHealthStatusSegment(
+                storage_endpoint_id=endpoint.id,
+                check_mode="http",
+                check_type="availability",
+                scope="endpoint",
+                status=HealthCheckStatus.DOWN.value,
+                started_at=now - timedelta(minutes=10),
+                ended_at=None,
+            ),
+            EndpointHealthStatusSegment(
+                storage_endpoint_id=endpoint.id,
+                check_mode="s3",
+                check_type="availability",
+                scope="endpoint",
+                status=HealthCheckStatus.DEGRADED.value,
+                started_at=now - timedelta(minutes=20),
+                ended_at=now - timedelta(minutes=5),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = HealthCheckQueryService(db_session).build_workspace_health_overview(
+        incident_highlight_minutes=60
+    )
+
+    assert [incident["status"] for incident in payload["incidents"]] == [
+        HealthCheckStatus.DOWN.value,
+        HealthCheckStatus.DEGRADED.value,
+    ]
+    assert payload["incidents"][0]["ongoing"] is True
+    assert payload["incidents"][0]["recent"] is False
+    assert payload["incidents"][1]["ongoing"] is False
+    assert payload["incidents"][1]["recent"] is True
+    assert payload["incidents"][1]["duration_minutes"] == 15
