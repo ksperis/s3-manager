@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from app.db import S3Account
 from app.models.browser import CleanupObjectVersionsPayload
 from app.services import browser_service
@@ -10,6 +12,22 @@ from app.services.browser import versions as browser_versions
 
 def _account() -> S3Account:
     return S3Account(name="cleanup-test")
+
+
+def test_cleanup_requires_a_criterion_before_opening_an_s3_client(monkeypatch):
+    service = browser_service.BrowserService()
+    monkeypatch.setattr(
+        service,
+        "_client",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("S3 client must not be opened")),
+    )
+
+    with pytest.raises(ValueError, match="No cleanup criteria provided"):
+        service.cleanup_object_versions(
+            "bucket-a",
+            _account(),
+            CleanupObjectVersionsPayload(),
+        )
 
 
 def test_cleanup_keep_last_never_deletes_current_version(monkeypatch):
@@ -118,6 +136,46 @@ def test_cleanup_older_than_never_deletes_current_version(monkeypatch):
     assert result.deleted_versions == 1
     assert {"Key": "docs/archive.zip", "VersionId": "latest-old"} not in captured_deletions
     assert captured_deletions == [{"Key": "docs/archive.zip", "VersionId": "old"}]
+
+
+def test_cleanup_keeps_delete_markers_for_keys_with_remaining_versions(monkeypatch):
+    captured_deletions: list[dict] = []
+
+    class FakeClient:
+        def list_object_versions(self, **_kwargs):  # noqa: ANN001
+            return {
+                "Versions": [
+                    {
+                        "Key": "docs/retained.txt",
+                        "VersionId": "current",
+                        "LastModified": datetime(2026, 1, 3, tzinfo=timezone.utc),
+                        "IsLatest": True,
+                    }
+                ],
+                "DeleteMarkers": [
+                    {"Key": "docs/retained.txt", "VersionId": "retained-marker"},
+                    {"Key": "docs/orphan.txt", "VersionId": "orphan-marker"},
+                ],
+                "NextKeyMarker": None,
+                "NextVersionIdMarker": None,
+            }
+
+    def fake_delete_objects(_client, _bucket, items):  # noqa: ANN001
+        captured_deletions.extend(items)
+
+    service = browser_service.BrowserService()
+    monkeypatch.setattr(service, "_client", lambda _account, request_profile="interactive": FakeClient())
+    monkeypatch.setattr(browser_versions, "delete_objects", fake_delete_objects)
+
+    result = service.cleanup_object_versions(
+        "bucket-a",
+        _account(),
+        CleanupObjectVersionsPayload(prefix="docs/", delete_orphan_markers=True),
+    )
+
+    assert result.deleted_versions == 0
+    assert result.deleted_delete_markers == 1
+    assert captured_deletions == [{"Key": "docs/orphan.txt", "VersionId": "orphan-marker"}]
 
 
 def test_cleanup_batches_large_version_deletions_and_orphan_markers(monkeypatch):
