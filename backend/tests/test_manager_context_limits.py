@@ -59,3 +59,24 @@ def test_manager_context_loads_limits_on_explicit_request(db_session, monkeypatc
     assert payload.max_users == 20
     assert payload.max_roles == 12
     assert payload.max_groups == 6
+
+
+def test_manager_context_resolves_user_access_once(db_session, monkeypatch):
+    account, actor = _prepare_context(db_session, monkeypatch)
+    original_resolve = context_router.EffectiveAccessService.resolve_user
+    resolved_users: list[User] = []
+
+    def resolve_once(service, user):  # noqa: ANN001
+        resolved_users.append(user)
+        return original_resolve(service, user)
+
+    monkeypatch.setattr(context_router.EffectiveAccessService, "resolve_user", resolve_once)
+
+    context_router.get_manager_context(
+        account=account,
+        actor=actor,
+        db=db_session,
+        include_limits=False,
+    )
+
+    assert resolved_users == [actor]

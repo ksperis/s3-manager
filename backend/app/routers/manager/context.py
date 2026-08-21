@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -20,13 +21,29 @@ from app.services.app_settings_service import load_app_settings
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import get_s3_users_service
-from app.services.effective_access_service import EffectiveAccessService
+from app.services.effective_access_service import EffectiveAccessService, ResolvedUserAccess
 from app.services.managed_private_access_service import ManagedPrivateAccessService
 from app.services.rgw_supervision import has_supervision_credentials
 from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags
 
 router = APIRouter(prefix="/manager", tags=["manager-context"])
+
+
+@dataclass(frozen=True)
+class _ManagerBrowserState:
+    enabled: bool
+    message: Optional[str]
+
+
+@dataclass(frozen=True)
+class _ManagerLimits:
+    quota_max_size_gb: Optional[float] = None
+    quota_max_objects: Optional[int] = None
+    max_buckets: Optional[int] = None
+    max_users: Optional[int] = None
+    max_roles: Optional[int] = None
+    max_groups: Optional[int] = None
 
 
 def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[str]]:
@@ -66,6 +83,163 @@ def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[
     return False, None, None
 
 
+def _manager_access_mode(
+    actor: ManagerActor,
+    s3_user_id: Optional[int],
+    s3_connection_id: Optional[int],
+) -> str:
+    if isinstance(actor, ManagerSessionPrincipal):
+        return "session"
+    if s3_connection_id is not None:
+        return "connection"
+    if s3_user_id is not None:
+        return "s3_user"
+    return "admin"
+
+
+def _manager_browser_state(
+    account,
+    actor: ManagerActor,
+    db: Session,
+    access_service: Optional[EffectiveAccessService],
+    resolved_access: Optional[ResolvedUserAccess],
+) -> _ManagerBrowserState:
+    settings = load_app_settings()
+    if not settings.general.browser_enabled:
+        return _ManagerBrowserState(False, "Browser is disabled.")
+    if not settings.general.manager_enabled:
+        return _ManagerBrowserState(False, "Manager is disabled.")
+    if not settings.general.browser_manager_enabled:
+        return _ManagerBrowserState(False, "Manager Browser is disabled.")
+    if isinstance(actor, ManagerSessionPrincipal):
+        enabled = bool(actor.capabilities.access_browser)
+        message = None if enabled else "Browser access is not allowed for this session."
+        return _ManagerBrowserState(enabled, message)
+
+    if resolved_access is None or access_service is None:
+        raise RuntimeError("UI user effective access was not resolved")
+    s3_connection_id = getattr(account, "s3_connection_id", None)
+    if s3_connection_id is not None:
+        connection = db.query(S3Connection).filter(S3Connection.id == s3_connection_id).first()
+        enabled = bool(
+            connection
+            and access_service.manager_browser_connection_is_allowed(
+                actor,
+                connection,
+            )
+        )
+        message = None
+        if not enabled:
+            message = (
+                "Manager Browser requires an owned private connection with both Manager and "
+                "Browser access. Shared connections are not supported."
+            )
+        return _ManagerBrowserState(enabled, message)
+
+    s3_user_id = getattr(account, "s3_user_id", None)
+    if s3_user_id is not None:
+        enabled = resolved_access.can_browse_s3_user(int(s3_user_id))
+        message = None if enabled else "Manager Browser data access is not allowed for this RGW user."
+        return _ManagerBrowserState(enabled, message)
+
+    account_id = getattr(account, "id", None)
+    link = resolved_access.account_link_for(int(account_id)) if account_id else None
+    enabled = bool(link and link.manager_browser_allowed)
+    message = None
+    if not enabled:
+        message = (
+            "Manager Browser requires account administrator and explicit data access on the "
+            "same association."
+        )
+    return _ManagerBrowserState(enabled, message)
+
+
+def _manager_iam_identity(
+    account,
+    actor: ManagerActor,
+    access_mode: str,
+    connection_iam_identity: Optional[str],
+) -> Optional[str]:
+    if access_mode == "admin":
+        return resolve_admin_uid(
+            getattr(account, "rgw_account_id", None),
+            getattr(account, "rgw_user_uid", None),
+        )
+    if access_mode == "session" and isinstance(actor, ManagerSessionPrincipal):
+        return actor.user_uid or actor.account_id or actor.account_name
+    if access_mode == "s3_user":
+        return getattr(account, "rgw_user_uid", None)
+    if access_mode == "connection":
+        return connection_iam_identity
+    return None
+
+
+def _manager_private_access_enabled(
+    account,
+    actor: ManagerActor,
+    db: Session,
+    resolved_access: Optional[ResolvedUserAccess],
+) -> bool:
+    if not isinstance(actor, User):
+        return False
+    if resolved_access is None:
+        raise RuntimeError("UI user effective access was not resolved")
+    if getattr(account, "s3_user_id", None) is not None:
+        return ManagedPrivateAccessService(db).rgw_user_provisioning_available(actor, account)
+
+    capabilities = getattr(account, "manager_capabilities", None)
+    endpoint = getattr(account, "storage_endpoint", None)
+    return bool(
+        resolved_access.can_provision_managed_private_connections
+        and capabilities
+        and capabilities.can_manage_iam
+        and (endpoint is None or resolve_feature_flags(endpoint).iam_enabled)
+    )
+
+
+def _manager_limits(
+    account,
+    db: Session,
+    *,
+    include_limits: bool,
+    s3_user_id: Optional[int],
+    s3_connection_id: Optional[int],
+) -> _ManagerLimits:
+    if not include_limits or s3_connection_id is not None:
+        return _ManagerLimits()
+    if s3_user_id is not None:
+        s3_user = db.query(S3User).filter(S3User.id == s3_user_id).first()
+        if s3_user is None:
+            return _ManagerLimits()
+        quota_max_size_gb, quota_max_objects, max_buckets = get_s3_users_service(db).get_user_limits(s3_user)
+        return _ManagerLimits(
+            quota_max_size_gb=quota_max_size_gb,
+            quota_max_objects=quota_max_objects,
+            max_buckets=max_buckets,
+        )
+
+    account_id = getattr(account, "id", None)
+    s3_account = db.query(S3Account).filter(S3Account.id == account_id).first() if account_id else None
+    if s3_account is None:
+        return _ManagerLimits()
+    (
+        quota_max_size_gb,
+        quota_max_objects,
+        max_buckets,
+        max_users,
+        max_roles,
+        max_groups,
+    ) = get_s3_accounts_service(db).get_account_limits(s3_account)
+    return _ManagerLimits(
+        quota_max_size_gb=quota_max_size_gb,
+        quota_max_objects=quota_max_objects,
+        max_buckets=max_buckets,
+        max_users=max_users,
+        max_roles=max_roles,
+        max_groups=max_groups,
+    )
+
+
 @router.get("/context", response_model=ManagerContext)
 def get_manager_context(
     account=Depends(get_account_context),
@@ -76,114 +250,46 @@ def get_manager_context(
     s3_user_id = getattr(account, "s3_user_id", None)
     s3_connection_id = getattr(account, "s3_connection_id", None)
     manager_stats_enabled, manager_stats_message, connection_iam_identity = _manager_stats_state(account, actor)
-    access_mode = "admin"
-    if isinstance(actor, ManagerSessionPrincipal):
-        access_mode = "session"
-    elif s3_connection_id is not None:
-        access_mode = "connection"
-    elif s3_user_id is not None:
-        access_mode = "s3_user"
-
-    iam_identity: Optional[str] = None
-    settings = load_app_settings()
-    manager_browser_enabled = False
-    manager_browser_message: Optional[str] = None
-    if not settings.general.browser_enabled:
-        manager_browser_message = "Browser is disabled."
-    elif not settings.general.manager_enabled:
-        manager_browser_message = "Manager is disabled."
-    elif not settings.general.browser_manager_enabled:
-        manager_browser_message = "Manager Browser is disabled."
-    elif isinstance(actor, ManagerSessionPrincipal):
-        manager_browser_enabled = bool(actor.capabilities.access_browser)
-        if not manager_browser_enabled:
-            manager_browser_message = "Browser access is not allowed for this session."
-    else:
-        access_service = EffectiveAccessService(db)
-        resolved_access = access_service.resolve_user(actor)
-        if s3_connection_id is not None:
-            connection = db.query(S3Connection).filter(S3Connection.id == s3_connection_id).first()
-            manager_browser_enabled = bool(
-                connection
-                and access_service.manager_browser_connection_is_allowed(actor, connection)
-            )
-            if not manager_browser_enabled:
-                manager_browser_message = (
-                    "Manager Browser requires an owned private connection with both Manager and Browser access. Shared connections are not supported."
-                )
-        elif s3_user_id is not None:
-            manager_browser_enabled = resolved_access.can_browse_s3_user(int(s3_user_id))
-            if not manager_browser_enabled:
-                manager_browser_message = (
-                    "Manager Browser data access is not allowed for this RGW user."
-                )
-        else:
-            account_id = getattr(account, "id", None)
-            link = resolved_access.account_link_for(int(account_id)) if account_id else None
-            manager_browser_enabled = bool(link and link.manager_browser_allowed)
-            if not manager_browser_enabled:
-                manager_browser_message = (
-                    "Manager Browser requires account administrator and explicit data access on the same association."
-                )
-    if access_mode == "admin":
-        iam_identity = resolve_admin_uid(getattr(account, "rgw_account_id", None), getattr(account, "rgw_user_uid", None))
-    elif access_mode == "session":
-        iam_identity = actor.user_uid or actor.account_id or actor.account_name
-    elif access_mode == "s3_user":
-        iam_identity = getattr(account, "rgw_user_uid", None)
-    elif access_mode == "connection":
-        iam_identity = connection_iam_identity
+    access_mode = _manager_access_mode(actor, s3_user_id, s3_connection_id)
+    access_service = EffectiveAccessService(db) if isinstance(actor, User) else None
+    resolved_access = access_service.resolve_user(actor) if access_service else None
+    browser_state = _manager_browser_state(
+        account,
+        actor,
+        db,
+        access_service,
+        resolved_access,
+    )
+    iam_identity = _manager_iam_identity(
+        account,
+        actor,
+        access_mode,
+        connection_iam_identity,
+    )
 
     manager_ceph_keys_enabled = (
         is_manager_rgw_access_key_management_available(account, actor, db=db)
         if isinstance(actor, User)
         else False
     )
-    manager_private_access_enabled = False
-    if isinstance(actor, User):
-        resolved_access = EffectiveAccessService(db).resolve_user(actor)
-        if s3_user_id is not None:
-            manager_private_access_enabled = ManagedPrivateAccessService(
-                db
-            ).rgw_user_provisioning_available(actor, account)
-        else:
-            capabilities = getattr(account, "manager_capabilities", None)
-            endpoint = getattr(account, "storage_endpoint", None)
-            manager_private_access_enabled = bool(
-                resolved_access.can_provision_managed_private_connections
-                and capabilities
-                and capabilities.can_manage_iam
-                and (endpoint is None or resolve_feature_flags(endpoint).iam_enabled)
-            )
+    manager_private_access_enabled = _manager_private_access_enabled(
+        account,
+        actor,
+        db,
+        resolved_access,
+    )
     manager_bucket_quota_enabled = (
         is_manager_bucket_quota_available(account, actor, db=db)
         if isinstance(actor, User)
         else False
     )
-
-    quota_max_size_gb = None
-    quota_max_objects = None
-    max_buckets = None
-    max_users = None
-    max_roles = None
-    max_groups = None
-    if include_limits and s3_connection_id is None:
-        if s3_user_id is not None:
-            s3_user = db.query(S3User).filter(S3User.id == s3_user_id).first()
-            if s3_user is not None:
-                quota_max_size_gb, quota_max_objects, max_buckets = get_s3_users_service(db).get_user_limits(s3_user)
-        else:
-            account_id = getattr(account, "id", None)
-            s3_account = db.query(S3Account).filter(S3Account.id == account_id).first() if account_id else None
-            if s3_account is not None:
-                (
-                    quota_max_size_gb,
-                    quota_max_objects,
-                    max_buckets,
-                    max_users,
-                    max_roles,
-                    max_groups,
-                ) = get_s3_accounts_service(db).get_account_limits(s3_account)
+    limits = _manager_limits(
+        account,
+        db,
+        include_limits=include_limits,
+        s3_user_id=s3_user_id,
+        s3_connection_id=s3_connection_id,
+    )
 
     return ManagerContext(
         access_mode=access_mode,
@@ -191,15 +297,15 @@ def get_manager_context(
         iam_identity=iam_identity,
         manager_stats_enabled=manager_stats_enabled,
         manager_stats_message=manager_stats_message,
-        manager_browser_enabled=manager_browser_enabled,
-        manager_browser_message=manager_browser_message,
+        manager_browser_enabled=browser_state.enabled,
+        manager_browser_message=browser_state.message,
         manager_bucket_quota_enabled=manager_bucket_quota_enabled,
         manager_ceph_keys_enabled=manager_ceph_keys_enabled,
         manager_private_access_enabled=manager_private_access_enabled,
-        quota_max_size_gb=quota_max_size_gb,
-        quota_max_objects=quota_max_objects,
-        max_buckets=max_buckets,
-        max_users=max_users,
-        max_roles=max_roles,
-        max_groups=max_groups,
+        quota_max_size_gb=limits.quota_max_size_gb,
+        quota_max_objects=limits.quota_max_objects,
+        max_buckets=limits.max_buckets,
+        max_users=limits.max_users,
+        max_roles=limits.max_roles,
+        max_groups=limits.max_groups,
     )
