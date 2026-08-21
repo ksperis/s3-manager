@@ -98,6 +98,7 @@ import { useBrowserBucketCors } from "./useBrowserBucketCors";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
+import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
@@ -1018,12 +1019,6 @@ export default function BrowserPage({
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
   const contextCountIdRef = useRef(0);
   const bucketInspectorRequestIdRef = useRef(0);
-  const browserPathRef = useRef("");
-  const browserHistoryStateRef = useRef<{
-    bucketName: string;
-    prefix: string;
-  } | null>(null);
-  const skipHistoryPushRef = useRef(false);
   const browserRootSelectionPersistenceReadyRef = useRef(false);
   const browserRootSelectionContextIdRef = useRef<string | null>(
     browserRootContextId,
@@ -1868,84 +1863,18 @@ export default function BrowserPage({
     folderInputRef.current.setAttribute("directory", "");
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    browserPathRef.current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handlePopState = (event: PopStateEvent) => {
-      const state = event.state as {
-        browserPage?: boolean;
-        bucketName?: string;
-        prefix?: string;
-      } | null;
-      if (state?.browserPage) {
-        const nextBucket = state.bucketName ?? "";
-        const nextPrefix = state.prefix ?? "";
-        const isSame =
-          nextBucket === bucketNameRef.current &&
-          nextPrefix === prefixRef.current;
-        skipHistoryPushRef.current = !isSame;
-        if (nextBucket !== bucketNameRef.current) {
-          setBucketName(nextBucket);
-        }
-        setPrefix(nextPrefix);
-        setActiveItem(null);
-        setIsEditingPath(false);
-        return;
+  useBrowserNavigationHistory({
+    bucketName,
+    prefix,
+    onNavigate: ({ bucketName: nextBucket, prefix: nextPrefix }) => {
+      if (nextBucket !== bucketNameRef.current) {
+        setBucketName(nextBucket);
       }
-      const safeState = {
-        ...(window.history.state ?? {}),
-        browserPage: true,
-        bucketName: bucketNameRef.current,
-        prefix: prefixRef.current,
-      };
-      window.history.pushState(
-        safeState,
-        "",
-        browserPathRef.current ||
-          `${window.location.pathname}${window.location.search}${window.location.hash}`,
-      );
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (skipHistoryPushRef.current) {
-      skipHistoryPushRef.current = false;
-      browserHistoryStateRef.current = { bucketName, prefix };
-      return;
-    }
-    const last = browserHistoryStateRef.current;
-    if (last && last.bucketName === bucketName && last.prefix === prefix) {
-      return;
-    }
-    const baseState = window.history.state ?? {};
-    const nextState = { ...baseState, browserPage: true, bucketName, prefix };
-    if (!baseState?.browserPage) {
-      window.history.replaceState(
-        nextState,
-        "",
-        browserPathRef.current ||
-          `${window.location.pathname}${window.location.search}${window.location.hash}`,
-      );
-      browserHistoryStateRef.current = { bucketName, prefix };
-      return;
-    }
-    window.history.pushState(
-      nextState,
-      "",
-      browserPathRef.current ||
-        `${window.location.pathname}${window.location.search}${window.location.hash}`,
-    );
-    browserHistoryStateRef.current = { bucketName, prefix };
-  }, [bucketName, prefix]);
+      setPrefix(nextPrefix);
+      setActiveItem(null);
+      setIsEditingPath(false);
+    },
+  });
 
   useEffect(() => {
     setInspectorTab("context");
