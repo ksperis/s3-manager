@@ -70,6 +70,18 @@ class _ItemSafety:
     rollback_safe: bool
 
 
+@dataclass(frozen=True)
+class _PlannedItem:
+    report: dict[str, Any]
+    infos: int
+    warnings: int
+    blocking_errors: int
+    same_endpoint_copy_safe: bool
+    delete_source_safe: bool
+    rollback_safe: bool
+    unsupported_features: frozenset[str]
+
+
 def _check_entry(
     *,
     code: str,
@@ -659,8 +671,8 @@ class BucketMigrationPrecheckPlanner:
             rollback_safe=rollback_safe,
         )
 
-    def run(self, migration: Any, *, checked_at: Any) -> dict[str, Any]:
-        report: dict[str, Any] = {
+    def _new_report(self, *, checked_at: Any) -> dict[str, Any]:
+        return {
             "report_version": _PRECHECK_REPORT_VERSION,
             "status": "passed",
             "checked_at": checked_at.isoformat(),
@@ -673,17 +685,23 @@ class BucketMigrationPrecheckPlanner:
             "unsupported_features": [],
         }
 
-        blocking_errors = 0
-        warnings = 0
-        infos = 0
-
-        source_ctx: Optional[Any] = None
-        target_ctx: Optional[Any] = None
-        context_entries: list[dict[str, Any]] = []
+    def _resolve_contexts(
+        self,
+        migration: Any,
+        report: dict[str, Any],
+    ) -> tuple[Any | None, Any | None, list[dict[str, Any]]]:
+        entries: list[dict[str, Any]] = []
         try:
-            source_ctx = self._service._resolve_context(migration.source_context_id)
-            target_ctx = self._service._resolve_context(migration.target_context_id)
-            same_endpoint = self._service._is_same_endpoint(source_ctx, target_ctx)
+            source_ctx = self._service._resolve_context(
+                migration.source_context_id
+            )
+            target_ctx = self._service._resolve_context(
+                migration.target_context_id
+            )
+            same_endpoint = self._service._is_same_endpoint(
+                source_ctx,
+                target_ctx,
+            )
             report["contexts"] = {
                 "source": {
                     "context_id": source_ctx.context_id,
@@ -699,28 +717,31 @@ class BucketMigrationPrecheckPlanner:
             report["same_endpoint"] = bool(same_endpoint)
             report["capabilities"] = self._global_capabilities(
                 same_endpoint=same_endpoint,
-                same_endpoint_copy_requested=bool(migration.use_same_endpoint_copy),
+                same_endpoint_copy_requested=bool(
+                    migration.use_same_endpoint_copy
+                ),
             )
         except Exception as exc:  # noqa: BLE001
-            entry = _check_entry(
-                code="context_resolution_failed",
-                severity="error",
-                blocking=True,
-                scope="migration",
-                message=f"Unable to resolve migration contexts: {exc}",
-                details=None,
+            entries.append(
+                _check_entry(
+                    code="context_resolution_failed",
+                    severity="error",
+                    blocking=True,
+                    scope="migration",
+                    message=f"Unable to resolve migration contexts: {exc}",
+                )
             )
-            context_entries.append(entry)
             report["contexts_error"] = str(exc)
-            source_ctx = None
-            target_ctx = None
             report["capabilities"] = self._global_capabilities(
                 same_endpoint=False,
-                same_endpoint_copy_requested=bool(migration.use_same_endpoint_copy),
+                same_endpoint_copy_requested=bool(
+                    migration.use_same_endpoint_copy
+                ),
             )
+            return None, None, entries
 
-        if source_ctx is not None and not source_ctx.endpoint:
-            context_entries.append(
+        if not source_ctx.endpoint:
+            entries.append(
                 _check_entry(
                     code="source_endpoint_missing",
                     severity="error",
@@ -729,8 +750,8 @@ class BucketMigrationPrecheckPlanner:
                     message="Source context endpoint is missing.",
                 )
             )
-        if target_ctx is not None and not target_ctx.endpoint:
-            context_entries.append(
+        if not target_ctx.endpoint:
+            entries.append(
                 _check_entry(
                     code="target_endpoint_missing",
                     severity="error",
@@ -739,156 +760,192 @@ class BucketMigrationPrecheckPlanner:
                     message="Target context endpoint is missing.",
                 )
             )
+        return source_ctx, target_ctx, entries
 
-        if source_ctx is None or target_ctx is None or context_entries:
-            counts = _count_entries(context_entries)
-            report["errors"] = counts["errors"]
-            report["warnings"] = counts["warnings"]
-            report["status"] = "failed"
-            report["summary"] = {
-                "items": len(migration.items),
-                "infos": counts["infos"],
-                "warnings": counts["warnings"],
-                "errors": counts["errors"],
-                "blocking_errors": counts["blocking_errors"],
-            }
-            report["checks"] = context_entries
-            return report
+    def _context_failure_report(
+        self,
+        report: dict[str, Any],
+        migration: Any,
+        entries: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        counts = _count_entries(entries)
+        report["errors"] = counts["errors"]
+        report["warnings"] = counts["warnings"]
+        report["status"] = "failed"
+        report["summary"] = {
+            "items": len(migration.items),
+            "infos": counts["infos"],
+            "warnings": counts["warnings"],
+            "errors": counts["errors"],
+            "blocking_errors": counts["blocking_errors"],
+        }
+        report["checks"] = entries
+        return report
 
-        same_endpoint = bool(report.get("same_endpoint"))
-        same_endpoint_copy_enabled = bool(same_endpoint and migration.use_same_endpoint_copy)
-        global_same_endpoint_copy_safe = not same_endpoint_copy_enabled
-        global_delete_source_safe = True
-        global_rollback_safe = True
-        global_unsupported_features: set[str] = set()
-        probe_policy = self._inspector.build_probe_policy(copy_bucket_settings=bool(migration.copy_bucket_settings))
+    def _plan_item(
+        self,
+        source_ctx: Any,
+        target_ctx: Any,
+        item: Any,
+        migration: Any,
+        *,
+        checked_at: Any,
+        probe_policy: Any,
+        same_endpoint_copy_enabled: bool,
+    ) -> _PlannedItem:
+        checks: list[dict[str, Any]] = []
 
-        for item in sorted(migration.items, key=lambda entry: entry.id):
-            checks: list[dict[str, Any]] = []
-
-            def add_check(
-                *,
-                code: str,
-                severity: str,
-                blocking: bool,
-                scope: str,
-                message: str,
-                details: Optional[dict[str, Any]] = None,
-            ) -> None:
-                checks.append(
-                    _check_entry(
-                        code=code,
-                        severity=severity,
-                        blocking=blocking,
-                        scope=scope,
-                        message=message,
-                        details=details,
-                    )
+        def add_check(
+            *,
+            code: str,
+            severity: str,
+            blocking: bool,
+            scope: str,
+            message: str,
+            details: Optional[dict[str, Any]] = None,
+        ) -> None:
+            checks.append(
+                _check_entry(
+                    code=code,
+                    severity=severity,
+                    blocking=blocking,
+                    scope=scope,
+                    message=message,
+                    details=details,
                 )
-
-            source_inspection = self._inspect_source_bucket(
-                source_ctx,
-                item,
-                probe_policy=probe_policy,
-                add_check=add_check,
-            )
-            target_inspection = self._inspect_target_bucket(
-                target_ctx,
-                item,
-                probe_policy=probe_policy,
-                add_check=add_check,
-            )
-            source_access_ok = source_inspection.access_ok
-            source_count = source_inspection.object_count
-            source_profile = source_inspection.profile
-            target_exists = target_inspection.exists
-            target_count = target_inspection.object_count
-            target_profile = target_inspection.profile
-            strategy = "skip_existing" if target_exists is True else "current_only"
-            item.source_count = source_count
-            item.target_count = target_count
-
-            source_plan = self._plan_source_bucket(
-                source_ctx,
-                item,
-                migration,
-                profile=source_profile,
-                object_count=source_count,
-                initial_strategy=strategy,
-                add_check=add_check,
-            )
-            strategy = source_plan.strategy
-            global_unsupported_features.update(source_plan.unsupported_features)
-
-            safety = self._evaluate_item_safety(
-                source_ctx,
-                target_ctx,
-                item,
-                migration,
-                source_access_ok=source_access_ok,
-                source_profile=source_profile,
-                target_exists=target_exists,
-                strategy=strategy,
-                same_endpoint_copy_enabled=same_endpoint_copy_enabled,
-                add_check=add_check,
-            )
-            same_endpoint_copy_safe = safety.same_endpoint_copy_safe
-            delete_source_safe = safety.delete_source_safe
-            rollback_safe = safety.rollback_safe
-
-            counts = _count_entries(checks)
-            blocking = counts["blocking_errors"] > 0
-            infos += counts["infos"]
-            warnings += counts["warnings"]
-            blocking_errors += counts["blocking_errors"]
-            global_same_endpoint_copy_safe = global_same_endpoint_copy_safe and same_endpoint_copy_safe
-            global_delete_source_safe = global_delete_source_safe and delete_source_safe
-            global_rollback_safe = global_rollback_safe and rollback_safe
-
-            item.source_snapshot_json = self._service._json_dumps_safe(source_profile)
-            item.target_snapshot_json = self._service._json_dumps_safe(target_profile)
-            execution_plan = {
-                "report_version": _PRECHECK_REPORT_VERSION,
-                "strategy": strategy,
-                "supported": not blocking,
-                "blocked": blocking,
-                "delete_source_safe": delete_source_safe,
-                "rollback_safe": rollback_safe,
-                "same_endpoint_copy_safe": same_endpoint_copy_safe,
-                "blocking_codes": [
-                    entry["code"]
-                    for entry in checks
-                    if str(entry.get("severity") or "").lower() == "error" and bool(entry.get("blocking"))
-                ],
-            }
-            item.execution_plan_json = self._service._json_dumps_safe(execution_plan)
-            item.updated_at = checked_at
-
-            report["items"].append(
-                {
-                    "item_id": item.id,
-                    "source_bucket": item.source_bucket,
-                    "target_bucket": item.target_bucket,
-                    "strategy": strategy,
-                    "blocking": blocking,
-                    "delete_source_safe": delete_source_safe,
-                    "rollback_safe": rollback_safe,
-                    "same_endpoint_copy_safe": same_endpoint_copy_safe,
-                    "source_object_count": source_count,
-                    "target_object_count": target_count,
-                    "source_profile": source_profile,
-                    "target_profile": target_profile,
-                    "checks": checks,
-                    "messages": checks,
-                    "errors": counts["errors"],
-                    "warnings": counts["warnings"],
-                }
             )
 
-        report["same_endpoint_copy_safe"] = global_same_endpoint_copy_safe
-        report["delete_source_safe"] = global_delete_source_safe
-        report["rollback_safe"] = global_rollback_safe
-        report["unsupported_features"] = sorted(global_unsupported_features)
+        source = self._inspect_source_bucket(
+            source_ctx,
+            item,
+            probe_policy=probe_policy,
+            add_check=add_check,
+        )
+        target = self._inspect_target_bucket(
+            target_ctx,
+            item,
+            probe_policy=probe_policy,
+            add_check=add_check,
+        )
+        item.source_count = source.object_count
+        item.target_count = target.object_count
+        source_plan = self._plan_source_bucket(
+            source_ctx,
+            item,
+            migration,
+            profile=source.profile,
+            object_count=source.object_count,
+            initial_strategy=(
+                "skip_existing" if target.exists is True else "current_only"
+            ),
+            add_check=add_check,
+        )
+        safety = self._evaluate_item_safety(
+            source_ctx,
+            target_ctx,
+            item,
+            migration,
+            source_access_ok=source.access_ok,
+            source_profile=source.profile,
+            target_exists=target.exists,
+            strategy=source_plan.strategy,
+            same_endpoint_copy_enabled=same_endpoint_copy_enabled,
+            add_check=add_check,
+        )
+        counts = _count_entries(checks)
+        blocking = counts["blocking_errors"] > 0
+        self._store_item_plan(
+            item,
+            checked_at=checked_at,
+            source_profile=source.profile,
+            target_profile=target.profile,
+            strategy=source_plan.strategy,
+            safety=safety,
+            blocking=blocking,
+            checks=checks,
+        )
+        return _PlannedItem(
+            report={
+                "item_id": item.id,
+                "source_bucket": item.source_bucket,
+                "target_bucket": item.target_bucket,
+                "strategy": source_plan.strategy,
+                "blocking": blocking,
+                "delete_source_safe": safety.delete_source_safe,
+                "rollback_safe": safety.rollback_safe,
+                "same_endpoint_copy_safe": safety.same_endpoint_copy_safe,
+                "source_object_count": source.object_count,
+                "target_object_count": target.object_count,
+                "source_profile": source.profile,
+                "target_profile": target.profile,
+                "checks": checks,
+                "messages": checks,
+                "errors": counts["errors"],
+                "warnings": counts["warnings"],
+            },
+            infos=counts["infos"],
+            warnings=counts["warnings"],
+            blocking_errors=counts["blocking_errors"],
+            same_endpoint_copy_safe=safety.same_endpoint_copy_safe,
+            delete_source_safe=safety.delete_source_safe,
+            rollback_safe=safety.rollback_safe,
+            unsupported_features=source_plan.unsupported_features,
+        )
+
+    def _store_item_plan(
+        self,
+        item: Any,
+        *,
+        checked_at: Any,
+        source_profile: dict[str, Any] | None,
+        target_profile: dict[str, Any] | None,
+        strategy: str,
+        safety: _ItemSafety,
+        blocking: bool,
+        checks: list[dict[str, Any]],
+    ) -> None:
+        item.source_snapshot_json = self._service._json_dumps_safe(
+            source_profile
+        )
+        item.target_snapshot_json = self._service._json_dumps_safe(
+            target_profile
+        )
+        execution_plan = {
+            "report_version": _PRECHECK_REPORT_VERSION,
+            "strategy": strategy,
+            "supported": not blocking,
+            "blocked": blocking,
+            "delete_source_safe": safety.delete_source_safe,
+            "rollback_safe": safety.rollback_safe,
+            "same_endpoint_copy_safe": safety.same_endpoint_copy_safe,
+            "blocking_codes": [
+                entry["code"]
+                for entry in checks
+                if str(entry.get("severity") or "").lower() == "error"
+                and bool(entry.get("blocking"))
+            ],
+        }
+        item.execution_plan_json = self._service._json_dumps_safe(
+            execution_plan
+        )
+        item.updated_at = checked_at
+
+    def _finalize_report(
+        self,
+        report: dict[str, Any],
+        *,
+        infos: int,
+        warnings: int,
+        blocking_errors: int,
+        same_endpoint_copy_safe: bool,
+        delete_source_safe: bool,
+        rollback_safe: bool,
+        unsupported_features: set[str],
+    ) -> dict[str, Any]:
+        report["same_endpoint_copy_safe"] = same_endpoint_copy_safe
+        report["delete_source_safe"] = delete_source_safe
+        report["rollback_safe"] = rollback_safe
+        report["unsupported_features"] = sorted(unsupported_features)
         report["errors"] = blocking_errors
         report["warnings"] = warnings
         report["status"] = "failed" if blocking_errors > 0 else "passed"
@@ -899,9 +956,80 @@ class BucketMigrationPrecheckPlanner:
             "errors": blocking_errors,
             "blocking_errors": blocking_errors,
             "strategies": {
-                "current_only": len([item for item in report["items"] if item.get("strategy") == "current_only"]),
-                "version_aware": len([item for item in report["items"] if item.get("strategy") == "version_aware"]),
-                "skip_existing": len([item for item in report["items"] if item.get("strategy") == "skip_existing"]),
+                strategy: sum(
+                    item.get("strategy") == strategy
+                    for item in report["items"]
+                )
+                for strategy in (
+                    "current_only",
+                    "version_aware",
+                    "skip_existing",
+                )
             },
         }
         return report
+
+    def run(self, migration: Any, *, checked_at: Any) -> dict[str, Any]:
+        report = self._new_report(checked_at=checked_at)
+        source_ctx, target_ctx, context_entries = self._resolve_contexts(
+            migration,
+            report,
+        )
+        if source_ctx is None or target_ctx is None or context_entries:
+            return self._context_failure_report(
+                report,
+                migration,
+                context_entries,
+            )
+
+        same_endpoint = bool(report.get("same_endpoint"))
+        same_endpoint_copy_enabled = bool(
+            same_endpoint and migration.use_same_endpoint_copy
+        )
+        global_same_endpoint_copy_safe = not same_endpoint_copy_enabled
+        global_delete_source_safe = True
+        global_rollback_safe = True
+        global_unsupported_features: set[str] = set()
+        blocking_errors = 0
+        warnings = 0
+        infos = 0
+        probe_policy = self._inspector.build_probe_policy(
+            copy_bucket_settings=bool(migration.copy_bucket_settings)
+        )
+
+        for item in sorted(migration.items, key=lambda entry: entry.id):
+            planned = self._plan_item(
+                source_ctx,
+                target_ctx,
+                item,
+                migration,
+                checked_at=checked_at,
+                probe_policy=probe_policy,
+                same_endpoint_copy_enabled=same_endpoint_copy_enabled,
+            )
+            report["items"].append(planned.report)
+            infos += planned.infos
+            warnings += planned.warnings
+            blocking_errors += planned.blocking_errors
+            global_unsupported_features.update(planned.unsupported_features)
+            global_same_endpoint_copy_safe = (
+                global_same_endpoint_copy_safe
+                and planned.same_endpoint_copy_safe
+            )
+            global_delete_source_safe = (
+                global_delete_source_safe and planned.delete_source_safe
+            )
+            global_rollback_safe = (
+                global_rollback_safe and planned.rollback_safe
+            )
+
+        return self._finalize_report(
+            report,
+            infos=infos,
+            warnings=warnings,
+            blocking_errors=blocking_errors,
+            same_endpoint_copy_safe=global_same_endpoint_copy_safe,
+            delete_source_safe=global_delete_source_safe,
+            rollback_safe=global_rollback_safe,
+            unsupported_features=global_unsupported_features,
+        )
