@@ -47,6 +47,13 @@ MANAGER_TOOL_ROLES = {
     UserRole.UI_ADMIN.value,
     UserRole.UI_USER.value,
 }
+_MANAGER_TOOL_FIELDS = {
+    "bucket_compare": "can_access_manager_bucket_compare",
+    "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
+    "bucket_migration": "can_access_manager_bucket_migration",
+    "feature_rules": "can_access_manager_feature_rules",
+    "bucket_purge": "can_access_manager_bucket_purge",
+}
 
 
 @dataclass
@@ -91,6 +98,24 @@ class _AccountRoleAccumulator:
         )
 
 
+@dataclass(frozen=True)
+class _ResolvedGroups:
+    rows: list[UiGroup]
+    ids: list[int]
+    names: dict[int, str]
+    details: list[LinkedUiGroup]
+
+
+@dataclass(frozen=True)
+class _ResolvedFeatureAccess:
+    can_access_ceph_admin: bool
+    can_access_storage_ops: bool
+    can_create_manual_private_connections: bool
+    can_provision_managed_private_connections: bool
+    manager_tool_access: ManagerToolAccess
+    browser_advanced_features_enabled: bool
+
+
 @dataclass
 class ResolvedUserAccess:
     group_ids: list[int]
@@ -120,6 +145,7 @@ class ResolvedUserAccess:
     def can_browse_s3_user(self, s3_user_id: int) -> bool:
         return s3_user_id in set(self.manager_browser_s3_user_ids)
 
+
 class EffectiveAccessService:
     """Single source for role aggregation and executable UI-user contexts."""
 
@@ -127,20 +153,65 @@ class EffectiveAccessService:
         self.db = db
 
     def resolve_user(self, user: User) -> ResolvedUserAccess:
-        group_rows = (
-            self.db.query(UiGroup.id, UiGroup.name)
+        groups = self._resolve_groups(user)
+        account_links = self._resolve_account_links(user, groups)
+        s3_user_ids, manager_browser_s3_user_ids = self._resolve_s3_user_access(
+            user,
+            groups.ids,
+        )
+        shared_connection_ids = self._resolve_shared_connection_ids(
+            user,
+            groups.ids,
+        )
+        features = self._resolve_feature_access(user, groups.rows)
+        return ResolvedUserAccess(
+            group_ids=groups.ids,
+            group_details=groups.details,
+            account_links=account_links,
+            s3_user_ids=sorted(s3_user_ids),
+            manager_browser_s3_user_ids=sorted(manager_browser_s3_user_ids),
+            s3_connection_ids=sorted(shared_connection_ids),
+            can_access_ceph_admin=features.can_access_ceph_admin,
+            can_access_storage_ops=features.can_access_storage_ops,
+            can_create_manual_private_connections=(
+                features.can_create_manual_private_connections
+            ),
+            can_provision_managed_private_connections=(
+                features.can_provision_managed_private_connections
+            ),
+            has_owned_private_connections=self._has_owned_private_connections(user),
+            manager_tool_access=features.manager_tool_access,
+            browser_advanced_features_enabled=(
+                features.browser_advanced_features_enabled
+            ),
+        )
+
+    def _resolve_groups(self, user: User) -> _ResolvedGroups:
+        rows = (
+            self.db.query(UiGroup)
             .join(UserUiGroup, UserUiGroup.group_id == UiGroup.id)
             .filter(UserUiGroup.user_id == user.id)
             .order_by(UiGroup.name.asc(), UiGroup.id.asc())
             .all()
         )
-        group_ids = [int(row[0]) for row in group_rows]
-        group_names = {int(row[0]): str(row[1]) for row in group_rows}
-        group_details = [LinkedUiGroup(id=row[0], name=row[1]) for row in group_rows]
-        groups = self.db.query(UiGroup).filter(UiGroup.id.in_(group_ids)).all() if group_ids else []
+        return _ResolvedGroups(
+            rows=rows,
+            ids=[int(group.id) for group in rows],
+            names={int(group.id): str(group.name) for group in rows},
+            details=[LinkedUiGroup(id=group.id, name=group.name) for group in rows],
+        )
 
+    def _resolve_account_links(
+        self,
+        user: User,
+        groups: _ResolvedGroups,
+    ) -> list[EffectiveAccountLink]:
         account_by_id: dict[int, _AccountRoleAccumulator] = {}
-        direct_links = self.db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
+        direct_links = (
+            self.db.query(UserS3Account)
+            .filter(UserS3Account.user_id == user.id)
+            .all()
+        )
         for link in direct_links:
             accumulator = account_by_id.setdefault(
                 int(link.account_id),
@@ -156,10 +227,10 @@ class EffectiveAccessService:
                 link.allow_manager_browser_data_access
             )
 
-        if group_ids:
+        if groups.ids:
             group_links = (
                 self.db.query(UiGroupS3Account)
-                .filter(UiGroupS3Account.group_id.in_(group_ids))
+                .filter(UiGroupS3Account.group_id.in_(groups.ids))
                 .all()
             )
             for link in group_links:
@@ -170,33 +241,56 @@ class EffectiveAccessService:
                 accumulator.group_roles.append(
                     (
                         int(link.group_id),
-                        group_names.get(int(link.group_id), f"Group #{link.group_id}"),
+                        groups.names.get(
+                            int(link.group_id),
+                            f"Group #{link.group_id}",
+                        ),
                         str(link.role),
                         bool(link.allow_manager_browser_data_access),
                     )
                 )
+        return sorted(
+            (accumulator.build() for accumulator in account_by_id.values()),
+            key=lambda link: link.account_id,
+        )
 
-        direct_s3_user_rows = self.db.query(
-            UserS3User.s3_user_id,
-            UserS3User.allow_manager_browser_data_access,
-        ).filter(UserS3User.user_id == user.id).all()
-        s3_user_ids = {
-            int(row[0])
-            for row in direct_s3_user_rows
-        }
+    def _resolve_s3_user_access(
+        self,
+        user: User,
+        group_ids: list[int],
+    ) -> tuple[set[int], set[int]]:
+        direct_rows = (
+            self.db.query(
+                UserS3User.s3_user_id,
+                UserS3User.allow_manager_browser_data_access,
+            )
+            .filter(UserS3User.user_id == user.id)
+            .all()
+        )
+        s3_user_ids = {int(row[0]) for row in direct_rows}
         manager_browser_s3_user_ids = {
-            int(row[0]) for row in direct_s3_user_rows if bool(row[1])
+            int(row[0]) for row in direct_rows if bool(row[1])
         }
         if group_ids:
-            group_s3_user_rows = self.db.query(
-                UiGroupS3User.s3_user_id,
-                UiGroupS3User.allow_manager_browser_data_access,
-            ).filter(UiGroupS3User.group_id.in_(group_ids)).all()
-            s3_user_ids.update(int(row[0]) for row in group_s3_user_rows)
-            manager_browser_s3_user_ids.update(
-                int(row[0]) for row in group_s3_user_rows if bool(row[1])
+            group_rows = (
+                self.db.query(
+                    UiGroupS3User.s3_user_id,
+                    UiGroupS3User.allow_manager_browser_data_access,
+                )
+                .filter(UiGroupS3User.group_id.in_(group_ids))
+                .all()
             )
+            s3_user_ids.update(int(row[0]) for row in group_rows)
+            manager_browser_s3_user_ids.update(
+                int(row[0]) for row in group_rows if bool(row[1])
+            )
+        return s3_user_ids, manager_browser_s3_user_ids
 
+    def _resolve_shared_connection_ids(
+        self,
+        user: User,
+        group_ids: list[int],
+    ) -> set[int]:
         shared_connection_ids = {
             int(row[0])
             for row in self.db.query(UserS3Connection.s3_connection_id)
@@ -218,44 +312,71 @@ class EffectiveAccessService:
                 )
                 .all()
             )
+        return shared_connection_ids
 
+    def _resolve_feature_access(
+        self,
+        user: User,
+        groups: list[UiGroup],
+    ) -> _ResolvedFeatureAccess:
         role_supports_tools = user.role in MANAGER_TOOL_ROLES
         can_access_ceph_admin = (
-            bool(user.can_access_ceph_admin)
-            or any(bool(group.can_access_ceph_admin) for group in groups)
+            self._user_or_group_flag(user, groups, "can_access_ceph_admin")
         ) and is_admin_ui_role(user.role)
         can_access_storage_ops = (
-            bool(user.can_access_storage_ops)
-            or any(bool(group.can_access_storage_ops) for group in groups)
+            self._user_or_group_flag(user, groups, "can_access_storage_ops")
         ) and role_supports_tools
         manager_tool_access = ManagerToolAccess(
             **{
                 output_name: role_supports_tools
-                and (
-                    bool(getattr(user, user_field))
-                    or any(bool(getattr(group, user_field)) for group in groups)
-                )
-                for output_name, user_field in {
-                    "bucket_compare": "can_access_manager_bucket_compare",
-                    "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
-                    "bucket_migration": "can_access_manager_bucket_migration",
-                    "feature_rules": "can_access_manager_feature_rules",
-                    "bucket_purge": "can_access_manager_bucket_purge",
-                }.items()
+                and self._user_or_group_flag(user, groups, user_field)
+                for output_name, user_field in _MANAGER_TOOL_FIELDS.items()
             }
         )
-        browser_advanced = bool(user.browser_advanced_features_enabled) or any(
-            bool(group.browser_advanced_features_enabled) for group in groups
+        browser_advanced = self._user_or_group_flag(
+            user,
+            groups,
+            "browser_advanced_features_enabled",
         )
         can_create_manual_private_connections = role_supports_tools and (
-            bool(user.can_create_manual_private_connections)
-            or any(bool(group.can_create_manual_private_connections) for group in groups)
+            self._user_or_group_flag(
+                user,
+                groups,
+                "can_create_manual_private_connections",
+            )
         )
         can_provision_managed_private_connections = role_supports_tools and (
-            bool(user.can_provision_managed_private_connections)
-            or any(bool(group.can_provision_managed_private_connections) for group in groups)
+            self._user_or_group_flag(
+                user,
+                groups,
+                "can_provision_managed_private_connections",
+            )
         )
-        has_owned_private_connections = (
+        return _ResolvedFeatureAccess(
+            can_access_ceph_admin=can_access_ceph_admin,
+            can_access_storage_ops=can_access_storage_ops,
+            can_create_manual_private_connections=(
+                can_create_manual_private_connections
+            ),
+            can_provision_managed_private_connections=(
+                can_provision_managed_private_connections
+            ),
+            manager_tool_access=manager_tool_access,
+            browser_advanced_features_enabled=browser_advanced,
+        )
+
+    @staticmethod
+    def _user_or_group_flag(
+        user: User,
+        groups: list[UiGroup],
+        field_name: str,
+    ) -> bool:
+        return bool(getattr(user, field_name)) or any(
+            bool(getattr(group, field_name)) for group in groups
+        )
+
+    def _has_owned_private_connections(self, user: User) -> bool:
+        return (
             self.db.query(S3Connection.id)
             .filter(
                 S3Connection.created_by_user_id == user.id,
@@ -263,25 +384,6 @@ class EffectiveAccessService:
             )
             .first()
             is not None
-        )
-
-        return ResolvedUserAccess(
-            group_ids=group_ids,
-            group_details=group_details,
-            account_links=sorted(
-                (accumulator.build() for accumulator in account_by_id.values()),
-                key=lambda link: link.account_id,
-            ),
-            s3_user_ids=sorted(s3_user_ids),
-            manager_browser_s3_user_ids=sorted(manager_browser_s3_user_ids),
-            s3_connection_ids=sorted(shared_connection_ids),
-            can_access_ceph_admin=can_access_ceph_admin,
-            can_access_storage_ops=can_access_storage_ops,
-            can_create_manual_private_connections=can_create_manual_private_connections,
-            can_provision_managed_private_connections=can_provision_managed_private_connections,
-            has_owned_private_connections=has_owned_private_connections,
-            manager_tool_access=manager_tool_access,
-            browser_advanced_features_enabled=browser_advanced,
         )
 
     def list_workspace_connections(
