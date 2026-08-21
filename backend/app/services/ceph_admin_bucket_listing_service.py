@@ -2,11 +2,17 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 
 from app.db import StorageEndpoint
-from app.models.ceph_admin import CephAdminBucketSummary, PaginatedCephAdminBucketsResponse
+from app.models.ceph_admin import (
+    CephAdminBucketFilterQuery,
+    CephAdminBucketFilterRule,
+    CephAdminBucketSummary,
+    PaginatedCephAdminBucketsResponse,
+)
 from app.services import rgw_bucket_metadata
 from app.services.bucket_listing_enrichment import (
     COLUMN_DETAIL_KEYS,
@@ -76,6 +82,558 @@ def _build_s3_context(ctx: CephAdminBucketListingContext) -> S3ExecutionContext:
         access_key=ctx.access_key,
         secret_key=ctx.secret_key,
     )
+
+
+@dataclass(frozen=True)
+class _LoadedBucketEntries:
+    entries: list[dict]
+    effective_with_stats: bool
+    stats_available: bool
+    stats_warning: str | None
+
+
+@dataclass(frozen=True)
+class _AdvancedFilterPlan:
+    query: CephAdminBucketFilterQuery
+    field_rules: list[CephAdminBucketFilterRule]
+    feature_state_rules: list[CephAdminBucketFilterRule]
+    feature_param_rules: list[CephAdminBucketFilterRule]
+    expensive_field_rules: list[CephAdminBucketFilterRule]
+    cheap_field_rules: list[CephAdminBucketFilterRule]
+    filter_features: set[str]
+    requires_tag_lookup: bool
+    requires_owner_name_lookup: bool
+    requires_owner_suspended_lookup: bool
+    requires_owner_quota_lookup: bool
+    requires_owner_usage_lookup: bool
+
+    @classmethod
+    def from_query(cls, query: CephAdminBucketFilterQuery) -> _AdvancedFilterPlan:
+        field_rules = [rule for rule in query.rules if rule.field]
+        feature_state_rules = [rule for rule in query.rules if rule.feature and rule.state is not None]
+        feature_param_rules = [rule for rule in query.rules if rule.feature and rule.param is not None]
+        expensive_field_rules = [rule for rule in field_rules if rule.field in EXPENSIVE_FIELD_RULES]
+        cheap_field_rules = [rule for rule in field_rules if rule.field not in EXPENSIVE_FIELD_RULES]
+        return cls(
+            query=query,
+            field_rules=field_rules,
+            feature_state_rules=feature_state_rules,
+            feature_param_rules=feature_param_rules,
+            expensive_field_rules=expensive_field_rules,
+            cheap_field_rules=cheap_field_rules,
+            filter_features={rule.feature for rule in feature_state_rules if rule.feature},
+            requires_tag_lookup=any(rule.field == "tag" for rule in expensive_field_rules),
+            requires_owner_name_lookup=any(rule.field == "owner_name" for rule in expensive_field_rules),
+            requires_owner_suspended_lookup=any(rule.field in OWNER_STATUS_FIELDS for rule in expensive_field_rules),
+            requires_owner_quota_lookup=any(
+                rule.field in (OWNER_QUOTA_FIELDS | OWNER_USAGE_PERCENT_FIELDS)
+                for rule in expensive_field_rules
+            ),
+            requires_owner_usage_lookup=any(
+                rule.field in (OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS)
+                for rule in expensive_field_rules
+            ),
+        )
+
+    @property
+    def has_expensive_rules(self) -> bool:
+        return bool(self.expensive_field_rules or self.feature_state_rules or self.feature_param_rules)
+
+
+class _CephAdminBucketSnapshotBuilder:
+    def __init__(
+        self,
+        *,
+        ctx: CephAdminBucketListingContext,
+        advanced_filter: CephAdminBucketFilterQuery | None,
+        sort_by: str,
+        sort_dir: str,
+        with_stats: bool,
+        stats_required_for_request: bool,
+        needs_owner_metadata: bool,
+        needs_tenant_metadata: bool,
+        owner_usage_required_for_request: bool,
+        progress: ListingProgressEmitter,
+        include_progress_hooks: bool,
+        cancel_check: Callable[[], None] | None,
+    ) -> None:
+        self.ctx = ctx
+        self.advanced_filter = advanced_filter
+        self.sort_by = sort_by
+        self.sort_dir = sort_dir
+        self.with_stats = with_stats
+        self.stats_required_for_request = stats_required_for_request
+        self.needs_owner_metadata = needs_owner_metadata
+        self.needs_tenant_metadata = needs_tenant_metadata
+        self.owner_usage_required_for_request = owner_usage_required_for_request
+        self.progress = progress
+        self.include_progress_hooks = include_progress_hooks
+        self.cancel_check = cancel_check
+
+    def build(self) -> CephAdminBucketListingSnapshot:
+        invoke_cancel_check(self.cancel_check)
+        loaded = self._load_entries()
+        results = self._build_summaries(loaded)
+        results = self._backfill_owner_metadata(results)
+        owner_usage_by_key = (
+            compute_bucket_owner_usage(results)
+            if loaded.effective_with_stats and results
+            else None
+        )
+        results = self._apply_advanced_filter(results, owner_usage_by_key)
+        invoke_cancel_check(self.cancel_check)
+        results = self._sort_results(results)
+        return CephAdminBucketListingSnapshot(
+            items=results,
+            stats_available=loaded.stats_available,
+            stats_warning=loaded.stats_warning,
+            owner_usage_by_key=owner_usage_by_key,
+        )
+
+    def _load_entries(self) -> _LoadedBucketEntries:
+        name_candidates = (
+            None
+            if self.owner_usage_required_for_request
+            else extract_name_candidates(self.advanced_filter)
+        )
+        try:
+            entries = self._fetch_entries(self.with_stats, name_candidates)
+        except RGWAdminError as exc:
+            if not self.with_stats:
+                raise
+            if self.stats_required_for_request:
+                raise RequiredBucketStatsUnavailableError(
+                    "Bucket stats are unavailable via Ceph Admin credentials for this request"
+                ) from exc
+            logger.warning(
+                "Ceph admin bucket listing stats fallback on endpoint=%s error=%s",
+                getattr(getattr(self.ctx, "endpoint", None), "id", "unknown"),
+                exc,
+            )
+            self.progress.emit(
+                percent=12,
+                stage="fetch_rgw_fallback",
+                message="Bucket stats unavailable, retrying without stats",
+                force=True,
+            )
+            entries = self._fetch_entries(False, name_candidates)
+            return _LoadedBucketEntries(
+                entries=entries,
+                effective_with_stats=False,
+                stats_available=False,
+                stats_warning=_BUCKET_STATS_UNAVAILABLE_WARNING,
+            )
+        return _LoadedBucketEntries(
+            entries=entries,
+            effective_with_stats=self.with_stats,
+            stats_available=True,
+            stats_warning=None,
+        )
+
+    def _fetch_entries(
+        self,
+        request_with_stats: bool,
+        name_candidates: list[str] | None,
+    ) -> list[dict]:
+        self.progress.emit(percent=10, stage="fetch_rgw", message="Loading buckets from RGW", force=True)
+        if name_candidates is None:
+            return get_cached_rgw_bucket_entries(self.ctx, with_stats=request_with_stats)
+        if not name_candidates:
+            return []
+        allowed_names = set(name_candidates)
+        return [
+            entry
+            for entry in get_cached_rgw_bucket_entries(self.ctx, with_stats=request_with_stats)
+            if rgw_bucket_metadata.extract_bucket_name(entry) in allowed_names
+        ]
+
+    def _build_summaries(self, loaded: _LoadedBucketEntries) -> list[CephAdminBucketSummary]:
+        entries = loaded.entries
+        self.progress.emit(
+            percent=15,
+            stage="fetch_rgw",
+            processed=len(entries),
+            total=len(entries),
+            message="RGW bucket payload loaded",
+            force=True,
+        )
+        results: list[CephAdminBucketSummary] = []
+        total_entries = len(entries)
+        for index, entry in enumerate(entries, start=1):
+            invoke_cancel_check(self.cancel_check)
+            summary = rgw_bucket_metadata.build_bucket_summary(entry)
+            if summary:
+                if not loaded.effective_with_stats:
+                    summary.used_bytes = None
+                    summary.object_count = None
+                    summary.quota_max_size_bytes = None
+                    summary.quota_max_objects = None
+                results.append(summary)
+            percent = 15 + int((index / total_entries) * 45) if total_entries > 0 else 60
+            self.progress.emit(
+                percent=percent,
+                stage="scan_entries",
+                processed=index,
+                total=total_entries,
+                message="Scanning RGW bucket entries",
+            )
+        self.progress.emit(
+            percent=60,
+            stage="scan_entries",
+            processed=total_entries,
+            total=total_entries,
+            message="Bucket scanning completed",
+            force=True,
+        )
+        invoke_cancel_check(self.cancel_check)
+        return results
+
+    def _backfill_owner_metadata(
+        self,
+        results: list[CephAdminBucketSummary],
+    ) -> list[CephAdminBucketSummary]:
+        if not self.needs_owner_metadata or not results:
+            return results
+        self.progress.emit(
+            percent=63,
+            stage="owner_backfill",
+            processed=0,
+            total=len(results),
+            message="Loading bucket owner metadata",
+            force=True,
+        )
+        return backfill_bucket_owner_metadata(
+            self.ctx,
+            results,
+            include_tenant=self.needs_tenant_metadata,
+            **self._progress_options(
+                stage="owner_backfill",
+                message="Loading bucket owner metadata",
+                start=63,
+                end=65,
+            ),
+        )
+
+    def _apply_advanced_filter(
+        self,
+        results: list[CephAdminBucketSummary],
+        owner_usage_by_key: dict[str, BucketOwnerUsage] | None,
+    ) -> list[CephAdminBucketSummary]:
+        if not self.advanced_filter or not self.advanced_filter.rules:
+            self.progress.emit(
+                percent=90,
+                stage="expensive_filters",
+                message="No expensive filters",
+                force=True,
+            )
+            return results
+
+        self.progress.emit(
+            percent=65,
+            stage="expensive_filters",
+            message="Applying advanced filters",
+            force=True,
+        )
+        plan = _AdvancedFilterPlan.from_query(self.advanced_filter)
+        results = self._apply_cheap_field_rules(results, plan)
+        if plan.has_expensive_rules:
+            results = self._apply_expensive_rules(results, plan, owner_usage_by_key)
+            self._clear_transient_enrichment(results)
+        self.progress.emit(
+            percent=90,
+            stage="expensive_filters",
+            message="Advanced filters applied",
+            force=True,
+        )
+        return results
+
+    @staticmethod
+    def _apply_cheap_field_rules(
+        results: list[CephAdminBucketSummary],
+        plan: _AdvancedFilterPlan,
+    ) -> list[CephAdminBucketSummary]:
+        if not plan.cheap_field_rules:
+            return results
+        if plan.query.match == "all":
+            return [
+                bucket
+                for bucket in results
+                if all(match_bucket_field_rule(bucket, rule) for rule in plan.cheap_field_rules)
+            ]
+        if not plan.has_expensive_rules:
+            return [
+                bucket
+                for bucket in results
+                if any(match_bucket_field_rule(bucket, rule) for rule in plan.cheap_field_rules)
+            ]
+        return results
+
+    def _apply_expensive_rules(
+        self,
+        results: list[CephAdminBucketSummary],
+        plan: _AdvancedFilterPlan,
+        owner_usage_by_key: dict[str, BucketOwnerUsage] | None,
+    ) -> list[CephAdminBucketSummary]:
+        field_matched: list[CephAdminBucketSummary] = []
+        candidates = results
+        if not plan.feature_param_rules and plan.query.match == "any" and plan.cheap_field_rules:
+            field_matched, candidates = self._partition_cheap_matches(results, plan.cheap_field_rules)
+
+        service = BucketConfigurationService()
+        account = _build_s3_context(self.ctx)
+        candidates = self._enrich_expensive_candidates(
+            candidates,
+            plan,
+            owner_usage_by_key,
+            service,
+            account,
+        )
+        if plan.feature_param_rules:
+            return self._filter_feature_param_candidates(candidates, plan, service, account)
+
+        matched = self._filter_nonparam_candidates(candidates, plan)
+        return field_matched + matched
+
+    @staticmethod
+    def _partition_cheap_matches(
+        results: list[CephAdminBucketSummary],
+        rules: list[CephAdminBucketFilterRule],
+    ) -> tuple[list[CephAdminBucketSummary], list[CephAdminBucketSummary]]:
+        matched: list[CephAdminBucketSummary] = []
+        unresolved: list[CephAdminBucketSummary] = []
+        for bucket in results:
+            target = matched if any(match_bucket_field_rule(bucket, rule) for rule in rules) else unresolved
+            target.append(bucket)
+        return matched, unresolved
+
+    def _enrich_expensive_candidates(
+        self,
+        candidates: list[CephAdminBucketSummary],
+        plan: _AdvancedFilterPlan,
+        owner_usage_by_key: dict[str, BucketOwnerUsage] | None,
+        service: BucketConfigurationService,
+        account: S3ExecutionContext,
+    ) -> list[CephAdminBucketSummary]:
+        if plan.requires_owner_name_lookup and candidates:
+            self._enrich_owner_names(candidates)
+        if (
+            plan.requires_owner_suspended_lookup
+            or plan.requires_owner_quota_lookup
+            or plan.requires_owner_usage_lookup
+        ) and candidates:
+            candidates = apply_owner_enrichment(
+                self.ctx,
+                candidates,
+                include_suspended=plan.requires_owner_suspended_lookup,
+                include_quota=plan.requires_owner_quota_lookup,
+                include_usage=plan.requires_owner_usage_lookup,
+                usage_by_key=owner_usage_by_key,
+            )
+        if not candidates or not (plan.filter_features or plan.requires_tag_lookup):
+            return candidates
+
+        progress_end = 82 if plan.feature_param_rules else 88
+        self.progress.emit(
+            percent=75,
+            stage="bucket_enrichment",
+            processed=0,
+            total=len(candidates),
+            message="Loading bucket details",
+            force=True,
+        )
+        return enrich_buckets(
+            candidates,
+            {feature for feature in plan.filter_features if feature != "tags"},
+            include_tags=plan.requires_tag_lookup or ("tags" in plan.filter_features),
+            service=service,
+            account=account,
+            **self._progress_options(
+                stage="bucket_enrichment",
+                message="Loading bucket details",
+                start=75,
+                end=progress_end,
+            ),
+        )
+
+    def _enrich_owner_names(self, candidates: list[CephAdminBucketSummary]) -> None:
+        owner_scope = determine_owner_name_lookup_scope(self.advanced_filter)
+        owner_name_by_key = resolve_owner_names_for_buckets(
+            self.ctx,
+            candidates,
+            owner_scope=owner_scope,
+        )
+        for bucket in candidates:
+            if not bucket.owner:
+                bucket.owner_name = None
+                continue
+            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
+            bucket.owner_name = owner_name_by_key.get(owner_key)
+
+    def _filter_feature_param_candidates(
+        self,
+        candidates: list[CephAdminBucketSummary],
+        plan: _AdvancedFilterPlan,
+        service: BucketConfigurationService,
+        account: S3ExecutionContext,
+    ) -> list[CephAdminBucketSummary]:
+        if candidates:
+            self.progress.emit(
+                percent=82,
+                stage="feature_param_enrichment",
+                processed=0,
+                total=len(candidates),
+                message="Loading bucket feature parameters",
+                force=True,
+            )
+        snapshots, available_keys = load_bucket_feature_param_snapshots(
+            candidates,
+            plan.feature_param_rules,
+            service=service,
+            account=account,
+            **self._progress_options(
+                stage="feature_param_enrichment",
+                message="Loading bucket feature parameters",
+                start=82,
+                end=88,
+            ),
+        )
+        return [
+            bucket
+            for bucket in candidates
+            if self._matches_feature_param_candidate(bucket, plan, snapshots, available_keys)
+        ]
+
+    @staticmethod
+    def _matches_feature_param_candidate(
+        bucket: CephAdminBucketSummary,
+        plan: _AdvancedFilterPlan,
+        snapshots: dict[str, dict[str, object]],
+        available_keys: set[str],
+    ) -> bool:
+        bucket_key = bucket_identity_key(bucket)
+        if bucket_key not in available_keys:
+            return False
+        snapshot = snapshots.get(bucket_key, {})
+        if plan.query.match == "all":
+            field_match = (
+                all(match_bucket_field_rule(bucket, rule) for rule in plan.field_rules)
+                if plan.field_rules
+                else True
+            )
+            state_match = (
+                all(match_bucket_feature_rule(bucket, rule) for rule in plan.feature_state_rules)
+                if plan.feature_state_rules
+                else True
+            )
+            return field_match and state_match and match_bucket_feature_param_rules(
+                plan.feature_param_rules,
+                plan.query.match,
+                snapshot,
+            )
+        field_match = (
+            any(match_bucket_field_rule(bucket, rule) for rule in plan.field_rules)
+            if plan.field_rules
+            else False
+        )
+        state_match = (
+            any(match_bucket_feature_rule(bucket, rule) for rule in plan.feature_state_rules)
+            if plan.feature_state_rules
+            else False
+        )
+        return field_match or state_match or match_bucket_feature_param_rules(
+            plan.feature_param_rules,
+            plan.query.match,
+            snapshot,
+        )
+
+    @staticmethod
+    def _filter_nonparam_candidates(
+        candidates: list[CephAdminBucketSummary],
+        plan: _AdvancedFilterPlan,
+    ) -> list[CephAdminBucketSummary]:
+        if plan.query.match == "all":
+            return [
+                bucket
+                for bucket in candidates
+                if (
+                    all(match_bucket_field_rule(bucket, rule) for rule in plan.expensive_field_rules)
+                    if plan.expensive_field_rules
+                    else True
+                )
+                and (
+                    all(match_bucket_feature_rule(bucket, rule) for rule in plan.feature_state_rules)
+                    if plan.feature_state_rules
+                    else True
+                )
+            ]
+        return [
+            bucket
+            for bucket in candidates
+            if (
+                any(match_bucket_field_rule(bucket, rule) for rule in plan.expensive_field_rules)
+                if plan.expensive_field_rules
+                else False
+            )
+            or (
+                any(match_bucket_feature_rule(bucket, rule) for rule in plan.feature_state_rules)
+                if plan.feature_state_rules
+                else False
+            )
+        ]
+
+    @staticmethod
+    def _clear_transient_enrichment(results: list[CephAdminBucketSummary]) -> None:
+        for bucket in results:
+            bucket.features = None
+            bucket.tags = None
+            bucket.column_details = None
+
+    def _progress_options(
+        self,
+        *,
+        stage: str,
+        message: str,
+        start: int,
+        end: int,
+    ) -> dict[str, Any]:
+        if not self.include_progress_hooks:
+            return {}
+        return {
+            "progress": self.progress,
+            "progress_stage": stage,
+            "progress_message": message,
+            "progress_start": start,
+            "progress_end": end,
+            "cancel_check": self.cancel_check,
+        }
+
+    def _sort_value(self, bucket: CephAdminBucketSummary) -> str | int | None:
+        if self.sort_by == "tenant":
+            value: str | int | None = bucket.tenant or ""
+        elif self.sort_by == "owner":
+            value = bucket.owner or ""
+        elif self.sort_by == "used_bytes":
+            value = bucket.used_bytes if bucket.used_bytes is not None else 0
+        elif self.sort_by == "object_count":
+            value = bucket.object_count if bucket.object_count is not None else 0
+        else:
+            value = bucket.name
+        return value.lower() if isinstance(value, str) else value
+
+    def _sort_results(
+        self,
+        results: list[CephAdminBucketSummary],
+    ) -> list[CephAdminBucketSummary]:
+        sortable: list[tuple[object, CephAdminBucketSummary]] = []
+        missing_values: list[CephAdminBucketSummary] = []
+        for bucket in results:
+            value = self._sort_value(bucket)
+            if value is None:
+                missing_values.append(bucket)
+            else:
+                sortable.append((value, bucket))
+        sortable.sort(key=lambda item: item[0], reverse=self.sort_dir == "desc")
+        return [bucket for _, bucket in sortable] + missing_values
 
 
 def compute_ceph_admin_bucket_listing(
@@ -149,399 +707,22 @@ def compute_ceph_admin_bucket_listing(
     )
     invoke_cancel_check(cancel_check)
 
-    def build_listing() -> CephAdminBucketListingSnapshot:
-        invoke_cancel_check(cancel_check)
-        name_candidates = None if owner_usage_required_for_request else extract_name_candidates(advanced_filter)
-        effective_with_stats = with_stats
-        stats_available = True
-        stats_warning: str | None = None
-        owner_usage_by_key: dict[str, BucketOwnerUsage] | None = None
-
-        def load_entries(request_with_stats: bool) -> list[dict]:
-            progress.emit(percent=10, stage="fetch_rgw", message="Loading buckets from RGW", force=True)
-            if name_candidates is not None:
-                if not name_candidates:
-                    return []
-                allowed_names = set(name_candidates)
-                return [
-                    entry
-                    for entry in get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
-                    if rgw_bucket_metadata.extract_bucket_name(entry) in allowed_names
-                ]
-            return get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
-
-        try:
-            entries = load_entries(with_stats)
-        except RGWAdminError as exc:
-            if not with_stats:
-                raise
-            if stats_required_for_request:
-                raise RequiredBucketStatsUnavailableError(
-                    "Bucket stats are unavailable via Ceph Admin credentials for this request"
-                ) from exc
-            logger.warning(
-                "Ceph admin bucket listing stats fallback on endpoint=%s error=%s",
-                getattr(getattr(ctx, "endpoint", None), "id", "unknown"),
-                exc,
-            )
-            effective_with_stats = False
-            stats_available = False
-            stats_warning = _BUCKET_STATS_UNAVAILABLE_WARNING
-            progress.emit(
-                percent=12,
-                stage="fetch_rgw_fallback",
-                message="Bucket stats unavailable, retrying without stats",
-                force=True,
-            )
-            entries = load_entries(False)
-
-        progress.emit(
-            percent=15,
-            stage="fetch_rgw",
-            processed=len(entries),
-            total=len(entries),
-            message="RGW bucket payload loaded",
-            force=True,
-        )
-
-        results: list[CephAdminBucketSummary] = []
-        total_entries = len(entries)
-        for idx, entry in enumerate(entries, start=1):
-            invoke_cancel_check(cancel_check)
-            summary = rgw_bucket_metadata.build_bucket_summary(entry)
-            if summary:
-                if not effective_with_stats:
-                    summary.used_bytes = None
-                    summary.object_count = None
-                    summary.quota_max_size_bytes = None
-                    summary.quota_max_objects = None
-                results.append(summary)
-            percent = 15 + int((idx / total_entries) * 45) if total_entries > 0 else 60
-            progress.emit(
-                percent=percent,
-                stage="scan_entries",
-                processed=idx,
-                total=total_entries,
-                message="Scanning RGW bucket entries",
-            )
-        progress.emit(
-            percent=60,
-            stage="scan_entries",
-            processed=total_entries,
-            total=total_entries,
-            message="Bucket scanning completed",
-            force=True,
-        )
-        invoke_cancel_check(cancel_check)
-
-        if needs_owner_metadata and results:
-            progress.emit(
-                percent=63,
-                stage="owner_backfill",
-                processed=0,
-                total=len(results),
-                message="Loading bucket owner metadata",
-                force=True,
-            )
-            results = backfill_bucket_owner_metadata(
-                ctx,
-                results,
-                include_tenant=needs_tenant_metadata,
-                **(
-                    {
-                        "progress": progress,
-                        "progress_stage": "owner_backfill",
-                        "progress_message": "Loading bucket owner metadata",
-                        "progress_start": 63,
-                        "progress_end": 65,
-                        "cancel_check": cancel_check,
-                    }
-                    if include_progress_hooks
-                    else {}
-                ),
-            )
-
-        if effective_with_stats and results:
-            owner_usage_by_key = compute_bucket_owner_usage(results)
-
-        if advanced_filter and advanced_filter.rules:
-            progress.emit(percent=65, stage="expensive_filters", message="Applying advanced filters", force=True)
-            field_rules = [rule for rule in advanced_filter.rules if rule.field]
-            feature_state_rules = [rule for rule in advanced_filter.rules if rule.feature and rule.state is not None]
-            feature_param_rules = [rule for rule in advanced_filter.rules if rule.feature and rule.param is not None]
-            match_mode = advanced_filter.match
-            expensive_field_rules = [rule for rule in field_rules if rule.field in EXPENSIVE_FIELD_RULES]
-            cheap_field_rules = [rule for rule in field_rules if rule.field not in EXPENSIVE_FIELD_RULES]
-
-            if cheap_field_rules and match_mode == "all":
-                results = [bucket for bucket in results if all(match_bucket_field_rule(bucket, rule) for rule in cheap_field_rules)]
-            elif (
-                cheap_field_rules
-                and match_mode == "any"
-                and not expensive_field_rules
-                and not feature_state_rules
-                and not feature_param_rules
-            ):
-                results = [bucket for bucket in results if any(match_bucket_field_rule(bucket, rule) for rule in cheap_field_rules)]
-
-            if expensive_field_rules or feature_state_rules or feature_param_rules:
-                filter_features = {rule.feature for rule in feature_state_rules if rule.feature}
-                requires_tag_lookup = any(rule.field == "tag" for rule in expensive_field_rules)
-                requires_owner_name_lookup = any(rule.field == "owner_name" for rule in expensive_field_rules)
-                requires_owner_suspended_lookup = any(rule.field in OWNER_STATUS_FIELDS for rule in expensive_field_rules)
-                requires_owner_quota_lookup = any(
-                    rule.field in (OWNER_QUOTA_FIELDS | OWNER_USAGE_PERCENT_FIELDS) for rule in expensive_field_rules
-                )
-                requires_owner_usage_lookup = any(
-                    rule.field in (OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS) for rule in expensive_field_rules
-                )
-                service = BucketConfigurationService()
-                account = _build_s3_context(ctx)
-                expensive_candidates = results
-
-                if feature_param_rules:
-                    if requires_owner_name_lookup and expensive_candidates:
-                        owner_scope = determine_owner_name_lookup_scope(advanced_filter)
-                        owner_name_by_key = resolve_owner_names_for_buckets(
-                            ctx,
-                            expensive_candidates,
-                            owner_scope=owner_scope,
-                        )
-                        for bucket in expensive_candidates:
-                            if not bucket.owner:
-                                bucket.owner_name = None
-                                continue
-                            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
-                            bucket.owner_name = owner_name_by_key.get(owner_key)
-                    if (
-                        requires_owner_suspended_lookup
-                        or requires_owner_quota_lookup
-                        or requires_owner_usage_lookup
-                    ) and expensive_candidates:
-                        expensive_candidates = apply_owner_enrichment(
-                            ctx,
-                            expensive_candidates,
-                            include_suspended=requires_owner_suspended_lookup,
-                            include_quota=requires_owner_quota_lookup,
-                            include_usage=requires_owner_usage_lookup,
-                            usage_by_key=owner_usage_by_key,
-                        )
-
-                    if expensive_candidates and (filter_features or requires_tag_lookup):
-                        progress.emit(
-                            percent=75,
-                            stage="bucket_enrichment",
-                            processed=0,
-                            total=len(expensive_candidates),
-                            message="Loading bucket details",
-                            force=True,
-                        )
-                        expensive_candidates = enrich_buckets(
-                            expensive_candidates,
-                            {feature for feature in filter_features if feature != "tags"},
-                            include_tags=requires_tag_lookup or ("tags" in filter_features),
-                            service=service,
-                            account=account,
-                            **(
-                                {
-                                    "progress": progress,
-                                    "progress_stage": "bucket_enrichment",
-                                    "progress_message": "Loading bucket details",
-                                    "progress_start": 75,
-                                    "progress_end": 82,
-                                    "cancel_check": cancel_check,
-                                }
-                                if include_progress_hooks
-                                else {}
-                            ),
-                        )
-
-                    if expensive_candidates and feature_param_rules:
-                        progress.emit(
-                            percent=82,
-                            stage="feature_param_enrichment",
-                            processed=0,
-                            total=len(expensive_candidates),
-                            message="Loading bucket feature parameters",
-                            force=True,
-                        )
-                    feature_param_snapshots, feature_param_available_keys = load_bucket_feature_param_snapshots(
-                        expensive_candidates,
-                        feature_param_rules,
-                        service=service,
-                        account=account,
-                        **(
-                            {
-                                "progress": progress,
-                                "progress_stage": "feature_param_enrichment",
-                                "progress_message": "Loading bucket feature parameters",
-                                "progress_start": 82,
-                                "progress_end": 88,
-                                "cancel_check": cancel_check,
-                            }
-                            if include_progress_hooks
-                            else {}
-                        ),
-                    )
-
-                    filtered: list[CephAdminBucketSummary] = []
-                    for bucket in expensive_candidates:
-                        bucket_key = bucket_identity_key(bucket)
-                        if bucket_key not in feature_param_available_keys:
-                            continue
-                        snapshot = feature_param_snapshots.get(bucket_key, {})
-                        if match_mode == "all":
-                            matches = (
-                                (all(match_bucket_field_rule(bucket, rule) for rule in field_rules) if field_rules else True)
-                                and (all(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else True)
-                                and match_bucket_feature_param_rules(feature_param_rules, match_mode, snapshot)
-                            )
-                        else:
-                            field_match = any(match_bucket_field_rule(bucket, rule) for rule in field_rules) if field_rules else False
-                            state_match = (
-                                any(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules)
-                                if feature_state_rules
-                                else False
-                            )
-                            param_match = match_bucket_feature_param_rules(feature_param_rules, match_mode, snapshot)
-                            matches = field_match or state_match or param_match
-                        if matches:
-                            filtered.append(bucket)
-                    results = filtered
-                else:
-                    field_matched: list[CephAdminBucketSummary] = []
-                    if match_mode == "any" and cheap_field_rules:
-                        unresolved: list[CephAdminBucketSummary] = []
-                        for bucket in results:
-                            if any(match_bucket_field_rule(bucket, rule) for rule in cheap_field_rules):
-                                field_matched.append(bucket)
-                            else:
-                                unresolved.append(bucket)
-                        expensive_candidates = unresolved
-
-                    if requires_owner_name_lookup and expensive_candidates:
-                        owner_scope = determine_owner_name_lookup_scope(advanced_filter)
-                        owner_name_by_key = resolve_owner_names_for_buckets(
-                            ctx,
-                            expensive_candidates,
-                            owner_scope=owner_scope,
-                        )
-                        for bucket in expensive_candidates:
-                            if not bucket.owner:
-                                bucket.owner_name = None
-                                continue
-                            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
-                            bucket.owner_name = owner_name_by_key.get(owner_key)
-                    if (
-                        requires_owner_suspended_lookup
-                        or requires_owner_quota_lookup
-                        or requires_owner_usage_lookup
-                    ) and expensive_candidates:
-                        expensive_candidates = apply_owner_enrichment(
-                            ctx,
-                            expensive_candidates,
-                            include_suspended=requires_owner_suspended_lookup,
-                            include_quota=requires_owner_quota_lookup,
-                            include_usage=requires_owner_usage_lookup,
-                            usage_by_key=owner_usage_by_key,
-                        )
-
-                    if expensive_candidates and (filter_features or requires_tag_lookup):
-                        progress.emit(
-                            percent=75,
-                            stage="bucket_enrichment",
-                            processed=0,
-                            total=len(expensive_candidates),
-                            message="Loading bucket details",
-                            force=True,
-                        )
-                        expensive_candidates = enrich_buckets(
-                            expensive_candidates,
-                            {feature for feature in filter_features if feature != "tags"},
-                            include_tags=requires_tag_lookup or ("tags" in filter_features),
-                            service=service,
-                            account=account,
-                            **(
-                                {
-                                    "progress": progress,
-                                    "progress_stage": "bucket_enrichment",
-                                    "progress_message": "Loading bucket details",
-                                    "progress_start": 75,
-                                    "progress_end": 88,
-                                    "cancel_check": cancel_check,
-                                }
-                                if include_progress_hooks
-                                else {}
-                            ),
-                        )
-
-                    if match_mode == "all":
-                        results = [
-                            bucket
-                            for bucket in expensive_candidates
-                            if (all(match_bucket_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else True)
-                            and (all(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else True)
-                        ]
-                    elif cheap_field_rules:
-                        expensive_matched = [
-                            bucket
-                            for bucket in expensive_candidates
-                            if (any(match_bucket_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
-                            or (any(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False)
-                        ]
-                        results = field_matched + expensive_matched
-                    else:
-                        results = [
-                            bucket
-                            for bucket in expensive_candidates
-                            if (any(match_bucket_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
-                            or (any(match_bucket_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False)
-                        ]
-
-                for bucket in results:
-                    bucket.features = None
-                    bucket.tags = None
-                    bucket.column_details = None
-            progress.emit(percent=90, stage="expensive_filters", message="Advanced filters applied", force=True)
-        else:
-            progress.emit(percent=90, stage="expensive_filters", message="No expensive filters", force=True)
-        invoke_cancel_check(cancel_check)
-
-        def sort_value(bucket: CephAdminBucketSummary):
-            if sort_by == "tenant":
-                value = bucket.tenant or ""
-            elif sort_by == "owner":
-                value = bucket.owner or ""
-            elif sort_by == "used_bytes":
-                value = bucket.used_bytes if bucket.used_bytes is not None else 0
-            elif sort_by == "object_count":
-                value = bucket.object_count if bucket.object_count is not None else 0
-            else:
-                value = bucket.name
-            if isinstance(value, str):
-                return value.lower()
-            return value
-
-        sortable: list[tuple[object, CephAdminBucketSummary]] = []
-        missing_values: list[CephAdminBucketSummary] = []
-        for bucket in results:
-            value = sort_value(bucket)
-            if value is None:
-                missing_values.append(bucket)
-            else:
-                sortable.append((value, bucket))
-
-        sortable.sort(key=lambda item: item[0], reverse=sort_dir == "desc")
-        results = [bucket for _, bucket in sortable] + missing_values
-        return CephAdminBucketListingSnapshot(
-            items=results,
-            stats_available=stats_available,
-            stats_warning=stats_warning,
-            owner_usage_by_key=owner_usage_by_key,
-        )
-
+    snapshot_builder = _CephAdminBucketSnapshotBuilder(
+        ctx=ctx,
+        advanced_filter=advanced_filter,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        with_stats=with_stats,
+        stats_required_for_request=stats_required_for_request,
+        needs_owner_metadata=needs_owner_metadata,
+        needs_tenant_metadata=needs_tenant_metadata,
+        owner_usage_required_for_request=owner_usage_required_for_request,
+        progress=progress,
+        include_progress_hooks=include_progress_hooks,
+        cancel_check=cancel_check,
+    )
     invoke_cancel_check(cancel_check)
-    listing = get_cached_bucket_listing(cache_key, build_listing)
+    listing = get_cached_bucket_listing(cache_key, snapshot_builder.build)
     results = listing.items
     progress.emit(percent=92, stage="sort_paginate", message="Sorting and paginating results", force=True)
 

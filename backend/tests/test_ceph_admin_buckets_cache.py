@@ -849,6 +849,7 @@ def test_ceph_admin_bucket_listing_any_mixed_filter_prefers_bulk_field_rules(mon
     assert captured["requested"] == {"versioning"}
     assert captured["include_tags"] is False
     assert [item.name for item in response.items] == ["bucket-a", "bucket-b"]
+    assert all(item.features is None for item in response.items)
 
 
 def test_ceph_admin_bucket_listing_notifications_include_and_filter(monkeypatch: pytest.MonkeyPatch):
@@ -1152,6 +1153,7 @@ def test_ceph_admin_bucket_listing_any_tag_filter_prefers_bulk_field_rules(monke
     assert captured["requested"] == set()
     assert captured["include_tags"] is True
     assert [item.name for item in response.items] == ["bucket-a", "bucket-c"]
+    assert all(item.tags is None for item in response.items)
 
 
 def test_ceph_admin_bucket_listing_owner_name_lookup_deduplicates_same_owner():
