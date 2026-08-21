@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import monotonic
 from typing import Any, Callable
@@ -61,6 +61,20 @@ class BucketPurgeOptions:
     parallelism: int = 10
     include_versions: bool = True
     individual_deletes: bool = False
+
+
+@dataclass
+class _BucketDeletePurgeState:
+    target: BucketPurgeResolvedTarget
+    options: BucketPurgeOptions
+    total_entries_estimate: int | None
+    progress_callback: ProgressCallback
+    cancel_check: CancelCheck | None
+    started_at: float = field(default_factory=monotonic)
+    listed_objects: int = 0
+    listed_versions: int = 0
+    deleted_objects: int = 0
+    deleted_versions: int = 0
 
 
 class BucketPurgeService(LongRunningS3ClientService):
@@ -407,199 +421,239 @@ class BucketPurgeService(LongRunningS3ClientService):
         progress_callback: ProgressCallback,
         cancel_check: CancelCheck | None,
     ) -> BucketPurgeBucketResult:
-        started = monotonic()
-        listed_objects = 0
-        listed_versions = 0
-        deleted_objects = 0
-        deleted_versions = 0
-
-        def low_progress(progress: s3_deletion.BucketContentPurgeProgress) -> None:
-            stage = _normalize_progress_stage(progress.stage)
-            next_total_entries_estimate = self._progress_total_entries_estimate(
-                total_entries_estimate,
-                listed_objects=progress.listed_objects,
-                listed_versions=progress.listed_versions,
-                deleted_objects=progress.deleted_objects,
-                deleted_versions=progress.deleted_versions,
-                total_entries_final=stage == "completed",
-            )
-            progress_callback(
-                BucketPurgeProgress(
-                    stage=stage,
-                    bucket_name=target.bucket_name,
-                    context_id=target.context_id,
-                    context_name=target.context_name,
-                    total_buckets=1,
-                    completed_buckets=0,
-                    listed_objects=progress.listed_objects,
-                    listed_versions=progress.listed_versions,
-                    deleted_objects=progress.deleted_objects,
-                    deleted_versions=progress.deleted_versions,
-                    total_entries_estimate=next_total_entries_estimate,
-                    total_entries_final=stage == "completed",
-                    failed_count=progress.failed_count,
-                    bucket_deleted=False,
-                    message=progress.message,
-                )
-            )
-
-        def failure_result(
-            *,
-            stage: str,
-            message: str,
-            failed_count: int = 1,
-            key: str | None = None,
-            version_id: str | None = None,
-        ) -> BucketPurgeBucketResult:
-            return BucketPurgeBucketResult(
-                bucket_name=target.bucket_name,
-                context_id=target.context_id,
-                context_name=target.context_name,
-                status="failed",
-                listed_objects=listed_objects,
-                listed_versions=listed_versions,
-                deleted_objects=deleted_objects,
-                deleted_versions=deleted_versions,
-                failed_count=failed_count,
-                bucket_deleted=False,
-                duration_seconds=round(monotonic() - started, 3),
-                failures_sample=[
-                    BucketPurgeFailure(
-                        bucket_name=target.bucket_name,
-                        stage=stage,
-                        message=message,
-                        key=key,
-                        version_id=version_id,
-                        count=failed_count,
-                    )
-                ],
-            )
-
+        state = _BucketDeletePurgeState(
+            target=target,
+            options=options,
+            total_entries_estimate=total_entries_estimate,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check,
+        )
         try:
             client = self._build_client(target.account)
             purge_result = s3_deletion.purge_bucket_contents(
                 client,
                 target.bucket_name,
-                parallelism=options.parallelism,
-                include_versions=options.include_versions,
-                individual_deletes=options.individual_deletes,
-                progress_callback=low_progress,
-                cancel_check=cancel_check,
+                parallelism=state.options.parallelism,
+                include_versions=state.options.include_versions,
+                individual_deletes=state.options.individual_deletes,
+                progress_callback=lambda progress: self._emit_delete_purge_progress(
+                    state,
+                    progress,
+                ),
+                cancel_check=state.cancel_check,
             )
-            listed_objects = purge_result.listed_objects
-            listed_versions = purge_result.listed_versions
-            deleted_objects = purge_result.deleted_objects
-            deleted_versions = purge_result.deleted_versions
+            self._apply_delete_purge_result(state, purge_result)
             if purge_result.failed_count > 0:
-                failures = [
-                    BucketPurgeFailure(
-                        bucket_name=target.bucket_name,
-                        stage=failure.stage,
-                        message=failure.message,
-                        key=failure.key,
-                        version_id=failure.version_id,
-                        count=failure.count,
-                    )
-                    for failure in purge_result.failures_sample
-                ]
-                return BucketPurgeBucketResult(
-                    bucket_name=target.bucket_name,
-                    context_id=target.context_id,
-                    context_name=target.context_name,
-                    status="failed",
-                    listed_objects=listed_objects,
-                    listed_versions=listed_versions,
-                    deleted_objects=deleted_objects,
-                    deleted_versions=deleted_versions,
-                    failed_count=purge_result.failed_count,
-                    bucket_deleted=False,
-                    duration_seconds=round(monotonic() - started, 3),
-                    failures_sample=failures,
-                )
+                return self._delete_purge_failure_result(state, purge_result)
 
-            progress_callback(
-                BucketPurgeProgress(
-                    stage="delete_bucket",
-                    bucket_name=target.bucket_name,
-                    context_id=target.context_id,
-                    context_name=target.context_name,
-                    total_buckets=1,
-                    completed_buckets=0,
-                    listed_objects=listed_objects,
-                    listed_versions=listed_versions,
-                    deleted_objects=deleted_objects,
-                    deleted_versions=deleted_versions,
-                    total_entries_estimate=self._progress_total_entries_estimate(
-                        total_entries_estimate,
-                        listed_objects=listed_objects,
-                        listed_versions=listed_versions,
-                        deleted_objects=deleted_objects,
-                        deleted_versions=deleted_versions,
-                        total_entries_final=True,
-                    ),
-                    total_entries_final=True,
-                    failed_count=0,
-                    bucket_deleted=False,
-                    message=f"Deleting bucket {target.bucket_name}...",
-                )
+            self._emit_bucket_deletion_progress(
+                state,
+                stage="delete_bucket",
+                completed_buckets=0,
+                bucket_deleted=False,
+                message=f"Deleting bucket {target.bucket_name}...",
             )
-            try:
-                client.delete_bucket(Bucket=target.bucket_name)
-            except ClientError as exc:
-                error_code = aws_error_code(exc, lowercase=True)
-                if error_code == "bucketnotempty":
-                    return failure_result(
-                        stage="delete_bucket",
-                        message=(
-                            f"Bucket '{target.bucket_name}' is not empty after purge. "
-                            "Objects may have been added while the deletion was running."
-                        ),
-                    )
-                return failure_result(stage="delete_bucket", message=format_s3_error(exc))
-            except BotoCoreError as exc:
-                return failure_result(stage="delete_bucket", message=sanitized_error_log_detail(exc))
-
-            progress_callback(
-                BucketPurgeProgress(
-                    stage="completed",
-                    bucket_name=target.bucket_name,
-                    context_id=target.context_id,
-                    context_name=target.context_name,
-                    total_buckets=1,
-                    completed_buckets=1,
-                    listed_objects=listed_objects,
-                    listed_versions=listed_versions,
-                    deleted_objects=deleted_objects,
-                    deleted_versions=deleted_versions,
-                    total_entries_estimate=self._progress_total_entries_estimate(
-                        total_entries_estimate,
-                        listed_objects=listed_objects,
-                        listed_versions=listed_versions,
-                        deleted_objects=deleted_objects,
-                        deleted_versions=deleted_versions,
-                        total_entries_final=True,
-                    ),
-                    total_entries_final=True,
-                    failed_count=0,
-                    bucket_deleted=True,
-                    message=f"Deleted bucket {target.bucket_name}.",
-                )
+            delete_failure = self._delete_empty_bucket(client, state)
+            if delete_failure is not None:
+                return delete_failure
+            self._emit_bucket_deletion_progress(
+                state,
+                stage="completed",
+                completed_buckets=1,
+                bucket_deleted=True,
+                message=f"Deleted bucket {target.bucket_name}.",
             )
-            return BucketPurgeBucketResult(
-                bucket_name=target.bucket_name,
-                context_id=target.context_id,
-                context_name=target.context_name,
+            return self._build_bucket_delete_result(
+                state,
                 status="completed",
-                listed_objects=listed_objects,
-                listed_versions=listed_versions,
-                deleted_objects=deleted_objects,
-                deleted_versions=deleted_versions,
                 failed_count=0,
                 bucket_deleted=True,
-                duration_seconds=round(monotonic() - started, 3),
                 failures_sample=[],
             )
         except BucketPurgeCancelled:
             raise
         except Exception as exc:  # noqa: BLE001
-            return failure_result(stage="list", message=sanitized_error_log_detail(exc))
+            return self._bucket_delete_failure_result(
+                state,
+                stage="list",
+                message=sanitized_error_log_detail(exc),
+            )
+
+    def _emit_delete_purge_progress(
+        self,
+        state: _BucketDeletePurgeState,
+        progress: s3_deletion.BucketContentPurgeProgress,
+    ) -> None:
+        stage = _normalize_progress_stage(progress.stage)
+        state.progress_callback(
+            BucketPurgeProgress(
+                stage=stage,
+                bucket_name=state.target.bucket_name,
+                context_id=state.target.context_id,
+                context_name=state.target.context_name,
+                total_buckets=1,
+                completed_buckets=0,
+                listed_objects=progress.listed_objects,
+                listed_versions=progress.listed_versions,
+                deleted_objects=progress.deleted_objects,
+                deleted_versions=progress.deleted_versions,
+                total_entries_estimate=self._progress_total_entries_estimate(
+                    state.total_entries_estimate,
+                    listed_objects=progress.listed_objects,
+                    listed_versions=progress.listed_versions,
+                    deleted_objects=progress.deleted_objects,
+                    deleted_versions=progress.deleted_versions,
+                    total_entries_final=stage == "completed",
+                ),
+                total_entries_final=stage == "completed",
+                failed_count=progress.failed_count,
+                bucket_deleted=False,
+                message=progress.message,
+            )
+        )
+
+    @staticmethod
+    def _apply_delete_purge_result(
+        state: _BucketDeletePurgeState,
+        result: s3_deletion.BucketContentPurgeResult,
+    ) -> None:
+        state.listed_objects = result.listed_objects
+        state.listed_versions = result.listed_versions
+        state.deleted_objects = result.deleted_objects
+        state.deleted_versions = result.deleted_versions
+
+    def _delete_purge_failure_result(
+        self,
+        state: _BucketDeletePurgeState,
+        result: s3_deletion.BucketContentPurgeResult,
+    ) -> BucketPurgeBucketResult:
+        failures = [
+            BucketPurgeFailure(
+                bucket_name=state.target.bucket_name,
+                stage=failure.stage,
+                message=failure.message,
+                key=failure.key,
+                version_id=failure.version_id,
+                count=failure.count,
+            )
+            for failure in result.failures_sample
+        ]
+        return self._build_bucket_delete_result(
+            state,
+            status="failed",
+            failed_count=result.failed_count,
+            bucket_deleted=False,
+            failures_sample=failures,
+        )
+
+    def _emit_bucket_deletion_progress(
+        self,
+        state: _BucketDeletePurgeState,
+        *,
+        stage: BucketPurgeStage,
+        completed_buckets: int,
+        bucket_deleted: bool,
+        message: str,
+    ) -> None:
+        state.progress_callback(
+            BucketPurgeProgress(
+                stage=stage,
+                bucket_name=state.target.bucket_name,
+                context_id=state.target.context_id,
+                context_name=state.target.context_name,
+                total_buckets=1,
+                completed_buckets=completed_buckets,
+                listed_objects=state.listed_objects,
+                listed_versions=state.listed_versions,
+                deleted_objects=state.deleted_objects,
+                deleted_versions=state.deleted_versions,
+                total_entries_estimate=self._progress_total_entries_estimate(
+                    state.total_entries_estimate,
+                    listed_objects=state.listed_objects,
+                    listed_versions=state.listed_versions,
+                    deleted_objects=state.deleted_objects,
+                    deleted_versions=state.deleted_versions,
+                    total_entries_final=True,
+                ),
+                total_entries_final=True,
+                failed_count=0,
+                bucket_deleted=bucket_deleted,
+                message=message,
+            )
+        )
+
+    def _delete_empty_bucket(
+        self,
+        client: Any,
+        state: _BucketDeletePurgeState,
+    ) -> BucketPurgeBucketResult | None:
+        try:
+            client.delete_bucket(Bucket=state.target.bucket_name)
+        except ClientError as exc:
+            if aws_error_code(exc, lowercase=True) == "bucketnotempty":
+                return self._bucket_delete_failure_result(
+                    state,
+                    stage="delete_bucket",
+                    message=(
+                        f"Bucket '{state.target.bucket_name}' is not empty after purge. "
+                        "Objects may have been added while the deletion was running."
+                    ),
+                )
+            return self._bucket_delete_failure_result(
+                state,
+                stage="delete_bucket",
+                message=format_s3_error(exc),
+            )
+        except BotoCoreError as exc:
+            return self._bucket_delete_failure_result(
+                state,
+                stage="delete_bucket",
+                message=sanitized_error_log_detail(exc),
+            )
+        return None
+
+    def _bucket_delete_failure_result(
+        self,
+        state: _BucketDeletePurgeState,
+        *,
+        stage: str,
+        message: str,
+    ) -> BucketPurgeBucketResult:
+        return self._build_bucket_delete_result(
+            state,
+            status="failed",
+            failed_count=1,
+            bucket_deleted=False,
+            failures_sample=[
+                BucketPurgeFailure(
+                    bucket_name=state.target.bucket_name,
+                    stage=stage,
+                    message=message,
+                    count=1,
+                )
+            ],
+        )
+
+    @staticmethod
+    def _build_bucket_delete_result(
+        state: _BucketDeletePurgeState,
+        *,
+        status: BucketPurgeStatus,
+        failed_count: int,
+        bucket_deleted: bool,
+        failures_sample: list[BucketPurgeFailure],
+    ) -> BucketPurgeBucketResult:
+        return BucketPurgeBucketResult(
+            bucket_name=state.target.bucket_name,
+            context_id=state.target.context_id,
+            context_name=state.target.context_name,
+            status=status,
+            listed_objects=state.listed_objects,
+            listed_versions=state.listed_versions,
+            deleted_objects=state.deleted_objects,
+            deleted_versions=state.deleted_versions,
+            failed_count=failed_count,
+            bucket_deleted=bucket_deleted,
+            duration_seconds=round(monotonic() - state.started_at, 3),
+            failures_sample=failures_sample,
+        )

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from botocore.exceptions import ClientError
+
 from app.services import bucket_purge_service
 from app.services.bucket_purge_service import (
     BucketPurgeOptions,
@@ -95,6 +97,97 @@ def test_delete_bucket_with_purge_deletes_large_bucket_without_entry_limit(monke
     assert result.deleted_versions == 0
     assert sum(len(call) for call in client.delete_object_calls) == 11000
     assert client.delete_bucket_calls == ["bucket-huge"]
+
+
+def test_delete_bucket_with_purge_preserves_content_purge_failures(monkeypatch):
+    client = SimpleNamespace(delete_bucket=lambda **kwargs: None)
+    purge_failure = bucket_purge_service.s3_deletion.BucketContentPurgeFailure(
+        stage="delete",
+        message="object delete failed",
+        key="blocked.txt",
+        count=2,
+    )
+
+    monkeypatch.setattr(
+        BucketPurgeService,
+        "_build_client",
+        lambda self, account: client,
+    )
+    monkeypatch.setattr(
+        bucket_purge_service.s3_deletion,
+        "purge_bucket_contents",
+        lambda *args, **kwargs: (
+            bucket_purge_service.s3_deletion.BucketContentPurgeResult(
+                bucket_name="bucket-a",
+                listed_objects=3,
+                deleted_objects=1,
+                failed_count=2,
+                failures_sample=[purge_failure],
+            )
+        ),
+    )
+
+    result = BucketPurgeService().run_delete_bucket_with_purge(
+        BucketPurgeResolvedTarget(
+            account=SimpleNamespace(),
+            bucket_name="bucket-a",
+        ),
+        BucketPurgeOptions(),
+    )
+
+    assert result.status == "failed"
+    assert result.bucket_deleted is False
+    assert result.listed_objects == 3
+    assert result.deleted_objects == 1
+    assert result.failed_count == 2
+    assert result.buckets[0].failures_sample[0].key == "blocked.txt"
+
+
+def test_delete_bucket_with_purge_reports_bucket_not_empty_race(monkeypatch):
+    class DeleteClient:
+        def delete_bucket(self, **kwargs):
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "BucketNotEmpty",
+                        "Message": "The bucket is not empty",
+                    }
+                },
+                "DeleteBucket",
+            )
+
+    monkeypatch.setattr(
+        BucketPurgeService,
+        "_build_client",
+        lambda self, account: DeleteClient(),
+    )
+    monkeypatch.setattr(
+        bucket_purge_service.s3_deletion,
+        "purge_bucket_contents",
+        lambda *args, **kwargs: (
+            bucket_purge_service.s3_deletion.BucketContentPurgeResult(
+                bucket_name="bucket-racing",
+                listed_objects=2,
+                deleted_objects=2,
+            )
+        ),
+    )
+    progress_events = []
+
+    result = BucketPurgeService().run_delete_bucket_with_purge(
+        BucketPurgeResolvedTarget(
+            account=SimpleNamespace(),
+            bucket_name="bucket-racing",
+        ),
+        BucketPurgeOptions(),
+        progress_callback=progress_events.append,
+    )
+
+    assert result.status == "failed"
+    assert result.bucket_deleted is False
+    assert result.completed_buckets == 0
+    assert "not empty after purge" in result.buckets[0].failures_sample[0].message
+    assert progress_events[-1].stage == "delete_bucket"
 
 
 def test_purge_progress_uses_rgw_stats_entry_estimate_before_listing(monkeypatch):
