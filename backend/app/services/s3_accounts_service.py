@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from dataclasses import dataclass
 import logging
 import random
 from typing import Any, Optional
@@ -53,6 +54,16 @@ from app.utils.name_ordering import name_order_by
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _PreparedAccountImport:
+    source: S3AccountImport
+    endpoint: StorageEndpoint
+    admin: RGWAdminClient
+    account_name: str
+    root_uid: str
+    root_display_name: str
 
 
 class S3AccountsService:
@@ -561,94 +572,149 @@ class S3AccountsService:
             tags=self.tags.get_account_tags(account),
         )
 
-    def import_accounts(self, imports: list[S3AccountImport]) -> list[S3AccountSchema]:
-        created: list[S3AccountSchema] = []
+    @staticmethod
+    def _extract_complete_key_pair(admin: RGWAdminClient, payload: Any) -> tuple[Optional[str], Optional[str]]:
+        for entry in admin._extract_keys(payload or {}):
+            if not isinstance(entry, dict):
+                continue
+            access_key = entry.get("access_key")
+            secret_key = entry.get("secret_key")
+            if access_key and secret_key:
+                return str(access_key), str(secret_key)
+        return None, None
+
+    @staticmethod
+    def _load_existing_root_user(
+        admin: RGWAdminClient,
+        root_uid: str,
+        account_id: str,
+    ) -> Optional[dict[str, Any]]:
+        for tenant in (account_id, None):
+            try:
+                payload = admin.get_user(root_uid, tenant=tenant, allow_not_found=True)
+            except RGWAdminError:
+                continue
+            if payload and not payload.get("not_found"):
+                return payload
+        return None
+
+    def _prepare_account_imports(self, imports: list[S3AccountImport]) -> list[_PreparedAccountImport]:
+        requested_ids = {item.rgw_account_id for item in imports}
+        existing_ids = {
+            str(row[0])
+            for row in self.db.query(S3Account.rgw_account_id)
+            .filter(S3Account.rgw_account_id.in_(requested_ids))
+            .all()
+        }
+        seen_ids = set(existing_ids)
+        prepared: list[_PreparedAccountImport] = []
         for item in imports:
+            if item.rgw_account_id in seen_ids:
+                continue
+            seen_ids.add(item.rgw_account_id)
             endpoint = self._resolve_storage_endpoint(item.storage_endpoint_id, require_ceph=True)
             admin = self._admin_for_endpoint(endpoint, allow_missing=False)
-
-            # Skip if already present
-            if self.db.query(S3Account).filter(S3Account.rgw_account_id == item.rgw_account_id).first():
-                continue
-            # Validate RGW account id format
-            if not item.rgw_account_id.startswith("RGW") or not item.rgw_account_id[3:].isdigit():
-                raise ValueError(f"Invalid account id format: {item.rgw_account_id}")
-            # Verify account exists in RGW
+            if admin is None:
+                raise ValueError("Admin operations are disabled for this endpoint.")
             rgw_info = admin.get_account(item.rgw_account_id, allow_not_found=True)
             if not rgw_info or rgw_info.get("not_found"):
                 raise ValueError(f"S3Account {item.rgw_account_id} not found in RGW")
             account_name = rgw_info.get("name") or item.name or item.rgw_account_id
-            # We do not create the account in RGW (assumed existing); ensure root user keys
             root_uid = self._root_uid(item.rgw_account_id)
-            root_display = self._root_display_name(account_name, item.rgw_account_id)
-            access_key = None
-            secret_key = None
-            existing_root = None
-            for tenant in (item.rgw_account_id, None):
-                if existing_root:
-                    break
-                try:
-                    existing_root = admin.get_user(root_uid, tenant=tenant, allow_not_found=True)
-                except RGWAdminError:
-                    existing_root = None
-            keys = admin._extract_keys(existing_root or {})
-            access_key = access_key or (keys[0].get("access_key") if keys else None)
-            secret_key = secret_key or (keys[0].get("secret_key") if keys else None)
+            prepared.append(
+                _PreparedAccountImport(
+                    source=item,
+                    endpoint=endpoint,
+                    admin=admin,
+                    account_name=str(account_name),
+                    root_uid=root_uid,
+                    root_display_name=self._root_display_name(str(account_name), item.rgw_account_id),
+                )
+            )
+
+        names = [item.account_name for item in prepared]
+        existing_names = {
+            str(row[0])
+            for row in self.db.query(S3Account.name).filter(S3Account.name.in_(names)).all()
+        }
+        seen_names = set(existing_names)
+        for item in prepared:
+            if item.account_name in seen_names:
+                raise ValueError(f"S3Account name already exists: {item.account_name}")
+            seen_names.add(item.account_name)
+        return prepared
+
+    def _obtain_import_root_keys(self, prepared: _PreparedAccountImport) -> tuple[str, str]:
+        item = prepared.source
+        admin = prepared.admin
+        existing_root = self._load_existing_root_user(admin, prepared.root_uid, item.rgw_account_id)
+        access_key, secret_key = self._extract_complete_key_pair(admin, existing_root)
+        if not access_key or not secret_key:
             if not existing_root:
                 resp = admin.create_user_with_account_id(
-                    uid=root_uid,
+                    uid=prepared.root_uid,
                     account_id=item.rgw_account_id,
-                    display_name=root_display,
+                    display_name=prepared.root_display_name,
                     account_root=True,
                 )
-                keys = admin._extract_keys(resp)
-                access_key = access_key or (keys[0].get("access_key") if keys else None)
-                secret_key = secret_key or (keys[0].get("secret_key") if keys else None)
+                access_key, secret_key = self._extract_complete_key_pair(admin, resp)
                 if not access_key or not secret_key:
                     try:
-                        existing_root = admin.get_user(root_uid, tenant=item.rgw_account_id, allow_not_found=True)
+                        existing_root = admin.get_user(
+                            prepared.root_uid,
+                            tenant=item.rgw_account_id,
+                            allow_not_found=True,
+                        )
                     except RGWAdminError:
                         existing_root = None
-                    keys = admin._extract_keys(existing_root or {})
-                    access_key = access_key or (keys[0].get("access_key") if keys else None)
-                    secret_key = secret_key or (keys[0].get("secret_key") if keys else None)
+                    access_key, secret_key = self._extract_complete_key_pair(admin, existing_root)
             if not access_key or not secret_key:
                 try:
                     resp = admin.create_access_key(
-                        root_uid,
+                        prepared.root_uid,
                         tenant=item.rgw_account_id,
                         key_name="bucketreef",
                     )
-                    keys = admin._extract_keys(resp)
-                    access_key = access_key or (keys[0].get("access_key") if keys else None)
-                    secret_key = secret_key or (keys[0].get("secret_key") if keys else None)
+                    access_key, secret_key = self._extract_complete_key_pair(admin, resp)
                 except RGWAdminError:
                     pass
-            if not access_key or not secret_key:
-                raise ValueError(f"Unable to obtain root keys for account {item.rgw_account_id}")
+        if not access_key or not secret_key:
+            raise ValueError(f"Unable to obtain root keys for account {item.rgw_account_id}")
+        return access_key, secret_key
+
+    def import_accounts(self, imports: list[S3AccountImport]) -> list[S3AccountSchema]:
+        prepared = self._prepare_account_imports(imports)
+        resolved = [
+            (item, *self._obtain_import_root_keys(item))
+            for item in prepared
+        ]
+        accounts: list[tuple[S3Account, StorageEndpoint]] = []
+        for item, access_key, secret_key in resolved:
             account = S3Account(
-                name=account_name,
-                rgw_account_id=item.rgw_account_id,
+                name=item.account_name,
+                rgw_account_id=item.source.rgw_account_id,
                 rgw_access_key=access_key,
                 rgw_secret_key=secret_key,
-                rgw_user_uid=root_uid,
-                email=item.email,
-                storage_endpoint_id=endpoint.id,
+                rgw_user_uid=item.root_uid,
+                email=item.source.email,
+                storage_endpoint_id=item.endpoint.id,
             )
             self.db.add(account)
-            self.db.flush()
-            created.append(
-                s3_account_from_db(
-                    account,
-                    quota_max_size_gb=None,
-                    quota_max_objects=None,
-                    user_links=[],
-                    group_links=[],
-                    storage_endpoint=endpoint,
-                    storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
-                    tags=[],
-                )
+            accounts.append((account, item.endpoint))
+        self.db.flush()
+        created = [
+            s3_account_from_db(
+                account,
+                quota_max_size_gb=None,
+                quota_max_objects=None,
+                user_links=[],
+                group_links=[],
+                storage_endpoint=endpoint,
+                storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                tags=[],
             )
+            for account, endpoint in accounts
+        ]
         self.db.commit()
         return created
 

@@ -94,6 +94,10 @@ def test_admin_account_mutations_require_a_canonical_endpoint(client: TestClient
         "/api/admin/accounts/import",
         json=[{"rgw_account_id": "RGW00000000000000101"}],
     )
+    invalid_import_id_response = client.post(
+        "/api/admin/accounts/import",
+        json=[{"rgw_account_id": "RGW123", "storage_endpoint_id": 1}],
+    )
     update_response = client.put(
         "/api/admin/accounts/1",
         json={"storage_endpoint_id": None},
@@ -110,6 +114,8 @@ def test_admin_account_mutations_require_a_canonical_endpoint(client: TestClient
 
     assert create_response.status_code == 422
     assert import_response.status_code == 422
+    assert invalid_import_id_response.status_code == 422
+    assert "RGW followed by 17 digits" in invalid_import_id_response.text
     assert update_response.status_code == 422
     assert removed_create_fields_response.status_code == 422
 

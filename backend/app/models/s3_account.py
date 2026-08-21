@@ -10,6 +10,7 @@ from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validat
 from app.models.ui_group import UiGroupAvatar
 from app.models.user import UserAvatar
 from app.utils.account_roles import CanonicalAccountRole
+from app.utils.rgw_identifiers import is_rgw_account_id, normalize_rgw_identifier
 
 
 class _CanonicalAccountLink(ApiModel):
@@ -75,6 +76,14 @@ class S3AccountImport(ApiModel):
     name: Optional[str] = None
     email: Optional[str] = None
     storage_endpoint_id: int
+
+    @field_validator("rgw_account_id", mode="before")
+    @classmethod
+    def normalize_account_id(cls, value: object) -> str:
+        normalized = normalize_rgw_identifier(str(value or ""))
+        if not normalized or not is_rgw_account_id(normalized):
+            raise ValueError("rgw_account_id must match RGW followed by 17 digits")
+        return normalized
 
 
 class S3AccountUpdate(ApiModel):

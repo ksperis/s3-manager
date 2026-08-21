@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime
 from typing import Optional
 
 import pytest
+from pydantic import ValidationError
 
 from app.services.s3_accounts_service import S3AccountsService
 from app.db import (
@@ -227,15 +228,7 @@ class FakeRGWAdminImport:
             return {"keys": [{"access_key": "IMPORTED", "secret_key": "SECRET"}]}
         return None
 
-    def get_account_user(self, account_id: str, uid: str, allow_not_found: bool = False):
-        self.calls.append(("get_account_user", account_id))
-        raise RGWAdminError("account user endpoint unavailable")
-
     def create_user_with_account_id(self, *args, **kwargs):
-        return {}
-
-    def create_user(self, uid: str, display_name: Optional[str] = None, email: Optional[str] = None, tenant: Optional[str] = None, caps: Optional[str] = None):
-        self.calls.append(("create_user", tenant))
         return {}
 
     def create_access_key(self, *args, **kwargs):
@@ -244,17 +237,8 @@ class FakeRGWAdminImport:
     def _extract_keys(self, data):
         return data.get("keys", [])
 
-    def set_user_caps(self, uid: str, cap: str, tenant: Optional[str] = None):
-        return {"uid": uid, "cap": cap, "tenant": tenant}
 
-    def list_topics(self, account_id: Optional[str] = None):
-        return []
-
-    def list_users(self):
-        return []
-
-
-def test_import_account_uses_user_api_when_account_user_missing(db_session, monkeypatch):
+def test_import_account_reuses_existing_root_user_keys(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
     fake_admin = FakeRGWAdminImport()
     svc = _build_service(db_session, monkeypatch, fake_admin)
@@ -268,11 +252,13 @@ def test_import_account_uses_user_api_when_account_user_missing(db_session, monk
     assert db_account.rgw_access_key == "IMPORTED"
     assert db_account.rgw_secret_key == "SECRET"
     assert db_account.rgw_user_uid == "RGW12345678901234567-admin"
+    assert fake_admin.calls == [("get_user", "RGW12345678901234567")]
 
 
 class FakeRGWAdminImportCreatesRoot:
-    def __init__(self):
+    def __init__(self, account_name: str = "MissingRootS3Account"):
         self.created_users: list[tuple[str, Optional[str]]] = []
+        self.account_name = account_name
 
     def get_account(
         self,
@@ -280,12 +266,9 @@ class FakeRGWAdminImportCreatesRoot:
         allow_not_found: bool = False,
         allow_not_implemented: bool = False,
     ):
-        return {"id": account_id, "name": "MissingRootS3Account", "user_list": []}
+        return {"id": account_id, "name": self.account_name, "user_list": []}
 
     def get_user(self, uid: str, tenant: Optional[str] = None, allow_not_found: bool = False):
-        return None
-
-    def get_account_user(self, account_id: str, uid: str, allow_not_found: bool = False):
         return None
 
     def create_user_with_account_id(self, *args, **kwargs):
@@ -299,15 +282,6 @@ class FakeRGWAdminImportCreatesRoot:
 
     def _extract_keys(self, data):
         return data.get("keys", [])
-
-    def set_user_caps(self, uid: str, cap: str, tenant: Optional[str] = None):
-        return {"uid": uid, "cap": cap, "tenant": tenant}
-
-    def list_topics(self, account_id: Optional[str] = None):
-        return []
-
-    def list_users(self):
-        return []
 
 
 def test_import_account_creates_root_user_when_missing(db_session, monkeypatch):
@@ -326,6 +300,108 @@ def test_import_account_creates_root_user_when_missing(db_session, monkeypatch):
     assert db_account.rgw_secret_key == "NEWSECRET"
     assert fake_admin.created_users == [("RGW98765432109876543-admin", account_id)]
     assert db_account.rgw_user_uid == "RGW98765432109876543-admin"
+
+
+def test_import_account_identifier_is_normalized_and_strictly_validated():
+    normalized = S3AccountImport(
+        rgw_account_id=" rgw12345678901234567 ",
+        storage_endpoint_id=1,
+    )
+
+    assert normalized.rgw_account_id == "RGW12345678901234567"
+    with pytest.raises(ValidationError, match="RGW followed by 17 digits"):
+        S3AccountImport(rgw_account_id="RGW123", storage_endpoint_id=1)
+
+
+class FakeRGWAdminImportSplitKeys(FakeRGWAdminImportCreatesRoot):
+    def __init__(self):
+        super().__init__(account_name="SplitKeysAccount")
+        self.created_keys: list[tuple[str, Optional[str]]] = []
+
+    def get_user(self, uid: str, tenant: Optional[str] = None, allow_not_found: bool = False):
+        return {"keys": [{"access_key": "ACCESS-ONLY"}, {"secret_key": "SECRET-ONLY"}]}
+
+    def create_access_key(self, uid: str, tenant: Optional[str] = None, key_name: Optional[str] = None):
+        self.created_keys.append((uid, tenant))
+        return {"keys": [{"access_key": "MATCHED-ACCESS", "secret_key": "MATCHED-SECRET"}]}
+
+
+def test_import_account_never_combines_credentials_from_different_keys(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
+    fake_admin = FakeRGWAdminImportSplitKeys()
+    svc = _build_service(db_session, monkeypatch, fake_admin)
+
+    account_id = "RGW11111111111111111"
+    created = svc.import_accounts(
+        [S3AccountImport(rgw_account_id=account_id, storage_endpoint_id=endpoint.id)]
+    )
+
+    assert len(created) == 1
+    db_account = db_session.query(S3Account).filter(S3Account.rgw_account_id == account_id).one()
+    assert db_account.rgw_access_key == "MATCHED-ACCESS"
+    assert db_account.rgw_secret_key == "MATCHED-SECRET"
+    assert fake_admin.created_keys == [(f"{account_id}-admin", account_id)]
+
+
+class FakeRGWAdminImportBatch(FakeRGWAdminImportCreatesRoot):
+    def __init__(self, missing_account_id: str):
+        super().__init__(account_name="PreparedAccount")
+        self.missing_account_id = missing_account_id
+
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = False,
+        allow_not_implemented: bool = False,
+    ):
+        if account_id == self.missing_account_id:
+            return {"not_found": True}
+        return {"id": account_id, "name": f"Account-{account_id}", "user_list": []}
+
+
+def test_import_accounts_validates_entire_batch_before_mutating_rgw(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
+    missing_account_id = "RGW22222222222222222"
+    fake_admin = FakeRGWAdminImportBatch(missing_account_id)
+    svc = _build_service(db_session, monkeypatch, fake_admin)
+    first_account_id = "RGW33333333333333333"
+
+    with pytest.raises(ValueError, match=f"S3Account {missing_account_id} not found in RGW"):
+        svc.import_accounts(
+            [
+                S3AccountImport(rgw_account_id=first_account_id, storage_endpoint_id=endpoint.id),
+                S3AccountImport(rgw_account_id=missing_account_id, storage_endpoint_id=endpoint.id),
+            ]
+        )
+
+    assert fake_admin.created_users == []
+    assert db_session.query(S3Account).filter(S3Account.rgw_account_id == first_account_id).first() is None
+
+
+def test_import_accounts_rejects_name_collisions_before_mutating_rgw(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
+    existing = S3Account(
+        name="Existing account",
+        rgw_account_id="RGW44444444444444444",
+        rgw_user_uid="RGW44444444444444444-admin",
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add(existing)
+    db_session.commit()
+    fake_admin = FakeRGWAdminImportCreatesRoot(account_name=existing.name)
+    svc = _build_service(db_session, monkeypatch, fake_admin)
+
+    with pytest.raises(ValueError, match="S3Account name already exists: Existing account"):
+        svc.import_accounts(
+            [
+                S3AccountImport(
+                    rgw_account_id="RGW55555555555555555",
+                    storage_endpoint_id=endpoint.id,
+                )
+            ]
+        )
+
+    assert fake_admin.created_users == []
 
 
 class FakeRGWDeleteAdmin:
