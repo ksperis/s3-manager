@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 import logging
 from typing import Any, Optional
@@ -170,6 +170,234 @@ def _version_listing_absent_error(exc: Exception) -> bool:
     return aws_error_code(exc, lowercase=True) in {"nosuchbucket", "nosuchversion", "notfound"}
 
 
+_DeleteBatchResult = tuple[str, int, list[dict] | None, Exception | None]
+_PendingDeletes = set[Future[_DeleteBatchResult]]
+
+
+class _BucketContentPurger:
+    _FAILURE_SAMPLE_LIMIT = 500
+
+    def __init__(
+        self,
+        client: Any,
+        bucket_name: str,
+        *,
+        parallelism: int,
+        include_versions: bool,
+        individual_deletes: bool,
+        progress_callback: Callable[[BucketContentPurgeProgress], None] | None,
+        cancel_check: Callable[[], None] | None,
+        tolerate_missing_bucket: bool,
+    ) -> None:
+        self.client = client
+        self.bucket_name = bucket_name
+        self.worker_count = max(1, min(int(parallelism or 10), 64))
+        self.include_versions = include_versions
+        self.individual_deletes = individual_deletes
+        self.progress_callback = progress_callback
+        self.cancel_check = cancel_check
+        self.tolerate_missing_bucket = tolerate_missing_bucket
+        self.listed_objects = 0
+        self.listed_versions = 0
+        self.deleted_objects = 0
+        self.deleted_versions = 0
+        self.failed_count = 0
+        self.failures: list[BucketContentPurgeFailure] = []
+
+    def run(self) -> BucketContentPurgeResult:
+        self._emit("list", f"Listing objects in {self.bucket_name}...")
+        with ThreadPoolExecutor(
+            max_workers=self.worker_count,
+            thread_name_prefix="bucket-purge-delete",
+        ) as executor:
+            pending: _PendingDeletes = set()
+            pending, missing_bucket = self._queue_current_objects(executor, pending)
+            if missing_bucket:
+                return BucketContentPurgeResult(bucket_name=self.bucket_name, missing_bucket=True)
+            self._drain_all(pending)
+
+            if self.include_versions:
+                self._emit("versions", f"Listing object versions in {self.bucket_name}...")
+                pending = self._queue_object_versions(executor, set())
+                self._drain_all(pending)
+
+        self._emit("completed", f"Purged {self.bucket_name}.")
+        return self._result()
+
+    def _check_cancel(self) -> None:
+        if self.cancel_check:
+            self.cancel_check()
+
+    def _emit(self, stage: str, message: str | None = None) -> None:
+        if not self.progress_callback:
+            return
+        self.progress_callback(
+            BucketContentPurgeProgress(
+                bucket_name=self.bucket_name,
+                stage=stage,
+                listed_objects=self.listed_objects,
+                listed_versions=self.listed_versions,
+                deleted_objects=self.deleted_objects,
+                deleted_versions=self.deleted_versions,
+                failed_count=self.failed_count,
+                message=message,
+            )
+        )
+
+    def _result(self) -> BucketContentPurgeResult:
+        return BucketContentPurgeResult(
+            bucket_name=self.bucket_name,
+            listed_objects=self.listed_objects,
+            listed_versions=self.listed_versions,
+            deleted_objects=self.deleted_objects,
+            deleted_versions=self.deleted_versions,
+            failed_count=self.failed_count,
+            failures_sample=self.failures,
+        )
+
+    def _add_failure(self, stage: str, exc: Exception, items: list[dict] | None) -> None:
+        self.failed_count += len(items or []) or 1
+        if len(self.failures) >= self._FAILURE_SAMPLE_LIMIT:
+            return
+        first = (items or [{}])[0]
+        self.failures.append(
+            BucketContentPurgeFailure(
+                stage=stage,
+                message=format_s3_error(exc),
+                key=str(first.get("Key") or "") or None,
+                version_id=str(first.get("VersionId") or "") or None,
+                count=len(items or []),
+            )
+        )
+
+    def _delete_batch(self, stage: str, items: list[dict]) -> _DeleteBatchResult:
+        self._check_cancel()
+        try:
+            if self.individual_deletes:
+                deleted = _delete_objects_individually(self.client, self.bucket_name, items)
+            else:
+                deleted = delete_objects_count(self.client, self.bucket_name, items)
+            return stage, deleted, None, None
+        except Exception as exc:  # noqa: BLE001
+            return stage, 0, items, exc
+
+    def _drain(self, pending: _PendingDeletes, *, wait_all: bool = False) -> _PendingDeletes:
+        if not pending:
+            return pending
+        done, remaining = wait(
+            pending,
+            timeout=1.0 if wait_all else None,
+            return_when=FIRST_COMPLETED,
+        )
+        for future in done:
+            stage, deleted, items, exc = future.result()
+            if stage == "versions":
+                self.deleted_versions += deleted
+            else:
+                self.deleted_objects += deleted
+            if exc is not None:
+                self._add_failure(stage, exc, items)
+        self._emit("delete")
+        return remaining
+
+    def _drain_all(self, pending: _PendingDeletes) -> None:
+        while pending:
+            self._check_cancel()
+            pending = self._drain(pending, wait_all=True)
+
+    def _submit_batch(
+        self,
+        executor: ThreadPoolExecutor,
+        pending: _PendingDeletes,
+        stage: str,
+        items: list[dict],
+    ) -> _PendingDeletes:
+        pending.add(executor.submit(self._delete_batch, stage, items))
+        while len(pending) >= self.worker_count * 2:
+            self._check_cancel()
+            pending = self._drain(pending)
+        return pending
+
+    def _submit_items(
+        self,
+        executor: ThreadPoolExecutor,
+        pending: _PendingDeletes,
+        stage: str,
+        items: list[dict],
+    ) -> _PendingDeletes:
+        chunk_size = 1 if self.individual_deletes else 1000
+        for start in range(0, len(items), chunk_size):
+            pending = self._submit_batch(executor, pending, stage, items[start : start + chunk_size])
+        return pending
+
+    def _queue_current_objects(
+        self,
+        executor: ThreadPoolExecutor,
+        pending: _PendingDeletes,
+    ) -> tuple[_PendingDeletes, bool]:
+        continuation_token = None
+        while True:
+            self._check_cancel()
+            list_kwargs = {"Bucket": self.bucket_name, "MaxKeys": 1000}
+            if continuation_token:
+                list_kwargs["ContinuationToken"] = continuation_token
+            try:
+                page = self.client.list_objects_v2(**list_kwargs)
+            except ClientError as exc:
+                if self.tolerate_missing_bucket and _bucket_missing_error(exc):
+                    return pending, True
+                raise
+            objects = [{"Key": item["Key"]} for item in page.get("Contents", []) or [] if item.get("Key")]
+            if objects:
+                self.listed_objects += len(objects)
+                pending = self._submit_items(executor, pending, "objects", objects)
+            continuation_token = page.get("NextContinuationToken")
+            self._emit("list")
+            if not continuation_token:
+                return pending, False
+
+    def _queue_object_versions(
+        self,
+        executor: ThreadPoolExecutor,
+        pending: _PendingDeletes,
+    ) -> _PendingDeletes:
+        key_marker = None
+        version_marker = None
+        while True:
+            self._check_cancel()
+            list_kwargs = {"Bucket": self.bucket_name}
+            if key_marker:
+                list_kwargs["KeyMarker"] = key_marker
+            if version_marker:
+                list_kwargs["VersionIdMarker"] = version_marker
+            try:
+                page = self.client.list_object_versions(**list_kwargs)
+            except ClientError as exc:
+                if _version_listing_absent_error(exc):
+                    return pending
+                raise
+            items = self._version_items(page)
+            if items:
+                self.listed_versions += len(items)
+                pending = self._submit_items(executor, pending, "versions", items)
+            key_marker = page.get("NextKeyMarker")
+            version_marker = page.get("NextVersionIdMarker")
+            self._emit("versions")
+            if not key_marker and not version_marker:
+                return pending
+
+    @staticmethod
+    def _version_items(page: dict) -> list[dict]:
+        items: list[dict] = []
+        for collection in (page.get("Versions", []) or [], page.get("DeleteMarkers", []) or []):
+            for entry in collection:
+                key = entry.get("Key")
+                version_id = entry.get("VersionId")
+                if key and version_id:
+                    items.append({"Key": key, "VersionId": version_id})
+        return items
+
+
 def purge_bucket_contents(
     client: Any,
     bucket_name: str,
@@ -181,172 +409,16 @@ def purge_bucket_contents(
     cancel_check: Callable[[], None] | None = None,
     tolerate_missing_bucket: bool = False,
 ) -> BucketContentPurgeResult:
-    worker_count = max(1, min(int(parallelism or 10), 64))
-    failure_sample_limit = 500
-    listed_objects = 0
-    listed_versions = 0
-    deleted_objects = 0
-    deleted_versions = 0
-    failed_count = 0
-    failures: list[BucketContentPurgeFailure] = []
-
-    def check_cancel() -> None:
-        if cancel_check:
-            cancel_check()
-
-    def emit(stage: str, message: str | None = None) -> None:
-        if progress_callback:
-            progress_callback(
-                BucketContentPurgeProgress(
-                    bucket_name=bucket_name,
-                    stage=stage,
-                    listed_objects=listed_objects,
-                    listed_versions=listed_versions,
-                    deleted_objects=deleted_objects,
-                    deleted_versions=deleted_versions,
-                    failed_count=failed_count,
-                    message=message,
-                )
-            )
-
-    def add_failure(stage: str, exc: Exception, *, items: list[dict] | None = None) -> None:
-        nonlocal failed_count
-        failed_count += len(items or []) or 1
-        if len(failures) >= failure_sample_limit:
-            return
-        first = (items or [{}])[0] if items is not None else {}
-        failures.append(
-            BucketContentPurgeFailure(
-                stage=stage,
-                message=format_s3_error(exc),
-                key=str(first.get("Key") or "") or None,
-                version_id=str(first.get("VersionId") or "") or None,
-                count=len(items or []),
-            )
-        )
-
-    def delete_batch(stage: str, items: list[dict]) -> tuple[str, int, list[dict] | None, Exception | None]:
-        check_cancel()
-        try:
-            if individual_deletes:
-                deleted = _delete_objects_individually(client, bucket_name, items)
-            else:
-                deleted = delete_objects_count(client, bucket_name, items)
-            return stage, deleted, None, None
-        except Exception as exc:  # noqa: BLE001
-            return stage, 0, items, exc
-
-    def drain(pending: set, *, wait_all: bool = False) -> set:
-        nonlocal deleted_objects, deleted_versions
-        if not pending:
-            return pending
-        done, remaining = wait(
-            pending,
-            timeout=1.0 if wait_all else None,
-            return_when=FIRST_COMPLETED,
-        )
-        for future in done:
-            stage, deleted, items, exc = future.result()
-            if stage == "versions":
-                deleted_versions += deleted
-            else:
-                deleted_objects += deleted
-            if exc is not None:
-                add_failure(stage, exc, items=items)
-        emit("delete")
-        return remaining
-
-    def submit_or_wait(executor: ThreadPoolExecutor, pending: set, stage: str, items: list[dict]) -> set:
-        pending.add(executor.submit(delete_batch, stage, items))
-        while len(pending) >= worker_count * 2:
-            check_cancel()
-            pending = drain(pending)
-        return pending
-
-    def submit_items(executor: ThreadPoolExecutor, pending: set, stage: str, items: list[dict]) -> set:
-        chunk_size = 1 if individual_deletes else 1000
-        for start in range(0, len(items), chunk_size):
-            pending = submit_or_wait(executor, pending, stage, items[start : start + chunk_size])
-        return pending
-
-    emit("list", f"Listing objects in {bucket_name}...")
-    with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-purge-delete") as executor:
-        pending: set = set()
-        continuation_token = None
-        while True:
-            check_cancel()
-            list_kwargs = {"Bucket": bucket_name, "MaxKeys": 1000}
-            if continuation_token:
-                list_kwargs["ContinuationToken"] = continuation_token
-            try:
-                page = client.list_objects_v2(**list_kwargs)
-            except ClientError as exc:
-                if tolerate_missing_bucket and _bucket_missing_error(exc):
-                    return BucketContentPurgeResult(bucket_name=bucket_name, missing_bucket=True)
-                raise
-            contents = page.get("Contents", []) or []
-            objects = [{"Key": obj["Key"]} for obj in contents if obj.get("Key")]
-            if objects:
-                listed_objects += len(objects)
-                pending = submit_items(executor, pending, "objects", objects)
-            continuation_token = page.get("NextContinuationToken")
-            emit("list")
-            if not continuation_token:
-                break
-        while pending:
-            check_cancel()
-            pending = drain(pending, wait_all=True)
-
-        if include_versions:
-            emit("versions", f"Listing object versions in {bucket_name}...")
-            key_marker = None
-            version_marker = None
-            while True:
-                check_cancel()
-                list_kwargs = {"Bucket": bucket_name}
-                if key_marker:
-                    list_kwargs["KeyMarker"] = key_marker
-                if version_marker:
-                    list_kwargs["VersionIdMarker"] = version_marker
-                try:
-                    page = client.list_object_versions(**list_kwargs)
-                except ClientError as exc:
-                    if _version_listing_absent_error(exc):
-                        break
-                    raise
-                version_objects: list[dict] = []
-                for entry in page.get("Versions", []) or []:
-                    key = entry.get("Key")
-                    version_id = entry.get("VersionId")
-                    if key and version_id:
-                        version_objects.append({"Key": key, "VersionId": version_id})
-                for entry in page.get("DeleteMarkers", []) or []:
-                    key = entry.get("Key")
-                    version_id = entry.get("VersionId")
-                    if key and version_id:
-                        version_objects.append({"Key": key, "VersionId": version_id})
-                if version_objects:
-                    listed_versions += len(version_objects)
-                    pending = submit_items(executor, pending, "versions", version_objects)
-                key_marker = page.get("NextKeyMarker")
-                version_marker = page.get("NextVersionIdMarker")
-                emit("versions")
-                if not key_marker and not version_marker:
-                    break
-            while pending:
-                check_cancel()
-                pending = drain(pending, wait_all=True)
-
-    emit("completed", f"Purged {bucket_name}.")
-    return BucketContentPurgeResult(
-        bucket_name=bucket_name,
-        listed_objects=listed_objects,
-        listed_versions=listed_versions,
-        deleted_objects=deleted_objects,
-        deleted_versions=deleted_versions,
-        failed_count=failed_count,
-        failures_sample=failures,
-    )
+    return _BucketContentPurger(
+        client,
+        bucket_name,
+        parallelism=parallelism,
+        include_versions=include_versions,
+        individual_deletes=individual_deletes,
+        progress_callback=progress_callback,
+        cancel_check=cancel_check,
+        tolerate_missing_bucket=tolerate_missing_bucket,
+    ).run()
 
 
 def delete_bucket(

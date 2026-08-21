@@ -418,3 +418,108 @@ def test_purge_bucket_contents_can_delete_entries_individually_in_parallel(monke
         ("versioned", "v1"),
         ("versioned", "v2"),
     ]
+
+
+def test_purge_bucket_contents_preserves_version_pagination_markers():
+    class PaginatedVersionClient:
+        def __init__(self):
+            self.version_calls: list[dict] = []
+            self.deleted: list[dict] = []
+
+        def list_objects_v2(self, **kwargs):  # noqa: ARG002
+            return {"Contents": []}
+
+        def list_object_versions(self, **kwargs):
+            self.version_calls.append(kwargs)
+            if len(self.version_calls) == 1:
+                return {
+                    "Versions": [{"Key": "versioned", "VersionId": "v1"}],
+                    "DeleteMarkers": [{"Key": "deleted", "VersionId": "marker-1"}],
+                    "NextKeyMarker": "next-key",
+                    "NextVersionIdMarker": "next-version",
+                }
+            assert kwargs == {
+                "Bucket": "bucket-purge",
+                "KeyMarker": "next-key",
+                "VersionIdMarker": "next-version",
+            }
+            return {"Versions": [{"Key": "versioned", "VersionId": "v2"}]}
+
+        def delete_objects(self, **kwargs):
+            self.deleted.extend(kwargs["Delete"]["Objects"])
+            return {}
+
+    client = PaginatedVersionClient()
+
+    result = s3_deletion.purge_bucket_contents(client, "bucket-purge")
+
+    assert len(client.version_calls) == 2
+    assert result.listed_versions == 3
+    assert result.deleted_versions == 3
+    assert sorted(client.deleted, key=lambda item: item["VersionId"]) == [
+        {"Key": "deleted", "VersionId": "marker-1"},
+        {"Key": "versioned", "VersionId": "v1"},
+        {"Key": "versioned", "VersionId": "v2"},
+    ]
+
+
+def test_purge_bucket_contents_reports_failed_batch_without_stopping_completion():
+    class FailingDeleteClient:
+        def list_objects_v2(self, **kwargs):  # noqa: ARG002
+            return {"Contents": [{"Key": "first"}, {"Key": "second"}]}
+
+        def delete_objects(self, **kwargs):  # noqa: ARG002
+            return {
+                "Errors": [
+                    {"Key": "first", "Code": "AccessDenied", "Message": "denied"},
+                ]
+            }
+
+    progress_events = []
+
+    result = s3_deletion.purge_bucket_contents(
+        FailingDeleteClient(),
+        "bucket-purge",
+        include_versions=False,
+        progress_callback=progress_events.append,
+    )
+
+    assert result.listed_objects == 2
+    assert result.deleted_objects == 0
+    assert result.failed_count == 2
+    assert len(result.failures_sample) == 1
+    assert result.failures_sample[0].stage == "objects"
+    assert result.failures_sample[0].key == "first"
+    assert result.failures_sample[0].count == 2
+    assert "AccessDenied" in result.failures_sample[0].message
+    assert progress_events[-1].stage == "completed"
+    assert progress_events[-1].failed_count == 2
+
+
+def test_purge_bucket_contents_tolerates_missing_bucket_before_deletion():
+    class MissingBucketClient:
+        def list_objects_v2(self, **kwargs):  # noqa: ARG002
+            raise ClientError(
+                {"Error": {"Code": "NoSuchBucket", "Message": "missing"}},
+                "ListObjectsV2",
+            )
+
+        def list_object_versions(self, **kwargs):  # noqa: ARG002
+            raise AssertionError("Version listing must not run for a missing bucket")
+
+        def delete_objects(self, **kwargs):  # noqa: ARG002
+            raise AssertionError("Deletion must not run for a missing bucket")
+
+    result = s3_deletion.purge_bucket_contents(
+        MissingBucketClient(),
+        "missing-bucket",
+        tolerate_missing_bucket=True,
+    )
+
+    assert result.bucket_name == "missing-bucket"
+    assert result.missing_bucket is True
+    assert result.listed_objects == 0
+    assert result.deleted_objects == 0
+    assert result.listed_versions == 0
+    assert result.deleted_versions == 0
+    assert result.failed_count == 0
