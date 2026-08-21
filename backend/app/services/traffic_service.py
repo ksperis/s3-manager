@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -181,6 +182,193 @@ def _normalize_bucket_filters(bucket_filter: Optional[str | Iterable[str]]) -> O
     return normalized_values
 
 
+def _activity_totals() -> dict[str, int]:
+    return {"bytes_in": 0, "bytes_out": 0, "ops": 0, "success_ops": 0}
+
+
+def _transfer_totals() -> dict[str, int]:
+    return {"bytes_in": 0, "bytes_out": 0, "ops": 0}
+
+
+@dataclass
+class _UsageAccumulator:
+    start: datetime
+    end: datetime
+    bucket_filters: Optional[set[str]]
+    window: Optional[TrafficWindow]
+    timeline: dict[str, dict[str, int]] = field(
+        default_factory=lambda: defaultdict(_activity_totals)
+    )
+    bucket_totals: dict[str, dict[str, int]] = field(
+        default_factory=lambda: defaultdict(_activity_totals)
+    )
+    user_totals: dict[Any, dict[str, int]] = field(
+        default_factory=lambda: defaultdict(_activity_totals)
+    )
+    category_totals: dict[Any, dict[str, int]] = field(
+        default_factory=lambda: defaultdict(_transfer_totals)
+    )
+    request_groups: dict[str, dict[str, int]] = field(
+        default_factory=lambda: defaultdict(_transfer_totals)
+    )
+
+    @staticmethod
+    def _add_transfer(
+        totals: dict[str, int],
+        *,
+        bytes_in: int,
+        bytes_out: int,
+        ops: int,
+    ) -> None:
+        totals["bytes_in"] += bytes_in
+        totals["bytes_out"] += bytes_out
+        totals["ops"] += ops
+
+    @classmethod
+    def _add_activity(
+        cls,
+        totals: dict[str, int],
+        *,
+        bytes_in: int,
+        bytes_out: int,
+        ops: int,
+        success_ops: int,
+    ) -> None:
+        cls._add_transfer(
+            totals,
+            bytes_in=bytes_in,
+            bytes_out=bytes_out,
+            ops=ops,
+        )
+        totals["success_ops"] += success_ops
+
+    def _add_category(
+        self,
+        timestamp: datetime,
+        bucket: str,
+        user: Any,
+        category_entry: dict,
+    ) -> None:
+        category = category_entry.get("category") or category_entry.get("type")
+        bytes_out = int_or_zero(category_entry.get("bytes_sent") or category_entry.get("sent"))
+        bytes_in = int_or_zero(category_entry.get("bytes_received") or category_entry.get("received"))
+        ops = int_or_zero(category_entry.get("ops") or category_entry.get("operations"))
+        success_ops = int_or_zero(
+            category_entry.get("successful_ops") or category_entry.get("success")
+        )
+        activity = {
+            "bytes_in": bytes_in,
+            "bytes_out": bytes_out,
+            "ops": ops,
+            "success_ops": success_ops,
+        }
+        self._add_activity(self.timeline[timestamp.isoformat()], **activity)
+        self._add_activity(self.bucket_totals[bucket], **activity)
+        self._add_activity(self.user_totals[user], **activity)
+        transfer = {"bytes_in": bytes_in, "bytes_out": bytes_out, "ops": ops}
+        self._add_transfer(self.category_totals[category or "unknown"], **transfer)
+        self._add_transfer(self.request_groups[_group_category(category)], **transfer)
+
+    def add_entry(self, entry: dict) -> None:
+        timestamp = _parse_timestamp(
+            entry.get("time") or entry.get("timestamp") or entry.get("date")
+        )
+        if timestamp is None or timestamp < self.start or timestamp > self.end:
+            return
+        bucket_value = entry.get("bucket") or entry.get("bucket_name") or "unknown"
+        if not isinstance(bucket_value, str):
+            bucket_value = str(bucket_value)
+        normalized_bucket = _normalize_bucket_name(bucket_value)
+        if self.bucket_filters is not None and normalized_bucket not in self.bucket_filters:
+            return
+        bucketed_timestamp = _bucket_timestamp(timestamp, self.window)
+        user = entry.get("user") or entry.get("owner") or "unknown"
+        for category in _normalize_categories(entry.get("categories")):
+            self._add_category(bucketed_timestamp, bucket_value, user, category)
+
+    @staticmethod
+    def _rankings(
+        totals: dict[Any, dict[str, int]],
+        label: str,
+    ) -> list[dict[str, Any]]:
+        rankings = [
+            {
+                label: name,
+                "bytes_total": values["bytes_in"] + values["bytes_out"],
+                "bytes_in": values["bytes_in"],
+                "bytes_out": values["bytes_out"],
+                "ops": values["ops"],
+                "success_ops": values["success_ops"],
+                "success_ratio": (
+                    values["success_ops"] / values["ops"]
+                    if values["ops"]
+                    else None
+                ),
+            }
+            for name, values in totals.items()
+        ]
+        rankings.sort(key=lambda entry: entry["bytes_total"], reverse=True)
+        return rankings[:10]
+
+    @staticmethod
+    def _breakdown(
+        totals: dict[Any, dict[str, int]],
+        label: str,
+        *,
+        sort_by_ops: bool,
+        limit: Optional[int] = None,
+    ) -> list[dict[str, Any]]:
+        breakdown = [
+            {
+                label: name,
+                "bytes_in": values["bytes_in"],
+                "bytes_out": values["bytes_out"],
+                "ops": values["ops"],
+            }
+            for name, values in totals.items()
+        ]
+        if sort_by_ops:
+            breakdown.sort(key=lambda entry: entry["ops"], reverse=True)
+        else:
+            breakdown.sort(
+                key=lambda entry: entry["bytes_in"] + entry["bytes_out"],
+                reverse=True,
+            )
+        return breakdown[:limit] if limit is not None else breakdown
+
+    def result(self) -> Dict[str, Any]:
+        series = [
+            {"timestamp": key, **values}
+            for key, values in sorted(self.timeline.items(), key=lambda item: item[0])
+        ]
+        totals = {
+            "bytes_in": sum(point["bytes_in"] for point in series),
+            "bytes_out": sum(point["bytes_out"] for point in series),
+            "ops": sum(point["ops"] for point in series),
+            "success_ops": sum(point["success_ops"] for point in series),
+        }
+        totals["success_rate"] = (
+            totals["success_ops"] / totals["ops"] if totals["ops"] else None
+        )
+        return {
+            "series": series,
+            "totals": totals,
+            "bucket_rankings": self._rankings(self.bucket_totals, "bucket"),
+            "user_rankings": self._rankings(self.user_totals, "user"),
+            "request_breakdown": self._breakdown(
+                self.request_groups,
+                "group",
+                sort_by_ops=True,
+            ),
+            "category_breakdown": self._breakdown(
+                self.category_totals,
+                "category",
+                sort_by_ops=False,
+                limit=15,
+            ),
+        }
+
+
 def aggregate_usage(
     entries: Iterable[dict],
     start: datetime,
@@ -188,141 +376,15 @@ def aggregate_usage(
     bucket_filter: Optional[str | Iterable[str]] = None,
     window: Optional[TrafficWindow] = None,
 ) -> Dict[str, Any]:
-    normalized_filters = _normalize_bucket_filters(bucket_filter)
-    timeline: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"bytes_in": 0, "bytes_out": 0, "ops": 0, "success_ops": 0}
+    accumulator = _UsageAccumulator(
+        start=start,
+        end=end,
+        bucket_filters=_normalize_bucket_filters(bucket_filter),
+        window=window,
     )
-    bucket_totals: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"bytes_in": 0, "bytes_out": 0, "ops": 0, "success_ops": 0}
-    )
-    user_totals: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"bytes_in": 0, "bytes_out": 0, "ops": 0, "success_ops": 0}
-    )
-    category_totals: dict[str, dict[str, int]] = defaultdict(lambda: {"bytes_in": 0, "bytes_out": 0, "ops": 0})
-    request_groups: dict[str, dict[str, int]] = defaultdict(lambda: {"bytes_in": 0, "bytes_out": 0, "ops": 0})
-
     for entry in entries:
-        timestamp = _parse_timestamp(entry.get("time") or entry.get("timestamp") or entry.get("date"))
-        if timestamp is None or timestamp < start or timestamp > end:
-            continue
-        bucketed_timestamp = _bucket_timestamp(timestamp, window)
-        bucket_value = entry.get("bucket") or entry.get("bucket_name") or "unknown"
-        if not isinstance(bucket_value, str):
-            bucket_value = str(bucket_value)
-        bucket = bucket_value
-        bucket_normalized = _normalize_bucket_name(bucket_value)
-        if normalized_filters is not None and bucket_normalized not in normalized_filters:
-            continue
-        user = entry.get("user") or entry.get("owner") or "unknown"
-        categories = _normalize_categories(entry.get("categories"))
-        for category_entry in categories:
-            cat_name = category_entry.get("category") or category_entry.get("type")
-            bytes_out = int_or_zero(category_entry.get("bytes_sent") or category_entry.get("sent"))
-            bytes_in = int_or_zero(category_entry.get("bytes_received") or category_entry.get("received"))
-            ops = int_or_zero(category_entry.get("ops") or category_entry.get("operations"))
-            success_ops = int_or_zero(category_entry.get("successful_ops") or category_entry.get("success"))
-
-            timeline_key = bucketed_timestamp.isoformat()
-            timeline[timeline_key]["bytes_in"] += bytes_in
-            timeline[timeline_key]["bytes_out"] += bytes_out
-            timeline[timeline_key]["ops"] += ops
-            timeline[timeline_key]["success_ops"] += success_ops
-
-            bucket_totals[bucket]["bytes_in"] += bytes_in
-            bucket_totals[bucket]["bytes_out"] += bytes_out
-            bucket_totals[bucket]["ops"] += ops
-            bucket_totals[bucket]["success_ops"] += success_ops
-
-            user_totals[user]["bytes_in"] += bytes_in
-            user_totals[user]["bytes_out"] += bytes_out
-            user_totals[user]["ops"] += ops
-            user_totals[user]["success_ops"] += success_ops
-
-            category_totals[cat_name or "unknown"]["bytes_in"] += bytes_in
-            category_totals[cat_name or "unknown"]["bytes_out"] += bytes_out
-            category_totals[cat_name or "unknown"]["ops"] += ops
-
-            request_group = _group_category(cat_name)
-            request_groups[request_group]["bytes_in"] += bytes_in
-            request_groups[request_group]["bytes_out"] += bytes_out
-            request_groups[request_group]["ops"] += ops
-
-    sorted_timeline = [
-        {"timestamp": key, **values} for key, values in sorted(timeline.items(), key=lambda item: item[0])
-    ]
-
-    bucket_rankings: list[dict[str, Any]] = []
-    for bucket, values in bucket_totals.items():
-        bytes_total = values["bytes_in"] + values["bytes_out"]
-        success_ratio = (values["success_ops"] / values["ops"]) if values["ops"] else None
-        bucket_rankings.append(
-            {
-                "bucket": bucket,
-                "bytes_total": bytes_total,
-                "bytes_in": values["bytes_in"],
-                "bytes_out": values["bytes_out"],
-                "ops": values["ops"],
-                "success_ops": values["success_ops"],
-                "success_ratio": success_ratio,
-            }
-        )
-    bucket_rankings.sort(key=lambda entry: entry["bytes_total"], reverse=True)
-
-    user_rankings: list[dict[str, Any]] = []
-    for user, values in user_totals.items():
-        bytes_total = values["bytes_in"] + values["bytes_out"]
-        success_ratio = (values["success_ops"] / values["ops"]) if values["ops"] else None
-        user_rankings.append(
-            {
-                "user": user,
-                "bytes_total": bytes_total,
-                "bytes_in": values["bytes_in"],
-                "bytes_out": values["bytes_out"],
-                "ops": values["ops"],
-                "success_ops": values["success_ops"],
-                "success_ratio": success_ratio,
-            }
-        )
-    user_rankings.sort(key=lambda entry: entry["bytes_total"], reverse=True)
-
-    request_breakdown = [
-        {
-            "group": group,
-            "bytes_in": values["bytes_in"],
-            "bytes_out": values["bytes_out"],
-            "ops": values["ops"],
-        }
-        for group, values in request_groups.items()
-    ]
-    request_breakdown.sort(key=lambda entry: entry["ops"], reverse=True)
-
-    category_breakdown = [
-        {
-            "category": name,
-            "bytes_in": values["bytes_in"],
-            "bytes_out": values["bytes_out"],
-            "ops": values["ops"],
-        }
-        for name, values in category_totals.items()
-    ]
-    category_breakdown.sort(key=lambda entry: entry["bytes_in"] + entry["bytes_out"], reverse=True)
-
-    totals = {
-        "bytes_in": sum(point["bytes_in"] for point in sorted_timeline),
-        "bytes_out": sum(point["bytes_out"] for point in sorted_timeline),
-        "ops": sum(point["ops"] for point in sorted_timeline),
-        "success_ops": sum(point["success_ops"] for point in sorted_timeline),
-    }
-    totals["success_rate"] = (totals["success_ops"] / totals["ops"]) if totals["ops"] else None
-
-    return {
-        "series": sorted_timeline,
-        "totals": totals,
-        "bucket_rankings": bucket_rankings[:10],
-        "user_rankings": user_rankings[:10],
-        "request_breakdown": request_breakdown,
-        "category_breakdown": category_breakdown[:15],
-    }
+        accumulator.add_entry(entry)
+    return accumulator.result()
 
 
 class TrafficService:

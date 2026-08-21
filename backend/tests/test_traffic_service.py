@@ -6,7 +6,7 @@ import pytest
 
 from app.db import S3Account
 from app.services.rgw_admin import RGWAdminError
-from app.services.traffic_service import TrafficService, TrafficWindow
+from app.services.traffic_service import TrafficService, TrafficWindow, aggregate_usage
 
 
 class FakeRGWClient:
@@ -34,6 +34,71 @@ def _make_account() -> S3Account:
         rgw_access_key="access",
         rgw_secret_key="secret",
     )
+
+
+def test_aggregate_usage_preserves_rankings_and_success_ratios():
+    start = datetime(2024, 3, 10, 9, 0, tzinfo=timezone.utc)
+    end = datetime(2024, 3, 10, 12, 0, tzinfo=timezone.utc)
+
+    result = aggregate_usage(
+        [
+            {
+                "bucket": "tenant:alpha",
+                "user": "alice",
+                "time": "2024-03-10 10:00:00",
+                "categories": [
+                    {
+                        "category": "get_obj",
+                        "bytes_sent": 100,
+                        "ops": 2,
+                        "successful_ops": 1,
+                    }
+                ],
+            },
+            {
+                "bucket": "beta",
+                "user": "bob",
+                "time": "2024-03-10 11:00:00",
+                "categories": [
+                    {
+                        "category": "put_obj",
+                        "bytes_received": 300,
+                        "ops": 0,
+                        "successful_ops": 0,
+                    }
+                ],
+            },
+            {
+                "bucket": "outside",
+                "time": "2024-03-10 08:59:59",
+                "categories": [{"category": "get_obj", "bytes_sent": 9_999, "ops": 1}],
+            },
+        ],
+        start=start,
+        end=end,
+    )
+
+    assert result["totals"] == {
+        "bytes_in": 300,
+        "bytes_out": 100,
+        "ops": 2,
+        "success_ops": 1,
+        "success_rate": 0.5,
+    }
+    assert [item["bucket"] for item in result["bucket_rankings"]] == [
+        "beta",
+        "tenant:alpha",
+    ]
+    assert result["bucket_rankings"][0]["success_ratio"] is None
+    assert result["bucket_rankings"][1]["success_ratio"] == 0.5
+    assert [item["group"] for item in result["request_breakdown"]] == [
+        "read",
+        "write",
+    ]
+    assert [item["category"] for item in result["category_breakdown"]] == [
+        "put_obj",
+        "get_obj",
+    ]
 
 
 def test_traffic_service_aggregates_usage_entries():
