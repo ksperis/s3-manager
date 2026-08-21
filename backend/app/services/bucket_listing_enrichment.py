@@ -782,6 +782,126 @@ def _enrich_encryption_configuration(
         column_details["sse_kms_key_ids"] = extract_sse_values(encryption, "sse_kms_key_id")
 
 
+def _project_lifecycle_details(
+    rules: list[dict[str, Any]],
+    detail_keys: set[str],
+    column_details: dict[str, Any],
+) -> None:
+    if "lifecycle_expiration_days" in detail_keys:
+        values = [extract_lifecycle_expiration_days(rule) for rule in rules]
+        column_details["lifecycle_expiration_days"] = dedupe_sorted_day_values(
+            [value for value in values if value is not None]
+        )
+    if "lifecycle_noncurrent_expiration_days" in detail_keys:
+        values = [extract_lifecycle_noncurrent_expiration_days(rule) for rule in rules]
+        column_details["lifecycle_noncurrent_expiration_days"] = dedupe_sorted_day_values(
+            [value for value in values if value is not None]
+        )
+    if "lifecycle_transition_days" in detail_keys:
+        values: list[float] = []
+        for rule in rules:
+            values.extend(extract_lifecycle_transition_days(rule))
+        column_details["lifecycle_transition_days"] = dedupe_sorted_day_values(values)
+    if "lifecycle_abort_multipart_days" in detail_keys:
+        values = [extract_lifecycle_abort_days(rule) for rule in rules]
+        column_details["lifecycle_abort_multipart_days"] = dedupe_sorted_day_values(
+            [value for value in values if value is not None]
+        )
+
+
+def _enrich_lifecycle_configuration(
+    bucket: CephAdminBucketSummary,
+    service: BucketConfigurationService,
+    account: S3ExecutionTarget,
+    *,
+    wants_feature: bool,
+    detail_keys: set[str],
+    use_properties: bool,
+    properties: BucketProperties | None,
+    properties_unavailable: bool,
+    feature_map: dict[str, BucketFeatureStatus],
+    column_details: dict[str, Any],
+) -> None:
+    rules_for_state: list[object] = []
+    raw_rules: list[dict[str, Any]] | None = None
+    unavailable = False
+
+    if detail_keys:
+        try:
+            raw_rules = service.get_lifecycle(bucket.name, account).rules or []
+            rules_for_state = raw_rules
+        except RuntimeError:
+            unavailable = True
+    elif use_properties:
+        if properties_unavailable:
+            unavailable = True
+        else:
+            rules_for_state = properties.lifecycle_rules if properties else []
+    else:
+        try:
+            raw_rules = service.get_lifecycle(bucket.name, account).rules or []
+            rules_for_state = raw_rules
+        except RuntimeError:
+            unavailable = True
+
+    if wants_feature:
+        if unavailable:
+            feature_map["lifecycle_rules"] = _feature_status_unavailable()
+        else:
+            has_rules = bool(rules_for_state and len(rules_for_state) > 0)
+            feature_map["lifecycle_rules"] = (
+                _feature_status_active("Enabled") if has_rules else _feature_status_inactive("Disabled")
+            )
+
+    if not detail_keys:
+        return
+    if unavailable:
+        _mark_details_unavailable(column_details, detail_keys)
+        return
+
+    normalized_rules = [item for item in (raw_rules or []) if isinstance(item, dict)]
+    _project_lifecycle_details(normalized_rules, detail_keys, column_details)
+
+
+def _project_property_details(
+    properties: BucketProperties | None,
+    properties_unavailable: bool,
+    detail_keys: set[str],
+    column_details: dict[str, Any],
+) -> None:
+    if properties_unavailable or properties is None:
+        _mark_details_unavailable(column_details, detail_keys)
+        return
+
+    object_lock = properties.object_lock
+    if "object_lock_mode" in detail_keys:
+        column_details["object_lock_mode"] = object_lock.mode if object_lock else None
+    if "object_lock_retention_days" in detail_keys:
+        column_details["object_lock_retention_days"] = object_lock.days if object_lock else None
+    if "object_lock_retention_years" in detail_keys:
+        column_details["object_lock_retention_years"] = object_lock.years if object_lock else None
+
+    public_access_block = properties.public_access_block
+    if "bpa_block_public_acls" in detail_keys:
+        column_details["bpa_block_public_acls"] = public_access_block.block_public_acls if public_access_block else None
+    if "bpa_ignore_public_acls" in detail_keys:
+        column_details["bpa_ignore_public_acls"] = public_access_block.ignore_public_acls if public_access_block else None
+    if "bpa_block_public_policy" in detail_keys:
+        column_details["bpa_block_public_policy"] = (
+            public_access_block.block_public_policy if public_access_block else None
+        )
+    if "bpa_restrict_public_buckets" in detail_keys:
+        column_details["bpa_restrict_public_buckets"] = (
+            public_access_block.restrict_public_buckets if public_access_block else None
+        )
+
+    cors_rules = properties.cors_rules if isinstance(properties.cors_rules, list) else []
+    if "cors_allowed_methods" in detail_keys:
+        column_details["cors_allowed_methods"] = extract_cors_allowed_values(cors_rules, "cors_allowed_method")
+    if "cors_allowed_origins" in detail_keys:
+        column_details["cors_allowed_origins"] = extract_cors_allowed_values(cors_rules, "cors_allowed_origin")
+
+
 def enrich_buckets(
     buckets: list[CephAdminBucketSummary],
     requested: set[str],
@@ -911,64 +1031,18 @@ def enrich_buckets(
                         feature_map["block_public_access"] = _feature_status_inactive("Disabled")
 
         if "lifecycle_rules" in requested or wants_lifecycle_details:
-            lifecycle_rules_for_state: list[object] = []
-            lifecycle_rules_raw: list[dict] | None = None
-            lifecycle_unavailable = False
-
-            if wants_lifecycle_details:
-                try:
-                    lifecycle_rules_raw = service.get_lifecycle(bucket.name, account).rules or []
-                    lifecycle_rules_for_state = lifecycle_rules_raw
-                except RuntimeError:
-                    lifecycle_unavailable = True
-            elif use_props_bundle:
-                if props_error:
-                    lifecycle_unavailable = True
-                else:
-                    lifecycle_rules_for_state = props.lifecycle_rules if props else []
-            else:
-                try:
-                    lifecycle_rules_raw = service.get_lifecycle(bucket.name, account).rules or []
-                    lifecycle_rules_for_state = lifecycle_rules_raw
-                except RuntimeError:
-                    lifecycle_unavailable = True
-
-            if "lifecycle_rules" in requested:
-                if lifecycle_unavailable:
-                    feature_map["lifecycle_rules"] = _feature_status_unavailable()
-                else:
-                    has_rules = bool(lifecycle_rules_for_state and len(lifecycle_rules_for_state) > 0)
-                    feature_map["lifecycle_rules"] = (
-                        _feature_status_active("Enabled") if has_rules else _feature_status_inactive("Disabled")
-                    )
-
-            if wants_lifecycle_details:
-                if lifecycle_unavailable:
-                    for key in lifecycle_detail_keys:
-                        column_details[key] = None
-                else:
-                    normalized_rules = [item for item in (lifecycle_rules_raw or []) if isinstance(item, dict)]
-
-                    if "lifecycle_expiration_days" in lifecycle_detail_keys:
-                        values = [extract_lifecycle_expiration_days(rule) for rule in normalized_rules]
-                        column_details["lifecycle_expiration_days"] = dedupe_sorted_day_values(
-                            [value for value in values if value is not None]
-                        )
-                    if "lifecycle_noncurrent_expiration_days" in lifecycle_detail_keys:
-                        values = [extract_lifecycle_noncurrent_expiration_days(rule) for rule in normalized_rules]
-                        column_details["lifecycle_noncurrent_expiration_days"] = dedupe_sorted_day_values(
-                            [value for value in values if value is not None]
-                        )
-                    if "lifecycle_transition_days" in lifecycle_detail_keys:
-                        values: list[float] = []
-                        for rule in normalized_rules:
-                            values.extend(extract_lifecycle_transition_days(rule))
-                        column_details["lifecycle_transition_days"] = dedupe_sorted_day_values(values)
-                    if "lifecycle_abort_multipart_days" in lifecycle_detail_keys:
-                        values = [extract_lifecycle_abort_days(rule) for rule in normalized_rules]
-                        column_details["lifecycle_abort_multipart_days"] = dedupe_sorted_day_values(
-                            [value for value in values if value is not None]
-                        )
+            _enrich_lifecycle_configuration(
+                bucket,
+                service,
+                account,
+                wants_feature="lifecycle_rules" in requested,
+                detail_keys=lifecycle_detail_keys,
+                use_properties=use_props_bundle,
+                properties=props,
+                properties_unavailable=props_error,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
 
         if "cors" in requested:
             rules = None
@@ -987,33 +1061,7 @@ def enrich_buckets(
                 feature_map["cors"] = _feature_status_active("Configured") if has_rules else _feature_status_inactive("Not set")
 
         if wants_props_details:
-            if props_error or props is None:
-                for key in props_detail_keys:
-                    column_details[key] = None
-            else:
-                object_lock = props.object_lock
-                if "object_lock_mode" in props_detail_keys:
-                    column_details["object_lock_mode"] = object_lock.mode if object_lock else None
-                if "object_lock_retention_days" in props_detail_keys:
-                    column_details["object_lock_retention_days"] = object_lock.days if object_lock else None
-                if "object_lock_retention_years" in props_detail_keys:
-                    column_details["object_lock_retention_years"] = object_lock.years if object_lock else None
-
-                public_access_block = props.public_access_block
-                if "bpa_block_public_acls" in props_detail_keys:
-                    column_details["bpa_block_public_acls"] = public_access_block.block_public_acls if public_access_block else None
-                if "bpa_ignore_public_acls" in props_detail_keys:
-                    column_details["bpa_ignore_public_acls"] = public_access_block.ignore_public_acls if public_access_block else None
-                if "bpa_block_public_policy" in props_detail_keys:
-                    column_details["bpa_block_public_policy"] = public_access_block.block_public_policy if public_access_block else None
-                if "bpa_restrict_public_buckets" in props_detail_keys:
-                    column_details["bpa_restrict_public_buckets"] = public_access_block.restrict_public_buckets if public_access_block else None
-
-                cors_rules = props.cors_rules if isinstance(props.cors_rules, list) else []
-                if "cors_allowed_methods" in props_detail_keys:
-                    column_details["cors_allowed_methods"] = extract_cors_allowed_values(cors_rules, "cors_allowed_method")
-                if "cors_allowed_origins" in props_detail_keys:
-                    column_details["cors_allowed_origins"] = extract_cors_allowed_values(cors_rules, "cors_allowed_origin")
+            _project_property_details(props, props_error, props_detail_keys, column_details)
 
         if wants_website or wants_website_details:
             _enrich_website_configuration(
