@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import InlinePolicyEditor from "./InlinePolicyEditor";
@@ -108,5 +108,35 @@ describe("InlinePolicyEditor", () => {
 
     expect(screen.getByText(/will replace that existing inline policy/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Replace existing inline policy" })).toBeInTheDocument();
+  });
+
+  it("confirms inline policy deletion with the affected entity", async () => {
+    loadPoliciesMock.mockResolvedValue([
+      {
+        name: "readonly-inline",
+        document: { Version: "2012-10-17", Statement: [] },
+      },
+    ]);
+    deletePolicyMock.mockResolvedValue(undefined);
+
+    render(
+      <InlinePolicyEditor
+        entityLabel="user"
+        entityName="alice"
+        loadPolicies={loadPoliciesMock}
+        savePolicy={savePolicyMock}
+        deletePolicy={deletePolicyMock}
+      />
+    );
+
+    fireEvent.click((await screen.findAllByRole("button", { name: /readonly-inline/i }))[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Delete inline policy" }));
+
+    expect(screen.getByRole("heading", { name: "Delete inline policy?" })).toBeInTheDocument();
+    expect(screen.getAllByText("alice").length).toBeGreaterThan(0);
+    expect(deletePolicyMock).not.toHaveBeenCalled();
+
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete inline policy" }));
+    await waitFor(() => expect(deletePolicyMock).toHaveBeenCalledWith("readonly-inline"));
   });
 });

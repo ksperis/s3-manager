@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import ManagerGroupUsersPage from "./ManagerGroupUsersPage";
 const useS3AccountContextMock = vi.fn();
 const listIamGroupUsersMock = vi.fn();
 const listIamUsersMock = vi.fn();
+const removeIamGroupUserMock = vi.fn();
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
@@ -18,7 +19,7 @@ vi.mock("../../api/managerIamGroups", async () => {
     ...actual,
     addIamGroupUser: vi.fn(),
     listIamGroupUsers: (...args: unknown[]) => listIamGroupUsersMock(...args),
-    removeIamGroupUser: vi.fn(),
+    removeIamGroupUser: (...args: unknown[]) => removeIamGroupUserMock(...args),
   };
 });
 
@@ -45,6 +46,7 @@ describe("ManagerGroupUsersPage", () => {
     useS3AccountContextMock.mockReset();
     listIamGroupUsersMock.mockReset();
     listIamUsersMock.mockReset();
+    removeIamGroupUserMock.mockReset().mockResolvedValue(undefined);
     useS3AccountContextMock.mockReturnValue({
       selectedS3AccountType: "tenant",
       accountIdForApi: "acc-1",
@@ -88,5 +90,10 @@ describe("ManagerGroupUsersPage", () => {
       expect(listIamGroupUsersMock).toHaveBeenCalledWith("acc-1", "operators");
       expect(listIamUsersMock).toHaveBeenCalledWith("acc-1");
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getByRole("heading", { name: "Remove user from group?" })).toBeInTheDocument();
+    expect(screen.getByText("Permissions inherited only through this group will no longer apply to the user.")).toBeInTheDocument();
+    expect(removeIamGroupUserMock).not.toHaveBeenCalled();
   });
 });

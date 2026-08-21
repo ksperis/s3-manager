@@ -14,7 +14,7 @@ import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 
 function extractError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
@@ -33,6 +33,7 @@ export default function ManagerGroupUsersPage() {
   const [newUser, setNewUser] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const memberConfirmation = useConfirmActionDialog();
 
   const decodedGroup = useMemo(() => {
     if (!groupName) return "";
@@ -102,9 +103,8 @@ export default function ManagerGroupUsersPage() {
     }
   };
 
-  const handleRemove = async (userName: string) => {
+  const removeUser = async (userName: string) => {
     if (needsS3AccountSelection || !groupName) return;
-    if (!confirmAction(`Remove ${userName} from the group?`)) return;
     setBusy(userName);
     setError(null);
     setActionMessage(null);
@@ -117,6 +117,20 @@ export default function ManagerGroupUsersPage() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleRemove = (userName: string) => {
+    memberConfirmation.requestConfirmation({
+      title: "Remove user from group?",
+      description: "Detach this IAM user from the selected group.",
+      confirmLabel: "Remove user",
+      details: [
+        { label: "Group", value: decodedGroup },
+        { label: "User", value: userName },
+      ],
+      impacts: ["Permissions inherited only through this group will no longer apply to the user."],
+      onConfirm: () => removeUser(userName),
+    });
   };
 
   if (isS3User) {
@@ -255,6 +269,7 @@ export default function ManagerGroupUsersPage() {
           responsiveCards
         />
       </div>
+      {memberConfirmation.confirmationDialog}
     </PageShell>
   );
 }

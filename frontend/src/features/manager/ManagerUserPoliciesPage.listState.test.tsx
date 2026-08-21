@@ -5,6 +5,7 @@ import ManagerUserPoliciesPage from "./ManagerUserPoliciesPage";
 
 const listIamPoliciesMock = vi.fn();
 const listUserPoliciesMock = vi.fn();
+const detachUserPolicyMock = vi.fn();
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => ({
@@ -23,7 +24,7 @@ vi.mock("../../api/managerIamPolicies", () => ({
 vi.mock("../../api/managerIamUsers", () => ({
   attachUserPolicy: vi.fn(),
   deleteUserInlinePolicy: vi.fn(),
-  detachUserPolicy: vi.fn(),
+  detachUserPolicy: (...args: unknown[]) => detachUserPolicyMock(...args),
   listUserInlinePolicies: vi.fn(async () => []),
   listUserPolicies: (accountId: unknown, userName: string) => listUserPoliciesMock(accountId, userName),
   putUserInlinePolicy: vi.fn(),
@@ -46,6 +47,7 @@ function renderPage() {
 describe("ManagerUserPoliciesPage list states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    detachUserPolicyMock.mockResolvedValue(undefined);
   });
 
   it("keeps policies rows visible when refresh fails after a successful load", async () => {
@@ -82,6 +84,12 @@ describe("ManagerUserPoliciesPage list states", () => {
       "data-mobile-actions",
       "true"
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Detach" }));
+    expect(screen.getByRole("heading", { name: "Detach managed policy?" })).toBeInTheDocument();
+    expect(screen.getAllByText("arn:aws:iam::123:policy/ReadOnlyPolicy").length).toBeGreaterThan(1);
+    expect(detachUserPolicyMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
 

@@ -4,9 +4,9 @@
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { InlinePolicy } from "../../api/managerIamPolicies";
-import { confirmAction } from "../../utils/confirm";
 import { extractApiError } from "../../utils/apiError";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { summarizeInlinePolicyDocument } from "./inlinePolicySummary";
 
@@ -41,6 +41,7 @@ export default function InlinePolicyEditor({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const deleteConfirmation = useConfirmActionDialog();
 
   const trimmedName = selectedName.trim();
   const hasPolicies = policies.length > 0;
@@ -196,9 +197,8 @@ export default function InlinePolicyEditor({
     }
   };
 
-  const handleDelete = async () => {
+  const deleteSelectedPolicy = async () => {
     if (disabled || !selectedPolicy) return;
-    if (!confirmAction(`Delete inline policy "${selectedPolicy.name}" from this ${entityLabel}?`)) return;
     setDeleting(true);
     setError(null);
     setMessage(null);
@@ -215,6 +215,22 @@ export default function InlinePolicyEditor({
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleDelete = () => {
+    if (disabled || !selectedPolicy) return;
+    const policyName = selectedPolicy.name;
+    deleteConfirmation.requestConfirmation({
+      title: "Delete inline policy?",
+      description: `Permanently remove this policy embedded in the ${entityLabel}.`,
+      confirmLabel: "Delete inline policy",
+      details: [
+        { label: entityLabel, value: entityName },
+        { label: "Policy", value: policyName },
+      ],
+      impacts: [`Permissions granted only by this inline policy will no longer apply to the ${entityLabel}.`],
+      onConfirm: deleteSelectedPolicy,
+    });
   };
 
   return (
@@ -438,6 +454,7 @@ export default function InlinePolicyEditor({
           </form>
         )}
       </div>
+      {deleteConfirmation.confirmationDialog}
     </div>
   );
 }

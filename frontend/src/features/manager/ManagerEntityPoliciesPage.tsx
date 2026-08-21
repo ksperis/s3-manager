@@ -11,7 +11,7 @@ import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import InlinePolicyEditor from "./InlinePolicyEditor";
 import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
@@ -104,6 +104,7 @@ export default function ManagerEntityPoliciesPage({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const policyConfirmation = useConfirmActionDialog();
 
   const decodedEntity = useMemo(() => {
     if (!rawEntityName) return "";
@@ -177,9 +178,8 @@ export default function ManagerEntityPoliciesPage({
     }
   };
 
-  const handleDetach = async (policyArn: string) => {
+  const detachPolicy = async (policyArn: string) => {
     if (needsS3AccountSelection || !rawEntityName) return;
-    if (!confirmAction(`Detach policy ${policyArn} from the ${config.singularLabel}?`)) return;
     setBusy(policyArn);
     setError(null);
     setActionMessage(null);
@@ -192,6 +192,20 @@ export default function ManagerEntityPoliciesPage({
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleDetach = (policyArn: string) => {
+    policyConfirmation.requestConfirmation({
+      title: "Detach managed policy?",
+      description: `Remove this managed policy from the selected ${config.singularLabel}.`,
+      confirmLabel: "Detach policy",
+      details: [
+        { label: config.singularLabel, value: decodedEntity },
+        { label: "Policy ARN", value: policyArn, mono: true },
+      ],
+      impacts: [`Permissions granted only by this policy will no longer apply to the ${config.singularLabel}.`],
+      onConfirm: () => detachPolicy(policyArn),
+    });
   };
 
   const loadInlinePolicies = async () => {
@@ -353,6 +367,7 @@ export default function ManagerEntityPoliciesPage({
           />
         </div>
       </div>
+      {policyConfirmation.confirmationDialog}
     </PageShell>
   );
 }
