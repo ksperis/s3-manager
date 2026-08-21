@@ -58,7 +58,6 @@ import {
   BrowserObject,
   BrowserObjectVersion,
   BrowserSettings,
-  BucketCorsStatus,
   PresignPartRequest,
   PresignRequest,
   copyObject,
@@ -69,7 +68,6 @@ import {
   fetchBrowserObjectColumns,
   fetchObjectMetadata,
   getBucketCorsStatus,
-  ensureBucketCors,
   initiateMultipartUpload,
   listBrowserObjects,
   listObjectVersions,
@@ -96,6 +94,7 @@ import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
+import { useBrowserBucketCors } from "./useBrowserBucketCors";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
@@ -749,12 +748,8 @@ export default function BrowserPage({
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [browserSettings, setBrowserSettings] =
     useState<BrowserSettings | null>(null);
-  const [corsStatus, setCorsStatus] = useState<BucketCorsStatus | null>(null);
   const [useProxyTransfers, setUseProxyTransfers] = useState(false);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
-  const [corsFixing, setCorsFixing] = useState(false);
-  const [corsFixError, setCorsFixError] = useState<string | null>(null);
-  const [showCorsActionPopover, setShowCorsActionPopover] = useState(false);
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
   const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
@@ -959,8 +954,6 @@ export default function BrowserPage({
   const toolbarMoreMenuRef = useRef<HTMLDivElement | null>(null);
   const toolbarColumnsButtonRef = useRef<HTMLButtonElement | null>(null);
   const toolbarColumnsMenuRef = useRef<HTMLDivElement | null>(null);
-  const corsActionTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const corsActionPopoverRef = useRef<HTMLDivElement | null>(null);
   const objectsListViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
   const bucketPanelViewportRef = useRef<HTMLDivElement | null>(null);
@@ -1618,6 +1611,28 @@ export default function BrowserPage({
     () => (typeof window === "undefined" ? undefined : window.location.origin),
     [],
   );
+  const {
+    status: corsStatus,
+    error: corsFixError,
+    fixing: corsFixing,
+    actionAvailable: hasCorsAction,
+    popoverOpen: showCorsActionPopover,
+    triggerRef: corsActionTriggerRef,
+    popoverRef: corsActionPopoverRef,
+    togglePopover: toggleCorsActionPopover,
+    ensureCors: handleEnsureCors,
+    setStatus: setCorsStatus,
+    setError: setCorsFixError,
+  } = useBrowserBucketCors({
+    accountIdForApi,
+    allowAction: !isPortalProfile,
+    bucketName,
+    enabled:
+      !accountSwitchInFlight && Boolean(bucketName) && hasS3AccountContext,
+    origin: uiOrigin,
+    requestOptions: browserRequestOptions,
+    setStatusMessage,
+  });
   const transferParallelism = useMemo(
     () =>
       resolveBrowserTransferParallelism(browserSettings, useProxyTransfers),
@@ -1749,9 +1764,6 @@ export default function BrowserPage({
       stsCredentialsError,
       warningMessage,
     ],
-  );
-  const hasCorsAction = Boolean(
-    !isPortalProfile && corsStatus && !corsStatus.enabled && uiOrigin,
   );
   const stsExpirationLabel = useMemo(() => {
     if (!stsCredentials?.expiration) return "";
@@ -1948,10 +1960,6 @@ export default function BrowserPage({
   }, [bucketName, prefix, selectedIds]);
 
   useEffect(() => {
-    setShowCorsActionPopover(false);
-  }, [accountIdForApi, bucketName]);
-
-  useEffect(() => {
     bucketInspectorRequestIdRef.current += 1;
     setBucketInspectorLoading(false);
     setBucketInspectorError(null);
@@ -2034,27 +2042,6 @@ export default function BrowserPage({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [showSearchOptionsMenu]);
-
-  useEffect(() => {
-    if (!showCorsActionPopover) return;
-    const handleMouseDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (corsActionTriggerRef.current?.contains(target)) return;
-      if (corsActionPopoverRef.current?.contains(target)) return;
-      setShowCorsActionPopover(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowCorsActionPopover(false);
-      }
-    };
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showCorsActionPopover]);
 
   useEffect(() => {
     if (!showToolbarMoreMenu) return;
@@ -2144,12 +2131,6 @@ export default function BrowserPage({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [showUploadQuickMenu]);
-
-  useEffect(() => {
-    if (!hasCorsAction) {
-      setShowCorsActionPopover(false);
-    }
-  }, [hasCorsAction]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -3666,39 +3647,6 @@ export default function BrowserPage({
     loadTreeChildren,
     prefix,
     treeNodes,
-  ]);
-
-  useEffect(() => {
-    if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
-      setCorsStatus(null);
-      setUseProxyTransfers(false);
-      return;
-    }
-    let isMounted = true;
-    getBucketCorsStatus(accountIdForApi, bucketName, uiOrigin, browserRequestOptions)
-      .then((status) => {
-        if (!isMounted) return;
-        setCorsStatus(status);
-        setCorsFixError(null);
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setCorsStatus({
-          enabled: false,
-          rules: [],
-          error: "Unable to check bucket CORS.",
-        });
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    accountIdForApi,
-    accountSwitchInFlight,
-    bucketName,
-    browserRequestOptions,
-    hasS3AccountContext,
-    uiOrigin,
   ]);
 
   useEffect(() => {
@@ -5964,34 +5912,6 @@ export default function BrowserPage({
         isExpanded: true,
       })),
     );
-  };
-
-  const handleEnsureCors = async () => {
-    if (!bucketName || !hasS3AccountContext || !uiOrigin) return;
-    setCorsFixing(true);
-    setCorsFixError(null);
-    setStatusMessage(null);
-    try {
-      const status = await ensureBucketCors(
-        accountIdForApi,
-        bucketName,
-        uiOrigin,
-        browserRequestOptions,
-      );
-      setCorsStatus(status);
-      if (status.enabled) {
-        setStatusMessage("CORS rules updated for this bucket.");
-        setShowCorsActionPopover(false);
-      } else {
-        setCorsFixError(
-          status.error ?? "CORS is still not enabled for this origin.",
-        );
-      }
-    } catch {
-      setCorsFixError("Unable to update bucket CORS configuration.");
-    } finally {
-      setCorsFixing(false);
-    }
   };
 
   const handleGoUp = () => {
@@ -10836,9 +10756,7 @@ export default function BrowserPage({
                         ref={corsActionTriggerRef}
                         type="button"
                         className="inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-700 transition hover:text-amber-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700 dark:text-amber-200 dark:hover:text-amber-100 dark:focus-visible:outline-amber-200"
-                        onClick={() =>
-                          setShowCorsActionPopover((prev) => !prev)
-                        }
+                        onClick={toggleCorsActionPopover}
                         aria-label="CORS actions"
                         title="CORS actions"
                         aria-haspopup="dialog"
