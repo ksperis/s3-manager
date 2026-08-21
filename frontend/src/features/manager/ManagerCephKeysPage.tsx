@@ -156,7 +156,7 @@ export default function ManagerCephKeysPage() {
 
   return (
     <PageShell
-      title="Ceph"
+      title="Ceph access keys"
       description="Manage Ceph RGW access keys and provision private access for this S3 User context."
       breadcrumbs={managerPageBreadcrumbs("ceph-keys")}
       actions={[

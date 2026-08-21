@@ -88,6 +88,7 @@ describe("ManagerCephKeysPage", () => {
     );
 
     expect(await screen.findByText("AK-PORTAL")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ceph access keys" })).toBeInTheDocument();
     expect(screen.getByText("KLO")).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.getByText("AK-PORTAL").closest("td")).toHaveAttribute("data-mobile-primary", "true");

@@ -7,6 +7,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 
 import PageShell from "../../components/PageShell";
 import PageTabs, { PageTabPanel } from "../../components/PageTabs";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import {
   canAccessPrivateConnectionsSection,
   isSuperAdminRole,
@@ -42,6 +43,7 @@ export default function AccountProfilePage() {
   const requestedTab = searchParams.get("tab") as AccountTab | null;
   const activeTab: AccountTab = requestedTab && availableTabs.includes(requestedTab) ? requestedTab : "profile";
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [pendingTab, setPendingTab] = useState<AccountTab | null>(null);
   const workspace = resolveWorkspaceIdFromPath(location.pathname);
 
   useEffect(() => {
@@ -58,13 +60,20 @@ export default function AccountProfilePage() {
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  const changeTab = (tab: string) => {
-    if (!availableTabs.includes(tab as AccountTab) || tab === activeTab) return;
-    if (hasUnsavedChanges && !window.confirm("Discard unsaved changes?")) return;
+  const applyTabChange = (tab: AccountTab) => {
     setHasUnsavedChanges(false);
     const next = new URLSearchParams(searchParams);
     next.set("tab", tab);
     setSearchParams(next);
+  };
+
+  const changeTab = (tab: string) => {
+    if (!availableTabs.includes(tab as AccountTab) || tab === activeTab) return;
+    if (hasUnsavedChanges) {
+      setPendingTab(tab as AccountTab);
+      return;
+    }
+    applyTabChange(tab as AccountTab);
   };
 
   const tabs = [
@@ -77,7 +86,7 @@ export default function AccountProfilePage() {
   return (
     <PageShell
       title="User profile"
-      description="Manage your identity, preferences, private storage connections, and automation tokens."
+      description="Manage your identity, preferences, sign-in security, and available account tools."
       breadcrumbs={buildWorkspaceBreadcrumbs(workspace, { label: "Profile" })}
     >
       <PageTabs
@@ -100,6 +109,19 @@ export default function AccountProfilePage() {
           <ApiTokensPage showPageHeader={false} onUnsavedChangesChange={setHasUnsavedChanges} />
         ) : null}
       </PageTabPanel>
+      {pendingTab ? (
+        <ConfirmActionDialog
+          title="Discard unsaved changes?"
+          description="The changes in the current profile section have not been saved."
+          confirmLabel="Discard changes"
+          onCancel={() => setPendingTab(null)}
+          onConfirm={() => {
+            const nextTab = pendingTab;
+            setPendingTab(null);
+            applyTabChange(nextTab);
+          }}
+        />
+      ) : null}
     </PageShell>
   );
 }

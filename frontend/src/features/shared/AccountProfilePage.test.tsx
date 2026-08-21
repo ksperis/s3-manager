@@ -95,14 +95,22 @@ describe("AccountProfilePage", () => {
 
   it("protects dirty content before changing tabs", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     renderPage();
 
     await user.click(screen.getByRole("button", { name: "Make dirty" }));
     await user.click(screen.getByRole("tab", { name: "API tokens" }));
 
-    expect(window.confirm).toHaveBeenCalledWith("Discard unsaved changes?");
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
     expect(screen.getByText("Profile content")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).not.toBeInTheDocument();
+    expect(screen.getByText("Profile content")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "API tokens" }));
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(screen.getByText("API tokens content")).toBeInTheDocument();
+    expect(screen.getByText("/profile?tab=api-tokens")).toBeInTheDocument();
   });
 
   it("uses the Browser breadcrumb on the standalone Browser profile route", () => {
