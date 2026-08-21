@@ -19,6 +19,7 @@ from ._shared import (
     _json_loads,
 )
 from .execution_item_loop import _MigrationItemExecutionLoop
+from .execution_settings_copy import _BucketSettingsCopyRunner
 
 
 class BucketMigrationItemRunnerMixin:
@@ -382,127 +383,15 @@ class BucketMigrationItemRunnerMixin:
         migration: BucketMigration,
         item: BucketMigrationItem,
     ) -> None:
-        failures: list[str] = []
-        strategy = self._item_execution_strategy(item)
-
-        def run_copy_step(step_name: str, action: Callable[[], None], *, message: str) -> None:
-            try:
-                action()
-            except Exception as exc:  # noqa: BLE001
-                failures.append(f"{step_name}: {exc}")
-                self._add_event(
-                    migration,
-                    item=item,
-                    level="error",
-                    message=message,
-                    metadata={"error": str(exc), "setting": step_name},
-                )
-
-        run_copy_step(
-            "versioning",
-            lambda: self._configuration.set_versioning(
-                target_bucket,
-                target_account,
-                enabled=(
-                    True
-                    if strategy == "version_aware"
-                    else str(
-                        self._configuration.get_bucket_properties(source_bucket, source_account).versioning_status or ""
-                    ).strip().lower()
-                    == "enabled"
-                ),
-            ),
-            message="Versioning copy failed.",
-        )
-
-        def _copy_object_lock() -> None:
-            src_object_lock = self._configuration.get_bucket_object_lock(source_bucket, source_account)
-            if src_object_lock and (
-                src_object_lock.enabled is not None
-                or src_object_lock.mode is not None
-                or src_object_lock.days is not None
-                or src_object_lock.years is not None
-            ):
-                self._configuration.set_object_lock(target_bucket, target_account, src_object_lock)
-
-        run_copy_step("object_lock", _copy_object_lock, message="Object lock copy failed.")
-
-        def _copy_encryption() -> None:
-            encryption = self._configuration.get_bucket_encryption(source_bucket, source_account)
-            rules = list(encryption.rules or [])
-            if rules:
-                self._configuration.set_bucket_encryption(target_bucket, target_account, rules)
-            else:
-                self._configuration.delete_bucket_encryption(target_bucket, target_account)
-
-        run_copy_step("encryption", _copy_encryption, message="Default bucket encryption copy failed.")
-        run_copy_step(
-            "public_access_block",
-            lambda: self._configuration.set_public_access_block(
-                target_bucket,
-                target_account,
-                self._configuration.get_public_access_block(source_bucket, source_account),
-            ),
-            message="Public access block copy failed.",
-        )
-
-        def _copy_lifecycle() -> None:
-            lifecycle = self._configuration.get_lifecycle(source_bucket, source_account)
-            rules = lifecycle.rules or []
-            if rules:
-                self._configuration.set_lifecycle(target_bucket, target_account, rules)
-            else:
-                self._configuration.delete_lifecycle(target_bucket, target_account)
-
-        run_copy_step("lifecycle", _copy_lifecycle, message="Lifecycle copy failed.")
-
-        def _copy_cors() -> None:
-            cors = self._configuration.get_bucket_cors(source_bucket, source_account)
-            if cors:
-                self._configuration.set_cors(target_bucket, target_account, cors)
-            else:
-                self._configuration.delete_cors(target_bucket, target_account)
-
-        run_copy_step("cors", _copy_cors, message="CORS copy failed.")
-
-        def _copy_policy() -> None:
-            policy = self._configuration.get_policy(source_bucket, source_account)
-            if policy:
-                self._configuration.put_policy(target_bucket, target_account, policy)
-            else:
-                self._configuration.delete_policy(target_bucket, target_account)
-
-        run_copy_step("bucket_policy", _copy_policy, message="Policy copy failed.")
-
-        def _copy_tags() -> None:
-            tags = self._configuration.get_bucket_tags(source_bucket, source_account)
-            if tags:
-                self._configuration.set_bucket_tags(
-                    target_bucket,
-                    target_account,
-                    [{"key": tag.key, "value": tag.value} for tag in tags],
-                )
-            else:
-                self._configuration.delete_bucket_tags(target_bucket, target_account)
-
-        run_copy_step("tags", _copy_tags, message="Tags copy failed.")
-        run_copy_step(
-            "access_logging",
-            lambda: self._configuration.set_bucket_logging(
-                target_bucket,
-                target_account,
-                self._configuration.get_bucket_logging(source_bucket, source_account),
-            ),
-            message="Access logging copy failed.",
-        )
-
-        if failures:
-            raise RuntimeError(
-                "Bucket settings copy failed for supported settings: "
-                + "; ".join(failures[:8])
-            )
-
-        self._add_event(migration, item=item, level="info", message="Bucket settings copied.")
+        _BucketSettingsCopyRunner(
+            service=self,
+            source_account=source_account,
+            source_bucket=source_bucket,
+            target_account=target_account,
+            target_bucket=target_bucket,
+            migration=migration,
+            item=item,
+        ).run()
 
     def _precheck_can_list_bucket(self, source_ctx: _ResolvedContext, source_bucket: str) -> None:
         client = self._context_client(source_ctx)
