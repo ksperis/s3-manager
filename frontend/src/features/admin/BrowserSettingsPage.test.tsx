@@ -13,10 +13,6 @@ vi.mock("../../api/appSettings", () => ({
   updateAppSettings: (payload: AppSettings) => updateAppSettingsMock(payload),
 }));
 
-vi.mock("../../utils/confirm", () => ({
-  confirmAction: () => true,
-}));
-
 function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSettings {
   return {
     general: {
@@ -124,6 +120,9 @@ describe("BrowserSettingsPage", () => {
     const toggle = await screen.findByLabelText("Enable Browser in Portal Storage Spaces");
     expect(toggle).not.toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: /reset to defaults/i }));
+    expect(screen.getByRole("heading", { name: "Reset Browser settings draft?" })).toBeInTheDocument();
+    expect(fetchDefaultAppSettingsMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Load defaults" }));
 
     await waitFor(() => {
       expect(toggle).toBeChecked();

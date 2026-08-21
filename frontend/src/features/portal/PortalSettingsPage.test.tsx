@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalSettingsPage from "./PortalSettingsPage";
 
@@ -80,7 +80,6 @@ describe("PortalSettingsPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     mocks.accountContext.selectedAccountId = "101";
     mocks.accountContext.loading = false;
     mocks.workspaceData.loading = false;
@@ -151,6 +150,10 @@ describe("PortalSettingsPage", () => {
       });
     });
     fireEvent.click(screen.getByRole("button", { name: "Reset overrides" }));
+    expect(screen.getByRole("heading", { name: "Reset all project overrides?" })).toBeInTheDocument();
+    expect(screen.getAllByText("Research Account").length).toBeGreaterThan(1);
+    expect(mocks.updateProjectSettingsMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Reset overrides" }));
     await waitFor(() => expect(mocks.updateProjectSettingsMock).toHaveBeenLastCalledWith("101", {}));
   });
 

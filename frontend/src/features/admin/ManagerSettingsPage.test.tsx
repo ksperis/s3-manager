@@ -15,10 +15,6 @@ vi.mock("../../api/appSettings", () => ({
   updateAppSettings: (payload: AppSettings) => updateAppSettingsMock(payload),
 }));
 
-vi.mock("../../utils/confirm", () => ({
-  confirmAction: () => true,
-}));
-
 function buildSettings(): AppSettings {
   return {
     general: {
@@ -196,6 +192,7 @@ describe("ManagerSettingsPage", () => {
     expect(toggle.checked).toBe(false);
 
     await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+    await user.click(screen.getByRole("button", { name: "Load defaults" }));
 
     await waitFor(() => {
       expect(toggle.checked).toBe(true);
@@ -221,6 +218,7 @@ describe("ManagerSettingsPage", () => {
     expect(rgwMetricsToggle.checked).toBe(true);
 
     await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+    await user.click(screen.getByRole("button", { name: "Load defaults" }));
 
     await waitFor(() => {
       expect(compositionToggle.checked).toBe(true);
@@ -240,6 +238,7 @@ describe("ManagerSettingsPage", () => {
     expect(toggle.checked).toBe(false);
 
     await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+    await user.click(screen.getByRole("button", { name: "Load defaults" }));
 
     await waitFor(() => {
       expect(toggle.checked).toBe(true);
@@ -258,6 +257,7 @@ describe("ManagerSettingsPage", () => {
     expect(toggle.checked).toBe(false);
 
     await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+    await user.click(screen.getByRole("button", { name: "Load defaults" }));
 
     await waitFor(() => {
       expect(toggle.checked).toBe(true);

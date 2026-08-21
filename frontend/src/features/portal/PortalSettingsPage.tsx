@@ -21,7 +21,7 @@ import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiCheckboxClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { formatBytes } from "../../utils/format";
 import { usePortalAccountContext } from "./PortalAccountContext";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
@@ -161,6 +161,7 @@ export default function PortalSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const resetConfirmation = useConfirmActionDialog();
 
   const selectedWorkspaceAccess = useMemo(
     () => resolveWorkspaceAccess(user, selectedAccountId),
@@ -250,9 +251,8 @@ export default function PortalSettingsPage() {
     }
   };
 
-  const handleReset = async () => {
+  const resetProjectOverrides = async () => {
     if (!selectedAccountId || !editable || saving) return;
-    if (!confirmAction(t({ en: "Reset all project overrides?", fr: "Réinitialiser tous les overrides du projet ?", de: "Alle Projektüberschreibungen zurücksetzen?" }))) return;
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -265,6 +265,28 @@ export default function PortalSettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleReset = () => {
+    if (!selectedAccountId || !editable || saving) return;
+    resetConfirmation.requestConfirmation({
+      title: t({ en: "Reset all project overrides?", fr: "Réinitialiser tous les overrides du projet ?", de: "Alle Projektüberschreibungen zurücksetzen?" }),
+      description: t({
+        en: "Return every delegated project setting to the platform value.",
+        fr: "Rétablir chaque paramètre délégué du projet à la valeur de la plateforme.",
+        de: "Alle delegierten Projekteinstellungen auf den Plattformwert zurücksetzen.",
+      }),
+      confirmLabel: t({ en: "Reset overrides", fr: "Réinitialiser", de: "Zurücksetzen" }),
+      details: [{ label: t({ en: "Project", fr: "Projet", de: "Projekt" }), value: selectedAccount?.name ?? selectedAccountId }],
+      impacts: [
+        t({
+          en: "The effective Portal capabilities and defaults may change immediately.",
+          fr: "Les fonctions et valeurs par défaut effectives du Portal peuvent changer immédiatement.",
+          de: "Die wirksamen Portal-Funktionen und Standardwerte können sich sofort ändern.",
+        }),
+      ],
+      onConfirm: resetProjectOverrides,
+    });
   };
 
   const triStateControl = (label: string, value: TriState, onChange: (value: TriState) => void) => (
@@ -367,6 +389,7 @@ export default function PortalSettingsPage() {
           </div>
         </UiCard>
       ) : null}
+      {resetConfirmation.confirmationDialog}
     </PageShell>
   );
 }

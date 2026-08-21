@@ -16,7 +16,7 @@ import {
 } from "../../components/settings/SettingsLayout";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 
 const corsOriginsTextareaClass = `mt-2 ${settingsTextareaClassName}`;
 
@@ -26,6 +26,7 @@ export default function PortalSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const resetConfirmation = useConfirmActionDialog();
   const [corsOriginsText, setCorsOriginsText] = useState("");
   const initRef = useRef(false);
 
@@ -173,9 +174,8 @@ export default function PortalSettingsPage() {
     }
   };
 
-  const handleResetDefaults = async () => {
+  const resetDefaults = async () => {
     if (!settings) return;
-    if (!confirmAction("Reset portal settings to defaults? Save changes to apply.")) return;
     setResetting(true);
     setError(null);
     setSavedMessage(null);
@@ -196,6 +196,17 @@ export default function PortalSettingsPage() {
     } finally {
       setResetting(false);
     }
+  };
+
+  const handleResetDefaults = () => {
+    resetConfirmation.requestConfirmation({
+      title: "Reset Portal settings draft?",
+      description: "Replace the current Portal capabilities and Storage Space defaults with application defaults.",
+      confirmLabel: "Load defaults",
+      tone: "primary",
+      warning: "Defaults are loaded into this form only. Review them, then use Save changes to apply them.",
+      onConfirm: resetDefaults,
+    });
   };
 
   const portalBucketCreateEnabled = Boolean(settings?.portal.allow_private_storage_space_create);
@@ -418,6 +429,7 @@ export default function PortalSettingsPage() {
           </SettingsSection>
         </SettingsCard>
       </form>
+      {resetConfirmation.confirmationDialog}
     </PageShell>
   );
 }

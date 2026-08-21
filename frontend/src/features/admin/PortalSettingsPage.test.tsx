@@ -14,10 +14,6 @@ vi.mock("../../api/appSettings", () => ({
   updateAppSettings: (payload: AppSettings) => updateAppSettingsMock(payload),
 }));
 
-vi.mock("../../utils/confirm", () => ({
-  confirmAction: () => true,
-}));
-
 function buildSettings(): AppSettings {
   return {
     general: {

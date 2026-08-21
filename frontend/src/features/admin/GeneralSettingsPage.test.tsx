@@ -39,10 +39,6 @@ vi.mock("../../components/ui/brandingRuntime", async () => {
   };
 });
 
-vi.mock("../../utils/confirm", () => ({
-  confirmAction: () => true,
-}));
-
 function buildSettings(): AppSettings {
   return {
     general: {
@@ -213,6 +209,9 @@ describe("GeneralSettingsPage branding", () => {
 
     await screen.findByLabelText("Primary color picker");
     await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+    expect(screen.getByRole("heading", { name: "Reset general settings draft?" })).toBeInTheDocument();
+    expect(fetchDefaultAppSettingsMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Load defaults" }));
     await waitFor(() => {
       expect(fetchDefaultAppSettingsMock).toHaveBeenCalledTimes(1);
     });

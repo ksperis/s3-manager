@@ -27,7 +27,7 @@ import {
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { applyBranding } from "../../components/ui/brandingRuntime";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 
 const CEPH_ADMIN_WARNING_MESSAGE =
   "Ceph Admin is an advanced Ceph cluster mass-management feature (accounts, users, buckets). " +
@@ -92,6 +92,7 @@ export default function GeneralSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const resetConfirmation = useConfirmActionDialog();
   const [loginLogoUrlDraft, setLoginLogoUrlDraft] = useState("");
 
   useEffect(() => {
@@ -213,9 +214,8 @@ export default function GeneralSettingsPage() {
     }
   };
 
-  const handleResetDefaults = async () => {
+  const resetDefaults = async () => {
     if (!settings) return;
-    if (!confirmAction("Reset general and branding settings to defaults? Save changes to apply.")) return;
     setResetting(true);
     setError(null);
     setSavedMessage(null);
@@ -250,6 +250,17 @@ export default function GeneralSettingsPage() {
     } finally {
       setResetting(false);
     }
+  };
+
+  const handleResetDefaults = () => {
+    resetConfirmation.requestConfirmation({
+      title: "Reset general settings draft?",
+      description: "Replace the current general, quota notification, and branding values with application defaults.",
+      confirmLabel: "Load defaults",
+      tone: "primary",
+      warning: "Defaults are loaded into this form only. Review them, then use Save changes to apply them.",
+      onConfirm: resetDefaults,
+    });
   };
 
   return (
@@ -696,6 +707,7 @@ export default function GeneralSettingsPage() {
           </div>
         )}
       </form>
+      {resetConfirmation.confirmationDialog}
     </PageShell>
   );
 }

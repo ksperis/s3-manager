@@ -16,7 +16,7 @@ import {
 } from "../../components/settings/SettingsLayout";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { extractApiError } from "../../utils/apiError";
-import { confirmAction } from "../../utils/confirm";
+import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 
 function clampInt(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -29,6 +29,7 @@ export default function ManagerSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const resetConfirmation = useConfirmActionDialog();
 
   useEffect(() => {
     fetchAppSettings()
@@ -204,9 +205,8 @@ export default function ManagerSettingsPage() {
     }
   };
 
-  const handleResetDefaults = async () => {
+  const resetDefaults = async () => {
     if (!settings) return;
-    if (!confirmAction("Reset manager settings to defaults? Save changes to apply.")) return;
     setResetting(true);
     setError(null);
     setSavedMessage(null);
@@ -236,6 +236,17 @@ export default function ManagerSettingsPage() {
     } finally {
       setResetting(false);
     }
+  };
+
+  const handleResetDefaults = () => {
+    resetConfirmation.requestConfirmation({
+      title: "Reset Manager settings draft?",
+      description: "Replace the current Manager metrics, tools, and migration limits with application defaults.",
+      confirmLabel: "Load defaults",
+      tone: "primary",
+      warning: "Defaults are loaded into this form only. Review them, then use Save changes to apply them.",
+      onConfirm: resetDefaults,
+    });
   };
 
   return (
@@ -416,6 +427,7 @@ export default function ManagerSettingsPage() {
           </div>
         )}
       </form>
+      {resetConfirmation.confirmationDialog}
     </PageShell>
   );
 }
