@@ -17,13 +17,14 @@ describe("ApiTokensPage list states", () => {
     listApiTokensMock.mockResolvedValue([]);
   });
 
-  it("shows error banner and error row when list load fails with no rows", async () => {
+  it("shows the load error once in the table when no rows are available", async () => {
     listApiTokensMock.mockRejectedValueOnce(new Error("Failed to load tokens"));
 
     render(<ApiTokensPage />);
 
     expect(await screen.findByText("Failed to load tokens")).toBeInTheDocument();
-    expect(screen.getByText("Unable to load API tokens.")).toBeInTheDocument();
+    expect(screen.getAllByText("Failed to load tokens")).toHaveLength(1);
+    expect(screen.queryByText("Unable to load API tokens.")).not.toBeInTheDocument();
   });
 
   it("keeps existing rows on refresh failure and does not show table error row", async () => {

@@ -3,8 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { PageBreadcrumb } from "../components/PageHeader";
+import type { WorkspaceId } from "../utils/workspaces";
 
-export type WorkspaceId = "admin" | "ceph-admin" | "manager" | "portal" | "storage-ops";
+export type { WorkspaceId } from "../utils/workspaces";
 
 type WorkspaceContract = {
   label: string;
@@ -22,7 +23,18 @@ export const WORKSPACE_CONTRACTS: Record<WorkspaceId, WorkspaceContract> = {
   manager: { label: "Manager", path: "/manager" },
   portal: { label: "Portal", path: "/portal" },
   "storage-ops": { label: "Storage Ops", path: "/storage-ops" },
+  browser: { label: "Browser", path: "/browser" },
 };
+
+export function resolveWorkspaceIdFromPath(
+  pathname: string,
+  fallback: WorkspaceId = "admin",
+): WorkspaceId {
+  const segment = pathname.split("/")[1] as WorkspaceId | undefined;
+  return segment && Object.prototype.hasOwnProperty.call(WORKSPACE_CONTRACTS, segment)
+    ? segment
+    : fallback;
+}
 
 export const ADMIN_PAGE_CONTRACTS = {
   dashboard: { label: "Dashboard", path: "/admin" },

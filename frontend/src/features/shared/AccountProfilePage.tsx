@@ -17,7 +17,7 @@ import ProfilePage from "./ProfilePage";
 import SecurityPage from "./SecurityPage";
 import {
   buildWorkspaceBreadcrumbs,
-  type WorkspaceId,
+  resolveWorkspaceIdFromPath,
 } from "../../navigation/workspacePages";
 
 type AccountTab = "profile" | "security" | "connections" | "api-tokens";
@@ -42,15 +42,7 @@ export default function AccountProfilePage() {
   const requestedTab = searchParams.get("tab") as AccountTab | null;
   const activeTab: AccountTab = requestedTab && availableTabs.includes(requestedTab) ? requestedTab : "profile";
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const workspace: WorkspaceId = location.pathname.startsWith("/ceph-admin")
-    ? "ceph-admin"
-    : location.pathname.startsWith("/storage-ops")
-      ? "storage-ops"
-      : location.pathname.startsWith("/manager")
-        ? "manager"
-        : location.pathname.startsWith("/portal")
-          ? "portal"
-          : "admin";
+  const workspace = resolveWorkspaceIdFromPath(location.pathname);
 
   useEffect(() => {
     if (!requestedTab || requestedTab === activeTab) return;

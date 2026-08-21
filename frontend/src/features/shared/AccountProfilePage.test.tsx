@@ -31,7 +31,7 @@ function renderPage(initialEntry = "/profile") {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/profile" element={<><AccountProfilePage /><LocationProbe /></>} />
+        <Route path="*" element={<><AccountProfilePage /><LocationProbe /></>} />
       </Routes>
     </MemoryRouter>
   );
@@ -103,5 +103,12 @@ describe("AccountProfilePage", () => {
 
     expect(window.confirm).toHaveBeenCalledWith("Discard unsaved changes?");
     expect(screen.getByText("Profile content")).toBeInTheDocument();
+  });
+
+  it("uses the Browser breadcrumb on the standalone Browser profile route", () => {
+    renderPage("/browser/profile");
+
+    expect(screen.getByRole("link", { name: "Browser" })).toHaveAttribute("href", "/browser");
+    expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
   });
 });

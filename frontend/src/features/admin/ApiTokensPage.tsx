@@ -85,7 +85,8 @@ type ApiTokensPageProps = {
 export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesChange }: ApiTokensPageProps) {
   const [tokens, setTokens] = useState<ApiTokenInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const [includeRevoked, setIncludeRevoked] = useState(false);
@@ -121,18 +122,18 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
   }, [tokens]);
   const tableStatus = resolveListTableStatus({
     loading,
-    error,
+    error: loadError,
     rowCount: sortedTokens.length,
   });
 
   const loadTokens = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
       const data = await listApiTokens(includeRevoked);
       setTokens(data);
     } catch (loadError) {
-      setError(extractError(loadError));
+      setLoadError(extractError(loadError));
     } finally {
       setLoading(false);
     }
@@ -223,13 +224,13 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
     if (!confirmAction(`Revoke API token '${token.name}'?`)) return;
     setBusyTokenId(token.id);
     setActionMessage(null);
-    setError(null);
+    setActionError(null);
     try {
       await revokeApiToken(token.id);
       setActionMessage("API token revoked.");
       await loadTokens();
     } catch (revokeError) {
-      setError(extractError(revokeError));
+      setActionError(extractError(revokeError));
     } finally {
       setBusyTokenId(null);
     }
@@ -241,7 +242,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
       setCopyMessage(message);
       window.setTimeout(() => setCopyMessage(null), 2500);
     } catch (copyError) {
-      setError(extractError(copyError));
+      setActionError(extractError(copyError));
     }
   };
 
@@ -332,7 +333,8 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
         />
       ) : null}
 
-      {error && <PageBanner tone="error">{error}</PageBanner>}
+      {loadError && sortedTokens.length > 0 ? <PageBanner tone="error">{loadError}</PageBanner> : null}
+      {actionError ? <PageBanner tone="error">{actionError}</PageBanner> : null}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {copyMessage && <PageBanner tone="info">{copyMessage}</PageBanner>}
 
@@ -414,7 +416,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
           rowKey={(token) => token.id}
           status={tableStatus}
           loadingMessage="Loading API tokens..."
-          errorMessage="Unable to load API tokens."
+          errorMessage={loadError ?? "Unable to load API tokens."}
           emptyMessage="No API tokens."
           tableClassName="compact-table"
           responsiveCards

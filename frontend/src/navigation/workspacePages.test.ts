@@ -5,6 +5,7 @@ import {
   CEPH_ADMIN_PAGE_CONTRACTS,
   buildWorkspaceBreadcrumbs,
   buildWorkspacePageBreadcrumbs,
+  resolveWorkspaceIdFromPath,
 } from "./workspacePages";
 
 describe("workspace breadcrumb contracts", () => {
@@ -35,5 +36,11 @@ describe("workspace breadcrumb contracts", () => {
       { label: "Ceph Admin", to: "/ceph-admin" },
       { label: "RGW Accounts" },
     ]);
+  });
+
+  it("resolves every workspace root from nested routes", () => {
+    expect(resolveWorkspaceIdFromPath("/browser/profile")).toBe("browser");
+    expect(resolveWorkspaceIdFromPath("/storage-ops/buckets/example")).toBe("storage-ops");
+    expect(resolveWorkspaceIdFromPath("/unknown/path")).toBe("admin");
   });
 });
