@@ -1,22 +1,33 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from typing import Optional, Protocol
+from __future__ import annotations
+
+from typing import Protocol
 
 from app.models.bucket import (
     Bucket,
     BucketFeatureStatus,
-    BucketLifecycleConfig,
     BucketLoggingConfiguration,
     BucketNotificationConfiguration,
-    BucketObjectLock,
-    BucketProperties,
-    BucketPublicAccessBlock,
     BucketTag,
     BucketWebsiteConfiguration,
 )
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
+)
+from app.services.bucket_property_feature_enrichment import (
+    BUCKET_PROPERTY_FEATURES,
+    BucketPropertyFeatureReader,
+    active_feature_status,
+    enrich_cors,
+    enrich_lifecycle,
+    enrich_object_lock,
+    enrich_public_access_block,
+    enrich_versioning,
+    inactive_feature_status,
+    load_bucket_properties_context,
+    unavailable_feature_status,
 )
 from app.services.s3_execution_context import S3ExecutionTarget
 
@@ -35,24 +46,12 @@ ALLOWED_BUCKET_FEATURES = {
 }
 
 
-class BucketFeatureReader(Protocol):
+class BucketFeatureReader(BucketPropertyFeatureReader, Protocol):
     def get_bucket_tags(self, name: str, account: S3ExecutionTarget) -> list[BucketTag]: ...
-
-    def get_bucket_properties(self, name: str, account: S3ExecutionTarget) -> BucketProperties: ...
-
-    def get_bucket_versioning_status(self, name: str, account: S3ExecutionTarget) -> str | None: ...
-
-    def get_bucket_object_lock(self, name: str, account: S3ExecutionTarget) -> BucketObjectLock | None: ...
-
-    def get_public_access_block(self, name: str, account: S3ExecutionTarget) -> BucketPublicAccessBlock: ...
-
-    def get_lifecycle(self, name: str, account: S3ExecutionTarget) -> BucketLifecycleConfig: ...
-
-    def get_bucket_cors(self, name: str, account: S3ExecutionTarget) -> list[dict]: ...
 
     def get_bucket_website(self, name: str, account: S3ExecutionTarget) -> BucketWebsiteConfiguration: ...
 
-    def get_policy(self, name: str, account: S3ExecutionTarget) -> Optional[dict]: ...
+    def get_policy(self, name: str, account: S3ExecutionTarget) -> dict | None: ...
 
     def get_bucket_logging(self, name: str, account: S3ExecutionTarget) -> BucketLoggingConfiguration: ...
 
@@ -70,13 +69,12 @@ def enrich_bucket_features(
         return buckets
 
     wants_tags = "tags" in requested
-    props_feature_keys = {"versioning", "object_lock", "block_public_access", "lifecycle_rules", "cors"}
-    use_props_bundle = len(requested & props_feature_keys) > 1
+    use_props_bundle = len(requested & BUCKET_PROPERTY_FEATURES) > 1
     sns_feature_enabled = account_sns_feature_enabled(account)
 
     result: list[Bucket] = []
     for bucket in buckets:
-        tags: Optional[list[BucketTag]] = None
+        tags: list[BucketTag] | None = None
         if wants_tags:
             try:
                 tags = reader.get_bucket_tags(bucket.name, account)
@@ -84,111 +82,27 @@ def enrich_bucket_features(
                 tags = []
 
         feature_map: dict[str, BucketFeatureStatus] = {}
-        properties: Optional[BucketProperties] = None
-        properties_error = False
-        if use_props_bundle:
-            try:
-                properties = reader.get_bucket_properties(bucket.name, account)
-            except RuntimeError:
-                properties_error = True
+        properties_context = load_bucket_properties_context(
+            reader,
+            bucket.name,
+            account,
+            uses_bundle=use_props_bundle,
+        )
 
         if "versioning" in requested:
-            raw_versioning: Optional[str] = None
-            if use_props_bundle:
-                if properties_error:
-                    feature_map["versioning"] = _unavailable()
-                else:
-                    raw_versioning = properties.versioning_status if properties else None
-            else:
-                try:
-                    raw_versioning = reader.get_bucket_versioning_status(bucket.name, account)
-                except RuntimeError:
-                    feature_map["versioning"] = _unavailable()
-            if "versioning" not in feature_map:
-                raw = raw_versioning or "Disabled"
-                normalized = str(raw).strip().lower()
-                if normalized == "enabled":
-                    feature_map["versioning"] = _active(raw)
-                elif normalized == "suspended":
-                    feature_map["versioning"] = BucketFeatureStatus(state=raw, tone="unknown")
-                else:
-                    feature_map["versioning"] = _inactive(raw)
+            enrich_versioning(properties_context, feature_map)
 
         if "object_lock" in requested:
-            if use_props_bundle:
-                if properties_error:
-                    feature_map["object_lock"] = _unavailable()
-                else:
-                    enabled = bool((properties.object_lock_enabled if properties else None) is True)
-                    feature_map["object_lock"] = _active("Enabled") if enabled else _inactive("Disabled")
-            else:
-                try:
-                    object_lock = reader.get_bucket_object_lock(bucket.name, account)
-                    enabled = bool(object_lock and object_lock.enabled is True)
-                    feature_map["object_lock"] = _active("Enabled") if enabled else _inactive("Disabled")
-                except RuntimeError:
-                    feature_map["object_lock"] = _unavailable()
+            enrich_object_lock(properties_context, feature_map)
 
         if "block_public_access" in requested:
-            config = None
-            if use_props_bundle:
-                if properties_error:
-                    feature_map["block_public_access"] = _unavailable()
-                else:
-                    config = properties.public_access_block if properties else None
-            else:
-                try:
-                    config = reader.get_public_access_block(bucket.name, account)
-                except RuntimeError:
-                    feature_map["block_public_access"] = _unavailable()
-            if "block_public_access" not in feature_map:
-                if not config:
-                    feature_map["block_public_access"] = _inactive("Disabled")
-                else:
-                    values = [
-                        config.block_public_acls,
-                        config.ignore_public_acls,
-                        config.block_public_policy,
-                        config.restrict_public_buckets,
-                    ]
-                    fully_enabled = all(value is True for value in values)
-                    partially_enabled = not fully_enabled and any(value is True for value in values)
-                    if fully_enabled:
-                        feature_map["block_public_access"] = _active("Enabled")
-                    elif partially_enabled:
-                        feature_map["block_public_access"] = _active("Partial")
-                    else:
-                        feature_map["block_public_access"] = _inactive("Disabled")
+            enrich_public_access_block(properties_context, feature_map)
 
         if "lifecycle_rules" in requested:
-            rules = None
-            if use_props_bundle:
-                if properties_error:
-                    feature_map["lifecycle_rules"] = _unavailable()
-                else:
-                    rules = properties.lifecycle_rules if properties else []
-            else:
-                try:
-                    rules = reader.get_lifecycle(bucket.name, account).rules
-                except RuntimeError:
-                    feature_map["lifecycle_rules"] = _unavailable()
-            if "lifecycle_rules" not in feature_map:
-                feature_map["lifecycle_rules"] = _active("Enabled") if rules else _inactive("Disabled")
+            enrich_lifecycle(properties_context, feature_map)
 
         if "cors" in requested:
-            rules = None
-            if use_props_bundle:
-                if properties_error:
-                    feature_map["cors"] = _unavailable()
-                else:
-                    rules = properties.cors_rules if properties else []
-            else:
-                try:
-                    rules = reader.get_bucket_cors(bucket.name, account)
-                except RuntimeError:
-                    feature_map["cors"] = _unavailable()
-            if "cors" not in feature_map:
-                feature_map["cors"] = _active("Configured") if rules else _inactive("Not set")
+            enrich_cors(properties_context, feature_map)
 
         if "static_website" in requested:
             try:
@@ -199,50 +113,48 @@ def enrich_bucket_features(
                     or (website.index_document or "").strip()
                     or (isinstance(routing_rules, list) and len(routing_rules) > 0)
                 )
-                feature_map["static_website"] = _active("Enabled") if configured else _inactive("Disabled")
+                feature_map["static_website"] = (
+                    active_feature_status("Enabled") if configured else inactive_feature_status("Disabled")
+                )
             except RuntimeError:
-                feature_map["static_website"] = _unavailable()
+                feature_map["static_website"] = unavailable_feature_status()
 
         if "bucket_policy" in requested:
             try:
                 policy = reader.get_policy(bucket.name, account)
                 configured = bool(policy and isinstance(policy, dict) and len(policy) > 0)
-                feature_map["bucket_policy"] = _active("Configured") if configured else _inactive("Not set")
+                feature_map["bucket_policy"] = (
+                    active_feature_status("Configured") if configured else inactive_feature_status("Not set")
+                )
             except RuntimeError:
-                feature_map["bucket_policy"] = _unavailable()
+                feature_map["bucket_policy"] = unavailable_feature_status()
 
         if "access_logging" in requested:
             try:
                 logging_config = reader.get_bucket_logging(bucket.name, account)
                 enabled = bool(logging_config.enabled and (logging_config.target_bucket or "").strip())
-                feature_map["access_logging"] = _active("Enabled") if enabled else _inactive("Disabled")
+                feature_map["access_logging"] = (
+                    active_feature_status("Enabled") if enabled else inactive_feature_status("Disabled")
+                )
             except RuntimeError:
-                feature_map["access_logging"] = _unavailable()
+                feature_map["access_logging"] = unavailable_feature_status()
 
         if "notifications" in requested:
             if not sns_feature_enabled:
-                feature_map["notifications"] = _unavailable()
+                feature_map["notifications"] = unavailable_feature_status()
             else:
                 try:
                     notifications = reader.get_bucket_notifications(bucket.name, account)
                     configured = is_bucket_notification_configuration_configured(notifications.configuration)
-                    feature_map["notifications"] = _active("Configured") if configured else _inactive("Not set")
+                    feature_map["notifications"] = (
+                        active_feature_status("Configured")
+                        if configured
+                        else inactive_feature_status("Not set")
+                    )
                 except RuntimeError:
-                    feature_map["notifications"] = _unavailable()
+                    feature_map["notifications"] = unavailable_feature_status()
 
         base = bucket.model_dump(exclude={"tags", "features"})
         result.append(Bucket(**base, tags=tags, features=feature_map or None))
 
     return result
-
-
-def _unavailable() -> BucketFeatureStatus:
-    return BucketFeatureStatus(state="Unavailable", tone="unknown")
-
-
-def _inactive(state: str) -> BucketFeatureStatus:
-    return BucketFeatureStatus(state=state, tone="inactive")
-
-
-def _active(state: str) -> BucketFeatureStatus:
-    return BucketFeatureStatus(state=state, tone="active")
