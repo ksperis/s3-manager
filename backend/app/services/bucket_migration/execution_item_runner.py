@@ -61,6 +61,32 @@ class BucketMigrationItemRunnerMixin:
                 )
             raise RuntimeError("Migration item is blocked by precheck findings and cannot run.")
 
+    def _stop_interrupted_item(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        control_check: Callable[[], str],
+    ) -> None:
+        state = control_check()
+        if state == "lost_lease":
+            raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
+        if state == "cancel":
+            item.status = "canceled"
+            item.finished_at = utcnow()
+        else:
+            item.status = "paused"
+        item.updated_at = utcnow()
+        self._commit()
+
+    def _store_item_diff(self, item: BucketMigrationItem, diff: Any) -> None:
+        item.source_count = diff.source_count
+        item.target_count = diff.target_count
+        item.matched_count = diff.matched_count
+        item.different_count = diff.different_count
+        item.only_source_count = diff.only_source_count
+        item.only_target_count = diff.only_target_count
+        item.diff_sample_json = _json_dumps(diff.sample)
+
     def _run_item(
         self,
         migration: BucketMigration,
@@ -192,24 +218,9 @@ class BucketMigrationItemRunnerMixin:
                     control_check=control_check,
                 )
                 if copied < 0 or deleted < 0:
-                    state = control_check()
-                    if state == "lost_lease":
-                        raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
-                    if state == "cancel":
-                        item.status = "canceled"
-                        item.finished_at = utcnow()
-                    else:
-                        item.status = "paused"
-                    item.updated_at = utcnow()
-                    self._commit()
+                    self._stop_interrupted_item(migration, item, control_check)
                     return
-                item.source_count = diff.source_count
-                item.target_count = diff.target_count
-                item.matched_count = diff.matched_count
-                item.different_count = diff.different_count
-                item.only_source_count = diff.only_source_count
-                item.only_target_count = diff.only_target_count
-                item.diff_sample_json = _json_dumps(diff.sample)
+                self._store_item_diff(item, diff)
                 item.pre_sync_done = True
                 item.status = "awaiting_cutover"
                 item.step = "awaiting_cutover"
@@ -252,24 +263,9 @@ class BucketMigrationItemRunnerMixin:
                     control_check=control_check,
                 )
                 if copied < 0 or deleted < 0:
-                    state = control_check()
-                    if state == "lost_lease":
-                        raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
-                    if state == "cancel":
-                        item.status = "canceled"
-                        item.finished_at = utcnow()
-                    else:
-                        item.status = "paused"
-                    item.updated_at = utcnow()
-                    self._commit()
+                    self._stop_interrupted_item(migration, item, control_check)
                     return
-                item.source_count = diff.source_count
-                item.target_count = diff.target_count
-                item.matched_count = diff.matched_count
-                item.different_count = diff.different_count
-                item.only_source_count = diff.only_source_count
-                item.only_target_count = diff.only_target_count
-                item.diff_sample_json = _json_dumps(diff.sample)
+                self._store_item_diff(item, diff)
                 item.step = "verify"
                 item.updated_at = utcnow()
                 self._commit()
@@ -285,25 +281,10 @@ class BucketMigrationItemRunnerMixin:
                     control_check=control_check,
                 )
                 if diff is None:
-                    state = control_check()
-                    if state == "lost_lease":
-                        raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
-                    if state == "cancel":
-                        item.status = "canceled"
-                        item.finished_at = utcnow()
-                    else:
-                        item.status = "paused"
-                    item.updated_at = utcnow()
-                    self._commit()
+                    self._stop_interrupted_item(migration, item, control_check)
                     return
 
-                item.source_count = diff.source_count
-                item.target_count = diff.target_count
-                item.matched_count = diff.matched_count
-                item.different_count = diff.different_count
-                item.only_source_count = diff.only_source_count
-                item.only_target_count = diff.only_target_count
-                item.diff_sample_json = _json_dumps(diff.sample)
+                self._store_item_diff(item, diff)
 
                 has_diff = bool(
                     diff.different_count
@@ -346,16 +327,7 @@ class BucketMigrationItemRunnerMixin:
                             control_check=control_check,
                         )
                         if size_only_count < 0:
-                            state = control_check()
-                            if state == "lost_lease":
-                                raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
-                            if state == "cancel":
-                                item.status = "canceled"
-                                item.finished_at = utcnow()
-                            else:
-                                item.status = "paused"
-                            item.updated_at = utcnow()
-                            self._commit()
+                            self._stop_interrupted_item(migration, item, control_check)
                             return
 
                         if failed_keys:
