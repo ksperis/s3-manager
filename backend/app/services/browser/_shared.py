@@ -15,15 +15,13 @@ from botocore.exceptions import ClientError
 
 from app.models.browser import (
     BrowserBucket,
-    BrowserObject,
-    BrowserObjectSortBy,
-    BrowserObjectSortDir,
     ListBrowserObjectsResponse,
 )
-from app.services.object_listing_temp_store import TemporarySqliteStore
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.aws_errors import aws_error_code
 from app.utils.s3_endpoint import resolve_s3_client_options
+
+from .sorted_listing import SortedObjectSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -115,76 +113,6 @@ class _TtlLruCache(Generic[_CacheKey, _CacheValue]):
         return removed
 
 
-@dataclass
-class _SortedObjectSnapshot:
-    store: TemporarySqliteStore
-    sort_by: BrowserObjectSortBy
-    sort_dir: BrowserObjectSortDir
-    prefix_count: int = 0
-    object_count: int = 0
-
-    def close(self) -> None:
-        self.store.close()
-
-    def fetch_prefixes(self, offset: int, limit: int) -> list[str]:
-        if limit <= 0:
-            return []
-        cursor = self.store.connection.execute(
-            """
-            SELECT prefix
-            FROM sorted_prefixes
-            ORDER BY prefix
-            LIMIT ? OFFSET ?
-            """,
-            (limit, offset),
-        )
-        return [str(row["prefix"]) for row in cursor]
-
-    def fetch_objects(self, offset: int, limit: int) -> list[BrowserObject]:
-        if limit <= 0:
-            return []
-        order_by = self._object_order_by()
-        cursor = self.store.connection.execute(
-            f"""
-            SELECT key, size, last_modified_iso, storage_class, etag
-            FROM sorted_objects
-            ORDER BY {order_by}
-            LIMIT ? OFFSET ?
-            """,
-            (limit, offset),
-        )
-        return [self._object_from_row(row) for row in cursor]
-
-    def _object_order_by(self) -> str:
-        direction = "ASC" if self.sort_dir == "asc" else "DESC"
-        null_direction = "ASC" if self.sort_dir == "asc" else "DESC"
-        if self.sort_by == "name":
-            return f"key {direction}"
-        if self.sort_by == "size":
-            return f"size {direction}, key ASC"
-        if self.sort_by == "modified":
-            return f"last_modified_ts IS NULL {null_direction}, last_modified_ts {direction}, key ASC"
-        if self.sort_by == "storage_class":
-            return f"storage_class IS NULL {null_direction}, storage_class {direction}, key ASC"
-        return f"etag IS NULL {null_direction}, etag {direction}, key ASC"
-
-    def _object_from_row(self, row) -> BrowserObject:
-        last_modified = None
-        raw_last_modified = row["last_modified_iso"]
-        if isinstance(raw_last_modified, str) and raw_last_modified:
-            try:
-                last_modified = datetime.fromisoformat(raw_last_modified)
-            except ValueError:
-                last_modified = None
-        return BrowserObject(
-            key=str(row["key"]),
-            size=int(row["size"] or 0),
-            last_modified=last_modified,
-            storage_class=row["storage_class"] if isinstance(row["storage_class"], str) else None,
-            etag=row["etag"] if isinstance(row["etag"], str) else None,
-        )
-
-
 @dataclass(frozen=True)
 class _ObjectLazyHeadCacheValue:
     content_type: Optional[str]
@@ -209,7 +137,7 @@ _OBJECT_LIST_CACHE: _TtlLruCache[tuple, ListBrowserObjectsResponse] = _TtlLruCac
     max_entries=OBJECT_LIST_CACHE_MAX_ENTRIES,
     ttl_seconds=OBJECT_LIST_CACHE_TTL_SECONDS,
 )
-_OBJECT_SORT_SNAPSHOT_CACHE: _TtlLruCache[tuple, _SortedObjectSnapshot] = _TtlLruCache(
+_OBJECT_SORT_SNAPSHOT_CACHE: _TtlLruCache[tuple, SortedObjectSnapshot] = _TtlLruCache(
     max_entries=OBJECT_SORT_SNAPSHOT_CACHE_MAX_ENTRIES,
     ttl_seconds=OBJECT_LIST_CACHE_TTL_SECONDS,
     on_evict=lambda snapshot: snapshot.close(),

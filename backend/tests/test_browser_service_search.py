@@ -9,6 +9,7 @@ import pytest
 from app.db import S3Account, StorageEndpoint
 from app.models.portal import PortalStorageSpaceIcon
 from app.services.browser import _shared as browser_shared
+from app.services.browser import sorted_listing
 from app.services.browser_service import BrowserService
 from app.services.s3_execution_context import S3ExecutionContext
 
@@ -530,6 +531,38 @@ def test_list_objects_sorted_paginates_prefixes_then_objects_with_cached_snapsho
     assert len(calls) == 1
 
 
+def test_list_objects_sorted_snapshot_scans_all_s3_pages(monkeypatch):
+    continuation_tokens = []
+
+    class FakeClient:
+        def list_objects_v2(self, **kwargs):  # noqa: ANN001
+            continuation_tokens.append(kwargs.get("ContinuationToken"))
+            if len(continuation_tokens) == 1:
+                return {
+                    "Contents": [{"Key": "larger.txt", "Size": 20}],
+                    "IsTruncated": True,
+                    "NextContinuationToken": "next-page",
+                }
+            return {
+                "Contents": [{"Key": "smaller.txt", "Size": 10}],
+                "IsTruncated": False,
+            }
+
+    service = BrowserService()
+    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+
+    result = service.list_objects(
+        "bucket-a",
+        _account(),
+        recursive=True,
+        sort_by="size",
+        sort_dir="asc",
+    )
+
+    assert continuation_tokens == [None, "next-page"]
+    assert [item.key for item in result.objects] == ["smaller.txt", "larger.txt"]
+
+
 def test_sorted_object_snapshot_temp_store_is_closed_on_invalidation(monkeypatch):
     class FakeClient:
         def list_objects_v2(self, **_kwargs):  # noqa: ANN001
@@ -571,6 +604,38 @@ def test_sorted_object_snapshot_temp_store_is_closed_on_invalidation(monkeypatch
     service.invalidate_object_list_cache_for_account(account, "bucket-a")
 
     assert not snapshot_path.exists()
+
+
+def test_sorted_object_snapshot_temp_store_is_closed_when_schema_creation_fails(monkeypatch):
+    created_stores = []
+
+    class FailingConnection:
+        def execute(self, *_args, **_kwargs):
+            raise RuntimeError("schema creation failed")
+
+    class FailingStore:
+        def __init__(self, *, prefix):  # noqa: ARG002
+            self.connection = FailingConnection()
+            self.closed = False
+            created_stores.append(self)
+
+        def close(self):
+            self.closed = True
+
+    service = BrowserService()
+    monkeypatch.setattr(service, "_client", lambda _account: SimpleNamespace())
+    monkeypatch.setattr(sorted_listing, "TemporarySqliteStore", FailingStore)
+
+    with pytest.raises(RuntimeError, match="schema creation failed"):
+        service._scan_sorted_object_snapshot(
+            "bucket-a",
+            _account(),
+            sort_by="size",
+            sort_dir="asc",
+        )
+
+    assert len(created_stores) == 1
+    assert created_stores[0].closed is True
 
 
 def test_get_object_columns_reuses_backend_cache_and_invalidates_after_mutation(

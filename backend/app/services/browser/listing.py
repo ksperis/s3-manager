@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
 from time import monotonic
 from typing import Any, Callable, Optional
 
@@ -18,7 +17,6 @@ from app.models.browser import (
     ListBrowserObjectsResponse,
     ListObjectVersionsResponse,
 )
-from app.services.object_listing_temp_store import TemporarySqliteStore
 from app.services.s3_execution_context import S3ExecutionTarget
 
 from ._shared import (
@@ -26,10 +24,14 @@ from ._shared import (
     OBJECT_LIST_SCAN_TIME_BUDGET_MS,
     _OBJECT_LIST_CACHE,
     _OBJECT_SORT_SNAPSHOT_CACHE,
-    _SortedObjectSnapshot,
     _decode_sorted_cursor,
     _encode_sorted_cursor,
     _sorted_snapshot_signature,
+)
+from .sorted_listing import (
+    SortedObjectScanOptions,
+    SortedObjectSnapshot,
+    SortedObjectSnapshotBuilder,
 )
 
 logger = logging.getLogger(__name__)
@@ -319,7 +321,7 @@ class BrowserListingMixin:
         recursive: bool = False,
         sort_by: BrowserObjectSortBy,
         sort_dir: BrowserObjectSortDir,
-    ) -> _SortedObjectSnapshot:
+    ) -> SortedObjectSnapshot:
         normalized_prefix = prefix or ""
         query_value_raw = (query or "").strip()
         type_filter = (item_type or "all").lower()
@@ -344,142 +346,26 @@ class BrowserListingMixin:
         if cached is not None:
             return cached
 
-        client = self._client(account)
-        matches_query = self._build_query_matcher(
-            normalized_prefix=normalized_prefix,
-            query_value_raw=query_value_raw,
-            query_exact=query_exact,
-            query_case_sensitive=query_case_sensitive,
-        )
-        store = TemporarySqliteStore(prefix="bucketreef-browser-sort-")
-        store.connection.execute(
-            """
-            CREATE TABLE sorted_prefixes (
-                prefix TEXT PRIMARY KEY
-            )
-            """
-        )
-        store.connection.execute(
-            """
-            CREATE TABLE sorted_objects (
-                key TEXT PRIMARY KEY,
-                size INTEGER NOT NULL,
-                last_modified_ts REAL,
-                last_modified_iso TEXT,
-                storage_class TEXT,
-                etag TEXT
-            )
-            """
-        )
-        scan_token: Optional[str] = None
-
-        def datetime_values(value: object) -> tuple[Optional[float], Optional[str]]:
-            normalized = self._normalize_datetime_value(value if isinstance(value, datetime) else None)
-            if normalized is None:
-                return None, None
-            return normalized.timestamp(), normalized.isoformat()
-
-        def insert_object(obj: dict) -> None:
-            key = obj.get("Key")
-            if not isinstance(key, str) or not key:
-                return
-            size = int(obj.get("Size") or 0)
-            if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
-                return
-            is_folder_marker = key.endswith("/") and size == 0
-
-            if recursive and type_filter != "file":
-                if is_folder_marker and key != normalized_prefix:
-                    if matches_query(key):
-                        store.connection.execute("INSERT OR IGNORE INTO sorted_prefixes(prefix) VALUES (?)", (key,))
-                if normalized_prefix and key.startswith(normalized_prefix):
-                    relative = key[len(normalized_prefix):]
-                else:
-                    relative = key
-                segments = [segment for segment in relative.split("/") if segment]
-                if len(segments) > 1:
-                    running = normalized_prefix
-                    for segment in segments[:-1]:
-                        running = f"{running}{segment}/"
-                        if matches_query(running):
-                            store.connection.execute("INSERT OR IGNORE INTO sorted_prefixes(prefix) VALUES (?)", (running,))
-
-            if type_filter == "folder":
-                return
-            if recursive and is_folder_marker:
-                return
-            if not matches_query(key):
-                return
-            storage = obj.get("StorageClass")
-            if storage_filter and storage != storage_filter:
-                return
-            last_modified_ts, last_modified_iso = datetime_values(obj.get("LastModified"))
-            store.connection.execute(
-                """
-                INSERT OR REPLACE INTO sorted_objects(
-                    key, size, last_modified_ts, last_modified_iso, storage_class, etag
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    key,
-                    size,
-                    last_modified_ts,
-                    last_modified_iso,
-                    storage if isinstance(storage, str) else None,
-                    self._clean_etag(obj.get("ETag")),
-                ),
-            )
-
-        try:
-            while True:
-                kwargs = {
-                    "Bucket": bucket_name,
-                    "Prefix": normalized_prefix,
-                    "MaxKeys": 1000,
-                }
-                if not recursive:
-                    kwargs["Delimiter"] = "/"
-                if scan_token:
-                    kwargs["ContinuationToken"] = scan_token
-                try:
-                    resp = client.list_objects_v2(**kwargs)
-                except (ClientError, BotoCoreError) as exc:
-                    raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
-
-                for obj in resp.get("Contents", []):
-                    insert_object(obj)
-
-                if not recursive and type_filter != "file":
-                    for entry in resp.get("CommonPrefixes", []) or []:
-                        prefix_value = entry.get("Prefix")
-                        if not prefix_value or not matches_query(prefix_value):
-                            continue
-                        store.connection.execute("INSERT OR IGNORE INTO sorted_prefixes(prefix) VALUES (?)", (prefix_value,))
-
-                if not resp.get("IsTruncated"):
-                    break
-                scan_token = resp.get("NextContinuationToken")
-                if not scan_token:
-                    break
-
-            store.connection.execute("CREATE INDEX sorted_objects_size_idx ON sorted_objects(size, key)")
-            store.connection.execute("CREATE INDEX sorted_objects_modified_idx ON sorted_objects(last_modified_ts, key)")
-            store.connection.execute("CREATE INDEX sorted_objects_storage_idx ON sorted_objects(storage_class, key)")
-            store.connection.execute("CREATE INDEX sorted_objects_etag_idx ON sorted_objects(etag, key)")
-            store.connection.commit()
-            prefix_count_row = store.connection.execute("SELECT COUNT(*) AS count FROM sorted_prefixes").fetchone()
-            object_count_row = store.connection.execute("SELECT COUNT(*) AS count FROM sorted_objects").fetchone()
-            snapshot = _SortedObjectSnapshot(
-                store=store,
+        snapshot = SortedObjectSnapshotBuilder(
+            client=self._client(account),
+            options=SortedObjectScanOptions(
+                bucket_name=bucket_name,
+                prefix=normalized_prefix,
+                item_type=type_filter,
+                storage_class=storage_filter,
+                recursive=recursive,
                 sort_by=sort_by,
                 sort_dir=sort_dir,
-                prefix_count=int(prefix_count_row["count"] or 0) if prefix_count_row else 0,
-                object_count=int(object_count_row["count"] or 0) if object_count_row else 0,
-            )
-        except Exception:
-            store.close()
-            raise
+            ),
+            matches_query=self._build_query_matcher(
+                normalized_prefix=normalized_prefix,
+                query_value_raw=query_value_raw,
+                query_exact=query_exact,
+                query_case_sensitive=query_case_sensitive,
+            ),
+            clean_etag=self._clean_etag,
+            normalize_datetime=self._normalize_datetime_value,
+        ).build()
         _OBJECT_SORT_SNAPSHOT_CACHE.set(snapshot_cache_key, snapshot)
         return snapshot
 
@@ -540,7 +426,11 @@ class BrowserListingMixin:
                 query=(query or "").strip(),
                 query_exact=query_exact,
                 query_case_sensitive=query_case_sensitive,
-                item_type=(item_type or "all").lower() if (item_type or "").lower() in {"all", "file", "folder"} else "all",
+                item_type=(
+                    (item_type or "all").lower()
+                    if (item_type or "").lower() in {"all", "file", "folder"}
+                    else "all"
+                ),
                 storage_class=(storage_class or "").strip() or None,
                 recursive=recursive,
                 sort_by=sort_by,
