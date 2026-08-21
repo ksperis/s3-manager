@@ -94,6 +94,7 @@ import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
 import { useBrowserBucketCors } from "./useBrowserBucketCors";
+import { useBrowserContextMenu } from "./useBrowserContextMenu";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
@@ -354,7 +355,6 @@ import type {
   BulkMetadataDraft,
   ClipboardState,
   CompletedOperationItem,
-  ContextMenuState,
   CopyDetailItem,
   CopyDetailStatus,
   DeleteDetailItem,
@@ -395,9 +395,6 @@ type BrowserCopyDialogState = {
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 const PATH_SUGGESTIONS_DEBOUNCE_MS = 200;
 const PATH_SUGGESTIONS_API_LIMIT = 50;
-const CONTEXT_MENU_PADDING_PX = 8;
-const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
-const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
 const TREE_PREFIXES_PAGE_BUDGET = 50;
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
@@ -843,7 +840,12 @@ export default function BrowserPage({
   const [pathSuggestionsLoading, setPathSuggestionsLoading] = useState(false);
   const [pathSuggestionIndex, setPathSuggestionIndex] = useState(-1);
   const [pathHistory, setPathHistory] = useState<string[]>([]);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const {
+    closeContextMenu,
+    contextMenu,
+    contextMenuRef,
+    openContextMenu,
+  } = useBrowserContextMenu();
   const [showBulkAttributesModal, setShowBulkAttributesModal] = useState(false);
   const [showBulkRestoreModal, setShowBulkRestoreModal] = useState(false);
   const [bulkActionItems, setBulkActionItems] = useState<BrowserItem[]>([]);
@@ -932,7 +934,6 @@ export default function BrowserPage({
   const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
   const bucketPanelViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketPanelLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const pathSuggestionsDebounceRef = useRef<number | null>(null);
   const bucketSearchDebounceRef = useRef<number | null>(null);
@@ -1615,71 +1616,6 @@ export default function BrowserPage({
       useProxyTransfers,
     ],
   );
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
-  const clampContextMenuPosition = useCallback(
-    (
-      x: number,
-      y: number,
-      menuWidth = CONTEXT_MENU_FALLBACK_WIDTH_PX,
-      menuHeight = CONTEXT_MENU_FALLBACK_HEIGHT_PX,
-    ) => {
-      if (typeof window === "undefined") {
-        return { x, y };
-      }
-      const safeWidth =
-        Number.isFinite(menuWidth) && menuWidth > 0
-          ? menuWidth
-          : CONTEXT_MENU_FALLBACK_WIDTH_PX;
-      const safeHeight =
-        Number.isFinite(menuHeight) && menuHeight > 0
-          ? menuHeight
-          : CONTEXT_MENU_FALLBACK_HEIGHT_PX;
-      const maxX = Math.max(
-        CONTEXT_MENU_PADDING_PX,
-        window.innerWidth - safeWidth - CONTEXT_MENU_PADDING_PX,
-      );
-      const maxY = Math.max(
-        CONTEXT_MENU_PADDING_PX,
-        window.innerHeight - safeHeight - CONTEXT_MENU_PADDING_PX,
-      );
-      const clamp = (value: number, min: number, max: number) =>
-        Math.min(Math.max(value, min), max);
-      return {
-        x: clamp(x, CONTEXT_MENU_PADDING_PX, maxX),
-        y: clamp(y, CONTEXT_MENU_PADDING_PX, maxY),
-      };
-    },
-    [],
-  );
-  const repositionContextMenu = useCallback(() => {
-    setContextMenu((previous) => {
-      if (!previous) return previous;
-      const menuNode = contextMenuRef.current;
-      if (!menuNode) return previous;
-      const menuRect = menuNode.getBoundingClientRect();
-      const nextPosition = clampContextMenuPosition(
-        previous.x,
-        previous.y,
-        menuRect.width,
-        menuRect.height,
-      );
-      if (
-        Math.abs(nextPosition.x - previous.x) < 0.5 &&
-        Math.abs(nextPosition.y - previous.y) < 0.5
-      ) {
-        return previous;
-      }
-      return { ...previous, ...nextPosition };
-    });
-  }, [clampContextMenuPosition]);
-  const getContextMenuPosition = useCallback(
-    (event: ReactMouseEvent<HTMLElement>) => {
-      const { clientX, clientY } = event;
-      return clampContextMenuPosition(clientX, clientY);
-    },
-    [clampContextMenuPosition],
-  );
-
   useEffect(() => {
     if (!folderInputRef.current) return;
     folderInputRef.current.setAttribute("webkitdirectory", "");
@@ -1883,46 +1819,6 @@ export default function BrowserPage({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [showUploadQuickMenu]);
-
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handleMouseDown = (event: MouseEvent) => {
-      if (
-        contextMenuRef.current &&
-        !contextMenuRef.current.contains(event.target as Node)
-      ) {
-        setContextMenu(null);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setContextMenu(null);
-      }
-    };
-    const handleScroll = () => {
-      setContextMenu(null);
-    };
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("scroll", handleScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("scroll", handleScroll, true);
-    };
-  }, [contextMenu]);
-
-  useEffect(() => {
-    if (!contextMenu || typeof window === "undefined") return;
-    const frame = window.requestAnimationFrame(() => {
-      repositionContextMenu();
-    });
-    window.addEventListener("resize", repositionContextMenu);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", repositionContextMenu);
-    };
-  }, [contextMenu, repositionContextMenu]);
 
   useEffect(() => {
     if (operations.length === 0) return;
@@ -4803,14 +4699,14 @@ export default function BrowserPage({
       setSelectionAnchorId(item.id);
       setActiveRowId(item.id);
     }
-    const { x, y } = getContextMenuPosition(event);
-    setContextMenu({
-      kind: isSelected && selectedItems.length > 1 ? "selection" : "item",
-      x,
-      y,
-      item,
-      items: itemsForMenu,
-    });
+    openContextMenu(
+      {
+        kind: isSelected && selectedItems.length > 1 ? "selection" : "item",
+        item,
+        items: itemsForMenu,
+      },
+      { x: event.clientX, y: event.clientY },
+    );
   };
 
   const handleItemActionsButtonClick = (
@@ -4826,19 +4722,14 @@ export default function BrowserPage({
       setActiveRowId(item.id);
     }
     const rect = event.currentTarget.getBoundingClientRect();
-    const { x, y } = clampContextMenuPosition(
-      rect.right - CONTEXT_MENU_FALLBACK_WIDTH_PX,
-      rect.bottom + 6,
-      CONTEXT_MENU_FALLBACK_WIDTH_PX,
-      CONTEXT_MENU_FALLBACK_HEIGHT_PX,
+    openContextMenu(
+      { kind: "item", item, items: [item] },
+      {
+        x: rect.right,
+        y: rect.bottom + 6,
+        horizontalAlignment: "end",
+      },
     );
-    setContextMenu({
-      kind: "item",
-      x,
-      y,
-      item,
-      items: [item],
-    });
   };
 
   const handlePathContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
@@ -4848,16 +4739,20 @@ export default function BrowserPage({
     }
     event.preventDefault();
     event.stopPropagation();
-    const { x, y } = getContextMenuPosition(event);
-    setContextMenu({ kind: "path", x, y });
+    openContextMenu(
+      { kind: "path" },
+      { x: event.clientX, y: event.clientY },
+    );
   };
 
   const handleHeaderContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
     if (!isMainBrowserPath) return;
     event.preventDefault();
     event.stopPropagation();
-    const { x, y } = getContextMenuPosition(event);
-    setContextMenu({ kind: "headerConfig", x, y });
+    openContextMenu(
+      { kind: "headerConfig" },
+      { x: event.clientX, y: event.clientY },
+    );
   };
 
   const handleListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
