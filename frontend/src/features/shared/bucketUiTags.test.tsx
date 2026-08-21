@@ -1,55 +1,170 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildBucketUiTagsStorageKey, createBucketUiTagTarget, useBucketUiTags } from "./bucketUiTags";
+import {
+  fetchCephAdminBucketUiTags,
+  fetchStorageOpsBucketUiTags,
+  patchCephAdminBucketUiTags,
+  patchStorageOpsBucketUiTags,
+  type BucketUiTagCatalog,
+} from "../../api/bucketUiTags";
+import {
+  buildBucketUiTagsStorageKey,
+  buildPhysicalBucketUiTagIdentity,
+  createBucketUiTagTarget,
+  useBucketUiTags,
+} from "./bucketUiTags";
 
-const storedEntry = (name: string, tags: string[]) => ({ name, tenant: null, tags });
+vi.mock("../../api/bucketUiTags", () => ({
+  fetchCephAdminBucketUiTags: vi.fn(),
+  fetchStorageOpsBucketUiTags: vi.fn(),
+  patchCephAdminBucketUiTags: vi.fn(),
+  patchStorageOpsBucketUiTags: vi.fn(),
+}));
+
+const emptyCatalog = (): BucketUiTagCatalog => ({ definitions: [], assignments: [] });
+const duplicateLabelCatalog: BucketUiTagCatalog = {
+  definitions: [
+    { id: 11, label: "Production", color_key: "blue", scope: "standard", visibility: "private" },
+    { id: 12, label: "Production", color_key: "amber", scope: "standard", visibility: "shared" },
+  ],
+  assignments: [
+    { target: { endpoint_id: 7, tenant: "", name: "bucket-a" }, tag_ids: [11, 12] },
+  ],
+};
 
 describe("useBucketUiTags", () => {
-  beforeEach(() => localStorage.clear());
-
-  it("hydrates endpoint changes without copying tags between endpoints", async () => {
-    const endpointAKey = buildBucketUiTagsStorageKey("ceph-admin", 7);
-    const endpointBKey = buildBucketUiTagsStorageKey("ceph-admin", 8);
-    localStorage.setItem(endpointAKey, JSON.stringify({ "\u001fbucket-a": storedEntry("bucket-a", ["alpha"]) }));
-    localStorage.setItem(endpointBKey, JSON.stringify({ "\u001fbucket-b": storedEntry("bucket-b", ["beta"]) }));
-    const endpointABefore = localStorage.getItem(endpointAKey);
-    const endpointBBefore = localStorage.getItem(endpointBKey);
-
-    const { result, rerender } = renderHook(({ endpointId }) => useBucketUiTags("ceph-admin", endpointId), {
-      initialProps: { endpointId: 7 },
-    });
-    expect(Object.values(result.current.tags)).toEqual([["alpha"]]);
-
-    rerender({ endpointId: 8 });
-    await waitFor(() => expect(Object.values(result.current.tags)).toEqual([["beta"]]));
-    expect(localStorage.getItem(endpointAKey)).toBe(endpointABefore);
-    expect(localStorage.getItem(endpointBKey)).toBe(endpointBBefore);
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(emptyCatalog());
+    vi.mocked(fetchStorageOpsBucketUiTags).mockResolvedValue(emptyCatalog());
+    vi.mocked(patchCephAdminBucketUiTags).mockResolvedValue(emptyCatalog());
+    vi.mocked(patchStorageOpsBucketUiTags).mockResolvedValue(emptyCatalog());
   });
 
-  it("synchronizes storage events for the active endpoint only", async () => {
-    const activeKey = buildBucketUiTagsStorageKey("ceph-admin", 7);
-    const otherKey = buildBucketUiTagsStorageKey("ceph-admin", 8);
+  it("loads the backend catalog and leaves legacy v2 local data untouched", async () => {
+    const legacyKey = buildBucketUiTagsStorageKey("ceph-admin", 7);
+    const legacyValue = JSON.stringify({ old: { name: "old", tenant: null, tags: ["legacy"] } });
+    localStorage.setItem(legacyKey, legacyValue);
+    vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(duplicateLabelCatalog);
+
     const { result } = renderHook(() => useBucketUiTags("ceph-admin", 7));
 
-    localStorage.setItem(otherKey, JSON.stringify({ other: storedEntry("other", ["ignored"]) }));
-    act(() => window.dispatchEvent(new StorageEvent("storage", { key: otherKey })));
-    expect(result.current.tags).toEqual({});
-
-    localStorage.setItem(activeKey, JSON.stringify({ "\u001fbucket-a": storedEntry("bucket-a", ["shared"]) }));
-    act(() => window.dispatchEvent(new StorageEvent("storage", { key: activeKey })));
-    await waitFor(() => expect(Object.values(result.current.tags)).toEqual([["shared"]]));
+    await waitFor(() => expect(result.current.definitions).toHaveLength(2));
+    expect(Object.values(result.current.tags)[0].map((tag) => tag.id)).toEqual([11, 12]);
+    expect(result.current.definitions.map((tag) => [tag.label, tag.visibility])).toEqual([
+      ["Production", "private"],
+      ["Production", "shared"],
+    ]);
+    expect(localStorage.getItem(legacyKey)).toBe(legacyValue);
   });
 
-  it("applies changes to the target endpoint key", () => {
+  it("does not expose a previous Ceph Admin endpoint catalog while the next scope loads", async () => {
+    vi.mocked(fetchCephAdminBucketUiTags).mockImplementation((endpointId) => {
+      if (endpointId === 7) return Promise.resolve(duplicateLabelCatalog);
+      return new Promise<BucketUiTagCatalog>(() => undefined);
+    });
+    const { result, rerender, unmount } = renderHook(
+      ({ endpointId }) => useBucketUiTags("ceph-admin", endpointId),
+      { initialProps: { endpointId: 7 } }
+    );
+    await waitFor(() => expect(result.current.definitions).toHaveLength(2));
+
+    rerender({ endpointId: 8 });
+
+    expect(result.current.definitions).toEqual([]);
+    expect(result.current.entries).toEqual({});
+    expect(result.current.ready).toBe(false);
+    unmount();
+  });
+
+  it("splits mutations above 200 targets and keeps Storage Ops tags private", async () => {
     const { result } = renderHook(() => useBucketUiTags("storage-ops", null));
-    const target = createBucketUiTagTarget("storage-ops", 9, "physical-9", "bucket-a", null);
-    expect(target).not.toBeNull();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const targets = Array.from({ length: 201 }, (_, index) =>
+      createBucketUiTagTarget(
+        "storage-ops",
+        9,
+        buildPhysicalBucketUiTagIdentity(9, null, `bucket-${index}`),
+        `bucket-${index}`,
+        null,
+        `context-${index}`
+      )!
+    );
 
-    act(() => result.current.applyTags([target!], ["ops"], []));
+    await act(async () => {
+      await result.current.applyTags(
+        targets,
+        [{ label: "Ops", color_key: "teal", visibility: "shared" }],
+        []
+      );
+    });
 
-    expect(JSON.parse(localStorage.getItem(buildBucketUiTagsStorageKey("storage-ops", 9)) ?? "{}")).toEqual({
-      "physical-9": storedEntry("bucket-a", ["ops"]),
+    expect(patchStorageOpsBucketUiTags).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(patchStorageOpsBucketUiTags).mock.calls[0][0].targets).toHaveLength(200);
+    expect(vi.mocked(patchStorageOpsBucketUiTags).mock.calls[1][0].targets).toHaveLength(1);
+    expect(vi.mocked(patchStorageOpsBucketUiTags).mock.calls[0][0].create_tags).toEqual([
+      { label: "Ops", color_key: "teal" },
+    ]);
+  });
+
+  it("keeps the successful catalog when a later mutation batch fails", async () => {
+    const partialCatalog: BucketUiTagCatalog = {
+      definitions: [
+        { id: 31, label: "Partial", color_key: "blue", scope: "standard", visibility: "private" },
+      ],
+      assignments: [
+        { target: { endpoint_id: 7, tenant: "", name: "bucket-0" }, tag_ids: [31] },
+      ],
+    };
+    vi.mocked(patchCephAdminBucketUiTags)
+      .mockResolvedValueOnce(partialCatalog)
+      .mockRejectedValueOnce(new Error("second batch failed"));
+    const onMutated = vi.fn();
+    const { result } = renderHook(() => useBucketUiTags("ceph-admin", 7, onMutated));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const targets = Array.from({ length: 201 }, (_, index) =>
+      createBucketUiTagTarget("ceph-admin", 7, `bucket-${index}`, `bucket-${index}`)!
+    );
+
+    await act(async () => {
+      await expect(
+        result.current.applyTags(targets, [{ label: "Partial", color_key: "blue" }], [])
+      ).rejects.toThrow("second batch failed");
+    });
+
+    expect(result.current.definitions.map((tag) => tag.id)).toEqual([31]);
+    expect(onMutated).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBe("second batch failed");
+  });
+
+  it("revalidates an orphan through the physical target before removing all tags", async () => {
+    const catalog: BucketUiTagCatalog = {
+      definitions: [
+        { id: 21, label: "Orphan", color_key: "rose", scope: "standard", visibility: "private" },
+      ],
+      assignments: [
+        { target: { endpoint_id: 9, tenant: "tenant-a", name: "missing" }, tag_ids: [21] },
+      ],
+    };
+    vi.mocked(fetchStorageOpsBucketUiTags).mockResolvedValue(catalog);
+    vi.mocked(patchStorageOpsBucketUiTags).mockResolvedValue(emptyCatalog());
+    const { result } = renderHook(() => useBucketUiTags("storage-ops", null));
+    await waitFor(() => expect(Object.keys(result.current.entries)).toHaveLength(1));
+    const targetKey = Object.keys(result.current.entries)[0];
+
+    await act(async () => {
+      await result.current.removeTargets([targetKey]);
+    });
+
+    expect(patchStorageOpsBucketUiTags).toHaveBeenCalledWith({
+      targets: [{ endpoint_id: 9, tenant: "tenant-a", name: "missing" }],
+      add_tag_ids: [],
+      create_tags: [],
+      remove_tag_ids: [],
+      remove_all: true,
+      require_absent: true,
     });
   });
 });

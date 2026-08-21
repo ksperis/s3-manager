@@ -31,7 +31,7 @@ SIGNAL_FIELDS = {
     "delegated_portal_request_reject_audit": "service.reject_request(",
     "delegated_portal_request_message_audit": "service.add_admin_message(",
     "delegated_private_access_audit": "ManagedPrivateAccessService(db).",
-    "delegated_ceph_admin_execute_audit": "return _execute(",
+    "delegated_ceph_admin_execute_audit": "_execute(",
     "delegated_portal_deleted_restore_audit": "stream_portal_deleted_prefix_restore(",
     "delegated_portal_version_cleanup_audit": "stream_portal_storage_space_version_cleanup(",
 }
@@ -105,6 +105,7 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/manager/usage_stats.py", "stream_manager_usage_stats_aggregate", "/manager/usage-stats/stream"): "read-only stream",
     ("POST", "app/routers/storage_ops/buckets.py", "refresh_storage_ops_bucket_listing_cache", "/cache/refresh"): "cache refresh",
     ("POST", "app/routers/storage_ops/buckets.py", "query_storage_ops_buckets", "/query"): "read-only query",
+    ("PATCH", "app/routers/storage_ops/bucket_ui_tags.py", "patch_bucket_ui_tags", ""): "user-private UI metadata excluded from the global audit log",
     ("DELETE", "app/routers/portal_objects.py", "portal_delete_storage_space_object", "/storage-spaces/{space_id}/objects"): "data-plane operation covered by provider access logs",
     ("POST", "app/routers/portal_objects.py", "portal_restore_storage_space_object", "/storage-spaces/{space_id}/objects/restore"): "data-plane operation covered by provider access logs",
     ("POST", "app/routers/storage_ops/usage_stats.py", "stream_storage_ops_bucket_usage_stats", "/stream"): "read-only stream",

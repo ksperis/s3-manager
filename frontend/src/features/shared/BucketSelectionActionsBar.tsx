@@ -20,6 +20,7 @@ import {
 import ActionProgressCard from "./ActionProgressCard";
 import type { ActionProgressState } from "./actionProgress";
 import { bucketAction, BUCKET_ACTION_GROUP_LABELS } from "./bucketActionCatalog";
+import type { BucketUiTagDefinition, BucketUiTagVisibility } from "../../api/bucketUiTags";
 
 type SelectionTagAction = "add" | "remove";
 type SelectionExportFormat = "text" | "csv" | "json";
@@ -28,13 +29,17 @@ type BucketSelectionActionsBarProps = {
   selectedCount: number;
   hiddenSelectedCount: number;
   clearSelection: () => void;
-  availableUiTags: string[];
-  selectedUiTagSuggestions: string[];
+  availableUiTags: BucketUiTagDefinition[];
+  selectedUiTagSuggestions: BucketUiTagDefinition[];
   selectionTagAddInput: string;
   setSelectionTagAddInput: (value: string) => void;
   parsedSelectionTagAddInput: string[];
   selectionTagActionLoading: SelectionTagAction | null;
-  applyUiTagToSelection: (tag: string, action: SelectionTagAction) => Promise<void> | void;
+  applyUiTagToSelection: (
+    tag: BucketUiTagDefinition | string,
+    action: SelectionTagAction,
+    visibility?: BucketUiTagVisibility
+  ) => Promise<void> | void;
   selectionExportLoading: SelectionExportFormat | null;
   exportSelectedBuckets: (format: SelectionExportFormat) => Promise<void> | void;
   selectionActionProgress?: ActionProgressState | null;
@@ -78,6 +83,7 @@ export default function BucketSelectionActionsBar({
 }: BucketSelectionActionsBarProps) {
   const [dialog, setDialog] = useState<"tags" | "export" | null>(null);
   const [tagMode, setTagMode] = useState<SelectionTagAction>("add");
+  const [newTagVisibility, setNewTagVisibility] = useState<BucketUiTagVisibility>("private");
 
   if (selectedCount <= 0) return null;
 
@@ -190,13 +196,20 @@ export default function BucketSelectionActionsBar({
               ) : (
                 tagOptions.map((tag) => (
                   <button
-                    key={`${tagMode}:${tag}`}
+                    key={`${tagMode}:${tag.id}`}
                     type="button"
                     className={dialogActionClass}
                     disabled={selectionTagActionLoading !== null}
                     onClick={() => runAndClose(() => void applyUiTagToSelection(tag, tagMode))}
                   >
-                    <span>{tag}</span>
+                    <span>
+                      {tag.label}
+                      {!isStorageOps && (
+                        <span className="ml-2 font-normal opacity-70">
+                          {tag.visibility === "shared" ? "Shared" : "Private"}
+                        </span>
+                      )}
+                    </span>
                     <span aria-hidden="true">{tagMode === "add" ? "+" : "−"}</span>
                   </button>
                 ))
@@ -216,6 +229,17 @@ export default function BucketSelectionActionsBar({
                     placeholder="new-tag"
                     className={cx(uiInputClass, "min-w-0 flex-1 px-2 py-1.5 ui-caption")}
                   />
+                  {!isStorageOps && (
+                    <select
+                      aria-label="New UI tag visibility"
+                      value={newTagVisibility}
+                      onChange={(event) => setNewTagVisibility(event.target.value as BucketUiTagVisibility)}
+                      className={cx(uiInputClass, "w-auto px-2 py-1.5 ui-caption")}
+                    >
+                      <option value="private">Private</option>
+                      <option value="shared">Shared</option>
+                    </select>
+                  )}
                   <UiButton
                     type="button"
                     size="sm"
@@ -223,7 +247,7 @@ export default function BucketSelectionActionsBar({
                     onClick={() => {
                       const customTag = selectionTagAddInput;
                       setSelectionTagAddInput("");
-                      runAndClose(() => void applyUiTagToSelection(customTag, "add"));
+                      runAndClose(() => void applyUiTagToSelection(customTag, "add", newTagVisibility));
                     }}
                   >
                     Add

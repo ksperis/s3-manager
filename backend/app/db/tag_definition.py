@@ -46,6 +46,51 @@ class TagDefinition(Base):
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     owner = relationship("User")
+    bucket_ui_assignments = relationship(
+        "BucketUiTagAssignment",
+        back_populates="tag_definition",
+        cascade="all, delete-orphan",
+    )
+
+
+class BucketUiTagAssignment(Base):
+    __tablename__ = "bucket_ui_tag_assignments"
+    __table_args__ = (
+        UniqueConstraint(
+            "storage_endpoint_id",
+            "tenant_key",
+            "bucket_name",
+            "tag_definition_id",
+            name="uq_bucket_ui_tag_assignment",
+        ),
+        Index(
+            "ix_bucket_ui_tag_assignments_bucket",
+            "storage_endpoint_id",
+            "tenant_key",
+            "bucket_name",
+        ),
+        Index("ix_bucket_ui_tag_assignments_definition", "tag_definition_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    storage_endpoint_id = Column(
+        Integer,
+        ForeignKey("storage_endpoints.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_key = Column(String, nullable=False, default="", server_default="")
+    bucket_name = Column(String, nullable=False)
+    tag_definition_id = Column(
+        Integer,
+        ForeignKey("tag_definitions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    position = Column(Integer, nullable=False, default=0)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
+
+    endpoint = relationship("StorageEndpoint", back_populates="bucket_ui_tag_assignments")
+    tag_definition = relationship("TagDefinition", back_populates="bucket_ui_assignments")
 
 
 class StorageEndpointTag(Base):

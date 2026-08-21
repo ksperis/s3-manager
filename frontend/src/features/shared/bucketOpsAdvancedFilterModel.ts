@@ -65,7 +65,7 @@ export type AdvancedTextOrNumericField = "tenant" | "owner" | "ownerName" | "s3T
 export type ActiveFilterRemoveAction =
   | { type: "quick" }
   | { type: "tag_mode" }
-  | { type: "tag"; tag: string }
+  | { type: "tag"; tag: string | number }
   | { type: "advanced_context_ids" }
   | { type: "advanced_endpoint_names" }
   | { type: "advanced_text"; field: "tenant" | "owner" | "ownerName" | "s3Tags" }

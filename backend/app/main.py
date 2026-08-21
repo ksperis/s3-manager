@@ -45,6 +45,7 @@ from app.routers.ceph_admin import account_profiles as ceph_admin_account_profil
 from app.routers.ceph_admin import users as ceph_admin_users
 from app.routers.ceph_admin import user_profiles as ceph_admin_user_profiles
 from app.routers.ceph_admin import buckets as ceph_admin_buckets
+from app.routers.ceph_admin import bucket_ui_tags as ceph_admin_bucket_ui_tags
 from app.routers.ceph_admin import integrity as ceph_admin_integrity
 from app.routers.ceph_admin import purge as ceph_admin_purge
 from app.routers.ceph_admin import usage_stats as ceph_admin_usage_stats
@@ -52,6 +53,7 @@ from app.routers.ceph_admin import metrics as ceph_admin_metrics
 from app.routers.ceph_admin import admin_ops as ceph_admin_admin_ops
 from app.routers.storage_ops import summary as storage_ops_summary
 from app.routers.storage_ops import buckets as storage_ops_buckets
+from app.routers.storage_ops import bucket_ui_tags as storage_ops_bucket_ui_tags
 from app.routers.storage_ops import integrity as storage_ops_integrity
 from app.routers.storage_ops import purge as storage_ops_purge
 from app.routers.storage_ops import usage_stats as storage_ops_usage_stats
@@ -224,6 +226,7 @@ app.include_router(
     dependencies=[Depends(require_ceph_admin_enabled)],
 )
 app.include_router(ceph_admin_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_bucket_ui_tags.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_integrity.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_purge.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_usage_stats.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
@@ -231,6 +234,7 @@ app.include_router(ceph_admin_metrics.router, prefix=settings.api_v1_prefix, dep
 app.include_router(ceph_admin_admin_ops.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(storage_ops_summary.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(storage_ops_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
+app.include_router(storage_ops_bucket_ui_tags.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(storage_ops_integrity.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(storage_ops_purge.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(storage_ops_usage_stats.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])

@@ -6,7 +6,9 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
 from app.models.ceph_admin import (
     CephAdminAdminOpsResult,
     CephAdminBucketDeleteRequest,
@@ -23,6 +25,7 @@ from app.routers.ceph_admin.admin_ops_common import (
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.services.rgw_admin import RGWAdminError
+from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
 from app.utils.normalize import normalize_optional_string
 
 router = APIRouter()
@@ -89,6 +92,7 @@ def delete_bucket(
     payload: CephAdminBucketDeleteRequest,
     tenant: Optional[str] = Query(default=None),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
+    db: Session = Depends(get_db),
 ) -> JSONResponse:
     operation = "delete_bucket"
     action = "ceph_admin.bucket.delete"
@@ -110,7 +114,7 @@ def delete_bucket(
         "purge_objects": payload.purge_objects,
         "bypass_gc": payload.bypass_gc,
     }
-    return _execute(
+    response = _execute(
         ctx,
         operation=operation,
         action=action,
@@ -125,6 +129,13 @@ def delete_bucket(
         metadata={"options": options},
         invalidate=invalidate_all_admin_ops_caches,
     )
+    if response.status_code == status.HTTP_200_OK:
+        tag_service = BucketUiTagsService(db)
+        tag_service.remove_all_namespaces_for_bucket(
+            PhysicalBucketTarget.create(ctx.endpoint.id, tenant, bucket)
+        )
+        tag_service.commit()
+    return response
 
 
 @router.post("/buckets/{bucket}/unlink", response_model=CephAdminAdminOpsResult)

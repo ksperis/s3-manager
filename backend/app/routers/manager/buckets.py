@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.db import User
 from app.models.access_context import ManagerActor
 from app.models.bucket import Bucket, BucketCreate, BucketQuotaUpdate
@@ -50,6 +50,8 @@ from app.services.bucket_listing_cache import (
     invalidate_bucket_listing_cache_for_account,
 )
 from app.services.bucket_listing_shared import parse_includes
+from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
+from app.services.storage_ops_bucket_listing_service import resolve_storage_ops_context_tenant
 from app.services.manager_bucket_compare_service import (
     InvalidManagerBucketComparisonError,
     compare_manager_buckets,
@@ -263,6 +265,17 @@ def delete_bucket(
         entity_id=bucket_name,
         account=account,
     )
+    endpoint_id = int(getattr(account, "storage_endpoint_id", 0) or 0)
+    if endpoint_id > 0:
+        tag_service = BucketUiTagsService(audit_service.db)
+        tag_service.remove_all_namespaces_for_bucket(
+            PhysicalBucketTarget.create(
+                endpoint_id,
+                resolve_storage_ops_context_tenant(account),
+                bucket_name,
+            )
+        )
+        tag_service.commit()
     return response
 
 
@@ -296,10 +309,27 @@ def stream_delete_bucket_with_purge(
         "include_versions": True,
         "confirmation": "matched",
     }
+    deleted_bucket_target = (
+        PhysicalBucketTarget.create(
+            int(getattr(account, "storage_endpoint_id", 0) or 0),
+            resolve_storage_ops_context_tenant(account),
+            bucket_name,
+        )
+        if int(getattr(account, "storage_endpoint_id", 0) or 0) > 0
+        else None
+    )
 
     def after_result(result: BucketPurgeResult) -> None:
         if result.bucket_deleted:
             _invalidate_bucket_listing_for_account(account)
+            if deleted_bucket_target is not None:
+                cleanup_db = SessionLocal()
+                try:
+                    tag_service = BucketUiTagsService(cleanup_db)
+                    tag_service.remove_all_namespaces_for_bucket(deleted_bucket_target)
+                    tag_service.commit()
+                finally:
+                    cleanup_db.close()
 
     def result_succeeded(result: BucketPurgeResult) -> bool:
         return result.status == "completed" and result.bucket_deleted

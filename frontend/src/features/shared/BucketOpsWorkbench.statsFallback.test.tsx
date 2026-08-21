@@ -7,6 +7,10 @@ const mocks = vi.hoisted(() => ({
   streamCephAdminBuckets: vi.fn(),
   refreshCephAdminBucketListingCache: vi.fn(),
   refreshStorageOpsBucketListingCache: vi.fn(),
+  fetchCephAdminBucketUiTags: vi.fn(),
+  fetchStorageOpsBucketUiTags: vi.fn(),
+  patchCephAdminBucketUiTags: vi.fn(),
+  patchStorageOpsBucketUiTags: vi.fn(),
   noopAsync: vi.fn(async () => ({})),
   navigate: vi.fn(),
 }));
@@ -80,6 +84,13 @@ vi.mock("../../api/storageOps", () => ({
   updateStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
 }));
 
+vi.mock("../../api/bucketUiTags", () => ({
+  fetchCephAdminBucketUiTags: mocks.fetchCephAdminBucketUiTags,
+  fetchStorageOpsBucketUiTags: mocks.fetchStorageOpsBucketUiTags,
+  patchCephAdminBucketUiTags: mocks.patchCephAdminBucketUiTags,
+  patchStorageOpsBucketUiTags: mocks.patchStorageOpsBucketUiTags,
+}));
+
 vi.mock("../cephAdmin/CephAdminEndpointContext", () => ({
   useCephAdminEndpoint: () => ({
     selectedEndpointId: 7,
@@ -148,6 +159,14 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
     mocks.refreshStorageOpsBucketListingCache.mockReset();
     mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
+    mocks.fetchCephAdminBucketUiTags.mockReset();
+    mocks.fetchStorageOpsBucketUiTags.mockReset();
+    mocks.patchCephAdminBucketUiTags.mockReset();
+    mocks.patchStorageOpsBucketUiTags.mockReset();
+    mocks.fetchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.patchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.patchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
     mocks.noopAsync.mockClear();
     mocks.navigate.mockReset();
     window.localStorage.clear();

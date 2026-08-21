@@ -30,6 +30,7 @@ from app.services.bucket_listing_shared import (
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService
 from app.services.buckets_service import BucketsService
 from app.services.bucket_configuration_service import BucketConfigurationService
+from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.listing_progress import (
     ListingProgressEmitter,
@@ -39,6 +40,7 @@ from app.services.listing_progress import (
 )
 from app.services.s3_execution_context import S3ExecutionContext
 from app.utils.normalize import normalize_text
+from app.utils.tagging import TAG_DOMAIN_BUCKET_UI_STORAGE_OPS
 
 logger = logging.getLogger(__name__)
 
@@ -434,6 +436,11 @@ def _resolve_context_owner(account: S3ExecutionContext) -> _StorageOpsContextOwn
     return _StorageOpsContextOwner(owner=resolution.rgw_account_id)
 
 
+def resolve_storage_ops_context_tenant(account: S3ExecutionContext) -> str:
+    """Return the normalized tenant used in the physical bucket identity."""
+    return str(_resolve_context_owner(account).tenant or "").strip()
+
+
 def _apply_page_owner_enrichment(
     *,
     page_items: list[StorageOpsBucketSummary],
@@ -678,6 +685,10 @@ class _StorageOpsBucketListingPipeline:
         sort_dir: str,
         include: list[str],
         with_stats: bool,
+        ui_tag_ids: list[int] | None,
+        ui_tag_match: str,
+        bucket_ui_tags_service: BucketUiTagsService | None,
+        actor_user_id: int | None,
         progress_callback: Callable[[ListingProgressSnapshot], None] | None,
         cancel_check: Callable[[], None] | None,
     ) -> None:
@@ -692,6 +703,10 @@ class _StorageOpsBucketListingPipeline:
         self.sort_dir = sort_dir
         self.include = include
         self.with_stats = with_stats
+        self.ui_tag_ids = tuple(dict.fromkeys(int(item) for item in (ui_tag_ids or []) if int(item) > 0))
+        self.ui_tag_match = "all" if ui_tag_match == "all" else "any"
+        self.bucket_ui_tags_service = bucket_ui_tags_service
+        self.actor_user_id = actor_user_id
         self.progress = ListingProgressEmitter(progress_callback)
         self.cancel_check = cancel_check
 
@@ -714,6 +729,7 @@ class _StorageOpsBucketListingPipeline:
         )
         contexts = self._resolve_contexts(query)
         results = self._list_contexts(contexts, query)
+        results = self._apply_ui_tags(results)
         page_items, total, has_next = self._paginate(results)
         page_items = self._enrich_page(page_items, contexts, query)
         invoke_cancel_check(self.cancel_check)
@@ -732,6 +748,34 @@ class _StorageOpsBucketListingPipeline:
             page_size=self.page_size,
             has_next=has_next,
         )
+
+    def _apply_ui_tags(
+        self,
+        results: list[StorageOpsBucketSummary],
+    ) -> list[StorageOpsBucketSummary]:
+        if self.bucket_ui_tags_service is None or self.actor_user_id is None:
+            return results
+        targets = [
+            PhysicalBucketTarget.create(bucket.endpoint_id or 0, bucket.tenant, bucket.bucket_name or bucket.name)
+            for bucket in results
+        ]
+        tags_by_target = self.bucket_ui_tags_service.get_tags_for_targets(
+            domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
+            actor_user_id=self.actor_user_id,
+            targets=targets,
+        )
+        requested = set(self.ui_tag_ids)
+        matched: list[StorageOpsBucketSummary] = []
+        for bucket, target in zip(results, targets):
+            bucket.ui_tags = list(tags_by_target.get(target, []))
+            if not requested:
+                matched.append(bucket)
+                continue
+            assigned = {tag.id for tag in bucket.ui_tags}
+            include = requested.issubset(assigned) if self.ui_tag_match == "all" else bool(requested & assigned)
+            if include:
+                matched.append(bucket)
+        return matched
 
     def _resolve_contexts(
         self,
@@ -935,6 +979,10 @@ def compute_storage_ops_bucket_listing(
     sort_dir: str,
     include: list[str],
     with_stats: bool,
+    ui_tag_ids: list[int] | None = None,
+    ui_tag_match: str = "any",
+    bucket_ui_tags_service: BucketUiTagsService | None = None,
+    actor_user_id: int | None = None,
     progress_callback: Callable[[ListingProgressSnapshot], None] | None = None,
     cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedStorageOpsBucketsResponse:
@@ -950,6 +998,10 @@ def compute_storage_ops_bucket_listing(
         sort_dir=sort_dir,
         include=include,
         with_stats=with_stats,
+        ui_tag_ids=ui_tag_ids,
+        ui_tag_match=ui_tag_match,
+        bucket_ui_tags_service=bucket_ui_tags_service,
+        actor_user_id=actor_user_id,
         progress_callback=progress_callback,
         cancel_check=cancel_check,
     ).run()

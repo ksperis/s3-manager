@@ -7,7 +7,7 @@ from typing import Optional, Sequence
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
-from app.db import S3Account, S3AccountTag, S3Connection, S3ConnectionTag, S3User, S3UserTag, StorageEndpoint, StorageEndpointTag, TagDefinition
+from app.db import BucketUiTagAssignment, S3Account, S3AccountTag, S3Connection, S3ConnectionTag, S3User, S3UserTag, StorageEndpoint, StorageEndpointTag, TagDefinition
 from app.models.tagging import TagDefinitionSummary
 from app.utils.tagging import (
     DEFAULT_TAG_COLOR_KEY,
@@ -123,6 +123,7 @@ class TagsService:
                 ~exists().where(S3AccountTag.tag_definition_id == TagDefinition.id),
                 ~exists().where(S3UserTag.tag_definition_id == TagDefinition.id),
                 ~exists().where(S3ConnectionTag.tag_definition_id == TagDefinition.id),
+                ~exists().where(BucketUiTagAssignment.tag_definition_id == TagDefinition.id),
             )
             .all()
         )
@@ -154,7 +155,7 @@ class TagsService:
     ) -> list[TagDefinitionSummary]:
         normalized = normalize_tag_items_input(tags, allow_none=False) or []
         definitions = [
-            self._resolve_definition(
+            self.resolve_definition(
                 domain_kind=domain_kind,
                 owner_user_id=owner_user_id,
                 label=item["label"],
@@ -183,7 +184,7 @@ class TagsService:
         self.cleanup_orphan_definitions()
         return [self._to_summary(definition) for definition in definitions]
 
-    def _resolve_definition(
+    def resolve_definition(
         self,
         *,
         domain_kind: str,
@@ -191,6 +192,7 @@ class TagsService:
         label: str,
         color_key: str,
         scope: str,
+        update_existing: bool = True,
     ) -> TagDefinition:
         label_key = build_tag_label_key(label)
         query = (
@@ -217,11 +219,12 @@ class TagsService:
             self.db.add(definition)
             self.db.flush()
             return definition
-        definition.label = label
-        definition.color_key = color_key
-        definition.scope = scope
-        self.db.add(definition)
-        self.db.flush()
+        if update_existing:
+            definition.label = label
+            definition.color_key = color_key
+            definition.scope = scope
+            self.db.add(definition)
+            self.db.flush()
         return definition
 
     @staticmethod

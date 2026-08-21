@@ -41,6 +41,8 @@ TAG_SCOPES: tuple[str, ...] = (
 TAG_DOMAIN_ENDPOINT = "endpoint"
 TAG_DOMAIN_ADMIN_MANAGED = "admin_managed"
 TAG_DOMAIN_PRIVATE_CONNECTION_USER = "private_connection_user"
+TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN = "bucket_ui_ceph_admin"
+TAG_DOMAIN_BUCKET_UI_STORAGE_OPS = "bucket_ui_storage_ops"
 
 
 def normalize_tag_label(value: object) -> str:

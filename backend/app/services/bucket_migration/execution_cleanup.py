@@ -9,8 +9,10 @@ from typing import Optional
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.services.app_settings_service import load_app_settings
+from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
 from app.services.s3_deletion import purge_bucket_contents
 from app.services.s3_execution_context import S3ExecutionTarget
+from app.services.storage_ops_bucket_listing_service import resolve_storage_ops_context_tenant
 from ._shared import _ResolvedContext
 
 logger = logging.getLogger(__name__)
@@ -22,6 +24,15 @@ class BucketMigrationCleanupMixin:
         for attempt in range(1, 4):
             try:
                 self._buckets.delete_bucket(source_bucket, source_account, force=True)
+                endpoint_id = int(source_account.storage_endpoint_id or 0)
+                if endpoint_id > 0:
+                    BucketUiTagsService(self.db).remove_all_namespaces_for_bucket(
+                        PhysicalBucketTarget.create(
+                            endpoint_id,
+                            resolve_storage_ops_context_tenant(source_account),
+                            source_bucket,
+                        )
+                    )
                 return
             except RuntimeError as exc:
                 last_exc = exc

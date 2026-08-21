@@ -55,6 +55,7 @@ from app.services.user_avatar_service import UserAvatarService
 from app.services.user_output_service import UserOutputService
 from app.utils.account_roles import require_account_role
 from app.utils.time import utcnow
+from app.utils.tagging import TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN, TAG_DOMAIN_BUCKET_UI_STORAGE_OPS
 
 logger = logging.getLogger(__name__)
 
@@ -451,6 +452,18 @@ class UsersService:
             self.db.query(BucketMigration)
             .filter(BucketMigration.created_by_user_id == user.id)
             .update({BucketMigration.created_by_user_id: None}, synchronize_session=False)
+        )
+        # Private bucket UI tags must disappear with their owner. Turning them
+        # into global definitions would silently make private metadata shared.
+        (
+            self.db.query(TagDefinition)
+            .filter(
+                TagDefinition.owner_user_id == user.id,
+                TagDefinition.domain_kind.in_(
+                    [TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN, TAG_DOMAIN_BUCKET_UI_STORAGE_OPS]
+                ),
+            )
+            .delete(synchronize_session=False)
         )
         (
             self.db.query(TagDefinition)

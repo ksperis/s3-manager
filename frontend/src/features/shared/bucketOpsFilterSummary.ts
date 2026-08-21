@@ -37,7 +37,8 @@ type AdvancedFilterSummaryContext = {
 type ActiveFilterSummaryOptions = AdvancedFilterSummaryContext & {
   quickFilterValue: string;
   quickFilterMode: TextMatchMode;
-  tagFilters: string[];
+  tagFilters: Array<string | number>;
+  tagLabelById?: ReadonlyMap<number, string>;
   tagFilterMode: "any" | "all";
   advanced: AdvancedFilterState | null;
 };
@@ -427,7 +428,9 @@ export const buildBucketOpsActiveFilterSummaryItems = ({
     }
   }
 
-  const normalizedTags = normalizeUiTagValues(tagFilters);
+  const normalizedTags = tagFilters.every((tag): tag is number => typeof tag === "number")
+    ? Array.from(new Set(tagFilters))
+    : normalizeUiTagValues(tagFilters.filter((tag): tag is string => typeof tag === "string"));
   if (normalizedTags.length > 1) {
     items.push({
       id: "tag-mode",
@@ -436,9 +439,10 @@ export const buildBucketOpsActiveFilterSummaryItems = ({
     });
   }
   normalizedTags.forEach((tag) => {
+    const label = typeof tag === "number" ? context.tagLabelById?.get(tag) ?? `#${tag}` : tag;
     items.push({
-      id: `tag-${tag.toLowerCase()}`,
-      label: `UI tag: ${tag}`,
+      id: `tag-${typeof tag === "number" ? tag : tag.toLowerCase()}`,
+      label: `UI tag: ${label}`,
       remove: { type: "tag", tag },
     });
   });

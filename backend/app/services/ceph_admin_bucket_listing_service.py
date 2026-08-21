@@ -34,6 +34,8 @@ from app.services.bucket_listing_enrichment import (
     request_requires_tenant_metadata,
     resolve_owner_names_for_buckets,
 )
+from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
+from app.utils.tagging import TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN
 from app.services.bucket_feature_param_matching import (
     bucket_identity_key,
     load_bucket_feature_param_snapshots,
@@ -138,6 +140,8 @@ class _CephAdminBucketListingRequest:
     needs_tenant_metadata: bool
     requested_features: frozenset[str]
     requested_detail_fields: frozenset[str]
+    ui_tag_ids: tuple[int, ...]
+    ui_tag_match: str
 
     @classmethod
     def parse(
@@ -149,6 +153,9 @@ class _CephAdminBucketListingRequest:
         sort_dir: str,
         include: list[str],
         with_stats: bool,
+        ui_tag_ids: list[int] | None = None,
+        ui_tag_match: str = "any",
+        with_ui_tags: bool = False,
     ) -> _CephAdminBucketListingRequest:
         if raw_advanced_filter:
             simple_filter = (
@@ -187,14 +194,16 @@ class _CephAdminBucketListingRequest:
                 advanced_filter,
                 sort_by,
                 simple_filter if not advanced_filter else None,
-            ),
+            ) or with_ui_tags,
             needs_tenant_metadata=request_requires_tenant_metadata(
                 advanced_filter,
                 sort_by,
                 simple_filter if not advanced_filter else None,
-            ),
+            ) or with_ui_tags,
             requested_features=frozenset(include_set & _REQUESTED_BUCKET_FEATURES),
             requested_detail_fields=frozenset(include_set & COLUMN_DETAIL_KEYS),
+            ui_tag_ids=tuple(dict.fromkeys(int(item) for item in (ui_tag_ids or []) if int(item) > 0)),
+            ui_tag_match="all" if ui_tag_match == "all" else "any",
         )
 
     def cache_key(self, ctx: CephAdminBucketListingContext) -> CephAdminBucketListCacheKey:
@@ -747,6 +756,8 @@ class _CephAdminBucketPageBuilder:
         progress: ListingProgressEmitter,
         include_progress_hooks: bool,
         cancel_check: Callable[[], None] | None,
+        bucket_ui_tags_service: BucketUiTagsService | None,
+        actor_user_id: int | None,
     ) -> None:
         self.ctx = ctx
         self.request = request
@@ -754,6 +765,8 @@ class _CephAdminBucketPageBuilder:
         self.progress = progress
         self.include_progress_hooks = include_progress_hooks
         self.cancel_check = cancel_check
+        self.bucket_ui_tags_service = bucket_ui_tags_service
+        self.actor_user_id = actor_user_id
 
     def build(self, *, page: int, page_size: int) -> PaginatedCephAdminBucketsResponse:
         self.progress.emit(
@@ -763,6 +776,7 @@ class _CephAdminBucketPageBuilder:
             force=True,
         )
         filtered_results = self._apply_simple_filter(self.listing.items)
+        filtered_results = self._apply_ui_tags(filtered_results)
         invoke_cancel_check(self.cancel_check)
         total = len(filtered_results)
         start = max(page - 1, 0) * page_size
@@ -791,6 +805,35 @@ class _CephAdminBucketPageBuilder:
             force=True,
         )
         return response
+
+    def _apply_ui_tags(
+        self,
+        results: list[CephAdminBucketSummary],
+    ) -> list[CephAdminBucketSummary]:
+        if self.bucket_ui_tags_service is None or self.actor_user_id is None:
+            return results
+        results = clone_ceph_admin_bucket_list(results)
+        targets = [
+            PhysicalBucketTarget.create(self.ctx.endpoint.id, bucket.tenant, bucket.name)
+            for bucket in results
+        ]
+        tags_by_target = self.bucket_ui_tags_service.get_tags_for_targets(
+            domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+            actor_user_id=self.actor_user_id,
+            targets=targets,
+        )
+        requested = set(self.request.ui_tag_ids)
+        matched: list[CephAdminBucketSummary] = []
+        for bucket, target in zip(results, targets):
+            bucket.ui_tags = list(tags_by_target.get(target, []))
+            if not requested:
+                matched.append(bucket)
+                continue
+            assigned = {tag.id for tag in bucket.ui_tags}
+            include = requested.issubset(assigned) if self.request.ui_tag_match == "all" else bool(requested & assigned)
+            if include:
+                matched.append(bucket)
+        return matched
 
     def _apply_simple_filter(
         self,
@@ -920,6 +963,10 @@ def compute_ceph_admin_bucket_listing(
     include: list[str],
     with_stats: bool,
     ctx: CephAdminBucketListingContext,
+    ui_tag_ids: list[int] | None = None,
+    ui_tag_match: str = "any",
+    bucket_ui_tags_service: BucketUiTagsService | None = None,
+    actor_user_id: int | None = None,
     progress_callback: Callable[[ListingProgressSnapshot], None] | None = None,
     cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedCephAdminBucketsResponse:
@@ -934,6 +981,9 @@ def compute_ceph_admin_bucket_listing(
         sort_dir=sort_dir,
         include=include,
         with_stats=with_stats,
+        ui_tag_ids=ui_tag_ids,
+        ui_tag_match=ui_tag_match,
+        with_ui_tags=bucket_ui_tags_service is not None,
     )
     invoke_cancel_check(cancel_check)
     snapshot_builder = _CephAdminBucketSnapshotBuilder(
@@ -952,4 +1002,6 @@ def compute_ceph_admin_bucket_listing(
         progress=progress,
         include_progress_hooks=include_progress_hooks,
         cancel_check=cancel_check,
+        bucket_ui_tags_service=bucket_ui_tags_service,
+        actor_user_id=actor_user_id,
     ).build(page=page, page_size=page_size)

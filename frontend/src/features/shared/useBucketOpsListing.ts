@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { shouldUsePostBucketListing } from "../../api/bucketListingTransport";
@@ -29,6 +29,8 @@ type UseBucketOpsListingParams = {
   includeParams: string[];
   requiresStats: boolean;
   baseRequiresStats: boolean;
+  uiTagIds: number[];
+  uiTagMatch: "any" | "all";
   extractError: (err: unknown) => string;
   listBuckets: (
     scopeId: number,
@@ -99,6 +101,8 @@ export function useBucketOpsListing({
   includeParams,
   requiresStats,
   baseRequiresStats,
+  uiTagIds,
+  uiTagMatch,
   extractError,
   listBuckets,
   streamBuckets,
@@ -114,6 +118,19 @@ export function useBucketOpsListing({
   const requestSeqRef = useRef(0);
   const requestAbortRef = useRef<AbortController | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const uiTagIdsKey = uiTagIds.join(",");
+  const stableUiTagIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          uiTagIdsKey
+            .split(",")
+            .map((value) => Number(value))
+            .filter((id) => Number.isInteger(id) && id > 0)
+        )
+      ),
+    [uiTagIdsKey]
+  );
 
   const refresh = useCallback(() => {
     setReloadNonce((prev) => prev + 1);
@@ -146,6 +163,8 @@ export function useBucketOpsListing({
         sort_by: sort.field,
         sort_dir: sort.direction,
         with_stats: baseRequiresStats,
+        ui_tag_ids: stableUiTagIds.length > 0 ? stableUiTagIds : undefined,
+        ui_tag_match: uiTagMatch,
       };
       const canUseAdvancedStream =
         advancedSearchEnabled &&
@@ -241,6 +260,8 @@ export function useBucketOpsListing({
             sort_dir: sort.direction,
             include: includeParams.length > 0 ? includeParams : undefined,
             with_stats: detailWithStats,
+            ui_tag_ids: stableUiTagIds.length > 0 ? stableUiTagIds : undefined,
+            ui_tag_match: uiTagMatch,
           },
           { signal: requestAbort.signal }
         );
@@ -279,6 +300,8 @@ export function useBucketOpsListing({
     includeParams,
     requiresStats,
     baseRequiresStats,
+    stableUiTagIds,
+    uiTagMatch,
     extractError,
     listBuckets,
     streamBuckets,

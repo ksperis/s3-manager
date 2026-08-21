@@ -72,7 +72,7 @@ export type BucketListState = {
   filter: string;
   quickFilterMode: TextMatchMode;
   advancedApplied: AdvancedFilterState | null;
-  tagFilters: string[];
+  tagFilters: number[];
   tagFilterMode: "any" | "all";
   page: number;
   pageSize: number;
@@ -372,9 +372,6 @@ export const normalizeUiTagValues = (values: string[]) => {
   return normalized;
 };
 
-const sanitizeStringArray = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
-
 const sanitizeSort = (value: unknown): BucketListState["sort"] => {
   if (!value || typeof value !== "object") return DEFAULT_SORT;
   const data = value as { field?: unknown; direction?: unknown };
@@ -412,7 +409,17 @@ export const loadBucketListState = (storageKey: string, endpointId?: number | nu
     filter: typeof data.filter === "string" ? data.filter : "",
     quickFilterMode: data.quickFilterMode === "exact" ? "exact" : "contains",
     advancedApplied: data.advancedApplied ? sanitizeAdvancedFilter(data.advancedApplied) : null,
-    tagFilters: normalizeUiTagValues(sanitizeStringArray(data.tagFilters)),
+    // Legacy label-based filters are intentionally ignored. Persisted filters
+    // now contain stable definition identifiers so equal labels remain distinct.
+    tagFilters: Array.isArray(data.tagFilters)
+      ? Array.from(
+          new Set(
+            data.tagFilters.filter(
+              (item): item is number => Number.isInteger(item) && Number(item) > 0
+            )
+          )
+        )
+      : [],
     tagFilterMode: data.tagFilterMode === "all" ? "all" : "any",
     page: sanitizePositiveInteger(data.page, 1),
     pageSize: sanitizePositiveInteger(data.pageSize, DEFAULT_PAGE_SIZE, 200),
@@ -432,5 +439,3 @@ export const persistBucketListState = (
 };
 
 export const parseUiTags = (value: string) => normalizeUiTagValues(value.split(","));
-export const mergeUiTags = (existing: string[], incoming: string[]) =>
-  normalizeUiTagValues([...existing, ...incoming]);

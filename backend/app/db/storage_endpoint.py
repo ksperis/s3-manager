@@ -40,3 +40,8 @@ class StorageEndpoint(Base):
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     tag_links = relationship("StorageEndpointTag", back_populates="endpoint", cascade="all, delete-orphan")
+    bucket_ui_tag_assignments = relationship(
+        "BucketUiTagAssignment",
+        back_populates="endpoint",
+        cascade="all, delete-orphan",
+    )

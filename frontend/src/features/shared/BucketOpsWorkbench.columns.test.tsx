@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   refreshCephAdminBucketListingCache: vi.fn(),
   refreshStorageOpsBucketListingCache: vi.fn(),
   listExecutionContexts: vi.fn(),
+  fetchCephAdminBucketUiTags: vi.fn(),
+  fetchStorageOpsBucketUiTags: vi.fn(),
+  patchCephAdminBucketUiTags: vi.fn(),
+  patchStorageOpsBucketUiTags: vi.fn(),
   noopAsync: vi.fn(async () => ({})),
   navigate: vi.fn(),
 }));
@@ -87,6 +91,13 @@ vi.mock("../../api/executionContexts", () => ({
   listExecutionContexts: mocks.listExecutionContexts,
 }));
 
+vi.mock("../../api/bucketUiTags", () => ({
+  fetchCephAdminBucketUiTags: mocks.fetchCephAdminBucketUiTags,
+  fetchStorageOpsBucketUiTags: mocks.fetchStorageOpsBucketUiTags,
+  patchCephAdminBucketUiTags: mocks.patchCephAdminBucketUiTags,
+  patchStorageOpsBucketUiTags: mocks.patchStorageOpsBucketUiTags,
+}));
+
 vi.mock("../cephAdmin/CephAdminEndpointContext", () => ({
   useCephAdminEndpoint: () => ({
     selectedEndpointId: 7,
@@ -127,7 +138,6 @@ vi.mock("./BucketOpsRowActionsMenu", () => ({
 
 import BucketOpsWorkbench from "./BucketOpsWorkbench";
 import { saveBucketListReturnContext } from "./bucketListReturnContext";
-import { buildBucketUiTagsStorageKey } from "./bucketUiTags";
 
 const STORAGE_OPS_COLUMNS_STORAGE_KEY = "storage-ops.bucket_list.columns.v2";
 const STORAGE_OPS_LIST_STATE_STORAGE_KEY = "storage-ops.bucket_list.state.v2";
@@ -144,7 +154,7 @@ const baseBucket = {
   name: "bucket-a",
   bucket_name: "bucket-a",
   endpoint_id: 7,
-  bucket_identity: "physical-7-bucket-a",
+  bucket_identity: '[7,"","bucket-a"]',
   context_id: "account-1",
   context_name: "Account A",
   owner: "owner-a",
@@ -192,6 +202,14 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     mocks.refreshCephAdminBucketListingCache.mockReset();
     mocks.refreshStorageOpsBucketListingCache.mockReset();
     mocks.listExecutionContexts.mockReset();
+    mocks.fetchCephAdminBucketUiTags.mockReset();
+    mocks.fetchStorageOpsBucketUiTags.mockReset();
+    mocks.patchCephAdminBucketUiTags.mockReset();
+    mocks.patchStorageOpsBucketUiTags.mockReset();
+    mocks.fetchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.patchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.patchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
     mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.listExecutionContexts.mockResolvedValue([
@@ -400,18 +418,16 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
   });
 
   it("shares UI tags across contexts for one physical bucket without leaking to another endpoint", async () => {
-    localStorage.setItem(
-      buildBucketUiTagsStorageKey("storage-ops", 7),
-      JSON.stringify({
-        "physical-7-bucket-a": { name: "bucket-a", tenant: null, tags: ["urgent"] },
-      })
-    );
-    localStorage.setItem(
-      buildBucketUiTagsStorageKey("storage-ops", 8),
-      JSON.stringify({
-        "physical-8-bucket-a": { name: "bucket-a", tenant: null, tags: ["archive"] },
-      })
-    );
+    mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({
+      definitions: [
+        { id: 1, label: "urgent", color_key: "red", scope: "standard", visibility: "private" },
+        { id: 2, label: "archive", color_key: "slate", scope: "standard", visibility: "private" },
+      ],
+      assignments: [
+        { target: { endpoint_id: 7, tenant: "", name: "bucket-a" }, tag_ids: [1] },
+        { target: { endpoint_id: 8, tenant: "", name: "bucket-a" }, tag_ids: [2] },
+      ],
+    });
     const buckets = [
       { ...baseBucket, name: "account-1::bucket-a", context_id: "account-1", context_name: "Account A" },
       { ...baseBucket, name: "conn-2::bucket-a", context_id: "conn-2", context_name: "Connection B" },
@@ -422,7 +438,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         context_name: "Account C",
         endpoint_id: 8,
         endpoint_name: "Archive",
-        bucket_identity: "physical-8-bucket-a",
+        bucket_identity: '[8,"","bucket-a"]',
       },
     ];
     mocks.listStorageOpsBuckets.mockResolvedValue({ items: buckets, ...baseResponse, total: buckets.length });
@@ -669,12 +685,12 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
 
     renderStorageOps();
 
-    await waitFor(() => expect(mocks.listStorageOpsBuckets).toHaveBeenCalledTimes(2));
-    expect(mocks.listStorageOpsBuckets.mock.calls[1]?.[1]).toEqual(
-      expect.objectContaining({
-        include: ["owner_quota"],
-        with_stats: false,
-      })
+    await waitFor(() =>
+      expect(
+        mocks.listStorageOpsBuckets.mock.calls.some(
+          (call) => JSON.stringify(call[1]?.include) === JSON.stringify(["owner_quota"]) && call[1]?.with_stats === false
+        )
+      ).toBe(true)
     );
   });
 
@@ -690,12 +706,12 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
 
     renderStorageOps();
 
-    await waitFor(() => expect(mocks.listStorageOpsBuckets).toHaveBeenCalledTimes(2));
-    expect(mocks.listStorageOpsBuckets.mock.calls[1]?.[1]).toEqual(
-      expect.objectContaining({
-        include: ["owner_suspended"],
-        with_stats: false,
-      })
+    await waitFor(() =>
+      expect(
+        mocks.listStorageOpsBuckets.mock.calls.some(
+          (call) => JSON.stringify(call[1]?.include) === JSON.stringify(["owner_suspended"]) && call[1]?.with_stats === false
+        )
+      ).toBe(true)
     );
     expect(screen.getByText("Owner suspended")).toBeInTheDocument();
     expect(screen.getByText("Yes")).toBeInTheDocument();
@@ -718,12 +734,14 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
 
     renderStorageOps();
 
-    await waitFor(() => expect(mocks.listStorageOpsBuckets).toHaveBeenCalledTimes(2));
-    expect(mocks.listStorageOpsBuckets.mock.calls[1]?.[1]).toEqual(
-      expect.objectContaining({
-        include: ["owner_quota", "owner_quota_usage"],
-        with_stats: true,
-      })
+    await waitFor(() =>
+      expect(
+        mocks.listStorageOpsBuckets.mock.calls.some(
+          (call) =>
+            JSON.stringify(call[1]?.include) === JSON.stringify(["owner_quota", "owner_quota_usage"]) &&
+            call[1]?.with_stats === true
+        )
+      ).toBe(true)
     );
   });
 

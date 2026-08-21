@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   refreshStorageOpsBucketListingCache: vi.fn(),
   listStorageOpsBuckets: vi.fn(),
   streamStorageOpsBuckets: vi.fn(),
+  fetchCephAdminBucketUiTags: vi.fn(),
+  fetchStorageOpsBucketUiTags: vi.fn(),
+  patchCephAdminBucketUiTags: vi.fn(),
+  patchStorageOpsBucketUiTags: vi.fn(),
   noopAsync: vi.fn(async () => ({})),
   navigate: vi.fn(),
 }));
@@ -82,6 +86,13 @@ vi.mock("../../api/storageOps", () => ({
   streamStorageOpsBuckets: mocks.streamStorageOpsBuckets,
   updateStorageOpsBucketObjectLock: mocks.noopAsync,
   updateStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
+}));
+
+vi.mock("../../api/bucketUiTags", () => ({
+  fetchCephAdminBucketUiTags: mocks.fetchCephAdminBucketUiTags,
+  fetchStorageOpsBucketUiTags: mocks.fetchStorageOpsBucketUiTags,
+  patchCephAdminBucketUiTags: mocks.patchCephAdminBucketUiTags,
+  patchStorageOpsBucketUiTags: mocks.patchStorageOpsBucketUiTags,
 }));
 
 vi.mock("../cephAdmin/CephAdminEndpointContext", () => ({
@@ -234,6 +245,7 @@ function createBucketListMock(allBuckets: Array<Record<string, unknown>>) {
 
 describe("BucketOpsWorkbench selection actions", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     mocks.backupCephAdminBucketConfigs.mockReset();
     mocks.listCephAdminBuckets.mockReset();
     mocks.streamCephAdminBuckets.mockReset();
@@ -243,6 +255,14 @@ describe("BucketOpsWorkbench selection actions", () => {
     mocks.refreshStorageOpsBucketListingCache.mockReset();
     mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
+    mocks.fetchCephAdminBucketUiTags.mockReset();
+    mocks.fetchStorageOpsBucketUiTags.mockReset();
+    mocks.patchCephAdminBucketUiTags.mockReset();
+    mocks.patchStorageOpsBucketUiTags.mockReset();
+    mocks.fetchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.patchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.patchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
     mocks.backupCephAdminBucketConfigs.mockResolvedValue({
       kind: "ceph-admin.bucket-config-backup",
       version: 1,
@@ -254,7 +274,6 @@ describe("BucketOpsWorkbench selection actions", () => {
     mocks.noopAsync.mockClear();
     mocks.navigate.mockReset();
     window.localStorage.clear();
-    vi.restoreAllMocks();
     Object.defineProperty(window.URL, "createObjectURL", {
       value: vi.fn(() => "blob:test"),
       writable: true,

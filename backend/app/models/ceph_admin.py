@@ -7,6 +7,7 @@ from pydantic import Field, model_validator
 
 from app.models.base import ApiModel
 from app.models.bucket import BucketFeatureStatus, BucketTag
+from app.models.bucket_ui_tags import BucketUiTagDefinitionSummary
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionSummary
 
@@ -202,6 +203,7 @@ class CephAdminBucketSummary(ApiModel):
     tags: Optional[list[BucketTag]] = None
     features: Optional[dict[str, BucketFeatureStatus]] = None
     column_details: Optional[dict[str, Any]] = None
+    ui_tags: list[BucketUiTagDefinitionSummary] = Field(default_factory=list)
 
 
 class PaginatedCephAdminBucketsResponse(PaginatedResponse):
@@ -219,6 +221,8 @@ class CephAdminBucketListingRequest(ApiModel):
     sort_dir: Literal["asc", "desc"] = "asc"
     include: list[str] = Field(default_factory=list)
     with_stats: bool = True
+    ui_tag_ids: list[int] = Field(default_factory=list)
+    ui_tag_match: Literal["any", "all"] = "any"
 
 
 class PaginatedCephAdminAccountsResponse(PaginatedResponse):

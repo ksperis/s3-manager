@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.models.ceph_admin import CephAdminBucketListingRequest, PaginatedCephAdminBucketsResponse
 from app.routers.ceph_admin import bucket_config, bucket_tools
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.ceph_admin.listing_common import stream_listing_response
 from app.services.bucket_listing_shared import BucketListingFilterError, is_advanced_filter_stream_payload
+from app.services.bucket_ui_tags_service import BucketUiTagsService
 from app.services.ceph_admin_bucket_listing_service import (
     RequiredBucketStatsUnavailableError,
     compute_ceph_admin_bucket_listing,
@@ -38,7 +41,10 @@ def list_buckets(
     sort_dir: str = Query("asc"),
     include: list[str] = Query(default=[]),
     with_stats: bool = True,
+    ui_tag_ids: list[int] = Query(default=[]),
+    ui_tag_match: Literal["any", "all"] = Query(default="any"),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
+    db: Session = Depends(get_db),
 ) -> PaginatedCephAdminBucketsResponse:
     return _compute_bucket_listing(
         page=page,
@@ -49,7 +55,10 @@ def list_buckets(
         sort_dir=sort_dir,
         include=include,
         with_stats=with_stats,
+        ui_tag_ids=ui_tag_ids,
+        ui_tag_match=ui_tag_match,
         ctx=ctx,
+        db=db,
     )
 
 
@@ -57,6 +66,7 @@ def list_buckets(
 def query_buckets(
     payload: CephAdminBucketListingRequest,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
+    db: Session = Depends(get_db),
 ) -> PaginatedCephAdminBucketsResponse:
     return _compute_bucket_listing(
         page=payload.page,
@@ -67,7 +77,10 @@ def query_buckets(
         sort_dir=payload.sort_dir,
         include=payload.include,
         with_stats=payload.with_stats,
+        ui_tag_ids=payload.ui_tag_ids,
+        ui_tag_match=payload.ui_tag_match,
         ctx=ctx,
+        db=db,
     )
 
 
@@ -81,11 +94,16 @@ def _compute_bucket_listing(
     sort_dir: str,
     include: list[str],
     with_stats: bool,
+    ui_tag_ids: list[int] | None = None,
+    ui_tag_match: str = "any",
     ctx: CephAdminContext,
+    db: Session | None = None,
     progress_callback: Callable[[ListingProgressSnapshot], None] | None = None,
     cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedCephAdminBucketsResponse:
     try:
+        actor = getattr(ctx, "actor", None)
+        tag_service = BucketUiTagsService(db) if isinstance(db, Session) and actor is not None else None
         return compute_ceph_admin_bucket_listing(
             page=page,
             page_size=page_size,
@@ -95,6 +113,10 @@ def _compute_bucket_listing(
             sort_dir=sort_dir,
             include=include,
             with_stats=with_stats,
+            ui_tag_ids=ui_tag_ids if isinstance(ui_tag_ids, list) else [],
+            ui_tag_match=ui_tag_match if ui_tag_match in {"any", "all"} else "any",
+            bucket_ui_tags_service=tag_service,
+            actor_user_id=int(actor.id) if actor is not None else None,
             ctx=ctx,
             progress_callback=progress_callback,
             cancel_check=cancel_check,
@@ -124,7 +146,10 @@ async def stream_buckets(
     sort_dir: str = Query("asc"),
     include: list[str] = Query(default=[]),
     with_stats: bool = True,
+    ui_tag_ids: list[int] = Query(default=[]),
+    ui_tag_match: Literal["any", "all"] = Query(default="any"),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
+    db: Session = Depends(get_db),
 ) -> StreamingResponse:
     if not is_advanced_filter_stream_payload(advanced_filter):
         raise HTTPException(
@@ -143,7 +168,10 @@ async def stream_buckets(
             sort_dir=sort_dir,
             include=include,
             with_stats=with_stats,
+            ui_tag_ids=ui_tag_ids,
+            ui_tag_match=ui_tag_match,
             ctx=ctx,
+            db=db,
             progress_callback=progress_callback,
             cancel_check=cancel_check,
         ),

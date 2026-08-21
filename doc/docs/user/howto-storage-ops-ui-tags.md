@@ -11,8 +11,11 @@ Use **UI tags** in **Storage Ops > Buckets** to build reusable operational selec
 
 ## Before you start
 
-Use Storage Ops UI tags for cross-context campaigns. They stay local to the browser and do not change backend S3 tags.
-Their identity is the physical bucket (endpoint, tenant, and bucket name), so two authorized contexts targeting the same bucket share its UI tags while homonymous buckets on different endpoints remain separate.
+Use Storage Ops UI tags for cross-context campaigns. They are persisted by
+BucketReef, are always private to the signed-in user, and do not change S3
+tags. Their identity is the physical bucket (endpoint, tenant, and bucket
+name), so two authorized contexts targeting the same bucket reuse its UI tags
+while homonymous buckets on different endpoints remain separate.
 
 ## Steps
 
@@ -39,8 +42,15 @@ Check Storage Ops access, the global feature flag, and whether rows are selected
 ## Limits / feature flags
 
 !!! note
-    UI tags are stored in browser localStorage and do not modify backend S3 tags. Storage Ops and Ceph Admin use separate endpoint-scoped keys and synchronize changes between tabs.
-    The endpoint-isolated v2 storage resets UI tags and active UI-tag filters created with the earlier browser-storage format.
+    Storage Ops and Ceph Admin use separate UI-tag namespaces. Storage Ops does
+    not expose a Shared choice and rejects shared or unauthorized context
+    references at the API boundary. UI tags never call or modify the S3 Tags
+    API.
+
+    Legacy `bucket-workbench.ui_tags.v2` browser data is not imported or read
+    and remains untouched. At workbench load, BucketReef still checks tagged
+    physical buckets in batches. The warning action revalidates that a bucket
+    is absent before removing its persistent assignments.
 
 ## Related pages
 

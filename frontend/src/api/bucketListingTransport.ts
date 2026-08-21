@@ -12,6 +12,8 @@ type BucketListingTransportParams = {
   sort_dir?: "asc" | "desc";
   include?: string[];
   with_stats?: boolean;
+  ui_tag_ids?: number[];
+  ui_tag_match?: "any" | "all";
 };
 
 // Stay well below common proxy/browser URL limits when advanced_filter expands
@@ -31,6 +33,8 @@ export function buildBucketListingQuery(params?: BucketListingTransportParams): 
   if (typeof params.sort_dir === "string" && params.sort_dir.trim().length > 0) query.set("sort_dir", params.sort_dir);
   if (Array.isArray(params.include) && params.include.length > 0) query.set("include", params.include.join(","));
   if (params.with_stats !== undefined) query.set("with_stats", params.with_stats ? "true" : "false");
+  params.ui_tag_ids?.forEach((id) => query.append("ui_tag_ids", String(id)));
+  if (params.ui_tag_match) query.set("ui_tag_match", params.ui_tag_match);
   return query;
 }
 
@@ -54,5 +58,7 @@ export function buildBucketListingRequestBody(
     sort_dir: typeof params.sort_dir === "string" && params.sort_dir.trim().length > 0 ? params.sort_dir : undefined,
     include: Array.isArray(params.include) && params.include.length > 0 ? params.include : undefined,
     with_stats: params.with_stats,
+    ui_tag_ids: Array.isArray(params.ui_tag_ids) && params.ui_tag_ids.length > 0 ? params.ui_tag_ids : undefined,
+    ui_tag_match: params.ui_tag_match,
   };
 }

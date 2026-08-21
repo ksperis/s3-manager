@@ -33,6 +33,7 @@ def _load_migration() -> ModuleType:
 MIGRATION = _load_migration()
 
 POST_MIGRATION_UTC_COLUMNS = {
+    "bucket_ui_tag_assignments": ("created_at", "updated_at"),
     "oidc_authorization_codes": ("created_at", "expires_at"),
     "auth_challenges": ("created_at", "expires_at", "consumed_at"),
     "auth_rate_limits": ("window_started_at", "updated_at"),

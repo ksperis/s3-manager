@@ -6,6 +6,7 @@ import client, { timeoutForRequestProfile } from "./client";
 import type { PaginatedResponse } from "./types";
 import type { ManagerTrafficStats, TrafficWindow } from "./stats";
 import type { TagDefinitionSummary } from "./tags";
+import type { BucketUiTagDefinition } from "./bucketUiTags";
 import type {
   BucketFeatureStatus,
   BucketLoggingConfiguration,
@@ -657,6 +658,7 @@ export type CephAdminBucket = {
   tags?: BucketTag[] | null;
   features?: Record<string, BucketFeatureStatus> | null;
   column_details?: Record<string, unknown> | null;
+  ui_tags?: BucketUiTagDefinition[];
 };
 
 export type PaginatedCephAdminBucketsResponse = PaginatedResponse<CephAdminBucket> & {
@@ -673,6 +675,8 @@ export type ListCephAdminBucketsParams = {
   sort_dir?: "asc" | "desc";
   include?: string[];
   with_stats?: boolean;
+  ui_tag_ids?: number[];
+  ui_tag_match?: "any" | "all";
 };
 
 export type CephAdminBucketsStreamProgress = CephAdminListingStreamProgress;

@@ -72,7 +72,10 @@ You can search and operate on large bucket sets across authorized accounts, S3 u
 ## Limits / feature flags
 
 !!! note
-    UI tags are local browser metadata (localStorage), namespaced separately from Ceph Admin and keyed by physical endpoint, tenant, and bucket name. Tabs synchronize changes without sharing tags across endpoints.
+    UI tags are persistent BucketReef metadata, namespaced separately from Ceph
+    Admin and keyed by physical endpoint, tenant, and bucket name. They are
+    private to the current Storage Ops user. Legacy localStorage UI tags are
+    neither imported nor read. UI Tags remain distinct from S3 Tags.
     Storage Ops exposes the Notifications feature-state filter globally; each
     bucket status still follows the SNS capability of its underlying context.
     Feature-detail columns are opt-in and loaded only when selected or exported.

@@ -38,6 +38,8 @@ from app.routers.dependencies import (
 )
 from app.services import bucket_config_actions
 from app.services.audit_service import AuditService
+from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
+from app.services.storage_ops_bucket_listing_service import resolve_storage_ops_context_tenant
 from app.services.bucket_config_mutation_service import BucketConfigMutationService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.bucket_configuration_service import (
@@ -163,6 +165,17 @@ def delete_bucket_config(
         account=account,
         metadata=audit_metadata,
     )
+    endpoint_id = int(getattr(account, "storage_endpoint_id", 0) or 0)
+    if endpoint_id > 0:
+        tag_service = BucketUiTagsService(audit_service.db)
+        tag_service.remove_all_namespaces_for_bucket(
+            PhysicalBucketTarget.create(
+                endpoint_id,
+                resolve_storage_ops_context_tenant(account),
+                bucket_name,
+            )
+        )
+        tag_service.commit()
     return response
 
 

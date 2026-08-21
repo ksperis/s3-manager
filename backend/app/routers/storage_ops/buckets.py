@@ -23,6 +23,7 @@ from app.routers.execution_contexts import list_execution_contexts
 from app.services.bucket_listing_cache import invalidate_bucket_listing_cache_for_account
 from app.services.bucket_listing_shared import BucketListingFilterError, is_advanced_filter_stream_payload
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
+from app.services.bucket_ui_tags_service import BucketUiTagsService
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.listing_progress import ListingProgressSnapshot
 from app.services.s3_execution_context import S3ExecutionContext
@@ -71,10 +72,13 @@ def _compute_storage_ops_listing(
     sort_dir: str,
     include: list[str],
     with_stats: bool,
+    ui_tag_ids: list[int] | None = None,
+    ui_tag_match: str = "any",
     progress_callback: Callable[[ListingProgressSnapshot], None] | None = None,
     cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedStorageOpsBucketsResponse:
     try:
+        tag_service = BucketUiTagsService(db) if isinstance(db, Session) else None
         return compute_storage_ops_bucket_listing(
             load_context_refs=lambda: _collect_context_refs(user, db),
             resolve_account=lambda ref: _resolve_context_account(
@@ -92,6 +96,10 @@ def _compute_storage_ops_listing(
             sort_dir=sort_dir,
             include=include,
             with_stats=with_stats,
+            ui_tag_ids=ui_tag_ids if isinstance(ui_tag_ids, list) else [],
+            ui_tag_match=ui_tag_match if ui_tag_match in {"any", "all"} else "any",
+            bucket_ui_tags_service=tag_service,
+            actor_user_id=int(user.id) if tag_service is not None else None,
             progress_callback=progress_callback,
             cancel_check=cancel_check,
         )
@@ -140,6 +148,8 @@ def list_storage_ops_buckets(
     sort_dir: Literal["asc", "desc"] = Query(default="asc"),
     include: list[str] = Query(default=[]),
     with_stats: bool = Query(default=True),
+    ui_tag_ids: list[int] = Query(default=[]),
+    ui_tag_match: Literal["any", "all"] = Query(default="any"),
     user: User = Depends(get_current_storage_ops_admin),
     db: Session = Depends(get_db),
     service: BucketsService = Depends(get_buckets_service),
@@ -157,6 +167,8 @@ def list_storage_ops_buckets(
         sort_dir=sort_dir,
         include=include,
         with_stats=with_stats,
+        ui_tag_ids=ui_tag_ids,
+        ui_tag_match=ui_tag_match,
     )
 
 
@@ -181,6 +193,8 @@ def query_storage_ops_buckets(
         sort_dir=payload.sort_dir,
         include=payload.include,
         with_stats=payload.with_stats,
+        ui_tag_ids=payload.ui_tag_ids,
+        ui_tag_match=payload.ui_tag_match,
     )
 
 
@@ -195,6 +209,8 @@ async def stream_storage_ops_buckets(
     sort_dir: Literal["asc", "desc"] = Query(default="asc"),
     include: list[str] = Query(default=[]),
     with_stats: bool = Query(default=True),
+    ui_tag_ids: list[int] = Query(default=[]),
+    ui_tag_match: Literal["any", "all"] = Query(default="any"),
     user: User = Depends(get_current_storage_ops_admin),
     db: Session = Depends(get_db),
     service: BucketsService = Depends(get_buckets_service),
@@ -220,6 +236,8 @@ async def stream_storage_ops_buckets(
             sort_dir=sort_dir,
             include=include,
             with_stats=with_stats,
+            ui_tag_ids=ui_tag_ids,
+            ui_tag_match=ui_tag_match,
             progress_callback=progress_callback,
             cancel_check=cancel_check,
         ),
