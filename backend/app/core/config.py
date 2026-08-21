@@ -5,7 +5,7 @@ import ipaddress
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
@@ -619,7 +619,7 @@ class Settings(BaseSettings):
     def effective_api_jwt_keys(self) -> list[str]:
         return list(self.api_jwt_keys or self.jwt_keys)
 
-    def _validate_production_security(self) -> None:
+    def _validate_production_origins(self) -> ParseResult:
         public = urlparse(self.public_origin)
         if public.scheme != "https" or not public.hostname or public.path not in {"", "/"}:
             raise ValueError("PUBLIC_ORIGIN must be an HTTPS origin without a path in production")
@@ -628,6 +628,9 @@ class Settings(BaseSettings):
             raise ValueError("WEBAUTHN_ORIGIN must exactly match PUBLIC_ORIGIN in production")
         if webauthn.hostname != self.webauthn_rp_id:
             raise ValueError("WEBAUTHN_RP_ID must match the WebAuthn origin host in production")
+        return public
+
+    def _validate_production_authentication_boundary(self) -> None:
         if not self.refresh_token_cookie_secure:
             raise ValueError("Secure authentication cookies are mandatory in production")
         if self.refresh_token_cookie_domain is not None:
@@ -638,6 +641,8 @@ class Settings(BaseSettings):
             raise ValueError("SEED_SUPER_ADMIN_MODE must be disabled in production")
         if not self.require_registered_s3_login_endpoints:
             raise ValueError("Production requires administratively registered S3 login endpoints")
+
+    def _validate_production_network_boundary(self, public: ParseResult) -> None:
         if not self.allowed_hosts or any(host.strip() == "*" for host in self.allowed_hosts):
             raise ValueError("Explicit ALLOWED_HOSTS are mandatory in production")
         if public.hostname not in {host.strip().lower() for host in self.allowed_hosts}:
@@ -648,6 +653,8 @@ class Settings(BaseSettings):
             network = ipaddress.ip_network(cidr, strict=False)
             if network.prefixlen == 0:
                 raise ValueError("TRUSTED_PROXY_CIDRS cannot trust the entire address space in production")
+
+    def _validate_production_keyrings(self) -> None:
         key_sets = {
             "UI_JWT_KEYS": self.ui_jwt_keys,
             "API_JWT_KEYS": self.api_jwt_keys,
@@ -658,6 +665,8 @@ class Settings(BaseSettings):
                 raise ValueError(f"{name} must contain strong non-default keys in production")
         if set(self.ui_jwt_keys) & set(self.api_jwt_keys):
             raise ValueError("UI and API JWT key rings must be distinct in production")
+
+    def _validate_production_seed_configuration(self) -> None:
         seed_endpoint_configured = "seed_s3_endpoint" in self.model_fields_set
         seed_endpoint = urlparse(self.seed_s3_endpoint)
         if seed_endpoint_configured and (seed_endpoint.scheme != "https" or not seed_endpoint.hostname):
@@ -672,6 +681,8 @@ class Settings(BaseSettings):
         for name, value in production_secrets.items():
             if value is not None and is_weak_secret_value(value):
                 raise ValueError(f"{name} must be a strong non-default secret in production")
+
+    def _validate_production_oidc(self, public: ParseResult) -> None:
         for provider_id, provider in self.oidc_providers.items():
             if not provider.enabled:
                 continue
@@ -682,13 +693,29 @@ class Settings(BaseSettings):
             redirect = urlparse(provider.redirect_uri)
             if redirect.scheme != "https" or redirect.netloc != public.netloc:
                 raise ValueError(f"OIDC provider {provider_id} redirect must use PUBLIC_ORIGIN")
+
+    def _validate_production_ldap(self) -> None:
         for provider_id, provider in self.ldap_providers.items():
             if not provider.enabled:
                 continue
             ldap_scheme = urlparse(provider.url).scheme
             encrypted_transport = ldap_scheme == "ldaps" or (ldap_scheme == "ldap" and provider.start_tls)
-            if not encrypted_transport or provider.allow_insecure or not provider.tls_verify or provider.allow_legacy_tls:
+            if (
+                not encrypted_transport
+                or provider.allow_insecure
+                or not provider.tls_verify
+                or provider.allow_legacy_tls
+            ):
                 raise ValueError(f"LDAP provider {provider_id} violates the production TLS policy")
+
+    def _validate_production_security(self) -> None:
+        public = self._validate_production_origins()
+        self._validate_production_authentication_boundary()
+        self._validate_production_network_boundary(public)
+        self._validate_production_keyrings()
+        self._validate_production_seed_configuration()
+        self._validate_production_oidc(public)
+        self._validate_production_ldap()
 
 
 def is_weak_secret_value(value: Optional[str]) -> bool:
