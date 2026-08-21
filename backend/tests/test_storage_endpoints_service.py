@@ -661,6 +661,38 @@ def test_update_endpoint_clearing_access_keys_also_clears_secrets(db_session):
     assert persisted.ceph_admin_secret_key is None
 
 
+def test_update_endpoint_preserves_omitted_secrets_and_nullable_settings(db_session):
+    endpoint = _create_ceph_endpoint_with_full_credentials(
+        db_session,
+        name="ceph-partial-update",
+    )
+    endpoint.force_path_style = True
+    endpoint.verify_tls = False
+    db_session.add(endpoint)
+    db_session.commit()
+
+    updated = StorageEndpointsService(db_session).update_endpoint(
+        endpoint.id,
+        StorageEndpointUpdate(
+            name="ceph-renamed",
+            force_path_style=None,
+            verify_tls=None,
+            features_config=None,
+        ),
+    )
+
+    assert updated.name == "ceph-renamed"
+    assert updated.force_path_style is True
+    assert updated.verify_tls is False
+    assert updated.admin_access_key == "AKIA-ADMIN"
+    assert updated.supervision_access_key == "AKIA-SUPERVISION"
+    assert updated.ceph_admin_access_key == "AKIA-CEPH-ADMIN"
+    persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint.id).one()
+    assert persisted.admin_secret_key == "SECRET-ADMIN"
+    assert persisted.supervision_secret_key == "SECRET-SUPERVISION"
+    assert persisted.ceph_admin_secret_key == "SECRET-CEPH-ADMIN"
+
+
 def test_update_endpoint_tags_normalizes_and_serializes_tags(db_session):
     endpoint = _create_ceph_endpoint(db_session, name="ceph-tags")
     service = StorageEndpointsService(db_session)

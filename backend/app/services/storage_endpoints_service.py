@@ -3,7 +3,7 @@
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from pydantic import ValidationError, field_validator
@@ -46,6 +46,15 @@ from app.utils.name_ordering import name_order_by
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+_EndpointCredentialValues = tuple[
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+]
 
 
 class EnvStorageEndpoint(ApiModel):
@@ -117,7 +126,7 @@ class _EnvEndpointIdentity:
 
 
 @dataclass(frozen=True)
-class _NormalizedEnvEndpoint:
+class _NormalizedEndpointState:
     name: str
     endpoint_url: str
     admin_endpoint: Optional[str]
@@ -134,7 +143,7 @@ class _NormalizedEnvEndpoint:
     ceph_admin_access_key: Optional[str]
     ceph_admin_secret_key: Optional[str]
     features_config: str
-    is_default: bool
+    is_default: bool = False
 
 
 class StorageEndpointsService:
@@ -337,7 +346,7 @@ class StorageEndpointsService:
         ceph_admin_secret_key: Optional[str],
         admin_enabled: bool,
         supervision_required: bool,
-    ) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    ) -> _EndpointCredentialValues:
         if provider == StorageProvider.CEPH:
             if admin_enabled and (not admin_access_key or not admin_secret_key):
                 raise ValueError("Ceph endpoints with admin enabled require an admin access key and secret key.")
@@ -569,19 +578,21 @@ class StorageEndpointsService:
             )
         return identities
 
-    def _normalize_env_endpoint(
+    def _normalize_endpoint_state(
         self,
-        identity: _EnvEndpointIdentity,
-    ) -> _NormalizedEnvEndpoint:
-        entry = identity.entry
-        provider = self._normalize_provider(entry.provider)
-        region = self._normalize_region(provider, entry.region)
-        raw_features = (
-            dump_features_config(entry.features)
-            if entry.features is not None
-            else entry.features_config
+        payload: StorageEndpointCreate,
+    ) -> _NormalizedEndpointState:
+        name = self._normalize_name(payload.name, fallback="Endpoint")
+        endpoint_url = normalize_s3_endpoint(payload.endpoint_url)
+        if not endpoint_url:
+            raise ValueError("Endpoint URL is required.")
+        provider = self._normalize_provider(payload.provider)
+        region = self._normalize_region(provider, payload.region)
+        features, features_config = self._normalize_features(
+            provider,
+            payload.features_config,
+            region,
         )
-        features, features_config = self._normalize_features(provider, raw_features, region)
         admin_enabled = bool(features.get("admin", {}).get("enabled")) or bool(
             features.get("account", {}).get("enabled")
         )
@@ -597,24 +608,24 @@ class StorageEndpointsService:
             ceph_admin_secret_key,
         ) = self._validate_credentials(
             provider,
-            normalize_optional_string(entry.admin_access_key),
-            normalize_optional_string(entry.admin_secret_key),
-            normalize_optional_string(entry.supervision_access_key),
-            normalize_optional_string(entry.supervision_secret_key),
-            normalize_optional_string(entry.ceph_admin_access_key),
-            normalize_optional_string(entry.ceph_admin_secret_key),
+            normalize_optional_string(payload.admin_access_key),
+            normalize_optional_string(payload.admin_secret_key),
+            normalize_optional_string(payload.supervision_access_key),
+            normalize_optional_string(payload.supervision_secret_key),
+            normalize_optional_string(payload.ceph_admin_access_key),
+            normalize_optional_string(payload.ceph_admin_secret_key),
             admin_enabled,
             supervision_required,
         )
-        return _NormalizedEnvEndpoint(
-            name=identity.name,
-            endpoint_url=identity.endpoint_url,
+        return _NormalizedEndpointState(
+            name=name,
+            endpoint_url=endpoint_url,
             admin_endpoint=features.get("admin", {}).get("endpoint"),
             region=region,
-            force_path_style=bool(entry.force_path_style),
-            verify_tls=bool(entry.verify_tls),
-            latitude=entry.latitude,
-            longitude=entry.longitude,
+            force_path_style=bool(payload.force_path_style),
+            verify_tls=bool(payload.verify_tls),
+            latitude=payload.latitude,
+            longitude=payload.longitude,
             provider=provider,
             admin_access_key=admin_access_key,
             admin_secret_key=admin_secret_key,
@@ -623,22 +634,52 @@ class StorageEndpointsService:
             ceph_admin_access_key=ceph_admin_access_key,
             ceph_admin_secret_key=ceph_admin_secret_key,
             features_config=features_config,
-            is_default=identity.is_default,
         )
+
+    def _normalize_env_endpoint(
+        self,
+        identity: _EnvEndpointIdentity,
+    ) -> _NormalizedEndpointState:
+        entry = identity.entry
+        raw_features = (
+            dump_features_config(entry.features)
+            if entry.features is not None
+            else entry.features_config
+        )
+        state = self._normalize_endpoint_state(
+            StorageEndpointCreate(
+                name=identity.name,
+                endpoint_url=identity.endpoint_url,
+                region=entry.region,
+                force_path_style=entry.force_path_style,
+                verify_tls=entry.verify_tls,
+                provider=entry.provider,
+                admin_access_key=entry.admin_access_key,
+                admin_secret_key=entry.admin_secret_key,
+                supervision_access_key=entry.supervision_access_key,
+                supervision_secret_key=entry.supervision_secret_key,
+                ceph_admin_access_key=entry.ceph_admin_access_key,
+                ceph_admin_secret_key=entry.ceph_admin_secret_key,
+                features_config=raw_features,
+                latitude=entry.latitude,
+                longitude=entry.longitude,
+            )
+        )
+        return replace(state, is_default=identity.is_default)
 
     def _normalized_env_endpoints(
         self,
         env_endpoints: list[EnvStorageEndpoint],
-    ) -> list[_NormalizedEnvEndpoint]:
+    ) -> list[_NormalizedEndpointState]:
         return [
             self._normalize_env_endpoint(identity)
             for identity in self._env_endpoint_identities(env_endpoints)
         ]
 
     @staticmethod
-    def _apply_env_endpoint(
+    def _apply_endpoint_state(
         endpoint: StorageEndpoint,
-        config: _NormalizedEnvEndpoint,
+        config: _NormalizedEndpointState,
     ) -> None:
         endpoint.name = config.name
         endpoint.endpoint_url = config.endpoint_url
@@ -656,12 +697,20 @@ class StorageEndpointsService:
         endpoint.ceph_admin_access_key = config.ceph_admin_access_key
         endpoint.ceph_admin_secret_key = config.ceph_admin_secret_key
         endpoint.features_config = config.features_config
+
+    @classmethod
+    def _apply_env_endpoint(
+        cls,
+        endpoint: StorageEndpoint,
+        config: _NormalizedEndpointState,
+    ) -> None:
+        cls._apply_endpoint_state(endpoint, config)
         endpoint.is_default = config.is_default
         endpoint.is_editable = False
 
     def _upsert_env_endpoint(
         self,
-        config: _NormalizedEnvEndpoint,
+        config: _NormalizedEndpointState,
         existing_by_url: dict[str, StorageEndpoint],
     ) -> StorageEndpoint:
         endpoint = existing_by_url.get(config.endpoint_url)
@@ -689,7 +738,7 @@ class StorageEndpointsService:
 
     def _serialize_env_endpoints(
         self,
-        configs: list[_NormalizedEnvEndpoint],
+        configs: list[_NormalizedEndpointState],
     ) -> list[StorageEndpointSchema]:
         synced: list[StorageEndpointSchema] = []
         for config in configs:
@@ -764,79 +813,70 @@ class StorageEndpointsService:
         self.db.refresh(endpoint)
         return self._serialize(endpoint)
 
-    def create_endpoint(self, payload: StorageEndpointCreate) -> StorageEndpointSchema:
-        self._ensure_env_editable()
-        name = self._normalize_name(payload.name, fallback="Endpoint")
-        endpoint_url = normalize_s3_endpoint(payload.endpoint_url)
-        force_path_style = bool(payload.force_path_style)
-        verify_tls = bool(payload.verify_tls)
-        provider = self._normalize_provider(payload.provider)
-        region = self._normalize_region(provider, payload.region)
-        admin_access = normalize_optional_string(payload.admin_access_key)
-        admin_secret = normalize_optional_string(payload.admin_secret_key)
-        supervision_access = normalize_optional_string(payload.supervision_access_key)
-        supervision_secret = normalize_optional_string(payload.supervision_secret_key)
-        ceph_admin_access = normalize_optional_string(payload.ceph_admin_access_key)
-        ceph_admin_secret = normalize_optional_string(payload.ceph_admin_secret_key)
-        features, features_config = self._normalize_features(provider, payload.features_config, region)
-        admin_endpoint = features.get("admin", {}).get("endpoint")
-
-        if not endpoint_url:
-            raise ValueError("Endpoint URL is required.")
-        self._ensure_unique_name(name)
-        self._ensure_unique_endpoint(endpoint_url)
-        (
-            admin_access,
-            admin_secret,
-            supervision_access,
-            supervision_secret,
-            ceph_admin_access,
-            ceph_admin_secret,
-        ) = self._validate_credentials(
-            provider,
-            admin_access,
-            admin_secret,
-            supervision_access,
-            supervision_secret,
-            ceph_admin_access,
-            ceph_admin_secret,
-            bool(features.get("admin", {}).get("enabled")) or bool(features.get("account", {}).get("enabled")),
-            bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
-        )
-
-        entry = StorageEndpoint(
-            name=name,
-            endpoint_url=endpoint_url,
-            admin_endpoint=admin_endpoint,
-            region=region,
-            force_path_style=force_path_style,
-            verify_tls=verify_tls,
-            latitude=payload.latitude,
-            longitude=payload.longitude,
-            provider=provider.value,
-            admin_access_key=admin_access,
-            admin_secret_key=admin_secret,
-            supervision_access_key=supervision_access,
-            supervision_secret_key=supervision_secret,
-            ceph_admin_access_key=ceph_admin_access,
-            ceph_admin_secret_key=ceph_admin_secret,
-            features_config=features_config,
-            is_default=False,
-            is_editable=True,
-        )
-        self.db.add(entry)
+    def _persist_endpoint(self, endpoint: StorageEndpoint) -> StorageEndpointSchema:
+        self.db.add(endpoint)
         self.db.commit()
-        self.db.refresh(entry)
-        return self._serialize(entry)
+        self.db.refresh(endpoint)
+        return self._serialize(endpoint)
 
-    def update_endpoint(self, endpoint_id: int, payload: StorageEndpointUpdate) -> StorageEndpointSchema:
-        self._ensure_env_editable()
-        endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
-        if not endpoint:
-            raise ValueError("Endpoint not found.")
-        if not endpoint.is_editable:
-            raise ValueError("This endpoint is protected and cannot be edited.")
+    @staticmethod
+    def _update_credential_value(
+        endpoint: StorageEndpoint,
+        payload: StorageEndpointUpdate,
+        field: str,
+    ) -> Optional[str]:
+        if field not in payload.model_fields_set:
+            return getattr(endpoint, field)
+        return normalize_optional_string(getattr(payload, field))
 
+    def _updated_endpoint_credentials(
+        self,
+        endpoint: StorageEndpoint,
+        payload: StorageEndpointUpdate,
+    ) -> _EndpointCredentialValues:
+        fields_set = payload.model_fields_set
+        admin_access_key = self._update_credential_value(endpoint, payload, "admin_access_key")
+        admin_secret_key = self._update_credential_value(endpoint, payload, "admin_secret_key")
+        supervision_access_key = self._update_credential_value(
+            endpoint,
+            payload,
+            "supervision_access_key",
+        )
+        supervision_secret_key = self._update_credential_value(
+            endpoint,
+            payload,
+            "supervision_secret_key",
+        )
+        ceph_admin_access_key = self._update_credential_value(
+            endpoint,
+            payload,
+            "ceph_admin_access_key",
+        )
+        ceph_admin_secret_key = self._update_credential_value(
+            endpoint,
+            payload,
+            "ceph_admin_secret_key",
+        )
+        if "admin_access_key" in fields_set and not admin_access_key:
+            admin_secret_key = None
+        if "supervision_access_key" in fields_set and not supervision_access_key:
+            supervision_secret_key = None
+        if "ceph_admin_access_key" in fields_set and not ceph_admin_access_key:
+            ceph_admin_secret_key = None
+        return (
+            admin_access_key,
+            admin_secret_key,
+            supervision_access_key,
+            supervision_secret_key,
+            ceph_admin_access_key,
+            ceph_admin_secret_key,
+        )
+
+    def _updated_endpoint_state(
+        self,
+        endpoint: StorageEndpoint,
+        payload: StorageEndpointUpdate,
+    ) -> _NormalizedEndpointState:
         fields_set = payload.model_fields_set
         name = (
             self._normalize_name(payload.name, fallback=endpoint.name)
@@ -848,11 +888,9 @@ class StorageEndpointsService:
             if "endpoint_url" in fields_set
             else endpoint.endpoint_url
         )
-        region = (
-            normalize_optional_string(payload.region)
-            if "region" in fields_set
-            else endpoint.region
-        )
+        if not endpoint_url:
+            raise ValueError("Endpoint URL is required.")
+        region = payload.region if "region" in fields_set else endpoint.region
         force_path_style = (
             bool(payload.force_path_style)
             if "force_path_style" in fields_set and payload.force_path_style is not None
@@ -863,97 +901,62 @@ class StorageEndpointsService:
             if "verify_tls" in fields_set and payload.verify_tls is not None
             else bool(getattr(endpoint, "verify_tls", True))
         )
-        latitude = payload.latitude if "latitude" in fields_set else endpoint.latitude
-        longitude = payload.longitude if "longitude" in fields_set else endpoint.longitude
-        provider = self._normalize_provider(payload.provider if "provider" in fields_set else endpoint.provider)
-        region = self._normalize_region(provider, region)
-        admin_access = (
-            normalize_optional_string(payload.admin_access_key)
-            if "admin_access_key" in fields_set
-            else endpoint.admin_access_key
-        )
-        admin_secret = (
-            normalize_optional_string(payload.admin_secret_key)
-            if "admin_secret_key" in fields_set
-            else endpoint.admin_secret_key
-        )
-        supervision_access = (
-            normalize_optional_string(payload.supervision_access_key)
-            if "supervision_access_key" in fields_set
-            else endpoint.supervision_access_key
-        )
-        supervision_secret = (
-            normalize_optional_string(payload.supervision_secret_key)
-            if "supervision_secret_key" in fields_set
-            else endpoint.supervision_secret_key
-        )
-        ceph_admin_access = (
-            normalize_optional_string(payload.ceph_admin_access_key)
-            if "ceph_admin_access_key" in fields_set
-            else endpoint.ceph_admin_access_key
-        )
-        ceph_admin_secret = (
-            normalize_optional_string(payload.ceph_admin_secret_key)
-            if "ceph_admin_secret_key" in fields_set
-            else endpoint.ceph_admin_secret_key
-        )
-        # Keep credentials consistent when an access key is explicitly cleared.
-        # This avoids stale encrypted secrets if API clients only send access_key=null.
-        if "admin_access_key" in fields_set and not admin_access:
-            admin_secret = None
-        if "supervision_access_key" in fields_set and not supervision_access:
-            supervision_secret = None
-        if "ceph_admin_access_key" in fields_set and not ceph_admin_access:
-            ceph_admin_secret = None
-        raw_features = payload.features_config if payload.features_config is not None else endpoint.features_config
-        features, features_config = self._normalize_features(provider, raw_features, region)
-        admin_endpoint = features.get("admin", {}).get("endpoint")
-
-        if not endpoint_url:
-            raise ValueError("Endpoint URL is required.")
-
-        self._ensure_unique_name(name, exclude_id=endpoint.id)
-        self._ensure_unique_endpoint(endpoint_url, exclude_id=endpoint.id)
-
         (
-            admin_access,
-            admin_secret,
-            supervision_access,
-            supervision_secret,
-            ceph_admin_access,
-            ceph_admin_secret,
-        ) = self._validate_credentials(
-            provider,
-            admin_access,
-            admin_secret,
-            supervision_access,
-            supervision_secret,
-            ceph_admin_access,
-            ceph_admin_secret,
-            bool(features.get("admin", {}).get("enabled")) or bool(features.get("account", {}).get("enabled")),
-            bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
+            admin_access_key,
+            admin_secret_key,
+            supervision_access_key,
+            supervision_secret_key,
+            ceph_admin_access_key,
+            ceph_admin_secret_key,
+        ) = self._updated_endpoint_credentials(endpoint, payload)
+
+        return self._normalize_endpoint_state(
+            StorageEndpointCreate(
+                name=name,
+                endpoint_url=endpoint_url,
+                region=region,
+                force_path_style=force_path_style,
+                verify_tls=verify_tls,
+                provider=(payload.provider if "provider" in fields_set else endpoint.provider),
+                admin_access_key=admin_access_key,
+                admin_secret_key=admin_secret_key,
+                supervision_access_key=supervision_access_key,
+                supervision_secret_key=supervision_secret_key,
+                ceph_admin_access_key=ceph_admin_access_key,
+                ceph_admin_secret_key=ceph_admin_secret_key,
+                features_config=(
+                    payload.features_config
+                    if payload.features_config is not None
+                    else endpoint.features_config
+                ),
+                latitude=(payload.latitude if "latitude" in fields_set else endpoint.latitude),
+                longitude=(payload.longitude if "longitude" in fields_set else endpoint.longitude),
+            )
         )
 
-        endpoint.name = name
-        endpoint.endpoint_url = endpoint_url
-        endpoint.admin_endpoint = admin_endpoint
-        endpoint.region = region
-        endpoint.force_path_style = force_path_style
-        endpoint.verify_tls = verify_tls
-        endpoint.latitude = latitude
-        endpoint.longitude = longitude
-        endpoint.provider = provider.value
-        endpoint.admin_access_key = admin_access
-        endpoint.admin_secret_key = admin_secret
-        endpoint.supervision_access_key = supervision_access
-        endpoint.supervision_secret_key = supervision_secret
-        endpoint.ceph_admin_access_key = ceph_admin_access
-        endpoint.ceph_admin_secret_key = ceph_admin_secret
-        endpoint.features_config = features_config
-        self.db.add(endpoint)
-        self.db.commit()
-        self.db.refresh(endpoint)
-        return self._serialize(endpoint)
+    def create_endpoint(self, payload: StorageEndpointCreate) -> StorageEndpointSchema:
+        self._ensure_env_editable()
+        state = self._normalize_endpoint_state(payload)
+        self._ensure_unique_name(state.name)
+        self._ensure_unique_endpoint(state.endpoint_url)
+        endpoint = StorageEndpoint(name=state.name, endpoint_url=state.endpoint_url)
+        self._apply_endpoint_state(endpoint, state)
+        endpoint.is_default = False
+        endpoint.is_editable = True
+        return self._persist_endpoint(endpoint)
+
+    def update_endpoint(self, endpoint_id: int, payload: StorageEndpointUpdate) -> StorageEndpointSchema:
+        self._ensure_env_editable()
+        endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
+        if not endpoint:
+            raise ValueError("Endpoint not found.")
+        if not endpoint.is_editable:
+            raise ValueError("This endpoint is protected and cannot be edited.")
+        state = self._updated_endpoint_state(endpoint, payload)
+        self._ensure_unique_name(state.name, exclude_id=endpoint.id)
+        self._ensure_unique_endpoint(state.endpoint_url, exclude_id=endpoint.id)
+        self._apply_endpoint_state(endpoint, state)
+        return self._persist_endpoint(endpoint)
 
     def delete_endpoint(self, endpoint_id: int) -> None:
         self._ensure_env_editable()
