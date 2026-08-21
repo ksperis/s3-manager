@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import time
 import uuid
 from typing import Any, Callable, Optional
 
@@ -14,12 +13,12 @@ from app.utils.aws_errors import aws_error_code
 from app.utils.time import utcnow
 
 from ._shared import (
-    _ITEM_HEARTBEAT_PERSIST_INTERVAL_SECONDS,
     _ResolvedContext,
     _WorkerLeaseLostError,
     _json_dumps,
     _json_loads,
 )
+from .execution_item_loop import _MigrationItemExecutionLoop
 
 
 class BucketMigrationItemRunnerMixin:
@@ -309,162 +308,14 @@ class BucketMigrationItemRunnerMixin:
         *,
         control_check: Callable[[], str],
     ) -> None:
-        self._assert_item_execution_plan_supported(item)
-        last_heartbeat_persist = 0.0
-        while True:
-            now_mono = time.monotonic()
-            if (now_mono - last_heartbeat_persist) >= _ITEM_HEARTBEAT_PERSIST_INTERVAL_SECONDS:
-                heartbeat_at = utcnow()
-                migration.last_heartbeat_at = heartbeat_at
-                migration.updated_at = heartbeat_at
-                item.updated_at = heartbeat_at
-                self._commit()
-                last_heartbeat_persist = now_mono
-
-            state = control_check()
-            if state == "lost_lease":
-                raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
-            if state == "cancel":
-                item.status = "canceled"
-                item.finished_at = utcnow()
-                item.updated_at = utcnow()
-                self._commit()
-                return
-            if state == "pause":
-                item.status = "paused"
-                item.updated_at = utcnow()
-                self._commit()
-                return
-
-            strategy = self._item_execution_strategy(item)
-
-            if item.step == "create_bucket":
-                if not self._run_create_bucket_step(
-                    migration,
-                    item,
-                    source_ctx,
-                    target_ctx,
-                    strategy=strategy,
-                ):
-                    return
-                continue
-
-            if item.step == "copy_bucket_settings":
-                self._copy_bucket_settings(source_ctx.account, item.source_bucket, target_ctx.account, item.target_bucket, migration, item)
-                item.step = self._next_step_after_target_setup(migration, item)
-                self._commit()
-                continue
-
-            if item.step == "apply_target_lock":
-                self._run_apply_target_lock_step(migration, item, target_ctx)
-                continue
-
-            if item.step == "pre_sync":
-                copied, deleted, diff = self._sync_bucket(
-                    source_ctx,
-                    target_ctx,
-                    source_bucket=item.source_bucket,
-                    target_bucket=item.target_bucket,
-                    allow_delete=False,
-                    parallelism_max=migration.parallelism_max,
-                    migration=migration,
-                    item=item,
-                    control_check=control_check,
-                )
-                if copied < 0 or deleted < 0:
-                    self._stop_interrupted_item(migration, item, control_check)
-                    return
-                self._store_item_diff(item, diff)
-                item.pre_sync_done = True
-                item.status = "awaiting_cutover"
-                item.step = "awaiting_cutover"
-                item.updated_at = utcnow()
-                self._add_event(
-                    migration,
-                    item=item,
-                    level="info",
-                    message="Pre-sync completed; waiting for cutover.",
-                    metadata={"copied": copied},
-                )
-                self._commit()
-                return
-
-            if item.step == "awaiting_cutover":
-                item.status = "awaiting_cutover"
-                item.updated_at = utcnow()
-                self._commit()
-                return
-
-            if item.step == "apply_read_only":
-                self._apply_read_only_policy(source_ctx.account, item.source_bucket, item)
-                item.read_only_applied = True
-                item.step = "sync"
-                item.updated_at = utcnow()
-                self._add_event(migration, item=item, level="info", message="Read-only policy applied on source bucket.")
-                self._commit()
-                continue
-
-            if item.step == "sync":
-                copied, deleted, diff = self._sync_bucket(
-                    source_ctx,
-                    target_ctx,
-                    source_bucket=item.source_bucket,
-                    target_bucket=item.target_bucket,
-                    allow_delete=True,
-                    parallelism_max=migration.parallelism_max,
-                    migration=migration,
-                    item=item,
-                    control_check=control_check,
-                )
-                if copied < 0 or deleted < 0:
-                    self._stop_interrupted_item(migration, item, control_check)
-                    return
-                self._store_item_diff(item, diff)
-                item.step = "verify"
-                item.updated_at = utcnow()
-                self._commit()
-                continue
-
-            if item.step == "verify":
-                should_continue = self._run_verify_step(
-                    migration,
-                    item,
-                    source_ctx,
-                    target_ctx,
-                    strategy=strategy,
-                    control_check=control_check,
-                )
-                if should_continue:
-                    continue
-                return
-
-            if item.step == "delete_source":
-                self._set_managed_block_policy(item.source_bucket, source_ctx.account, deny_delete=False)
-                self._delete_source_bucket_with_retry(item.source_bucket, source_ctx.account)
-                self._finalize_target_versioning_state(
-                    target_ctx.account,
-                    item.target_bucket,
-                    migration,
-                    item,
-                )
-                item.status = "completed"
-                item.step = "completed"
-                item.finished_at = utcnow()
-                item.updated_at = utcnow()
-                self._add_event(migration, item=item, level="info", message="Source bucket deleted after clean diff.")
-                self._commit()
-                return
-
-            if item.step in {"completed", "skipped"}:
-                if item.status == "running":
-                    item.status = "completed"
-                if item.finished_at is None:
-                    item.finished_at = utcnow()
-                item.updated_at = utcnow()
-                self._commit()
-                return
-
-            raise RuntimeError(f"Unsupported item step: {item.step}")
+        _MigrationItemExecutionLoop(
+            service=self,
+            migration=migration,
+            item=item,
+            source_ctx=source_ctx,
+            target_ctx=target_ctx,
+            control_check=control_check,
+        ).run()
 
     def _copy_bucket_settings(
         self,
