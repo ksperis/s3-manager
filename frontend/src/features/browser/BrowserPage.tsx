@@ -13,7 +13,6 @@ import {
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import {
@@ -99,6 +98,7 @@ import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
+import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
@@ -304,17 +304,10 @@ import {
   SELECTION_COLUMN_WIDTH_PX,
   buildBrowserItems,
   buildBrowserPathStats,
-  clampColumnWidth,
   collectAvailableStorageClasses,
   createLazyColumnCacheEntry,
-  loadColumnWidthsForSurface,
-  loadVisibleColumnsForSurface,
-  normalizeVisibleColumns,
-  persistColumnWidthsForSurface,
-  persistVisibleColumnsForSurface,
   resolveColumnWidthPx,
   type BrowserColumnId,
-  type BrowserObjectColumnWidths,
   type BrowserResizableColumnId,
   type BrowserSortKey,
   type ColumnDefinition,
@@ -624,14 +617,18 @@ export default function BrowserPage({
   );
   const [activeLayoutMode, setActiveLayoutMode] =
     useState<BrowserLayoutMode>(initialLayoutMode);
-  const [columnWidths, setColumnWidths] = useState<BrowserObjectColumnWidths>(
-    () => loadColumnWidthsForSurface(isMainBrowserPath, initialLayoutMode),
-  );
-  const [activeColumnResize, setActiveColumnResize] = useState<{
-    columnId: BrowserResizableColumnId;
-    startX: number;
-    startWidthPx: number;
-  } | null>(null);
+  const {
+    activeColumnResize,
+    columnWidths,
+    resetColumnWidth,
+    resetColumns: handleResetVisibleColumns,
+    startColumnResize,
+    toggleVisibleColumn: handleToggleVisibleColumn,
+    visibleColumns,
+  } = useBrowserObjectColumns({
+    isMainBrowserPath,
+    layoutMode: activeLayoutMode,
+  });
   const [isMobileViewport, setIsMobileViewport] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia(MOBILE_OBJECT_LIST_MEDIA_QUERY).matches;
@@ -736,9 +733,6 @@ export default function BrowserPage({
   const [showMobileActionsSheet, setShowMobileActionsSheet] = useState(false);
   const [showToolbarColumnsMenu, setShowToolbarColumnsMenu] = useState(false);
   const [showUploadQuickMenu, setShowUploadQuickMenu] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<BrowserColumnId[]>(
-    () => loadVisibleColumnsForSurface(isMainBrowserPath, initialLayoutMode),
-  );
   const [lazyColumnCache, setLazyColumnCache] = useState<
     Record<string, LazyColumnCacheEntry>
   >({});
@@ -940,7 +934,6 @@ export default function BrowserPage({
   const bucketPanelLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
-  const columnWidthsRef = useRef(columnWidths);
   const pathSuggestionsDebounceRef = useRef<number | null>(null);
   const bucketSearchDebounceRef = useRef<number | null>(null);
   const bucketSearchValueRef = useRef("");
@@ -1194,57 +1187,6 @@ export default function BrowserPage({
     writeBrowserRootDensity(density);
   }, [density, isMainBrowserPath, resolvedFunctionalProfile]);
 
-  useEffect(() => {
-    columnWidthsRef.current = columnWidths;
-  }, [columnWidths]);
-
-  useEffect(() => {
-    setVisibleColumns(loadVisibleColumnsForSurface(isMainBrowserPath, activeLayoutMode));
-  }, [activeLayoutMode, isMainBrowserPath]);
-
-  useEffect(() => {
-    persistVisibleColumnsForSurface(isMainBrowserPath, visibleColumns, activeLayoutMode);
-  }, [activeLayoutMode, isMainBrowserPath, visibleColumns]);
-
-  useEffect(() => {
-    setColumnWidths(loadColumnWidthsForSurface(isMainBrowserPath, activeLayoutMode));
-  }, [activeLayoutMode, isMainBrowserPath]);
-
-  useEffect(() => {
-    if (activeColumnResize) return;
-    persistColumnWidthsForSurface(isMainBrowserPath, columnWidths, activeLayoutMode);
-  }, [activeColumnResize, activeLayoutMode, columnWidths, isMainBrowserPath]);
-
-  useEffect(() => {
-    if (!activeColumnResize) return;
-    const handlePointerMove = (event: PointerEvent) => {
-      const nextWidth =
-        activeColumnResize.startWidthPx + (event.clientX - activeColumnResize.startX);
-      setColumnWidths((prev) => ({
-        ...prev,
-        [activeColumnResize.columnId]: clampColumnWidth(
-          activeColumnResize.columnId,
-          nextWidth,
-        ),
-      }));
-    };
-    const stopColumnResize = () => {
-      setActiveColumnResize(null);
-    };
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("pointermove", handlePointerMove);
-    document.addEventListener("pointerup", stopColumnResize);
-    document.addEventListener("pointercancel", stopColumnResize);
-    return () => {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      document.removeEventListener("pointermove", handlePointerMove);
-      document.removeEventListener("pointerup", stopColumnResize);
-      document.removeEventListener("pointercancel", stopColumnResize);
-    };
-  }, [activeColumnResize]);
-
   const toggleFoldersPanel = useCallback(() => {
     if (!canUseFoldersPanel) return;
     setShowFolders((prev) => !prev);
@@ -1265,8 +1207,6 @@ export default function BrowserPage({
         nextLayout.foldersPanelWidthPx,
         nextLayout.inspectorPanelWidthPx,
       );
-      setVisibleColumns(loadVisibleColumnsForSurface(true, nextMode));
-      setColumnWidths(loadColumnWidthsForSurface(true, nextMode));
       setActiveLayoutMode(nextMode);
     },
     [isMainBrowserPath, resolvedFunctionalProfile, setPanelWidths],
@@ -4256,29 +4196,6 @@ export default function BrowserPage({
     });
   };
 
-  const startColumnResize = useCallback(
-    (columnId: BrowserResizableColumnId) =>
-      (event: ReactPointerEvent<HTMLDivElement>) => {
-        event.preventDefault();
-        event.stopPropagation();
-        setActiveColumnResize({
-          columnId,
-          startX: event.clientX,
-          startWidthPx: resolveColumnWidthPx(columnId, columnWidthsRef.current),
-        });
-      },
-    [],
-  );
-
-  const resetColumnWidth = useCallback((columnId: BrowserResizableColumnId) => {
-    setColumnWidths((prev) => {
-      if (!(columnId in prev)) return prev;
-      const next = { ...prev };
-      delete next[columnId];
-      return next;
-    });
-  }, []);
-
   const openItemDetails = (item: BrowserItem) => {
     if (onOpenObjectDetailsRoute && item.type === "file") {
       onOpenObjectDetailsRoute({
@@ -5176,30 +5093,6 @@ export default function BrowserPage({
       setSidebarBody(null);
     };
   }, [renderWorkspaceSidebarBody, setSidebarBody, showWorkspaceSidebar]);
-
-  const resetAllColumnWidths = useCallback(() => {
-    setColumnWidths({});
-  }, []);
-
-  const handleToggleVisibleColumn = useCallback(
-    (columnId: BrowserColumnId) => {
-      setVisibleColumns((prev) => {
-        const selected = new Set(prev);
-        if (selected.has(columnId)) {
-          selected.delete(columnId);
-        } else {
-          selected.add(columnId);
-        }
-        return normalizeVisibleColumns(Array.from(selected));
-      });
-    },
-    [],
-  );
-
-  const handleResetVisibleColumns = useCallback(() => {
-    setVisibleColumns(DEFAULT_VISIBLE_COLUMN_IDS);
-    resetAllColumnWidths();
-  }, [resetAllColumnWidths]);
 
   const loadLazyColumnDataForItems = useCallback(
     async (itemIds: string[]) => {
