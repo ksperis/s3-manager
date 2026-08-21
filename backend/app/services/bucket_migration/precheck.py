@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from .precheck_inspection import BucketMigrationInspector
@@ -40,6 +41,20 @@ _FEATURE_LABELS = {
     "notifications": "Notifications",
     "replication": "Replication",
 }
+
+
+@dataclass(frozen=True)
+class _SourceInspection:
+    access_ok: bool
+    object_count: int | None
+    profile: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
+class _TargetInspection:
+    exists: bool | None
+    object_count: int | None
+    profile: dict[str, Any] | None
 
 
 def _check_entry(
@@ -156,6 +171,169 @@ class BucketMigrationPrecheckPlanner:
                     details=details,
                 )
 
+    def _inspect_source_bucket(
+        self,
+        context: Any,
+        item: Any,
+        *,
+        probe_policy: Any,
+        add_check: Callable[..., None],
+    ) -> _SourceInspection:
+        try:
+            self._service._precheck_can_list_bucket(context, item.source_bucket)
+        except Exception as exc:  # noqa: BLE001
+            add_check(
+                code="source_access_failed",
+                severity="error",
+                blocking=True,
+                scope="source_bucket",
+                message=f"Source bucket read/list check failed: {exc}",
+            )
+            return _SourceInspection(access_ok=False, object_count=None, profile=None)
+
+        add_check(
+            code="source_access_ok",
+            severity="info",
+            blocking=False,
+            scope="source_bucket",
+            message="Source bucket is reachable for list/read operations.",
+        )
+
+        object_count: int | None = None
+        try:
+            object_count = int(self._service._count_bucket_objects(context, item.source_bucket))
+            add_check(
+                code="source_count_ok",
+                severity="info",
+                blocking=False,
+                scope="source_bucket",
+                message=f"Source bucket object count: {object_count}.",
+                details={"current_object_count": object_count},
+            )
+        except Exception as exc:  # noqa: BLE001
+            add_check(
+                code="source_count_failed",
+                severity="warning",
+                blocking=False,
+                scope="source_bucket",
+                message=f"Unable to count source bucket objects: {exc}",
+            )
+
+        profile: dict[str, Any] | None = None
+        try:
+            profile = self._inspector.inspect_bucket_state(
+                context,
+                item.source_bucket,
+                probe_policy=probe_policy,
+            )
+            self._add_feature_availability_checks(
+                profile,
+                scope_prefix="source",
+                add_check=add_check,
+            )
+        except Exception as exc:  # noqa: BLE001
+            add_check(
+                code="source_profile_inspection_failed",
+                severity="error",
+                blocking=True,
+                scope="source_bucket",
+                message=f"Unable to inspect source bucket features: {exc}",
+            )
+        return _SourceInspection(access_ok=True, object_count=object_count, profile=profile)
+
+    def _inspect_target_bucket(
+        self,
+        context: Any,
+        item: Any,
+        *,
+        probe_policy: Any,
+        add_check: Callable[..., None],
+    ) -> _TargetInspection:
+        target_exists: bool | None = None
+        try:
+            target_exists = self._service._precheck_bucket_exists(context, item.target_bucket)
+            if target_exists is True:
+                add_check(
+                    code="target_exists",
+                    severity="warning",
+                    blocking=False,
+                    scope="target_bucket",
+                    message="Target bucket already exists; this item will be skipped.",
+                )
+            elif target_exists is False:
+                add_check(
+                    code="target_missing",
+                    severity="info",
+                    blocking=False,
+                    scope="target_bucket",
+                    message="Target bucket does not exist.",
+                )
+            else:
+                add_check(
+                    code="target_existence_unknown",
+                    severity="error",
+                    blocking=True,
+                    scope="target_bucket",
+                    message="Unable to verify whether target bucket exists.",
+                )
+        except Exception as exc:  # noqa: BLE001
+            add_check(
+                code="target_existence_failed",
+                severity="error",
+                blocking=True,
+                scope="target_bucket",
+                message=f"Target bucket existence check failed: {exc}",
+            )
+
+        if target_exists is not True:
+            return _TargetInspection(
+                exists=target_exists,
+                object_count=0 if target_exists is False else None,
+                profile=None,
+            )
+
+        object_count: int | None = None
+        try:
+            object_count = int(self._service._count_bucket_objects(context, item.target_bucket))
+            add_check(
+                code="target_count_ok",
+                severity="info",
+                blocking=False,
+                scope="target_bucket",
+                message=f"Target bucket object count: {object_count}.",
+                details={"current_object_count": object_count},
+            )
+        except Exception as exc:  # noqa: BLE001
+            add_check(
+                code="target_count_failed",
+                severity="warning",
+                blocking=False,
+                scope="target_bucket",
+                message=f"Unable to count target bucket objects: {exc}",
+            )
+
+        profile: dict[str, Any] | None = None
+        try:
+            profile = self._inspector.inspect_bucket_state(
+                context,
+                item.target_bucket,
+                probe_policy=probe_policy,
+            )
+            self._add_feature_availability_checks(
+                profile,
+                scope_prefix="target",
+                add_check=add_check,
+            )
+        except Exception as exc:  # noqa: BLE001
+            add_check(
+                code="target_profile_inspection_failed",
+                severity="warning",
+                blocking=False,
+                scope="target_bucket",
+                message=f"Unable to inspect existing target bucket features: {exc}",
+            )
+        return _TargetInspection(exists=True, object_count=object_count, profile=profile)
+
     def run(self, migration: Any, *, checked_at: Any) -> dict[str, Any]:
         report: dict[str, Any] = {
             "report_version": _PRECHECK_REPORT_VERSION,
@@ -262,13 +440,6 @@ class BucketMigrationPrecheckPlanner:
 
         for item in sorted(migration.items, key=lambda entry: entry.id):
             checks: list[dict[str, Any]] = []
-            source_profile: Optional[dict[str, Any]] = None
-            target_profile: Optional[dict[str, Any]] = None
-            target_exists: Optional[bool] = None
-            source_access_ok = False
-            strategy = "current_only"
-            source_count: Optional[int] = None
-            target_count: Optional[int] = None
 
             def add_check(
                 *,
@@ -290,149 +461,27 @@ class BucketMigrationPrecheckPlanner:
                     )
                 )
 
-            try:
-                self._service._precheck_can_list_bucket(source_ctx, item.source_bucket)
-                source_access_ok = True
-                add_check(
-                    code="source_access_ok",
-                    severity="info",
-                    blocking=False,
-                    scope="source_bucket",
-                    message="Source bucket is reachable for list/read operations.",
-                )
-            except Exception as exc:  # noqa: BLE001
-                add_check(
-                    code="source_access_failed",
-                    severity="error",
-                    blocking=True,
-                    scope="source_bucket",
-                    message=f"Source bucket read/list check failed: {exc}",
-                )
-
-            if source_access_ok:
-                try:
-                    source_count = self._service._count_bucket_objects(source_ctx, item.source_bucket)
-                    item.source_count = int(source_count)
-                    add_check(
-                        code="source_count_ok",
-                        severity="info",
-                        blocking=False,
-                        scope="source_bucket",
-                        message=f"Source bucket object count: {source_count}.",
-                        details={"current_object_count": source_count},
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    item.source_count = None
-                    add_check(
-                        code="source_count_failed",
-                        severity="warning",
-                        blocking=False,
-                        scope="source_bucket",
-                        message=f"Unable to count source bucket objects: {exc}",
-                    )
-
-                try:
-                    source_profile = self._inspector.inspect_bucket_state(
-                        source_ctx,
-                        item.source_bucket,
-                        probe_policy=probe_policy,
-                    )
-                    self._add_feature_availability_checks(
-                        source_profile,
-                        scope_prefix="source",
-                        add_check=add_check,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    add_check(
-                        code="source_profile_inspection_failed",
-                        severity="error",
-                        blocking=True,
-                        scope="source_bucket",
-                        message=f"Unable to inspect source bucket features: {exc}",
-                    )
-            else:
-                item.source_count = None
-
-            try:
-                target_exists = self._service._precheck_bucket_exists(target_ctx, item.target_bucket)
-                if target_exists is True:
-                    add_check(
-                        code="target_exists",
-                        severity="warning",
-                        blocking=False,
-                        scope="target_bucket",
-                        message="Target bucket already exists; this item will be skipped.",
-                    )
-                elif target_exists is False:
-                    add_check(
-                        code="target_missing",
-                        severity="info",
-                        blocking=False,
-                        scope="target_bucket",
-                        message="Target bucket does not exist.",
-                    )
-                else:
-                    add_check(
-                        code="target_existence_unknown",
-                        severity="error",
-                        blocking=True,
-                        scope="target_bucket",
-                        message="Unable to verify whether target bucket exists.",
-                    )
-            except Exception as exc:  # noqa: BLE001
-                add_check(
-                    code="target_existence_failed",
-                    severity="error",
-                    blocking=True,
-                    scope="target_bucket",
-                    message=f"Target bucket existence check failed: {exc}",
-                )
-
-            if target_exists is True:
-                strategy = "skip_existing"
-                try:
-                    target_count = self._service._count_bucket_objects(target_ctx, item.target_bucket)
-                    item.target_count = int(target_count)
-                    add_check(
-                        code="target_count_ok",
-                        severity="info",
-                        blocking=False,
-                        scope="target_bucket",
-                        message=f"Target bucket object count: {target_count}.",
-                        details={"current_object_count": target_count},
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    item.target_count = None
-                    add_check(
-                        code="target_count_failed",
-                        severity="warning",
-                        blocking=False,
-                        scope="target_bucket",
-                        message=f"Unable to count target bucket objects: {exc}",
-                    )
-                try:
-                    target_profile = self._inspector.inspect_bucket_state(
-                        target_ctx,
-                        item.target_bucket,
-                        probe_policy=probe_policy,
-                    )
-                    self._add_feature_availability_checks(
-                        target_profile,
-                        scope_prefix="target",
-                        add_check=add_check,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    add_check(
-                        code="target_profile_inspection_failed",
-                        severity="warning",
-                        blocking=False,
-                        scope="target_bucket",
-                        message=f"Unable to inspect existing target bucket features: {exc}",
-                    )
-            elif target_exists is False:
-                item.target_count = 0
-            else:
-                item.target_count = None
+            source_inspection = self._inspect_source_bucket(
+                source_ctx,
+                item,
+                probe_policy=probe_policy,
+                add_check=add_check,
+            )
+            target_inspection = self._inspect_target_bucket(
+                target_ctx,
+                item,
+                probe_policy=probe_policy,
+                add_check=add_check,
+            )
+            source_access_ok = source_inspection.access_ok
+            source_count = source_inspection.object_count
+            source_profile = source_inspection.profile
+            target_exists = target_inspection.exists
+            target_count = target_inspection.object_count
+            target_profile = target_inspection.profile
+            strategy = "skip_existing" if target_exists is True else "current_only"
+            item.source_count = source_count
+            item.target_count = target_count
 
             if source_profile is not None:
                 source_profile["current_object_count"] = source_count
@@ -728,8 +777,6 @@ class BucketMigrationPrecheckPlanner:
             global_delete_source_safe = global_delete_source_safe and delete_source_safe
             global_rollback_safe = global_rollback_safe and rollback_safe
 
-            item.source_count = source_count
-            item.target_count = target_count if target_exists is True else item.target_count
             item.source_snapshot_json = self._service._json_dumps_safe(source_profile)
             item.target_snapshot_json = self._service._json_dumps_safe(target_profile)
             execution_plan = {
