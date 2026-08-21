@@ -5,8 +5,6 @@
 import type { PageBreadcrumb } from "../components/PageHeader";
 import type { WorkspaceId } from "../utils/workspaces";
 
-export type { WorkspaceId } from "../utils/workspaces";
-
 type WorkspaceContract = {
   label: string;
   path: string;

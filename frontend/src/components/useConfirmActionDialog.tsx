@@ -12,7 +12,7 @@ type ConfirmActionDialogDetail = {
   mono?: boolean;
 };
 
-export type ConfirmActionRequest = {
+type ConfirmActionRequest = {
   title: string;
   description: ReactNode;
   confirmLabel: string;
