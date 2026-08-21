@@ -214,6 +214,92 @@ class BucketMigrationItemRunnerMixin:
         self._commit()
         return False
 
+    def _run_create_bucket_step(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        strategy: str,
+    ) -> bool:
+        object_lock_enabled = False
+        if migration.copy_bucket_settings:
+            object_lock = self._configuration.get_bucket_object_lock(item.source_bucket, source_ctx.account)
+            object_lock_enabled = bool(object_lock and object_lock.enabled)
+        try:
+            self._buckets.create_bucket(
+                item.target_bucket,
+                target_ctx.account,
+                versioning=(strategy == "version_aware"),
+                location_constraint=target_ctx.region,
+                object_lock_enabled=object_lock_enabled,
+            )
+        except RuntimeError as exc:
+            if not self._is_bucket_already_exists_error(exc):
+                raise
+            item.target_bucket_exists = True
+            item.status = "skipped"
+            item.step = "skipped"
+            item.error_message = "Target bucket already exists; item skipped."
+            item.finished_at = utcnow()
+            self._add_event(
+                migration,
+                item=item,
+                level="info",
+                message="Target bucket already exists; item skipped.",
+                metadata={"target_bucket": item.target_bucket},
+            )
+            self._commit()
+            return False
+
+        self._add_event(
+            migration,
+            item=item,
+            level="info",
+            message="Target bucket created.",
+            metadata={"target_bucket": item.target_bucket, "object_lock_enabled": object_lock_enabled},
+        )
+        item.step = (
+            "copy_bucket_settings"
+            if migration.copy_bucket_settings
+            else self._next_step_after_target_setup(migration, item)
+        )
+        self._commit()
+        return True
+
+    def _run_apply_target_lock_step(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        target_ctx: _ResolvedContext,
+    ) -> None:
+        try:
+            self._apply_target_write_lock_policy(target_ctx, item.target_bucket, item)
+            item.target_lock_applied = True
+        except Exception as exc:  # noqa: BLE001
+            lock_error = str(exc)
+            try:
+                if item.target_policy_backup_json:
+                    self._restore_target_write_lock_policy(target_ctx.account, item.target_bucket, item)
+                else:
+                    self._remove_managed_target_write_lock_statement(item.target_bucket, target_ctx.account)
+            except Exception as restore_exc:  # noqa: BLE001
+                lock_error = f"{lock_error}; restore attempt failed: {restore_exc}"
+            item.target_lock_applied = False
+            item.target_policy_backup_json = None
+            raise RuntimeError(f"Target write-lock policy could not be applied: {lock_error}") from exc
+
+        item.step = "pre_sync" if migration.mode == "pre_sync" and not item.pre_sync_done else "apply_read_only"
+        item.updated_at = utcnow()
+        self._add_event(
+            migration,
+            item=item,
+            level="info",
+            message="Target write-lock policy applied.",
+        )
+        self._commit()
+
     def _run_item(
         self,
         migration: BucketMigration,
@@ -253,47 +339,14 @@ class BucketMigrationItemRunnerMixin:
             strategy = self._item_execution_strategy(item)
 
             if item.step == "create_bucket":
-                object_lock_enabled = False
-                if migration.copy_bucket_settings:
-                    object_lock = self._configuration.get_bucket_object_lock(item.source_bucket, source_ctx.account)
-                    object_lock_enabled = bool(object_lock and object_lock.enabled)
-                try:
-                    self._buckets.create_bucket(
-                        item.target_bucket,
-                        target_ctx.account,
-                        versioning=(strategy == "version_aware"),
-                        location_constraint=target_ctx.region,
-                        object_lock_enabled=object_lock_enabled,
-                    )
-                except RuntimeError as exc:
-                    if self._is_bucket_already_exists_error(exc):
-                        item.target_bucket_exists = True
-                        item.status = "skipped"
-                        item.step = "skipped"
-                        item.error_message = "Target bucket already exists; item skipped."
-                        item.finished_at = utcnow()
-                        self._add_event(
-                            migration,
-                            item=item,
-                            level="info",
-                            message="Target bucket already exists; item skipped.",
-                            metadata={"target_bucket": item.target_bucket},
-                        )
-                        self._commit()
-                        return
-                    raise
-                self._add_event(
+                if not self._run_create_bucket_step(
                     migration,
-                    item=item,
-                    level="info",
-                    message="Target bucket created.",
-                    metadata={"target_bucket": item.target_bucket, "object_lock_enabled": object_lock_enabled},
-                )
-                if migration.copy_bucket_settings:
-                    item.step = "copy_bucket_settings"
-                else:
-                    item.step = self._next_step_after_target_setup(migration, item)
-                self._commit()
+                    item,
+                    source_ctx,
+                    target_ctx,
+                    strategy=strategy,
+                ):
+                    return
                 continue
 
             if item.step == "copy_bucket_settings":
@@ -303,33 +356,7 @@ class BucketMigrationItemRunnerMixin:
                 continue
 
             if item.step == "apply_target_lock":
-                try:
-                    self._apply_target_write_lock_policy(target_ctx, item.target_bucket, item)
-                    item.target_lock_applied = True
-                except Exception as exc:  # noqa: BLE001
-                    lock_error = str(exc)
-                    try:
-                        if item.target_policy_backup_json:
-                            self._restore_target_write_lock_policy(target_ctx.account, item.target_bucket, item)
-                        else:
-                            self._remove_managed_target_write_lock_statement(item.target_bucket, target_ctx.account)
-                    except Exception as restore_exc:  # noqa: BLE001
-                        lock_error = f"{lock_error}; restore attempt failed: {restore_exc}"
-                    item.target_lock_applied = False
-                    item.target_policy_backup_json = None
-                    raise RuntimeError(
-                        "Target write-lock policy could not be applied: "
-                        f"{lock_error}"
-                    ) from exc
-                item.step = "pre_sync" if migration.mode == "pre_sync" and not item.pre_sync_done else "apply_read_only"
-                item.updated_at = utcnow()
-                self._add_event(
-                    migration,
-                    item=item,
-                    level="info",
-                    message="Target write-lock policy applied.",
-                )
-                self._commit()
+                self._run_apply_target_lock_step(migration, item, target_ctx)
                 continue
 
             if item.step == "pre_sync":
