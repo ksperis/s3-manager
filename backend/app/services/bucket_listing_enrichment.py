@@ -8,12 +8,9 @@ from typing import Any, Callable, Literal, Protocol
 from app.db import StorageEndpoint
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.bucket import (
-    BucketEncryptionConfiguration,
     BucketFeatureStatus,
-    BucketLoggingConfiguration,
     BucketProperties,
     BucketTag,
-    BucketWebsiteConfiguration,
 )
 from app.models.ceph_admin import (
     CephAdminBucketFilterQuery,
@@ -614,6 +611,177 @@ def backfill_bucket_owner_metadata(
     return buckets
 
 
+def _mark_details_unavailable(column_details: dict[str, Any], detail_keys: set[str]) -> None:
+    for key in detail_keys:
+        column_details[key] = None
+
+
+def _enrich_website_configuration(
+    bucket: CephAdminBucketSummary,
+    service: BucketConfigurationService,
+    account: S3ExecutionTarget,
+    *,
+    wants_feature: bool,
+    detail_keys: set[str],
+    feature_map: dict[str, BucketFeatureStatus],
+    column_details: dict[str, Any],
+) -> None:
+    try:
+        website = service.get_bucket_website(bucket.name, account)
+    except RuntimeError:
+        if wants_feature:
+            feature_map["static_website"] = _feature_status_unavailable()
+        _mark_details_unavailable(column_details, detail_keys)
+        return
+
+    routing_rules = website.routing_rules or []
+    configured = bool(
+        (website.redirect_all_requests_to and (website.redirect_all_requests_to.host_name or "").strip())
+        or (website.index_document or "").strip()
+        or (isinstance(routing_rules, list) and len(routing_rules) > 0)
+    )
+    if wants_feature:
+        feature_map["static_website"] = (
+            _feature_status_active("Enabled") if configured else _feature_status_inactive("Disabled")
+        )
+    if "website_index_document" in detail_keys:
+        column_details["website_index_document"] = (website.index_document or "").strip() or None
+    if "website_error_document" in detail_keys:
+        column_details["website_error_document"] = (website.error_document or "").strip() or None
+    if "website_redirect_host" in detail_keys:
+        redirect_host = (
+            (website.redirect_all_requests_to.host_name or "").strip()
+            if website.redirect_all_requests_to
+            else ""
+        )
+        column_details["website_redirect_host"] = redirect_host or None
+    if "website_routing_rule_count" in detail_keys:
+        column_details["website_routing_rule_count"] = len(routing_rules) if isinstance(routing_rules, list) else 0
+
+
+def _enrich_policy_configuration(
+    bucket: CephAdminBucketSummary,
+    service: BucketConfigurationService,
+    account: S3ExecutionTarget,
+    *,
+    wants_feature: bool,
+    detail_keys: set[str],
+    feature_map: dict[str, BucketFeatureStatus],
+    column_details: dict[str, Any],
+) -> None:
+    try:
+        policy = service.get_policy(bucket.name, account)
+    except RuntimeError:
+        if wants_feature:
+            feature_map["bucket_policy"] = _feature_status_unavailable()
+        _mark_details_unavailable(column_details, detail_keys)
+        return
+
+    configured = bool(policy and isinstance(policy, dict) and len(policy.keys()) > 0)
+    if wants_feature:
+        feature_map["bucket_policy"] = (
+            _feature_status_active("Configured") if configured else _feature_status_inactive("Not set")
+        )
+    statement_count, has_conditions = extract_policy_statement_summary(policy if isinstance(policy, dict) else None)
+    if "policy_statement_count" in detail_keys:
+        column_details["policy_statement_count"] = statement_count
+    if "policy_has_conditions" in detail_keys:
+        column_details["policy_has_conditions"] = has_conditions
+
+
+def _enrich_logging_configuration(
+    bucket: CephAdminBucketSummary,
+    service: BucketConfigurationService,
+    account: S3ExecutionTarget,
+    *,
+    wants_feature: bool,
+    detail_keys: set[str],
+    feature_map: dict[str, BucketFeatureStatus],
+    column_details: dict[str, Any],
+) -> None:
+    try:
+        logging_config = service.get_bucket_logging(bucket.name, account)
+    except RuntimeError:
+        if wants_feature:
+            feature_map["access_logging"] = _feature_status_unavailable()
+        _mark_details_unavailable(column_details, detail_keys)
+        return
+
+    enabled = bool(logging_config.enabled and (logging_config.target_bucket or "").strip())
+    if wants_feature:
+        feature_map["access_logging"] = (
+            _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
+        )
+    if "logging_target_bucket" in detail_keys:
+        column_details["logging_target_bucket"] = (logging_config.target_bucket or "").strip() or None
+    if "logging_target_prefix" in detail_keys:
+        column_details["logging_target_prefix"] = (logging_config.target_prefix or "").strip() or None
+
+
+def _enrich_notification_configuration(
+    bucket: CephAdminBucketSummary,
+    service: BucketConfigurationService,
+    account: S3ExecutionTarget,
+    *,
+    sns_feature_enabled: bool,
+    wants_feature: bool,
+    detail_keys: set[str],
+    feature_map: dict[str, BucketFeatureStatus],
+    column_details: dict[str, Any],
+) -> None:
+    if not sns_feature_enabled:
+        if wants_feature:
+            feature_map["notifications"] = _feature_status_unavailable()
+        _mark_details_unavailable(column_details, detail_keys)
+        return
+
+    try:
+        notifications = service.get_bucket_notifications(bucket.name, account)
+    except RuntimeError:
+        if wants_feature:
+            feature_map["notifications"] = _feature_status_unavailable()
+        _mark_details_unavailable(column_details, detail_keys)
+        return
+
+    configuration = notifications.configuration or {}
+    if wants_feature:
+        configured = is_bucket_notification_configuration_configured(configuration)
+        feature_map["notifications"] = (
+            _feature_status_active("Configured") if configured else _feature_status_inactive("Not set")
+        )
+    if "notification_topic_names" in detail_keys:
+        column_details["notification_topic_names"] = extract_notification_topic_names(configuration)
+
+
+def _enrich_encryption_configuration(
+    bucket: CephAdminBucketSummary,
+    service: BucketConfigurationService,
+    account: S3ExecutionTarget,
+    *,
+    wants_feature: bool,
+    detail_keys: set[str],
+    feature_map: dict[str, BucketFeatureStatus],
+    column_details: dict[str, Any],
+) -> None:
+    try:
+        encryption = service.get_bucket_encryption(bucket.name, account)
+    except RuntimeError:
+        if wants_feature:
+            feature_map["server_side_encryption"] = _feature_status_unavailable()
+        _mark_details_unavailable(column_details, detail_keys)
+        return
+
+    enabled = bool(encryption.rules and len(encryption.rules) > 0)
+    if wants_feature:
+        feature_map["server_side_encryption"] = (
+            _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
+        )
+    if "sse_algorithms" in detail_keys:
+        column_details["sse_algorithms"] = extract_sse_values(encryption, "sse_algorithm")
+    if "sse_kms_key_ids" in detail_keys:
+        column_details["sse_kms_key_ids"] = extract_sse_values(encryption, "sse_kms_key_id")
+
+
 def enrich_buckets(
     buckets: list[CephAdminBucketSummary],
     requested: set[str],
@@ -848,108 +1016,60 @@ def enrich_buckets(
                     column_details["cors_allowed_origins"] = extract_cors_allowed_values(cors_rules, "cors_allowed_origin")
 
         if wants_website or wants_website_details:
-            try:
-                website = service.get_bucket_website(bucket.name, account)
-                routing_rules = website.routing_rules or []
-                configured = bool(
-                    (website.redirect_all_requests_to and (website.redirect_all_requests_to.host_name or "").strip())
-                    or (website.index_document or "").strip()
-                    or (isinstance(routing_rules, list) and len(routing_rules) > 0)
-                )
-                if wants_website:
-                    feature_map["static_website"] = _feature_status_active("Enabled") if configured else _feature_status_inactive("Disabled")
-                if "website_index_document" in website_detail_keys:
-                    column_details["website_index_document"] = (website.index_document or "").strip() or None
-                if "website_error_document" in website_detail_keys:
-                    column_details["website_error_document"] = (website.error_document or "").strip() or None
-                if "website_redirect_host" in website_detail_keys:
-                    redirect_host = (
-                        (website.redirect_all_requests_to.host_name or "").strip()
-                        if website.redirect_all_requests_to
-                        else ""
-                    )
-                    column_details["website_redirect_host"] = redirect_host or None
-                if "website_routing_rule_count" in website_detail_keys:
-                    column_details["website_routing_rule_count"] = len(routing_rules) if isinstance(routing_rules, list) else 0
-            except RuntimeError:
-                if wants_website:
-                    feature_map["static_website"] = _feature_status_unavailable()
-                for key in website_detail_keys:
-                    column_details[key] = None
+            _enrich_website_configuration(
+                bucket,
+                service,
+                account,
+                wants_feature=wants_website,
+                detail_keys=website_detail_keys,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
 
         if wants_policy or wants_policy_details:
-            try:
-                policy = service.get_policy(bucket.name, account)
-                configured = bool(policy and isinstance(policy, dict) and len(policy.keys()) > 0)
-                if wants_policy:
-                    feature_map["bucket_policy"] = _feature_status_active("Configured") if configured else _feature_status_inactive("Not set")
-                statement_count, has_conditions = extract_policy_statement_summary(policy if isinstance(policy, dict) else None)
-                if "policy_statement_count" in policy_detail_keys:
-                    column_details["policy_statement_count"] = statement_count
-                if "policy_has_conditions" in policy_detail_keys:
-                    column_details["policy_has_conditions"] = has_conditions
-            except RuntimeError:
-                if wants_policy:
-                    feature_map["bucket_policy"] = _feature_status_unavailable()
-                for key in policy_detail_keys:
-                    column_details[key] = None
+            _enrich_policy_configuration(
+                bucket,
+                service,
+                account,
+                wants_feature=wants_policy,
+                detail_keys=policy_detail_keys,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
 
         if wants_logging or wants_logging_details:
-            try:
-                logging_config = service.get_bucket_logging(bucket.name, account)
-                enabled = bool(logging_config.enabled and (logging_config.target_bucket or "").strip())
-                if wants_logging:
-                    feature_map["access_logging"] = _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
-                if "logging_target_bucket" in logging_detail_keys:
-                    column_details["logging_target_bucket"] = (logging_config.target_bucket or "").strip() or None
-                if "logging_target_prefix" in logging_detail_keys:
-                    column_details["logging_target_prefix"] = (logging_config.target_prefix or "").strip() or None
-            except RuntimeError:
-                if wants_logging:
-                    feature_map["access_logging"] = _feature_status_unavailable()
-                for key in logging_detail_keys:
-                    column_details[key] = None
+            _enrich_logging_configuration(
+                bucket,
+                service,
+                account,
+                wants_feature=wants_logging,
+                detail_keys=logging_detail_keys,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
 
         if wants_notifications or wants_notification_details:
-            if not sns_feature_enabled:
-                if wants_notifications:
-                    feature_map["notifications"] = _feature_status_unavailable()
-                for key in notification_detail_keys:
-                    column_details[key] = None
-            else:
-                try:
-                    notifications = service.get_bucket_notifications(bucket.name, account)
-                    configuration = notifications.configuration or {}
-                    if wants_notifications:
-                        configured = is_bucket_notification_configuration_configured(configuration)
-                        feature_map["notifications"] = (
-                            _feature_status_active("Configured") if configured else _feature_status_inactive("Not set")
-                        )
-                    if "notification_topic_names" in notification_detail_keys:
-                        column_details["notification_topic_names"] = extract_notification_topic_names(configuration)
-                except RuntimeError:
-                    if wants_notifications:
-                        feature_map["notifications"] = _feature_status_unavailable()
-                    for key in notification_detail_keys:
-                        column_details[key] = None
+            _enrich_notification_configuration(
+                bucket,
+                service,
+                account,
+                sns_feature_enabled=sns_feature_enabled,
+                wants_feature=wants_notifications,
+                detail_keys=notification_detail_keys,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
 
         if wants_encryption or wants_sse_details:
-            try:
-                encryption = service.get_bucket_encryption(bucket.name, account)
-                enabled = bool(encryption.rules and len(encryption.rules) > 0)
-                if wants_encryption:
-                    feature_map["server_side_encryption"] = (
-                        _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
-                    )
-                if "sse_algorithms" in sse_detail_keys:
-                    column_details["sse_algorithms"] = extract_sse_values(encryption, "sse_algorithm")
-                if "sse_kms_key_ids" in sse_detail_keys:
-                    column_details["sse_kms_key_ids"] = extract_sse_values(encryption, "sse_kms_key_id")
-            except RuntimeError:
-                if wants_encryption:
-                    feature_map["server_side_encryption"] = _feature_status_unavailable()
-                for key in sse_detail_keys:
-                    column_details[key] = None
+            _enrich_encryption_configuration(
+                bucket,
+                service,
+                account,
+                wants_feature=wants_encryption,
+                detail_keys=sse_detail_keys,
+                feature_map=feature_map,
+                column_details=column_details,
+            )
 
         update = {}
         if tags is not None:
