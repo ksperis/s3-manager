@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,23 @@ import ManagerMigrationDetailPage from "./ManagerMigrationDetailPage";
 
 const mockUseManagerContexts = vi.fn();
 const mockUseManagerMigrationDetail = vi.fn();
+const mockDeleteManagerMigration = vi.fn();
+const mockRollbackFailedManagerMigrationItems = vi.fn();
+const mockRollbackManagerMigration = vi.fn();
+const mockRollbackManagerMigrationItem = vi.fn();
+const mockStopManagerMigration = vi.fn();
+
+vi.mock("../../../api/managerMigrations", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/managerMigrations")>("../../../api/managerMigrations");
+  return {
+    ...actual,
+    deleteManagerMigration: (...args: unknown[]) => mockDeleteManagerMigration(...args),
+    rollbackFailedManagerMigrationItems: (...args: unknown[]) => mockRollbackFailedManagerMigrationItems(...args),
+    rollbackManagerMigration: (...args: unknown[]) => mockRollbackManagerMigration(...args),
+    rollbackManagerMigrationItem: (...args: unknown[]) => mockRollbackManagerMigrationItem(...args),
+    stopManagerMigration: (...args: unknown[]) => mockStopManagerMigration(...args),
+  };
+});
 
 vi.mock("./hooks", () => ({
   useManagerContexts: () => mockUseManagerContexts(),
@@ -188,6 +205,11 @@ function buildDetail() {
 
 describe("ManagerMigrationDetailPage", () => {
   beforeEach(() => {
+    mockDeleteManagerMigration.mockReset().mockResolvedValue(undefined);
+    mockRollbackFailedManagerMigrationItems.mockReset().mockResolvedValue(undefined);
+    mockRollbackManagerMigration.mockReset().mockResolvedValue(undefined);
+    mockRollbackManagerMigrationItem.mockReset().mockResolvedValue(undefined);
+    mockStopManagerMigration.mockReset().mockResolvedValue(undefined);
     mockUseManagerContexts.mockReturnValue({
       contextLabelById: new Map([
         ["src-ctx", "Source"],
@@ -268,5 +290,68 @@ describe("ManagerMigrationDetailPage", () => {
     );
 
     expect(screen.getByRole("button", { name: "Run precheck" })).toHaveClass("ui-button-base");
+  });
+
+  it("confirms stopping an active migration before calling the API", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/manager/migrations/11"]}>
+        <Routes>
+          <Route path="/manager/migrations/:migrationId" element={<ManagerMigrationDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    expect(screen.getByRole("heading", { name: "Stop migration?" })).toBeInTheDocument();
+    expect(mockStopManagerMigration).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("heading", { name: "Stop migration?" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    await user.click(screen.getByRole("button", { name: "Stop migration" }));
+    await waitFor(() => expect(mockStopManagerMigration).toHaveBeenCalledWith(11));
+  });
+
+  it("confirms migration, batch, item, and history rollback paths", async () => {
+    const user = userEvent.setup();
+    const failedDetail = { ...buildDetail(), status: "failed" } as const;
+    mockUseManagerMigrationDetail.mockReturnValue({
+      migrationDetail: failedDetail,
+      detailLoading: false,
+      detailError: null,
+      setDetailError: vi.fn(),
+      refresh: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/manager/migrations/11"]}>
+        <Routes>
+          <Route path="/manager/migrations/:migrationId" element={<ManagerMigrationDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Rollback migration" }));
+    expect(screen.getByRole("heading", { name: "Roll back migration?" })).toBeInTheDocument();
+    expect(mockRollbackManagerMigration).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Rollback all failed (1)" }));
+    expect(screen.getByRole("heading", { name: "Roll back all failed buckets?" })).toBeInTheDocument();
+    expect(mockRollbackFailedManagerMigrationItems).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Rollback bucket" }));
+    expect(screen.getByRole("heading", { name: "Roll back this failed bucket?" })).toBeInTheDocument();
+    expect(screen.getByText("bucket-failed-copy")).toBeInTheDocument();
+    expect(mockRollbackManagerMigrationItem).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Delete migration" }));
+    expect(screen.getByRole("heading", { name: "Delete migration history?" })).toBeInTheDocument();
+    expect(screen.getByText(/Source and destination buckets will not be deleted/)).toBeInTheDocument();
+    expect(mockDeleteManagerMigration).not.toHaveBeenCalled();
   });
 });

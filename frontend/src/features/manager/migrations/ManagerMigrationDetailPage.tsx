@@ -5,6 +5,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import ConfirmActionDialog from "../../../components/ConfirmActionDialog";
 import PageShell from "../../../components/PageShell";
 import UiButton from "../../../components/ui/UiButton";
 import { cx, uiPanelClass, uiPanelMutedClass } from "../../../components/ui/styles";
@@ -51,6 +52,21 @@ import {
 
 type BucketFocus = "focus" | "all" | "failed" | "awaiting";
 
+type PendingMigrationConfirmation =
+  | { kind: "stop" }
+  | { kind: "rollback" }
+  | { kind: "rollback-failed" }
+  | { kind: "rollback-item"; itemId: number }
+  | { kind: "delete" };
+
+type MigrationConfirmationCopy = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  details?: Array<{ label: string; value: string | number; mono?: boolean }>;
+  impacts: string[];
+};
+
 function priorityValue(item: BucketMigrationItemView): number {
   const priority: Record<string, number> = {
     failed: 0,
@@ -87,6 +103,7 @@ export default function ManagerMigrationDetailPage() {
   const [showEvents, setShowEvents] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
   const [bucketFocus, setBucketFocus] = useState<BucketFocus>("focus");
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingMigrationConfirmation | null>(null);
 
   const selectedMigrationSummary = useMemo(() => {
     if (!migrationDetail) return null;
@@ -195,7 +212,7 @@ export default function ManagerMigrationDetailPage() {
       !["queued", "running", "pause_requested", "cancel_requested"].includes(migrationDetail.status)
   );
 
-  const runAction = async (action: MigrationOperatorAction | "stop") => {
+  const executeAction = async (action: MigrationOperatorAction | "stop") => {
     if (!migrationDetail) return;
     setActionLoading(action);
     setDetailError(null);
@@ -214,6 +231,14 @@ export default function ManagerMigrationDetailPage() {
     }
   };
 
+  const runAction = (action: MigrationOperatorAction | "stop") => {
+    if (action === "stop" || action === "rollback") {
+      setPendingConfirmation({ kind: action });
+      return;
+    }
+    void executeAction(action);
+  };
+
   const runPrecheck = async () => {
     if (!migrationDetail) return;
     setActionLoading("precheck");
@@ -228,14 +253,8 @@ export default function ManagerMigrationDetailPage() {
     }
   };
 
-  const runFailedItemsAction = async (action: "retry_failed_items" | "rollback_failed_items") => {
+  const executeFailedItemsAction = async (action: "retry_failed_items" | "rollback_failed_items") => {
     if (!migrationDetail) return;
-    if (action === "rollback_failed_items") {
-      const confirmed = window.confirm(
-        "Rollback all failed buckets? This will restore source rights and purge destination objects for failed items."
-      );
-      if (!confirmed) return;
-    }
     const loadingKey = action === "retry_failed_items" ? "retry-failed-items" : "rollback-failed-items";
     setActionLoading(loadingKey);
     setDetailError(null);
@@ -250,14 +269,16 @@ export default function ManagerMigrationDetailPage() {
     }
   };
 
-  const runItemAction = async (itemId: number, action: "retry" | "rollback") => {
-    if (!migrationDetail) return;
-    if (action === "rollback") {
-      const confirmed = window.confirm(
-        "Rollback this failed bucket? This will restore source rights and purge destination objects for this bucket."
-      );
-      if (!confirmed) return;
+  const runFailedItemsAction = (action: "retry_failed_items" | "rollback_failed_items") => {
+    if (action === "rollback_failed_items") {
+      setPendingConfirmation({ kind: "rollback-failed" });
+      return;
     }
+    void executeFailedItemsAction(action);
+  };
+
+  const executeItemAction = async (itemId: number, action: "retry" | "rollback") => {
+    if (!migrationDetail) return;
     const loadingKey = `${action}-item-${itemId}`;
     setActionLoading(loadingKey);
     setDetailError(null);
@@ -272,6 +293,14 @@ export default function ManagerMigrationDetailPage() {
     }
   };
 
+  const runItemAction = (itemId: number, action: "retry" | "rollback") => {
+    if (action === "rollback") {
+      setPendingConfirmation({ kind: "rollback-item", itemId });
+      return;
+    }
+    void executeItemAction(itemId, action);
+  };
+
   const togglePrecheckDetails = (itemId: number) => {
     setExpandedPrecheckItems((current) => ({
       ...current,
@@ -279,13 +308,8 @@ export default function ManagerMigrationDetailPage() {
     }));
   };
 
-  const runDeleteMigration = async () => {
+  const executeDeleteMigration = async () => {
     if (!migrationDetail || !isFinalMigrationStatus(migrationDetail.status)) return;
-    const confirmed = window.confirm(
-      `Delete migration #${migrationDetail.id}? This only removes migration history and tracking data.`
-    );
-    if (!confirmed) return;
-
     setActionLoading("delete-migration");
     setDetailError(null);
     try {
@@ -297,6 +321,79 @@ export default function ManagerMigrationDetailPage() {
       setActionLoading(null);
     }
   };
+
+  const runDeleteMigration = () => {
+    setPendingConfirmation({ kind: "delete" });
+  };
+
+  const confirmPendingAction = async () => {
+    if (!pendingConfirmation) return;
+    try {
+      if (pendingConfirmation.kind === "stop") await executeAction("stop");
+      if (pendingConfirmation.kind === "rollback") await executeAction("rollback");
+      if (pendingConfirmation.kind === "rollback-failed") await executeFailedItemsAction("rollback_failed_items");
+      if (pendingConfirmation.kind === "rollback-item") {
+        await executeItemAction(pendingConfirmation.itemId, "rollback");
+      }
+      if (pendingConfirmation.kind === "delete") await executeDeleteMigration();
+    } finally {
+      setPendingConfirmation(null);
+    }
+  };
+
+  const confirmationCopy = useMemo<MigrationConfirmationCopy | null>(() => {
+    if (!migrationDetail || !pendingConfirmation) return null;
+    if (pendingConfirmation.kind === "stop") {
+      return {
+        title: "Stop migration?",
+        description: "Stop the active replication run for this migration.",
+        confirmLabel: "Stop migration",
+        details: [{ label: "Migration", value: `#${migrationDetail.id}` }],
+        impacts: ["Partially copied destination data may remain until you resume, roll back, or clean it up."],
+      };
+    }
+    if (pendingConfirmation.kind === "rollback") {
+      return {
+        title: "Roll back migration?",
+        description: "Reverse the completed migration work and restore source access.",
+        confirmLabel: "Roll back migration",
+        details: [{ label: "Migration", value: `#${migrationDetail.id}` }],
+        impacts: ["Destination objects created by this migration will be purged."],
+      };
+    }
+    if (pendingConfirmation.kind === "rollback-failed") {
+      return {
+        title: "Roll back all failed buckets?",
+        description: "Reverse the migration work for every failed bucket in this run.",
+        confirmLabel: "Roll back failed buckets",
+        details: [
+          { label: "Migration", value: `#${migrationDetail.id}` },
+          { label: "Failed buckets", value: failedItemCount },
+        ],
+        impacts: ["Source access will be restored and destination objects for failed items will be purged."],
+      };
+    }
+    if (pendingConfirmation.kind === "rollback-item") {
+      const item = migrationDetail.items.find((entry) => entry.id === pendingConfirmation.itemId);
+      return {
+        title: "Roll back this failed bucket?",
+        description: "Reverse the migration work for this bucket only.",
+        confirmLabel: "Roll back bucket",
+        details: [
+          { label: "Source", value: item?.source_bucket ?? `Item #${pendingConfirmation.itemId}`, mono: true },
+          { label: "Destination", value: item?.target_bucket ?? "Unknown", mono: true },
+        ],
+        impacts: ["Source access will be restored and destination objects for this bucket will be purged."],
+      };
+    }
+    return {
+      title: "Delete migration history?",
+      description: "Remove this completed migration from the operational history.",
+      confirmLabel: "Delete history",
+      details: [{ label: "Migration", value: `#${migrationDetail.id}` }],
+      impacts: ["Tracking data and events will be removed. Source and destination buckets will not be deleted."],
+    };
+  }, [failedItemCount, migrationDetail, pendingConfirmation]);
 
   if (!migrationIdValue) {
     return (
@@ -818,6 +915,19 @@ export default function ManagerMigrationDetailPage() {
               </div>
             )}
           </section>
+
+          {confirmationCopy && (
+            <ConfirmActionDialog
+              title={confirmationCopy.title}
+              description={confirmationCopy.description}
+              confirmLabel={confirmationCopy.confirmLabel}
+              details={confirmationCopy.details}
+              impacts={confirmationCopy.impacts}
+              loading={actionLoading != null}
+              onCancel={() => setPendingConfirmation(null)}
+              onConfirm={() => void confirmPendingAction()}
+            />
+          )}
         </>
       )}
     </PageShell>
