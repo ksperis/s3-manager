@@ -31,6 +31,7 @@ from app.services.bucket_listing_shared import (
     listing_sort_key,
     serialize_filter,
 )
+from app.services.listing_rule_matching import match_numeric_rule, match_text_rule
 from app.routers.ceph_admin.account_listing_cache import (
     get_cached_accounts_listing,
     get_cached_rgw_accounts_payload,
@@ -45,7 +46,7 @@ from app.services.listing_progress import (
     interpolate_progress_percent,
     invoke_cancel_check,
 )
-from app.utils.normalize import normalize_optional_scalar, normalize_text
+from app.utils.normalize import normalize_optional_scalar
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
@@ -83,53 +84,9 @@ def _match_account_field_rule(account: CephAdminRgwAccountSummary, rule: CephAdm
 
     string_fields = {"account_id", "account_name", "email"}
     if field in string_fields:
-        left = normalize_text(str(value))
-        right = normalize_text(str(rule.value or ""))
-        if op == "contains":
-            return right in left
-        if op == "starts_with":
-            return left.startswith(right)
-        if op == "ends_with":
-            return left.endswith(right)
-        if op == "eq":
-            return left == right
-        if op == "neq":
-            return left != right
-        if op in ("in", "not_in"):
-            if not isinstance(rule.value, list):
-                return False
-            candidates = {normalize_text(str(item)) for item in rule.value}
-            result = left in candidates
-            return result if op == "in" else not result
-        return False
+        return match_text_rule(value, op, rule.value)
 
-    left_num = coerce_number(value)
-    if left_num is None:
-        return False
-    if op in ("eq", "neq", "gt", "gte", "lt", "lte"):
-        right_num = coerce_number(rule.value)
-        if right_num is None:
-            return False
-        if op == "eq":
-            return left_num == right_num
-        if op == "neq":
-            return left_num != right_num
-        if op == "gt":
-            return left_num > right_num
-        if op == "gte":
-            return left_num >= right_num
-        if op == "lt":
-            return left_num < right_num
-        if op == "lte":
-            return left_num <= right_num
-    if op in ("in", "not_in"):
-        if not isinstance(rule.value, list):
-            return False
-        candidates = {coerce_number(item) for item in rule.value}
-        candidates = {item for item in candidates if item is not None}
-        result = left_num in candidates
-        return result if op == "in" else not result
-    return False
+    return match_numeric_rule(value, op, rule.value, coerce=coerce_number)
 
 
 def _match_account_rules(

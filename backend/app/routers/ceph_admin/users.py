@@ -31,6 +31,11 @@ from app.services.bucket_listing_shared import (
     listing_sort_key,
     serialize_filter,
 )
+from app.services.listing_rule_matching import (
+    match_boolean_rule,
+    match_numeric_rule,
+    match_text_rule,
+)
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.ceph_admin.user_common import (
     coerce_bool,
@@ -50,7 +55,7 @@ from app.services.listing_progress import (
     interpolate_progress_percent,
     invoke_cancel_check,
 )
-from app.utils.normalize import normalize_optional_scalar, normalize_text
+from app.utils.normalize import normalize_optional_scalar
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw_payloads import extract_bucket_list, extract_rgw_user_payload
 from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
@@ -99,76 +104,22 @@ def _match_user_field_rule(user: CephAdminRgwUserSummary, rule: CephAdminUserFil
         return value is not None
 
     if field == "suspended":
-        left_bool = coerce_bool(value)
-        if left_bool is None:
-            # Treat missing suspended flag as active.
-            left_bool = False
-        if op in ("eq", "neq"):
-            right_bool = coerce_bool(rule.value)
-            if right_bool is None:
-                return False
-            return left_bool == right_bool if op == "eq" else left_bool != right_bool
-        if op in ("in", "not_in"):
-            if not isinstance(rule.value, list):
-                return False
-            candidates = {coerce_bool(item) for item in rule.value}
-            candidates = {item for item in candidates if item is not None}
-            result = left_bool in candidates
-            return result if op == "in" else not result
-        return False
+        return match_boolean_rule(
+            value,
+            op,
+            rule.value,
+            coerce=coerce_bool,
+            default_if_none=False,
+        )
 
     if value is None:
         return False
 
     string_fields = {"uid", "tenant", "account_id", "account_name", "full_name", "email"}
     if field in string_fields:
-        left = normalize_text(str(value))
-        right = normalize_text(str(rule.value or ""))
-        if op == "contains":
-            return right in left
-        if op == "starts_with":
-            return left.startswith(right)
-        if op == "ends_with":
-            return left.endswith(right)
-        if op == "eq":
-            return left == right
-        if op == "neq":
-            return left != right
-        if op in ("in", "not_in"):
-            if not isinstance(rule.value, list):
-                return False
-            candidates = {normalize_text(str(item)) for item in rule.value}
-            result = left in candidates
-            return result if op == "in" else not result
-        return False
+        return match_text_rule(value, op, rule.value)
 
-    left_num = coerce_number(value)
-    if left_num is None:
-        return False
-    if op in ("eq", "neq", "gt", "gte", "lt", "lte"):
-        right_num = coerce_number(rule.value)
-        if right_num is None:
-            return False
-        if op == "eq":
-            return left_num == right_num
-        if op == "neq":
-            return left_num != right_num
-        if op == "gt":
-            return left_num > right_num
-        if op == "gte":
-            return left_num >= right_num
-        if op == "lt":
-            return left_num < right_num
-        if op == "lte":
-            return left_num <= right_num
-    if op in ("in", "not_in"):
-        if not isinstance(rule.value, list):
-            return False
-        candidates = {coerce_number(item) for item in rule.value}
-        candidates = {item for item in candidates if item is not None}
-        result = left_num in candidates
-        return result if op == "in" else not result
-    return False
+    return match_numeric_rule(value, op, rule.value, coerce=coerce_number)
 
 
 def _match_user_rules(

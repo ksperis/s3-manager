@@ -31,7 +31,16 @@ from app.services.bucket_feature_param_matching import (
     extract_policy_statement_summary,
     extract_sse_values,
 )
-from app.services.bucket_listing_shared import coerce_filter_bool, coerce_filter_number, filter_requires_stats
+from app.services.bucket_listing_shared import (
+    coerce_filter_bool,
+    coerce_filter_number,
+    filter_requires_stats,
+)
+from app.services.listing_rule_matching import (
+    match_boolean_rule,
+    match_numeric_rule,
+    match_text_rule,
+)
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
@@ -119,6 +128,14 @@ def _normalize_owner_kind(raw: object) -> Literal["account", "user"] | None:
     if value in {"user", "users"}:
         return "user"
     return None
+
+
+def _normalize_owner_kind_scalar(raw: object) -> str | None:
+    normalized_kind = _normalize_owner_kind(raw)
+    if normalized_kind:
+        return normalized_kind
+    normalized = normalize_text(str(raw or ""))
+    return normalized or None
 
 
 def determine_owner_name_lookup_scope(query: CephAdminBucketFilterQuery | None) -> Literal["any", "account", "user"]:
@@ -391,22 +408,13 @@ def match_bucket_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucke
     if op == "not_null":
         return value is not None
     if field == "owner_suspended":
-        left_bool = coerce_filter_bool(value)
-        if left_bool is None:
-            left_bool = False
-        if op in ("eq", "neq"):
-            right_bool = coerce_filter_bool(rule.value)
-            if right_bool is None:
-                return False
-            return left_bool == right_bool if op == "eq" else left_bool != right_bool
-        if op in ("in", "not_in"):
-            if not isinstance(rule.value, list):
-                return False
-            candidates = {coerce_filter_bool(item) for item in rule.value}
-            candidates = {item for item in candidates if item is not None}
-            result = left_bool in candidates
-            return result if op == "in" else not result
-        return False
+        return match_boolean_rule(
+            value,
+            op,
+            rule.value,
+            coerce=coerce_filter_bool,
+            default_if_none=False,
+        )
     if value is None:
         return False
 
@@ -423,65 +431,23 @@ def match_bucket_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucke
         "bucket_identity",
     }
     if field in string_fields:
-        left = normalize_text(str(value))
         if field == "owner_kind":
-            normalized_kind = _normalize_owner_kind(rule.value)
-            right = normalized_kind if normalized_kind else normalize_text(str(rule.value or ""))
-            if not right:
-                return False
-        else:
-            right = normalize_text(str(rule.value or ""))
-        if op == "contains":
-            return right in left
-        if op == "starts_with":
-            return left.startswith(right)
-        if op == "ends_with":
-            return left.endswith(right)
-        if op == "eq":
-            return left == right
-        if op == "neq":
-            return left != right
-        if op in ("in", "not_in"):
-            if not isinstance(rule.value, list):
-                return False
-            if field == "owner_kind":
-                candidates = {_normalize_owner_kind(item) for item in rule.value}
-                candidates = {item for item in candidates if item is not None}
-                if not candidates:
-                    return False
-            else:
-                candidates = {normalize_text(str(item)) for item in rule.value}
-            result = left in candidates
-            return result if op == "in" else not result
-        return False
+            return match_text_rule(
+                value,
+                op,
+                rule.value,
+                scalar_normalizer=_normalize_owner_kind_scalar,
+                candidate_normalizer=_normalize_owner_kind,
+                require_candidates=True,
+            )
+        return match_text_rule(value, op, rule.value)
 
-    left_num = coerce_filter_number(value)
-    if left_num is None:
-        return False
-    if op in ("eq", "neq", "gt", "gte", "lt", "lte"):
-        right_num = coerce_filter_number(rule.value)
-        if right_num is None:
-            return False
-        if op == "eq":
-            return left_num == right_num
-        if op == "neq":
-            return left_num != right_num
-        if op == "gt":
-            return left_num > right_num
-        if op == "gte":
-            return left_num >= right_num
-        if op == "lt":
-            return left_num < right_num
-        if op == "lte":
-            return left_num <= right_num
-    if op in ("in", "not_in"):
-        if not isinstance(rule.value, list):
-            return False
-        candidates = {coerce_filter_number(item) for item in rule.value}
-        candidates = {item for item in candidates if item is not None}
-        result = left_num in candidates
-        return result if op == "in" else not result
-    return False
+    return match_numeric_rule(
+        value,
+        op,
+        rule.value,
+        coerce=coerce_filter_number,
+    )
 
 
 def match_bucket_feature_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
