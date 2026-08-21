@@ -327,6 +327,156 @@ class _DistributionBuilder:
         return result
 
 
+class _BucketUsageScan:
+    def __init__(self, calculated_at: datetime) -> None:
+        self.calculated_at = calculated_at
+        self.data_types = _DistributionBuilder(
+            _DATA_TYPE_LABELS,
+            _DATA_TYPE_ORDER,
+        )
+        self.storage_classes = _DistributionBuilder({}, [])
+        self.sizes = _DistributionBuilder(
+            {key: label for key, label, _, _ in _SIZE_BUCKETS},
+            [key for key, _, _, _ in _SIZE_BUCKETS],
+        )
+        self.ages = _DistributionBuilder(
+            {key: label for key, label, _, _ in _AGE_BUCKETS}
+            | {"unknown": "Unknown"},
+            [key for key, _, _, _ in _AGE_BUCKETS] + ["unknown"],
+        )
+        self.current_versions = _DistributionBuilder(
+            _CURRENT_LABELS,
+            ["current", "noncurrent"],
+        )
+        self.object_version_count = 0
+        self.current_version_count = 0
+        self.noncurrent_version_count = 0
+        self.delete_marker_count = 0
+        self.total_bytes = 0
+        self.current_bytes = 0
+        self.noncurrent_bytes = 0
+        self.last_progress_at = 0.0
+
+    def add_entry(self, entry: _ObjectVersionEntry) -> None:
+        self.object_version_count += 1
+        self.total_bytes += entry.size
+        current_key = "current" if entry.is_latest else "noncurrent"
+        if entry.is_latest:
+            self.current_version_count += 1
+            self.current_bytes += entry.size
+        else:
+            self.noncurrent_version_count += 1
+            self.noncurrent_bytes += entry.size
+        self.current_versions.add(current_key, bytes_value=entry.size)
+        self.data_types.add(
+            classify_data_type(entry.key),
+            bytes_value=entry.size,
+        )
+        storage_class = (
+            (entry.storage_class or "STANDARD").strip().upper() or "STANDARD"
+        )
+        self.storage_classes.add(
+            storage_class,
+            bytes_value=entry.size,
+            label=storage_class,
+        )
+        size_key, size_label = _size_bucket_key(entry.size)
+        self.sizes.add(size_key, bytes_value=entry.size, label=size_label)
+        age_key, age_label = _age_bucket_key(
+            entry.last_modified,
+            self.calculated_at,
+        )
+        self.ages.add(age_key, bytes_value=entry.size, label=age_label)
+
+    def add_delete_marker(self) -> None:
+        self.delete_marker_count += 1
+
+    def emit_progress(
+        self,
+        target: BucketUsageStatsResolvedTarget,
+        callback: ProgressCallback | None,
+        message: str | None = None,
+    ) -> None:
+        if callback is None:
+            return
+        now_monotonic = monotonic()
+        should_throttle = bool(
+            message is None
+            and self.object_version_count % _PROGRESS_EVERY_LISTED != 0
+            and now_monotonic - self.last_progress_at
+            < _PROGRESS_MIN_INTERVAL_SECONDS
+        )
+        if should_throttle:
+            return
+        self.last_progress_at = now_monotonic
+        callback(
+            BucketUsageStatsProgress(
+                stage="list",
+                bucket_name=target.bucket_name,
+                context_id=target.context_id,
+                context_name=target.context_name,
+                listed_versions=self.object_version_count,
+                listed_delete_markers=self.delete_marker_count,
+                total_bytes=self.total_bytes,
+                message=message,
+            )
+        )
+
+    def snapshot(
+        self,
+        target: BucketUsageStatsResolvedTarget,
+        *,
+        scan_mode: BucketUsageStatsScanMode,
+        version_listing_available: bool,
+        warnings: list[str],
+    ) -> BucketUsageStatsSnapshot:
+        current_vs_noncurrent = (
+            []
+            if scan_mode == "current_only"
+            else self.current_versions.entries(
+                total_count=self.object_version_count,
+                total_bytes=self.total_bytes,
+                include_zero_keys=True,
+            )
+        )
+        return BucketUsageStatsSnapshot(
+            scope_kind=target.scope_kind,
+            scope_id=target.scope_id,
+            scope_name=target.scope_name,
+            bucket_name=target.bucket_name,
+            scan_mode=scan_mode,
+            version_listing_available=version_listing_available,
+            object_version_count=self.object_version_count,
+            current_version_count=self.current_version_count,
+            noncurrent_version_count=self.noncurrent_version_count,
+            delete_marker_count=self.delete_marker_count,
+            total_bytes=self.total_bytes,
+            current_bytes=self.current_bytes,
+            noncurrent_bytes=self.noncurrent_bytes,
+            data_type_distribution=self.data_types.entries(
+                total_count=self.object_version_count,
+                total_bytes=self.total_bytes,
+            ),
+            storage_class_distribution=self.storage_classes.entries(
+                total_count=self.object_version_count,
+                total_bytes=self.total_bytes,
+            ),
+            size_distribution=self.sizes.entries(
+                total_count=self.object_version_count,
+                total_bytes=self.total_bytes,
+                include_zero_keys=True,
+            ),
+            age_distribution=self.ages.entries(
+                total_count=self.object_version_count,
+                total_bytes=self.total_bytes,
+                include_zero_keys=True,
+            ),
+            current_vs_noncurrent=current_vs_noncurrent,
+            warnings=warnings,
+            calculated_at=self.calculated_at,
+        )
+
+
 class BucketUsageStatsService(LongRunningS3ClientService):
     s3_user_agent_extra = "bucketreef-bucket-usage-stats"
 
@@ -391,156 +541,102 @@ class BucketUsageStatsService(LongRunningS3ClientService):
         cancel_check: CancelCheck | None = None,
     ) -> BucketUsageStatsSnapshot:
         client = self._build_client(target.account)
-        now = utcnow()
+        calculated_at = utcnow()
         warnings: list[str] = []
         scan_mode: BucketUsageStatsScanMode = "versions"
         version_listing_available = True
-
-        data_type_dist = _DistributionBuilder(_DATA_TYPE_LABELS, _DATA_TYPE_ORDER)
-        storage_class_dist = _DistributionBuilder({}, [])
-        size_dist = _DistributionBuilder({key: label for key, label, _, _ in _SIZE_BUCKETS}, [key for key, _, _, _ in _SIZE_BUCKETS])
-        age_dist = _DistributionBuilder(
-            {key: label for key, label, _, _ in _AGE_BUCKETS} | {"unknown": "Unknown"},
-            [key for key, _, _, _ in _AGE_BUCKETS] + ["unknown"],
-        )
-        current_dist = _DistributionBuilder(_CURRENT_LABELS, ["current", "noncurrent"])
-
-        object_version_count = 0
-        current_version_count = 0
-        noncurrent_version_count = 0
-        delete_marker_count = 0
-        total_bytes = 0
-        current_bytes = 0
-        noncurrent_bytes = 0
-        last_progress_at = 0.0
-
-        def emit_progress(message: str | None = None) -> None:
-            nonlocal last_progress_at
-            if progress_callback is None:
-                return
-            now_monotonic = monotonic()
-            if message is None and object_version_count % _PROGRESS_EVERY_LISTED != 0 and now_monotonic - last_progress_at < _PROGRESS_MIN_INTERVAL_SECONDS:
-                return
-            last_progress_at = now_monotonic
-            progress_callback(
-                BucketUsageStatsProgress(
-                    stage="list",
-                    bucket_name=target.bucket_name,
-                    context_id=target.context_id,
-                    context_name=target.context_name,
-                    listed_versions=object_version_count,
-                    listed_delete_markers=delete_marker_count,
-                    total_bytes=total_bytes,
-                    message=message,
-                )
-            )
-
+        scan = _BucketUsageScan(calculated_at)
         try:
-            iterator = self._iter_version_entries(client, target.bucket_name, cancel_check=cancel_check)
-            emit_progress("Listing object versions")
-            for raw_entry in iterator:
-                if cancel_check:
-                    cancel_check()
-                if isinstance(raw_entry, dict) and raw_entry.get("delete_marker"):
-                    delete_marker_count += 1
-                    continue
-                entry = raw_entry
-                object_version_count += 1
-                entry_bytes = entry.size
-                total_bytes += entry_bytes
-                if entry.is_latest:
-                    current_version_count += 1
-                    current_bytes += entry_bytes
-                    current_dist.add("current", bytes_value=entry_bytes)
-                else:
-                    noncurrent_version_count += 1
-                    noncurrent_bytes += entry_bytes
-                    current_dist.add("noncurrent", bytes_value=entry_bytes)
-                data_type_dist.add(classify_data_type(entry.key), bytes_value=entry_bytes)
-                storage_class = (entry.storage_class or "STANDARD").strip().upper() or "STANDARD"
-                storage_class_dist.add(storage_class, bytes_value=entry_bytes, label=storage_class)
-                size_key, size_label = _size_bucket_key(entry_bytes)
-                size_dist.add(size_key, bytes_value=entry_bytes, label=size_label)
-                age_key, age_label = _age_bucket_key(entry.last_modified, now)
-                age_dist.add(age_key, bytes_value=entry_bytes, label=age_label)
-                emit_progress()
+            self._scan_version_entries(
+                client,
+                target,
+                scan,
+                progress_callback=progress_callback,
+                cancel_check=cancel_check,
+            )
         except (ClientError, BotoCoreError, RuntimeError) as exc:
             if not _is_version_listing_unsupported(exc):
                 raise RuntimeError(
                     f"Unable to list object versions for '{target.bucket_name}': {format_s3_error(exc)}"
                 ) from exc
-            warnings.append("Version listing is unavailable for this endpoint. Statistics were calculated from current objects only.")
+            warnings.append(
+                "Version listing is unavailable for this endpoint. "
+                "Statistics were calculated from current objects only."
+            )
             scan_mode = "current_only"
             version_listing_available = False
-            object_version_count = 0
-            current_version_count = 0
-            noncurrent_version_count = 0
-            delete_marker_count = 0
-            total_bytes = 0
-            current_bytes = 0
-            noncurrent_bytes = 0
-            data_type_dist = _DistributionBuilder(_DATA_TYPE_LABELS, _DATA_TYPE_ORDER)
-            storage_class_dist = _DistributionBuilder({}, [])
-            size_dist = _DistributionBuilder({key: label for key, label, _, _ in _SIZE_BUCKETS}, [key for key, _, _, _ in _SIZE_BUCKETS])
-            age_dist = _DistributionBuilder(
-                {key: label for key, label, _, _ in _AGE_BUCKETS} | {"unknown": "Unknown"},
-                [key for key, _, _, _ in _AGE_BUCKETS] + ["unknown"],
-            )
-            current_dist = _DistributionBuilder(_CURRENT_LABELS, ["current", "noncurrent"])
-            emit_progress("Listing current objects")
+            scan = _BucketUsageScan(calculated_at)
             try:
-                for entry in self._iter_current_entries(client, target.bucket_name, cancel_check=cancel_check):
-                    if cancel_check:
-                        cancel_check()
-                    object_version_count += 1
-                    current_version_count += 1
-                    entry_bytes = entry.size
-                    total_bytes += entry_bytes
-                    current_bytes += entry_bytes
-                    data_type_dist.add(classify_data_type(entry.key), bytes_value=entry_bytes)
-                    storage_class = (entry.storage_class or "STANDARD").strip().upper() or "STANDARD"
-                    storage_class_dist.add(storage_class, bytes_value=entry_bytes, label=storage_class)
-                    size_key, size_label = _size_bucket_key(entry_bytes)
-                    size_dist.add(size_key, bytes_value=entry_bytes, label=size_label)
-                    age_key, age_label = _age_bucket_key(entry.last_modified, now)
-                    age_dist.add(age_key, bytes_value=entry_bytes, label=age_label)
-                    emit_progress()
+                self._scan_current_entries(
+                    client,
+                    target,
+                    scan,
+                    progress_callback=progress_callback,
+                    cancel_check=cancel_check,
+                )
             except (ClientError, BotoCoreError, RuntimeError) as fallback_exc:
                 raise RuntimeError(
                     f"Unable to list current objects for '{target.bucket_name}': {format_s3_error(fallback_exc)}"
                 ) from fallback_exc
-
-        if scan_mode == "current_only":
-            current_vs_noncurrent = []
-        else:
-            current_vs_noncurrent = current_dist.entries(
-                total_count=object_version_count,
-                total_bytes=total_bytes,
-                include_zero_keys=True,
-            )
-
-        return BucketUsageStatsSnapshot(
-            scope_kind=target.scope_kind,
-            scope_id=target.scope_id,
-            scope_name=target.scope_name,
-            bucket_name=target.bucket_name,
+        return scan.snapshot(
+            target,
             scan_mode=scan_mode,
             version_listing_available=version_listing_available,
-            object_version_count=object_version_count,
-            current_version_count=current_version_count,
-            noncurrent_version_count=noncurrent_version_count,
-            delete_marker_count=delete_marker_count,
-            total_bytes=total_bytes,
-            current_bytes=current_bytes,
-            noncurrent_bytes=noncurrent_bytes,
-            data_type_distribution=data_type_dist.entries(total_count=object_version_count, total_bytes=total_bytes),
-            storage_class_distribution=storage_class_dist.entries(total_count=object_version_count, total_bytes=total_bytes),
-            size_distribution=size_dist.entries(total_count=object_version_count, total_bytes=total_bytes, include_zero_keys=True),
-            age_distribution=age_dist.entries(total_count=object_version_count, total_bytes=total_bytes, include_zero_keys=True),
-            current_vs_noncurrent=current_vs_noncurrent,
             warnings=warnings,
-            calculated_at=now,
         )
+
+    def _scan_version_entries(
+        self,
+        client: Any,
+        target: BucketUsageStatsResolvedTarget,
+        scan: _BucketUsageScan,
+        *,
+        progress_callback: ProgressCallback | None,
+        cancel_check: CancelCheck | None,
+    ) -> None:
+        scan.emit_progress(
+            target,
+            progress_callback,
+            "Listing object versions",
+        )
+        entries = self._iter_version_entries(
+            client,
+            target.bucket_name,
+            cancel_check=cancel_check,
+        )
+        for entry in entries:
+            if cancel_check:
+                cancel_check()
+            if isinstance(entry, dict) and entry.get("delete_marker"):
+                scan.add_delete_marker()
+                continue
+            scan.add_entry(entry)
+            scan.emit_progress(target, progress_callback)
+
+    def _scan_current_entries(
+        self,
+        client: Any,
+        target: BucketUsageStatsResolvedTarget,
+        scan: _BucketUsageScan,
+        *,
+        progress_callback: ProgressCallback | None,
+        cancel_check: CancelCheck | None,
+    ) -> None:
+        scan.emit_progress(
+            target,
+            progress_callback,
+            "Listing current objects",
+        )
+        entries = self._iter_current_entries(
+            client,
+            target.bucket_name,
+            cancel_check=cancel_check,
+        )
+        for entry in entries:
+            if cancel_check:
+                cancel_check()
+            scan.add_entry(entry)
+            scan.emit_progress(target, progress_callback)
 
     def get_latest(self, db: Session, *, scope_kind: str, scope_id: str, bucket_name: str) -> BucketUsageStatsSnapshot | None:
         row = (

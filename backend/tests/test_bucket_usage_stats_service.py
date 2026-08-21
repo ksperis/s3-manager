@@ -190,6 +190,56 @@ def test_usage_stats_falls_back_to_current_objects_when_versions_are_unsupported
     assert _dist(snapshot, "images").bytes == 10
 
 
+def test_usage_stats_fallback_discards_partial_version_scan():
+    class PartialVersionPaginator(FakePaginator):
+        def paginate(self, **kwargs):
+            self.calls.append(kwargs)
+            yield {
+                "Versions": [
+                    {
+                        "Key": "stale/partial.pdf",
+                        "IsLatest": True,
+                        "Size": 999,
+                    }
+                ]
+            }
+            raise _client_error("NotImplemented", "not implemented")
+
+    client = FakeS3Client(
+        {
+            "list_object_versions": PartialVersionPaginator(),
+            "list_objects_v2": FakePaginator(
+                [
+                    {
+                        "Contents": [
+                            {
+                                "Key": "current/logo.png",
+                                "Size": 10,
+                            }
+                        ]
+                    }
+                ]
+            ),
+        }
+    )
+    progress = []
+
+    snapshot = FakeUsageStatsService(client).calculate_bucket(
+        _target(),
+        progress_callback=progress.append,
+    )
+
+    assert snapshot.scan_mode == "current_only"
+    assert snapshot.object_version_count == 1
+    assert snapshot.total_bytes == 10
+    assert _dist(snapshot, "images").bytes == 10
+    assert all(entry.bytes != 999 for entry in snapshot.data_type_distribution)
+    assert [event.message for event in progress if event.message] == [
+        "Listing object versions",
+        "Listing current objects",
+    ]
+
+
 def test_usage_stats_does_not_fallback_on_access_denied():
     client = FakeS3Client(
         {
