@@ -11,7 +11,9 @@ const mocks = vi.hoisted(() => ({
   refreshStorageOpsBucketListingCache: vi.fn(),
   listStorageOpsBuckets: vi.fn(),
   streamStorageOpsBuckets: vi.fn(),
+  fetchCephAdminBucketUiTagOrphans: vi.fn(),
   fetchCephAdminBucketUiTags: vi.fn(),
+  fetchStorageOpsBucketUiTagOrphans: vi.fn(),
   fetchStorageOpsBucketUiTags: vi.fn(),
   patchCephAdminBucketUiTags: vi.fn(),
   patchStorageOpsBucketUiTags: vi.fn(),
@@ -89,7 +91,9 @@ vi.mock("../../api/storageOps", () => ({
 }));
 
 vi.mock("../../api/bucketUiTags", () => ({
+  fetchCephAdminBucketUiTagOrphans: mocks.fetchCephAdminBucketUiTagOrphans,
   fetchCephAdminBucketUiTags: mocks.fetchCephAdminBucketUiTags,
+  fetchStorageOpsBucketUiTagOrphans: mocks.fetchStorageOpsBucketUiTagOrphans,
   fetchStorageOpsBucketUiTags: mocks.fetchStorageOpsBucketUiTags,
   patchCephAdminBucketUiTags: mocks.patchCephAdminBucketUiTags,
   patchStorageOpsBucketUiTags: mocks.patchStorageOpsBucketUiTags,
@@ -255,14 +259,18 @@ describe("BucketOpsWorkbench selection actions", () => {
     mocks.refreshStorageOpsBucketListingCache.mockReset();
     mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
+    mocks.fetchCephAdminBucketUiTagOrphans.mockReset();
     mocks.fetchCephAdminBucketUiTags.mockReset();
+    mocks.fetchStorageOpsBucketUiTagOrphans.mockReset();
     mocks.fetchStorageOpsBucketUiTags.mockReset();
     mocks.patchCephAdminBucketUiTags.mockReset();
     mocks.patchStorageOpsBucketUiTags.mockReset();
-    mocks.fetchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
-    mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
-    mocks.patchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
-    mocks.patchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.fetchCephAdminBucketUiTagOrphans.mockResolvedValue({ orphans: [] });
+    mocks.fetchCephAdminBucketUiTags.mockResolvedValue({ definitions: [] });
+    mocks.fetchStorageOpsBucketUiTagOrphans.mockResolvedValue({ orphans: [] });
+    mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [] });
+    mocks.patchCephAdminBucketUiTags.mockResolvedValue({ definitions: [] });
+    mocks.patchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [] });
     mocks.backupCephAdminBucketConfigs.mockResolvedValue({
       kind: "ceph-admin.bucket-config-backup",
       version: 1,

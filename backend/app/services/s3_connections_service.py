@@ -469,6 +469,7 @@ class S3ConnectionsService:
             )
 
     def _delete_entry(self, row: DBS3Connection) -> None:
+        domain_kind, _owner_user_id = self.tags.resolve_connection_domain(row)
         (
             self.db.query(UserS3Connection)
             .filter(UserS3Connection.s3_connection_id == row.id)
@@ -481,7 +482,7 @@ class S3ConnectionsService:
         )
         self.db.delete(row)
         self.db.flush()
-        self.tags.cleanup_orphan_definitions()
+        self.tags.cleanup_orphan_definitions(domain_kinds=[domain_kind])
         self.db.commit()
 
     def _resolve_access_flags(self, *, access_manager: Optional[bool], access_browser: Optional[bool]) -> tuple[bool, bool]:

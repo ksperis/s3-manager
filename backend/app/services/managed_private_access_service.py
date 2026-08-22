@@ -279,9 +279,14 @@ class ManagedPrivateAccessService:
             ) from exc
 
         self.db.delete(provisioning)
+        domain_kind, _owner_user_id = self.connections.tags.resolve_connection_domain(
+            connection
+        )
         self.db.delete(connection)
         self.db.flush()
-        self.connections.tags.cleanup_orphan_definitions()
+        self.connections.tags.cleanup_orphan_definitions(
+            domain_kinds=[domain_kind]
+        )
         self.db.commit()
         self._record(
             user,

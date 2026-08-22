@@ -2,11 +2,14 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  fetchCephAdminBucketUiTagOrphans,
   fetchCephAdminBucketUiTags,
+  fetchStorageOpsBucketUiTagOrphans,
   fetchStorageOpsBucketUiTags,
   patchCephAdminBucketUiTags,
   patchStorageOpsBucketUiTags,
   type BucketUiTagCatalog,
+  type BucketUiTagOrphans,
 } from "../../api/bucketUiTags";
 import {
   buildBucketUiTagsStorageKey,
@@ -16,20 +19,20 @@ import {
 } from "./bucketUiTags";
 
 vi.mock("../../api/bucketUiTags", () => ({
+  fetchCephAdminBucketUiTagOrphans: vi.fn(),
   fetchCephAdminBucketUiTags: vi.fn(),
+  fetchStorageOpsBucketUiTagOrphans: vi.fn(),
   fetchStorageOpsBucketUiTags: vi.fn(),
   patchCephAdminBucketUiTags: vi.fn(),
   patchStorageOpsBucketUiTags: vi.fn(),
 }));
 
-const emptyCatalog = (): BucketUiTagCatalog => ({ definitions: [], assignments: [] });
+const emptyCatalog = (): BucketUiTagCatalog => ({ definitions: [] });
+const emptyOrphans = (): BucketUiTagOrphans => ({ orphans: [] });
 const duplicateLabelCatalog: BucketUiTagCatalog = {
   definitions: [
     { id: 11, label: "Production", color_key: "blue", scope: "standard", visibility: "private" },
     { id: 12, label: "Production", color_key: "amber", scope: "standard", visibility: "shared" },
-  ],
-  assignments: [
-    { target: { endpoint_id: 7, tenant: "", name: "bucket-a" }, tag_ids: [11, 12] },
   ],
 };
 
@@ -37,7 +40,9 @@ describe("useBucketUiTags", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(fetchCephAdminBucketUiTagOrphans).mockResolvedValue(emptyOrphans());
     vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(emptyCatalog());
+    vi.mocked(fetchStorageOpsBucketUiTagOrphans).mockResolvedValue(emptyOrphans());
     vi.mocked(fetchStorageOpsBucketUiTags).mockResolvedValue(emptyCatalog());
     vi.mocked(patchCephAdminBucketUiTags).mockResolvedValue(emptyCatalog());
     vi.mocked(patchStorageOpsBucketUiTags).mockResolvedValue(emptyCatalog());
@@ -52,7 +57,7 @@ describe("useBucketUiTags", () => {
     const { result } = renderHook(() => useBucketUiTags("ceph-admin", 7));
 
     await waitFor(() => expect(result.current.definitions).toHaveLength(2));
-    expect(Object.values(result.current.tags)[0].map((tag) => tag.id)).toEqual([11, 12]);
+    expect(result.current.orphanEntries).toEqual({});
     expect(result.current.definitions.map((tag) => [tag.label, tag.visibility])).toEqual([
       ["Production", "private"],
       ["Production", "shared"],
@@ -74,9 +79,29 @@ describe("useBucketUiTags", () => {
     rerender({ endpointId: 8 });
 
     expect(result.current.definitions).toEqual([]);
-    expect(result.current.entries).toEqual({});
+    expect(result.current.orphanEntries).toEqual({});
     expect(result.current.ready).toBe(false);
     unmount();
+  });
+
+  it("keeps definitions ready when orphan inventory validation fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(duplicateLabelCatalog);
+    vi.mocked(fetchCephAdminBucketUiTagOrphans).mockRejectedValue(
+      new Error("inventory unavailable")
+    );
+
+    const { result } = renderHook(() => useBucketUiTags("ceph-admin", 7));
+
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.definitions).toHaveLength(2);
+    expect(result.current.orphanEntries).toEqual({});
+    expect(result.current.error).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      "Unable to validate UI tags against bucket inventory.",
+      expect.any(Error)
+    );
+    warn.mockRestore();
   });
 
   it("splits mutations above 200 targets and keeps Storage Ops tags private", async () => {
@@ -114,9 +139,6 @@ describe("useBucketUiTags", () => {
       definitions: [
         { id: 31, label: "Partial", color_key: "blue", scope: "standard", visibility: "private" },
       ],
-      assignments: [
-        { target: { endpoint_id: 7, tenant: "", name: "bucket-0" }, tag_ids: [31] },
-      ],
     };
     vi.mocked(patchCephAdminBucketUiTags)
       .mockResolvedValueOnce(partialCatalog)
@@ -144,15 +166,20 @@ describe("useBucketUiTags", () => {
       definitions: [
         { id: 21, label: "Orphan", color_key: "rose", scope: "standard", visibility: "private" },
       ],
-      assignments: [
-        { target: { endpoint_id: 9, tenant: "tenant-a", name: "missing" }, tag_ids: [21] },
-      ],
     };
     vi.mocked(fetchStorageOpsBucketUiTags).mockResolvedValue(catalog);
+    vi.mocked(fetchStorageOpsBucketUiTagOrphans).mockResolvedValue({
+      orphans: [
+        {
+          target: { endpoint_id: 9, tenant: "tenant-a", name: "missing" },
+          tags: catalog.definitions,
+        },
+      ],
+    });
     vi.mocked(patchStorageOpsBucketUiTags).mockResolvedValue(emptyCatalog());
     const { result } = renderHook(() => useBucketUiTags("storage-ops", null));
-    await waitFor(() => expect(Object.keys(result.current.entries)).toHaveLength(1));
-    const targetKey = Object.keys(result.current.entries)[0];
+    await waitFor(() => expect(Object.keys(result.current.orphanEntries)).toHaveLength(1));
+    const targetKey = Object.keys(result.current.orphanEntries)[0];
 
     await act(async () => {
       await result.current.removeTargets([targetKey]);

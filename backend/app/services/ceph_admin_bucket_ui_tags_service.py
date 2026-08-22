@@ -7,6 +7,7 @@ from typing import Protocol
 
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
+    BucketUiTagOrphansResponse,
     CephAdminBucketUiTagPatchRequest,
 )
 from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
@@ -43,19 +44,32 @@ class CephAdminBucketUiTagsWorkflow:
         actor_user_id: int,
         endpoint_id: int,
         bucket_info: CephAdminBucketInfoReader,
+        bucket_inventory: Callable[[], set[PhysicalBucketTarget]],
         record_shared_mutation: Callable[[int], None],
     ) -> None:
         self.tags = tags
         self.actor_user_id = int(actor_user_id)
         self.endpoint_id = int(endpoint_id)
         self.bucket_info = bucket_info
+        self.bucket_inventory = bucket_inventory
         self.record_shared_mutation = record_shared_mutation
 
     def catalog(self) -> BucketUiTagCatalogResponse:
         return self.tags.catalog(
             domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
             actor_user_id=self.actor_user_id,
+        )
+
+    def orphans(self) -> BucketUiTagOrphansResponse:
+        try:
+            existing_targets = self.bucket_inventory()
+        except RGWAdminError as exc:
+            raise CephAdminBucketUiTagUpstreamError(str(exc)) from exc
+        return self.tags.orphans(
+            domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+            actor_user_id=self.actor_user_id,
             endpoint_id=self.endpoint_id,
+            existing_targets=existing_targets,
         )
 
     def _targets(

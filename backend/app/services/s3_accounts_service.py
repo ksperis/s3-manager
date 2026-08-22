@@ -37,6 +37,7 @@ from app.services.resource_deletion_purge_service import ResourceDeletionPurgeSe
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
 from app.services.s3_account_associations_service import S3AccountAssociationsService
 from app.services.tags_service import TagsService
+from app.utils.tagging import TAG_DOMAIN_ADMIN_MANAGED
 from app.services.ui_group_avatar_service import UiGroupAvatarService
 from app.services.user_avatar_service import UserAvatarService
 from app.utils.storage_endpoint_features import (
@@ -961,7 +962,9 @@ class S3AccountsService:
         )
         self.db.delete(account)
         self.db.flush()
-        self.tags.cleanup_orphan_definitions()
+        self.tags.cleanup_orphan_definitions(
+            domain_kinds=[TAG_DOMAIN_ADMIN_MANAGED]
+        )
         self.db.commit()
 
 

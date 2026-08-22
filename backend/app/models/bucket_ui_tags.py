@@ -25,14 +25,17 @@ class BucketUiTagPhysicalTarget(ApiModel):
     name: str
 
 
-class BucketUiTagAssignmentSummary(ApiModel):
-    target: BucketUiTagPhysicalTarget
-    tag_ids: list[int] = Field(default_factory=list)
-
-
 class BucketUiTagCatalogResponse(ApiModel):
     definitions: list[BucketUiTagDefinitionSummary] = Field(default_factory=list)
-    assignments: list[BucketUiTagAssignmentSummary] = Field(default_factory=list)
+
+
+class BucketUiTagOrphanSummary(ApiModel):
+    target: BucketUiTagPhysicalTarget
+    tags: list[BucketUiTagDefinitionSummary] = Field(default_factory=list)
+
+
+class BucketUiTagOrphansResponse(ApiModel):
+    orphans: list[BucketUiTagOrphanSummary] = Field(default_factory=list)
 
 
 class CephAdminBucketUiTagTarget(ApiModel):

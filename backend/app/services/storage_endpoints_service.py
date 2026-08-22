@@ -33,6 +33,11 @@ from app.services.mappers.storage_endpoint import storage_endpoint_from_db
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
+from app.utils.tagging import (
+    TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+    TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
+    TAG_DOMAIN_ENDPOINT,
+)
 from app.utils.normalize import normalize_optional_string, normalize_storage_provider
 from app.utils.s3_endpoint import configured_s3_endpoint, normalize_s3_endpoint
 from app.utils.storage_endpoint_features import (
@@ -984,7 +989,13 @@ class StorageEndpointsService:
         ResourceDeletionPurgeService(self.db).purge_endpoint_derived_data(endpoint.id)
         self.db.delete(endpoint)
         self.db.flush()
-        self.tags.cleanup_orphan_definitions()
+        self.tags.cleanup_orphan_definitions(
+            domain_kinds=[
+                TAG_DOMAIN_ENDPOINT,
+                TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+                TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
+            ]
+        )
         self.db.commit()
 
     def set_default_endpoint(self, endpoint_id: int) -> StorageEndpointSchema:

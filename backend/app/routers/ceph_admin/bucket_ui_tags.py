@@ -9,11 +9,15 @@ from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
+    BucketUiTagOrphansResponse,
     CephAdminBucketUiTagPatchRequest,
 )
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.services.bucket_ui_tags_service import BucketUiTagsService
+from app.services.ceph_admin_bucket_listing_service import (
+    get_cached_ceph_admin_bucket_targets,
+)
 from app.services.ceph_admin_bucket_ui_tags_service import (
     CephAdminBucketUiTagConflictError,
     CephAdminBucketUiTagUpstreamError,
@@ -37,6 +41,7 @@ def get_ceph_admin_bucket_ui_tags_workflow(
         actor_user_id=int(ctx.actor.id),
         endpoint_id=int(ctx.endpoint.id),
         bucket_info=ctx.rgw_admin,
+        bucket_inventory=lambda: get_cached_ceph_admin_bucket_targets(ctx),
         record_shared_mutation=lambda target_count: record_ceph_admin_action(
             ctx,
             action="bucket_ui_tags.update_shared",
@@ -54,6 +59,21 @@ def get_bucket_ui_tags(
     ),
 ) -> BucketUiTagCatalogResponse:
     return workflow.catalog()
+
+
+@router.get("/orphans", response_model=BucketUiTagOrphansResponse)
+def get_bucket_ui_tag_orphans(
+    workflow: CephAdminBucketUiTagsWorkflow = Depends(
+        get_ceph_admin_bucket_ui_tags_workflow
+    ),
+) -> BucketUiTagOrphansResponse:
+    try:
+        return workflow.orphans()
+    except CephAdminBucketUiTagUpstreamError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
 
 
 @router.patch("", response_model=BucketUiTagCatalogResponse)

@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
-from app.models.bucket_ui_tags import BucketUiTagCatalogResponse, StorageOpsBucketUiTagPatchRequest
+from app.models.bucket_ui_tags import (
+    BucketUiTagCatalogResponse,
+    BucketUiTagOrphansResponse,
+    StorageOpsBucketUiTagPatchRequest,
+)
 from app.routers.dependencies import get_current_storage_ops_admin
 from app.routers.storage_ops.buckets import _collect_context_refs, _resolve_context_account
 from app.services.bucket_ui_tags_service import BucketUiTagsService
@@ -51,6 +55,22 @@ def get_bucket_ui_tags(
     db: Session = Depends(get_db),
 ) -> BucketUiTagCatalogResponse:
     return _workflow(request=request, user=user, db=db).catalog()
+
+
+@router.get("/orphans", response_model=BucketUiTagOrphansResponse)
+def get_bucket_ui_tag_orphans(
+    request: Request,
+    user: User = Depends(get_current_storage_ops_admin),
+    db: Session = Depends(get_db),
+    buckets: BucketsService = Depends(get_buckets_service),
+) -> BucketUiTagOrphansResponse:
+    try:
+        return _workflow(request=request, user=user, db=db).orphans(buckets)
+    except StorageOpsBucketUiTagUpstreamError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
 
 
 @router.patch("", response_model=BucketUiTagCatalogResponse)

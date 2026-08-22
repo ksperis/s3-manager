@@ -6,8 +6,10 @@ from collections.abc import Callable, Sequence
 
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
+    BucketUiTagOrphansResponse,
     StorageOpsBucketUiTagPatchRequest,
 )
+from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
 from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
 from app.services.buckets_service import BucketsService
 from app.services.s3_execution_context import S3ExecutionContext
@@ -182,7 +184,44 @@ class StorageOpsBucketUiTagsWorkflow:
         return self.tags.catalog(
             domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
             actor_user_id=self.actor_user_id,
-            allowed_scopes=self.allowed_scopes(),
+        )
+
+    def orphans(self, buckets: BucketsService) -> BucketUiTagOrphansResponse:
+        existing_targets: set[PhysicalBucketTarget] = set()
+        allowed_scopes: set[tuple[int, str]] = set()
+        for ref in self.refs_by_id.values():
+            account = self._account_for_ref(ref)
+            endpoint_id = (
+                int(getattr(account, "storage_endpoint_id", 0) or 0)
+                if account is not None
+                else 0
+            )
+            if account is None or endpoint_id <= 0:
+                continue
+            tenant = resolve_storage_ops_context_tenant(account)
+            allowed_scopes.add((endpoint_id, tenant))
+            try:
+                listed = get_cached_bucket_listing_for_account(
+                    account=account,
+                    include=set(),
+                    with_stats=False,
+                    builder=lambda account=account: buckets.list_buckets(
+                        account,
+                        include=None,
+                        with_stats=False,
+                    ),
+                )
+            except RuntimeError as exc:
+                raise StorageOpsBucketUiTagUpstreamError(str(exc)) from exc
+            existing_targets.update(
+                PhysicalBucketTarget.create(endpoint_id, tenant, bucket.name)
+                for bucket in listed
+            )
+        return self.tags.orphans(
+            domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
+            actor_user_id=self.actor_user_id,
+            allowed_scopes=allowed_scopes,
+            existing_targets=existing_targets,
         )
 
     def mutate(

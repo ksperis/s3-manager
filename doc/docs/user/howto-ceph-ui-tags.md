@@ -50,9 +50,12 @@ Check that rows are selected and that you are on the Ceph Admin bucket workbench
     imported or read and remains untouched in local storage. View preferences
     stay local, but UI-tag filters now store definition identifiers.
 
-    At workbench load, BucketReef still checks tagged bucket identities in
-    batches. If a bucket is missing, the warning banner can remove its UI tags;
-    the backend rechecks that the bucket has not reappeared before removing them.
+    At workbench load, a dedicated backend check compares persisted UI-tag
+    assignments with the endpoint bucket inventory. This check is independent
+    from the lightweight tag-definition catalogue and does not transfer every
+    bucket assignment to the browser. If a bucket is missing, the warning
+    banner can remove its UI tags; the backend rechecks that the bucket has not
+    reappeared before removing them.
 
 ## Related pages
 

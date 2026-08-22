@@ -69,7 +69,11 @@ class BucketUiTagAssignment(Base):
             "tenant_key",
             "bucket_name",
         ),
-        Index("ix_bucket_ui_tag_assignments_definition", "tag_definition_id"),
+        Index(
+            "ix_bucket_ui_tag_assignments_definition_endpoint",
+            "tag_definition_id",
+            "storage_endpoint_id",
+        ),
     )
 
     id = Column(Integer, primary_key=True)

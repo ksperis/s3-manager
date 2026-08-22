@@ -48,9 +48,11 @@ Check Storage Ops access, the global feature flag, and whether rows are selected
     API.
 
     Legacy `bucket-workbench.ui_tags.v2` browser data is not imported or read
-    and remains untouched. At workbench load, BucketReef still checks tagged
-    physical buckets in batches. The warning action revalidates that a bucket
-    is absent before removing its persistent assignments.
+    and remains untouched. At workbench load, a dedicated backend check
+    compares persistent assignments with the cached inventories of authorized
+    contexts without transferring every assignment to the browser. If an
+    inventory cannot be verified, no bucket is reported as missing. The warning
+    action revalidates that a bucket is absent before removing its assignments.
 
 ## Related pages
 

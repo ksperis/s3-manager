@@ -5,14 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Literal, Sequence
 
-from sqlalchemy import or_
+from sqlalchemy import or_, tuple_
 from sqlalchemy.orm import Session
 
 from app.db import BucketUiTagAssignment, TagDefinition
 from app.models.bucket_ui_tags import (
-    BucketUiTagAssignmentSummary,
     BucketUiTagCatalogResponse,
     BucketUiTagDefinitionSummary,
+    BucketUiTagOrphanSummary,
+    BucketUiTagOrphansResponse,
     BucketUiTagPhysicalTarget,
 )
 from app.services.tags_service import TagsService
@@ -26,6 +27,7 @@ from app.utils.tagging import (
 
 
 BucketUiTagDomain = Literal["bucket_ui_ceph_admin", "bucket_ui_storage_ops"]
+ASSIGNMENT_TARGET_BATCH_SIZE = 200
 
 
 @dataclass(frozen=True, order=True)
@@ -95,6 +97,40 @@ class BucketUiTagsService:
             )
         return query.filter(TagDefinition.owner_user_id == actor_user_id)
 
+    def _visible_assignment_query(
+        self,
+        *,
+        domain_kind: BucketUiTagDomain,
+        actor_user_id: int,
+    ):
+        query = self.db.query(BucketUiTagAssignment, TagDefinition).join(
+            TagDefinition,
+            TagDefinition.id == BucketUiTagAssignment.tag_definition_id,
+        ).filter(TagDefinition.domain_kind == domain_kind)
+        if domain_kind == TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN:
+            return query.filter(
+                or_(
+                    TagDefinition.owner_user_id.is_(None),
+                    TagDefinition.owner_user_id == actor_user_id,
+                )
+            )
+        return query.filter(TagDefinition.owner_user_id == actor_user_id)
+
+    @staticmethod
+    def _target_batches(
+        targets: Sequence[PhysicalBucketTarget],
+    ) -> Iterable[list[PhysicalBucketTarget]]:
+        for start in range(0, len(targets), ASSIGNMENT_TARGET_BATCH_SIZE):
+            yield list(targets[start : start + ASSIGNMENT_TARGET_BATCH_SIZE])
+
+    @staticmethod
+    def _target_filter(batch: Sequence[PhysicalBucketTarget]):
+        return tuple_(
+            BucketUiTagAssignment.storage_endpoint_id,
+            BucketUiTagAssignment.tenant_key,
+            BucketUiTagAssignment.bucket_name,
+        ).in_([(item.endpoint_id, item.tenant, item.name) for item in batch])
+
     def visible_definitions(
         self,
         *,
@@ -114,21 +150,39 @@ class BucketUiTagsService:
         *,
         domain_kind: str,
         actor_user_id: int,
-        endpoint_id: int | None = None,
-        allowed_scopes: set[tuple[int, str]] | None = None,
     ) -> BucketUiTagCatalogResponse:
         definitions = self.visible_definitions(
             domain_kind=domain_kind,
             actor_user_id=actor_user_id,
         )
-        definition_ids = [int(row.id) for row in definitions]
-        query = self.db.query(BucketUiTagAssignment)
-        if definition_ids:
-            query = query.filter(BucketUiTagAssignment.tag_definition_id.in_(definition_ids))
-        else:
-            return BucketUiTagCatalogResponse(definitions=[], assignments=[])
+        return BucketUiTagCatalogResponse(
+            definitions=[self._to_definition(row) for row in definitions]
+        )
+
+    def visible_assignments(
+        self,
+        *,
+        domain_kind: str,
+        actor_user_id: int,
+        endpoint_id: int | None = None,
+        allowed_scopes: set[tuple[int, str]] | None = None,
+    ) -> dict[PhysicalBucketTarget, list[BucketUiTagDefinitionSummary]]:
+        domain = self._validate_domain(domain_kind)
+        if allowed_scopes is not None and not allowed_scopes:
+            return {}
+        query = self._visible_assignment_query(
+            domain_kind=domain,
+            actor_user_id=actor_user_id,
+        )
         if endpoint_id is not None:
             query = query.filter(BucketUiTagAssignment.storage_endpoint_id == int(endpoint_id))
+        if allowed_scopes is not None:
+            query = query.filter(
+                tuple_(
+                    BucketUiTagAssignment.storage_endpoint_id,
+                    BucketUiTagAssignment.tenant_key,
+                ).in_(sorted(allowed_scopes))
+            )
         rows = query.order_by(
             BucketUiTagAssignment.storage_endpoint_id.asc(),
             BucketUiTagAssignment.tenant_key.asc(),
@@ -136,31 +190,63 @@ class BucketUiTagsService:
             BucketUiTagAssignment.position.asc(),
             BucketUiTagAssignment.id.asc(),
         ).all()
-        grouped: dict[PhysicalBucketTarget, list[int]] = {}
-        for row in rows:
-            scope = (int(row.storage_endpoint_id), str(row.tenant_key or ""))
-            if allowed_scopes is not None and scope not in allowed_scopes:
-                continue
+        grouped: dict[PhysicalBucketTarget, list[BucketUiTagDefinitionSummary]] = {}
+        for assignment, definition in rows:
             target = PhysicalBucketTarget.create(
-                row.storage_endpoint_id,
-                row.tenant_key,
-                row.bucket_name,
+                assignment.storage_endpoint_id,
+                assignment.tenant_key,
+                assignment.bucket_name,
             )
-            grouped.setdefault(target, []).append(int(row.tag_definition_id))
-        return BucketUiTagCatalogResponse(
-            definitions=[self._to_definition(row) for row in definitions],
-            assignments=[
-                BucketUiTagAssignmentSummary(
+            grouped.setdefault(target, []).append(self._to_definition(definition))
+        return grouped
+
+    def orphans(
+        self,
+        *,
+        domain_kind: str,
+        actor_user_id: int,
+        existing_targets: set[PhysicalBucketTarget],
+        endpoint_id: int | None = None,
+        allowed_scopes: set[tuple[int, str]] | None = None,
+    ) -> BucketUiTagOrphansResponse:
+        assignments = self.visible_assignments(
+            domain_kind=domain_kind,
+            actor_user_id=actor_user_id,
+            endpoint_id=endpoint_id,
+            allowed_scopes=allowed_scopes,
+        )
+        return BucketUiTagOrphansResponse(
+            orphans=[
+                BucketUiTagOrphanSummary(
                     target=BucketUiTagPhysicalTarget(
                         endpoint_id=target.endpoint_id,
                         tenant=target.tenant,
                         name=target.name,
                     ),
-                    tag_ids=tag_ids,
+                    tags=tags,
                 )
-                for target, tag_ids in grouped.items()
+                for target, tags in assignments.items()
+                if target not in existing_targets
             ],
         )
+
+    def _links_for_targets(
+        self,
+        targets: Sequence[PhysicalBucketTarget],
+    ) -> dict[PhysicalBucketTarget, list[BucketUiTagAssignment]]:
+        grouped = {target: [] for target in targets}
+        for batch in self._target_batches(targets):
+            rows = self.db.query(BucketUiTagAssignment).filter(
+                self._target_filter(batch)
+            ).all()
+            for row in rows:
+                target = PhysicalBucketTarget.create(
+                    row.storage_endpoint_id,
+                    row.tenant_key,
+                    row.bucket_name,
+                )
+                grouped[target].append(row)
+        return grouped
 
     def _resolve_visible_ids(
         self,
@@ -232,12 +318,9 @@ class BucketUiTagsService:
                 actor_user_id=actor_user_id,
             )
         }
+        links_by_target = self._links_for_targets(unique_targets)
         for target in unique_targets:
-            links = self.db.query(BucketUiTagAssignment).filter(
-                BucketUiTagAssignment.storage_endpoint_id == target.endpoint_id,
-                BucketUiTagAssignment.tenant_key == target.tenant,
-                BucketUiTagAssignment.bucket_name == target.name,
-            ).all()
+            links = links_by_target[target]
             existing_by_id = {int(link.tag_definition_id): link for link in links}
             ids_to_remove = visible_ids if remove_all else remove_ids
             for identifier in ids_to_remove:
@@ -262,7 +345,7 @@ class BucketUiTagsService:
                 )
                 next_position += 1
         self.db.flush()
-        self.tags.cleanup_orphan_definitions()
+        self.tags.cleanup_orphan_definitions(domain_kinds=[domain])
 
     def get_tags_for_targets(
         self,
@@ -276,24 +359,21 @@ class BucketUiTagsService:
         if not unique_targets:
             return result
         domain = self._validate_domain(domain_kind)
-        visible = self.visible_definitions(domain_kind=domain, actor_user_id=actor_user_id)
-        visible_by_id = {int(row.id): row for row in visible}
-        if not visible_by_id:
-            return result
-        endpoint_ids = {target.endpoint_id for target in unique_targets}
-        rows = self.db.query(BucketUiTagAssignment).filter(
-            BucketUiTagAssignment.storage_endpoint_id.in_(endpoint_ids),
-            BucketUiTagAssignment.tag_definition_id.in_(list(visible_by_id)),
-        ).order_by(BucketUiTagAssignment.position.asc(), BucketUiTagAssignment.id.asc()).all()
-        target_set = set(unique_targets)
-        for row in rows:
-            target = PhysicalBucketTarget.create(
-                row.storage_endpoint_id,
-                row.tenant_key,
-                row.bucket_name,
-            )
-            if target in target_set:
-                result[target].append(self._to_definition(visible_by_id[int(row.tag_definition_id)]))
+        for batch in self._target_batches(unique_targets):
+            rows = self._visible_assignment_query(
+                domain_kind=domain,
+                actor_user_id=actor_user_id,
+            ).filter(self._target_filter(batch)).order_by(
+                BucketUiTagAssignment.position.asc(),
+                BucketUiTagAssignment.id.asc(),
+            ).all()
+            for assignment, definition in rows:
+                target = PhysicalBucketTarget.create(
+                    assignment.storage_endpoint_id,
+                    assignment.tenant_key,
+                    assignment.bucket_name,
+                )
+                result[target].append(self._to_definition(definition))
         return result
 
     def remove_all_namespaces_for_bucket(self, target: PhysicalBucketTarget) -> None:
@@ -312,4 +392,9 @@ class BucketUiTagsService:
                 BucketUiTagAssignment.bucket_name == target.name,
                 BucketUiTagAssignment.tag_definition_id.in_(definition_ids),
             ).delete(synchronize_session=False)
-            self.tags.cleanup_orphan_definitions()
+            self.tags.cleanup_orphan_definitions(
+                domain_kinds=[
+                    TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+                    TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
+                ]
+            )

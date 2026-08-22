@@ -10,7 +10,9 @@ const mocks = vi.hoisted(() => ({
   refreshCephAdminBucketListingCache: vi.fn(),
   refreshStorageOpsBucketListingCache: vi.fn(),
   listExecutionContexts: vi.fn(),
+  fetchCephAdminBucketUiTagOrphans: vi.fn(),
   fetchCephAdminBucketUiTags: vi.fn(),
+  fetchStorageOpsBucketUiTagOrphans: vi.fn(),
   fetchStorageOpsBucketUiTags: vi.fn(),
   patchCephAdminBucketUiTags: vi.fn(),
   patchStorageOpsBucketUiTags: vi.fn(),
@@ -92,7 +94,9 @@ vi.mock("../../api/executionContexts", () => ({
 }));
 
 vi.mock("../../api/bucketUiTags", () => ({
+  fetchCephAdminBucketUiTagOrphans: mocks.fetchCephAdminBucketUiTagOrphans,
   fetchCephAdminBucketUiTags: mocks.fetchCephAdminBucketUiTags,
+  fetchStorageOpsBucketUiTagOrphans: mocks.fetchStorageOpsBucketUiTagOrphans,
   fetchStorageOpsBucketUiTags: mocks.fetchStorageOpsBucketUiTags,
   patchCephAdminBucketUiTags: mocks.patchCephAdminBucketUiTags,
   patchStorageOpsBucketUiTags: mocks.patchStorageOpsBucketUiTags,
@@ -202,14 +206,18 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     mocks.refreshCephAdminBucketListingCache.mockReset();
     mocks.refreshStorageOpsBucketListingCache.mockReset();
     mocks.listExecutionContexts.mockReset();
+    mocks.fetchCephAdminBucketUiTagOrphans.mockReset();
     mocks.fetchCephAdminBucketUiTags.mockReset();
+    mocks.fetchStorageOpsBucketUiTagOrphans.mockReset();
     mocks.fetchStorageOpsBucketUiTags.mockReset();
     mocks.patchCephAdminBucketUiTags.mockReset();
     mocks.patchStorageOpsBucketUiTags.mockReset();
-    mocks.fetchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
-    mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
-    mocks.patchCephAdminBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
-    mocks.patchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [], assignments: [] });
+    mocks.fetchCephAdminBucketUiTagOrphans.mockResolvedValue({ orphans: [] });
+    mocks.fetchCephAdminBucketUiTags.mockResolvedValue({ definitions: [] });
+    mocks.fetchStorageOpsBucketUiTagOrphans.mockResolvedValue({ orphans: [] });
+    mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [] });
+    mocks.patchCephAdminBucketUiTags.mockResolvedValue({ definitions: [] });
+    mocks.patchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [] });
     mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.listExecutionContexts.mockResolvedValue([
@@ -423,14 +431,12 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         { id: 1, label: "urgent", color_key: "red", scope: "standard", visibility: "private" },
         { id: 2, label: "archive", color_key: "slate", scope: "standard", visibility: "private" },
       ],
-      assignments: [
-        { target: { endpoint_id: 7, tenant: "", name: "bucket-a" }, tag_ids: [1] },
-        { target: { endpoint_id: 8, tenant: "", name: "bucket-a" }, tag_ids: [2] },
-      ],
     });
+    const urgent = { id: 1, label: "urgent", color_key: "red", scope: "standard", visibility: "private" } as const;
+    const archive = { id: 2, label: "archive", color_key: "slate", scope: "standard", visibility: "private" } as const;
     const buckets = [
-      { ...baseBucket, name: "account-1::bucket-a", context_id: "account-1", context_name: "Account A" },
-      { ...baseBucket, name: "conn-2::bucket-a", context_id: "conn-2", context_name: "Connection B" },
+      { ...baseBucket, name: "account-1::bucket-a", context_id: "account-1", context_name: "Account A", ui_tags: [urgent] },
+      { ...baseBucket, name: "conn-2::bucket-a", context_id: "conn-2", context_name: "Connection B", ui_tags: [urgent] },
       {
         ...baseBucket,
         name: "account-9::bucket-a",
@@ -439,6 +445,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         endpoint_id: 8,
         endpoint_name: "Archive",
         bucket_identity: '[8,"","bucket-a"]',
+        ui_tags: [archive],
       },
     ];
     mocks.listStorageOpsBuckets.mockResolvedValue({ items: buckets, ...baseResponse, total: buckets.length });
@@ -449,12 +456,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
       expect(screen.getAllByRole("button", { name: "Remove tag urgent" })).toHaveLength(2),
     );
     expect(screen.getAllByRole("button", { name: "Remove tag archive" })).toHaveLength(1);
-    await waitFor(() =>
-      expect(mocks.listStorageOpsBuckets.mock.calls.some((call) => {
-        const raw = call[1]?.advanced_filter;
-        return typeof raw === "string" && raw.includes('"field":"bucket_identity"');
-      })).toBe(true)
-    );
+    expect(mocks.fetchStorageOpsBucketUiTagOrphans).toHaveBeenCalledTimes(1);
   });
 
   it("disables UI tags when a Storage Ops row has no configured endpoint", async () => {

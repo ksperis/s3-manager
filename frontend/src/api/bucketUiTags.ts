@@ -22,9 +22,12 @@ export type BucketUiTagPhysicalTarget = {
 
 export type BucketUiTagCatalog = {
   definitions: BucketUiTagDefinition[];
-  assignments: Array<{
+};
+
+export type BucketUiTagOrphans = {
+  orphans: Array<{
     target: BucketUiTagPhysicalTarget;
-    tag_ids: number[];
+    tags: BucketUiTagDefinition[];
   }>;
 };
 
@@ -55,6 +58,13 @@ export async function fetchCephAdminBucketUiTags(endpointId: number): Promise<Bu
   return data;
 }
 
+export async function fetchCephAdminBucketUiTagOrphans(endpointId: number): Promise<BucketUiTagOrphans> {
+  const { data } = await client.get<BucketUiTagOrphans>(
+    `/ceph-admin/endpoints/${endpointId}/bucket-ui-tags/orphans`
+  );
+  return data;
+}
+
 export async function patchCephAdminBucketUiTags(
   endpointId: number,
   payload: BucketUiTagPatch<CephAdminBucketUiTagTarget>
@@ -68,6 +78,11 @@ export async function patchCephAdminBucketUiTags(
 
 export async function fetchStorageOpsBucketUiTags(): Promise<BucketUiTagCatalog> {
   const { data } = await client.get<BucketUiTagCatalog>("/storage-ops/bucket-ui-tags");
+  return data;
+}
+
+export async function fetchStorageOpsBucketUiTagOrphans(): Promise<BucketUiTagOrphans> {
+  const { data } = await client.get<BucketUiTagOrphans>("/storage-ops/bucket-ui-tags/orphans");
   return data;
 }
 

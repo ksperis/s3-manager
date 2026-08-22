@@ -23,6 +23,7 @@ from app.services.resource_deletion_purge_service import ResourceDeletionPurgeSe
 from app.services.mappers.s3_user import s3_user_from_db, s3_user_summary_from_db
 from app.services.s3_user_associations_service import S3UserAssociationsService
 from app.services.tags_service import TagsService
+from app.utils.tagging import TAG_DOMAIN_ADMIN_MANAGED
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.models.s3_user import (
     S3User as S3UserSchema,
@@ -865,7 +866,9 @@ class S3UsersService:
         ResourceDeletionPurgeService(self.db).purge_s3_user_derived_data(s3_user.id)
         self.db.delete(s3_user)
         self.db.flush()
-        self.tags.cleanup_orphan_definitions()
+        self.tags.cleanup_orphan_definitions(
+            domain_kinds=[TAG_DOMAIN_ADMIN_MANAGED]
+        )
         self.db.commit()
 
 

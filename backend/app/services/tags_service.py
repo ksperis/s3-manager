@@ -13,6 +13,8 @@ from app.utils.tagging import (
     DEFAULT_TAG_COLOR_KEY,
     DEFAULT_TAG_SCOPE,
     TAG_DOMAIN_ADMIN_MANAGED,
+    TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+    TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
     TAG_DOMAIN_ENDPOINT,
     TAG_DOMAIN_PRIVATE_CONNECTION_USER,
     TAG_SCOPE_STANDARD,
@@ -115,20 +117,59 @@ class TagsService:
             tags=tags,
         )
 
-    def cleanup_orphan_definitions(self) -> None:
-        orphan_rows = (
-            self.db.query(TagDefinition)
-            .filter(
-                ~exists().where(StorageEndpointTag.tag_definition_id == TagDefinition.id),
-                ~exists().where(S3AccountTag.tag_definition_id == TagDefinition.id),
-                ~exists().where(S3UserTag.tag_definition_id == TagDefinition.id),
-                ~exists().where(S3ConnectionTag.tag_definition_id == TagDefinition.id),
-                ~exists().where(BucketUiTagAssignment.tag_definition_id == TagDefinition.id),
+    def cleanup_orphan_definitions(self, *, domain_kinds: Sequence[str]) -> None:
+        """Delete unused definitions without probing unrelated assignment tables."""
+
+        supported = {
+            TAG_DOMAIN_ENDPOINT,
+            TAG_DOMAIN_ADMIN_MANAGED,
+            TAG_DOMAIN_PRIVATE_CONNECTION_USER,
+            TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+            TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
+        }
+        requested = list(dict.fromkeys(str(item) for item in domain_kinds))
+        unsupported = set(requested) - supported
+        if unsupported:
+            raise ValueError(f"Unsupported tag definition domains: {sorted(unsupported)}")
+
+        for domain_kind in requested:
+            query = self.db.query(TagDefinition).filter(
+                TagDefinition.domain_kind == domain_kind
             )
-            .all()
-        )
-        for row in orphan_rows:
-            self.db.delete(row)
+            if domain_kind == TAG_DOMAIN_ENDPOINT:
+                query = query.filter(
+                    ~exists().where(
+                        StorageEndpointTag.tag_definition_id == TagDefinition.id
+                    )
+                )
+            elif domain_kind == TAG_DOMAIN_ADMIN_MANAGED:
+                query = query.filter(
+                    ~exists().where(S3AccountTag.tag_definition_id == TagDefinition.id),
+                    ~exists().where(S3UserTag.tag_definition_id == TagDefinition.id),
+                    ~exists().where(
+                        S3ConnectionTag.tag_definition_id == TagDefinition.id
+                    ),
+                )
+            elif domain_kind == TAG_DOMAIN_PRIVATE_CONNECTION_USER:
+                query = query.filter(
+                    ~exists().where(
+                        S3ConnectionTag.tag_definition_id == TagDefinition.id
+                    )
+                )
+            else:
+                query = query.filter(
+                    ~exists().where(
+                        BucketUiTagAssignment.tag_definition_id == TagDefinition.id
+                    )
+                )
+            orphan_ids = [
+                int(row[0])
+                for row in query.with_entities(TagDefinition.id).all()
+            ]
+            if orphan_ids:
+                self.db.query(TagDefinition).filter(
+                    TagDefinition.id.in_(orphan_ids)
+                ).delete(synchronize_session="fetch")
 
     def _serialize_for_parent(
         self,
@@ -181,7 +222,7 @@ class TagsService:
         setattr(parent, "tag_links", next_links)
         self.db.add(parent)
         self.db.flush()
-        self.cleanup_orphan_definitions()
+        self.cleanup_orphan_definitions(domain_kinds=[domain_kind])
         return [self._to_summary(definition) for definition in definitions]
 
     def resolve_definition(
