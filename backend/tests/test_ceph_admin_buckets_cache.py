@@ -1220,6 +1220,7 @@ def test_ceph_admin_bucket_listing_owner_name_skips_account_lookup_when_feature_
         endpoint=SimpleNamespace(
             id=174,
             provider="ceph",
+            region=None,
             features_config="features:\n  account:\n    enabled: false\n",
         ),
         rgw_admin=rgw_admin,

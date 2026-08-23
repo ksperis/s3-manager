@@ -438,6 +438,7 @@ def test_ceph_admin_users_listing_account_include_skips_lookup_when_feature_disa
     endpoint = SimpleNamespace(
         id=16,
         provider="ceph",
+        region=None,
         features_config="features:\n  account:\n    enabled: false\n",
     )
     ctx, rgw_admin = _build_ctx(endpoint_id=16, users_payload=users_payload, user_details=user_details, endpoint=endpoint)
@@ -470,6 +471,7 @@ def test_ceph_admin_user_detail_preserves_payload_account_name_when_account_api_
     endpoint = SimpleNamespace(
         id=17,
         provider="ceph",
+        region=None,
         features_config="features:\n  account:\n    enabled: false\n",
     )
     ctx, rgw_admin = _build_ctx(endpoint_id=17, users_payload=users_payload, user_details=user_details, endpoint=endpoint)

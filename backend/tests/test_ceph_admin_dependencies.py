@@ -12,6 +12,7 @@ def test_probe_ceph_admin_service_identity_classifies_unavailable(monkeypatch):
         id=1,
         name="Ceph endpoint",
         provider=StorageProvider.CEPH,
+        region=None,
         features_config="""
 features:
   admin:
@@ -42,6 +43,7 @@ def test_probe_ceph_admin_service_identity_classifies_denied(monkeypatch):
         id=2,
         name="Ceph endpoint",
         provider=StorageProvider.CEPH,
+        region=None,
         features_config="features:\n  admin:\n    endpoint: https://rgw-admin.example.test\n",
         endpoint_url="https://s3.example.test",
         ceph_admin_access_key="AKIA-ADMIN",

@@ -38,7 +38,7 @@ def _build_endpoint(*, usage_enabled: bool = True, metrics_enabled: bool = True)
         "  metrics:\n"
         f"    enabled: {'true' if metrics_enabled else 'false'}\n"
     )
-    endpoint = SimpleNamespace(provider="ceph", features_config=features_yaml)
+    endpoint = SimpleNamespace(provider="ceph", region=None, features_config=features_yaml)
     return endpoint
 
 

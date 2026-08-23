@@ -44,6 +44,7 @@ def _build_endpoint(*, endpoint_id: int = 1, metrics_enabled: bool = True, sse_e
     return SimpleNamespace(
         id=endpoint_id,
         provider="ceph",
+        region=None,
         features_config=features_yaml,
     )
 

@@ -113,7 +113,7 @@ def resolve_storage_endpoint_admin_ops_permissions(
             secret_key=endpoint.admin_secret_key,
             endpoint=admin_endpoint,
             region=endpoint.region,
-            verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+            verify_tls=endpoint.verify_tls,
         )
         user_payload = admin_client.get_user_by_access_key(
             endpoint.admin_access_key,

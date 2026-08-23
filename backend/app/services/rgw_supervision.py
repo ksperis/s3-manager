@@ -11,8 +11,8 @@ from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 def _supervision_credentials_from_endpoint(endpoint: StorageEndpoint | None) -> tuple[str, str] | None:
     if endpoint is None:
         return None
-    access_key = getattr(endpoint, "supervision_access_key", None)
-    secret_key = getattr(endpoint, "supervision_secret_key", None)
+    access_key = endpoint.supervision_access_key
+    secret_key = endpoint.supervision_secret_key
     if not access_key or not secret_key:
         return None
     return access_key, secret_key
@@ -39,5 +39,5 @@ def get_supervision_rgw_client(endpoint: StorageEndpoint) -> RGWAdminClient:
         secret_key=secret_key,
         endpoint=admin_endpoint,
         region=endpoint.region,
-        verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+        verify_tls=endpoint.verify_tls,
     )

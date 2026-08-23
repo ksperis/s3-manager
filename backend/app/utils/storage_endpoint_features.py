@@ -256,7 +256,7 @@ def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
     features = normalize_features_config(
         endpoint.provider,
         endpoint.features_config,
-        getattr(endpoint, "region", None),
+        endpoint.region,
     )
     return EndpointFeatureFlags(
         admin_enabled=bool(features["admin"]["enabled"]),
@@ -294,11 +294,11 @@ def resolve_sts_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
     flags = resolve_feature_flags(endpoint)
     if not flags.sts_enabled:
         return None
-    provider = normalize_storage_provider(getattr(endpoint, "provider", None))
+    provider = normalize_storage_provider(endpoint.provider)
     if flags.sts_endpoint:
         return flags.sts_endpoint
     if provider == StorageProvider.AWS:
-        return aws_sts_endpoint_for_region(getattr(endpoint, "region", None))
+        return aws_sts_endpoint_for_region(endpoint.region)
     return flags.sts_endpoint or _normalize_url(endpoint.endpoint_url)
 
 
@@ -308,15 +308,15 @@ def resolve_iam_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
         return None
     if flags.iam_endpoint:
         return flags.iam_endpoint
-    provider = normalize_storage_provider(getattr(endpoint, "provider", None))
+    provider = normalize_storage_provider(endpoint.provider)
     if provider == StorageProvider.AWS:
-        return aws_iam_endpoint_for_region(getattr(endpoint, "region", None))
+        return aws_iam_endpoint_for_region(endpoint.region)
     return _normalize_url(endpoint.endpoint_url)
 
 
 def resolve_iam_signing_region(endpoint: StorageEndpoint) -> Optional[str]:
-    provider = normalize_storage_provider(getattr(endpoint, "provider", None))
-    region = getattr(endpoint, "region", None)
+    provider = normalize_storage_provider(endpoint.provider)
+    region = endpoint.region
     if provider == StorageProvider.AWS:
         return aws_iam_signing_region_for_region(region)
     return region
