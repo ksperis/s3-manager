@@ -116,6 +116,20 @@ export function useBucketUiTags(
   const [error, setError] = useState<string | null>(null);
   const requestSequenceRef = useRef(0);
 
+  const refreshOrphans = useCallback((requestId: number) => {
+    const request = mode === "ceph-admin"
+      ? fetchCephAdminBucketUiTagOrphans(Number(selectedEndpointId))
+      : fetchStorageOpsBucketUiTagOrphans();
+    void request
+      .then((nextOrphans) => {
+        if (requestId === requestSequenceRef.current) setOrphans(nextOrphans);
+      })
+      .catch((orphanError: unknown) => {
+        if (requestId === requestSequenceRef.current) setOrphans(EMPTY_BUCKET_UI_TAG_ORPHANS);
+        console.warn("Unable to validate UI tags against bucket inventory.", orphanError);
+      });
+  }, [mode, selectedEndpointId]);
+
   const reload = useCallback(async () => {
     const requestId = requestSequenceRef.current + 1;
     requestSequenceRef.current = requestId;
@@ -133,17 +147,7 @@ export function useBucketUiTags(
     const catalogRequest = mode === "ceph-admin"
       ? fetchCephAdminBucketUiTags(Number(selectedEndpointId))
       : fetchStorageOpsBucketUiTags();
-    const orphanRequest = mode === "ceph-admin"
-      ? fetchCephAdminBucketUiTagOrphans(Number(selectedEndpointId))
-      : fetchStorageOpsBucketUiTagOrphans();
-    void orphanRequest
-      .then((nextOrphans) => {
-        if (requestId === requestSequenceRef.current) setOrphans(nextOrphans);
-      })
-      .catch((orphanError: unknown) => {
-        if (requestId === requestSequenceRef.current) setOrphans(EMPTY_BUCKET_UI_TAG_ORPHANS);
-        console.warn("Unable to validate UI tags against bucket inventory.", orphanError);
-      });
+    refreshOrphans(requestId);
     try {
       const nextCatalog = await catalogRequest;
       if (requestId === requestSequenceRef.current) {
@@ -162,7 +166,7 @@ export function useBucketUiTags(
     } finally {
       if (requestId === requestSequenceRef.current) setLoading(false);
     }
-  }, [catalogScopeKey, mode, selectedEndpointId]);
+  }, [catalogScopeKey, mode, refreshOrphans, selectedEndpointId]);
 
   useEffect(() => {
     void reload();
@@ -238,17 +242,7 @@ export function useBucketUiTags(
         if (requestId === requestSequenceRef.current) {
           setCatalog(nextCatalog);
           setLoadedScopeKey(catalogScopeKey);
-          const orphanRequest = mode === "ceph-admin"
-            ? fetchCephAdminBucketUiTagOrphans(Number(selectedEndpointId))
-            : fetchStorageOpsBucketUiTagOrphans();
-          void orphanRequest
-            .then((nextOrphans) => {
-              if (requestId === requestSequenceRef.current) setOrphans(nextOrphans);
-            })
-            .catch((orphanError: unknown) => {
-              if (requestId === requestSequenceRef.current) setOrphans(EMPTY_BUCKET_UI_TAG_ORPHANS);
-              console.warn("Unable to validate UI tags against bucket inventory.", orphanError);
-            });
+          refreshOrphans(requestId);
           onMutated?.();
         }
       } catch (err) {
@@ -262,24 +256,14 @@ export function useBucketUiTags(
         }
         if (requestId === requestSequenceRef.current) {
           setError(err instanceof Error ? err.message : "Unable to update bucket UI tags.");
-          const orphanRequest = mode === "ceph-admin"
-            ? fetchCephAdminBucketUiTagOrphans(Number(selectedEndpointId))
-            : fetchStorageOpsBucketUiTagOrphans();
-          void orphanRequest
-            .then((nextOrphans) => {
-              if (requestId === requestSequenceRef.current) setOrphans(nextOrphans);
-            })
-            .catch((orphanError: unknown) => {
-              if (requestId === requestSequenceRef.current) setOrphans(EMPTY_BUCKET_UI_TAG_ORPHANS);
-              console.warn("Unable to validate UI tags against bucket inventory.", orphanError);
-            });
+          refreshOrphans(requestId);
         }
         throw err;
       } finally {
         if (requestId === requestSequenceRef.current) setMutating(false);
       }
     },
-    [catalog, catalogScopeKey, mode, onMutated, selectedEndpointId]
+    [catalog, catalogScopeKey, mode, onMutated, refreshOrphans, selectedEndpointId]
   );
 
   const removeTargets = useCallback(

@@ -132,6 +132,7 @@ describe("useBucketUiTags", () => {
     expect(vi.mocked(patchStorageOpsBucketUiTags).mock.calls[0][0].create_tags).toEqual([
       { label: "Ops", color_key: "teal" },
     ]);
+    expect(fetchStorageOpsBucketUiTagOrphans).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the successful catalog when a later mutation batch fails", async () => {
@@ -159,6 +160,7 @@ describe("useBucketUiTags", () => {
     expect(result.current.definitions.map((tag) => tag.id)).toEqual([31]);
     expect(onMutated).toHaveBeenCalledTimes(1);
     expect(result.current.error).toBe("second batch failed");
+    expect(fetchCephAdminBucketUiTagOrphans).toHaveBeenCalledTimes(2);
   });
 
   it("revalidates an orphan through the physical target before removing all tags", async () => {
