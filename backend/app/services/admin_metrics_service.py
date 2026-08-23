@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Iterable, Optional, Tuple
 
@@ -33,6 +34,42 @@ from app.utils.rgw_payloads import extract_bucket_list
 from app.utils.usage_stats import aggregate_bucket_usage, extract_usage_stats
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _FallbackStorageTotals:
+    total_buckets: int = 0
+    used_bytes: int = 0
+    object_count: int = 0
+    has_bytes: bool = False
+    has_objects: bool = False
+
+    def add_account_usage(
+        self,
+        used_bytes: int | None,
+        used_objects: int | None,
+        bucket_count: int | None,
+    ) -> None:
+        if bucket_count:
+            self.total_buckets += bucket_count
+        if used_bytes is not None:
+            self.has_bytes = True
+            self.used_bytes += used_bytes
+        if used_objects is not None:
+            self.has_objects = True
+            self.object_count += used_objects
+
+    def use_user_bucket_count_when_empty(self, bucket_count: int | None) -> None:
+        if bucket_count and self.total_buckets == 0:
+            self.total_buckets = bucket_count
+
+    def payload(self, *, accounts_with_usage: int) -> dict:
+        return {
+            "used_bytes": self.used_bytes if self.has_bytes else None,
+            "object_count": self.object_count if self.has_objects else None,
+            "bucket_count": self.total_buckets or None,
+            "accounts_with_usage": accounts_with_usage,
+        }
 
 
 class AdminMetricsService:
@@ -158,62 +195,62 @@ class AdminMetricsService:
             filtered_buckets = self._filter_buckets(all_buckets, allowed_identifiers)
             return self._storage_snapshot_from_bucket_list(summary, accounts, s3_users, filtered_buckets)
 
-        # Fallback to per-account collection using admin credentials only
-        total_buckets = 0
-        bytes_acc = 0
-        objects_acc = 0
-        has_bytes = False
-        has_objects = False
+        return self._storage_snapshot_from_account_fallback(summary, accounts, s3_users)
 
-        account_usage: list[dict] = []
-        for acc in accounts:
-            used_bytes = None
-            used_objects = None
-            bucket_count = None
+    def _resolve_fallback_account_usage(
+        self,
+        account: S3Account,
+    ) -> tuple[int | None, int | None, int | None]:
+        used_bytes, used_objects, bucket_count = self._collect_bucket_usage(
+            account_id=account.rgw_account_id,
+            uid=account.rgw_user_uid,
+            context=f"account:{account.id}",
+        )
+        if used_bytes is not None or used_objects is not None:
+            return used_bytes, used_objects, bucket_count
 
-            used_bytes, used_objects, bucket_count = self._collect_bucket_usage(
-                account_id=acc.rgw_account_id,
-                uid=acc.rgw_user_uid,
-                context=f"account:{acc.id}",
+        try:
+            stats = self.rgw_admin.get_account_stats(account.rgw_account_id, sync=False) or {}
+        except RGWAdminError as exc:
+            logger.warning(
+                "Unable to fetch account stats for %s (%s): %s",
+                account.id,
+                account.rgw_account_id,
+                exc,
             )
-            if bucket_count:
-                total_buckets += bucket_count
+            return None, None, bucket_count
+        if isinstance(stats, dict) and stats.get("not_found"):
+            return None, None, bucket_count
+        usage_payload = None
+        if isinstance(stats, dict):
+            usage_payload = stats.get("stats") or stats.get("usage") or stats.get("total") or stats
+            if isinstance(usage_payload, dict) and "usage" in usage_payload:
+                usage_payload = usage_payload.get("usage")
+        used_bytes, used_objects = extract_usage_stats(usage_payload)
+        return used_bytes, used_objects, bucket_count
 
-            if used_bytes is None and used_objects is None:
-                try:
-                    stats = self.rgw_admin.get_account_stats(acc.rgw_account_id, sync=False) or {}
-                except RGWAdminError as exc:
-                    logger.warning("Unable to fetch account stats for %s (%s): %s", acc.id, acc.rgw_account_id, exc)
-                    continue
-                if isinstance(stats, dict) and stats.get("not_found"):
-                    continue
-                usage_payload = None
-                if isinstance(stats, dict):
-                    usage_payload = stats.get("stats") or stats.get("usage") or stats.get("total") or stats
-                    if isinstance(usage_payload, dict) and "usage" in usage_payload:
-                        usage_payload = usage_payload.get("usage")
-                used_bytes, used_objects = extract_usage_stats(usage_payload)
-
+    def _storage_snapshot_from_account_fallback(
+        self,
+        summary: dict,
+        accounts: Iterable[S3Account],
+        s3_users: Iterable[S3User],
+    ) -> dict:
+        totals = _FallbackStorageTotals()
+        account_usage: list[dict] = []
+        for account in accounts:
+            used_bytes, used_objects, bucket_count = self._resolve_fallback_account_usage(account)
+            totals.add_account_usage(used_bytes, used_objects, bucket_count)
             if used_bytes is None and used_objects is None:
                 continue
-
-            if used_bytes is not None:
-                has_bytes = True
-                bytes_acc += used_bytes
-            if used_objects is not None:
-                has_objects = True
-                objects_acc += used_objects
-
             account_usage.append(
                 {
-                    "account_id": acc.rgw_account_id,
-                    "account_name": acc.name,
+                    "account_id": account.rgw_account_id,
+                    "account_name": account.name,
                     "used_bytes": used_bytes,
                     "object_count": used_objects,
                     "bucket_count": bucket_count,
                 }
             )
-
         account_usage.sort(key=lambda entry: entry.get("used_bytes") or 0, reverse=True)
 
         s3_user_usage: list[dict] = []
@@ -223,9 +260,7 @@ class AdminMetricsService:
                 uid=user.rgw_user_uid,
                 context=f"s3_user:{user.id}",
             )
-            # Avoid double counting buckets already seen from account roots
-            if bucket_count and total_buckets == 0:
-                total_buckets = bucket_count
+            totals.use_user_bucket_count_when_empty(bucket_count)
             if used_bytes is None and used_objects is None:
                 continue
             s3_user_usage.append(
@@ -239,19 +274,12 @@ class AdminMetricsService:
             )
         s3_user_usage.sort(key=lambda entry: entry.get("used_bytes") or 0, reverse=True)
 
-        storage_totals = {
-            "used_bytes": bytes_acc if has_bytes else None,
-            "object_count": objects_acc if has_objects else None,
-            "bucket_count": total_buckets or None,
-            "accounts_with_usage": len(account_usage),
-        }
-
         return {
             **summary,
-            "total_buckets": total_buckets,
+            "total_buckets": totals.total_buckets,
             "account_usage": account_usage,
             "s3_user_usage": s3_user_usage,
-            "storage_totals": storage_totals,
+            "storage_totals": totals.payload(accounts_with_usage=len(account_usage)),
         }
 
     def _storage_snapshot_from_bucket_list(
