@@ -197,7 +197,10 @@ def test_rotate_keys_across_endpoint_account_and_user_deletes_old_keys(db_sessio
             raise RGWAdminError("unknown access key")
         return FakeRGWAdmin(registry)
 
-    monkeypatch.setattr("app.services.key_rotation_service.get_rgw_admin_client", fake_client_factory)
+    monkeypatch.setattr(
+        "app.services.key_rotation_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint, **kwargs: fake_client_factory(**kwargs),
+    )
 
     service = KeyRotationService(db_session)
     result = service.rotate_keys(
@@ -257,7 +260,10 @@ def test_rotate_keys_can_deactivate_old_keys_instead_of_deleting(db_session, mon
             raise RGWAdminError("unknown access key")
         return FakeRGWAdmin(registry)
 
-    monkeypatch.setattr("app.services.key_rotation_service.get_rgw_admin_client", fake_client_factory)
+    monkeypatch.setattr(
+        "app.services.key_rotation_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint, **kwargs: fake_client_factory(**kwargs),
+    )
 
     service = KeyRotationService(db_session)
     result = service.rotate_keys(
@@ -319,7 +325,10 @@ def test_env_managed_endpoint_credentials_are_skipped_without_rgw_calls(db_sessi
     def unexpected_client_factory(**kwargs):  # noqa: ANN003, ARG001
         raise AssertionError("RGW client must not be built for environment-managed endpoint keys")
 
-    monkeypatch.setattr("app.services.key_rotation_service.get_rgw_admin_client", unexpected_client_factory)
+    monkeypatch.setattr(
+        "app.services.key_rotation_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint, **kwargs: unexpected_client_factory(**kwargs),
+    )
 
     service = KeyRotationService(db_session)
     result = service.rotate_keys(
@@ -391,7 +400,10 @@ def test_env_managed_endpoint_mixed_rotation_still_rotates_accounts_and_s3_users
             raise RGWAdminError("unknown access key")
         return FakeRGWAdmin(registry)
 
-    monkeypatch.setattr("app.services.key_rotation_service.get_rgw_admin_client", fake_client_factory)
+    monkeypatch.setattr(
+        "app.services.key_rotation_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint, **kwargs: fake_client_factory(**kwargs),
+    )
 
     service = KeyRotationService(db_session)
     result = service.rotate_keys(
@@ -429,8 +441,8 @@ def test_endpoint_identity_rotation_failure_returns_failed_result(db_session, mo
             raise RGWAdminError("identity lookup failed")
 
     monkeypatch.setattr(
-        "app.services.key_rotation_service.get_rgw_admin_client",
-        lambda **kwargs: FailingRGWAdmin(),
+        "app.services.key_rotation_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint, **kwargs: FailingRGWAdmin(),
     )
 
     service = KeyRotationService(db_session)
@@ -463,7 +475,10 @@ def test_rotate_supervision_uses_admin_ops_identity(db_session, monkeypatch):
             raise RGWAdminError("unknown access key")
         return SupervisionRestrictedRGWAdmin(registry, access_key=access_key)
 
-    monkeypatch.setattr("app.services.key_rotation_service.get_rgw_admin_client", fake_client_factory)
+    monkeypatch.setattr(
+        "app.services.key_rotation_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint, **kwargs: fake_client_factory(**kwargs),
+    )
 
     service = KeyRotationService(db_session)
     result = service.rotate_keys(

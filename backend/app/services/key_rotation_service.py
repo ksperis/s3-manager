@@ -16,7 +16,8 @@ from app.models.key_rotation import (
     KeyRotationSummary,
     KeyRotationType,
 )
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
 from app.utils.normalize import (
     normalize_optional_string,
     normalize_storage_provider,
@@ -715,12 +716,10 @@ class KeyRotationService:
         if not admin_endpoint:
             raise ValueError("Admin feature is disabled or admin endpoint is not configured.")
         try:
-            return get_rgw_admin_client(
+            return get_endpoint_admin_rgw_client(
+                endpoint,
                 access_key=access_key,
                 secret_key=secret_key,
-                endpoint=admin_endpoint,
-                region=endpoint.region,
-                verify_tls=endpoint.verify_tls,
             )
         except RGWAdminError as exc:
             raise ValueError(f"Unable to build RGW admin client: {exc}") from exc

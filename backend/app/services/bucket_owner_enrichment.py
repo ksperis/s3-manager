@@ -13,6 +13,7 @@ from app.db import StorageEndpoint, StorageProvider
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
 from app.utils.cache import prune_expired_lru_cache
 from app.utils.normalize import normalize_optional_string
 from app.utils.quota_stats import extract_quota_limits
@@ -556,18 +557,12 @@ class BucketOwnerMetadataService:
                     pass
 
         admin_endpoint = resolve_admin_endpoint(endpoint)
-        access_key = getattr(endpoint, "admin_access_key", None)
-        secret_key = getattr(endpoint, "admin_secret_key", None)
+        access_key = endpoint.admin_access_key
+        secret_key = endpoint.admin_secret_key
         if not admin_endpoint or not access_key or not secret_key:
             return None
         try:
-            self.rgw_admin = get_rgw_admin_client(
-                access_key=access_key,
-                secret_key=secret_key,
-                endpoint=admin_endpoint,
-                region=endpoint.region,
-                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
-            )
+            self.rgw_admin = get_endpoint_admin_rgw_client(endpoint)
         except RGWAdminError:
             self.rgw_admin = None
         return self.rgw_admin

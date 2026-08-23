@@ -119,3 +119,34 @@ def test_get_endpoint_admin_rgw_client_uses_canonical_endpoint_fields(monkeypatc
         "region": "eu-west-1",
         "verify_tls": False,
     }
+
+
+def test_get_endpoint_admin_rgw_client_accepts_explicit_identity_credentials(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_get_rgw_admin_client(**kwargs):
+        captured.update(kwargs)
+        return "client"
+
+    monkeypatch.setattr(
+        "app.services.rgw_endpoint_clients.get_rgw_admin_client",
+        fake_get_rgw_admin_client,
+    )
+    endpoint = StorageEndpoint(
+        name="ceph",
+        endpoint_url="https://rgw.example.test",
+        provider=StorageProvider.CEPH.value,
+        admin_access_key="ADMIN-AK",
+        admin_secret_key="ADMIN-SK",
+        features_config="features:\n  admin:\n    enabled: true\n",
+    )
+
+    client = get_endpoint_admin_rgw_client(
+        endpoint,
+        access_key="ROTATING-AK",
+        secret_key="ROTATING-SK",
+    )
+
+    assert client == "client"
+    assert captured["access_key"] == "ROTATING-AK"
+    assert captured["secret_key"] == "ROTATING-SK"

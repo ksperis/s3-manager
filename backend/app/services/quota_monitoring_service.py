@@ -31,7 +31,8 @@ from app.services.quota_alert_state_service import (
     QuotaAlertStateKey,
     QuotaAlertStateService,
 )
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
 from app.services.rgw_supervision import get_supervision_rgw_client
 from app.services.quota_subject import SubjectContext
 from app.services.quota_usage_history_service import QuotaUsageHistoryService
@@ -539,13 +540,7 @@ class QuotaMonitoringService:
             cache[endpoint.id] = None
             return None
         try:
-            client = get_rgw_admin_client(
-                access_key=endpoint.admin_access_key,
-                secret_key=endpoint.admin_secret_key,
-                endpoint=admin_endpoint,
-                region=endpoint.region,
-                verify_tls=endpoint.verify_tls,
-            )
+            client = get_endpoint_admin_rgw_client(endpoint)
         except Exception:
             client = None
         cache[endpoint.id] = client
