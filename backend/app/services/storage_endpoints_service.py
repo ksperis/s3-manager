@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 import json
 import logging
-import re
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -32,6 +31,9 @@ from app.models.base import ApiModel
 from app.services.mappers.storage_endpoint import storage_endpoint_from_db
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.storage_endpoint_admin_permissions import (
+    resolve_storage_endpoint_admin_ops_permissions,
+)
 from app.services.tags_service import TagsService
 from app.utils.tagging import (
     TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
@@ -204,105 +206,6 @@ class StorageEndpointsService:
         features = normalize_features_config(provider, raw, region)
         return features, dump_features_config(features)
 
-    @staticmethod
-    def _empty_admin_ops_permissions() -> StorageEndpointAdminOpsPermissions:
-        return StorageEndpointAdminOpsPermissions()
-
-    @staticmethod
-    def _parse_caps_payload(raw_caps: object) -> dict[str, set[str]]:
-        parsed: dict[str, set[str]] = {}
-        if not raw_caps:
-            return parsed
-
-        def _append(scope: str, perms: str) -> None:
-            normalized_scope = scope.strip().lower()
-            if not normalized_scope:
-                return
-            scope_perms = parsed.setdefault(normalized_scope, set())
-            tokens = [token.strip().lower() for token in re.split(r"[,\s]+", perms) if token.strip()]
-            if not tokens:
-                scope_perms.add("*")
-                return
-            scope_perms.update(tokens)
-
-        if isinstance(raw_caps, str):
-            for item in raw_caps.split(";"):
-                scope, sep, perms = item.partition("=")
-                if sep:
-                    _append(scope, perms)
-            return parsed
-
-        if isinstance(raw_caps, list):
-            for item in raw_caps:
-                if isinstance(item, str):
-                    scope, sep, perms = item.partition("=")
-                    if sep:
-                        _append(scope, perms)
-                    continue
-                if isinstance(item, dict):
-                    scope = str(item.get("type") or item.get("scope") or "").strip()
-                    perms = str(item.get("perm") or item.get("permissions") or "*").strip()
-                    _append(scope, perms)
-            return parsed
-
-        if isinstance(raw_caps, dict):
-            for scope, perms in raw_caps.items():
-                _append(str(scope), str(perms))
-        return parsed
-
-    @staticmethod
-    def _perm_allows(scope_perms: set[str], permission: str) -> bool:
-        normalized_permission = permission.strip().lower()
-        if not normalized_permission:
-            return False
-        return "*" in scope_perms or normalized_permission in scope_perms
-
-    def _resolve_admin_ops_permissions(
-        self,
-        endpoint: StorageEndpoint,
-        capabilities: dict[str, bool],
-    ) -> StorageEndpointAdminOpsPermissions:
-        provider = self._normalize_provider(endpoint.provider)
-        if provider != StorageProvider.CEPH:
-            return self._empty_admin_ops_permissions()
-        if not capabilities.get("admin"):
-            return self._empty_admin_ops_permissions()
-        if not endpoint.admin_access_key or not endpoint.admin_secret_key:
-            return self._empty_admin_ops_permissions()
-
-        admin_endpoint = resolve_admin_endpoint(endpoint)
-        if not admin_endpoint:
-            return self._empty_admin_ops_permissions()
-
-        try:
-            admin_client = get_rgw_admin_client(
-                access_key=endpoint.admin_access_key,
-                secret_key=endpoint.admin_secret_key,
-                endpoint=admin_endpoint,
-                region=endpoint.region,
-                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
-            )
-            user_payload = admin_client.get_user_by_access_key(endpoint.admin_access_key, allow_not_found=True)
-            if not user_payload:
-                return self._empty_admin_ops_permissions()
-            parsed_caps = self._parse_caps_payload(user_payload.get("caps"))
-            users_perms = parsed_caps.get("users", set())
-            accounts_perms = parsed_caps.get("accounts", set())
-            return StorageEndpointAdminOpsPermissions(
-                users_read=self._perm_allows(users_perms, "read") or self._perm_allows(users_perms, "write"),
-                users_write=self._perm_allows(users_perms, "write"),
-                accounts_read=self._perm_allows(accounts_perms, "read") or self._perm_allows(accounts_perms, "write"),
-                accounts_write=self._perm_allows(accounts_perms, "write"),
-            )
-        except RGWAdminError as exc:
-            logger.warning(
-                "Unable to evaluate admin ops permissions for endpoint id=%s name=%s: %s",
-                endpoint.id,
-                endpoint.name,
-                exc,
-            )
-            return self._empty_admin_ops_permissions()
-
     def _serialize(
         self,
         endpoint: StorageEndpoint,
@@ -313,9 +216,14 @@ class StorageEndpointsService:
         features, _ = self._normalize_features(provider, endpoint.features_config, endpoint.region)
         capabilities = features_to_capabilities(features)
         admin_ops_permissions = (
-            self._resolve_admin_ops_permissions(endpoint, capabilities)
+            resolve_storage_endpoint_admin_ops_permissions(
+                endpoint,
+                provider=provider,
+                capabilities=capabilities,
+                client_factory=get_rgw_admin_client,
+            )
             if include_admin_ops_permissions
-            else self._empty_admin_ops_permissions()
+            else StorageEndpointAdminOpsPermissions()
         )
         return storage_endpoint_from_db(
             endpoint,
