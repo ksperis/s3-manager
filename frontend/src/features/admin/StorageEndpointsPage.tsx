@@ -493,77 +493,36 @@ function DetailLine({
   );
 }
 
-function resolveCapability(endpoint: StorageEndpoint, key: string, fallback = false) {
-  return endpoint.capabilities?.[key] ?? fallback;
-}
-
 function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvider): FeaturesState {
-  if (endpoint.features) {
-    return applyFeatureConstraints(
-      {
-        admin: {
-          enabled: Boolean(endpoint.features.admin?.enabled),
-          endpoint: endpoint.features.admin?.endpoint ?? "",
-        },
-        account: {
-          enabled: Boolean(endpoint.features.account?.enabled),
-          endpoint: "",
-        },
-        sts: {
-          enabled: Boolean(endpoint.features.sts?.enabled),
-          endpoint: endpoint.features.sts?.endpoint ?? "",
-        },
-        usage: {
-          enabled: Boolean(endpoint.features.usage?.enabled),
-          endpoint: "",
-        },
-        metrics: {
-          enabled: Boolean(endpoint.features.metrics?.enabled),
-          endpoint: "",
-        },
-        static_website: {
-          enabled: Boolean(endpoint.features.static_website?.enabled),
-          endpoint: "",
-        },
-        iam: {
-          enabled: Boolean(endpoint.features.iam?.enabled),
-          endpoint: endpoint.features.iam?.endpoint ?? "",
-        },
-        sns: {
-          enabled: Boolean(endpoint.features.sns?.enabled),
-          endpoint: "",
-        },
-        sse: {
-          enabled: Boolean(endpoint.features.sse?.enabled),
-          endpoint: "",
-        },
-        replication: {
-          enabled: Boolean(endpoint.features.replication?.enabled),
-          endpoint: "",
-        },
-        healthcheck: {
-          enabled: endpoint.features.healthcheck?.enabled !== false,
-          endpoint: endpoint.features.healthcheck?.url ?? "",
-          mode: endpoint.features.healthcheck?.mode === "s3" ? "s3" : "http",
-        },
+  return applyFeatureConstraints(
+    {
+      admin: {
+        enabled: endpoint.features.admin.enabled,
+        endpoint: endpoint.features.admin.endpoint ?? "",
       },
-      provider
-    );
-  }
-  const fallback: FeaturesState = {
-    admin: { enabled: resolveCapability(endpoint, "admin"), endpoint: endpoint.admin_endpoint ?? "" },
-    account: { enabled: resolveCapability(endpoint, "account"), endpoint: "" },
-    sts: { enabled: resolveCapability(endpoint, "sts"), endpoint: "" },
-    usage: { enabled: resolveCapability(endpoint, "usage"), endpoint: "" },
-    metrics: { enabled: resolveCapability(endpoint, "metrics"), endpoint: "" },
-    static_website: { enabled: resolveCapability(endpoint, "static_website"), endpoint: "" },
-    iam: { enabled: resolveCapability(endpoint, "iam"), endpoint: "" },
-    sns: { enabled: resolveCapability(endpoint, "sns"), endpoint: "" },
-    sse: { enabled: resolveCapability(endpoint, "sse"), endpoint: "" },
-    replication: { enabled: resolveCapability(endpoint, "replication"), endpoint: "" },
-    healthcheck: { enabled: true, endpoint: "", mode: "http" },
-  };
-  return applyFeatureConstraints(fallback, provider);
+      account: { enabled: endpoint.features.account.enabled, endpoint: "" },
+      sts: {
+        enabled: endpoint.features.sts.enabled,
+        endpoint: endpoint.features.sts.endpoint ?? "",
+      },
+      usage: { enabled: endpoint.features.usage.enabled, endpoint: "" },
+      metrics: { enabled: endpoint.features.metrics.enabled, endpoint: "" },
+      static_website: { enabled: endpoint.features.static_website.enabled, endpoint: "" },
+      iam: {
+        enabled: endpoint.features.iam.enabled,
+        endpoint: endpoint.features.iam.endpoint ?? "",
+      },
+      sns: { enabled: endpoint.features.sns.enabled, endpoint: "" },
+      sse: { enabled: endpoint.features.sse.enabled, endpoint: "" },
+      replication: { enabled: endpoint.features.replication.enabled, endpoint: "" },
+      healthcheck: {
+        enabled: endpoint.features.healthcheck.enabled,
+        endpoint: endpoint.features.healthcheck.url ?? "",
+        mode: endpoint.features.healthcheck.mode,
+      },
+    },
+    provider
+  );
 }
 
 export default function StorageEndpointsPage() {

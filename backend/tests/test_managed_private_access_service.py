@@ -121,7 +121,6 @@ def _endpoint(db_session, *, iam=True, admin=False):
     endpoint = StorageEndpoint(
         name=f"endpoint-{int(iam)}-{int(admin)}",
         endpoint_url="https://s3.example.test",
-        admin_endpoint="https://admin.example.test" if admin else None,
         region="us-east-1",
         provider=StorageProvider.CEPH.value,
         admin_access_key="ADMIN-AK" if admin else None,

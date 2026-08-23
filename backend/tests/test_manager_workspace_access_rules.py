@@ -57,7 +57,6 @@ def _ceph_metrics_endpoint(*, name: str, provider: str = "ceph") -> StorageEndpo
     return StorageEndpoint(
         name=name,
         endpoint_url=f"https://{name}.example.com",
-        admin_endpoint=f"https://{name}.example.com/admin",
         provider=provider,
         supervision_access_key="SUP-AK",
         supervision_secret_key="SUP-SK",
@@ -87,7 +86,6 @@ def _ceph_s3_user_management_endpoint(
         name=name,
         endpoint_url=normalized_endpoint_url,
         provider=provider,
-        admin_endpoint=f"https://{name}.example.com/admin",
         admin_access_key=admin_access_key,
         admin_secret_key=admin_secret_key,
         features_config=(

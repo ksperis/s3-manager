@@ -65,6 +65,21 @@ adds a database constraint. New invalid values now fail validation instead of
 being interpreted silently as Ceph. The downgrade removes the constraint but
 keeps the canonicalized values.
 
+## 2026-08 canonical Storage Endpoint admin endpoint
+
+Migration `0117_remove_storage_endpoint_admin_endpoint` removes the redundant
+`storage_endpoints.admin_endpoint` column. The configured override already
+lives in `features_config` at `features.admin.endpoint`, which is now the only
+persisted source. The downgrade recreates an empty nullable column but cannot
+reconstruct its former duplicate values.
+
+Storage Endpoint create and update requests now reject the removed
+`admin_endpoint` property. Put the override in the canonical `features_config`
+document instead. Storage Endpoint responses expose it through
+`features.admin.endpoint`; the separate feature-detection request keeps its
+transient `admin_endpoint` probe input. Deploy migration, backend, and frontend
+together.
+
 ## 2026-08 Clipboard API requirement
 
 Frontend copy actions now rely exclusively on the browser Clipboard API. The

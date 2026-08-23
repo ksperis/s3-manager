@@ -23,6 +23,7 @@ from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.storage_endpoint_features import (
     dump_features_config,
     normalize_features_config,
+    resolve_feature_flags,
 )
 
 
@@ -353,8 +354,8 @@ class AdminAutomationStorageEndpointHandler(AdminAutomationResultFactory):
     def _audit_metadata(endpoint: StorageEndpoint) -> dict[str, Any]:
         return {
             "endpoint_url": endpoint.endpoint_url,
-            "provider": endpoint.provider.value,
-            "admin_endpoint": endpoint.admin_endpoint,
+            "provider": normalize_storage_provider(endpoint.provider).value,
+            "admin_endpoint": resolve_feature_flags(endpoint).admin_endpoint,
             "verify_tls": endpoint.verify_tls,
         }
 

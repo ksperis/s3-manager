@@ -250,7 +250,6 @@ class ConnectionIdentityService:
             bool(getattr(endpoint, "supervision_access_key", None)) if endpoint is not None else False,
             bool(getattr(endpoint, "supervision_secret_key", None)) if endpoint is not None else False,
             (getattr(endpoint, "features_config", None) or "") if endpoint is not None else "",
-            (getattr(endpoint, "admin_endpoint", None) or "") if endpoint is not None else "",
             int(connection_updated.timestamp()) if isinstance(connection_updated, datetime) else 0,
             int(endpoint_updated.timestamp()) if isinstance(endpoint_updated, datetime) else 0,
         )

@@ -29,7 +29,6 @@ def _ceph_endpoint(name: str) -> StorageEndpoint:
     return StorageEndpoint(
         name=name,
         endpoint_url=f"https://{name}.example.test",
-        admin_endpoint=f"https://{name}.example.test/admin",
         provider="ceph",
         supervision_access_key="SUP-AK",
         supervision_secret_key="SUP-SK",

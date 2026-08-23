@@ -86,7 +86,6 @@ class EnvStorageEndpoint(ApiModel):
 class NormalizedEndpointState:
     name: str
     endpoint_url: str
-    admin_endpoint: Optional[str]
     region: Optional[str]
     force_path_style: bool
     verify_tls: bool
@@ -226,7 +225,6 @@ def normalize_storage_endpoint_state(
     return NormalizedEndpointState(
         name=name,
         endpoint_url=endpoint_url,
-        admin_endpoint=features.get("admin", {}).get("endpoint"),
         region=region,
         force_path_style=bool(payload.force_path_style),
         verify_tls=bool(payload.verify_tls),

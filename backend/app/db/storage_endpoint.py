@@ -33,7 +33,6 @@ class StorageEndpoint(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     endpoint_url = Column(String, nullable=False)
-    admin_endpoint = Column(String, nullable=True)
     region = Column(String, nullable=True)
     provider = Column(String, nullable=False, default=StorageProvider.CEPH.value)
     admin_access_key = Column(String, nullable=True)

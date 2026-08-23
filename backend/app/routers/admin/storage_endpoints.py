@@ -93,7 +93,7 @@ def create_storage_endpoint(
             metadata={
                 "endpoint_url": created.endpoint_url,
                 "provider": created.provider.value,
-                "admin_endpoint": created.admin_endpoint,
+                "admin_endpoint": created.features.admin.endpoint,
                 "force_path_style": created.force_path_style,
                 "verify_tls": created.verify_tls,
             },
@@ -122,7 +122,7 @@ def update_storage_endpoint(
             metadata={
                 "endpoint_url": updated.endpoint_url,
                 "provider": updated.provider.value,
-                "admin_endpoint": updated.admin_endpoint,
+                "admin_endpoint": updated.features.admin.endpoint,
                 "force_path_style": updated.force_path_style,
                 "verify_tls": updated.verify_tls,
             },

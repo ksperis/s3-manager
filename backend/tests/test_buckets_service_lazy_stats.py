@@ -348,7 +348,6 @@ def test_set_bucket_quota_uses_endpoint_admin_credentials(monkeypatch):
     account.storage_endpoint = StorageEndpoint(
         name="Ceph endpoint",
         endpoint_url="https://s3.example.test",
-        admin_endpoint="https://admin.example.test",
         provider="ceph",
         admin_access_key="endpoint-admin-ak",
         admin_secret_key="endpoint-admin-sk",

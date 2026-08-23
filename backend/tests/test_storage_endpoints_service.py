@@ -312,6 +312,20 @@ def test_endpoint_coordinates_reject_invalid_ranges():
         StorageEndpointUpdate(longitude=-181)
 
 
+def test_storage_endpoint_inputs_reject_obsolete_admin_endpoint_field():
+    with pytest.raises(ValidationError, match="admin_endpoint"):
+        StorageEndpointCreate(
+            name="Canonical features",
+            endpoint_url="https://canonical.example.test",
+            admin_endpoint="https://obsolete-admin.example.test",
+        )
+
+    with pytest.raises(ValidationError, match="admin_endpoint"):
+        StorageEndpointUpdate(
+            admin_endpoint="https://obsolete-admin.example.test",
+        )
+
+
 def test_aws_endpoint_helpers_are_partition_aware():
     assert AWS_S3_ENDPOINT == aws_s3_endpoint_for_region(AWS_DEFAULT_REGION)
     assert AWS_STS_ENDPOINT == aws_sts_endpoint_for_region(AWS_DEFAULT_REGION)

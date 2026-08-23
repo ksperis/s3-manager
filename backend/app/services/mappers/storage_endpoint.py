@@ -24,7 +24,6 @@ def storage_endpoint_from_db(
         id=endpoint.id,
         name=endpoint.name,
         endpoint_url=endpoint.endpoint_url,
-        admin_endpoint=features.get("admin", {}).get("endpoint"),
         region=endpoint.region,
         force_path_style=endpoint.force_path_style,
         verify_tls=endpoint.verify_tls,

@@ -131,7 +131,6 @@ class StorageEndpointsService:
     ) -> None:
         endpoint.name = config.name
         endpoint.endpoint_url = config.endpoint_url
-        endpoint.admin_endpoint = config.admin_endpoint
         endpoint.region = config.region
         endpoint.force_path_style = config.force_path_style
         endpoint.verify_tls = config.verify_tls

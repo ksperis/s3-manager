@@ -46,7 +46,6 @@ class StorageEndpointAdminOpsPermissions(ApiModel):
 class StorageEndpointBase(ApiModel):
     name: str
     endpoint_url: str
-    admin_endpoint: Optional[str] = None
     region: Optional[str] = None
     force_path_style: bool = False
     verify_tls: bool = True
@@ -61,7 +60,7 @@ class StorageEndpointBase(ApiModel):
     latitude: Optional[float] = Field(default=None)
     longitude: Optional[float] = Field(default=None)
 
-    @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
+    @field_validator("name", "endpoint_url", "region", mode="before")
     @classmethod
     def trim_str_fields(cls, value: Optional[str]) -> Optional[str]:
         if isinstance(value, str):
@@ -94,7 +93,6 @@ class StorageEndpointCreate(StorageEndpointBase):
 class StorageEndpointUpdate(ApiModel):
     name: Optional[str] = None
     endpoint_url: Optional[str] = None
-    admin_endpoint: Optional[str] = None
     region: Optional[str] = None
     force_path_style: Optional[bool] = None
     verify_tls: Optional[bool] = None
@@ -109,7 +107,7 @@ class StorageEndpointUpdate(ApiModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-    @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
+    @field_validator("name", "endpoint_url", "region", mode="before")
     @classmethod
     def trim_optional_str_fields(cls, value: Optional[str]) -> Optional[str]:
         if isinstance(value, str):

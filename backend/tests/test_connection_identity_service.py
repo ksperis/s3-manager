@@ -21,7 +21,6 @@ def _ceph_endpoint(
         id=1,
         name=name,
         endpoint_url=f"https://{name}.example.test",
-        admin_endpoint=f"https://{name}.example.test/admin",
         provider="ceph",
         region="eu-west-1",
         supervision_access_key="SUP-AK",

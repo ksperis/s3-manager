@@ -1575,7 +1575,6 @@ def test_storage_ops_bucket_listing_does_not_expose_quota_write_availability(cli
             context_id=account_ref,
             storage_endpoint=SimpleNamespace(
                 provider="ceph",
-                admin_endpoint="https://admin.example.test",
                 admin_access_key="admin-ak",
                 admin_secret_key="admin-sk",
                 features_config='{"features":{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}}',

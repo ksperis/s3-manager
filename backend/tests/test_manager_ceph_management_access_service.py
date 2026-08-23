@@ -28,7 +28,6 @@ def _endpoint(*, name: str = "ceph-manager", admin_enabled: bool = True) -> Stor
     return StorageEndpoint(
         name=name,
         endpoint_url=f"https://{name}.example.test",
-        admin_endpoint=f"https://{name}.example.test/admin",
         provider="ceph",
         admin_access_key="ADMIN-AK",
         admin_secret_key="ADMIN-SK",

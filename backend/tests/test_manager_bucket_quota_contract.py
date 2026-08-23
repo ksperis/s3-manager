@@ -27,7 +27,6 @@ def _quota_account(db_session, *, allow_target: bool = True) -> S3Account:
     endpoint = StorageEndpoint(
         name="Ceph quota endpoint",
         endpoint_url="https://s3.example.test",
-        admin_endpoint="https://admin.example.test",
         provider="ceph",
         admin_access_key="endpoint-admin-ak",
         admin_secret_key="endpoint-admin-sk",

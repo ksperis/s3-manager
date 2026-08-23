@@ -43,7 +43,6 @@ export type StorageEndpoint = {
   id: number;
   name: string;
   endpoint_url: string;
-  admin_endpoint?: string | null;
   region?: string | null;
   force_path_style: boolean;
   latitude?: number | null;
@@ -59,7 +58,7 @@ export type StorageEndpoint = {
   capabilities?: Record<string, boolean> | null;
   admin_ops_permissions?: StorageEndpointAdminOpsPermissions | null;
   features_config?: string | null;
-  features?: StorageEndpointFeatures;
+  features: StorageEndpointFeatures;
   is_default: boolean;
   is_editable: boolean;
   tags: TagDefinitionSummary[];
@@ -78,7 +77,6 @@ type StorageEndpointMeta = {
 export type StorageEndpointPayload = {
   name: string;
   endpoint_url: string;
-  admin_endpoint?: string | null;
   region?: string | null;
   force_path_style?: boolean;
   latitude?: number | null;
