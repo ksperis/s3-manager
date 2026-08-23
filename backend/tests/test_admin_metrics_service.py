@@ -69,3 +69,62 @@ def test_storage_snapshot_fallback_aggregates_accounts_without_double_counting_u
         }
     ]
     assert rgw_admin.account_stats_calls == [("account-2", False)]
+
+
+def test_consolidated_storage_snapshot_indexes_owner_usage_and_keeps_unmapped_totals():
+    service = AdminMetricsService(db=SimpleNamespace(), rgw_admin=SimpleNamespace(), endpoint_id=7)
+    accounts = [
+        SimpleNamespace(id=1, rgw_account_id="account-1", rgw_user_uid="root-1", name="Account 1"),
+    ]
+    s3_users = [SimpleNamespace(id=3, rgw_user_uid="user-3", name="User 3")]
+    buckets = [
+        {
+            "bucket": "account-bucket",
+            "owner": "ACCOUNT-1",
+            "usage": {"total_bytes": 100, "total_objects": 10},
+        },
+        {
+            "bucket": "user-bucket",
+            "owner": "user-3",
+            "usage": {"total_bytes": 25, "total_objects": 3},
+        },
+        {
+            "bucket": "unmapped-bucket",
+            "owner": "external-owner",
+            "usage": {"total_bytes": 5, "total_objects": 1},
+        },
+    ]
+
+    snapshot = service._storage_snapshot_from_bucket_list(
+        {"total_accounts": 1},
+        accounts,
+        s3_users,
+        buckets,
+    )
+
+    assert snapshot["total_buckets"] == 3
+    assert snapshot["storage_totals"] == {
+        "used_bytes": 130,
+        "object_count": 14,
+        "bucket_count": 3,
+        "accounts_with_usage": 1,
+    }
+    assert snapshot["account_usage"] == [
+        {
+            "account_id": "account-1",
+            "account_name": "Account 1",
+            "used_bytes": 100,
+            "object_count": 10,
+            "bucket_count": 1,
+        }
+    ]
+    assert snapshot["s3_user_usage"] == [
+        {
+            "user_id": 3,
+            "user_name": "User 3",
+            "rgw_user_uid": "user-3",
+            "used_bytes": 25,
+            "object_count": 3,
+            "bucket_count": 1,
+        }
+    ]

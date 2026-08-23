@@ -37,12 +37,20 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class _FallbackStorageTotals:
+class _StorageUsageTotals:
     total_buckets: int = 0
     used_bytes: int = 0
     object_count: int = 0
     has_bytes: bool = False
     has_objects: bool = False
+
+    def _add_usage(self, used_bytes: int | None, used_objects: int | None) -> None:
+        if used_bytes is not None:
+            self.has_bytes = True
+            self.used_bytes += used_bytes
+        if used_objects is not None:
+            self.has_objects = True
+            self.object_count += used_objects
 
     def add_account_usage(
         self,
@@ -52,12 +60,11 @@ class _FallbackStorageTotals:
     ) -> None:
         if bucket_count:
             self.total_buckets += bucket_count
-        if used_bytes is not None:
-            self.has_bytes = True
-            self.used_bytes += used_bytes
-        if used_objects is not None:
-            self.has_objects = True
-            self.object_count += used_objects
+        self._add_usage(used_bytes, used_objects)
+
+    def add_bucket_usage(self, used_bytes: int | None, used_objects: int | None) -> None:
+        self.total_buckets += 1
+        self._add_usage(used_bytes, used_objects)
 
     def use_user_bucket_count_when_empty(self, bucket_count: int | None) -> None:
         if bucket_count and self.total_buckets == 0:
@@ -70,6 +77,58 @@ class _FallbackStorageTotals:
             "bucket_count": self.total_buckets or None,
             "accounts_with_usage": accounts_with_usage,
         }
+
+
+@dataclass(frozen=True)
+class _OwnerUsage:
+    used_bytes: int | None
+    object_count: int | None
+    bucket_count: int
+
+
+@dataclass
+class _BucketUsageIndex:
+    entries_by_owner: dict[str, list[_OwnerUsage]]
+    totals: _StorageUsageTotals
+
+    @classmethod
+    def build(cls, buckets: Iterable[Dict]) -> "_BucketUsageIndex":
+        entries_by_owner: dict[str, list[_OwnerUsage]] = {}
+        totals = _StorageUsageTotals()
+        for bucket in buckets:
+            used_bytes, used_objects = extract_usage_stats(bucket.get("usage"))
+            owner = str(bucket.get("owner") or "").strip()
+            entries_by_owner.setdefault(owner.lower(), []).append(
+                _OwnerUsage(
+                    used_bytes=used_bytes,
+                    object_count=used_objects,
+                    bucket_count=1,
+                )
+            )
+            totals.add_bucket_usage(used_bytes, used_objects)
+        return cls(entries_by_owner=entries_by_owner, totals=totals)
+
+    def usage_for(self, owner_key: str | None) -> _OwnerUsage:
+        if not owner_key:
+            return _OwnerUsage(used_bytes=None, object_count=None, bucket_count=0)
+        entries = self.entries_by_owner.get(owner_key.lower(), [])
+        if not entries:
+            return _OwnerUsage(used_bytes=None, object_count=None, bucket_count=0)
+        has_bytes = any(entry.used_bytes is not None for entry in entries)
+        has_objects = any(entry.object_count is not None for entry in entries)
+        return _OwnerUsage(
+            used_bytes=(
+                sum(entry.used_bytes or 0 for entry in entries)
+                if has_bytes
+                else None
+            ),
+            object_count=(
+                sum(entry.object_count or 0 for entry in entries)
+                if has_objects
+                else None
+            ),
+            bucket_count=len(entries),
+        )
 
 
 class AdminMetricsService:
@@ -235,7 +294,7 @@ class AdminMetricsService:
         accounts: Iterable[S3Account],
         s3_users: Iterable[S3User],
     ) -> dict:
-        totals = _FallbackStorageTotals()
+        totals = _StorageUsageTotals()
         account_usage: list[dict] = []
         for account in accounts:
             used_bytes, used_objects, bucket_count = self._resolve_fallback_account_usage(account)
@@ -289,99 +348,63 @@ class AdminMetricsService:
         s3_users: Iterable[S3User],
         bucket_list: Iterable[Dict],
     ) -> dict:
-        normalized_buckets = []
-        total_bytes = 0
-        total_objects = 0
-        has_bytes = False
-        has_objects = False
-        for bucket in bucket_list:
-            usage_bytes, usage_objects = extract_usage_stats(bucket.get("usage"))
-            owner = str(bucket.get("owner") or "").strip()
-            normalized_buckets.append(
-                {
-                    "name": bucket.get("bucket"),
-                    "owner": owner,
-                    "tenant": bucket.get("tenant") or "",
-                    "usage_bytes": usage_bytes,
-                    "usage_objects": usage_objects,
-                }
-            )
-            if usage_bytes is not None:
-                total_bytes += usage_bytes
-                has_bytes = True
-            if usage_objects is not None:
-                total_objects += usage_objects
-                has_objects = True
+        usage_index = _BucketUsageIndex.build(bucket_list)
+        account_usage = self._account_usage_from_bucket_index(accounts, usage_index)
+        s3_user_usage = self._s3_user_usage_from_bucket_index(s3_users, usage_index)
+        return {
+            **summary,
+            "total_buckets": usage_index.totals.total_buckets,
+            "account_usage": account_usage,
+            "s3_user_usage": s3_user_usage,
+            "storage_totals": usage_index.totals.payload(accounts_with_usage=len(account_usage)),
+        }
 
-        owner_map: Dict[str, list[dict]] = {}
-        for entry in normalized_buckets:
-            owner = entry["owner"].lower()
-            if owner not in owner_map:
-                owner_map[owner] = []
-            owner_map[owner].append(entry)
-
-        def _aggregate_for_owner(owner_key: Optional[str]) -> tuple[Optional[int], Optional[int], int]:
-            if not owner_key:
-                return None, None, 0
-            entries = owner_map.get(owner_key.lower(), [])
-            if not entries:
-                return None, None, 0
-            b_total = sum(entry["usage_bytes"] or 0 for entry in entries if entry["usage_bytes"] is not None)
-            o_total = sum(entry["usage_objects"] or 0 for entry in entries if entry["usage_objects"] is not None)
-            has_b = any(entry["usage_bytes"] is not None for entry in entries)
-            has_o = any(entry["usage_objects"] is not None for entry in entries)
-            return (b_total if has_b else None, o_total if has_o else None, len(entries))
-
+    @staticmethod
+    def _account_usage_from_bucket_index(
+        accounts: Iterable[S3Account],
+        usage_index: _BucketUsageIndex,
+    ) -> list[dict]:
         account_usage: list[dict] = []
-        for acc in accounts:
-            owner_key = acc.rgw_account_id
-            used_bytes, used_objects, bucket_count = _aggregate_for_owner(owner_key)
-            if used_bytes is None and used_objects is None:
+        for account in accounts:
+            usage = usage_index.usage_for(account.rgw_account_id)
+            if usage.used_bytes is None and usage.object_count is None:
                 continue
             account_usage.append(
                 {
-                    "account_id": acc.rgw_account_id,
-                    "account_name": acc.name,
-                    "used_bytes": used_bytes,
-                    "object_count": used_objects,
-                    "bucket_count": bucket_count or None,
+                    "account_id": account.rgw_account_id,
+                    "account_name": account.name,
+                    "used_bytes": usage.used_bytes,
+                    "object_count": usage.object_count,
+                    "bucket_count": usage.bucket_count or None,
                 }
             )
         account_usage.sort(key=lambda entry: entry.get("used_bytes") or 0, reverse=True)
+        return account_usage
 
+    @staticmethod
+    def _s3_user_usage_from_bucket_index(
+        s3_users: Iterable[S3User],
+        usage_index: _BucketUsageIndex,
+    ) -> list[dict]:
         s3_user_usage: list[dict] = []
         for user in s3_users:
             if not user.rgw_user_uid:
                 continue
-            used_bytes, used_objects, bucket_count = _aggregate_for_owner(user.rgw_user_uid)
-            if used_bytes is None and used_objects is None:
+            usage = usage_index.usage_for(user.rgw_user_uid)
+            if usage.used_bytes is None and usage.object_count is None:
                 continue
             s3_user_usage.append(
                 {
                     "user_id": user.id,
                     "user_name": user.name,
                     "rgw_user_uid": user.rgw_user_uid,
-                    "used_bytes": used_bytes,
-                    "object_count": used_objects,
-                    "bucket_count": bucket_count or None,
+                    "used_bytes": usage.used_bytes,
+                    "object_count": usage.object_count,
+                    "bucket_count": usage.bucket_count or None,
                 }
             )
         s3_user_usage.sort(key=lambda entry: entry.get("used_bytes") or 0, reverse=True)
-
-        storage_totals = {
-            "used_bytes": total_bytes if has_bytes else None,
-            "object_count": total_objects if has_objects else None,
-            "bucket_count": len(normalized_buckets),
-            "accounts_with_usage": len(account_usage),
-        }
-
-        return {
-            **summary,
-            "total_buckets": len(normalized_buckets),
-            "account_usage": account_usage,
-            "s3_user_usage": s3_user_usage,
-            "storage_totals": storage_totals,
-        }
+        return s3_user_usage
 
     def _traffic(self, window: TrafficWindow) -> dict:
         if window not in WINDOW_DELTAS:
