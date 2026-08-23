@@ -80,6 +80,18 @@ document instead. Storage Endpoint responses expose it through
 transient `admin_endpoint` probe input. Deploy migration, backend, and frontend
 together.
 
+## 2026-08 canonical Storage Endpoint URLs
+
+Migration `0118_canonical_storage_endpoint_urls` trims persisted Storage
+Endpoint URLs, removes trailing slashes, and adds a database constraint that
+keeps new values canonical. The migration stops before changing the schema if
+an URL becomes empty or if two endpoints would become duplicates after
+normalization; repair or delete the reported rows and retry the upgrade.
+
+Runtime Ceph Admin consumers now trust this database contract instead of
+repairing endpoint URLs or supplying missing provider, region, and TLS values.
+The downgrade removes the constraint but keeps the normalized URLs.
+
 ## 2026-08 Clipboard API requirement
 
 Frontend copy actions now rely exclusively on the browser Clipboard API. The

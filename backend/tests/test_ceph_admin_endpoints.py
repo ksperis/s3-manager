@@ -56,6 +56,7 @@ def _build_endpoint(
         provider=StorageProvider.CEPH.value,
         endpoint_url="https://s3.example.test",
         region="",
+        verify_tls=True,
         is_default=False,
         features_config=features_yaml,
         supervision_access_key="METRICS-AK" if has_supervision_credentials else None,

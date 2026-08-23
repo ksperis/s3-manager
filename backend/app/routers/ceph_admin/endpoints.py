@@ -25,7 +25,7 @@ from app.routers.ceph_admin.dependencies import (
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
-from app.utils.normalize import normalize_optional_string
+from app.utils.normalize import normalize_optional_string, normalize_storage_provider
 from app.utils.rgw_payloads import extract_rgw_user_identity
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 from app.utils.name_ordering import name_order_by
@@ -172,7 +172,7 @@ def list_ceph_admin_endpoints(
     )
     results: list[CephAdminEndpoint] = []
     for endpoint in endpoints:
-        if str(endpoint.provider) != StorageProvider.CEPH.value:
+        if normalize_storage_provider(endpoint.provider) != StorageProvider.CEPH:
             continue
         payload = build_ceph_admin_endpoint_payload(endpoint)
         payload["tags"] = tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint))
@@ -202,15 +202,15 @@ def get_ceph_admin_endpoint_access(
         if identity_probe.status != "available":
             can_admin = False
             can_accounts = False
-        admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
-        if admin_warning is None and admin_endpoint and endpoint.ceph_admin_access_key and endpoint.ceph_admin_secret_key:
+        if admin_warning is None and endpoint.ceph_admin_access_key and endpoint.ceph_admin_secret_key:
+            admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
             try:
                 admin_client = get_rgw_admin_client(
                     access_key=endpoint.ceph_admin_access_key,
                     secret_key=endpoint.ceph_admin_secret_key,
                     endpoint=admin_endpoint,
                     region=endpoint.region,
-                    verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+                    verify_tls=endpoint.verify_tls,
                     request_timeout_seconds=get_settings().rgw_admin_probe_timeout_seconds,
                 )
                 active_rgw_uid, active_rgw_tenant = extract_rgw_user_identity(identity_probe.user_payload)

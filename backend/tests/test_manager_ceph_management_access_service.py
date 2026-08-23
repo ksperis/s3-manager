@@ -135,12 +135,11 @@ def test_policy_applies_global_kill_switches(db_session, monkeypatch, operation,
 @pytest.mark.parametrize("operation", ["bucket_quota", "rgw_access_keys"])
 @pytest.mark.parametrize(
     ("endpoint_field", "endpoint_value"),
-    [
-        ("provider", "other"),
-        ("features_config", "features:\n  admin:\n    enabled: false\n"),
-        ("endpoint_url", ""),
-        ("admin_access_key", None),
-        ("admin_secret_key", None),
+        [
+            ("provider", "other"),
+            ("features_config", "features:\n  admin:\n    enabled: false\n"),
+            ("admin_access_key", None),
+            ("admin_secret_key", None),
     ],
 )
 def test_policy_rejects_each_missing_ceph_admin_capability(

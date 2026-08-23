@@ -10,7 +10,7 @@ from app.models.account_capabilities import AccountCapabilities
 from app.services import app_settings_service, effective_access_service
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
-from app.utils.s3_endpoint import normalize_s3_endpoint
+from app.utils.normalize import normalize_storage_provider
 
 
 def _build_ceph_admin_browser_context(endpoint: StorageEndpoint) -> S3ExecutionContext:
@@ -48,7 +48,7 @@ def _resolve_ceph_admin_browser_context(
     endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
     if not endpoint:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage endpoint not found")
-    provider = StorageProvider(str(endpoint.provider))
+    provider = normalize_storage_provider(endpoint.provider)
     if provider != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not a Ceph provider")
 
@@ -58,11 +58,6 @@ def _resolve_ceph_admin_browser_context(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Ceph Admin credentials are not configured for this storage endpoint",
-        )
-    if not normalize_s3_endpoint(getattr(endpoint, "endpoint_url", None)):
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="S3 endpoint URL is not configured for this storage endpoint",
         )
     from app.routers.ceph_admin.dependencies import validate_ceph_admin_service_identity
 
@@ -86,4 +81,3 @@ def _resolve_default_endpoint(db: Session) -> StorageEndpoint:
             detail="Default storage endpoint is not configured",
         )
     return endpoint
-

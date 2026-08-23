@@ -28,6 +28,12 @@ class StorageEndpoint(Base):
             "provider IN ('ceph', 'aws', 'other')",
             name="ck_storage_endpoints_provider",
         ),
+        CheckConstraint(
+            "endpoint_url = trim(endpoint_url) "
+            "AND endpoint_url NOT LIKE '%/' "
+            "AND length(endpoint_url) > 0",
+            name="ck_storage_endpoints_endpoint_url_canonical",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)

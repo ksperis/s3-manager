@@ -76,15 +76,13 @@ def _ceph_s3_user_management_endpoint(
     *,
     name: str,
     provider: str = "ceph",
-    endpoint_url: str | None = None,
     admin_enabled: bool = True,
     admin_access_key: str | None = "AK-ADMIN",
     admin_secret_key: str | None = "SK-ADMIN",
 ) -> StorageEndpoint:
-    normalized_endpoint_url = endpoint_url if endpoint_url is not None else f"https://{name}.example.com"
     return StorageEndpoint(
         name=name,
-        endpoint_url=normalized_endpoint_url,
+        endpoint_url=f"https://{name}.example.com",
         provider=provider,
         admin_access_key=admin_access_key,
         admin_secret_key=admin_secret_key,
@@ -1061,11 +1059,10 @@ def test_manager_context_does_not_infer_managed_private_access_from_ceph_key_inv
 @pytest.mark.parametrize(
     ("endpoint", "feature_enabled"),
     [
-        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-missing-admin-keys", admin_access_key=None, admin_secret_key=None), True),
-        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-non-ceph", provider="other"), True),
-        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-admin-feature-off", admin_enabled=False), True),
-        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-admin-endpoint-missing", endpoint_url=""), True),
-        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-flag-off"), False),
+            (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-missing-admin-keys", admin_access_key=None, admin_secret_key=None), True),
+            (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-non-ceph", provider="other"), True),
+            (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-admin-feature-off", admin_enabled=False), True),
+            (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-flag-off"), False),
     ],
 )
 def test_manager_context_s3_user_disables_ceph_keys_when_management_not_possible(

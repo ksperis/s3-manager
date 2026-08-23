@@ -15,7 +15,7 @@ from app.routers.dependencies import get_current_ceph_admin
 from app.services.audit_service import AuditService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.s3_execution_context import S3ExecutionContext
-from app.utils.s3_endpoint import normalize_s3_endpoint
+from app.utils.normalize import normalize_storage_provider
 from app.utils.storage_endpoint_features import (
     features_to_capabilities,
     normalize_features_config,
@@ -84,8 +84,8 @@ def probe_ceph_admin_service_identity(endpoint: StorageEndpoint) -> CephAdminIde
             access_key=access_key,
             secret_key=secret_key,
             endpoint=admin_endpoint,
-            region=getattr(endpoint, "region", None),
-            verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+            region=endpoint.region,
+            verify_tls=endpoint.verify_tls,
             request_timeout_seconds=get_settings().rgw_admin_probe_timeout_seconds,
         )
         user_payload = rgw_admin.get_user_by_access_key(access_key, allow_not_found=True)
@@ -127,8 +127,6 @@ def validate_ceph_admin_service_identity(endpoint: StorageEndpoint) -> Optional[
 
 def validate_ceph_admin_service_configuration(endpoint: StorageEndpoint) -> Optional[str]:
     endpoint_label = endpoint.name or f"#{endpoint.id}"
-    if not resolve_rgw_admin_api_endpoint(endpoint):
-        return f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': RGW admin endpoint is not configured."
     if not endpoint.ceph_admin_access_key or not endpoint.ceph_admin_secret_key:
         return (
             f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': dedicated Ceph Admin credentials "
@@ -138,30 +136,13 @@ def validate_ceph_admin_service_configuration(endpoint: StorageEndpoint) -> Opti
 
 
 def _resolve_storage_endpoint(db: Session, endpoint_id: int) -> StorageEndpoint:
-    endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
-    if not endpoint:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage endpoint not found")
-    provider = StorageProvider(str(endpoint.provider))
-    if provider != StorageProvider.CEPH:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not a Ceph provider")
-    admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
-    if not admin_endpoint:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="RGW admin endpoint is not configured for this storage endpoint",
-        )
+    endpoint = _resolve_ceph_admin_workspace_endpoint(db, endpoint_id)
     access_key = endpoint.ceph_admin_access_key
     secret_key = endpoint.ceph_admin_secret_key
     if not access_key or not secret_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Ceph Admin credentials are not configured for this storage endpoint",
-        )
-    s3_endpoint = normalize_s3_endpoint(getattr(endpoint, "endpoint_url", None))
-    if not s3_endpoint:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="S3 endpoint URL is not configured for this storage endpoint",
         )
     return endpoint
 
@@ -170,7 +151,7 @@ def _resolve_ceph_admin_workspace_endpoint(db: Session, endpoint_id: int) -> Sto
     endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
     if not endpoint:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage endpoint not found")
-    provider = StorageProvider(str(endpoint.provider))
+    provider = normalize_storage_provider(endpoint.provider)
     if provider != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not a Ceph provider")
     return endpoint
@@ -185,19 +166,18 @@ def get_ceph_admin_context(
     admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
     access_key = endpoint.ceph_admin_access_key
     secret_key = endpoint.ceph_admin_secret_key
-    region = getattr(endpoint, "region", None)
+    region = endpoint.region
     rgw_admin = get_rgw_admin_client(
         access_key=access_key,
         secret_key=secret_key,
         endpoint=admin_endpoint,
         region=region,
-        verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+        verify_tls=endpoint.verify_tls,
     )
-    s3_endpoint = normalize_s3_endpoint(getattr(endpoint, "endpoint_url", None)) or ""
     return CephAdminContext(
         endpoint=endpoint,
         rgw_admin=rgw_admin,
-        s3_endpoint=s3_endpoint,
+        s3_endpoint=endpoint.endpoint_url,
         region=region,
         access_key=access_key,
         secret_key=secret_key,
