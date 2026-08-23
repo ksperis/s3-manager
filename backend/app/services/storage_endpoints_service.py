@@ -36,6 +36,7 @@ from app.services.storage_endpoint_normalization import (
     NormalizedEndpointState,
     normalize_env_storage_endpoint_states,
     normalize_storage_endpoint_state,
+    normalize_storage_endpoint_update,
     parse_env_storage_endpoints,
 )
 from app.services.tags_service import TagsService
@@ -44,7 +45,7 @@ from app.utils.tagging import (
     TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
     TAG_DOMAIN_ENDPOINT,
 )
-from app.utils.normalize import normalize_optional_string, normalize_storage_provider
+from app.utils.normalize import normalize_storage_provider
 from app.utils.s3_endpoint import configured_s3_endpoint, normalize_s3_endpoint
 from app.utils.name_ordering import name_order_by
 from app.utils.storage_endpoint_features import (
@@ -54,16 +55,6 @@ from app.utils.storage_endpoint_features import (
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-_EndpointCredentialValues = tuple[
-    Optional[str],
-    Optional[str],
-    Optional[str],
-    Optional[str],
-    Optional[str],
-    Optional[str],
-]
-
 
 class StorageEndpointsService:
     def __init__(self, db: Session) -> None:
@@ -276,121 +267,6 @@ class StorageEndpointsService:
         self.db.refresh(endpoint)
         return self._serialize(endpoint)
 
-    @staticmethod
-    def _update_credential_value(
-        endpoint: StorageEndpoint,
-        payload: StorageEndpointUpdate,
-        field: str,
-    ) -> Optional[str]:
-        if field not in payload.model_fields_set:
-            return getattr(endpoint, field)
-        return normalize_optional_string(getattr(payload, field))
-
-    def _updated_endpoint_credentials(
-        self,
-        endpoint: StorageEndpoint,
-        payload: StorageEndpointUpdate,
-    ) -> _EndpointCredentialValues:
-        fields_set = payload.model_fields_set
-        admin_access_key = self._update_credential_value(endpoint, payload, "admin_access_key")
-        admin_secret_key = self._update_credential_value(endpoint, payload, "admin_secret_key")
-        supervision_access_key = self._update_credential_value(
-            endpoint,
-            payload,
-            "supervision_access_key",
-        )
-        supervision_secret_key = self._update_credential_value(
-            endpoint,
-            payload,
-            "supervision_secret_key",
-        )
-        ceph_admin_access_key = self._update_credential_value(
-            endpoint,
-            payload,
-            "ceph_admin_access_key",
-        )
-        ceph_admin_secret_key = self._update_credential_value(
-            endpoint,
-            payload,
-            "ceph_admin_secret_key",
-        )
-        if "admin_access_key" in fields_set and not admin_access_key:
-            admin_secret_key = None
-        if "supervision_access_key" in fields_set and not supervision_access_key:
-            supervision_secret_key = None
-        if "ceph_admin_access_key" in fields_set and not ceph_admin_access_key:
-            ceph_admin_secret_key = None
-        return (
-            admin_access_key,
-            admin_secret_key,
-            supervision_access_key,
-            supervision_secret_key,
-            ceph_admin_access_key,
-            ceph_admin_secret_key,
-        )
-
-    def _updated_endpoint_state(
-        self,
-        endpoint: StorageEndpoint,
-        payload: StorageEndpointUpdate,
-    ) -> NormalizedEndpointState:
-        fields_set = payload.model_fields_set
-        if "name" in fields_set:
-            normalized_name = (payload.name or endpoint.name).strip()
-            name = normalized_name or endpoint.name
-        else:
-            name = endpoint.name
-        endpoint_url = (
-            normalize_s3_endpoint(payload.endpoint_url)
-            if "endpoint_url" in fields_set
-            else endpoint.endpoint_url
-        )
-        if not endpoint_url:
-            raise ValueError("Endpoint URL is required.")
-        region = payload.region if "region" in fields_set else endpoint.region
-        force_path_style = (
-            bool(payload.force_path_style)
-            if "force_path_style" in fields_set and payload.force_path_style is not None
-            else bool(getattr(endpoint, "force_path_style", False))
-        )
-        verify_tls = (
-            bool(payload.verify_tls)
-            if "verify_tls" in fields_set and payload.verify_tls is not None
-            else bool(getattr(endpoint, "verify_tls", True))
-        )
-        (
-            admin_access_key,
-            admin_secret_key,
-            supervision_access_key,
-            supervision_secret_key,
-            ceph_admin_access_key,
-            ceph_admin_secret_key,
-        ) = self._updated_endpoint_credentials(endpoint, payload)
-
-        return normalize_storage_endpoint_state(
-            StorageEndpointCreate(
-                name=name,
-                endpoint_url=endpoint_url,
-                region=region,
-                force_path_style=force_path_style,
-                verify_tls=verify_tls,
-                provider=(payload.provider if "provider" in fields_set else endpoint.provider),
-                admin_access_key=admin_access_key,
-                admin_secret_key=admin_secret_key,
-                supervision_access_key=supervision_access_key,
-                supervision_secret_key=supervision_secret_key,
-                ceph_admin_access_key=ceph_admin_access_key,
-                ceph_admin_secret_key=ceph_admin_secret_key,
-                features_config=(
-                    payload.features_config
-                    if payload.features_config is not None
-                    else endpoint.features_config
-                ),
-                latitude=(payload.latitude if "latitude" in fields_set else endpoint.latitude),
-                longitude=(payload.longitude if "longitude" in fields_set else endpoint.longitude),
-            )
-        )
-
     def create_endpoint(self, payload: StorageEndpointCreate) -> StorageEndpointSchema:
         self._ensure_env_editable()
         state = normalize_storage_endpoint_state(payload)
@@ -409,7 +285,7 @@ class StorageEndpointsService:
             raise ValueError("Endpoint not found.")
         if not endpoint.is_editable:
             raise ValueError("This endpoint is protected and cannot be edited.")
-        state = self._updated_endpoint_state(endpoint, payload)
+        state = normalize_storage_endpoint_update(endpoint, payload)
         self._ensure_unique_name(state.name, exclude_id=endpoint.id)
         self._ensure_unique_endpoint(state.endpoint_url, exclude_id=endpoint.id)
         self._apply_endpoint_state(endpoint, state)

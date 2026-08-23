@@ -6,9 +6,13 @@ from typing import Optional
 
 from pydantic import ValidationError, field_validator
 
-from app.db import StorageProvider
+from app.db import StorageEndpoint, StorageProvider
 from app.models.base import ApiModel
-from app.models.storage_endpoint import StorageEndpointBase, StorageEndpointCreate
+from app.models.storage_endpoint import (
+    StorageEndpointBase,
+    StorageEndpointCreate,
+    StorageEndpointUpdate,
+)
 from app.utils.normalize import normalize_optional_string, normalize_storage_provider
 from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.storage_endpoint_features import (
@@ -25,6 +29,19 @@ _EndpointCredentialValues = tuple[
     Optional[str],
     Optional[str],
 ]
+_CREDENTIAL_FIELD_PAIRS = (
+    ("admin_access_key", "admin_secret_key"),
+    ("supervision_access_key", "supervision_secret_key"),
+    ("ceph_admin_access_key", "ceph_admin_secret_key"),
+)
+_PRESERVE_EXISTING_ON_NULL_UPDATE_FIELDS = frozenset(
+    {
+        "features_config",
+        "force_path_style",
+        "name",
+        "verify_tls",
+    }
+)
 
 
 class EnvStorageEndpoint(ApiModel):
@@ -223,6 +240,36 @@ def normalize_storage_endpoint_state(
         ceph_admin_secret_key=ceph_admin_secret_key,
         features_config=features_config,
     )
+
+
+def normalize_storage_endpoint_update(
+    endpoint: StorageEndpoint,
+    payload: StorageEndpointUpdate,
+) -> NormalizedEndpointState:
+    fields_set = payload.model_fields_set
+    merged = StorageEndpointCreate.model_validate(
+        endpoint,
+        from_attributes=True,
+    ).model_dump()
+    for field in fields_set:
+        value = getattr(payload, field)
+        if (
+            value is None
+            and field in _PRESERVE_EXISTING_ON_NULL_UPDATE_FIELDS
+        ):
+            continue
+        merged[field] = value
+
+    if not merged["endpoint_url"]:
+        raise ValueError("Endpoint URL is required.")
+    for access_key_field, secret_key_field in _CREDENTIAL_FIELD_PAIRS:
+        if (
+            access_key_field in fields_set
+            and not normalize_optional_string(merged[access_key_field])
+        ):
+            merged[secret_key_field] = None
+
+    return normalize_storage_endpoint_state(StorageEndpointCreate.model_validate(merged))
 
 
 def _env_endpoint_identities(
