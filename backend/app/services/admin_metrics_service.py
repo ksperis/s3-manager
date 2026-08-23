@@ -86,6 +86,16 @@ class _OwnerUsage:
     bucket_count: int
 
 
+@dataclass(frozen=True)
+class _AssignmentCounts:
+    total: int
+    assigned: int
+
+    @property
+    def unassigned(self) -> int:
+        return max(self.total - self.assigned, 0)
+
+
 @dataclass
 class _BucketUsageIndex:
     entries_by_owner: dict[str, list[_OwnerUsage]]
@@ -145,85 +155,134 @@ class AdminMetricsService:
         self.endpoint_id = endpoint_id
 
     @staticmethod
-    def build_summary_payload(db: Session, endpoint_id: Optional[int] = None) -> dict:
-        accounts_query = db.query(func.count(S3Account.id))
+    def _endpoint_scoped_count(query, endpoint_column, endpoint_id: int | None) -> int:
         if endpoint_id is not None:
-            accounts_query = accounts_query.filter(S3Account.storage_endpoint_id == endpoint_id)
-        total_accounts = accounts_query.scalar() or 0
+            query = query.filter(endpoint_column == endpoint_id)
+        return int(query.scalar() or 0)
+
+    @classmethod
+    def _account_assignment_counts(
+        cls,
+        db: Session,
+        endpoint_id: int | None,
+    ) -> _AssignmentCounts:
+        total = cls._endpoint_scoped_count(
+            db.query(func.count(S3Account.id)),
+            S3Account.storage_endpoint_id,
+            endpoint_id,
+        )
         assigned_accounts_query = (
             db.query(func.count(func.distinct(S3Account.id)))
             .join(UserS3Account, UserS3Account.account_id == S3Account.id)
             .filter(UserS3Account.is_root.is_(False))
         )
-        if endpoint_id is not None:
-            assigned_accounts_query = assigned_accounts_query.filter(S3Account.storage_endpoint_id == endpoint_id)
-        assigned_accounts = assigned_accounts_query.scalar() or 0
-        unassigned_accounts = max(total_accounts - assigned_accounts, 0)
-        total_admins = (
+        assigned = cls._endpoint_scoped_count(
+            assigned_accounts_query,
+            S3Account.storage_endpoint_id,
+            endpoint_id,
+        )
+        return _AssignmentCounts(total=total, assigned=assigned)
+
+    @classmethod
+    def _s3_user_assignment_counts(
+        cls,
+        db: Session,
+        endpoint_id: int | None,
+    ) -> _AssignmentCounts:
+        total = cls._endpoint_scoped_count(
+            db.query(func.count(S3User.id)),
+            S3User.storage_endpoint_id,
+            endpoint_id,
+        )
+        assigned_s3_users_query = (
+            db.query(func.count(func.distinct(S3User.id)))
+            .join(UserS3User, UserS3User.s3_user_id == S3User.id)
+        )
+        assigned = cls._endpoint_scoped_count(
+            assigned_s3_users_query,
+            S3User.storage_endpoint_id,
+            endpoint_id,
+        )
+        return _AssignmentCounts(total=total, assigned=assigned)
+
+    @staticmethod
+    def _ui_user_counts(db: Session) -> tuple[int, int, int]:
+        admin_count = (
             db.query(func.count(User.id))
             .filter(User.role.in_([UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]))
             .scalar()
             or 0
         )
-        total_managers = (
+        manager_count = (
             db.query(func.count(User.id))
             .filter(User.role == UserRole.UI_USER.value)
             .scalar()
             or 0
         )
-        total_none_users = (
+        none_count = (
             db.query(func.count(User.id))
             .filter(User.role == UserRole.UI_NONE.value)
             .scalar()
             or 0
         )
-        s3_user_query = db.query(func.count(S3User.id))
-        if endpoint_id is not None:
-            s3_user_query = s3_user_query.filter(S3User.storage_endpoint_id == endpoint_id)
-        total_s3_users = s3_user_query.scalar() or 0
-        assigned_s3_users_query = (
-            db.query(func.count(func.distinct(S3User.id)))
-            .join(UserS3User, UserS3User.s3_user_id == S3User.id)
-        )
-        if endpoint_id is not None:
-            assigned_s3_users_query = assigned_s3_users_query.filter(S3User.storage_endpoint_id == endpoint_id)
-        assigned_s3_users = assigned_s3_users_query.scalar() or 0
-        unassigned_s3_users = max(total_s3_users - assigned_s3_users, 0)
-        total_ceph_endpoints = (
+        return int(admin_count), int(manager_count), int(none_count)
+
+    @staticmethod
+    def _endpoint_counts(db: Session) -> tuple[int, int]:
+        ceph_count = (
             db.query(func.count(StorageEndpoint.id))
             .filter(StorageEndpoint.provider == StorageProvider.CEPH.value)
             .scalar()
             or 0
         )
-        total_other_endpoints = (
+        other_count = (
             db.query(func.count(StorageEndpoint.id))
             .filter(StorageEndpoint.provider != StorageProvider.CEPH.value)
             .scalar()
             or 0
         )
-        total_connections = db.query(func.count(S3Connection.id)).scalar() or 0
-        total_shared_connections = (
+        return int(ceph_count), int(other_count)
+
+    @staticmethod
+    def _connection_counts(db: Session) -> tuple[int, int, int]:
+        total = db.query(func.count(S3Connection.id)).scalar() or 0
+        shared = (
             db.query(func.count(S3Connection.id))
             .filter(S3Connection.is_shared.is_(True))
             .scalar()
             or 0
         )
-        total_private_connections = (
+        private = (
             db.query(func.count(S3Connection.id))
             .filter(S3Connection.is_shared.is_(False))
             .scalar()
             or 0
         )
+        return int(total), int(shared), int(private)
+
+    @classmethod
+    def build_summary_payload(
+        cls,
+        db: Session,
+        endpoint_id: Optional[int] = None,
+    ) -> dict:
+        accounts = cls._account_assignment_counts(db, endpoint_id)
+        s3_users = cls._s3_user_assignment_counts(db, endpoint_id)
+        total_admins, total_managers, total_none_users = cls._ui_user_counts(db)
+        total_ceph_endpoints, total_other_endpoints = cls._endpoint_counts(db)
+        total_connections, total_shared_connections, total_private_connections = cls._connection_counts(
+            db
+        )
         return {
-            "total_accounts": total_accounts,
+            "total_accounts": accounts.total,
             "total_users": total_managers,
             "total_admins": total_admins,
             "total_none_users": total_none_users,
-            "total_s3_users": total_s3_users,
-            "assigned_accounts": assigned_accounts,
-            "unassigned_accounts": unassigned_accounts,
-            "assigned_s3_users": assigned_s3_users,
-            "unassigned_s3_users": unassigned_s3_users,
+            "total_s3_users": s3_users.total,
+            "assigned_accounts": accounts.assigned,
+            "unassigned_accounts": accounts.unassigned,
+            "assigned_s3_users": s3_users.assigned,
+            "unassigned_s3_users": s3_users.unassigned,
             "total_endpoints": total_ceph_endpoints + total_other_endpoints,
             "total_ceph_endpoints": total_ceph_endpoints,
             "total_other_endpoints": total_other_endpoints,
