@@ -15,6 +15,7 @@ from app.models.bucket_ui_tags import (
     BucketUiTagOrphanSummary,
     BucketUiTagOrphansResponse,
     BucketUiTagPhysicalTarget,
+    BucketUiTagVisibility,
 )
 from app.services.tags_service import TagsService
 from app.utils.tagging import (
@@ -43,6 +44,12 @@ class PhysicalBucketTarget:
             tenant=str(tenant or "").strip(),
             name=str(name or "").strip(),
         )
+
+
+@dataclass(frozen=True)
+class _BucketUiTagMutationPlan:
+    additions_by_id: dict[int, TagDefinition]
+    ids_to_remove: set[int]
 
 
 class BucketUiTagsService:
@@ -267,6 +274,100 @@ class BucketUiTagsService:
             raise ValueError("One or more UI tag identifiers are not visible.")
         return [by_id[identifier] for identifier in requested]
 
+    def _resolve_created_definitions(
+        self,
+        *,
+        domain_kind: BucketUiTagDomain,
+        actor_user_id: int,
+        create_tags: Sequence[tuple[str, str, BucketUiTagVisibility]],
+    ) -> list[TagDefinition]:
+        if domain_kind == TAG_DOMAIN_BUCKET_UI_STORAGE_OPS and any(
+            visibility != "private" for _, _, visibility in create_tags
+        ):
+            raise ValueError("Storage Ops UI tags are always private.")
+        return [
+            self.tags.resolve_definition(
+                domain_kind=domain_kind,
+                owner_user_id=None if visibility == "shared" else actor_user_id,
+                label=label,
+                color_key=color_key,
+                scope=DEFAULT_TAG_SCOPE,
+                update_existing=False,
+            )
+            for label, color_key, visibility in create_tags
+        ]
+
+    def _resolve_mutation_plan(
+        self,
+        *,
+        domain_kind: BucketUiTagDomain,
+        actor_user_id: int,
+        add_tag_ids: Sequence[int],
+        create_tags: Sequence[tuple[str, str, BucketUiTagVisibility]],
+        remove_tag_ids: Sequence[int],
+        remove_all: bool,
+    ) -> _BucketUiTagMutationPlan:
+        additions = self._resolve_visible_ids(
+            domain_kind=domain_kind,
+            actor_user_id=actor_user_id,
+            tag_ids=add_tag_ids,
+        )
+        removals = self._resolve_visible_ids(
+            domain_kind=domain_kind,
+            actor_user_id=actor_user_id,
+            tag_ids=remove_tag_ids,
+        )
+        additions.extend(
+            self._resolve_created_definitions(
+                domain_kind=domain_kind,
+                actor_user_id=actor_user_id,
+                create_tags=create_tags,
+            )
+        )
+        ids_to_remove = {int(row.id) for row in removals}
+        if remove_all:
+            ids_to_remove = {
+                int(row.id)
+                for row in self.visible_definitions(
+                    domain_kind=domain_kind,
+                    actor_user_id=actor_user_id,
+                )
+            }
+        return _BucketUiTagMutationPlan(
+            additions_by_id={int(row.id): row for row in additions},
+            ids_to_remove=ids_to_remove,
+        )
+
+    def _apply_mutation_to_target(
+        self,
+        *,
+        target: PhysicalBucketTarget,
+        links: Sequence[BucketUiTagAssignment],
+        plan: _BucketUiTagMutationPlan,
+    ) -> None:
+        existing_by_id = {int(link.tag_definition_id): link for link in links}
+        for identifier in plan.ids_to_remove:
+            link = existing_by_id.pop(identifier, None)
+            if link is not None:
+                self.db.delete(link)
+        next_position = max(
+            (int(link.position or 0) for link in existing_by_id.values()),
+            default=-1,
+        ) + 1
+        for identifier, definition in plan.additions_by_id.items():
+            if identifier in existing_by_id:
+                continue
+            self.db.add(
+                BucketUiTagAssignment(
+                    storage_endpoint_id=target.endpoint_id,
+                    tenant_key=target.tenant,
+                    bucket_name=target.name,
+                    tag_definition=definition,
+                    position=next_position,
+                )
+            )
+            next_position += 1
+
     def mutate(
         self,
         *,
@@ -274,76 +375,29 @@ class BucketUiTagsService:
         actor_user_id: int,
         targets: Sequence[PhysicalBucketTarget],
         add_tag_ids: Sequence[int],
-        create_tags: Sequence[tuple[str, str, Literal["private", "shared"]]],
+        create_tags: Sequence[tuple[str, str, BucketUiTagVisibility]],
         remove_tag_ids: Sequence[int],
         remove_all: bool = False,
     ) -> None:
         domain = self._validate_domain(domain_kind)
         unique_targets = list(dict.fromkeys(targets))
-        if not unique_targets or len(unique_targets) > 200:
+        if not unique_targets or len(unique_targets) > ASSIGNMENT_TARGET_BATCH_SIZE:
             raise ValueError("A bucket UI tag mutation requires 1 to 200 targets.")
-
-        additions = self._resolve_visible_ids(
+        plan = self._resolve_mutation_plan(
             domain_kind=domain,
             actor_user_id=actor_user_id,
-            tag_ids=add_tag_ids,
+            add_tag_ids=add_tag_ids,
+            create_tags=create_tags,
+            remove_tag_ids=remove_tag_ids,
+            remove_all=remove_all,
         )
-        removals = self._resolve_visible_ids(
-            domain_kind=domain,
-            actor_user_id=actor_user_id,
-            tag_ids=remove_tag_ids,
-        )
-        if domain == TAG_DOMAIN_BUCKET_UI_STORAGE_OPS and any(
-            visibility != "private" for _, _, visibility in create_tags
-        ):
-            raise ValueError("Storage Ops UI tags are always private.")
-        for label, color_key, visibility in create_tags:
-            owner_user_id = None if visibility == "shared" else actor_user_id
-            definition = self.tags.resolve_definition(
-                domain_kind=domain,
-                owner_user_id=owner_user_id,
-                label=label,
-                color_key=color_key,
-                scope=DEFAULT_TAG_SCOPE,
-                update_existing=False,
-            )
-            additions.append(definition)
-
-        add_by_id = {int(row.id): row for row in additions}
-        remove_ids = {int(row.id) for row in removals}
-        visible_ids = {
-            int(row.id)
-            for row in self.visible_definitions(
-                domain_kind=domain,
-                actor_user_id=actor_user_id,
-            )
-        }
         links_by_target = self._links_for_targets(unique_targets)
         for target in unique_targets:
-            links = links_by_target[target]
-            existing_by_id = {int(link.tag_definition_id): link for link in links}
-            ids_to_remove = visible_ids if remove_all else remove_ids
-            for identifier in ids_to_remove:
-                link = existing_by_id.pop(identifier, None)
-                if link is not None:
-                    self.db.delete(link)
-            next_position = max(
-                (int(link.position or 0) for link in existing_by_id.values()),
-                default=-1,
-            ) + 1
-            for identifier, definition in add_by_id.items():
-                if identifier in existing_by_id:
-                    continue
-                self.db.add(
-                    BucketUiTagAssignment(
-                        storage_endpoint_id=target.endpoint_id,
-                        tenant_key=target.tenant,
-                        bucket_name=target.name,
-                        tag_definition=definition,
-                        position=next_position,
-                    )
-                )
-                next_position += 1
+            self._apply_mutation_to_target(
+                target=target,
+                links=links_by_target[target],
+                plan=plan,
+            )
         self.db.flush()
         self.tags.cleanup_orphan_definitions(domain_kinds=[domain])
 
