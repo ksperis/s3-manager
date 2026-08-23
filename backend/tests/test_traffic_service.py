@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.db import S3Account
+from app.db import S3Account, StorageEndpoint
+from app.services import traffic_service as traffic_service_module
 from app.services.rgw_admin import RGWAdminError
 from app.services.traffic_service import TrafficService, TrafficWindow, aggregate_usage
 
@@ -177,6 +178,42 @@ def test_traffic_service_requires_credentials():
     account = S3Account(name="broken", rgw_access_key=None, rgw_secret_key=None)
     with pytest.raises(ValueError):
         TrafficService(account)
+
+
+def test_usage_client_uses_supervision_endpoint_when_admin_is_disabled(monkeypatch):
+    account = _make_account()
+    endpoint = StorageEndpoint(
+        name="Ceph usage",
+        endpoint_url="https://rgw.example.test",
+        provider="ceph",
+        supervision_access_key="SUP-AK",
+        supervision_secret_key="SUP-SK",
+        features_config=(
+            "features:\n"
+            "  admin:\n"
+            "    enabled: false\n"
+            "  usage:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account.storage_endpoint = endpoint
+    expected_client = FakeRGWClient([])
+    captured: dict[str, StorageEndpoint] = {}
+
+    def fake_get_supervision_rgw_client(resolved_endpoint):
+        captured["endpoint"] = resolved_endpoint
+        return expected_client
+
+    monkeypatch.setattr(
+        traffic_service_module,
+        "get_supervision_rgw_client",
+        fake_get_supervision_rgw_client,
+    )
+
+    service = TrafficService(account)
+
+    assert service.admin_client is expected_client
+    assert captured["endpoint"] is endpoint
 
 
 def test_traffic_service_uses_admin_style_targets():

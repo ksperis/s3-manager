@@ -14,12 +14,12 @@ from app.services import (
     s3_client,
     s3_deletion,
 )
-from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminError
 from app.models.bucket import Bucket
-from app.services.rgw_supervision import get_supervision_credentials
+from app.services.rgw_supervision import get_supervision_rgw_client
 from app.utils.rgw_identifiers import resolve_admin_uid
 from app.utils.rgw_payloads import extract_bucket_list
-from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
+from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 
 logger = logging.getLogger(__name__)
@@ -30,25 +30,16 @@ class BucketsService:
         self.configuration = configuration or BucketConfigurationService()
 
     def _rgw_admin_for_account(self, account: S3ExecutionTarget):
-        endpoint = getattr(account, "storage_endpoint", None)
-        creds = get_supervision_credentials(account)
-        if not creds or not endpoint:
+        endpoint = account.storage_endpoint
+        if endpoint is None:
             raise RuntimeError("Supervision credentials are not configured for this endpoint")
         flags = resolve_feature_flags(endpoint)
         if not flags.metrics_enabled:
             raise RuntimeError("Storage metrics are disabled for this endpoint")
-        access_key, secret_key = creds
         try:
-            admin_endpoint = resolve_admin_endpoint(endpoint)
-            if not admin_endpoint:
-                raise RuntimeError("Admin endpoint is not configured for this endpoint")
-            return get_rgw_admin_client(
-                access_key=access_key,
-                secret_key=secret_key,
-                endpoint=admin_endpoint,
-                region=endpoint.region,
-                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
-            )
+            return get_supervision_rgw_client(endpoint)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to initialize admin client: {exc}") from exc
 

@@ -19,7 +19,7 @@ def _supervision_credentials_from_endpoint(endpoint: StorageEndpoint | None) -> 
 
 
 def get_supervision_credentials(account: S3ExecutionTarget) -> tuple[str, str] | None:
-    return _supervision_credentials_from_endpoint(getattr(account, "storage_endpoint", None))
+    return _supervision_credentials_from_endpoint(account.storage_endpoint)
 
 
 def has_supervision_credentials(account: S3ExecutionTarget) -> bool:

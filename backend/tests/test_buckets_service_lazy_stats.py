@@ -38,6 +38,42 @@ def test_bucket_configuration_is_owned_by_dedicated_service():
     assert all(hasattr(BucketConfigurationService, method) for method in configuration_methods)
 
 
+def test_metrics_client_uses_supervision_endpoint_when_admin_is_disabled(monkeypatch):
+    account = _build_account()
+    endpoint = StorageEndpoint(
+        name="Ceph metrics",
+        endpoint_url="https://rgw.example.test",
+        provider="ceph",
+        supervision_access_key="SUP-AK",
+        supervision_secret_key="SUP-SK",
+        features_config=(
+            "features:\n"
+            "  admin:\n"
+            "    enabled: false\n"
+            "  metrics:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account.storage_endpoint = endpoint
+    expected_client = object()
+    captured: dict[str, StorageEndpoint] = {}
+
+    def fake_get_supervision_rgw_client(resolved_endpoint):
+        captured["endpoint"] = resolved_endpoint
+        return expected_client
+
+    monkeypatch.setattr(
+        buckets_service_module,
+        "get_supervision_rgw_client",
+        fake_get_supervision_rgw_client,
+    )
+
+    client = BucketsService()._rgw_admin_for_account(account)
+
+    assert client is expected_client
+    assert captured["endpoint"] is endpoint
+
+
 def test_list_buckets_skips_admin_stats_when_disabled(monkeypatch):
     service = BucketsService()
     account = _build_account()

@@ -10,11 +10,11 @@ from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
-from app.services.rgw_supervision import get_supervision_credentials
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.rgw_supervision import get_supervision_rgw_client
 from app.utils.numbers import int_or_zero
 from app.utils.rgw_identifiers import resolve_admin_uid
-from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
+from app.utils.storage_endpoint_features import resolve_feature_flags
 
 logger = logging.getLogger(__name__)
 
@@ -399,25 +399,14 @@ class TrafficService:
         self.admin_client = admin_client or self._admin_for_account(account)
 
     def _admin_for_account(self, account: S3ExecutionTarget) -> RGWAdminClient:
-        endpoint = getattr(account, "storage_endpoint", None)
-        creds = get_supervision_credentials(account)
-        if not creds or not endpoint:
+        endpoint = account.storage_endpoint
+        if endpoint is None:
             raise ValueError("Supervision credentials are not configured for this endpoint")
         flags = resolve_feature_flags(endpoint)
         if not flags.usage_enabled:
             raise ValueError("Usage logs are disabled for this endpoint")
-        access_key, secret_key = creds
         try:
-            admin_endpoint = resolve_admin_endpoint(endpoint)
-            if not admin_endpoint:
-                raise ValueError("Admin endpoint is not configured for this endpoint")
-            return get_rgw_admin_client(
-                access_key=access_key,
-                secret_key=secret_key,
-                endpoint=admin_endpoint,
-                region=endpoint.region,
-                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
-            )
+            return get_supervision_rgw_client(endpoint)
         except RGWAdminError as exc:
             raise ValueError(str(exc)) from exc
 
