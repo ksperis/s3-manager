@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBucketUiTagsStorageKey } from "./bucketUiTags";
 import { resolveBucketOpsSurface } from "./bucketOpsSurface";
 
 describe("bucketOpsSurface", () => {
@@ -28,10 +27,5 @@ describe("bucketOpsSurface", () => {
     expect(surface.scopeDisplayName).toBe("Scope");
     expect(surface.exportScopeKey).toBe("scope");
     expect(surface.useExplicitBucketName).toBe(true);
-  });
-
-  it("isolates UI tags by surface and endpoint", () => {
-    expect(buildBucketUiTagsStorageKey("ceph-admin", 7)).toBe("bucket-workbench.ui_tags.v2.ceph-admin.7");
-    expect(buildBucketUiTagsStorageKey("storage-ops", 9)).toBe("bucket-workbench.ui_tags.v2.storage-ops.9");
   });
 });

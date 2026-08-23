@@ -12,7 +12,6 @@ import {
   type BucketUiTagOrphans,
 } from "../../api/bucketUiTags";
 import {
-  buildBucketUiTagsStorageKey,
   buildPhysicalBucketUiTagIdentity,
   createBucketUiTagTarget,
   useBucketUiTags,
@@ -38,7 +37,6 @@ const duplicateLabelCatalog: BucketUiTagCatalog = {
 
 describe("useBucketUiTags", () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.clearAllMocks();
     vi.mocked(fetchCephAdminBucketUiTagOrphans).mockResolvedValue(emptyOrphans());
     vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(emptyCatalog());
@@ -48,10 +46,7 @@ describe("useBucketUiTags", () => {
     vi.mocked(patchStorageOpsBucketUiTags).mockResolvedValue(emptyCatalog());
   });
 
-  it("loads the backend catalog and leaves legacy v2 local data untouched", async () => {
-    const legacyKey = buildBucketUiTagsStorageKey("ceph-admin", 7);
-    const legacyValue = JSON.stringify({ old: { name: "old", tenant: null, tags: ["legacy"] } });
-    localStorage.setItem(legacyKey, legacyValue);
+  it("loads duplicate labels as distinct backend definitions", async () => {
     vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(duplicateLabelCatalog);
 
     const { result } = renderHook(() => useBucketUiTags("ceph-admin", 7));
@@ -62,7 +57,6 @@ describe("useBucketUiTags", () => {
       ["Production", "private"],
       ["Production", "shared"],
     ]);
-    expect(localStorage.getItem(legacyKey)).toBe(legacyValue);
   });
 
   it("does not expose a previous Ceph Admin endpoint catalog while the next scope loads", async () => {

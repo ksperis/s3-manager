@@ -46,9 +46,8 @@ Check that rows are selected and that you are on the Ceph Admin bucket workbench
 
 !!! note
     UI tags are BucketReef control-plane metadata. They never call or modify the
-    S3 Tags API. Legacy `bucket-workbench.ui_tags.v2` browser data is not
-    imported or read and remains untouched in local storage. View preferences
-    stay local, but UI-tag filters now store definition identifiers.
+    S3 Tags API. View preferences stay local, but UI-tag filters store
+    definition identifiers.
 
     At workbench load, a dedicated backend check compares persisted UI-tag
     assignments with the endpoint bucket inventory. This check is independent

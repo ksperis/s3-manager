@@ -19,8 +19,6 @@ import {
 } from "../../api/bucketUiTags";
 import type { BucketOpsMode } from "./bucketOpsSurface";
 
-// Kept only so old v2 browser data remains untouched. It is never read.
-const UI_TAGS_V2_PREFIX = "bucket-workbench.ui_tags.v2";
 const STATE_KEY_SEPARATOR = "\u001e";
 const MUTATION_BATCH_SIZE = 200;
 const EMPTY_BUCKET_UI_TAG_CATALOG: BucketUiTagCatalog = { definitions: [] };
@@ -47,9 +45,6 @@ type BucketUiTagMutationItem =
       color_key?: string;
       visibility?: BucketUiTagVisibility;
     };
-
-export const buildBucketUiTagsStorageKey = (mode: BucketOpsMode, endpointId: number) =>
-  `${UI_TAGS_V2_PREFIX}.${mode}.${endpointId}`;
 
 const buildBucketUiTagStateKey = (mode: BucketOpsMode, endpointId: number, identity: string) =>
   `${mode}${STATE_KEY_SEPARATOR}${endpointId}${STATE_KEY_SEPARATOR}${identity}`;
