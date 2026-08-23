@@ -1,19 +1,30 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   CLIENT_STORAGE_KEYS,
   clearAuthStorage,
   readClientJson,
+  readClientJsonFromKey,
   readClientStorage,
+  readClientStorageKey,
+  readSessionJsonFromKey,
   removeClientStorage,
+  removeClientStorageKey,
+  removeSessionStorageKey,
   writeClientJson,
+  writeClientJsonToKey,
   writeClientStorage,
+  writeClientStorageKey,
+  writeSessionJsonToKey,
 } from "./clientStorage";
 
 describe("clientStorage", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it("reads and writes known local storage keys", () => {
     writeClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace, "portal");
@@ -53,4 +64,38 @@ describe("clientStorage", () => {
     expect(readClientStorage(CLIENT_STORAGE_KEYS.theme)).toBeNull();
   });
 
+  it("supports dynamic local and session storage keys", () => {
+    writeClientStorageKey("dynamic-text", "value");
+    writeClientJsonToKey("dynamic-json", { page: 2 });
+    writeSessionJsonToKey("dynamic-session", ["used_bytes"]);
+
+    expect(readClientStorageKey("dynamic-text")).toBe("value");
+    expect(readClientJsonFromKey<{ page: number }>("dynamic-json")).toEqual({ page: 2 });
+    expect(readSessionJsonFromKey<string[]>("dynamic-session")).toEqual(["used_bytes"]);
+
+    removeClientStorageKey("dynamic-text");
+    removeSessionStorageKey("dynamic-session");
+
+    expect(readClientStorageKey("dynamic-text")).toBeNull();
+    expect(readSessionJsonFromKey("dynamic-session")).toBeNull();
+  });
+
+  it("contains browser storage API failures", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("Storage is unavailable");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage is unavailable");
+    });
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new DOMException("Storage is unavailable");
+    });
+
+    expect(readClientStorageKey("blocked")).toBeNull();
+    expect(readSessionJsonFromKey("blocked")).toBeNull();
+    expect(() => writeClientStorageKey("blocked", "value")).not.toThrow();
+    expect(() => writeSessionJsonToKey("blocked", { value: true })).not.toThrow();
+    expect(() => removeClientStorageKey("blocked")).not.toThrow();
+    expect(() => removeSessionStorageKey("blocked")).not.toThrow();
+  });
 });

@@ -5,6 +5,10 @@
 import { useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import {
+  readSessionJsonFromKey,
+  writeSessionJsonToKey,
+} from "../../utils/clientStorage";
 import type { BucketOpsMode } from "./bucketOpsSurface";
 
 const BUCKET_LIST_RETURN_STORAGE_PREFIX = "bucket-list.return.v1";
@@ -54,9 +58,7 @@ export function saveBucketListReturnContext(
     scrollY: Number.isFinite(scrollY) && scrollY > 0 ? scrollY : 0,
     savedAt: Date.now(),
   };
-  if (typeof window !== "undefined") {
-    sessionStorage.setItem(storageKey(origin.surface, origin.scopeKey), JSON.stringify(context));
-  }
+  writeSessionJsonToKey(storageKey(origin.surface, origin.scopeKey), context);
   return context;
 }
 
@@ -64,23 +66,24 @@ export function loadBucketListReturnContext(
   surface: BucketOpsMode,
   scopeKey: string
 ): BucketListReturnContext | null {
-  if (typeof window === "undefined") return null;
-  const raw = sessionStorage.getItem(storageKey(surface, scopeKey));
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as Partial<BucketListReturnContext>;
-    const origin = sanitizeOrigin(parsed);
-    if (!origin || origin.surface !== surface || origin.scopeKey !== scopeKey) return null;
-    if (typeof parsed.rowKey !== "string" || !parsed.rowKey) return null;
-    return {
-      ...origin,
-      rowKey: parsed.rowKey,
-      scrollY: typeof parsed.scrollY === "number" && Number.isFinite(parsed.scrollY) ? Math.max(0, parsed.scrollY) : 0,
-      savedAt: typeof parsed.savedAt === "number" && Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0,
-    };
-  } catch {
-    return null;
-  }
+  const parsed = readSessionJsonFromKey<Partial<BucketListReturnContext>>(
+    storageKey(surface, scopeKey),
+  );
+  const origin = sanitizeOrigin(parsed);
+  if (!origin || origin.surface !== surface || origin.scopeKey !== scopeKey) return null;
+  if (typeof parsed?.rowKey !== "string" || !parsed.rowKey) return null;
+  return {
+    ...origin,
+    rowKey: parsed.rowKey,
+    scrollY:
+      typeof parsed.scrollY === "number" && Number.isFinite(parsed.scrollY)
+        ? Math.max(0, parsed.scrollY)
+        : 0,
+    savedAt:
+      typeof parsed.savedAt === "number" && Number.isFinite(parsed.savedAt)
+        ? parsed.savedAt
+        : 0,
+  };
 }
 
 export function buildBucketDetailLocationState(origin: BucketListOrigin): BucketDetailLocationState {

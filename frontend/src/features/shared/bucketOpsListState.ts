@@ -3,6 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 import {
+  readClientJsonFromKey,
+  writeClientJsonToKey,
+} from "../../utils/clientStorage";
+import {
   sanitizeAdvancedFilter,
   type AdvancedFilterState,
   type FeatureKey,
@@ -339,23 +343,15 @@ export const loadVisibleColumns = (
   defaultColumns: ColumnId[],
   includeContextColumns: boolean
 ): ColumnId[] => {
-  if (typeof window === "undefined") return defaultColumns;
-  const raw = localStorage.getItem(storageKey);
-  if (!raw) return defaultColumns;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return defaultColumns;
-    const allowed = new Set(includeContextColumns ? [...CONTEXT_COLUMN_IDS, ...STANDARD_COLUMN_IDS] : STANDARD_COLUMN_IDS);
-    const cleaned = parsed.filter((value): value is ColumnId => typeof value === "string" && allowed.has(value as ColumnId));
-    return cleaned.length > 0 ? cleaned : defaultColumns;
-  } catch {
-    return defaultColumns;
-  }
+  const parsed = readClientJsonFromKey<unknown>(storageKey);
+  if (!Array.isArray(parsed)) return defaultColumns;
+  const allowed = new Set(includeContextColumns ? [...CONTEXT_COLUMN_IDS, ...STANDARD_COLUMN_IDS] : STANDARD_COLUMN_IDS);
+  const cleaned = parsed.filter((value): value is ColumnId => typeof value === "string" && allowed.has(value as ColumnId));
+  return cleaned.length > 0 ? cleaned : defaultColumns;
 };
 
 export const persistVisibleColumns = (storageKey: string, value: ColumnId[]) => {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(storageKey, JSON.stringify(value));
+  writeClientJsonToKey(storageKey, value);
 };
 
 export const normalizeUiTagValues = (values: string[]) => {
@@ -390,18 +386,12 @@ const sanitizePositiveInteger = (value: unknown, fallback: number, maximum?: num
 };
 
 const readStateStore = (storageKey: string): Record<string, unknown> => {
-  const raw = localStorage.getItem(storageKey);
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
+  const parsed = readClientJsonFromKey<unknown>(storageKey);
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
 };
 
 export const loadBucketListState = (storageKey: string, endpointId?: number | null): BucketListState | null => {
-  if (typeof window === "undefined" || !endpointId) return null;
+  if (!endpointId) return null;
   const stored = readStateStore(storageKey)[String(endpointId)];
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return null;
   const data = stored as Record<string, unknown>;
@@ -432,10 +422,10 @@ export const persistBucketListState = (
   endpointId: number | null | undefined,
   value: BucketListState
 ) => {
-  if (typeof window === "undefined" || !endpointId) return;
+  if (!endpointId) return;
   const store = readStateStore(storageKey);
   store[String(endpointId)] = value;
-  localStorage.setItem(storageKey, JSON.stringify(store));
+  writeClientJsonToKey(storageKey, store);
 };
 
 export const parseUiTags = (value: string) => normalizeUiTagValues(value.split(","));

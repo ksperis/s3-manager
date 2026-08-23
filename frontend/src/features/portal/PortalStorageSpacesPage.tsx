@@ -48,6 +48,10 @@ import {
 } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
+import {
+  readClientStorageKey,
+  writeClientStorageKey,
+} from "../../utils/clientStorage";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
 import {
@@ -534,7 +538,7 @@ export default function PortalStorageSpacesPage() {
 
   useEffect(() => {
     setStartGuideDismissed(
-      window.localStorage.getItem(startGuideStorageKey) === "1",
+      readClientStorageKey(startGuideStorageKey) === "1",
     );
   }, [startGuideStorageKey]);
 
@@ -717,7 +721,7 @@ export default function PortalStorageSpacesPage() {
   });
 
   const dismissStartGuide = () => {
-    window.localStorage.setItem(startGuideStorageKey, "1");
+    writeClientStorageKey(startGuideStorageKey, "1");
     setStartGuideDismissed(true);
   };
 

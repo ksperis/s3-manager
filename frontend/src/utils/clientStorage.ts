@@ -23,6 +23,7 @@ export const CLIENT_STORAGE_KEYS = {
 
 type ClientStorageKey = (typeof CLIENT_STORAGE_KEYS)[keyof typeof CLIENT_STORAGE_KEYS];
 type ClientStorageRawKey = string;
+type StorageResolver = () => Storage | null;
 
 function resolveLocalStorage(): Storage | null {
   return typeof window === "undefined" ? null : window.localStorage;
@@ -32,52 +33,61 @@ function resolveSessionStorage(): Storage | null {
   return typeof window === "undefined" ? null : window.sessionStorage;
 }
 
-export function readClientStorage(key: ClientStorageKey): string | null {
+function readStorageKey(resolveStorage: StorageResolver, key: string): string | null {
   try {
-    return resolveLocalStorage()?.getItem(key) ?? null;
+    return resolveStorage()?.getItem(key) ?? null;
   } catch {
     return null;
   }
 }
 
-export function writeClientStorage(key: ClientStorageKey, value: string): void {
+function writeStorageKey(resolveStorage: StorageResolver, key: string, value: string): void {
   try {
-    resolveLocalStorage()?.setItem(key, value);
+    resolveStorage()?.setItem(key, value);
   } catch {
     // Ignore storage failures in private mode, disabled storage, or quota pressure.
   }
 }
 
-export function removeClientStorage(key: ClientStorageKey): void {
+function removeStorageKey(resolveStorage: StorageResolver, key: string): void {
   try {
-    resolveLocalStorage()?.removeItem(key);
+    resolveStorage()?.removeItem(key);
   } catch {
     // Ignore storage failures in private mode or disabled storage.
   }
 }
 
-export function readClientJson<T>(key: ClientStorageKey): T | null {
-  const raw = readClientStorage(key);
+function parseStoredJson<T>(raw: string | null): T | null {
   if (!raw) return null;
   try {
     return JSON.parse(raw) as T;
   } catch {
     return null;
   }
+}
+
+export function readClientStorage(key: ClientStorageKey): string | null {
+  return readClientStorageKey(key);
+}
+
+export function writeClientStorage(key: ClientStorageKey, value: string): void {
+  writeClientStorageKey(key, value);
+}
+
+export function removeClientStorage(key: ClientStorageKey): void {
+  removeClientStorageKey(key);
+}
+
+export function readClientJson<T>(key: ClientStorageKey): T | null {
+  return readClientJsonFromKey<T>(key);
 }
 
 export function writeClientJson(key: ClientStorageKey, value: unknown): void {
-  writeClientStorage(key, JSON.stringify(value));
+  writeClientJsonToKey(key, value);
 }
 
 export function readClientJsonFromKey<T>(key: ClientStorageKey | ClientStorageRawKey): T | null {
-  const raw = readClientStorageKey(key);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+  return parseStoredJson<T>(readClientStorageKey(key));
 }
 
 export function writeClientJsonToKey(key: ClientStorageKey | ClientStorageRawKey, value: unknown): void {
@@ -85,61 +95,31 @@ export function writeClientJsonToKey(key: ClientStorageKey | ClientStorageRawKey
 }
 
 export function readClientStorageKey(key: ClientStorageKey | ClientStorageRawKey): string | null {
-  try {
-    return resolveLocalStorage()?.getItem(key) ?? null;
-  } catch {
-    return null;
-  }
+  return readStorageKey(resolveLocalStorage, key);
 }
 
 export function writeClientStorageKey(key: ClientStorageKey | ClientStorageRawKey, value: string): void {
-  try {
-    resolveLocalStorage()?.setItem(key, value);
-  } catch {
-    // Ignore storage failures in private mode, disabled storage, or quota pressure.
-  }
+  writeStorageKey(resolveLocalStorage, key, value);
 }
 
 export function removeClientStorageKey(key: ClientStorageKey | ClientStorageRawKey): void {
-  try {
-    resolveLocalStorage()?.removeItem(key);
-  } catch {
-    // Ignore storage failures in private mode or disabled storage.
-  }
+  removeStorageKey(resolveLocalStorage, key);
 }
 
 function readSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey): string | null {
-  try {
-    return resolveSessionStorage()?.getItem(key) ?? null;
-  } catch {
-    return null;
-  }
+  return readStorageKey(resolveSessionStorage, key);
 }
 
 function writeSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey, value: string): void {
-  try {
-    resolveSessionStorage()?.setItem(key, value);
-  } catch {
-    // Ignore storage failures in private mode, disabled storage, or quota pressure.
-  }
+  writeStorageKey(resolveSessionStorage, key, value);
 }
 
 export function removeSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey): void {
-  try {
-    resolveSessionStorage()?.removeItem(key);
-  } catch {
-    // Ignore storage failures in private mode or disabled storage.
-  }
+  removeStorageKey(resolveSessionStorage, key);
 }
 
 export function readSessionJsonFromKey<T>(key: ClientStorageKey | ClientStorageRawKey): T | null {
-  const raw = readSessionStorageKey(key);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+  return parseStoredJson<T>(readSessionStorageKey(key));
 }
 
 export function writeSessionJsonToKey(key: ClientStorageKey | ClientStorageRawKey, value: unknown): void {

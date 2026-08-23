@@ -50,6 +50,10 @@ import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
 import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
+import {
+  readSessionJsonFromKey,
+  writeSessionJsonToKey,
+} from "../../utils/clientStorage";
 import { formatAccountLabel } from "../shared/storageEndpointLabel";
 import BucketPurgeRunModal from "../shared/BucketPurgeRunModal";
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "../shared/BucketFeatureSummaryTooltip";
@@ -181,49 +185,32 @@ const COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
 const defaultVisibleColumns: ColumnId[] = ["used_bytes", "object_count"];
 
 const loadVisibleColumns = (): ColumnId[] => {
-  if (typeof window === "undefined") return defaultVisibleColumns;
-  let raw: string | null = null;
-  try {
-    raw = window.sessionStorage.getItem(COLUMNS_STORAGE_KEY);
-  } catch {
-    return defaultVisibleColumns;
-  }
-  if (!raw) return defaultVisibleColumns;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return defaultVisibleColumns;
-    const allowed = new Set<ColumnId>([
-      "used_bytes",
-      "object_count",
-      "quota_max_size_bytes",
-      "quota_max_objects",
-      "creation_date",
-      "tags",
-      "versioning",
-      "object_lock",
-      "block_public_access",
-      "lifecycle_rules",
-      "static_website",
-      "bucket_policy",
-      "cors",
-      "access_logging",
-      "notifications",
-      "quota_status",
-    ]);
-    const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
-    return cleaned.length > 0 ? cleaned : defaultVisibleColumns;
-  } catch {
-    return defaultVisibleColumns;
-  }
+  const parsed = readSessionJsonFromKey<unknown>(COLUMNS_STORAGE_KEY);
+  if (!Array.isArray(parsed)) return defaultVisibleColumns;
+  const allowed = new Set<ColumnId>([
+    "used_bytes",
+    "object_count",
+    "quota_max_size_bytes",
+    "quota_max_objects",
+    "creation_date",
+    "tags",
+    "versioning",
+    "object_lock",
+    "block_public_access",
+    "lifecycle_rules",
+    "static_website",
+    "bucket_policy",
+    "cors",
+    "access_logging",
+    "notifications",
+    "quota_status",
+  ]);
+  const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
+  return cleaned.length > 0 ? cleaned : defaultVisibleColumns;
 };
 
 const persistVisibleColumns = (value: ColumnId[]) => {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(value));
-  } catch {
-    // Ignore storage write failures; the in-memory selection still applies for this render.
-  }
+  writeSessionJsonToKey(COLUMNS_STORAGE_KEY, value);
 };
 
 export default function BucketsPage() {

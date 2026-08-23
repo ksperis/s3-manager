@@ -59,6 +59,10 @@ import {
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
+import {
+  readClientStorageKey,
+  writeClientStorageKey,
+} from "../../utils/clientStorage";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BrowserEmbed from "../browser/BrowserEmbed";
 import type {
@@ -364,11 +368,7 @@ export default function PortalStorageSpaceDetailPage() {
       setStartGuideDismissed(false);
       return;
     }
-    try {
-      setStartGuideDismissed(window.localStorage.getItem(startGuideStorageKey) === "true");
-    } catch {
-      setStartGuideDismissed(false);
-    }
+    setStartGuideDismissed(readClientStorageKey(startGuideStorageKey) === "true");
   }, [startGuideStorageKey]);
 
   const shouldLoadAccessSummary = Boolean(
@@ -933,11 +933,7 @@ export default function PortalStorageSpaceDetailPage() {
   const dismissStartGuide = () => {
     setStartGuideDismissed(true);
     if (!startGuideStorageKey) return;
-    try {
-      window.localStorage.setItem(startGuideStorageKey, "true");
-    } catch {
-      // Ignore storage failures; the guide can still be dismissed for this render.
-    }
+    writeClientStorageKey(startGuideStorageKey, "true");
   };
 
   const openPublicLinkDialog = (target: PublicLinkTarget) => {
