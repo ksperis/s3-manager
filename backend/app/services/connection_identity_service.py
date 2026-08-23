@@ -10,7 +10,10 @@ from typing import Optional
 
 from app.db import S3Connection, StorageProvider
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
-from app.utils.normalize import normalize_optional_string
+from app.utils.normalize import (
+    normalize_optional_string,
+    normalize_storage_provider,
+)
 from app.utils.rgw_identifiers import is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_rgw_admin_api_endpoint
 
@@ -71,7 +74,7 @@ class ConnectionIdentityService:
         return resolved
 
     def _resolve_identity_uncached(self, connection: S3Connection) -> ConnectionIdentityResolution:
-        endpoint = getattr(connection, "storage_endpoint", None)
+        endpoint = connection.storage_endpoint
         if connection.storage_endpoint_id is None or endpoint is None:
             return ConnectionIdentityResolution(
                 rgw_user_uid=None,
@@ -81,8 +84,7 @@ class ConnectionIdentityService:
                 reason="RGW identity is unavailable: this connection must target a configured storage endpoint.",
             )
 
-        provider_value = str(getattr(endpoint, "provider", "")).strip().lower()
-        if provider_value != StorageProvider.CEPH.value:
+        if normalize_storage_provider(endpoint.provider) != StorageProvider.CEPH:
             return ConnectionIdentityResolution(
                 rgw_user_uid=None,
                 rgw_account_id=None,
@@ -96,8 +98,8 @@ class ConnectionIdentityService:
         usage_enabled = bool(flags.usage_enabled)
 
         uid, account_id = _identity_from_metadata(
-            getattr(connection, "credential_owner_type", None),
-            getattr(connection, "credential_owner_identifier", None),
+            connection.credential_owner_type,
+            connection.credential_owner_identifier,
         )
         if uid:
             return ConnectionIdentityResolution(
@@ -108,7 +110,7 @@ class ConnectionIdentityService:
                 reason=None,
             )
 
-        access_key = (getattr(connection, "access_key_id", None) or "").strip()
+        access_key = connection.access_key_id.strip()
         if not access_key:
             return ConnectionIdentityResolution(
                 rgw_user_uid=None,
@@ -128,8 +130,12 @@ class ConnectionIdentityService:
                 reason="RGW identity is unavailable: admin endpoint is not configured for this endpoint.",
             )
 
-        lookup_access_key = getattr(endpoint, "supervision_access_key", None) or getattr(endpoint, "admin_access_key", None)
-        lookup_secret_key = getattr(endpoint, "supervision_secret_key", None) or getattr(endpoint, "admin_secret_key", None)
+        lookup_access_key = (
+            endpoint.supervision_access_key or endpoint.admin_access_key
+        )
+        lookup_secret_key = (
+            endpoint.supervision_secret_key or endpoint.admin_secret_key
+        )
         if not lookup_access_key or not lookup_secret_key:
             return ConnectionIdentityResolution(
                 rgw_user_uid=None,
@@ -144,8 +150,8 @@ class ConnectionIdentityService:
                 access_key=lookup_access_key,
                 secret_key=lookup_secret_key,
                 endpoint=admin_endpoint,
-                region=getattr(endpoint, "region", None),
-                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+                region=endpoint.region,
+                verify_tls=endpoint.verify_tls,
             )
             payload = rgw_admin.get_user_by_access_key(access_key, allow_not_found=True)
         except RGWAdminError as exc:
@@ -175,7 +181,7 @@ class ConnectionIdentityService:
         )
 
     def _resolve_metrics_uncached(self, connection: S3Connection) -> ConnectionIdentityResolution:
-        endpoint = getattr(connection, "storage_endpoint", None)
+        endpoint = connection.storage_endpoint
         if connection.storage_endpoint_id is None or endpoint is None:
             return ConnectionIdentityResolution(
                 rgw_user_uid=None,
@@ -185,8 +191,7 @@ class ConnectionIdentityService:
                 reason="Metrics are unavailable: this connection must target a configured storage endpoint.",
             )
 
-        provider_value = str(getattr(endpoint, "provider", "")).strip().lower()
-        if provider_value != StorageProvider.CEPH.value:
+        if normalize_storage_provider(endpoint.provider) != StorageProvider.CEPH:
             return ConnectionIdentityResolution(
                 rgw_user_uid=None,
                 rgw_account_id=None,
@@ -207,8 +212,8 @@ class ConnectionIdentityService:
                 reason="Metrics are unavailable: storage metrics and usage logs are disabled for this endpoint.",
             )
 
-        supervision_access_key = getattr(endpoint, "supervision_access_key", None)
-        supervision_secret_key = getattr(endpoint, "supervision_secret_key", None)
+        supervision_access_key = endpoint.supervision_access_key
+        supervision_secret_key = endpoint.supervision_secret_key
         if not supervision_access_key or not supervision_secret_key:
             return ConnectionIdentityResolution(
                 rgw_user_uid=None,
@@ -236,20 +241,30 @@ class ConnectionIdentityService:
         )
 
     def _cache_key(self, connection: S3Connection, *, scope: str) -> tuple:
-        endpoint = getattr(connection, "storage_endpoint", None)
-        endpoint_updated = getattr(endpoint, "updated_at", None)
-        connection_updated = getattr(connection, "updated_at", None)
+        endpoint = connection.storage_endpoint
+        endpoint_provider = ""
+        has_supervision_access_key = False
+        has_supervision_secret_key = False
+        features_config = ""
+        endpoint_updated = None
+        if endpoint is not None:
+            endpoint_provider = normalize_storage_provider(endpoint.provider).value
+            has_supervision_access_key = bool(endpoint.supervision_access_key)
+            has_supervision_secret_key = bool(endpoint.supervision_secret_key)
+            features_config = endpoint.features_config or ""
+            endpoint_updated = endpoint.updated_at
+        connection_updated = connection.updated_at
         return (
             scope,
-            getattr(connection, "id", None),
-            (getattr(connection, "access_key_id", None) or "").strip(),
-            getattr(connection, "storage_endpoint_id", None),
-            (getattr(connection, "credential_owner_type", None) or "").strip().lower(),
-            (getattr(connection, "credential_owner_identifier", None) or "").strip(),
-            str(getattr(endpoint, "provider", "")).strip().lower() if endpoint is not None else "",
-            bool(getattr(endpoint, "supervision_access_key", None)) if endpoint is not None else False,
-            bool(getattr(endpoint, "supervision_secret_key", None)) if endpoint is not None else False,
-            (getattr(endpoint, "features_config", None) or "") if endpoint is not None else "",
+            connection.id,
+            connection.access_key_id.strip(),
+            connection.storage_endpoint_id,
+            (connection.credential_owner_type or "").strip().lower(),
+            (connection.credential_owner_identifier or "").strip(),
+            endpoint_provider,
+            has_supervision_access_key,
+            has_supervision_secret_key,
+            features_config,
             int(connection_updated.timestamp()) if isinstance(connection_updated, datetime) else 0,
             int(endpoint_updated.timestamp()) if isinstance(endpoint_updated, datetime) else 0,
         )
