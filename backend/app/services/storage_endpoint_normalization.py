@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass, replace
 from typing import Optional
 
+import yaml
 from pydantic import ValidationError, field_validator
 
 from app.db import StorageEndpoint, StorageProvider
@@ -50,7 +51,7 @@ class EnvStorageEndpoint(ApiModel):
     region: Optional[str] = None
     force_path_style: bool = False
     verify_tls: bool = True
-    provider: Optional[StorageProvider] = None
+    provider: StorageProvider = StorageProvider.CEPH
     admin_access_key: Optional[str] = None
     admin_secret_key: Optional[str] = None
     supervision_access_key: Optional[str] = None
@@ -326,7 +327,11 @@ def normalize_env_storage_endpoint_states(
     for identity in _env_endpoint_identities(env_endpoints):
         entry = identity.entry
         raw_features = (
-            dump_features_config(entry.features)
+            yaml.safe_dump(
+                {"features": entry.features},
+                sort_keys=False,
+                default_flow_style=False,
+            ).strip()
             if entry.features is not None
             else entry.features_config
         )

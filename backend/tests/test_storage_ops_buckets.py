@@ -1578,7 +1578,7 @@ def test_storage_ops_bucket_listing_does_not_expose_quota_write_availability(cli
                 admin_endpoint="https://admin.example.test",
                 admin_access_key="admin-ak",
                 admin_secret_key="admin-sk",
-                features_config='{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}',
+                features_config='{"features":{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}}',
             ),
         )
 

@@ -29,6 +29,7 @@ AWS_DEFAULT_REGION = "us-east-1"
 AWS_IAM_ENDPOINT = "https://iam.amazonaws.com"
 AWS_GOV_IAM_ENDPOINT = "https://iam.us-gov.amazonaws.com"
 AWS_CN_IAM_ENDPOINT = "https://iam.cn-north-1.amazonaws.com.cn"
+_ENDPOINT_FEATURE_KEYS = frozenset({"admin", "iam", "sts"})
 
 
 def _normalize_region(value: Optional[object]) -> str:
@@ -155,13 +156,13 @@ def parse_features_config(raw: Optional[str]) -> dict[str, Any]:
         data = yaml.safe_load(raw)
     except yaml.YAMLError as exc:
         raise ValueError("Invalid endpoint features YAML.") from exc
-    if data is None:
-        return {}
     if not isinstance(data, dict):
         raise ValueError("Endpoint features YAML must be a mapping.")
-    features = data.get("features", data)
-    if features is None:
-        return {}
+    if set(data) != {"features"}:
+        raise ValueError(
+            "Endpoint features YAML must contain only the top-level 'features' mapping."
+        )
+    features = data["features"]
     if not isinstance(features, dict):
         raise ValueError("Endpoint features must be a mapping.")
     return features
@@ -180,19 +181,28 @@ def normalize_features_config(
         features["sts"]["endpoint"] = aws_sts_endpoint_for_region(aws_region)
         features["iam"]["endpoint"] = aws_iam_endpoint_for_region(aws_region)
     raw_features = parse_features_config(raw)
+    unknown_features = set(raw_features).difference(FEATURE_KEYS)
+    if unknown_features:
+        labels = ", ".join(sorted(str(key) for key in unknown_features))
+        raise ValueError(f"Unknown endpoint feature(s): {labels}.")
     for key, value in raw_features.items():
-        if key not in features:
-            continue
-        if value is None:
-            continue
         if not isinstance(value, dict):
             raise ValueError(f"Feature '{key}' must be a mapping.")
+        allowed_fields = {"enabled"}
+        if key in _ENDPOINT_FEATURE_KEYS:
+            allowed_fields.add("endpoint")
+        if key == "healthcheck":
+            allowed_fields.update({"healthcheck_url", "mode"})
+        unknown_fields = set(value).difference(allowed_fields)
+        if unknown_fields:
+            labels = ", ".join(sorted(str(field) for field in unknown_fields))
+            raise ValueError(f"Unknown field(s) for feature '{key}': {labels}.")
         if "enabled" in value:
             enabled = value.get("enabled")
             if not isinstance(enabled, bool):
                 raise ValueError(f"Feature '{key}.enabled' must be a boolean.")
             features[key]["enabled"] = enabled
-        if "endpoint" in value:
+        if key in _ENDPOINT_FEATURE_KEYS and "endpoint" in value:
             endpoint = value.get("endpoint")
             if endpoint is not None and not isinstance(endpoint, str):
                 raise ValueError(f"Feature '{key}.endpoint' must be a string.")
@@ -206,10 +216,12 @@ def normalize_features_config(
                 if normalized_mode not in {"http", "s3"}:
                     raise ValueError("Feature 'healthcheck.mode' must be 'http' or 's3'.")
                 features[key]["mode"] = normalized_mode
-            if "url" in value or "healthcheck_url" in value:
-                url = value.get("url") if "url" in value else value.get("healthcheck_url")
+            if "healthcheck_url" in value:
+                url = value.get("healthcheck_url")
                 if url is not None and not isinstance(url, str):
-                    raise ValueError("Feature 'healthcheck.url' must be a string.")
+                    raise ValueError(
+                        "Feature 'healthcheck.healthcheck_url' must be a string."
+                    )
                 features[key]["url"] = _normalize_url(url)
 
     if normalized_provider != StorageProvider.CEPH:

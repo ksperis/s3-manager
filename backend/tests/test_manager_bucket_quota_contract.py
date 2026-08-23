@@ -31,7 +31,7 @@ def _quota_account(db_session, *, allow_target: bool = True) -> S3Account:
         provider="ceph",
         admin_access_key="endpoint-admin-ak",
         admin_secret_key="endpoint-admin-sk",
-        features_config='{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}',
+        features_config='{"features":{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}}',
     )
     account = S3Account(
         name="quota-account",

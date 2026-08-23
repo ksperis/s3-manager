@@ -40,6 +40,22 @@ them. Before deploying, remove obsolete fields and correct misspelled names in
 those environment values. Valid configurations and the top-level handling of
 unrelated process environment variables are unchanged.
 
+## 2026-08 canonical Storage Endpoint feature configuration
+
+Migration `0115_canonical_storage_endpoint_features` rewrites every persisted
+Storage Endpoint feature document under the single `features` root. It converts
+the former health-check `url` and `endpoint` aliases to `healthcheck_url`,
+normalizes configured URLs and modes, and removes unknown feature names or
+fields that the runtime previously ignored.
+
+After this boundary, new API, automation, seed, and `ENV_STORAGE_ENDPOINTS`
+`features_config` values must use the canonical shape emitted by the Admin
+frontend. Unknown names and fields are rejected instead of being silently
+discarded. The database migration cannot rewrite environment values, so update
+those values before deploying. Invalid active values with the wrong type stop
+the migration explicitly. The downgrade keeps the canonical YAML because
+discarded inert keys and aliases cannot be reconstructed.
+
 ## 2026-08 Clipboard API requirement
 
 Frontend copy actions now rely exclusively on the browser Clipboard API. The

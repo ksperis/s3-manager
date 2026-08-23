@@ -354,7 +354,7 @@ def test_set_bucket_quota_uses_endpoint_admin_credentials(monkeypatch):
         admin_secret_key="endpoint-admin-sk",
         ceph_admin_access_key="ceph-admin-ak",
         ceph_admin_secret_key="ceph-admin-sk",
-        features_config='{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}',
+        features_config='{"features":{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}}',
     )
     captured: dict = {}
 

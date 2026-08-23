@@ -334,7 +334,7 @@ def test_replication_feature_defaults_to_disabled_and_can_be_enabled_for_ceph():
     assert enabled_features["replication"]["enabled"] is True
 
 
-def test_features_config_requires_canonical_account_and_healthcheck_keys():
+def test_features_config_accepts_canonical_account_and_healthcheck_keys():
     admin_only_features = normalize_features_config(
         StorageProvider.CEPH,
         "features:\n"
@@ -344,14 +344,52 @@ def test_features_config_requires_canonical_account_and_healthcheck_keys():
     assert admin_only_features["admin"]["enabled"] is True
     assert admin_only_features["account"]["enabled"] is False
 
-    legacy_healthcheck_features = normalize_features_config(
+    healthcheck_features = normalize_features_config(
         StorageProvider.CEPH,
         "features:\n"
         "  healthcheck:\n"
         "    enabled: true\n"
-        "    endpoint: https://health.example.test\n",
+        "    healthcheck_url: https://health.example.test/\n",
     )
-    assert legacy_healthcheck_features["healthcheck"]["url"] is None
+    assert healthcheck_features["healthcheck"]["url"] == "https://health.example.test"
+
+
+@pytest.mark.parametrize(
+    ("raw", "message"),
+    [
+        (
+            "admin:\n  enabled: true\n",
+            "top-level 'features' mapping",
+        ),
+        (
+            "null\n",
+            "Endpoint features YAML must be a mapping",
+        ),
+        (
+            "features:\n",
+            "Endpoint features must be a mapping",
+        ),
+        (
+            "features:\n  admin:\n",
+            "Feature 'admin' must be a mapping",
+        ),
+        (
+            "features:\n  healthcheck:\n    url: https://health.example.test\n",
+            "Unknown field.*healthcheck.*url",
+        ),
+        (
+            "features:\n  removed_feature:\n    enabled: true\n",
+            "Unknown endpoint feature.*removed_feature",
+        ),
+        (
+            "features:\n  usage:\n    endpoint: https://usage.example.test\n",
+            "Unknown field.*usage.*endpoint",
+        ),
+    ],
+)
+def test_features_config_rejects_noncanonical_shapes(raw, message):
+    with pytest.raises(ValueError, match=message):
+        normalize_features_config(StorageProvider.CEPH, raw)
 
 
 def test_aws_features_reject_ceph_only_capabilities():
@@ -491,6 +529,43 @@ def test_environment_storage_endpoint_rejects_unknown_fields(db_session, monkeyp
 
     assert isinstance(exc_info.value.__cause__, ValidationError)
     assert "obsolete_field" in str(exc_info.value.__cause__)
+
+
+@pytest.mark.parametrize(
+    ("features", "message"),
+    [
+        (
+            {"removed_feature": {"enabled": True}},
+            "Unknown endpoint feature.*removed_feature",
+        ),
+        (
+            {"healthcheck": {"url": "https://health.example.test"}},
+            "Unknown field.*healthcheck.*url",
+        ),
+    ],
+)
+def test_environment_storage_endpoint_rejects_noncanonical_features(
+    db_session,
+    monkeypatch,
+    features,
+    message,
+):
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.settings.env_storage_endpoints",
+        json.dumps(
+            [
+                {
+                    "name": "ceph-env",
+                    "endpoint_url": "https://ceph-env.example.test",
+                    "features": features,
+                }
+            ]
+        ),
+        raising=False,
+    )
+
+    with pytest.raises(ValueError, match=message):
+        StorageEndpointsService(db_session).sync_env_endpoints()
 
 
 def test_sync_env_endpoints_retries_after_concurrent_unique_conflict(db_session, monkeypatch):
