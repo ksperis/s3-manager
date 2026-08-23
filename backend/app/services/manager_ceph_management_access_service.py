@@ -13,7 +13,8 @@ from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User
 from app.services import app_settings_service
 from app.services.effective_access_service import EffectiveAccessService, MANAGER_TOOL_ROLES
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
+from app.utils.normalize import normalize_storage_provider
+from app.utils.storage_endpoint_features import resolve_feature_flags
 
 
 ManagerCephManagementOperation = Literal["bucket_quota", "rgw_access_keys"]
@@ -40,14 +41,9 @@ class ManagerCephManagementAccessService:
     def _endpoint_supports_ceph_admin(endpoint: StorageEndpoint | None) -> bool:
         if endpoint is None:
             return False
-        try:
-            if StorageProvider(str(endpoint.provider).strip().lower()) != StorageProvider.CEPH:
-                return False
-        except (TypeError, ValueError):
+        if normalize_storage_provider(endpoint.provider) != StorageProvider.CEPH:
             return False
         if not resolve_feature_flags(endpoint).admin_enabled:
-            return False
-        if not resolve_admin_endpoint(endpoint):
             return False
         return bool(
             (endpoint.admin_access_key or "").strip()

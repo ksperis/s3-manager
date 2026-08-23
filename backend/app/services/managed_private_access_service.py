@@ -28,10 +28,10 @@ from app.services.s3_users_service import S3UsersService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import build_custom_endpoint_config, resolve_connection_details
 from app.utils.s3_endpoint import resolve_iam_client_options, validate_user_supplied_s3_endpoint
+from app.utils.normalize import normalize_storage_provider
 from app.utils.storage_endpoint_features import (
     aws_iam_client_options_for_region,
     resolve_feature_flags,
-    resolve_admin_endpoint,
     resolve_iam_endpoint,
     resolve_iam_signing_region,
 )
@@ -468,9 +468,8 @@ class ManagedPrivateAccessService:
         if (
             not s3_user.allow_managed_private_connection_provisioning
             or endpoint is None
-            or str(endpoint.provider) != StorageProvider.CEPH.value
+            or normalize_storage_provider(endpoint.provider) != StorageProvider.CEPH
             or not resolve_feature_flags(endpoint).admin_enabled
-            or not resolve_admin_endpoint(endpoint)
             or not (endpoint.admin_access_key or "").strip()
             or not (endpoint.admin_secret_key or "").strip()
         ):

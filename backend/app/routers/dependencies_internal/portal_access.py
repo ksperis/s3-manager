@@ -15,6 +15,7 @@ from app.models.account_capabilities import AccountCapabilities
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.services import app_settings_service
 from app.services.s3_execution_context import S3ExecutionContext
+from app.utils.normalize import normalize_storage_provider
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.account_roles import portal_role_for
 
@@ -41,10 +42,10 @@ def _portal_membership_capabilities(
 
 
 def _validate_portal_account_surface(account: S3Account) -> None:
-    endpoint = getattr(account, "storage_endpoint", None)
+    endpoint = account.storage_endpoint
     if endpoint is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires a storage endpoint")
-    if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
+    if normalize_storage_provider(endpoint.provider) != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires a Ceph RGW account")
     if not resolve_feature_flags(endpoint).iam_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal is disabled for this endpoint")

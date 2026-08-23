@@ -17,8 +17,14 @@ from app.models.key_rotation import (
     KeyRotationType,
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
-from app.utils.normalize import normalize_optional_string
-from app.utils.storage_endpoint_features import resolve_admin_endpoint
+from app.utils.normalize import (
+    normalize_optional_string,
+    normalize_storage_provider,
+)
+from app.utils.storage_endpoint_features import (
+    resolve_admin_endpoint,
+    resolve_feature_flags,
+)
 from app.core.sensitive_data import sanitized_error_log_detail
 
 logger = logging.getLogger(__name__)
@@ -682,12 +688,11 @@ class KeyRotationService:
         )
 
     def _validate_ceph_admin_api(self, endpoint: StorageEndpoint) -> Optional[str]:
-        provider = StorageProvider(str(endpoint.provider))
+        provider = normalize_storage_provider(endpoint.provider)
         if provider != StorageProvider.CEPH:
             return "Key rotation is only supported for Ceph endpoints."
-        admin_endpoint = resolve_admin_endpoint(endpoint)
-        if not admin_endpoint:
-            return "Admin feature is disabled or admin endpoint is not configured."
+        if not resolve_feature_flags(endpoint).admin_enabled:
+            return "Admin feature is disabled."
         return None
 
     def _build_endpoint_admin_client(self, endpoint: StorageEndpoint) -> RGWAdminClient:
