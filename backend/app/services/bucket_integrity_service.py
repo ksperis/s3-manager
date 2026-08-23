@@ -2,8 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from dataclasses import dataclass
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import monotonic
 from typing import Any, Callable, Optional
@@ -77,6 +77,35 @@ class _ObjectCheckResult:
     success: bool
     bytes_read: int = 0
     message: str | None = None
+
+
+@dataclass
+class _BucketCheckState:
+    listed_count: int = 0
+    checked_count: int = 0
+    failed_count: int = 0
+    bytes_read: int = 0
+    failures: list[BucketIntegrityFailure] = field(default_factory=list)
+    last_progress_at: float = 0.0
+
+    def add_failure(self, failure: BucketIntegrityFailure) -> None:
+        self.failed_count += 1
+        if len(self.failures) < _FAILURE_SAMPLE_LIMIT:
+            self.failures.append(failure)
+
+    def record_result(self, bucket_name: str, result: _ObjectCheckResult) -> None:
+        self.checked_count += 1
+        self.bytes_read += result.bytes_read
+        if not result.success:
+            self.add_failure(
+                BucketIntegrityFailure(
+                    bucket_name=bucket_name,
+                    stage=result.stage,
+                    key=result.key,
+                    version_id=result.version_id,
+                    message=result.message or "Object check failed",
+                )
+            )
 
 
 def _object_request_kwargs(bucket_name: str, obj: _ObjectRef) -> dict[str, Any]:
@@ -241,6 +270,51 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
             return self._head_object(client, bucket_name, obj, cancel_check=cancel_check)
         return self._read_object(client, bucket_name, obj, max_bytes=max_bytes, cancel_check=cancel_check)
 
+    @staticmethod
+    def _record_completed_checks(
+        completed: set[Future[_ObjectCheckResult]],
+        state: _BucketCheckState,
+        bucket_name: str,
+    ) -> None:
+        for future in completed:
+            state.record_result(bucket_name, future.result())
+
+    @staticmethod
+    def _emit_bucket_progress(
+        state: _BucketCheckState,
+        target: BucketIntegrityResolvedTarget,
+        *,
+        stage: BucketIntegrityProgressStage,
+        total_buckets: int,
+        completed_buckets: int,
+        progress_callback: ProgressCallback,
+        force: bool = False,
+        message: str | None = None,
+    ) -> None:
+        now = monotonic()
+        if (
+            not force
+            and state.checked_count % _PROGRESS_EVERY_CHECKED != 0
+            and (now - state.last_progress_at) < _PROGRESS_MIN_INTERVAL_SECONDS
+        ):
+            return
+        state.last_progress_at = now
+        progress_callback(
+            BucketIntegrityCheckProgress(
+                stage=stage,
+                bucket_name=target.bucket_name,
+                context_id=target.context_id,
+                context_name=target.context_name,
+                total_buckets=total_buckets,
+                completed_buckets=completed_buckets,
+                listed_count=state.listed_count,
+                checked_count=state.checked_count,
+                failed_count=state.failed_count,
+                bytes_read=state.bytes_read,
+                message=message,
+            )
+        )
+
     def run(
         self,
         targets: list[BucketIntegrityResolvedTarget],
@@ -335,18 +409,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
         cancel_check: CancelCheck | None,
     ) -> BucketIntegrityBucketResult:
         started = monotonic()
-        listed_count = 0
-        checked_count = 0
-        failed_count = 0
-        bytes_read = 0
-        failures: list[BucketIntegrityFailure] = []
-        last_progress_at = 0.0
-
-        def add_failure(failure: BucketIntegrityFailure) -> None:
-            nonlocal failed_count
-            failed_count += 1
-            if len(failures) < _FAILURE_SAMPLE_LIMIT:
-                failures.append(failure)
+        state = _BucketCheckState()
 
         def emit(
             stage: BucketIntegrityProgressStage,
@@ -354,25 +417,15 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
             force: bool = False,
             message: str | None = None,
         ) -> None:
-            nonlocal last_progress_at
-            now = monotonic()
-            if not force and checked_count % _PROGRESS_EVERY_CHECKED != 0 and (now - last_progress_at) < _PROGRESS_MIN_INTERVAL_SECONDS:
-                return
-            last_progress_at = now
-            progress_callback(
-                BucketIntegrityCheckProgress(
-                    stage=stage,
-                    bucket_name=target.bucket_name,
-                    context_id=target.context_id,
-                    context_name=target.context_name,
-                    total_buckets=total_buckets,
-                    completed_buckets=completed_buckets,
-                    listed_count=listed_count,
-                    checked_count=checked_count,
-                    failed_count=failed_count,
-                    bytes_read=bytes_read,
-                    message=message,
-                )
+            self._emit_bucket_progress(
+                state,
+                target,
+                stage=stage,
+                total_buckets=total_buckets,
+                completed_buckets=completed_buckets,
+                progress_callback=progress_callback,
+                force=force,
+                message=message,
             )
 
         emit("list", force=True, message=f"Listing {target.bucket_name}...")
@@ -390,7 +443,7 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
                 ):
                     if cancel_check:
                         cancel_check()
-                    listed_count += 1
+                    state.listed_count += 1
                     pending.add(
                         executor.submit(
                             self._check_object,
@@ -404,45 +457,19 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
                     )
                     if len(pending) >= worker_count * 2:
                         done, pending = wait(pending, return_when=FIRST_COMPLETED)
-                        for future in done:
-                            result = future.result()
-                            checked_count += 1
-                            bytes_read += result.bytes_read
-                            if not result.success:
-                                add_failure(
-                                    BucketIntegrityFailure(
-                                        bucket_name=target.bucket_name,
-                                        stage=result.stage,
-                                        key=result.key,
-                                        version_id=result.version_id,
-                                        message=result.message or "Object check failed",
-                                    )
-                                )
+                        self._record_completed_checks(done, state, target.bucket_name)
                         emit("verify")
                 emit("verify", force=True, message=f"Verifying {target.bucket_name}...")
                 while pending:
                     if cancel_check:
                         cancel_check()
                     done, pending = wait(pending, timeout=1.0)
-                    for future in done:
-                        result = future.result()
-                        checked_count += 1
-                        bytes_read += result.bytes_read
-                        if not result.success:
-                            add_failure(
-                                BucketIntegrityFailure(
-                                    bucket_name=target.bucket_name,
-                                    stage=result.stage,
-                                    key=result.key,
-                                    version_id=result.version_id,
-                                    message=result.message or "Object check failed",
-                                )
-                            )
+                    self._record_completed_checks(done, state, target.bucket_name)
                     emit("verify")
         except BucketIntegrityCheckCancelled:
             raise
         except Exception as exc:  # noqa: BLE001
-            add_failure(
+            state.add_failure(
                 BucketIntegrityFailure(
                     bucket_name=target.bucket_name,
                     stage="list",
@@ -451,17 +478,17 @@ class BucketIntegrityCheckService(LongRunningS3ClientService):
             )
             status: BucketIntegrityStatus = "failed"
         else:
-            status = "passed" if failed_count == 0 else "completed_with_errors"
+            status = "passed" if state.failed_count == 0 else "completed_with_errors"
 
         return BucketIntegrityBucketResult(
             bucket_name=target.bucket_name,
             context_id=target.context_id,
             context_name=target.context_name,
             status=status,
-            listed_count=listed_count,
-            checked_count=checked_count,
-            failed_count=failed_count,
-            bytes_read=bytes_read,
+            listed_count=state.listed_count,
+            checked_count=state.checked_count,
+            failed_count=state.failed_count,
+            bytes_read=state.bytes_read,
             duration_seconds=round(monotonic() - started, 3),
-            failures_sample=failures,
+            failures_sample=state.failures,
         )
