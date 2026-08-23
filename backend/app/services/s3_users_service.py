@@ -36,7 +36,8 @@ from app.models.s3_user import (
     S3UserUserLink,
     S3UserUpdate,
 )
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
 from app.services import s3_client
 from app.utils.rgw_payloads import extract_bucket_list, extract_rgw_user_payload
 from app.utils.s3_endpoint import resolve_s3_client_options
@@ -86,13 +87,7 @@ class S3UsersService:
             admin_endpoint = resolve_admin_endpoint(endpoint)
             if not admin_endpoint:
                 raise ValueError("Admin operations are disabled for this endpoint.")
-            return get_rgw_admin_client(
-                access_key=endpoint.admin_access_key,
-                secret_key=endpoint.admin_secret_key,
-                endpoint=admin_endpoint,
-                region=endpoint.region,
-                verify_tls=endpoint.verify_tls,
-            )
+            return get_endpoint_admin_rgw_client(endpoint)
         except Exception as exc:
             raise ValueError(f"Unable to build admin client for {endpoint.name}: {exc}") from exc
 

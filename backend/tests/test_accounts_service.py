@@ -51,7 +51,10 @@ def _seed_ceph_endpoint(db_session, *, account_enabled: bool = True, is_default:
 
 
 def _build_service(db_session, monkeypatch, fake_admin) -> S3AccountsService:
-    monkeypatch.setattr("app.services.s3_accounts_service.get_rgw_admin_client", lambda **_: fake_admin)
+    monkeypatch.setattr(
+        "app.services.s3_accounts_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint: fake_admin,
+    )
     return S3AccountsService(db_session)
 
 

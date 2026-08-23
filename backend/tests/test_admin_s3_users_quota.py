@@ -103,7 +103,10 @@ def test_admin_s3_user_writes_require_an_explicit_endpoint(client: TestClient):
 def test_admin_create_s3_user_with_quota_unit(monkeypatch, client: TestClient, db_session):
     endpoint = _seed_ceph_endpoint(db_session)
     fake_rgw = FakeRGWAdmin()
-    monkeypatch.setattr("app.services.s3_users_service.get_rgw_admin_client", lambda **_: fake_rgw)
+    monkeypatch.setattr(
+        "app.services.s3_users_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint: fake_rgw,
+    )
 
     payload = {
         "name": "quota-user",
@@ -133,7 +136,10 @@ def test_admin_create_s3_user_with_quota_unit(monkeypatch, client: TestClient, d
 def test_admin_update_s3_user_quota(monkeypatch, client: TestClient, db_session):
     endpoint = _seed_ceph_endpoint(db_session)
     fake_rgw = FakeRGWAdmin()
-    monkeypatch.setattr("app.services.s3_users_service.get_rgw_admin_client", lambda **_: fake_rgw)
+    monkeypatch.setattr(
+        "app.services.s3_users_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint: fake_rgw,
+    )
 
     create = client.post(
         "/api/admin/s3-users",

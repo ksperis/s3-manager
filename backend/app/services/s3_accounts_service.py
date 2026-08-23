@@ -34,7 +34,8 @@ from app.services.portal_role_sync import (
     sync_portal_role_promotions,
 )
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
-from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
 from app.services.s3_account_associations_service import S3AccountAssociationsService
 from app.services.tags_service import TagsService
 from app.utils.tagging import TAG_DOMAIN_ADMIN_MANAGED
@@ -106,13 +107,7 @@ class S3AccountsService:
                 return None
             raise ValueError("Admin operations are disabled for this endpoint.")
         try:
-            return get_rgw_admin_client(
-                access_key=endpoint.admin_access_key,
-                secret_key=endpoint.admin_secret_key,
-                endpoint=admin_endpoint,
-                region=endpoint.region,
-                verify_tls=endpoint.verify_tls,
-            )
+            return get_endpoint_admin_rgw_client(endpoint)
         except Exception as exc:
             if allow_missing:
                 logger.warning("Unable to build RGW admin client for endpoint %s: %s", endpoint.name, exc)

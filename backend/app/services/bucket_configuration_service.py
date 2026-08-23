@@ -15,7 +15,8 @@ from app.services import (
     s3_bucket_security,
     s3_client,
 )
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
 from app.models.bucket import (
     BucketAcl,
     BucketAclGrant,
@@ -49,27 +50,21 @@ logger = logging.getLogger(__name__)
 
 class BucketConfigurationService:
     def _rgw_bucket_quota_admin_for_account(self, account: S3ExecutionTarget):
-        endpoint = getattr(account, "storage_endpoint", None)
+        endpoint = account.storage_endpoint
         if endpoint is None:
             raise RuntimeError("Storage endpoint is not configured for this context")
         flags = resolve_feature_flags(endpoint)
         if not flags.admin_enabled:
             raise RuntimeError("Admin API is disabled for this endpoint")
-        access_key = (getattr(endpoint, "admin_access_key", None) or "").strip()
-        secret_key = (getattr(endpoint, "admin_secret_key", None) or "").strip()
+        access_key = (endpoint.admin_access_key or "").strip()
+        secret_key = (endpoint.admin_secret_key or "").strip()
         if not access_key or not secret_key:
             raise RuntimeError("Endpoint admin credentials are not configured for this endpoint")
         try:
             admin_endpoint = resolve_admin_endpoint(endpoint)
             if not admin_endpoint:
                 raise RuntimeError("Admin endpoint is not configured for this endpoint")
-            return get_rgw_admin_client(
-                access_key=access_key,
-                secret_key=secret_key,
-                endpoint=admin_endpoint,
-                region=endpoint.region,
-                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
-            )
+            return get_endpoint_admin_rgw_client(endpoint)
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to initialize bucket quota admin client: {exc}") from exc
 

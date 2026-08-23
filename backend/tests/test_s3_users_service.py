@@ -163,7 +163,10 @@ def _seed_ceph_endpoint(db_session, *, metrics_enabled: bool = False) -> Storage
 
 
 def _build_service(db_session, monkeypatch, fake_admin: FakeRGWAdmin) -> S3UsersService:
-    monkeypatch.setattr("app.services.s3_users_service.get_rgw_admin_client", lambda **_: fake_admin)
+    monkeypatch.setattr(
+        "app.services.s3_users_service.get_endpoint_admin_rgw_client",
+        lambda _endpoint: fake_admin,
+    )
     return S3UsersService(db_session)
 
 

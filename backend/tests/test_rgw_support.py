@@ -3,6 +3,7 @@
 import pytest
 
 from app.db import StorageEndpoint, StorageProvider
+from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
 from app.services.rgw_supervision import get_supervision_rgw_client
 from app.utils.rgw_identifiers import is_rgw_account_id, resolve_account_scope
 from app.utils.rgw_payloads import extract_rgw_user_identity, extract_rgw_user_payload
@@ -79,3 +80,42 @@ def test_get_supervision_rgw_client_uses_endpoint_url_when_admin_feature_disable
     assert captured["secret_key"] == "SUP-SK"
     assert captured["endpoint"] == "https://rgw.example.test"
     assert captured["verify_tls"] is False
+
+
+def test_get_endpoint_admin_rgw_client_uses_canonical_endpoint_fields(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_get_rgw_admin_client(**kwargs):
+        captured.update(kwargs)
+        return "client"
+
+    monkeypatch.setattr(
+        "app.services.rgw_endpoint_clients.get_rgw_admin_client",
+        fake_get_rgw_admin_client,
+    )
+    endpoint = StorageEndpoint(
+        name="ceph",
+        endpoint_url="https://rgw.example.test",
+        provider=StorageProvider.CEPH.value,
+        region="eu-west-1",
+        verify_tls=False,
+        admin_access_key="ADMIN-AK",
+        admin_secret_key="ADMIN-SK",
+        features_config=(
+            "features:\n"
+            "  admin:\n"
+            "    enabled: true\n"
+            "    endpoint: https://admin.example.test/\n"
+        ),
+    )
+
+    client = get_endpoint_admin_rgw_client(endpoint)
+
+    assert client == "client"
+    assert captured == {
+        "access_key": "ADMIN-AK",
+        "secret_key": "ADMIN-SK",
+        "endpoint": "https://admin.example.test",
+        "region": "eu-west-1",
+        "verify_tls": False,
+    }

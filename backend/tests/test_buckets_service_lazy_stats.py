@@ -398,11 +398,17 @@ def test_set_bucket_quota_uses_endpoint_admin_credentials(monkeypatch):
             captured["quota"] = kwargs
             return {"ok": True}
 
-    def fake_get_rgw_admin_client(**kwargs):
-        captured["client"] = kwargs
+    def fake_get_endpoint_admin_rgw_client(endpoint):
+        captured["client"] = {
+            "access_key": endpoint.admin_access_key,
+            "secret_key": endpoint.admin_secret_key,
+        }
         return FakeRGWAdmin()
 
-    monkeypatch.setattr("app.services.bucket_configuration_service.get_rgw_admin_client", fake_get_rgw_admin_client)
+    monkeypatch.setattr(
+        "app.services.bucket_configuration_service.get_endpoint_admin_rgw_client",
+        fake_get_endpoint_admin_rgw_client,
+    )
 
     service.set_bucket_quota(
         "bucket-b",
