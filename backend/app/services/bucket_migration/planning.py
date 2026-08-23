@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import or_
@@ -23,6 +24,15 @@ from ._shared import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _DraftMigrationConfiguration:
+    mappings: list[tuple[str, str]]
+    webhook_url: str | None
+    use_same_endpoint_copy: bool
+    auto_grant_source_read_for_copy: bool
+    parallelism: int
 
 
 class BucketMigrationPlanningMixin:
@@ -70,7 +80,10 @@ class BucketMigrationPlanningMixin:
 
         return use_same_endpoint_copy, auto_grant_source_read_for_copy
 
-    def create_migration(self, payload: BucketMigrationCreateRequest, user: User) -> BucketMigration:
+    def _resolve_draft_configuration(
+        self,
+        payload: BucketMigrationCreateRequest,
+    ) -> _DraftMigrationConfiguration:
         mappings = self._build_bucket_mappings(payload)
         self._assert_context_authorized_for_mutation(payload.source_context_id)
         self._assert_context_authorized_for_mutation(payload.target_context_id)
@@ -87,14 +100,12 @@ class BucketMigrationPlanningMixin:
         if not target_ctx.endpoint:
             raise ValueError("Target context endpoint is not configured")
         same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
-        if same_endpoint:
-            for source_bucket, target_bucket in mappings:
-                if source_bucket == target_bucket:
-                    raise ValueError(
-                        "When source and target contexts use the same endpoint, "
-                        "target bucket must differ from source bucket. "
-                        "Use a prefix or explicit mapping override."
-                    )
+        if same_endpoint and any(source == target for source, target in mappings):
+            raise ValueError(
+                "When source and target contexts use the same endpoint, "
+                "target bucket must differ from source bucket. "
+                "Use a prefix or explicit mapping override."
+            )
         use_same_endpoint_copy, auto_grant_source_read_for_copy = self._resolve_same_endpoint_copy_options(
             payload,
             same_endpoint=same_endpoint,
@@ -106,7 +117,118 @@ class BucketMigrationPlanningMixin:
             if payload.parallelism_max is not None
             else int(limits.parallelism_default)
         )
-        parallelism = max(1, min(requested_parallelism, int(limits.parallelism_max)))
+        return _DraftMigrationConfiguration(
+            mappings=mappings,
+            webhook_url=webhook_url,
+            use_same_endpoint_copy=use_same_endpoint_copy,
+            auto_grant_source_read_for_copy=auto_grant_source_read_for_copy,
+            parallelism=max(1, min(requested_parallelism, int(limits.parallelism_max))),
+        )
+
+    @staticmethod
+    def _configuration_event_metadata(
+        payload: BucketMigrationCreateRequest,
+        configuration: _DraftMigrationConfiguration,
+    ) -> dict[str, object]:
+        return {
+            "source_context_id": payload.source_context_id,
+            "target_context_id": payload.target_context_id,
+            "mode": payload.mode,
+            "copy_bucket_settings": bool(payload.copy_bucket_settings),
+            "delete_source": bool(payload.delete_source),
+            "strong_integrity_check": bool(payload.strong_integrity_check),
+            "lock_target_writes": bool(payload.lock_target_writes),
+            "use_same_endpoint_copy": configuration.use_same_endpoint_copy,
+            "auto_grant_source_read_for_copy": configuration.auto_grant_source_read_for_copy,
+            "webhook_enabled": bool(configuration.webhook_url),
+            "parallelism_max": configuration.parallelism,
+            "items": len(configuration.mappings),
+        }
+
+    @staticmethod
+    def _build_draft_item(
+        migration_id: int,
+        source_bucket: str,
+        target_bucket: str,
+        *,
+        timestamp: datetime,
+    ) -> BucketMigrationItem:
+        return BucketMigrationItem(
+            migration_id=migration_id,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            status="pending",
+            step="create_bucket",
+            source_snapshot_json=None,
+            target_snapshot_json=None,
+            execution_plan_json=None,
+            replication_state_json=None,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+
+    @staticmethod
+    def _reset_draft_item(
+        item: BucketMigrationItem,
+        target_bucket: str,
+        *,
+        timestamp: datetime,
+    ) -> None:
+        item.target_bucket = target_bucket
+        item.status = "pending"
+        item.step = "create_bucket"
+        item.pre_sync_done = False
+        item.read_only_applied = False
+        item.target_lock_applied = False
+        item.target_bucket_exists = False
+        item.objects_copied = 0
+        item.objects_deleted = 0
+        item.source_count = None
+        item.target_count = None
+        item.matched_count = None
+        item.different_count = None
+        item.only_source_count = None
+        item.only_target_count = None
+        item.diff_sample_json = None
+        item.source_snapshot_json = None
+        item.target_snapshot_json = None
+        item.execution_plan_json = None
+        item.replication_state_json = None
+        item.source_policy_backup_json = None
+        item.target_policy_backup_json = None
+        item.error_message = None
+        item.started_at = None
+        item.finished_at = None
+        item.updated_at = timestamp
+
+    def _synchronize_draft_items(
+        self,
+        migration: BucketMigration,
+        mappings: list[tuple[str, str]],
+    ) -> None:
+        item_by_source = {item.source_bucket: item for item in migration.items}
+        mapping_by_source = dict(mappings)
+        for source_bucket, item in item_by_source.items():
+            if source_bucket not in mapping_by_source:
+                self.db.delete(item)
+
+        timestamp = utcnow()
+        for source_bucket, target_bucket in mappings:
+            item = item_by_source.get(source_bucket)
+            if item is None:
+                self.db.add(
+                    self._build_draft_item(
+                        migration.id,
+                        source_bucket,
+                        target_bucket,
+                        timestamp=timestamp,
+                    )
+                )
+            else:
+                self._reset_draft_item(item, target_bucket, timestamp=timestamp)
+
+    def create_migration(self, payload: BucketMigrationCreateRequest, user: User) -> BucketMigration:
+        configuration = self._resolve_draft_configuration(payload)
 
         migration = BucketMigration(
             created_by_user_id=user.id,
@@ -117,16 +239,16 @@ class BucketMigrationPlanningMixin:
             delete_source=bool(payload.delete_source),
             strong_integrity_check=bool(payload.strong_integrity_check),
             lock_target_writes=bool(payload.lock_target_writes),
-            use_same_endpoint_copy=use_same_endpoint_copy,
-            auto_grant_source_read_for_copy=auto_grant_source_read_for_copy,
-            webhook_url=webhook_url,
+            use_same_endpoint_copy=configuration.use_same_endpoint_copy,
+            auto_grant_source_read_for_copy=configuration.auto_grant_source_read_for_copy,
+            webhook_url=configuration.webhook_url,
             mapping_prefix=payload.mapping_prefix or None,
             status="draft",
             precheck_status="pending",
             precheck_report_json=None,
             precheck_checked_at=None,
-            parallelism_max=parallelism,
-            total_items=len(mappings),
+            parallelism_max=configuration.parallelism,
+            total_items=len(configuration.mappings),
             completed_items=0,
             failed_items=0,
             skipped_items=0,
@@ -137,20 +259,13 @@ class BucketMigrationPlanningMixin:
         self.db.add(migration)
         self.db.flush()
 
-        for source_bucket, target_bucket in mappings:
+        for source_bucket, target_bucket in configuration.mappings:
             self.db.add(
-                BucketMigrationItem(
-                    migration_id=migration.id,
-                    source_bucket=source_bucket,
-                    target_bucket=target_bucket,
-                    status="pending",
-                    step="create_bucket",
-                    source_snapshot_json=None,
-                    target_snapshot_json=None,
-                    execution_plan_json=None,
-                    replication_state_json=None,
-                    created_at=utcnow(),
-                    updated_at=utcnow(),
+                self._build_draft_item(
+                    migration.id,
+                    source_bucket,
+                    target_bucket,
+                    timestamp=utcnow(),
                 )
             )
 
@@ -158,20 +273,7 @@ class BucketMigrationPlanningMixin:
             migration,
             level="info",
             message="Migration created.",
-            metadata={
-                "source_context_id": payload.source_context_id,
-                "target_context_id": payload.target_context_id,
-                "mode": payload.mode,
-                "copy_bucket_settings": bool(payload.copy_bucket_settings),
-                "delete_source": bool(payload.delete_source),
-                "strong_integrity_check": bool(payload.strong_integrity_check),
-                "lock_target_writes": bool(payload.lock_target_writes),
-                "use_same_endpoint_copy": use_same_endpoint_copy,
-                "auto_grant_source_read_for_copy": auto_grant_source_read_for_copy,
-                "webhook_enabled": bool(payload.webhook_url),
-                "parallelism_max": parallelism,
-                "items": len(mappings),
-            },
+            metadata=self._configuration_event_metadata(payload, configuration),
         )
         self._commit()
         self.db.refresh(migration)
@@ -182,42 +284,7 @@ class BucketMigrationPlanningMixin:
         if migration.status != "draft":
             raise ValueError("Only draft migrations can be updated")
 
-        mappings = self._build_bucket_mappings(payload)
-        self._assert_context_authorized_for_mutation(payload.source_context_id)
-        self._assert_context_authorized_for_mutation(payload.target_context_id)
-        self._assert_cross_account_admin_contexts(payload.source_context_id, payload.target_context_id)
-
-        webhook_url = (payload.webhook_url or "").strip() or None
-        if webhook_url:
-            self._validate_configured_webhook_url(webhook_url)
-
-        source_ctx = self._resolve_context(payload.source_context_id)
-        target_ctx = self._resolve_context(payload.target_context_id)
-        if not source_ctx.endpoint:
-            raise ValueError("Source context endpoint is not configured")
-        if not target_ctx.endpoint:
-            raise ValueError("Target context endpoint is not configured")
-        same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
-        if same_endpoint:
-            for source_bucket, target_bucket in mappings:
-                if source_bucket == target_bucket:
-                    raise ValueError(
-                        "When source and target contexts use the same endpoint, "
-                        "target bucket must differ from source bucket. "
-                        "Use a prefix or explicit mapping override."
-                    )
-        use_same_endpoint_copy, auto_grant_source_read_for_copy = self._resolve_same_endpoint_copy_options(
-            payload,
-            same_endpoint=same_endpoint,
-        )
-
-        limits = self._load_runtime_limits()
-        requested_parallelism = (
-            int(payload.parallelism_max)
-            if payload.parallelism_max is not None
-            else int(limits.parallelism_default)
-        )
-        parallelism = max(1, min(requested_parallelism, int(limits.parallelism_max)))
+        configuration = self._resolve_draft_configuration(payload)
 
         migration.source_context_id = payload.source_context_id
         migration.target_context_id = payload.target_context_id
@@ -226,11 +293,11 @@ class BucketMigrationPlanningMixin:
         migration.delete_source = bool(payload.delete_source)
         migration.strong_integrity_check = bool(payload.strong_integrity_check)
         migration.lock_target_writes = bool(payload.lock_target_writes)
-        migration.use_same_endpoint_copy = use_same_endpoint_copy
-        migration.auto_grant_source_read_for_copy = auto_grant_source_read_for_copy
-        migration.webhook_url = webhook_url
+        migration.use_same_endpoint_copy = configuration.use_same_endpoint_copy
+        migration.auto_grant_source_read_for_copy = configuration.auto_grant_source_read_for_copy
+        migration.webhook_url = configuration.webhook_url
         migration.mapping_prefix = payload.mapping_prefix or None
-        migration.parallelism_max = parallelism
+        migration.parallelism_max = configuration.parallelism
         migration.status = "draft"
         migration.pause_requested = False
         migration.cancel_requested = False
@@ -245,60 +312,7 @@ class BucketMigrationPlanningMixin:
         migration.last_heartbeat_at = None
         migration.updated_at = utcnow()
 
-        item_by_source = {item.source_bucket: item for item in migration.items}
-        mapping_by_source = {source_bucket: target_bucket for source_bucket, target_bucket in mappings}
-
-        for source_bucket in list(item_by_source.keys()):
-            if source_bucket not in mapping_by_source:
-                self.db.delete(item_by_source[source_bucket])
-
-        now = utcnow()
-        for source_bucket, target_bucket in mappings:
-            item = item_by_source.get(source_bucket)
-            if item is None:
-                self.db.add(
-                    BucketMigrationItem(
-                        migration_id=migration.id,
-                        source_bucket=source_bucket,
-                        target_bucket=target_bucket,
-                        status="pending",
-                        step="create_bucket",
-                        source_snapshot_json=None,
-                        target_snapshot_json=None,
-                        execution_plan_json=None,
-                        replication_state_json=None,
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
-                continue
-
-            item.target_bucket = target_bucket
-            item.status = "pending"
-            item.step = "create_bucket"
-            item.pre_sync_done = False
-            item.read_only_applied = False
-            item.target_lock_applied = False
-            item.target_bucket_exists = False
-            item.objects_copied = 0
-            item.objects_deleted = 0
-            item.source_count = None
-            item.target_count = None
-            item.matched_count = None
-            item.different_count = None
-            item.only_source_count = None
-            item.only_target_count = None
-            item.diff_sample_json = None
-            item.source_snapshot_json = None
-            item.target_snapshot_json = None
-            item.execution_plan_json = None
-            item.replication_state_json = None
-            item.source_policy_backup_json = None
-            item.target_policy_backup_json = None
-            item.error_message = None
-            item.started_at = None
-            item.finished_at = None
-            item.updated_at = now
+        self._synchronize_draft_items(migration, configuration.mappings)
 
         self.db.flush()
         self.db.refresh(migration)
@@ -309,20 +323,7 @@ class BucketMigrationPlanningMixin:
             migration,
             level="info",
             message="Migration configuration updated.",
-            metadata={
-                "source_context_id": payload.source_context_id,
-                "target_context_id": payload.target_context_id,
-                "mode": payload.mode,
-                "copy_bucket_settings": bool(payload.copy_bucket_settings),
-                "delete_source": bool(payload.delete_source),
-                "strong_integrity_check": bool(payload.strong_integrity_check),
-                "lock_target_writes": bool(payload.lock_target_writes),
-                "use_same_endpoint_copy": use_same_endpoint_copy,
-                "auto_grant_source_read_for_copy": auto_grant_source_read_for_copy,
-                "webhook_enabled": bool(payload.webhook_url),
-                "parallelism_max": parallelism,
-                "items": len(mappings),
-            },
+            metadata=self._configuration_event_metadata(payload, configuration),
         )
         self._commit()
         self.db.refresh(migration)
