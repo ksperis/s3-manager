@@ -27,8 +27,8 @@ from app.utils.tagging import (
 )
 
 
-BucketUiTagDomain = Literal["bucket_ui_ceph_admin", "bucket_ui_storage_ops"]
-ASSIGNMENT_TARGET_BATCH_SIZE = 200
+_BucketUiTagDomain = Literal["bucket_ui_ceph_admin", "bucket_ui_storage_ops"]
+_ASSIGNMENT_TARGET_BATCH_SIZE = 200
 
 
 @dataclass(frozen=True, order=True)
@@ -70,7 +70,7 @@ class BucketUiTagsService:
         self.db.rollback()
 
     @staticmethod
-    def _validate_domain(domain_kind: str) -> BucketUiTagDomain:
+    def _validate_domain(domain_kind: str) -> _BucketUiTagDomain:
         if domain_kind not in {
             TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
             TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
@@ -91,7 +91,7 @@ class BucketUiTagsService:
     def _visible_definition_query(
         self,
         *,
-        domain_kind: BucketUiTagDomain,
+        domain_kind: _BucketUiTagDomain,
         actor_user_id: int,
     ):
         query = self.db.query(TagDefinition).filter(TagDefinition.domain_kind == domain_kind)
@@ -107,7 +107,7 @@ class BucketUiTagsService:
     def _visible_assignment_query(
         self,
         *,
-        domain_kind: BucketUiTagDomain,
+        domain_kind: _BucketUiTagDomain,
         actor_user_id: int,
     ):
         query = self.db.query(BucketUiTagAssignment, TagDefinition).join(
@@ -127,8 +127,8 @@ class BucketUiTagsService:
     def _target_batches(
         targets: Sequence[PhysicalBucketTarget],
     ) -> Iterable[list[PhysicalBucketTarget]]:
-        for start in range(0, len(targets), ASSIGNMENT_TARGET_BATCH_SIZE):
-            yield list(targets[start : start + ASSIGNMENT_TARGET_BATCH_SIZE])
+        for start in range(0, len(targets), _ASSIGNMENT_TARGET_BATCH_SIZE):
+            yield list(targets[start : start + _ASSIGNMENT_TARGET_BATCH_SIZE])
 
     @staticmethod
     def _target_filter(batch: Sequence[PhysicalBucketTarget]):
@@ -166,7 +166,7 @@ class BucketUiTagsService:
             definitions=[self._to_definition(row) for row in definitions]
         )
 
-    def visible_assignments(
+    def _visible_assignments(
         self,
         *,
         domain_kind: str,
@@ -216,7 +216,7 @@ class BucketUiTagsService:
         endpoint_id: int | None = None,
         allowed_scopes: set[tuple[int, str]] | None = None,
     ) -> BucketUiTagOrphansResponse:
-        assignments = self.visible_assignments(
+        assignments = self._visible_assignments(
             domain_kind=domain_kind,
             actor_user_id=actor_user_id,
             endpoint_id=endpoint_id,
@@ -258,7 +258,7 @@ class BucketUiTagsService:
     def _resolve_visible_ids(
         self,
         *,
-        domain_kind: BucketUiTagDomain,
+        domain_kind: _BucketUiTagDomain,
         actor_user_id: int,
         tag_ids: Iterable[int],
     ) -> list[TagDefinition]:
@@ -277,7 +277,7 @@ class BucketUiTagsService:
     def _resolve_created_definitions(
         self,
         *,
-        domain_kind: BucketUiTagDomain,
+        domain_kind: _BucketUiTagDomain,
         actor_user_id: int,
         create_tags: Sequence[tuple[str, str, BucketUiTagVisibility]],
     ) -> list[TagDefinition]:
@@ -300,7 +300,7 @@ class BucketUiTagsService:
     def _resolve_mutation_plan(
         self,
         *,
-        domain_kind: BucketUiTagDomain,
+        domain_kind: _BucketUiTagDomain,
         actor_user_id: int,
         add_tag_ids: Sequence[int],
         create_tags: Sequence[tuple[str, str, BucketUiTagVisibility]],
@@ -381,7 +381,7 @@ class BucketUiTagsService:
     ) -> None:
         domain = self._validate_domain(domain_kind)
         unique_targets = list(dict.fromkeys(targets))
-        if not unique_targets or len(unique_targets) > ASSIGNMENT_TARGET_BATCH_SIZE:
+        if not unique_targets or len(unique_targets) > _ASSIGNMENT_TARGET_BATCH_SIZE:
             raise ValueError("A bucket UI tag mutation requires 1 to 200 targets.")
         plan = self._resolve_mutation_plan(
             domain_kind=domain,

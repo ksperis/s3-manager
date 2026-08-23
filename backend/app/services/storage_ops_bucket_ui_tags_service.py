@@ -165,21 +165,6 @@ class StorageOpsBucketUiTagsWorkflow:
             targets.append(target)
         return targets
 
-    def allowed_scopes(self) -> set[tuple[int, str]]:
-        scopes: set[tuple[int, str]] = set()
-        for ref in self.refs_by_id.values():
-            account = self._account_for_ref(ref)
-            endpoint_id = (
-                int(getattr(account, "storage_endpoint_id", 0) or 0)
-                if account is not None
-                else 0
-            )
-            if account is not None and endpoint_id > 0:
-                scopes.add(
-                    (endpoint_id, resolve_storage_ops_context_tenant(account))
-                )
-        return scopes
-
     def catalog(self) -> BucketUiTagCatalogResponse:
         return self.tags.catalog(
             domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
