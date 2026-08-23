@@ -23,15 +23,17 @@ def normalize_text(value: object) -> str:
     return str(value or "").strip().lower()
 
 
-def normalize_storage_provider(provider: Optional[object]) -> StorageProvider:
-    if provider is None:
-        return StorageProvider.CEPH
+def normalize_storage_provider(provider: object) -> StorageProvider:
     if isinstance(provider, StorageProvider):
         return provider
+    if not isinstance(provider, str):
+        raise ValueError("Storage provider must be 'ceph', 'aws', or 'other'.")
     try:
         return StorageProvider(str(provider).strip().lower())
-    except Exception:
-        return StorageProvider.CEPH
+    except ValueError as exc:
+        raise ValueError(
+            f"Unsupported storage provider: {provider!r}."
+        ) from exc
 
 
 def normalize_string_list(values: Optional[list[str]]) -> list[str]:

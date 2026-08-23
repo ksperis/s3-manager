@@ -3,7 +3,16 @@
 from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    Float,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from app.core.security import EncryptedString
 from .base import Base
@@ -15,6 +24,10 @@ class StorageEndpoint(Base):
     __table_args__ = (
         UniqueConstraint("name", name="uq_storage_endpoints_name"),
         UniqueConstraint("endpoint_url", name="uq_storage_endpoints_endpoint"),
+        CheckConstraint(
+            "provider IN ('ceph', 'aws', 'other')",
+            name="ck_storage_endpoints_provider",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)

@@ -56,6 +56,15 @@ those values before deploying. Invalid active values with the wrong type stop
 the migration explicitly. The downgrade keeps the canonical YAML because
 discarded inert keys and aliases cannot be reconstructed.
 
+## 2026-08 canonical Storage Endpoint providers
+
+Migration `0116_canonical_storage_endpoint_providers` trims and lowercases the
+persisted provider values `ceph`, `aws`, and `other`, converts every missing or
+unsupported historical value to the previously effective `ceph` default, and
+adds a database constraint. New invalid values now fail validation instead of
+being interpreted silently as Ceph. The downgrade removes the constraint but
+keeps the canonicalized values.
+
 ## 2026-08 Clipboard API requirement
 
 Frontend copy actions now rely exclusively on the browser Clipboard API. The

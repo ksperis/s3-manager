@@ -169,7 +169,7 @@ def parse_features_config(raw: Optional[str]) -> dict[str, Any]:
 
 
 def normalize_features_config(
-    provider: Optional[object],
+    provider: object,
     raw: Optional[str],
     region: Optional[object] = None,
 ) -> dict[str, dict[str, Any]]:
