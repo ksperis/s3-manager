@@ -18,6 +18,7 @@ import {
 import { extractApiError } from "../../utils/apiError";
 import { formatLocalDateTime, toIsoString } from "./browserUtils";
 import { normalizeObjectDetailPairs } from "./browserObjectDetailsModel";
+import { runBrowserScopedSave } from "./browserScopedSave";
 import type { BrowserItem } from "./browserTypes";
 
 type MetadataDraft = {
@@ -162,26 +163,6 @@ export function useBrowserObjectProperties({
     [scope],
   );
 
-  const runSave = useCallback(
-    async <T>(
-      setSaving: (value: boolean) => void,
-      operation: () => Promise<T>,
-    ): Promise<T | null> => {
-      if (!isCurrentScope()) return null;
-      setSaving(true);
-      try {
-        const result = await operation();
-        return isCurrentScope() ? result : null;
-      } catch (saveError) {
-        if (!isCurrentScope()) return null;
-        throw saveError;
-      } finally {
-        if (isCurrentScope()) setSaving(false);
-      }
-    },
-    [isCurrentScope],
-  );
-
   const load = useCallback(
     async (force = false) => {
       if (scope !== scopeRef.current) return;
@@ -255,7 +236,7 @@ export function useBrowserObjectProperties({
       return false;
     }
     return (
-      (await runSave(setSavingMetadata, async () => {
+      (await runBrowserScopedSave(isCurrentScope, setSavingMetadata, async () => {
         const payload: ObjectMetadataUpdate = {
           key: item.key,
           version_id: metadata?.version_id ?? tagsVersionId ?? null,
@@ -288,7 +269,6 @@ export function useBrowserObjectProperties({
     metadataDraft,
     metadataItems,
     requestOptions,
-    runSave,
     tagsVersionId,
   ]);
 
@@ -297,7 +277,7 @@ export function useBrowserObjectProperties({
       return false;
     }
     return (
-      (await runSave(setSavingTags, async () => {
+      (await runBrowserScopedSave(isCurrentScope, setSavingTags, async () => {
         await updateObjectTags(
           accountId,
           bucketName,
@@ -323,7 +303,6 @@ export function useBrowserObjectProperties({
     load,
     metadata?.version_id,
     requestOptions,
-    runSave,
     tagsDraft,
     tagsVersionId,
   ]);
@@ -338,7 +317,7 @@ export function useBrowserObjectProperties({
     ) {
       return null;
     }
-    return runSave(setSavingStorageClass, async () => {
+    return runBrowserScopedSave(isCurrentScope, setSavingStorageClass, async () => {
       await updateObjectMetadata(
         accountId,
         bucketName,
@@ -361,7 +340,6 @@ export function useBrowserObjectProperties({
     load,
     metadata?.version_id,
     requestOptions,
-    runSave,
     storageClass,
     tagsVersionId,
   ]);

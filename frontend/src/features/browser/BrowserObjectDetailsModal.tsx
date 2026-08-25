@@ -15,12 +15,8 @@ import {
   proxyDownload,
   restoreObject,
   updateObjectAcl,
-  updateObjectLegalHold,
-  updateObjectRetention,
   type BrowserObjectVersion,
   type BrowserRequestOptions,
-  type ObjectLegalHold,
-  type ObjectRetention,
   type ObjectRestoreRequest,
   type PresignedUrl,
   type PresignRequest,
@@ -37,7 +33,6 @@ import {
 } from "./browserConstants";
 import {
   formatLocalDateTime,
-  toIsoString,
 } from "./browserUtils";
 import {
   ARCHIVE_STORAGE_CLASSES,
@@ -132,8 +127,6 @@ export default function BrowserObjectDetailsModal({
   const [presignError, setPresignError] = useState<string | null>(null);
 
   const [savingAcl, setSavingAcl] = useState(false);
-  const [savingLegalHold, setSavingLegalHold] = useState(false);
-  const [savingRetention, setSavingRetention] = useState(false);
   const [savingRestore, setSavingRestore] = useState(false);
   const [savingPresign, setSavingPresign] = useState(false);
   const [savingVersionAction, setSavingVersionAction] = useState(false);
@@ -202,7 +195,11 @@ export default function BrowserObjectDetailsModal({
     retentionError,
     objectLockUnavailable,
     loading: protectionLoading,
-    load: loadProtection,
+    savingLegalHold,
+    savingRetention,
+    isCurrentScope: isProtectionScopeCurrent,
+    saveLegalHold,
+    saveRetention,
   } = useBrowserObjectProtection({
     accountId,
     bucketName,
@@ -438,55 +435,33 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleSaveLegalHold = async () => {
-    if (!bucketName || !itemSnapshot.key) return;
-    setSavingLegalHold(true);
     setActionMessage(null);
     try {
-      await updateObjectLegalHold(accountId, bucketName, {
-        key: itemSnapshot.key,
-        status: legalHoldStatus,
-        version_id: versionId ?? null,
-      } satisfies ObjectLegalHold, undefined, requestOptions);
-      await loadProtection(true);
+      if (!(await saveLegalHold()) || !isProtectionScopeCurrent()) return;
       pushStatus("Legal hold updated.", "success");
     } catch (err) {
       pushStatus(
         extractApiError(err, "Unable to update legal hold."),
         "error",
       );
-    } finally {
-      setSavingLegalHold(false);
     }
   };
 
   const handleSaveRetention = async () => {
-    if (!bucketName || !itemSnapshot.key || !retentionMode || !retentionDate) {
-      return;
-    }
-    const retainUntil = toIsoString(retentionDate);
-    if (!retainUntil) {
-      pushStatus("Retention date is invalid.", "error");
-      return;
-    }
-    setSavingRetention(true);
     setActionMessage(null);
     try {
-      await updateObjectRetention(accountId, bucketName, {
-        key: itemSnapshot.key,
-        mode: retentionMode,
-        retain_until: retainUntil,
-        bypass_governance: retentionBypass,
-        version_id: versionId ?? null,
-      } satisfies ObjectRetention, undefined, requestOptions);
-      await loadProtection(true);
+      const result = await saveRetention();
+      if (result === "invalid") {
+        pushStatus("Retention date is invalid.", "error");
+        return;
+      }
+      if (result !== "saved" || !isProtectionScopeCurrent()) return;
       pushStatus("Retention updated.", "success");
     } catch (err) {
       pushStatus(
         extractApiError(err, "Unable to update retention."),
         "error",
       );
-    } finally {
-      setSavingRetention(false);
     }
   };
 

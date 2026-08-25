@@ -7,13 +7,19 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   getObjectLegalHold,
   getObjectRetention,
+  updateObjectLegalHold,
+  updateObjectRetention,
   type BrowserRequestOptions,
+  type ObjectLegalHold,
+  type ObjectRetention,
 } from "../../api/browser";
 import { extractApiError } from "../../utils/apiError";
-import { formatLocalDateTime } from "./browserUtils";
+import { formatLocalDateTime, toIsoString } from "./browserUtils";
 import { isObjectLockUnavailableMessage } from "./browserObjectDetailsModel";
+import { runBrowserScopedSave } from "./browserScopedSave";
 
 export type ObjectRetentionMode = "" | "GOVERNANCE" | "COMPLIANCE";
+type SaveObjectRetentionResult = "saved" | "invalid" | "skipped";
 
 type UseBrowserObjectProtectionOptions = {
   accountId: S3AccountSelector;
@@ -47,6 +53,8 @@ export function useBrowserObjectProtection({
   const [retentionError, setRetentionError] = useState<string | null>(null);
   const [objectLockUnavailable, setObjectLockUnavailable] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [savingLegalHold, setSavingLegalHold] = useState(false);
+  const [savingRetention, setSavingRetention] = useState(false);
   const legalHoldLoadedRef = useRef(false);
   const retentionLoadedRef = useRef(false);
   const loadingRef = useRef(false);
@@ -67,7 +75,14 @@ export function useBrowserObjectProtection({
     setRetentionError(null);
     setObjectLockUnavailable(false);
     setLoading(false);
+    setSavingLegalHold(false);
+    setSavingRetention(false);
   }, []);
+
+  const isCurrentScope = useCallback(
+    () => scope === scopeRef.current,
+    [scope],
+  );
 
   const load = useCallback(
     async (force = false) => {
@@ -168,6 +183,100 @@ export function useBrowserObjectProtection({
     [accountId, bucketName, objectKey, requestOptions, scope, versionId],
   );
 
+  const saveLegalHold = useCallback(async () => {
+    if (
+      !isCurrentScope() ||
+      !accountId ||
+      !bucketName ||
+      !objectKey ||
+      objectLockUnavailable
+    ) {
+      return false;
+    }
+    return (
+      (await runBrowserScopedSave(isCurrentScope, setSavingLegalHold, async () => {
+        await updateObjectLegalHold(
+          accountId,
+          bucketName,
+          {
+            key: objectKey,
+            status: legalHoldStatus,
+            version_id: versionId ?? null,
+          } satisfies ObjectLegalHold,
+          undefined,
+          requestOptions,
+        );
+        await load(true);
+        return true;
+      })) ?? false
+    );
+  }, [
+    accountId,
+    bucketName,
+    isCurrentScope,
+    legalHoldStatus,
+    load,
+    objectKey,
+    objectLockUnavailable,
+    requestOptions,
+    versionId,
+  ]);
+
+  const saveRetention = useCallback(
+    async (): Promise<SaveObjectRetentionResult> => {
+      if (
+        !isCurrentScope() ||
+        !accountId ||
+        !bucketName ||
+        !objectKey ||
+        !retentionMode ||
+        !retentionDate ||
+        objectLockUnavailable
+      ) {
+        return "skipped";
+      }
+      const retainUntil = toIsoString(retentionDate);
+      if (!retainUntil) return "invalid";
+
+      return (
+        (await runBrowserScopedSave(
+          isCurrentScope,
+          setSavingRetention,
+          async () => {
+            await updateObjectRetention(
+              accountId,
+              bucketName,
+              {
+                key: objectKey,
+                mode: retentionMode,
+                retain_until: retainUntil,
+                bypass_governance: retentionBypass,
+                version_id: versionId ?? null,
+              } satisfies ObjectRetention,
+              undefined,
+              requestOptions,
+            );
+            await load(true);
+            return "saved" as const;
+          },
+        )) ?? "skipped"
+      );
+    },
+    [
+      accountId,
+      bucketName,
+      isCurrentScope,
+      load,
+      objectKey,
+      objectLockUnavailable,
+      requestOptions,
+      retentionBypass,
+      retentionDate,
+      retentionMode,
+      versionId,
+    ],
+  );
+
   useEffect(() => reset(), [reset, scope]);
 
   useEffect(() => {
@@ -187,6 +296,11 @@ export function useBrowserObjectProtection({
     retentionError,
     objectLockUnavailable,
     loading,
+    savingLegalHold,
+    savingRetention,
     load,
+    isCurrentScope,
+    saveLegalHold,
+    saveRetention,
   };
 }
