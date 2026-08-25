@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SESSION_USER_UPDATED_EVENT } from "../../utils/workspaces";
+import { setSessionUserCache } from "../../utils/workspaces";
 import Topbar from "../Topbar";
 
 const notificationApiMock = vi.hoisted(() => ({
@@ -38,17 +38,15 @@ describe("Topbar account menu", () => {
     notificationApiMock.fetchUserNotifications.mockResolvedValue({ items: [], unread_count: 0 });
     notificationApiMock.markUserNotificationsRead.mockReset();
     notificationApiMock.markUserNotificationsRead.mockResolvedValue({ updated_count: 0, unread_count: 0 });
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_admin",
-        authType: "password",
-        can_create_manual_private_connections: true,
-      })
-    );
+    setSessionUserCache({
+      role: "ui_admin",
+      authType: "password",
+      can_create_manual_private_connections: true,
+    });
   });
 
   afterEach(() => {
+    act(() => setSessionUserCache(null));
     window.localStorage.clear();
   });
 
@@ -80,20 +78,17 @@ describe("Topbar account menu", () => {
 
   it("uses the stored profile avatar in the trigger and account menu", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_admin",
-        authType: "password",
-        full_name: "Admin User",
-        avatar: {
-          preference: "initials",
-          source: "initials",
-          url: null,
-          initials: "AU",
-        },
-      }),
-    );
+    setSessionUserCache({
+      role: "ui_admin",
+      authType: "password",
+      full_name: "Admin User",
+      avatar: {
+        preference: "initials",
+        source: "initials",
+        url: null,
+        initials: "AU",
+      },
+    });
 
     render(<Topbar userEmail="admin@example.com" />);
 
@@ -109,9 +104,7 @@ describe("Topbar account menu", () => {
     render(<Topbar userEmail="admin@example.com" />);
     const trigger = resolveAccountTrigger();
 
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
+    act(() => setSessionUserCache({
         role: "ui_admin",
         authType: "password",
         full_name: "New User",
@@ -121,11 +114,7 @@ describe("Topbar account menu", () => {
           url: null,
           initials: "NU",
         },
-      }),
-    );
-    act(() => {
-      window.dispatchEvent(new Event(SESSION_USER_UPDATED_EVENT));
-    });
+    }));
 
     await waitFor(() => {
       expect(within(trigger).getByTitle("New User")).toHaveTextContent("NU");
@@ -155,13 +144,7 @@ describe("Topbar account menu", () => {
     expect(screen.queryByRole("menuitem", { name: /api tokens/i })).not.toBeInTheDocument();
     adminRender.unmount();
 
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_superadmin",
-        authType: "password",
-      })
-    );
+    setSessionUserCache({ role: "ui_superadmin", authType: "password" });
 
     render(<Topbar userEmail="superadmin@example.com" />);
     await user.click(resolveAccountTrigger());
@@ -170,13 +153,7 @@ describe("Topbar account menu", () => {
 
   it("links API tokens to the shared profile page", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_superadmin",
-        authType: "password",
-      })
-    );
+    setSessionUserCache({ role: "ui_superadmin", authType: "password" });
 
     render(<Topbar userEmail="superadmin@example.com" />);
     await user.click(resolveAccountTrigger());

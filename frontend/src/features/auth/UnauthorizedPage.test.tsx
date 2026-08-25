@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ThemeProvider } from "../../components/theme";
 import UnauthorizedPage from "./UnauthorizedPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 function renderPage(theme?: "light" | "dark") {
   if (theme) {
@@ -21,6 +22,7 @@ function renderPage(theme?: "light" | "dark") {
 describe("UnauthorizedPage", () => {
   beforeEach(() => {
     document.documentElement.className = "";
+    setSessionUserCache(null);
     window.localStorage.clear();
   });
 
@@ -30,13 +32,7 @@ describe("UnauthorizedPage", () => {
   });
 
   it("uses the active light theme and keeps the workspace action", () => {
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        email: "admin@example.com",
-        role: "ui_admin",
-      })
-    );
+    setSessionUserCache({ email: "admin@example.com", role: "ui_admin" });
 
     const { container } = renderPage("light");
 

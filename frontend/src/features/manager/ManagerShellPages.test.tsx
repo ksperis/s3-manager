@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import BucketsPage from "./BucketsPage";
 import ManagerBrowserPage from "./ManagerBrowserPage";
 import ManagerDashboard from "./ManagerDashboard";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const useS3AccountContextMock = vi.fn();
 const useManagerStatsMock = vi.fn();
@@ -182,18 +183,15 @@ function trendText(value: string) {
 }
 
 function setManagerUser() {
-  window.localStorage.setItem(
-    "user",
-    JSON.stringify({
-      role: "ui_user",
-      manager_tool_access: {
-        bucket_compare: false,
-        bucket_integrity_check: false,
-        bucket_migration: false,
-        feature_rules: false,
-      },
-    })
-  );
+  setSessionUserCache({
+    role: "ui_user",
+    manager_tool_access: {
+      bucket_compare: false,
+      bucket_integrity_check: false,
+      bucket_migration: false,
+      feature_rules: false,
+    },
+  });
 }
 
 function setSelectedManagerAccountContext() {
@@ -259,6 +257,7 @@ function expectMetricValue(label: string, value: string) {
 describe("manager shell pages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSessionUserCache(null);
     useS3AccountContextMock.mockReturnValue({
       accounts: [],
       selectedS3AccountId: null,
@@ -1381,13 +1380,10 @@ describe("manager shell pages", () => {
 
   it("opens the delete-with-purge page for a non-empty bucket when purge access is enabled", async () => {
     bucketPurgeEnabled = true;
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_user",
-        manager_tool_access: { bucket_purge: true },
-      })
-    );
+    setSessionUserCache({
+      role: "ui_user",
+      manager_tool_access: { bucket_purge: true },
+    });
     listBucketsMock.mockResolvedValue([
       {
         name: "bucket-a",
@@ -1492,13 +1488,10 @@ describe("manager shell pages", () => {
 
   it("allows manager delete-with-purge when the visible object count exceeds 10000", async () => {
     bucketPurgeEnabled = true;
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_user",
-        manager_tool_access: { bucket_purge: true },
-      })
-    );
+    setSessionUserCache({
+      role: "ui_user",
+      manager_tool_access: { bucket_purge: true },
+    });
     listBucketsMock.mockResolvedValue([
       {
         name: "bucket-huge",

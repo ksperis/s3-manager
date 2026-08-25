@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const createCephAdminUserMock = vi.fn();
 const listCephAdminAccountsMock = vi.fn();
@@ -18,13 +19,10 @@ vi.mock("../../api/cephAdmin", async () => {
 describe("CephAdminUserCreateModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_superadmin",
-        effective_access: { can_create_manual_private_connections: true },
-      })
-    );
+    setSessionUserCache({
+      role: "ui_superadmin",
+      effective_access: { can_create_manual_private_connections: true },
+    });
     listCephAdminAccountsMock.mockResolvedValue({
       items: [
         {
@@ -139,13 +137,10 @@ describe("CephAdminUserCreateModal", () => {
   });
 
   it("hides Add as S3 Connection without manual creation permission", async () => {
-    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_superadmin",
-        effective_access: { can_create_manual_private_connections: false },
-      })
-    );
+    setSessionUserCache({
+      role: "ui_superadmin",
+      effective_access: { can_create_manual_private_connections: false },
+    });
     createCephAdminUserMock.mockResolvedValue({
       detail: { uid: "carol", display_name: "Carol Ops", caps: [], keys: [] },
       generated_key: { access_key: "AKIA-CEPH-CAROL", secret_key: "SECRET-CEPH-CAROL" },

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import S3ConnectionsPage from "./S3ConnectionsPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const listAdminS3ConnectionsMock = vi.fn();
 const createAdminS3ConnectionMock = vi.fn();
@@ -85,7 +86,7 @@ describe("S3ConnectionsPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    localStorage.setItem("user", JSON.stringify({ id: 1 }));
+    setSessionUserCache({ id: 1 });
 
     listAdminS3ConnectionsMock.mockResolvedValue({
       items: [makeConnection(1)],
@@ -126,6 +127,10 @@ describe("S3ConnectionsPage modal tabs", () => {
     ]);
     upsertS3ConnectionUserMock.mockResolvedValue({ user_id: 13, email: "u13@example.com" });
     removeS3ConnectionUserMock.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    setSessionUserCache(null);
   });
 
   it("renders direct UI users and UI groups in the combined listing column", async () => {

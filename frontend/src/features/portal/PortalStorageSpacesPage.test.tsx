@@ -11,6 +11,7 @@ import { MemoryRouter } from "react-router-dom";
 import { LanguageProvider } from "../../components/language";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import PortalStorageSpacesPage from "./PortalStorageSpacesPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const mocks = vi.hoisted(() => ({
   createStorageSpaceMock: vi.fn(),
@@ -113,6 +114,7 @@ vi.mock("./usePortalWorkspaceData", () => ({
 describe("PortalStorageSpacesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSessionUserCache(null);
     window.localStorage.clear();
     mocks.usePortalWorkspaceDataMock.mockClear();
     mocks.hookResult.accountIdForApi = "101";
@@ -431,17 +433,14 @@ describe("PortalStorageSpacesPage", () => {
 
   it("renders the storage spaces page and its close guard in French when requested", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        id: 1,
-        email: "laurent@example.com",
-        display_name: "Laurent",
-        role: "ui_user",
-        authType: "password",
-        ui_language: "fr",
-      }),
-    );
+    setSessionUserCache({
+      id: 1,
+      email: "laurent@example.com",
+      display_name: "Laurent",
+      role: "ui_user",
+      authType: "password",
+      ui_language: "fr",
+    });
 
     render(
       <LanguageProvider>

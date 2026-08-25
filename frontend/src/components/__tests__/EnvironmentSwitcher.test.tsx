@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { GeneralSettings } from "../../api/appSettings";
 import { useWorkspaceSwitcherModel } from "../EnvironmentSwitcher";
-import { readStoredUser, setSessionUserCache } from "../../utils/workspaces";
+import { readStoredUser, setSessionUserCache, type SessionUser } from "../../utils/workspaces";
 
 const mocks = vi.hoisted(() => ({
   fetchCurrentUser: vi.fn(),
@@ -115,7 +115,7 @@ function storePortalAdminUser() {
       account_links: [{ account_id: 101, role: "account_administrator" }],
   };
   mocks.sessionUser = user;
-  window.localStorage.setItem("user", JSON.stringify(user));
+  setSessionUserCache(user as SessionUser);
 }
 
 function storePlainAdminUser() {
@@ -127,7 +127,7 @@ function storePlainAdminUser() {
       account_links: [],
   };
   mocks.sessionUser = user;
-  window.localStorage.setItem("user", JSON.stringify(user));
+  setSessionUserCache(user as SessionUser);
 }
 
 describe("useWorkspaceSwitcherModel Portal workspace", () => {
@@ -241,7 +241,7 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
     };
     mocks.sessionUser = portalOnlyUser;
     mocks.fetchCurrentUser.mockResolvedValue(portalOnlyUser);
-    window.localStorage.setItem("user", JSON.stringify(portalOnlyUser));
+    setSessionUserCache(portalOnlyUser as SessionUser);
     mocks.getWorkspaceAccess.mockResolvedValue({
       admin: { available: false, context_count: 0 },
       ceph_admin: { available: false, context_count: 0 },

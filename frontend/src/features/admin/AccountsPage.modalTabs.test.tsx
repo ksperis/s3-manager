@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AccountsPage from "./AccountsPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const listS3AccountsMock = vi.fn();
 const getS3AccountMock = vi.fn();
@@ -101,7 +102,7 @@ describe("AccountsPage modal tabs", () => {
     vi.clearAllMocks();
 
     portalEnabled = false;
-    localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 1, role: "ui_superadmin" });
     listS3AccountsMock.mockResolvedValue({
       items: [
         {
@@ -515,7 +516,7 @@ describe("AccountsPage modal tabs", () => {
   });
 
   it("lets ui_admin submit privileged access grants from account edits", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 2, role: "ui_admin" }));
+    setSessionUserCache({ id: 2, role: "ui_admin" });
 
     render(<AccountsPage />);
 

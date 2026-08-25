@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import StorageEndpointsPage from "./StorageEndpointsPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const listStorageEndpointsMock = vi.fn();
 const fetchStorageEndpointsMetaMock = vi.fn();
@@ -107,6 +108,7 @@ function makeEndpoint(overrides?: Partial<Record<string, unknown>>) {
 describe("StorageEndpointsPage tags", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSessionUserCache(null);
     fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: false });
     listStorageEndpointsMock.mockResolvedValue([makeEndpoint()]);
     createStorageEndpointMock.mockResolvedValue(makeEndpoint({ id: 8, name: "AWS Regional", provider: "aws", endpoint_url: "https://s3.us-east-1.amazonaws.com" }));
@@ -116,11 +118,12 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   afterEach(() => {
+    setSessionUserCache(null);
     localStorage.clear();
   });
 
   it("renders storage endpoints as a compact table listing", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 1, role: "ui_superadmin" });
     listStorageEndpointsMock.mockResolvedValue([
       makeEndpoint({
         force_path_style: true,
@@ -196,7 +199,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("lets superadmin edit endpoint tags even when endpoints are env-managed", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 1, role: "ui_superadmin" });
     fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: true });
 
     renderPage();
@@ -219,7 +222,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("opens an env-managed endpoint as a tabbed read-only page while keeping tags editable", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 1, role: "ui_superadmin" });
     fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: true });
     listStorageEndpointsMock.mockResolvedValue([
       makeEndpoint({
@@ -255,7 +258,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("keeps tags read-only for a non-superadmin on the endpoint page", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 2, role: "ui_admin" }));
+    setSessionUserCache({ id: 2, role: "ui_admin" });
     fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: true });
 
     renderPage("/admin/storage-endpoints/7");
@@ -267,7 +270,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("keeps endpoint tags visible but hides editing from ui_admin", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 2, role: "ui_admin" }));
+    setSessionUserCache({ id: 2, role: "ui_admin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -278,7 +281,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("keeps endpoint tag editing visible on the identity row", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 3, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 3, role: "ui_superadmin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -301,7 +304,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("submits Ceph bucket replication feature when enabled", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 4, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 4, role: "ui_superadmin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -327,7 +330,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("preconfigures AWS endpoint defaults and submits AWS features", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 5, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 5, role: "ui_superadmin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -368,7 +371,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("syncs AWS generated endpoints when the region changes", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 5, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 5, role: "ui_superadmin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -387,7 +390,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("keeps AWS endpoint fields read-only and submits computed values", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 6, role: "ui_superadmin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -437,7 +440,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("clears AWS coordinates when the region is unknown", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 6, role: "ui_superadmin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -467,7 +470,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("does not auto-fill coordinates for non-AWS providers", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 6, role: "ui_superadmin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -483,7 +486,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("submits force path style when creating an endpoint", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 6, role: "ui_superadmin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -506,7 +509,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("submits GPS coordinates when creating an endpoint", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 6, role: "ui_superadmin" });
 
     renderPage();
     await screen.findByText("Ceph Endpoint");
@@ -531,7 +534,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("preloads and updates force path style when editing an endpoint", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 7, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 7, role: "ui_superadmin" });
     listStorageEndpointsMock.mockResolvedValue([makeEndpoint({ force_path_style: true })]);
 
     renderPage();
@@ -554,7 +557,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("preloads and clears GPS coordinates when editing an endpoint", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 8, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 8, role: "ui_superadmin" });
     listStorageEndpointsMock.mockResolvedValue([
       makeEndpoint({ latitude: 43.6047, longitude: 1.4442 }),
     ]);

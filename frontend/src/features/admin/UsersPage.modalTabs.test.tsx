@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import UsersPage from "./UsersPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const listUsersMock = vi.fn();
 const createUserMock = vi.fn();
@@ -77,7 +78,7 @@ describe("UsersPage modal tabs", () => {
     window.history.replaceState({}, "", "/admin/users");
 
     generalSettingsState.portal_enabled = false;
-    localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 1, role: "ui_superadmin" });
 
     listUsersMock.mockResolvedValue({
       items: [],

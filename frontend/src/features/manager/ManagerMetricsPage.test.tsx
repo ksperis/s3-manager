@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
 import ManagerMetricsPage from "./ManagerMetricsPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const useS3AccountContextMock = vi.fn();
 const useManagerStatsMock = vi.fn();
@@ -181,23 +182,21 @@ function buildUsageStatsAggregate(overrides?: Record<string, unknown>) {
 }
 
 function setManagerUser() {
-  localStorage.setItem(
-    "user",
-    JSON.stringify({
-      role: "ui_user",
-      capabilities: { can_manage_buckets: true },
-      manager_tool_access: {
-        bucket_compare: false,
-        bucket_integrity_check: false,
-        bucket_migration: false,
-        feature_rules: false,
-      },
-    })
-  );
+  setSessionUserCache({
+    role: "ui_user",
+    capabilities: { can_manage_buckets: true },
+    manager_tool_access: {
+      bucket_compare: false,
+      bucket_integrity_check: false,
+      bucket_migration: false,
+      feature_rules: false,
+    },
+  });
 }
 
 describe("ManagerMetricsPage", () => {
   beforeEach(() => {
+    setSessionUserCache(null);
     useManagerStatsMock.mockReset();
     useS3AccountContextMock.mockReset();
     fetchManagerUsageHistoryTrendsMock.mockReset();

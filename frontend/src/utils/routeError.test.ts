@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_GENERAL_SETTINGS } from "../components/GeneralSettingsContext";
 import { ApiError } from "../api/client";
 import { classifyRouteError, resolveRouteErrorHomePath } from "./routeError";
+import { setSessionUserCache } from "./workspaces";
 
 describe("classifyRouteError", () => {
   it("treats API network errors without a response as backend unavailable", () => {
@@ -29,16 +30,11 @@ describe("classifyRouteError", () => {
 describe("resolveRouteErrorHomePath", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    setSessionUserCache(null);
   });
 
   it("returns the authenticated workspace home when available", () => {
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        email: "admin@example.com",
-        role: "ui_admin",
-      })
-    );
+    setSessionUserCache({ email: "admin@example.com", role: "ui_admin" });
 
     expect(resolveRouteErrorHomePath(DEFAULT_GENERAL_SETTINGS)).toBe("/admin");
   });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { LanguageProvider } from "../../components/language";
 import { TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS } from "../../components/topbarControlWidths";
 import PortalLayout from "./PortalLayout";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const mocks = vi.hoisted(() => ({
   setSelectedAccountId: vi.fn(),
@@ -82,6 +83,7 @@ vi.mock("../../components/ThemeToggle", () => ({
 
 describe("PortalLayout", () => {
   afterEach(() => {
+    act(() => setSessionUserCache(null));
     window.localStorage.clear();
     vi.clearAllMocks();
     mocks.portalAccounts.splice(
@@ -94,9 +96,7 @@ describe("PortalLayout", () => {
 
   it("uses the shared shell with workspace and project selectors in the topbar", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
+    setSessionUserCache({
         id: 1,
         email: "laurent@example.com",
         display_name: "Laurent",
@@ -108,8 +108,7 @@ describe("PortalLayout", () => {
             role: "account_administrator",
           },
         ],
-      }),
-    );
+    });
     const { container } = render(
       <MemoryRouter initialEntries={["/portal"]}>
         <PortalLayout />
@@ -195,16 +194,13 @@ describe("PortalLayout", () => {
       { id: "106", name: "Delta", tags: [] },
       { id: "107", name: "Epsilon", tags: [] },
     );
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        id: 1,
-        email: "laurent@example.com",
-        display_name: "Laurent",
-        role: "ui_admin",
-        authType: "password",
-      }),
-    );
+    setSessionUserCache({
+      id: 1,
+      email: "laurent@example.com",
+      display_name: "Laurent",
+      role: "ui_admin",
+      authType: "password",
+    });
     render(
       <MemoryRouter initialEntries={["/portal"]}>
         <PortalLayout />
@@ -238,9 +234,7 @@ describe("PortalLayout", () => {
       { id: "106", name: "Delta", tags: [] },
       { id: "107", name: "Epsilon", tags: [] },
     );
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
+    setSessionUserCache({
         id: 1,
         email: "laurent@example.com",
         display_name: "Laurent",
@@ -253,8 +247,7 @@ describe("PortalLayout", () => {
             role: "account_administrator",
           },
         ],
-      }),
-    );
+    });
 
     render(
       <LanguageProvider>

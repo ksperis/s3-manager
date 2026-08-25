@@ -17,6 +17,7 @@ import {
 } from "react";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 import { ApiError } from "../../api/client";
 import type { ExecutionContext } from "../../api/executionContexts";
 import {
@@ -638,6 +639,7 @@ async function copyOrCutSelection(
 describe("BrowserPage interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSessionUserCache(null);
     window.localStorage.clear();
     window.sessionStorage.clear();
     setBrowserContext();
@@ -956,14 +958,11 @@ describe("BrowserPage interactions", () => {
   });
 
   it("uses manager-equivalent chrome on /browser when advanced Browser access is disabled", async () => {
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        id: 42,
-        role: "ui_user",
-        effective_access: { browser_advanced_features_enabled: false },
-      }),
-    );
+    setSessionUserCache({
+      id: 42,
+      role: "ui_user",
+      effective_access: { browser_advanced_features_enabled: false },
+    });
     seedBrowserRootUiState({
       layout: { showFolders: true, showInspector: true, showActionBar: true },
     });

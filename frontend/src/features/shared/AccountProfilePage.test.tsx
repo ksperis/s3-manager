@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import AccountProfilePage from "./AccountProfilePage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({ generalSettings: {} }),
@@ -39,7 +40,7 @@ function renderPage(initialEntry = "/profile") {
 
 describe("AccountProfilePage", () => {
   beforeEach(() => {
-    window.localStorage.setItem("user", JSON.stringify({
+    setSessionUserCache({
       role: "ui_superadmin",
       authType: "password",
       effective_access: {
@@ -47,10 +48,11 @@ describe("AccountProfilePage", () => {
         can_provision_managed_private_connections: false,
         has_owned_private_connections: false,
       },
-    }));
+    });
   });
 
   afterEach(() => {
+    setSessionUserCache(null);
     window.localStorage.clear();
     vi.restoreAllMocks();
   });
@@ -69,7 +71,7 @@ describe("AccountProfilePage", () => {
   });
 
   it("hides forbidden tabs and replaces a forbidden direct URL with profile", async () => {
-    window.localStorage.setItem("user", JSON.stringify({ role: "ui_user", authType: "password" }));
+    setSessionUserCache({ role: "ui_user", authType: "password" });
     renderPage("/profile?tab=api-tokens");
 
     expect(screen.queryByRole("button", { name: "Private S3 connections" })).not.toBeInTheDocument();
@@ -78,7 +80,7 @@ describe("AccountProfilePage", () => {
   });
 
   it("keeps the connections tab after permission revocation when a connection is owned", () => {
-    window.localStorage.setItem("user", JSON.stringify({
+    setSessionUserCache({
       role: "ui_user",
       authType: "password",
       effective_access: {
@@ -86,7 +88,7 @@ describe("AccountProfilePage", () => {
         can_provision_managed_private_connections: false,
         has_owned_private_connections: true,
       },
-    }));
+    });
 
     renderPage();
 

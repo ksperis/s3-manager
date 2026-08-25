@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import S3UsersPage from "./S3UsersPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const listS3UsersMock = vi.fn();
 const getS3UserMock = vi.fn();
@@ -64,7 +65,7 @@ describe("S3UsersPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
+    setSessionUserCache({ id: 1, role: "ui_superadmin" });
 
     listS3UsersMock.mockResolvedValue({
       items: [
@@ -434,7 +435,7 @@ describe("S3UsersPage modal tabs", () => {
   });
 
   it("lets ui_admin submit privileged access grants from S3 user edits", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 2, role: "ui_admin" }));
+    setSessionUserCache({ id: 2, role: "ui_admin" });
 
     render(
       <MemoryRouter>

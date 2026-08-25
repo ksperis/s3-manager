@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "../../components/theme";
 import { ApiError } from "../../api/client";
 import RouteErrorPage from "./RouteErrorPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 function ThrowingRoute({ error }: { error: unknown }) {
   throw error;
@@ -29,6 +30,7 @@ function renderRouteError(error: unknown) {
 describe("RouteErrorPage", () => {
   beforeEach(() => {
     document.documentElement.className = "";
+    setSessionUserCache(null);
     window.localStorage.clear();
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
@@ -39,13 +41,7 @@ describe("RouteErrorPage", () => {
   });
 
   it("shows the backend outage copy with light theme styling and home actions", async () => {
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        email: "admin@example.com",
-        role: "ui_admin",
-      })
-    );
+    setSessionUserCache({ email: "admin@example.com", role: "ui_admin" });
     window.localStorage.setItem("theme", "light");
 
     const { container } = renderRouteError(new ApiError("Network Error"));

@@ -13,9 +13,11 @@ import client, {
   timeoutForRequestProfile,
 } from "./client";
 import { CLIENT_STORAGE_KEYS } from "../utils/clientStorage";
+import { setSessionUserCache } from "../utils/workspaces";
 
 beforeEach(() => {
   localStorage.clear();
+  setSessionUserCache(null);
   document.cookie = "csrf_token=; Max-Age=0; path=/";
   vi.restoreAllMocks();
 });
@@ -57,10 +59,7 @@ describe("API request profiles", () => {
   });
 
   it("builds authenticated fetch requests from the shared API contract", () => {
-    localStorage.setItem(
-      CLIENT_STORAGE_KEYS.sessionUser,
-      JSON.stringify({ authType: "s3_session" }),
-    );
+    setSessionUserCache({ authType: "s3_session" });
     localStorage.setItem(
       CLIENT_STORAGE_KEYS.s3SessionEndpoint,
       "https://s3.example.test",

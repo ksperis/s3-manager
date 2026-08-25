@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import S3ConnectionsPage from "./S3ConnectionsPage";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const listAdminS3ConnectionsMock = vi.fn();
 const createAdminS3ConnectionMock = vi.fn();
@@ -78,11 +79,12 @@ describe("S3ConnectionsPage live validation", () => {
     updateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
     remediateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
     deleteAdminS3ConnectionMock.mockResolvedValue(undefined);
-    localStorage.setItem("user", JSON.stringify({ id: 1 }));
+    setSessionUserCache({ id: 1 });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    setSessionUserCache(null);
     localStorage.clear();
   });
 

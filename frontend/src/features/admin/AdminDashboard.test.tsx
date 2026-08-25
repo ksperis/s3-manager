@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneralSettings } from "../../api/appSettings";
 import AdminDashboard from "./AdminDashboard";
+import { setSessionUserCache, type SessionUser } from "../../utils/workspaces";
 
 const mocks = vi.hoisted(() => ({
   dismissOnboarding: vi.fn(),
@@ -77,8 +78,8 @@ function buildGeneralSettings(overrides: Partial<GeneralSettings> = {}): General
   };
 }
 
-async function renderDashboard(role = "ui_superadmin") {
-  window.localStorage.setItem("user", JSON.stringify({ role }));
+async function renderDashboard(role: SessionUser["role"] = "ui_superadmin") {
+  setSessionUserCache({ role });
 
   render(
     <MemoryRouter>
@@ -92,6 +93,7 @@ async function renderDashboard(role = "ui_superadmin") {
 describe("AdminDashboard feature summary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSessionUserCache(null);
     window.localStorage.clear();
     mocks.generalSettings = buildGeneralSettings();
     mocks.fetchAdminSummary.mockResolvedValue({

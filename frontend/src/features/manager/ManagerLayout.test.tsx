@@ -9,6 +9,7 @@ import {
   TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
 } from "../../components/topbarControlWidths";
 import ManagerLayout from "./ManagerLayout";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const useS3AccountContextMock = vi.fn();
 const useGeneralSettingsMock = vi.fn();
@@ -135,24 +136,22 @@ function buildGeneralSettings(overrides?: Record<string, unknown>) {
 }
 
 function setStoredManagerUser(overrides?: Record<string, unknown>) {
-  localStorage.setItem(
-    "user",
-    JSON.stringify({
-      role: "ui_user",
-      manager_tool_access: {
-        bucket_compare: true,
-        bucket_integrity_check: false,
-        bucket_migration: false,
-        bucket_purge: false,
-        feature_rules: true,
-      },
-      ...overrides,
-    })
-  );
+  setSessionUserCache({
+    role: "ui_user",
+    manager_tool_access: {
+      bucket_compare: true,
+      bucket_integrity_check: false,
+      bucket_migration: false,
+      bucket_purge: false,
+      feature_rules: true,
+    },
+    ...overrides,
+  });
 }
 
 describe("ManagerLayout", () => {
   beforeEach(() => {
+    setSessionUserCache(null);
     capturedNavSections = [];
     capturedTopbarControlDescriptors = [];
     capturedAccountSelectorProps = null;

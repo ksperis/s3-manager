@@ -117,16 +117,13 @@ describe("portal routes", () => {
   });
 
   it("redirects /portal to unauthorized when no explicit portal account role exists", async () => {
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        id: 1,
-        email: "admin@example.com",
-        role: "ui_admin",
-        authType: "password",
-        account_links: [],
-      })
-    );
+    setSessionUserCache({
+      id: 1,
+      email: "admin@example.com",
+      role: "ui_admin",
+      authType: "password",
+      account_links: [],
+    });
 
     render(
       <MemoryRouter initialEntries={["/portal"]}>
@@ -150,16 +147,13 @@ describe("portal routes", () => {
       authType: "password",
       account_links: [{ account_id: 24, role: "portal_manager" }],
     });
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        id: 1,
-        email: "admin@example.com",
-        role: "ui_superadmin",
-        authType: "password",
-        account_links: [],
-      })
-    );
+    setSessionUserCache({
+      id: 1,
+      email: "admin@example.com",
+      role: "ui_superadmin",
+      authType: "password",
+      account_links: [],
+    });
 
     render(
       <MemoryRouter initialEntries={["/portal"]}>
@@ -174,6 +168,6 @@ describe("portal routes", () => {
 
     expect(await screen.findByRole("heading", { name: "Portal workspace" })).toBeInTheDocument();
     expect(readStoredUser()?.account_links?.[0]?.role).toBe("portal_manager");
-    expect(window.localStorage.getItem("user")).not.toContain("portal_manager");
+    expect(window.localStorage.getItem("user")).toBeNull();
   });
 });

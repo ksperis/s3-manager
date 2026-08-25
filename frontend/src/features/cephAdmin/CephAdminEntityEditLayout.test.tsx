@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 const getCephAdminAccountDetailMock = vi.fn();
 const getCephAdminUserDetailMock = vi.fn();
@@ -25,6 +26,7 @@ vi.mock("../../api/cephAdmin", async () => {
 
 describe("Ceph Admin entity editor layout", () => {
   beforeEach(() => {
+    setSessionUserCache(null);
     getCephAdminAccountDetailMock.mockReset();
     getCephAdminUserDetailMock.mockReset();
     createCephAdminUserKeyMock.mockReset();
@@ -119,13 +121,10 @@ describe("Ceph Admin entity editor layout", () => {
   });
 
   it("hides Add as S3 Connection in RGW user key management without manual permission", async () => {
-    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_superadmin",
-        effective_access: { can_create_manual_private_connections: false },
-      })
-    );
+    setSessionUserCache({
+      role: "ui_superadmin",
+      effective_access: { can_create_manual_private_connections: false },
+    });
     render(
       <MemoryRouter>
         <CephAdminUserEditModal

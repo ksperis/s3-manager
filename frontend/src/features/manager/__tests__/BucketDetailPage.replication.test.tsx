@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BucketDetailPage from "../BucketDetailPage";
+import { setSessionUserCache } from "../../../utils/workspaces";
 
 const useS3AccountContextMock = vi.fn();
 const useCephAdminEndpointMock = vi.fn();
@@ -114,6 +115,7 @@ vi.mock("../../cephAdmin/CephAdminEndpointContext", () => ({
 describe("BucketDetailPage replication state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSessionUserCache(null);
     window.localStorage.clear();
     useS3AccountContextMock.mockReturnValue({
       accounts: [],
@@ -349,18 +351,15 @@ describe("BucketDetailPage replication state", () => {
   });
 
   it("shows Manager quota tab with bucket quota access", async () => {
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_user",
-        manager_tool_access: {
-          bucket_compare: false,
-          bucket_integrity_check: false,
-          bucket_migration: false,
-          feature_rules: false,
-        },
-      })
-    );
+    setSessionUserCache({
+      role: "ui_user",
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        feature_rules: false,
+      },
+    });
     useS3AccountContextMock.mockReturnValue({
       accounts: [{ id: "ceph-account", name: "Ceph account", endpoint_provider: "ceph" }],
       selectedS3AccountId: "ceph-account",
@@ -380,18 +379,15 @@ describe("BucketDetailPage replication state", () => {
   });
 
   it("hides Storage Ops quota tab when the context is not quota eligible", async () => {
-    window.localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role: "ui_user",
-        manager_tool_access: {
-          bucket_compare: false,
-          bucket_integrity_check: false,
-          bucket_migration: false,
-          feature_rules: false,
-        },
-      })
-    );
+    setSessionUserCache({
+      role: "ui_user",
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        feature_rules: false,
+      },
+    });
 
     render(
       <MemoryRouter>

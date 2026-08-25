@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { LanguageProvider } from "../../components/language";
 import PortalAccessKeysPage from "./PortalAccessKeysPage";
 import type { PortalAccessKeysState } from "../../api/portal";
+import { setSessionUserCache } from "../../utils/workspaces";
 
 let downloadedBlobs: Blob[] = [];
 
@@ -80,11 +81,14 @@ function getCreateWorkflowPage(): HTMLElement {
 
 describe("PortalAccessKeysPage", () => {
   afterEach(() => {
+    cleanup();
+    setSessionUserCache(null);
     vi.restoreAllMocks();
   });
 
   beforeEach(() => {
     downloadedBlobs = [];
+    setSessionUserCache(null);
     window.localStorage.clear();
     Object.defineProperty(window.URL, "createObjectURL", {
       configurable: true,
@@ -174,7 +178,7 @@ describe("PortalAccessKeysPage", () => {
     { language: "fr", name: "Fermer la fenêtre", text: "Fermer" },
     { language: "de", name: "Dialog schließen", text: "Schließen" },
   ])("localizes the modal close action in $language", async ({ language, name, text }) => {
-    window.localStorage.setItem("user", JSON.stringify({ ui_language: language }));
+    act(() => setSessionUserCache({ ui_language: language as "fr" | "de" }));
     renderPage();
 
     const connectTabName = language === "fr" ? "Connecter un outil" : "Werkzeug verbinden";

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { CLIENT_STORAGE_KEYS, writeClientJson } from "../../utils/clientStorage";
 import { readStoredUser, setSessionUserCache } from "../../utils/workspaces";
 import { updateStoredUserProfile } from "./profileStoredUser";
 
@@ -11,7 +10,7 @@ describe("updateStoredUserProfile", () => {
   });
 
   it("merges profile fields into an existing stored user", () => {
-    writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { email: "me@example.test", role: "ui_user" });
+    setSessionUserCache({ email: "me@example.test", role: "ui_user" });
 
     expect(updateStoredUserProfile({ fullName: "Ada Lovelace", uiLanguage: "fr" })).toBe(true);
 

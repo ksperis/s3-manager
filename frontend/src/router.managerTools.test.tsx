@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { RequireManagerFeatureRulesTool } from "./router";
+import { setSessionUserCache } from "./utils/workspaces";
 
 function renderRoute(path: string) {
   return render(
@@ -18,36 +19,34 @@ function renderRoute(path: string) {
 }
 
 function setStoredUser(featureRules: boolean, effectiveFeatureRules = featureRules) {
-  window.localStorage.setItem(
-    "user",
-    JSON.stringify({
-      id: 10,
-      email: "manager@example.com",
-      role: "ui_user",
-      capabilities: { can_manage_buckets: true },
+  setSessionUserCache({
+    id: 10,
+    email: "manager@example.com",
+    role: "ui_user",
+    capabilities: { can_manage_buckets: true },
+    manager_tool_access: {
+      bucket_compare: false,
+      bucket_integrity_check: false,
+      bucket_migration: false,
+      bucket_purge: false,
+      feature_rules: featureRules,
+    },
+    effective_access: {
       manager_tool_access: {
         bucket_compare: false,
         bucket_integrity_check: false,
         bucket_migration: false,
         bucket_purge: false,
-        feature_rules: featureRules,
+        feature_rules: effectiveFeatureRules,
       },
-      effective_access: {
-        manager_tool_access: {
-          bucket_compare: false,
-          bucket_integrity_check: false,
-          bucket_migration: false,
-          bucket_purge: false,
-          feature_rules: effectiveFeatureRules,
-        },
-      },
-    })
-  );
+    },
+  });
 }
 
 describe("manager tool routes", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    setSessionUserCache(null);
   });
 
   it("redirects Feature rules to unauthorized without manager tool access", async () => {

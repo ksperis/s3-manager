@@ -12,7 +12,7 @@ import type {
   UiRole,
   UserAvatarDescriptor,
 } from "../api/users";
-import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "./clientStorage";
+import { CLIENT_STORAGE_KEYS, readClientStorage } from "./clientStorage";
 
 export const WORKSPACE_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedWorkspace;
 export const SESSION_USER_UPDATED_EVENT = "bucketreef:session-user-updated";
@@ -120,13 +120,7 @@ export function canAccessPrivateConnectionsSection(user: PrivateConnectionAccess
 }
 
 export function readStoredUser(): SessionUser | null {
-  if (sessionUserCache) return sessionUserCache;
-  // Isolated component tests historically seed a non-secret user fixture in
-  // localStorage. Production authentication state never reads that value.
-  if (import.meta.env.MODE === "test") {
-    return readClientJson<SessionUser>(CLIENT_STORAGE_KEYS.sessionUser);
-  }
-  return null;
+  return sessionUserCache;
 }
 
 export function setSessionUserCache(user: SessionUser | null): void {
