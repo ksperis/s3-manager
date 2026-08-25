@@ -11,7 +11,6 @@ import ObjectPreview, {
 } from "../shared/ObjectPreview";
 import {
   fetchObjectMetadata,
-  presignObject,
   proxyDownload,
   restoreObject,
   updateObjectAcl,
@@ -32,9 +31,6 @@ import {
   toolbarPrimaryClasses,
 } from "./browserConstants";
 import {
-  formatLocalDateTime,
-} from "./browserUtils";
-import {
   ARCHIVE_STORAGE_CLASSES,
   OBJECT_LOCK_DISABLED_MESSAGE,
   aclOptions,
@@ -53,6 +49,7 @@ import {
   type ObjectRetentionMode,
 } from "./useBrowserObjectProtection";
 import { useBrowserObjectProperties } from "./useBrowserObjectProperties";
+import { useBrowserObjectSignedUrl } from "./useBrowserObjectSignedUrl";
 
 type BrowserObjectDetailsModalProps = {
   accountId: S3AccountSelector;
@@ -118,17 +115,8 @@ export default function BrowserObjectDetailsModal({
   const [restoreTier, setRestoreTier] = useState<
     "Standard" | "Bulk" | "Expedited"
   >("Standard");
-  const [presignExpires, setPresignExpires] = useState("");
-  const [presignUrl, setPresignUrl] = useState("");
-  const [presignMethod, setPresignMethod] = useState("");
-  const [presignHeaders, setPresignHeaders] = useState<
-    PresignedUrl["headers"] | null
-  >(null);
-  const [presignError, setPresignError] = useState<string | null>(null);
-
   const [savingAcl, setSavingAcl] = useState(false);
   const [savingRestore, setSavingRestore] = useState(false);
-  const [savingPresign, setSavingPresign] = useState(false);
   const [savingVersionAction, setSavingVersionAction] = useState(false);
 
   const {
@@ -222,6 +210,23 @@ export default function BrowserObjectDetailsModal({
     () => formatRestoreStatus(metadata?.restore_status),
     [metadata?.restore_status],
   );
+  const {
+    expires: presignExpires,
+    setExpires: setPresignExpires,
+    url: presignUrl,
+    method: presignMethod,
+    headers: presignHeaders,
+    error: presignError,
+    generating: savingPresign,
+    generate: generatePresign,
+    copy: copyPresign,
+  } = useBrowserObjectSignedUrl({
+    accountId,
+    bucketName,
+    objectKey: itemSnapshot.key,
+    requestOptions,
+    sseCustomerKeyBase64,
+  });
   const statusClassName = useMemo(() => {
     if (!actionTone) return "";
     if (actionTone === "error") {
@@ -327,13 +332,6 @@ export default function BrowserObjectDetailsModal({
 
     setRestoreDays("7");
     setRestoreTier("Standard");
-    setPresignExpires(
-      formatLocalDateTime(new Date(Date.now() + 60 * 60 * 1000)),
-    );
-    setPresignUrl("");
-    setPresignMethod("");
-    setPresignHeaders(null);
-    setPresignError(null);
     setSavingVersionAction(false);
   }, [initialTab, item, resetObjectProperties]);
 
@@ -492,59 +490,21 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleGeneratePresign = async () => {
-    if (!bucketName || !itemSnapshot.key) return;
-    setPresignError(null);
-    const expiresAt = presignExpires ? new Date(presignExpires) : null;
-    if (!expiresAt || Number.isNaN(expiresAt.getTime())) {
-      setPresignError("Select a valid expiration date.");
-      return;
-    }
-    const seconds = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
-    if (seconds < 60) {
-      setPresignError("Expiration must be at least 1 minute from now.");
-      return;
-    }
-    if (seconds > 43200) {
-      setPresignError("Expiration must be within 12 hours.");
-      return;
-    }
-    setSavingPresign(true);
-    try {
-      const presigned = await presignObject(
-        accountId,
-        bucketName,
-        {
-          key: itemSnapshot.key,
-          operation: "get_object",
-          expires_in: seconds,
-        },
-        sseCustomerKeyBase64,
-        requestOptions,
-      );
-      setPresignUrl(presigned.url);
-      setPresignMethod(presigned.method);
-      setPresignHeaders(presigned.headers ?? null);
+    const result = await generatePresign();
+    if (result.status === "generated") {
       pushStatus("Signed URL generated.", "success");
-    } catch (err) {
-      const errorMessage = extractApiError(
-        err,
-        "Unable to generate signed URL.",
-      );
-      setPresignError(errorMessage);
-      pushStatus(errorMessage, "error");
-    } finally {
-      setSavingPresign(false);
+    } else if (result.status === "api-error") {
+      pushStatus(result.message, "error");
     }
   };
 
   const handleCopyPresign = async () => {
-    if (!presignUrl) return;
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(presignUrl);
+    const result = await copyPresign();
+    if (result.status === "copied") {
       pushStatus("URL copied to clipboard.", "success");
-      return;
+    } else if (result.status === "fallback") {
+      setCopyDialogValue(result.value);
     }
-    setCopyDialogValue(presignUrl);
   };
 
   const handleVersionAction = async (
