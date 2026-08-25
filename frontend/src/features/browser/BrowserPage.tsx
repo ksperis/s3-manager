@@ -30,7 +30,6 @@ import {
   uiCardMutedClass,
   uiMenuClass,
 } from "../../components/ui/styles";
-import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
 import { runWithConcurrency } from "../../utils/concurrency";
 import { triggerBlobDownload } from "../../utils/download";
@@ -165,13 +164,14 @@ import {
   resolveBrowserFolderArchiveLabel,
 } from "./browserFolderDownload";
 import {
-  BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES,
   buildBucketInspectorFeatures,
   fetchBucketInspectorData,
   type BucketInspectorData,
 } from "./browserBucketInspectorModel";
+import BrowserInspectorPanel, {
+  type BrowserInspectorTab,
+} from "./BrowserInspectorPanel";
 import BrowserObjectDetailsModal from "./BrowserObjectDetailsModal";
-import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
 import BrowserOperationsModal from "./BrowserOperationsModal";
 import BrowserOperationsPanel from "./BrowserOperationsPanel";
 import BrowserMultipartUploadsModal from "./BrowserMultipartUploadsModal";
@@ -235,7 +235,6 @@ import {
   contextMenuSeparatorClasses,
   filterChipClasses,
   iconButtonClasses,
-  storageClassChipClasses,
   storageClassOptions,
   toolbarButtonClasses,
   toolbarIconButtonClasses,
@@ -255,13 +254,11 @@ import {
   getSelectionInfo,
   isAbortError,
   isLikelyCorsError,
-  isImageFile,
   makeId,
   normalizePrefix,
   normalizeUploadPath,
   parseKeyValueLines,
   pairsToRecord,
-  previewLabelForItem,
   shortName,
   toIsoString,
   updateTreeNodes,
@@ -399,22 +396,6 @@ const browserToolbarControlsGroupClasses =
   "flex shrink-0 items-center gap-1.5";
 const browserFloatingMenuClasses =
   cx(uiMenuClass, "overflow-hidden p-1.5");
-const inspectorTabListClasses =
-  "flex flex-nowrap gap-1 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-1 shadow-[var(--ui-shadow-soft)]";
-const inspectorTabBaseClasses =
-  "inline-flex min-w-0 flex-1 items-center justify-center rounded-md border px-2.5 py-1.5 text-center ui-caption font-semibold whitespace-nowrap transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-const inspectorTabInactiveClasses =
-  "border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-100";
-const inspectorTabActiveClasses =
-  "border-slate-200 bg-white text-slate-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100";
-const inspectorTabPanelClasses =
-  "space-y-4 ui-caption text-slate-600 dark:text-slate-300";
-const inspectorSectionCardClasses =
-  cx(browserSubtleSurfaceClasses, "px-3.5 py-3");
-const inspectorSectionTitleClasses =
-  "ui-caption font-semibold text-slate-500 dark:text-slate-400";
-const inspectorEmptyStateClasses =
-  "rounded-lg border border-dashed border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-4 ui-caption text-[var(--ui-text-muted)]";
 export default function BrowserPage({
   accountIdForApi: accountIdOverride,
   executionContextKind: executionContextKindOverride,
@@ -590,9 +571,8 @@ export default function BrowserPage({
     layoutMode: activeLayoutMode,
   });
   const isMobileViewport = useMediaQuery(MOBILE_OBJECT_LIST_MEDIA_QUERY);
-  const [inspectorTab, setInspectorTab] = useState<
-    "context" | "bucket" | "selection" | "details"
-  >("context");
+  const [inspectorTab, setInspectorTab] =
+    useState<BrowserInspectorTab>("context");
   const enforcedRootProfileDensity: BrowserDensity | null =
     isMainBrowserPath && resolvedFunctionalProfile !== "advanced"
       ? resolvedFunctionalProfile === "portal"
@@ -9614,611 +9594,75 @@ export default function BrowserPage({
             </div>
 
             {isInspectorPanelVisible && (
-              <div className="flex min-h-0 h-full flex-col gap-3">
-                <div className="ui-surface-card flex min-h-0 h-full flex-1 flex-col px-3 py-3">
-                  <div
-                    className={inspectorTabListClasses}
-                    role="tablist"
-                    aria-label="Inspector tabs"
-                  >
-                    <button
-                      type="button"
-                      role="tab"
-                      id="inspector-tab-details"
-                      aria-selected={inspectorTab === "details"}
-                      aria-controls="inspector-panel-details"
-                      onClick={() => setInspectorTab("details")}
-                      className={`${inspectorTabBaseClasses} ${
-                        inspectorTab === "details"
-                          ? inspectorTabActiveClasses
-                          : inspectorTabInactiveClasses
-                      }`}
-                    >
-                      Details
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      id="inspector-tab-context"
-                      aria-selected={inspectorTab === "context"}
-                      aria-controls="inspector-panel-context"
-                      onClick={() => setInspectorTab("context")}
-                      className={`${inspectorTabBaseClasses} ${
-                        inspectorTab === "context"
-                          ? inspectorTabActiveClasses
-                          : inspectorTabInactiveClasses
-                      }`}
-                    >
-                      Context
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      id="inspector-tab-bucket"
-                      aria-selected={inspectorTab === "bucket"}
-                      aria-controls="inspector-panel-bucket"
-                      onClick={handleOpenBucketInspector}
-                      className={`${inspectorTabBaseClasses} ${
-                        inspectorTab === "bucket"
-                          ? inspectorTabActiveClasses
-                          : inspectorTabInactiveClasses
-                      }`}
-                    >
-                      {workspaceNounCapitalized}
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      id="inspector-tab-selection"
-                      aria-selected={inspectorTab === "selection"}
-                      aria-controls="inspector-panel-selection"
-                      onClick={() => setInspectorTab("selection")}
-                      className={`${inspectorTabBaseClasses} ${
-                        inspectorTab === "selection"
-                          ? inspectorTabActiveClasses
-                          : inspectorTabInactiveClasses
-                      }`}
-                    >
-                      Selection
-                    </button>
-                  </div>
-
-                  <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-2">
-                    {inspectorTab === "context" && (
-                      <div
-                        role="tabpanel"
-                        id="inspector-panel-context"
-                        aria-labelledby="inspector-tab-context"
-                        className={inspectorTabPanelClasses}
-                      >
-                        <div className={inspectorSectionCardClasses}>
-                          <p className={inspectorSectionTitleClasses}>
-                            Current location
-                          </p>
-                          <p className="break-all ui-caption text-slate-500 dark:text-slate-400">
-                            {currentPath || `Select a ${workspaceNoun} to get started.`}
-                          </p>
-                        </div>
-                        <div className="space-y-3">
-                          <div className={inspectorSectionCardClasses}>
-                            <p className={inspectorSectionTitleClasses}>
-                              Prefix summary
-                            </p>
-                            <div className="mt-2 grid gap-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-500">Files</span>
-                                <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                  {pathStats.files}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-500">Folders</span>
-                                <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                  {pathStats.folders}
-                                </span>
-                              </div>
-                              {isVersioningEnabled && showDeletedObjects && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-slate-500">
-                                    Deleted shown
-                                  </span>
-                                  <span className="font-semibold text-rose-700 dark:text-rose-200">
-                                    {pathStats.deletedFiles +
-                                      pathStats.deletedFolders}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-500">
-                                  Total size
-                                </span>
-                                <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                  {formatBytes(pathStats.totalBytes)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className={inspectorSectionCardClasses}>
-                            <div className="flex items-center justify-between gap-2">
-                              <p className={inspectorSectionTitleClasses}>
-                                Counts
-                              </p>
-                              <button
-                                type="button"
-                                className={chromeBulkActionClasses}
-                                onClick={handleContextCount}
-                                disabled={
-                                  !bucketName ||
-                                  !hasS3AccountContext ||
-                                  contextCountsLoading
-                                }
-                              >
-                                <RefreshIcon className="h-3.5 w-3.5" />
-                                {contextCountsLoading
-                                  ? "Counting..."
-                                  : contextCounts
-                                    ? "Recount"
-                                    : "Count"}
-                              </button>
-                            </div>
-                            {contextCountsError && (
-                              <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                                {contextCountsError}
-                              </p>
-                            )}
-                            {!isVersioningEnabled && (
-                              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                                {usePortalWorkspaceLabels
-                                  ? "File history is not available in this view."
-                                  : "Versioning is disabled for this bucket."}
-                              </p>
-                            )}
-                            <div className="mt-2 grid gap-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-500">
-                                  Current objects
-                                </span>
-                                <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                  {contextCountsLoading
-                                    ? "..."
-                                    : contextCounts
-                                      ? contextCounts.objects
-                                      : "-"}
-                                </span>
-                              </div>
-                              {isVersioningEnabled && (
-                                <>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">
-                                      Versions
-                                    </span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {contextCountsLoading
-                                        ? "..."
-                                        : contextCounts
-                                          ? contextCounts.versions
-                                          : "-"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">
-                                      Delete markers
-                                    </span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {contextCountsLoading
-                                        ? "..."
-                                        : contextCounts
-                                          ? contextCounts.deleteMarkers
-                                          : "-"}
-                                    </span>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className={inspectorSectionCardClasses}>
-                            <p className={inspectorSectionTitleClasses}>
-                              Storage classes
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {Object.keys(pathStats.storageCounts).length ===
-                              0 ? (
-                                <span className="ui-caption text-slate-500 dark:text-slate-400">
-                                  No file data yet.
-                                </span>
-                              ) : (
-                                Object.entries(pathStats.storageCounts).map(
-                                  ([storage, count]) => (
-                                    <span
-                                      key={storage}
-                                      className={`rounded-full border px-2 py-1 ui-caption font-semibold ${
-                                        storageClassChipClasses[storage] ??
-                                        "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                      }`}
-                                    >
-                                      {storage} ({count})
-                                    </span>
-                                  ),
-                                )
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {inspectorTab === "bucket" && (
-                      <div
-                        role="tabpanel"
-                        id="inspector-panel-bucket"
-                        aria-labelledby="inspector-tab-bucket"
-                        className={inspectorTabPanelClasses}
-                      >
-                        <div className="space-y-3">
-                          <div className={inspectorSectionCardClasses}>
-                            <p className={inspectorSectionTitleClasses}>
-                              {`${workspaceNounCapitalized} overview`}
-                            </p>
-                            <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                              {bucketName || `Select a ${workspaceNoun} to inspect.`}
-                            </p>
-                          </div>
-
-                          {!bucketName || !hasS3AccountContext ? (
-                            <div className={inspectorEmptyStateClasses}>
-                              {`Select a ${workspaceNoun} to load ${workspaceNoun} stats and features.`}
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {bucketInspectorLoading &&
-                                !bucketInspectorData && (
-                                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                    {`Loading ${workspaceNoun} overview...`}
-                                  </p>
-                                )}
-                              {bucketInspectorError && (
-                                <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                                  {bucketInspectorError}
-                                </p>
-                              )}
-                              <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>
-                                  Stats
-                                </p>
-                                <div className="mt-2 grid gap-2">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-slate-500">
-                                      Created
-                                    </span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {bucketInspectorData?.creation_date
-                                        ? formatDateTime(
-                                            bucketInspectorData.creation_date,
-                                          )
-                                        : "-"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-slate-500">
-                                      Used bytes
-                                    </span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {formatBytes(
-                                        bucketInspectorData?.used_bytes ?? null,
-                                      )}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-slate-500">
-                                      {usePortalWorkspaceLabels
-                                        ? "File count"
-                                        : "Object count"}
-                                    </span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {bucketInspectorData?.object_count != null
-                                        ? bucketInspectorData.object_count.toLocaleString()
-                                        : "-"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {isCephContext && (
-                                <div className={inspectorSectionCardClasses}>
-                                  <p className={inspectorSectionTitleClasses}>
-                                    Ceph
-                                  </p>
-                                  <div className="mt-2 grid gap-2">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-slate-500">
-                                        {cephQuotaScopeLabel} size
-                                      </span>
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                        {cephContextQuotaSizeBytes != null
-                                          ? formatBytes(
-                                              cephContextQuotaSizeBytes,
-                                            )
-                                          : "Not set"}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-slate-500">
-                                        {cephQuotaScopeLabel} objects
-                                      </span>
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                        {cephContextQuotaObjects != null
-                                          ? cephContextQuotaObjects.toLocaleString()
-                                          : "Not set"}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-slate-500">
-                                        Bucket quota size
-                                      </span>
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                        {(bucketInspectorData?.quota_max_size_bytes ??
-                                          0) > 0
-                                          ? formatBytes(
-                                              bucketInspectorData?.quota_max_size_bytes ??
-                                                null,
-                                            )
-                                          : "Not set"}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-slate-500">
-                                        Bucket quota objects
-                                      </span>
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                        {(bucketInspectorData?.quota_max_objects ??
-                                          0) > 0
-                                          ? (
-                                              bucketInspectorData?.quota_max_objects ??
-                                              0
-                                            ).toLocaleString()
-                                          : "Not set"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>
-                                  Features
-                                </p>
-                                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                  {usePortalWorkspaceLabels
-                                    ? "Only user-facing storage details are shown in this Portal view."
-                                    : "States mirror the Manager bucket overview when available."}
-                                </p>
-                                <div className="mt-2 space-y-2">
-                                  {bucketInspectorFeatures.length === 0 ? (
-                                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                      No feature data available for this
-                                      context.
-                                    </p>
-                                  ) : (
-                                    bucketInspectorFeatures.map((feature) => (
-                                      <div
-                                        key={feature.key}
-                                        className="flex items-center justify-between gap-2"
-                                      >
-                                        <span className="text-slate-500">
-                                          {feature.label}
-                                        </span>
-                                        <span
-                                          className={`rounded-full px-2 py-1 ui-caption font-semibold ${BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES[feature.tone]}`}
-                                        >
-                                          {feature.state}
-                                        </span>
-                                      </div>
-                                    ))
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {inspectorTab === "selection" && (
-                      <div
-                        role="tabpanel"
-                        id="inspector-panel-selection"
-                        aria-labelledby="inspector-tab-selection"
-                        className={inspectorTabPanelClasses}
-                      >
-                        {canSelectionActions ? (
-                          <div className="space-y-3">
-                            <div
-                              className={`${inspectorSectionCardClasses} flex items-start justify-between gap-2`}
-                            >
-                              <div>
-                                <p className={inspectorSectionTitleClasses}>
-                                  Selection
-                                </p>
-                                <p className="mt-1 ui-caption text-slate-400">
-                                  {selectedCount > 0
-                                    ? `${selectedCount} selected`
-                                    : "No selection"}
-                                </p>
-                                {selectedCount > 0 && (
-                                  <p className="ui-caption text-slate-400">
-                                    {selectionIsSingle && selectionPrimary
-                                      ? selectionPrimary.name
-                                      : `${selectionFiles.length} files · ${selectionFolders.length} folders`}
-                                  </p>
-                                )}
-                                {selectionHasDeleted && (
-                                  <p className="ui-caption font-semibold text-amber-600 dark:text-amber-200">
-                                    Contains deleted items (derived from delete
-                                    markers).
-                                  </p>
-                                )}
-                                {selectedCount > 0 && (
-                                  <p className="ui-caption text-slate-400">
-                                    Total size: {formatBytes(selectedBytes)}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                            {selectionIsSingle && selectionPrimary?.type === "file" && (
-                              <button
-                                type="button"
-                                className={chromeBulkActionClasses}
-                                onClick={() => runSelectionAction("details")}
-                              >
-                                Open full details
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className={inspectorEmptyStateClasses}>
-                            Select one or more objects to see selection actions.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {inspectorTab === "details" && (
-                      <div
-                        role="tabpanel"
-                        id="inspector-panel-details"
-                        aria-labelledby="inspector-tab-details"
-                        className={inspectorTabPanelClasses}
-                      >
-                        {inspectedItem ? (
-                          <div className="space-y-3">
-                            <div className={inspectorSectionCardClasses}>
-                              <p className={inspectorSectionTitleClasses}>
-                                Object details
-                              </p>
-                            </div>
-                            <div className="rounded-lg border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)] px-3 py-2.5 shadow-[var(--ui-shadow-soft)]">
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className={`flex h-10 w-10 items-center justify-center rounded-lg border ui-caption font-bold ${
-                                    isImageFile(inspectedItem.name)
-                                      ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/30 dark:text-sky-200"
-                                      : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                                  }`}
-                                >
-                                  {previewLabelForItem(inspectedItem)}
-                                </div>
-                                <div>
-                                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
-                                    {inspectedItem.name}
-                                  </p>
-                                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                    {inspectedItem.type === "folder"
-                                      ? inspectedItem.isDeleted
-                                        ? "Deleted folder"
-                                        : "Prefix"
-                                      : inspectedItem.isDeleted
-                                        ? "Deleted object"
-                                        : "Object"}{" "}
-                                    | {inspectedItem.size}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                            {inspectedItem.type === "file" && (
-                              <button
-                                type="button"
-                                className={chromeBulkActionClasses}
-                                onClick={runInspectedFullDetailsAction}
-                              >
-                                Open full details
-                              </button>
-                            )}
-                            <div className={inspectorSectionCardClasses}>
-                              <p className={inspectorSectionTitleClasses}>
-                                Summary
-                              </p>
-                              <div className="grid gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">Path</span>
-                                  <span className="min-w-0 break-all text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedPath}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">Owner</span>
-                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedItem.owner}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">
-                                    Last modified
-                                  </span>
-                                  <span className="min-w-0 text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedItem.modified}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">
-                                    Type
-                                  </span>
-                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedItem.type === "folder"
-                                      ? inspectedItem.isDeleted
-                                        ? "Deleted folder"
-                                        : "Prefix"
-                                      : inspectedItem.isDeleted
-                                        ? "Deleted object"
-                                        : "Object"}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">
-                                    Storage class
-                                  </span>
-                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedItem.storageClass ?? "-"}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            {isVersioningEnabled &&
-                              inspectedItem.type === "file" && (
-                                <BrowserObjectVersionsList
-                                  title="Versions"
-                                  containerClassName={inspectorSectionCardClasses}
-                                  titleClassName={inspectorSectionTitleClasses}
-                                  bodyClassName="mt-2 space-y-2"
-                                  versions={objectVersionRows}
-                                  loading={objectVersionsLoading}
-                                  error={objectVersionsError}
-                                  canLoadMore={Boolean(
-                                    objectVersionKeyMarker ||
-                                      objectVersionIdMarker,
-                                  )}
-                                  onLoadMore={() =>
-                                    void loadObjectVersions({
-                                      append: true,
-                                      keyMarker: objectVersionKeyMarker,
-                                      versionIdMarker: objectVersionIdMarker,
-                                      targetKey: inspectedItem.key,
-                                    })
-                                  }
-                                  onRestoreVersion={handleRestoreVersion}
-                                  onDeleteVersion={handleDeleteVersion}
-                                />
-                              )}
-                          </div>
-                        ) : (
-                          <div className={inspectorEmptyStateClasses}>
-                            Select a single object to view details.
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <BrowserInspectorPanel
+                activeTab={inspectorTab}
+                workspaceNoun={workspaceNoun}
+                workspaceNounCapitalized={workspaceNounCapitalized}
+                usePortalWorkspaceLabels={usePortalWorkspaceLabels}
+                actionButtonClasses={chromeBulkActionClasses}
+                context={{
+                  currentPath,
+                  pathStats,
+                  versioningEnabled: isVersioningEnabled,
+                  showDeletedObjects,
+                  counts: contextCounts,
+                  countsLoading: contextCountsLoading,
+                  countsError: contextCountsError,
+                  canCount: Boolean(bucketName && hasS3AccountContext),
+                  onCount: () => void handleContextCount(),
+                }}
+                bucket={{
+                  name: bucketName,
+                  hasContext: hasS3AccountContext,
+                  loading: bucketInspectorLoading,
+                  error: bucketInspectorError,
+                  data: bucketInspectorData,
+                  features: bucketInspectorFeatures,
+                  isCephContext,
+                  cephQuotaScopeLabel,
+                  cephContextQuotaSizeBytes,
+                  cephContextQuotaObjects,
+                }}
+                selection={{
+                  hasActions: canSelectionActions,
+                  selectedCount,
+                  isSingle: selectionIsSingle,
+                  primary: selectionPrimary,
+                  fileCount: selectionFiles.length,
+                  folderCount: selectionFolders.length,
+                  hasDeleted: selectionHasDeleted,
+                  selectedBytes,
+                  onOpenFullDetails: () => runSelectionAction("details"),
+                }}
+                details={{
+                  item: inspectedItem,
+                  path: inspectedPath,
+                  versioningEnabled: isVersioningEnabled,
+                  versions: {
+                    versions: objectVersionRows,
+                    loading: objectVersionsLoading,
+                    error: objectVersionsError,
+                    canLoadMore: Boolean(
+                      inspectedItem &&
+                        (objectVersionKeyMarker || objectVersionIdMarker),
+                    ),
+                    onLoadMore: inspectedItem
+                      ? () =>
+                          void loadObjectVersions({
+                            append: true,
+                            keyMarker: objectVersionKeyMarker,
+                            versionIdMarker: objectVersionIdMarker,
+                            targetKey: inspectedItem.key,
+                          })
+                      : undefined,
+                    onRestoreVersion: handleRestoreVersion,
+                    onDeleteVersion: handleDeleteVersion,
+                  },
+                  onOpenFullDetails: runInspectedFullDetailsAction,
+                }}
+                onSelectTab={setInspectorTab}
+                onOpenBucketTab={handleOpenBucketInspector}
+              />
             )}
             {isFoldersPanelVisible && (
               <div

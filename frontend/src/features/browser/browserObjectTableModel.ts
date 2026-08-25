@@ -411,7 +411,7 @@ export const buildBrowserItems = (
   return [...folderItems, ...objectItems, ...deletedItems];
 };
 
-type BrowserPathStats = {
+export type BrowserPathStats = {
   totalBytes: number;
   files: number;
   deletedFiles: number;

@@ -15,3 +15,12 @@ export function resolveBrowserItemOpenLabel(item: BrowserItem): string {
     ? `Open folder ${item.name}`
     : `Open file ${item.name}`;
 }
+
+export function resolveBrowserInspectorItemTypeLabel(
+  item: BrowserItem,
+): string {
+  if (item.type === "folder") {
+    return item.isDeleted ? "Deleted folder" : "Prefix";
+  }
+  return item.isDeleted ? "Deleted object" : "Object";
+}

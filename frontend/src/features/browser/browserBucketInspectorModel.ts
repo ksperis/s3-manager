@@ -24,7 +24,7 @@ export type BucketInspectorData = {
   quota_max_objects?: number | null;
   features: Record<string, BucketInspectorFeature>;
 };
-type BucketInspectorFeatureView = BucketInspectorFeature & {
+export type BucketInspectorFeatureView = BucketInspectorFeature & {
   key: string;
   label: string;
 };
