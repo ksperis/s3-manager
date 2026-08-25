@@ -4470,6 +4470,48 @@ describe("BrowserPage interactions", () => {
     expect(fetchObjectMetadataMock).toHaveBeenCalledTimes(2);
   });
 
+  it("updates a canned ACL from the object details modal", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const row = await findRowByLabel("a.txt");
+    await user.click(
+      within(row).getByRole("button", { name: "More actions for a.txt" }),
+    );
+    await user.click(
+      within(await screen.findByRole("menu")).getByRole("button", {
+        name: "Properties",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    await user.click(
+      within(dialog).getByRole("tab", { name: "Access & Protection" }),
+    );
+    await user.selectOptions(
+      within(dialog).getByRole("combobox", { name: "Canned ACL" }),
+      "public-read",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Save ACL" }));
+
+    await waitFor(() => {
+      expect(updateObjectAclMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        {
+          key: "a.txt",
+          acl: "public-read",
+          version_id: null,
+        },
+        undefined,
+        undefined,
+      );
+    });
+    expect(await within(dialog).findByText("ACL updated.")).toBeInTheDocument();
+  });
+
   it("does not request a Browser preview when the object exceeds the shared limit", async () => {
     const user = userEvent.setup();
     listBrowserObjectsMock.mockResolvedValueOnce({

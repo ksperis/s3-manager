@@ -12,7 +12,6 @@ import ObjectPreview, {
 import {
   fetchObjectMetadata,
   proxyDownload,
-  updateObjectAcl,
   type BrowserObjectVersion,
   type BrowserRequestOptions,
   type PresignedUrl,
@@ -52,6 +51,7 @@ import {
   useBrowserObjectArchiveRestore,
   type ObjectRestoreTier,
 } from "./useBrowserObjectArchiveRestore";
+import { useBrowserObjectAcl } from "./useBrowserObjectAcl";
 
 type BrowserObjectDetailsModalProps = {
   accountId: S3AccountSelector;
@@ -112,8 +112,6 @@ export default function BrowserObjectDetailsModal({
   );
   const [copyDialogValue, setCopyDialogValue] = useState<string | null>(null);
 
-  const [aclValue, setAclValue] = useState("private");
-  const [savingAcl, setSavingAcl] = useState(false);
   const [savingVersionAction, setSavingVersionAction] = useState(false);
 
   const {
@@ -166,6 +164,19 @@ export default function BrowserObjectDetailsModal({
     item: itemSnapshot,
     requestOptions,
     sseCustomerKeyBase64,
+  });
+  const {
+    value: aclValue,
+    setValue: setAclValue,
+    saving: savingAcl,
+    isCurrentScope: isAclScopeCurrent,
+    save: saveAcl,
+  } = useBrowserObjectAcl({
+    accountId,
+    bucketName,
+    objectKey: itemSnapshot.key,
+    requestOptions,
+    versionId,
   });
   const {
     legalHoldStatus,
@@ -341,7 +352,6 @@ export default function BrowserObjectDetailsModal({
     setCopyDialogValue(null);
 
     resetObjectProperties(item);
-    setAclValue("private");
 
     setSavingVersionAction(false);
   }, [initialTab, item, resetObjectProperties]);
@@ -426,20 +436,12 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleSaveAcl = async () => {
-    if (!bucketName || !itemSnapshot.key) return;
-    setSavingAcl(true);
     setActionMessage(null);
     try {
-      await updateObjectAcl(accountId, bucketName, {
-        key: itemSnapshot.key,
-        acl: aclValue,
-        version_id: versionId ?? null,
-      }, undefined, requestOptions);
+      if (!(await saveAcl()) || !isAclScopeCurrent()) return;
       pushStatus("ACL updated.", "success");
     } catch (err) {
       pushStatus(extractApiError(err, "Unable to update ACL."), "error");
-    } finally {
-      setSavingAcl(false);
     }
   };
 
