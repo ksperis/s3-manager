@@ -23,7 +23,6 @@ import {
 } from "react-router-dom";
 import type { UploadProgressEvent } from "../../api/browser";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
-import UiBadge from "../../components/ui/UiBadge";
 import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import {
   cx,
@@ -83,18 +82,11 @@ import {
   type BrowserSidebarBodyRenderer,
 } from "./BrowserLayout";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
-import BrowserBucketSelector from "./BrowserBucketSelector";
-import { BrowserToolbarActionMenuItem } from "./BrowserActionPresentation";
 import BrowserObjectExplorer from "./BrowserObjectExplorer";
 import BrowserObjectSearchHeader from "./BrowserObjectSearchHeader";
-import BrowserPathNavigator from "./BrowserPathNavigator";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
-import {
-  BrowserColumnsMenu,
-  BrowserUploadQuickMenu,
-} from "./BrowserToolbarMenus";
-import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
+import BrowserToolbar from "./BrowserToolbar";
 import { useBrowserBucketCors } from "./useBrowserBucketCors";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
@@ -194,22 +186,10 @@ import {
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
 import {
-  ChevronDownIcon,
-  CopyIcon,
   DownloadIcon,
-  EyeIcon,
-  FolderIcon,
-  FolderPlusIcon,
-  HistoryIcon,
   InfoIcon,
-  ListIcon,
   MoreIcon,
   OpenIcon,
-  RefreshIcon,
-  SettingsIcon,
-  SlidersIcon,
-  TrashIcon,
-  UploadIcon,
   XIcon,
 } from "./browserIcons";
 import { resolveBrowserContextQuotas } from "./browserQuota";
@@ -230,9 +210,6 @@ import {
   VERSIONS_PAGE_SIZE,
   bulkActionClasses,
   bulkDangerClasses,
-  contextMenuItemClasses,
-  contextMenuItemDisabledClasses,
-  contextMenuSeparatorClasses,
   filterChipClasses,
   iconButtonClasses,
   storageClassOptions,
@@ -390,10 +367,6 @@ const browserShellClasses =
   "flex min-h-0 flex-1 flex-col overflow-hidden";
 const browserSubtleSurfaceClasses =
   cx(uiCardMutedClass, "shadow-none");
-const browserToolbarShellClasses =
-  "flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between";
-const browserToolbarControlsGroupClasses =
-  "flex shrink-0 items-center gap-1.5";
 const browserFloatingMenuClasses =
   cx(uiMenuClass, "overflow-hidden p-1.5");
 export default function BrowserPage({
@@ -863,14 +836,8 @@ export default function BrowserPage({
   const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
   const searchControlRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsButtonRef = useRef<HTMLButtonElement | null>(null);
-  const uploadQuickButtonRef = useRef<HTMLButtonElement | null>(null);
-  const uploadQuickMenuRef = useRef<HTMLDivElement | null>(null);
-  const toolbarMoreButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileActionsSheetRef = useRef<HTMLDivElement | null>(null);
-  const toolbarMoreMenuRef = useRef<HTMLDivElement | null>(null);
-  const toolbarColumnsButtonRef = useRef<HTMLButtonElement | null>(null);
-  const toolbarColumnsMenuRef = useRef<HTMLDivElement | null>(null);
   const objectsListViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
   const bucketPanelViewportRef = useRef<HTMLDivElement | null>(null);
@@ -1622,20 +1589,6 @@ export default function BrowserPage({
     onDismiss: () => setShowSearchOptionsMenu(false),
   });
 
-  useDismissibleLayer({
-    open: showToolbarMoreMenu,
-    insideRefs: [
-      toolbarMoreButtonRef,
-      toolbarMoreMenuRef,
-      toolbarColumnsButtonRef,
-      toolbarColumnsMenuRef,
-    ],
-    onDismiss: () => {
-      setShowToolbarColumnsMenu(false);
-      setShowToolbarMoreMenu(false);
-    },
-  });
-
   useEffect(() => {
     if (!showMobileActionsSheet) return;
     const sheet = mobileActionsSheetRef.current;
@@ -1678,12 +1631,6 @@ export default function BrowserPage({
       setShowMobileActionsSheet(false);
     }
   }, [isMobileViewport, selectedIds.length]);
-
-  useDismissibleLayer({
-    open: showUploadQuickMenu,
-    insideRefs: [uploadQuickButtonRef, uploadQuickMenuRef],
-    onDismiss: () => setShowUploadQuickMenu(false),
-  });
 
   useEffect(() => {
     if (operations.length === 0) return;
@@ -8714,14 +8661,6 @@ export default function BrowserPage({
   const browserNoticeShellClasses = "shrink-0 pb-2";
   const browserContentShellClasses =
     "relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden pb-3";
-  const toolbarStatusTextClassName =
-    selectedCount > 0
-      ? "ui-caption font-semibold text-primary-700 dark:text-primary-100"
-      : "ui-caption font-semibold text-slate-500 dark:text-slate-400";
-  const toolbarOverflowStatusRowClasses =
-    "flex items-start gap-3 px-1 py-1 ui-caption text-slate-600 dark:text-slate-300";
-  const toolbarOverflowSectionTitleClasses =
-    "px-1 py-1 ui-caption font-semibold text-slate-500 dark:text-slate-400";
   const toolbarSelectionSummary =
     selectedCount > 0 ? `${selectedCount} selected` : "No selection";
   const toolbarCanUploadFiles = pathActionStates.uploadFiles.enabled;
@@ -8738,8 +8677,6 @@ export default function BrowserPage({
     selectionActionStates.delete.visible &&
     selectionActionStates.delete.enabled;
   const toolbarPathActions = toolbarMorePathActions;
-  const hasToolbarPathActions =
-    toolbarPathActions.length > 0;
   const toolbarSelectionActions = (
     isActionBarVisible
       ? toolbarMoreSelectionOverflowActions
@@ -8757,41 +8694,7 @@ export default function BrowserPage({
     (isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled) ||
     Boolean(accessBadge) ||
     hasToolbarOperationsAction;
-  const hasToolbarLayoutSection =
-    showFolderToggle || showInspectorToggle || showLayoutModeToggle;
   const hasToolbarColumnsSection = !isPortalProfile;
-  const hasToolbarSecondaryActionsSection =
-    hasToolbarPathActions ||
-    hasToolbarSelectionActions ||
-    showSseControls;
-  const hasToolbarMoreMenu =
-    hasToolbarStatusSection ||
-    hasToolbarLayoutSection ||
-    hasToolbarColumnsSection ||
-    hasToolbarSecondaryActionsSection;
-  const closeToolbarMoreMenu = () => {
-    setShowToolbarColumnsMenu(false);
-    setShowToolbarMoreMenu(false);
-  };
-  const closeUploadQuickMenu = () => {
-    setShowUploadQuickMenu(false);
-  };
-  const runToolbarMoreAction = (action: () => void) => {
-    closeToolbarMoreMenu();
-    action();
-  };
-  const toggleToolbarMoreMenu = () => {
-    setShowUploadQuickMenu(false);
-    setShowToolbarColumnsMenu(false);
-    setShowToolbarMoreMenu((prev) => !prev);
-  };
-  const toggleUploadQuickMenu = () => {
-    closeToolbarMoreMenu();
-    setShowUploadQuickMenu((prev) => !prev);
-  };
-  const toggleToolbarColumnsMenu = () => {
-    setShowToolbarColumnsMenu((prev) => !prev);
-  };
   const toolbarColumnsSummary = `${effectiveVisibleColumns.length}/${COLUMN_DEFINITIONS.length} visible`;
   const handleToolbarDownload = () => {
     runSelectionAction("download");
@@ -8799,20 +8702,6 @@ export default function BrowserPage({
   const handleToolbarOpen = () => {
     runSelectionAction("open");
   };
-  const runQuickUploadAction = (action: "uploadFiles" | "uploadFolder") => {
-    closeUploadQuickMenu();
-    runPathAction(action);
-  };
-  useEffect(() => {
-    if (!hasToolbarMoreMenu && showToolbarMoreMenu) {
-      setShowToolbarMoreMenu(false);
-    }
-  }, [hasToolbarMoreMenu, showToolbarMoreMenu]);
-
-  useEffect(() => {
-    if (showToolbarMoreMenu) return;
-    setShowToolbarColumnsMenu(false);
-  }, [showToolbarMoreMenu]);
 
   const handleSearchScopeChange = (scope: SearchScope) => {
     setSearchScope(scope);
@@ -8876,541 +8765,159 @@ export default function BrowserPage({
       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
         <div className={browserShellClasses}>
         <div className={browserChromeShellClasses}>
-          <div className="flex flex-col gap-2.5">
-            <div
-              role="toolbar"
-              aria-label="Browser context bar"
-              className={browserToolbarShellClasses}
-            >
-              <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-stretch lg:items-center">
-                <BrowserBucketSelector
-                  rootRef={bucketMenuRef}
-                  filterInputRef={bucketMenuFilterRef}
-                  lockedBucketName={resolvedLockedBucketName}
-                  hasContext={hasS3AccountContext}
-                  open={showBucketMenu}
-                  buttonLabel={bucketButtonLabel}
-                  buttonActionLabel={bucketButtonActionLabel}
-                  needsAttention={bucketSelectorNeedsAttention}
-                  workspaceNoun={selectorWorkspaceNoun}
-                  workspaceNounPlural={selectorWorkspaceNounPlural}
-                  workspaceNounTitle={selectorWorkspaceNounTitle}
-                  bucketManagementEnabled={bucketManagementEnabled}
-                  filter={bucketFilter}
-                  loading={loadingBuckets}
-                  hasError={Boolean(bucketError)}
-                  totalCount={bucketTotalCount}
-                  total={bucketMenuTotal}
-                  items={bucketMenuItems}
-                  activeBucketName={bucketName}
-                  displayNameByBucket={bucketDisplayNameByName}
-                  canLoadMore={canLoadMoreBucketResults}
-                  loadingMore={bucketMenuLoadingMore}
-                  onToggle={() => setShowBucketMenu((current) => !current)}
-                  onCreateBucket={openCreateBucketDialog}
-                  onFilterChange={setBucketFilter}
-                  onRetry={() => void refreshBucketList()}
-                  onSelectBucket={handleBucketChange}
-                  onLoadMore={handleBucketMenuLoadMore}
-                />
-                <BrowserPathNavigator
-                  inputRef={pathInputRef}
-                  editing={isEditingPath}
-                  value={pathDraft}
-                  disabled={!bucketName}
-                  suggestions={pathSuggestions}
-                  suggestionsLoading={pathSuggestionsLoading}
-                  activeSuggestionIndex={pathSuggestionIndex}
-                  breadcrumbs={breadcrumbs}
-                  canGoUp={canGoUp}
-                  onStartEditing={startEditingPath}
-                  onChange={setPathDraft}
-                  onBlur={commitPathDraft}
-                  onKeyDown={handlePathKeyDown}
-                  onHoverSuggestion={setPathSuggestionIndex}
-                  onSelectSuggestion={(suggestion) =>
-                    applyPathSuggestion(suggestion, { commit: true })
-                  }
-                  onGoUp={handleGoUp}
-                  onSelectPrefix={handleSelectPrefix}
-                />
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                {!isPortalProfile &&
+          <BrowserToolbar
+            bucketSelector={{
+              rootRef: bucketMenuRef,
+              filterInputRef: bucketMenuFilterRef,
+              lockedBucketName: resolvedLockedBucketName,
+              hasContext: hasS3AccountContext,
+              open: showBucketMenu,
+              buttonLabel: bucketButtonLabel,
+              buttonActionLabel: bucketButtonActionLabel,
+              needsAttention: bucketSelectorNeedsAttention,
+              workspaceNoun: selectorWorkspaceNoun,
+              workspaceNounPlural: selectorWorkspaceNounPlural,
+              workspaceNounTitle: selectorWorkspaceNounTitle,
+              bucketManagementEnabled,
+              filter: bucketFilter,
+              loading: loadingBuckets,
+              hasError: Boolean(bucketError),
+              totalCount: bucketTotalCount,
+              total: bucketMenuTotal,
+              items: bucketMenuItems,
+              activeBucketName: bucketName,
+              displayNameByBucket: bucketDisplayNameByName,
+              canLoadMore: canLoadMoreBucketResults,
+              loadingMore: bucketMenuLoadingMore,
+              onToggle: () => setShowBucketMenu((current) => !current),
+              onCreateBucket: openCreateBucketDialog,
+              onFilterChange: setBucketFilter,
+              onRetry: () => void refreshBucketList(),
+              onSelectBucket: handleBucketChange,
+              onLoadMore: handleBucketMenuLoadMore,
+            }}
+            pathNavigator={{
+              inputRef: pathInputRef,
+              editing: isEditingPath,
+              value: pathDraft,
+              disabled: !bucketName,
+              suggestions: pathSuggestions,
+              suggestionsLoading: pathSuggestionsLoading,
+              activeSuggestionIndex: pathSuggestionIndex,
+              breadcrumbs,
+              canGoUp,
+              onStartEditing: startEditingPath,
+              onChange: setPathDraft,
+              onBlur: commitPathDraft,
+              onKeyDown: handlePathKeyDown,
+              onHoverSuggestion: setPathSuggestionIndex,
+              onSelectSuggestion: (suggestion) =>
+                applyPathSuggestion(suggestion, { commit: true }),
+              onGoUp: handleGoUp,
+              onSelectPrefix: handleSelectPrefix,
+            }}
+            deletedObjects={{
+              showToggle: Boolean(
+                !isPortalProfile &&
                   deletedObjectsOptions?.showToggle &&
                   isVersioningEnabled &&
-                  bucketName && (
-                    <button
-                      type="button"
-                      className={chromeToolbarButtonClasses}
-                      aria-pressed={showDeletedObjects}
-                      onClick={() => runPathAction("toggleShowDeleted")}
-                    >
-                      <TrashIcon className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">
-                        {showDeletedObjects
-                          ? "Hide deleted files"
-                          : "Show deleted files"}
-                      </span>
-                      <span className="sm:hidden">
-                        {showDeletedObjects ? "Hide deleted" : "Show deleted"}
-                      </span>
-                    </button>
-                  )}
-                {deletedObjectsOptions?.onRestorePrefix &&
+                  bucketName,
+              ),
+              showDeleted: showDeletedObjects,
+              showRestore: Boolean(
+                deletedObjectsOptions?.onRestorePrefix &&
                   pathActionStates.restore.visible &&
                   showDeletedObjects &&
                   isVersioningEnabled &&
                   bucketName &&
-                  normalizedPrefix && (
-                    <button
-                      type="button"
-                      className={chromeToolbarButtonClasses}
-                      onClick={() => runPathAction("restore")}
-                      disabled={!pathActionStates.restore.enabled}
-                    >
-                      <HistoryIcon className="h-3.5 w-3.5" />
-                      <span className="hidden lg:inline">
-                        Restore deleted files in this folder
-                      </span>
-                      <span className="lg:hidden">Restore folder</span>
-                    </button>
-                  )}
-                {isCompactToolbarMode && (
-                  <div className={browserToolbarControlsGroupClasses}>
-                    <button
-                      ref={uploadQuickButtonRef}
-                      type="button"
-                      className={chromeToolbarIconButtonClasses}
-                      onClick={toggleUploadQuickMenu}
-                      disabled={
-                        !toolbarCanUploadFiles && !toolbarCanUploadFolder
-                      }
-                      aria-haspopup={
-                        toolbarCanUploadFiles || toolbarCanUploadFolder
-                          ? "menu"
-                          : undefined
-                      }
-                      aria-expanded={
-                        toolbarCanUploadFiles || toolbarCanUploadFolder
-                          ? showUploadQuickMenu
-                          : undefined
-                      }
-                      aria-label="Upload"
-                      title="Upload"
-                    >
-                      <UploadIcon className="h-3.5 w-3.5" />
-                    </button>
-                    <BrowserUploadQuickMenu
-                      open={showUploadQuickMenu}
-                      anchorRef={uploadQuickButtonRef}
-                      menuRef={uploadQuickMenuRef}
-                      canUploadFiles={toolbarCanUploadFiles}
-                      canUploadFolder={toolbarCanUploadFolder}
-                      onUploadFiles={() =>
-                        runQuickUploadAction("uploadFiles")
-                      }
-                      onUploadFolder={() =>
-                        runQuickUploadAction("uploadFolder")
-                      }
-                    />
-                    <button
-                      type="button"
-                      className={chromeToolbarIconButtonClasses}
-                      onClick={() => runPathAction("newFolder")}
-                      disabled={!toolbarCanCreateFolder}
-                      aria-label="New folder"
-                      title="New folder"
-                    >
-                      <FolderPlusIcon className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      className={chromeToolbarIconButtonClasses}
-                      onClick={() => runPathAction("refresh")}
-                      disabled={!pathActionStates.refresh.enabled}
-                      aria-label="Refresh"
-                      title="Refresh"
-                    >
-                      <RefreshIcon className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      ref={toolbarMoreButtonRef}
-                      type="button"
-                      className={chromeToolbarIconButtonClasses}
-                      onClick={toggleToolbarMoreMenu}
-                      disabled={!hasToolbarMoreMenu}
-                      aria-haspopup={hasToolbarMoreMenu ? "menu" : undefined}
-                      aria-expanded={
-                        hasToolbarMoreMenu ? showToolbarMoreMenu : undefined
-                      }
-                      aria-label="More"
-                      title="More"
-                    >
-                      <MoreIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-            {isActionBarVisible && !isMobileViewport && (
-              <div
-                role="toolbar"
-                aria-label="Browser actions bar"
-                className="sticky top-0 z-20 hidden gap-3 rounded-xl border border-slate-200 bg-slate-50/95 px-3 py-2.5 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 md:flex md:items-center md:justify-between"
-              >
-                <div className="min-w-0 flex items-center">
-                  <div className="min-w-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                    <p className={`${toolbarStatusTextClassName} truncate`}>
-                      {toolbarSelectionSummary}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={handleToolbarOpen}
-                    disabled={!toolbarCanOpen}
-                  >
-                    <OpenIcon className="h-3.5 w-3.5" />
-                    Open
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={() => runSelectionAction("copy")}
-                    disabled={!toolbarCanCopy}
-                  >
-                    <CopyIcon className="h-3.5 w-3.5" />
-                    Copy
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarPrimaryClasses}
-                    onClick={handleToolbarDownload}
-                    disabled={!toolbarCanDownload}
-                  >
-                    <DownloadIcon className="h-3.5 w-3.5" />
-                    Download
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeDangerActionClasses}
-                    onClick={() => runSelectionAction("delete")}
-                    disabled={!toolbarCanDelete}
-                  >
-                    <TrashIcon className="h-3.5 w-3.5" />
-                    Delete
-                  </button>
-                  <button
-                    ref={toolbarMoreButtonRef}
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={toggleToolbarMoreMenu}
-                    disabled={!hasToolbarMoreMenu}
-                    aria-haspopup={hasToolbarMoreMenu ? "menu" : undefined}
-                    aria-expanded={
-                      hasToolbarMoreMenu ? showToolbarMoreMenu : undefined
+                  normalizedPrefix,
+              ),
+              restoreEnabled: pathActionStates.restore.enabled,
+            }}
+            compactActions={{
+              visible: isCompactToolbarMode,
+              uploadMenuOpen: showUploadQuickMenu,
+              canUploadFiles: toolbarCanUploadFiles,
+              canUploadFolder: toolbarCanUploadFolder,
+              canCreateFolder: toolbarCanCreateFolder,
+              canRefresh: pathActionStates.refresh.enabled,
+              onUploadMenuOpenChange: setShowUploadQuickMenu,
+            }}
+            selectionActions={{
+              visible: isActionBarVisible,
+              mobileViewport: isMobileViewport,
+              summary: toolbarSelectionSummary,
+              canOpen: toolbarCanOpen,
+              canCopy: toolbarCanCopy,
+              canDownload: toolbarCanDownload,
+              canDelete: toolbarCanDelete,
+            }}
+            moreMenu={{
+              open: showToolbarMoreMenu,
+              onOpenChange: setShowToolbarMoreMenu,
+              status: {
+                visible: hasToolbarStatusSection,
+                accessBadge,
+                viewLabel: isMainBrowserPath ? browserViewLabel : undefined,
+                operationsCount: hasToolbarOperationsAction
+                  ? operationsPanelTotalCount
+                  : undefined,
+                onOpenOperations: () => setShowOperationsDetailsModal(true),
+              },
+              layout: {
+                folders: showFolderToggle
+                  ? { checked: showFolders, onToggle: toggleFoldersPanel }
+                  : undefined,
+                inspector: showInspectorToggle
+                  ? { checked: showInspector, onToggle: toggleInspectorPanel }
+                  : undefined,
+                workbench: showLayoutModeToggle
+                  ? {
+                      checked: activeLayoutMode === "workbench",
+                      onToggle: () =>
+                        changeLayoutMode(
+                          activeLayoutMode === "workbench"
+                            ? "standard"
+                            : "workbench",
+                        ),
                     }
-                    aria-label="More"
-                    title="More"
-                  >
-                    <MoreIcon className="h-3.5 w-3.5" />
-                    More
-                  </button>
-                </div>
-              </div>
-            )}
-            {hasToolbarMoreMenu && (
-              <AnchoredPortalMenu
-                open={showToolbarMoreMenu}
-                anchorRef={toolbarMoreButtonRef}
-                placement="bottom-end"
-                offset={6}
-                minWidth={288}
-                className={`w-80 ${browserFloatingMenuClasses}`}
-              >
-                <div
-                  ref={toolbarMoreMenuRef}
-                  role="menu"
-                  aria-label="More"
-                  className="max-h-[min(70vh,28rem)] overflow-y-auto"
-                >
-                  {hasToolbarStatusSection && (
-                    <>
-                      <p className={toolbarOverflowSectionTitleClasses}>
-                        Status
-                      </p>
-                      {accessBadge && (
-                        <div
-                          className={toolbarOverflowStatusRowClasses}
-                          title={accessBadge.title}
-                        >
-                          <span
-                            className={`mt-0.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${accessBadge.indicatorClassName}`}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="font-semibold text-slate-700 dark:text-slate-100">
-                                Transfers
-                              </p>
-                              <UiBadge
-                                tone={accessBadge.tone}
-                                className="shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[10px] leading-4"
-                                title={accessBadge.title}
-                              >
-                                {accessBadge.label}
-                              </UiBadge>
-                            </div>
-                            <p className="text-slate-500 dark:text-slate-400">
-                              {accessBadge.title}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {isMainBrowserPath && (
-                        <div className={toolbarOverflowStatusRowClasses}>
-                          <EyeIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-slate-700 dark:text-slate-100">
-                              View
-                            </p>
-                            <p className="text-slate-500 dark:text-slate-400">
-                              {browserViewLabel}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {hasToolbarOperationsAction && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          aria-label="Operations overview"
-                          className={contextMenuItemClasses}
-                          onClick={() => {
-                            runToolbarMoreAction(() =>
-                              setShowOperationsDetailsModal(true),
-                            );
-                          }}
-                        >
-                          <ListIcon className="h-3.5 w-3.5" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block">Operations overview</span>
-                            <span
-                              aria-hidden="true"
-                              className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500"
-                            >
-                              {operationsPanelTotalCount === 1
-                                ? "1 operation"
-                                : `${operationsPanelTotalCount} operations`}
-                            </span>
-                          </span>
-                        </button>
-                      )}
-                    </>
-                  )}
-                  {hasToolbarLayoutSection && (
-                    <>
-                      {hasToolbarStatusSection && (
-                        <div className={contextMenuSeparatorClasses} />
-                      )}
-                      <p className={toolbarOverflowSectionTitleClasses}>
-                        Layout
-                      </p>
-                      {showFolderToggle && (
-                        <BrowserToolbarToggleMenuItem
-                          label="Folders panel"
-                          icon={<FolderIcon className="h-3.5 w-3.5" />}
-                          checked={showFolders}
-                          onToggle={toggleFoldersPanel}
-                        />
-                      )}
-                      {showInspectorToggle && (
-                        <BrowserToolbarToggleMenuItem
-                          label="Inspector panel"
-                          icon={<InfoIcon className="h-3.5 w-3.5" />}
-                          checked={showInspector}
-                          onToggle={toggleInspectorPanel}
-                        />
-                      )}
-                      {showLayoutModeToggle && (
-                        <BrowserToolbarToggleMenuItem
-                          label="Workbench layout"
-                          icon={<SlidersIcon className="h-3.5 w-3.5" />}
-                          checked={activeLayoutMode === "workbench"}
-                          onToggle={() =>
-                            changeLayoutMode(
-                              activeLayoutMode === "workbench" ? "standard" : "workbench",
-                            )
-                          }
-                        />
-                      )}
-                    </>
-                  )}
-                  {hasToolbarColumnsSection && (
-                    <>
-                      {(hasToolbarStatusSection || hasToolbarLayoutSection) && (
-                        <div className={contextMenuSeparatorClasses} />
-                      )}
-                      <p className={toolbarOverflowSectionTitleClasses}>
-                        Columns
-                      </p>
-                      <button
-                        ref={toolbarColumnsButtonRef}
-                        type="button"
-                        role="menuitem"
-                        aria-haspopup="menu"
-                        aria-expanded={showToolbarColumnsMenu}
-                        className={contextMenuItemClasses}
-                        onClick={toggleToolbarColumnsMenu}
-                      >
-                        <SlidersIcon className="h-3.5 w-3.5" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block">Columns</span>
-                          <span className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500">
-                            {toolbarColumnsSummary}
-                          </span>
-                        </span>
-                        <ChevronDownIcon
-                          className={`h-3.5 w-3.5 shrink-0 transition ${
-                            showToolbarColumnsMenu ? "" : "-rotate-90"
-                          }`}
-                        />
-                      </button>
-                      <BrowserColumnsMenu
-                        open={showToolbarColumnsMenu}
-                        anchorRef={toolbarColumnsButtonRef}
-                        menuRef={toolbarColumnsMenuRef}
-                        columns={COLUMN_DEFINITIONS}
-                        visibleColumnIds={visibleColumnSet}
-                        onToggleColumn={handleToggleVisibleColumn}
-                        onReset={handleResetVisibleColumns}
-                      />
-                    </>
-                  )}
-                  {hasToolbarSecondaryActionsSection && (
-                    <>
-                      {(hasToolbarStatusSection ||
-                        hasToolbarLayoutSection ||
-                        hasToolbarColumnsSection) && (
-                        <div className={contextMenuSeparatorClasses} />
-                      )}
-                      {hasToolbarPathActions && (
-                        <>
-                          <p className={toolbarOverflowSectionTitleClasses}>
-                            Current path
-                          </p>
-                          {toolbarPathActions.map((action) => (
-                            <BrowserToolbarActionMenuItem
-                              key={action.id}
-                              action={action}
-                              onSelect={() =>
-                                runToolbarMoreAction(() =>
-                                  runPathAction(action.id),
-                                )
-                              }
-                            />
-                          ))}
-                        </>
-                      )}
-                      {hasToolbarSelectionActions && (
-                        <>
-                          {hasToolbarPathActions && (
-                            <div className={contextMenuSeparatorClasses} />
-                          )}
-                          <p className={toolbarOverflowSectionTitleClasses}>
-                            {isActionBarVisible
-                              ? "Selection overflow"
-                              : "Selection actions"}
-                          </p>
-                          {toolbarSelectionActions.map((action) => (
-                            <BrowserToolbarActionMenuItem
-                              key={action.id}
-                              action={action}
-                              onSelect={() =>
-                                runToolbarMoreAction(() =>
-                                  runSelectionAction(action.id),
-                                )
-                              }
-                            />
-                          ))}
-                        </>
-                      )}
-                      {showSseControls && (
-                        <>
-                          {(hasToolbarPathActions ||
-                            hasToolbarSelectionActions) && (
-                            <div className={contextMenuSeparatorClasses} />
-                          )}
-                          <p className={toolbarOverflowSectionTitleClasses}>
-                            Security
-                          </p>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className={`${contextMenuItemClasses} ${
-                              !bucketName ||
-                              !hasS3AccountContext ||
-                              !sseFeatureEnabled
-                                ? contextMenuItemDisabledClasses
-                                : ""
-                            }`}
-                            onClick={() => {
-                              runToolbarMoreAction(openSseCustomerModal);
-                            }}
-                            disabled={
-                              !bucketName ||
-                              !hasS3AccountContext ||
-                              !sseFeatureEnabled
-                            }
-                            title={
-                              sseActive
-                                ? "SSE-C enabled for this bucket."
-                                : "Configure SSE-C key for this bucket."
-                            }
-                          >
-                            <SettingsIcon className="h-3.5 w-3.5" />
-                            <span className="min-w-0 flex-1">
-                              <span className="block">SSE-C</span>
-                              <span className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500">
-                                {sseActive
-                                  ? "Enabled for this bucket"
-                                  : "Configure customer key"}
-                              </span>
-                            </span>
-                            <span
-                              className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                sseActive
-                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100"
-                                  : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
-                              }`}
-                            >
-                              {sseActive ? "On" : "Off"}
-                            </span>
-                          </button>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              </AnchoredPortalMenu>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={handleFileInputChange}
-            />
-            <input
-              ref={folderInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={handleFolderInputChange}
-            />
-          </div>
+                  : undefined,
+              },
+              columns: hasToolbarColumnsSection
+                ? {
+                    open: showToolbarColumnsMenu,
+                    summary: toolbarColumnsSummary,
+                    columns: COLUMN_DEFINITIONS,
+                    visibleColumnIds: visibleColumnSet,
+                    onOpenChange: setShowToolbarColumnsMenu,
+                    onToggleColumn: handleToggleVisibleColumn,
+                    onReset: handleResetVisibleColumns,
+                  }
+                : undefined,
+              pathActions: toolbarPathActions,
+              selectionActions: hasToolbarSelectionActions
+                ? toolbarSelectionActions
+                : [],
+              selectionOverflow: isActionBarVisible,
+              sse: showSseControls
+                ? {
+                    enabled: Boolean(
+                      bucketName &&
+                        hasS3AccountContext &&
+                        sseFeatureEnabled,
+                    ),
+                    active: sseActive,
+                    onOpen: openSseCustomerModal,
+                  }
+                : undefined,
+            }}
+            fileInputRef={fileInputRef}
+            folderInputRef={folderInputRef}
+            onFileInputChange={handleFileInputChange}
+            onFolderInputChange={handleFolderInputChange}
+            onRunPathAction={runPathAction}
+            onRunSelectionAction={runSelectionAction}
+          />
         </div>
 
         {(bucketError || statusMessage || warnings.length > 0) && (

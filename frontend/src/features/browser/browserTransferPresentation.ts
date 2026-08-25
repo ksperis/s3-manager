@@ -31,7 +31,7 @@ type BrowserTransferParallelism = {
   otherOperations: number;
 };
 
-type BrowserTransferAccessBadge = {
+export type BrowserTransferAccessBadge = {
   label: string;
   title: string;
   tone: "danger" | "warning" | "info" | "success";
