@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Modal from "../../components/Modal";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { extractApiError } from "../../utils/apiError";
@@ -11,7 +11,6 @@ import ObjectPreview, {
 } from "../shared/ObjectPreview";
 import {
   fetchObjectMetadata,
-  getObjectTags,
   presignObject,
   proxyDownload,
   restoreObject,
@@ -23,11 +22,9 @@ import {
   type BrowserObjectVersion,
   type BrowserRequestOptions,
   type ObjectLegalHold,
-  type ObjectMetadata,
   type ObjectMetadataUpdate,
   type ObjectRetention,
   type ObjectRestoreRequest,
-  type ObjectTag,
   type ObjectTags,
   type PresignedUrl,
   type PresignRequest,
@@ -65,6 +62,7 @@ import {
   useBrowserObjectProtection,
   type ObjectRetentionMode,
 } from "./useBrowserObjectProtection";
+import { useBrowserObjectProperties } from "./useBrowserObjectProperties";
 
 type BrowserObjectDetailsModalProps = {
   accountId: S3AccountSelector;
@@ -90,18 +88,6 @@ type BrowserObjectDetailsModalProps = {
   readOnly?: boolean;
   requestOptions?: BrowserRequestOptions;
 };
-
-type MetadataDraft = {
-  contentType: string;
-  cacheControl: string;
-  contentDisposition: string;
-  contentEncoding: string;
-  contentLanguage: string;
-  expires: string;
-};
-
-type MetadataDraftItem = ObjectTag & { id: string };
-type TagDraft = ObjectTag & { id: string };
 
 type TabButton = {
   id: ObjectDetailsTabId;
@@ -137,23 +123,6 @@ export default function BrowserObjectDetailsModal({
   );
   const [copyDialogValue, setCopyDialogValue] = useState<string | null>(null);
 
-  const [metadata, setMetadata] = useState<ObjectMetadata | null>(null);
-  const [metadataLoading, setMetadataLoading] = useState(false);
-  const [metadataLoaded, setMetadataLoaded] = useState(false);
-  const [metadataError, setMetadataError] = useState<string | null>(null);
-  const [tagsVersionId, setTagsVersionId] = useState<string | null>(null);
-
-  const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>({
-    contentType: "",
-    cacheControl: "",
-    contentDisposition: "",
-    contentEncoding: "",
-    contentLanguage: "",
-    expires: "",
-  });
-  const [metadataItems, setMetadataItems] = useState<MetadataDraftItem[]>([]);
-  const [tagsDraft, setTagsDraft] = useState<TagDraft[]>([]);
-  const [storageClass, setStorageClass] = useState("");
   const [aclValue, setAclValue] = useState("private");
   const [restoreDays, setRestoreDays] = useState("7");
   const [restoreTier, setRestoreTier] = useState<
@@ -177,19 +146,6 @@ export default function BrowserObjectDetailsModal({
   const [savingPresign, setSavingPresign] = useState(false);
   const [savingVersionAction, setSavingVersionAction] = useState(false);
 
-  const tagIdRef = useRef(0);
-  const metadataIdRef = useRef(0);
-
-  const nextTagId = useCallback(() => {
-    tagIdRef.current += 1;
-    return `tag-${tagIdRef.current}`;
-  }, []);
-
-  const nextMetadataId = useCallback(() => {
-    metadataIdRef.current += 1;
-    return `meta-${metadataIdRef.current}`;
-  }, []);
-
   const {
     rows: versionRows,
     latestRow: latestVersionRow,
@@ -208,7 +164,32 @@ export default function BrowserObjectDetailsModal({
   const isDeletedCurrent = Boolean(
     itemSnapshot.isDeleted || latestVersionRow?.is_delete_marker,
   );
-  const versionId = metadata?.version_id ?? tagsVersionId ?? undefined;
+  const {
+    metadata,
+    loading: metadataLoading,
+    loaded: metadataLoaded,
+    error: metadataError,
+    versionId,
+    metadataDraft,
+    setMetadataDraft,
+    metadataItems,
+    setMetadataItems,
+    tagsDraft,
+    setTagsDraft,
+    storageClass,
+    setStorageClass,
+    nextTagId,
+    nextMetadataId,
+    load: loadProperties,
+    reset: resetObjectProperties,
+  } = useBrowserObjectProperties({
+    accountId,
+    bucketName,
+    isDeleted: isDeletedCurrent,
+    item: itemSnapshot,
+    requestOptions,
+    sseCustomerKeyBase64,
+  });
   const {
     legalHoldStatus,
     setLegalHoldStatus,
@@ -257,111 +238,6 @@ export default function BrowserObjectDetailsModal({
     setActionMessage(message);
     setActionTone(tone);
   };
-
-  const resetPropertiesDrafts = useCallback(
-    (nextMetadata: ObjectMetadata | null, baseItem: BrowserItem) => {
-      if (!nextMetadata) {
-        setMetadataDraft({
-          contentType: "",
-          cacheControl: "",
-          contentDisposition: "",
-          contentEncoding: "",
-          contentLanguage: "",
-          expires: "",
-        });
-        setMetadataItems([]);
-        setStorageClass(baseItem.storageClass ?? "");
-        return;
-      }
-      setMetadataDraft({
-        contentType: nextMetadata.content_type ?? "",
-        cacheControl: nextMetadata.cache_control ?? "",
-        contentDisposition: nextMetadata.content_disposition ?? "",
-        contentEncoding: nextMetadata.content_encoding ?? "",
-        contentLanguage: nextMetadata.content_language ?? "",
-        expires: formatLocalDateTime(nextMetadata.expires),
-      });
-      setMetadataItems(
-        Object.entries(nextMetadata.metadata || {}).map(([key, value]) => ({
-          id: nextMetadataId(),
-          key,
-          value,
-        })),
-      );
-      setStorageClass(nextMetadata.storage_class ?? baseItem.storageClass ?? "");
-    },
-    [nextMetadataId],
-  );
-
-  const resetTagsDraft = useCallback(
-    (nextTags: ObjectTag[]) => {
-      setTagsDraft(
-        nextTags.map((tag) => ({
-          id: nextTagId(),
-          key: tag.key,
-          value: tag.value,
-        })),
-      );
-    },
-    [nextTagId],
-  );
-
-  const performLoadProperties = useCallback(async (force = false) => {
-    if (
-      !bucketName ||
-      !accountId ||
-      itemSnapshot.type !== "file" ||
-      isDeletedCurrent
-    ) {
-      return;
-    }
-    setMetadataLoading(true);
-    setMetadataError(null);
-    try {
-      const [nextMetadata, nextTags] = await Promise.all([
-        fetchObjectMetadata(
-          accountId,
-          bucketName,
-          itemSnapshot.key,
-          null,
-          sseCustomerKeyBase64,
-          undefined,
-          requestOptions,
-        ),
-        getObjectTags(accountId, bucketName, itemSnapshot.key, null, requestOptions),
-      ]);
-      setMetadata(nextMetadata);
-      setTagsVersionId(nextTags.version_id ?? null);
-      resetPropertiesDrafts(nextMetadata, itemSnapshot);
-      resetTagsDraft(nextTags.tags ?? []);
-      setMetadataLoaded(true);
-    } catch (err) {
-      setMetadataError(extractApiError(err, "Unable to load object details."));
-      if (force) {
-        setMetadata(null);
-        setTagsVersionId(null);
-      }
-    } finally {
-      setMetadataLoading(false);
-    }
-  }, [
-    accountId,
-    bucketName,
-    isDeletedCurrent,
-    itemSnapshot,
-    requestOptions,
-    resetPropertiesDrafts,
-    resetTagsDraft,
-    sseCustomerKeyBase64,
-  ]);
-
-  const loadProperties = useCallback(
-    async (force = false) => {
-      if (!force && (metadataLoading || metadataLoaded)) return;
-      await performLoadProperties(force);
-    },
-    [metadataLoaded, metadataLoading, performLoadProperties],
-  );
 
   const loadObjectPreview = useCallback(
     async (signal: AbortSignal): Promise<ObjectPreviewLoadResult> => {
@@ -450,13 +326,7 @@ export default function BrowserObjectDetailsModal({
     setActionTone(null);
     setCopyDialogValue(null);
 
-    setMetadata(null);
-    setMetadataLoading(false);
-    setMetadataLoaded(false);
-    setMetadataError(null);
-    setTagsVersionId(null);
-    resetPropertiesDrafts(null, item);
-    resetTagsDraft([]);
+    resetObjectProperties(item);
     setAclValue("private");
 
     setRestoreDays("7");
@@ -469,7 +339,7 @@ export default function BrowserObjectDetailsModal({
     setPresignHeaders(null);
     setPresignError(null);
     setSavingVersionAction(false);
-  }, [initialTab, item, resetPropertiesDrafts, resetTagsDraft]);
+  }, [initialTab, item, resetObjectProperties]);
 
   useEffect(() => {
     if (!versioningEnabled && activeTab === "versions") {
@@ -493,14 +363,14 @@ export default function BrowserObjectDetailsModal({
       !metadataLoaded &&
       !isDeletedCurrent
     ) {
-      void performLoadProperties();
+      void loadProperties();
     }
     return undefined;
   }, [
     activeTab,
     isDeletedCurrent,
     metadataLoaded,
-    performLoadProperties,
+    loadProperties,
     loadVersions,
     versioningEnabled,
     versionsLoaded,
