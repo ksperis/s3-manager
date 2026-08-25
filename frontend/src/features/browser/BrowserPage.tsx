@@ -95,6 +95,7 @@ import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
 import { useBrowserOperationOverview } from "./useBrowserOperationOverview";
+import { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
@@ -129,12 +130,6 @@ import {
 import BrowserContextMenu from "./BrowserContextMenu";
 import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
 import {
-  completeOperationById,
-  patchOperationById,
-  prependCompletedActivity,
-} from "./browserOperationState";
-import {
-  cancelPendingOperationDetails,
   updateOperationDetailById,
   updateOperationDetailsByKey,
 } from "./browserOperationDetailState";
@@ -183,7 +178,6 @@ import {
 import { resolveBrowserContextQuotas } from "./browserQuota";
 import {
   BUCKET_MENU_LIMIT,
-  COMPLETED_OPERATIONS_LIMIT,
   DELETED_RESULTS_TARGET,
   DELETED_VERSIONS_SCAN_LIMIT,
   MULTIPART_CONCURRENCY,
@@ -304,13 +298,10 @@ import type {
   ClipboardState,
   CopyDetailItem,
   CopyDetailStatus,
-  DeleteDetailItem,
   DeleteDetailStatus,
-  DownloadDetailItem,
   DownloadDetailStatus,
   ObjectDetailsTabId,
   OperationCompletionStatus,
-  OperationItem,
   TreeNode,
   UploadCandidate,
   UploadQueueItem,
@@ -684,20 +675,31 @@ export default function BrowserPage({
     if (sortKey === "storageClass") return "storage_class";
     return sortKey;
   }, [sortKey]);
-  const [operations, setOperations] = useState<OperationItem[]>([]);
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const uploadQueueRef = useRef<UploadQueueItem[]>([]);
   const activeUploadsRef = useRef(0);
-  const operationControllersRef = useRef(new Map<string, AbortController>());
-  const [downloadDetails, setDownloadDetails] = useState<
-    Record<string, DownloadDetailItem[]>
-  >({});
-  const [deleteDetails, setDeleteDetails] = useState<
-    Record<string, DeleteDetailItem[]>
-  >({});
-  const [copyDetails, setCopyDetails] = useState<
-    Record<string, CopyDetailItem[]>
-  >({});
+  const {
+    cancelCopyDetails,
+    cancelDeleteDetails,
+    cancelDownloadDetails,
+    cancelOperation,
+    cancelOperationController,
+    clearOperationController,
+    completeOperation,
+    copyDetails,
+    createOperationController,
+    deleteDetails,
+    downloadDetails,
+    isOperationAborted,
+    operations,
+    recordCompletedActivity,
+    setCopyDetails,
+    setDeleteDetails,
+    setDownloadDetails,
+    setOperations,
+    startOperation: startRegisteredOperation,
+    updateOperation,
+  } = useBrowserOperationRegistry();
   const {
     activeOperationsCount,
     allOtherOperations,
@@ -752,6 +754,13 @@ export default function BrowserPage({
     setCopyDetails,
     setStatusMessage,
   });
+  const startOperation = useCallback(
+    (...args: Parameters<typeof startRegisteredOperation>) => {
+      showOperationsBar();
+      return startRegisteredOperation(...args);
+    },
+    [showOperationsBar, startRegisteredOperation],
+  );
   const [objectDetailsTarget, setObjectDetailsTarget] =
     useState<ObjectDetailsTarget | null>(null);
   const [configBucketName, setConfigBucketName] = useState<string | null>(null);
@@ -5255,24 +5264,8 @@ export default function BrowserPage({
   };
 
   const addActivity = (action: string, path: string) => {
-    const completedAt = new Date().toLocaleTimeString();
     showOperationsBar();
-    setOperations((previous) =>
-      prependCompletedActivity(
-        previous,
-        {
-          id: makeId(),
-          label: action,
-          path,
-          progress: 100,
-          kind: "activity",
-          cancelable: false,
-          completedAt,
-          completionStatus: "done",
-        },
-        COMPLETED_OPERATIONS_LIMIT,
-      ),
-    );
+    recordCompletedActivity(action, path);
   };
 
   const handleBrowserFolderCreated = async ({
@@ -5506,76 +5499,6 @@ export default function BrowserPage({
     };
   }, []);
 
-  const startOperation = useCallback(
-    (
-      status: NonNullable<OperationItem["status"]>,
-      label: string,
-      path: string,
-      options?: {
-        kind?: OperationItem["kind"];
-        groupId?: string;
-        groupLabel?: string;
-        groupKind?: OperationItem["groupKind"];
-        itemLabel?: string;
-        cancelable?: boolean;
-        sizeBytes?: number;
-      },
-      progress = status === "uploading" || status === "downloading" ? 0 : 20,
-    ) => {
-      showOperationsBar();
-      const operationId = makeId();
-      setOperations((prev) => [
-        {
-          id: operationId,
-          status,
-          label,
-          path,
-          progress,
-          sizeBytes: options?.sizeBytes,
-          kind: options?.kind ?? "other",
-          groupId: options?.groupId,
-          groupLabel: options?.groupLabel,
-          groupKind: options?.groupKind,
-          itemLabel: options?.itemLabel,
-          cancelable: options?.cancelable ?? false,
-        },
-        ...prev,
-      ]);
-      return operationId;
-    },
-    [showOperationsBar],
-  );
-
-  const updateOperation = useCallback(
-    (
-      operationId: string | null | undefined,
-      patch: Partial<Omit<OperationItem, "id">>,
-    ) => {
-      setOperations((prev) => patchOperationById(prev, operationId, patch));
-    },
-    [],
-  );
-
-  const completeOperation = useCallback(
-    (
-      operationId: string,
-      status: OperationCompletionStatus = "done",
-      errorMessage?: string,
-    ) => {
-      const completedAt = new Date().toLocaleTimeString();
-      setOperations((prev) =>
-        completeOperationById(
-          prev,
-          operationId,
-          status,
-          completedAt,
-          errorMessage,
-        ),
-      );
-    },
-    [],
-  );
-
   const openConfirmDialog = (dialog: BrowserConfirmDialogState) => {
     setConfirmDialog(dialog);
     setConfirmDialogLoading(false);
@@ -5635,68 +5558,6 @@ export default function BrowserPage({
     updateUploadQueue(
       uploadQueueRef.current.filter((item) => item.groupId !== groupId),
     );
-  };
-
-  const createOperationController = useCallback((operationId: string) => {
-    const controller = new AbortController();
-    operationControllersRef.current.set(operationId, controller);
-    return controller;
-  }, []);
-
-  const clearOperationController = useCallback((operationId: string) => {
-    operationControllersRef.current.delete(operationId);
-  }, []);
-
-  const cancelOperationController = (operationId: string) => {
-    const controller = operationControllersRef.current.get(operationId);
-    if (controller) {
-      controller.abort();
-    }
-  };
-
-  const isOperationAborted = (
-    err: unknown,
-    controller?: AbortController | null,
-  ) => isAbortError(err) || Boolean(controller?.signal.aborted);
-
-  const cancelDownloadDetails = (operationId: string) => {
-    setDownloadDetails((prev) =>
-      cancelPendingOperationDetails(
-        prev,
-        operationId,
-        "downloading",
-        "cancelled",
-      ),
-    );
-  };
-
-  const cancelCopyDetails = useCallback((operationId: string) => {
-    setCopyDetails((prev) =>
-      cancelPendingOperationDetails(
-        prev,
-        operationId,
-        "copying",
-        "cancelled",
-      ),
-    );
-  }, []);
-
-  const cancelDeleteDetails = useCallback((operationId: string) => {
-    setDeleteDetails((prev) =>
-      cancelPendingOperationDetails(
-        prev,
-        operationId,
-        "deleting",
-        "cancelled",
-      ),
-    );
-  }, []);
-
-  const cancelOperation = (operationId: string) => {
-    cancelOperationController(operationId);
-    cancelDownloadDetails(operationId);
-    cancelCopyDetails(operationId);
-    cancelDeleteDetails(operationId);
   };
 
   const cancelUploadGroup = (groupId: string) => {
@@ -6595,7 +6456,7 @@ export default function BrowserPage({
         ),
       );
     },
-    [],
+    [setCopyDetails],
   );
 
   const handleDownloadFolder = async (folderItem: BrowserItem) => {
@@ -7947,6 +7808,7 @@ export default function BrowserPage({
     listAllObjectsForPrefix,
     normalizedPrefix,
     showOperationsBar,
+    setCopyDetails,
     refreshObjectsNow,
     resolveClipboardTransferMode,
     resolvedFunctionalProfile,
