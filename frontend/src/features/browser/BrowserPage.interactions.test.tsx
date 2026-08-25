@@ -4412,6 +4412,64 @@ describe("BrowserPage interactions", () => {
     });
   });
 
+  it("submits an archive restore from the object details modal", async () => {
+    const user = userEvent.setup();
+    fetchObjectMetadataMock.mockResolvedValue({
+      key: "a.txt",
+      size: 10,
+      metadata: {},
+      content_type: "text/plain",
+      storage_class: "GLACIER",
+      version_id: "version-2",
+    });
+    renderPage();
+
+    const row = await findRowByLabel("a.txt");
+    await user.click(
+      within(row).getByRole("button", { name: "More actions for a.txt" }),
+    );
+    await user.click(
+      within(await screen.findByRole("menu")).getByRole("button", {
+        name: "Properties",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    await user.click(await within(dialog).findByRole("tab", { name: "Archive" }));
+    await user.clear(within(dialog).getByRole("spinbutton", { name: "Days" }));
+    await user.type(
+      within(dialog).getByRole("spinbutton", { name: "Days" }),
+      "14",
+    );
+    await user.selectOptions(
+      within(dialog).getByRole("combobox", { name: "Tier" }),
+      "Bulk",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Request restore" }),
+    );
+
+    await waitFor(() => {
+      expect(restoreObjectMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        {
+          key: "a.txt",
+          days: 14,
+          tier: "Bulk",
+          version_id: "version-2",
+        },
+        undefined,
+      );
+    });
+    expect(
+      await within(dialog).findByText("Restore request sent."),
+    ).toBeInTheDocument();
+    expect(fetchObjectMetadataMock).toHaveBeenCalledTimes(2);
+  });
+
   it("does not request a Browser preview when the object exceeds the shared limit", async () => {
     const user = userEvent.setup();
     listBrowserObjectsMock.mockResolvedValueOnce({

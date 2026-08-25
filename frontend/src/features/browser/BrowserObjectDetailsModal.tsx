@@ -12,11 +12,9 @@ import ObjectPreview, {
 import {
   fetchObjectMetadata,
   proxyDownload,
-  restoreObject,
   updateObjectAcl,
   type BrowserObjectVersion,
   type BrowserRequestOptions,
-  type ObjectRestoreRequest,
   type PresignedUrl,
   type PresignRequest,
 } from "../../api/browser";
@@ -50,6 +48,10 @@ import {
 } from "./useBrowserObjectProtection";
 import { useBrowserObjectProperties } from "./useBrowserObjectProperties";
 import { useBrowserObjectSignedUrl } from "./useBrowserObjectSignedUrl";
+import {
+  useBrowserObjectArchiveRestore,
+  type ObjectRestoreTier,
+} from "./useBrowserObjectArchiveRestore";
 
 type BrowserObjectDetailsModalProps = {
   accountId: S3AccountSelector;
@@ -111,12 +113,7 @@ export default function BrowserObjectDetailsModal({
   const [copyDialogValue, setCopyDialogValue] = useState<string | null>(null);
 
   const [aclValue, setAclValue] = useState("private");
-  const [restoreDays, setRestoreDays] = useState("7");
-  const [restoreTier, setRestoreTier] = useState<
-    "Standard" | "Bulk" | "Expedited"
-  >("Standard");
   const [savingAcl, setSavingAcl] = useState(false);
-  const [savingRestore, setSavingRestore] = useState(false);
   const [savingVersionAction, setSavingVersionAction] = useState(false);
 
   const {
@@ -210,6 +207,22 @@ export default function BrowserObjectDetailsModal({
     () => formatRestoreStatus(metadata?.restore_status),
     [metadata?.restore_status],
   );
+  const {
+    days: restoreDays,
+    setDays: setRestoreDays,
+    tier: restoreTier,
+    setTier: setRestoreTier,
+    saving: savingRestore,
+    isCurrentScope: isArchiveRestoreScopeCurrent,
+    restore: restoreArchive,
+  } = useBrowserObjectArchiveRestore({
+    accountId,
+    bucketName,
+    loadProperties,
+    objectKey: itemSnapshot.key,
+    requestOptions,
+    versionId,
+  });
   const {
     expires: presignExpires,
     setExpires: setPresignExpires,
@@ -330,8 +343,6 @@ export default function BrowserObjectDetailsModal({
     resetObjectProperties(item);
     setAclValue("private");
 
-    setRestoreDays("7");
-    setRestoreTier("Standard");
     setSavingVersionAction(false);
   }, [initialTab, item, resetObjectProperties]);
 
@@ -464,28 +475,19 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleRestoreArchive = async () => {
-    if (!bucketName || !itemSnapshot.key) return;
-    const days = Number(restoreDays);
-    if (!Number.isFinite(days) || days <= 0) {
-      pushStatus("Restore days must be a positive number.", "error");
-      return;
-    }
-    setSavingRestore(true);
     setActionMessage(null);
     try {
-      await restoreObject(accountId, bucketName, {
-        key: itemSnapshot.key,
-        days,
-        tier: restoreTier,
-        version_id: versionId ?? null,
-      } satisfies ObjectRestoreRequest, requestOptions);
-      await loadProperties(true);
+      const result = await restoreArchive();
+      if (result === "invalid") {
+        pushStatus("Restore days must be a positive number.", "error");
+        return;
+      }
+      if (result !== "restored" || !isArchiveRestoreScopeCurrent()) return;
       await onRefreshBrowserObjects(itemSnapshot.key);
+      if (!isArchiveRestoreScopeCurrent()) return;
       pushStatus("Restore request sent.", "success");
     } catch (err) {
       pushStatus(extractApiError(err, "Unable to restore object."), "error");
-    } finally {
-      setSavingRestore(false);
     }
   };
 
@@ -1198,7 +1200,7 @@ export default function BrowserObjectDetailsModal({
               value={restoreTier}
               onChange={(event) =>
                 setRestoreTier(
-                  event.target.value as "Standard" | "Bulk" | "Expedited",
+                  event.target.value as ObjectRestoreTier,
                 )
               }
             >
