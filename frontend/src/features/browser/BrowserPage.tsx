@@ -22,16 +22,13 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import type { UploadProgressEvent } from "../../api/browser";
-import TableEmptyState from "../../components/TableEmptyState";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import UiBadge from "../../components/ui/UiBadge";
 import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import {
   cx,
-  uiCardClass,
   uiCardMutedClass,
   uiMenuClass,
-  uiMutedTextClass,
 } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
@@ -89,13 +86,8 @@ import {
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBucketSelector from "./BrowserBucketSelector";
 import { BrowserToolbarActionMenuItem } from "./BrowserActionPresentation";
+import BrowserObjectExplorer from "./BrowserObjectExplorer";
 import BrowserObjectSearchHeader from "./BrowserObjectSearchHeader";
-import BrowserObjectMobileList from "./BrowserObjectMobileList";
-import {
-  BrowserObjectTableScaffold,
-  BrowserParentFolderRow,
-} from "./BrowserObjectTableScaffold";
-import BrowserObjectTableRow from "./BrowserObjectTableRow";
 import BrowserPathNavigator from "./BrowserPathNavigator";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
@@ -296,9 +288,6 @@ import {
   COMFORTABLE_ROW_ACTION_TARGET_SIZE_PX,
   COMPACT_ROW_ACTION_TARGET_SIZE_PX,
   DEFAULT_VISIBLE_COLUMN_IDS,
-  DIRECT_DELETED_ITEM_ACTION_IDS,
-  DIRECT_ITEM_ACTION_IDS,
-  DIRECT_PORTAL_ITEM_ACTION_IDS,
   MIN_ACTIONS_COLUMN_WIDTH_PX,
   ROW_ACTION_CELL_HORIZONTAL_PADDING_PX,
   ROW_ACTION_GAP_PX,
@@ -312,6 +301,7 @@ import {
   type BrowserSortKey,
   type LazyColumnCacheEntry,
 } from "./browserObjectTableModel";
+import { isBrowserInteractiveTarget } from "./browserObjectItemPresentation";
 import {
   buildPathSuggestionEntries,
   mergePathSuggestions,
@@ -409,15 +399,6 @@ const browserToolbarControlsGroupClasses =
   "flex shrink-0 items-center gap-1.5";
 const browserFloatingMenuClasses =
   cx(uiMenuClass, "overflow-hidden p-1.5");
-const browserSearchLabelClasses =
-  cx("ui-caption font-medium", uiMutedTextClass);
-const browserSearchStatusChipClasses =
-  "inline-flex max-w-full items-center gap-1 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-2 py-1 ui-caption text-[var(--ui-text-muted)] shadow-[var(--ui-shadow-soft)]";
-const browserExplorerShellClasses =
-  cx(
-    uiCardClass,
-    "relative flex min-h-0 flex-1 flex-col overflow-hidden",
-  );
 const inspectorTabListClasses =
   "flex flex-nowrap gap-1 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-1 shadow-[var(--ui-shadow-soft)]";
 const inspectorTabBaseClasses =
@@ -3309,7 +3290,6 @@ export default function BrowserPage({
   const lazyTagsColumnsVisible = visibleColumnSet.has("tagsCount");
   const hasActiveLazyColumns =
     lazyMetadataColumnsVisible || lazyTagsColumnsVisible;
-  const objectTableColSpan = 3 + visibleColumnDefinitions.length;
   const normalizedSearchQuery = filter.trim();
   const hasSearchQuery = normalizedSearchQuery.length > 0;
   const isSearchingInWholeBucket = hasSearchQuery && searchScope === "bucket";
@@ -3990,18 +3970,11 @@ export default function BrowserPage({
     setShowInspector(true);
   };
 
-  const isInteractiveTarget = (target: EventTarget | null) => {
-    const element = target as HTMLElement | null;
-    return Boolean(
-      element?.closest("button, a, input, textarea, select, label"),
-    );
-  };
-
   const handleItemDoubleClick = (
     event: ReactMouseEvent<HTMLElement>,
     item: BrowserItem,
   ) => {
-    if (isInteractiveTarget(event.target)) return;
+    if (isBrowserInteractiveTarget(event.target)) return;
     openItemPrimaryAction(item);
   };
 
@@ -4634,7 +4607,7 @@ export default function BrowserPage({
   };
 
   const handleListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (isInteractiveTarget(event.target)) {
+    if (isBrowserInteractiveTarget(event.target)) {
       return;
     }
     if (listItems.length === 0) {
@@ -9551,259 +9524,93 @@ export default function BrowserPage({
               />
             )}
             <div className="flex min-h-0 h-full min-w-0 flex-1 flex-col gap-3">
-              <div
-                className={`${browserExplorerShellClasses} ${
-                  dragging
-                    ? "border-primary/60 bg-primary/5 dark:border-primary-500/60 dark:bg-primary-500/10"
-                    : ""
-                }`}
+              <BrowserObjectExplorer
+                viewportRef={objectsListViewportRef}
+                dragging={dragging}
+                mobile={isMobileViewport}
+                bucketName={bucketName}
+                normalizedPrefix={normalizedPrefix}
+                workspaceNoun={workspaceNoun}
+                workspaceObjectNounPlural={workspaceObjectNounPlural}
+                items={listItems}
+                selectedIds={selectedSet}
+                loading={objectsLoading}
+                loadingMore={objectsLoadingMore}
+                canLoadMore={canLoadMoreObjectResults}
+                objectsIsTruncated={objectsIsTruncated}
+                deletedObjectsIsTruncated={deletedObjectsIsTruncated}
+                showDeletedObjects={showDeletedObjects}
+                showParentFolder={Boolean(
+                  canGoUp &&
+                    bucketName &&
+                    showFolderItems &&
+                    !isSearchingInWholeBucket,
+                )}
+                hasActiveSearchFilters={hasActiveSearchFilters}
+                searchStatusChips={activeSearchStatusChips}
+                issue={
+                  objectsIssue
+                    ? {
+                        title: objectsIssue.title,
+                        description: objectsIssueDescription,
+                      }
+                    : null
+                }
+                lazyColumnCache={lazyColumnCache}
+                isPortalProfile={isPortalProfile}
+                table={{
+                  scaffold: {
+                    minWidthPx: objectTableMinWidthPx,
+                    selectionColumnWidthPx: SELECTION_COLUMN_WIDTH_PX,
+                    nameColumnWidthPx,
+                    actionsColumnWidthPx,
+                    columns: visibleColumnDefinitions,
+                    columnWidthsPx: visibleColumnWidthsPx,
+                    headerPaddingClasses: headerPadding,
+                    allSelected,
+                    selectionDisabled: selectableListItems.length === 0,
+                    nameHeader: renderNameHeaderContent(),
+                    sortKey,
+                    sortDirection,
+                    activeResizeColumnId:
+                      activeColumnResize?.columnId ?? null,
+                    onToggleAll: toggleAllSelection,
+                    onSort: handleSortToggle,
+                    onStartResize: startColumnResize,
+                    onResetColumnWidth: resetColumnWidth,
+                    onHeaderContextMenu: handleHeaderContextMenu,
+                  },
+                  row: {
+                    compactMode,
+                    rowHeightClasses,
+                    rowCellClasses,
+                    iconBoxClasses,
+                    nameGapClasses,
+                    primaryItemButtonHeightClasses,
+                    rowActionButtonClasses,
+                  },
+                }}
+                loadMoreButtonClasses={chromeToolbarButtonClasses}
+                resolveItemActions={resolveItemActionStates}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onContextMenu={handlePathContextMenu}
-              >
-                {dragging && (
-                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/75 text-center ui-body font-semibold text-slate-700 backdrop-blur-sm dark:bg-slate-950/70 dark:text-slate-100">
-                    <div className="rounded-xl border border-primary/20 bg-white/90 px-5 py-4 shadow-sm dark:border-primary-500/30 dark:bg-slate-900/85">
-                      <div>Drop files or folders to upload</div>
-                      <div className="mt-1 ui-caption font-normal text-slate-500 dark:text-slate-400">
-                        {bucketName
-                          ? `${bucketName}/${normalizedPrefix}`
-                          : `Select a ${workspaceNoun} first`}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {bucketName && hasActiveSearchFilters && (
-                  <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/40">
-                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <p className={browserSearchLabelClasses}>Search</p>
-                        <p className="mt-1 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                          {objectsLoading
-                            ? "Searching..."
-                            : `${listItems.length} result${listItems.length === 1 ? "" : "s"}`}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {activeSearchStatusChips.map((chip) => (
-                          <span
-                            key={`${chip.label}:${chip.value}`}
-                            className={browserSearchStatusChipClasses}
-                            title={`${chip.label}: ${chip.value}`}
-                          >
-                            <span className="text-slate-400 dark:text-slate-500">
-                              {chip.label}
-                            </span>
-                            <span className="truncate text-slate-700 dark:text-slate-100">
-                              {chip.value}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div
-                  ref={objectsListViewportRef}
-                  className={`relative min-h-0 flex-1 overflow-y-auto bg-white/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:bg-transparent ${isMobileViewport ? "overflow-x-hidden pb-24" : "overflow-x-auto"}`}
-                  onClick={handleListBackgroundClick}
-                  onKeyDown={handleListKeyDown}
-                  tabIndex={0}
-                  aria-label="Objects list"
-                >
-                  {objectsLoading && listItems.length > 0 && (
-                    <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-white/45 pt-5 ui-caption font-semibold text-slate-600 backdrop-blur-[1px] dark:bg-slate-900/40 dark:text-slate-200">
-                      <span className="rounded-md border border-slate-200 bg-white/90 px-3 py-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-900/80">
-                        Refreshing objects...
-                      </span>
-                    </div>
-                  )}
-                  {isMobileViewport ? (
-                    <BrowserObjectMobileList
-                      items={listItems}
-                      selectedIds={selectedSet}
-                      loading={objectsLoading}
-                      hasBucket={Boolean(bucketName)}
-                      showParentFolder={Boolean(
-                        canGoUp &&
-                          bucketName &&
-                          showFolderItems &&
-                          !isSearchingInWholeBucket,
-                      )}
-                      hasActiveSearchFilters={hasActiveSearchFilters}
-                      issueTitle={objectsIssue?.title}
-                      workspaceNoun={workspaceNoun}
-                      workspaceObjectNounPlural={workspaceObjectNounPlural}
-                      rowActionButtonClasses={rowActionButtonClasses}
-                      onGoUp={handleGoUp}
-                      onSelectItem={(event, item) =>
-                        handleItemSelectionClick(event, item.id)
-                      }
-                      onItemDoubleClick={handleItemDoubleClick}
-                      onItemContextMenu={handleItemContextMenu}
-                      onToggleSelection={(item) => toggleSelection(item.id)}
-                      onItemNameClick={handleItemNameClick}
-                      onOpenActions={handleItemActionsButtonClick}
-                    />
-                  ) : (
-                  <BrowserObjectTableScaffold
-                    minWidthPx={objectTableMinWidthPx}
-                    selectionColumnWidthPx={SELECTION_COLUMN_WIDTH_PX}
-                    nameColumnWidthPx={nameColumnWidthPx}
-                    actionsColumnWidthPx={actionsColumnWidthPx}
-                    columns={visibleColumnDefinitions}
-                    columnWidthsPx={visibleColumnWidthsPx}
-                    headerPaddingClasses={headerPadding}
-                    allSelected={allSelected}
-                    selectionDisabled={selectableListItems.length === 0}
-                    nameHeader={renderNameHeaderContent()}
-                    sortKey={sortKey}
-                    sortDirection={sortDirection}
-                    activeResizeColumnId={
-                      activeColumnResize?.columnId ?? null
-                    }
-                    onToggleAll={toggleAllSelection}
-                    onSort={handleSortToggle}
-                    onStartResize={startColumnResize}
-                    onResetColumnWidth={resetColumnWidth}
-                    onHeaderContextMenu={handleHeaderContextMenu}
-                  >
-                      {canGoUp &&
-                        bucketName &&
-                        showFolderItems &&
-                        !isSearchingInWholeBucket && (
-                          <BrowserParentFolderRow
-                            columns={visibleColumnDefinitions}
-                            nameColumnWidthPx={nameColumnWidthPx}
-                            rowHeightClasses={rowHeightClasses}
-                            rowCellClasses={rowCellClasses}
-                            iconBoxClasses={iconBoxClasses}
-                            onGoUp={handleGoUp}
-                          />
-                        )}
-                      {objectsLoading && listItems.length === 0 && (
-                        <TableEmptyState
-                          colSpan={objectTableColSpan}
-                          message={`Loading ${workspaceObjectNounPlural}...`}
-                          className="py-10 text-center"
-                        />
-                      )}
-                      {!objectsLoading && !bucketName && (
-                        <TableEmptyState
-                          colSpan={objectTableColSpan}
-                          message={`Select a ${workspaceNoun} to browse ${workspaceObjectNounPlural}.`}
-                          className="py-10 text-center"
-                        />
-                      )}
-                      {!objectsLoading &&
-                        bucketName &&
-                        objectsIssue &&
-                        listItems.length === 0 && (
-                          <TableEmptyState
-                            colSpan={objectTableColSpan}
-                            title={objectsIssue.title}
-                            description={objectsIssueDescription}
-                            tone="error"
-                            className="py-10 text-center"
-                          />
-                        )}
-                      {!objectsLoading &&
-                        bucketName &&
-                        !objectsIssue &&
-                        listItems.length === 0 && (
-                          <TableEmptyState
-                            colSpan={objectTableColSpan}
-                            message={
-                              hasActiveSearchFilters
-                                ? "No objects matched this search."
-                                : showDeletedObjects &&
-                                    deletedObjectsIsTruncated
-                                  ? "No deleted files found yet. Continue loading to search more history."
-                                : "No objects found for this path."
-                            }
-                            className="py-10 text-center"
-                          />
-                        )}
-                      {listItems.map((item) => {
-                        const isSelected = selectedSet.has(item.id);
-                        const isDeleted = Boolean(item.isDeleted);
-                        const itemActionStates = resolveItemActionStates(item);
-                        const directItemActions = getVisibleBrowserActions(
-                          itemActionStates,
-                          isDeleted
-                            ? DIRECT_DELETED_ITEM_ACTION_IDS
-                            : isPortalProfile
-                              ? DIRECT_PORTAL_ITEM_ACTION_IDS
-                              : DIRECT_ITEM_ACTION_IDS,
-                        );
-                        return (
-                          <BrowserObjectTableRow
-                            key={item.id}
-                            item={item}
-                            selected={isSelected}
-                            compactMode={compactMode}
-                            nameColumnWidthPx={nameColumnWidthPx}
-                            visibleColumns={visibleColumnDefinitions}
-                            lazyEntry={lazyColumnCache[item.id]}
-                            directActions={directItemActions}
-                            rowHeightClasses={rowHeightClasses}
-                            rowCellClasses={rowCellClasses}
-                            iconBoxClasses={iconBoxClasses}
-                            nameGapClasses={nameGapClasses}
-                            primaryItemButtonHeightClasses={
-                              primaryItemButtonHeightClasses
-                            }
-                            rowActionButtonClasses={rowActionButtonClasses}
-                            onClick={(event) => {
-                              if (isInteractiveTarget(event.target)) {
-                                return;
-                              }
-                              if (isDeleted) {
-                                return;
-                              }
-                              handleItemSelectionClick(event, item.id);
-                            }}
-                            onDoubleClick={(event) =>
-                              handleItemDoubleClick(event, item)
-                            }
-                            onContextMenu={(event) => {
-                              handleItemContextMenu(event, item);
-                            }}
-                            onToggleSelection={() => toggleSelection(item.id)}
-                            onNameClick={(event) =>
-                              handleItemNameClick(event, item)
-                            }
-                            onRunAction={(actionId) =>
-                              runItemAction(item, actionId)
-                            }
-                            onOpenActions={(event) =>
-                              handleItemActionsButtonClick(event, item)
-                            }
-                          />
-                        );
-                      })}
-                  </BrowserObjectTableScaffold>
-                  )}
-                </div>
-                {canLoadMoreObjectResults && (
-                  <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-3 text-right dark:border-slate-700 dark:bg-slate-900/40">
-                    <button
-                      type="button"
-                      className={chromeToolbarButtonClasses}
-                      onClick={handleLoadMoreObjectResults}
-                      disabled={objectsLoadingMore}
-                    >
-                      {objectsLoadingMore
-                        ? "Loading..."
-                        : !objectsIsTruncated && deletedObjectsIsTruncated
-                          ? "Continue loading deleted files"
-                          : "Load more"}
-                    </button>
-                  </div>
-                )}
-              </div>
+                onPathContextMenu={handlePathContextMenu}
+                onListBackgroundClick={handleListBackgroundClick}
+                onListKeyDown={handleListKeyDown}
+                onGoUp={handleGoUp}
+                onSelectItem={(event, item) =>
+                  handleItemSelectionClick(event, item.id)
+                }
+                onItemDoubleClick={handleItemDoubleClick}
+                onItemContextMenu={handleItemContextMenu}
+                onToggleSelection={(item) => toggleSelection(item.id)}
+                onItemNameClick={handleItemNameClick}
+                onRunItemAction={runItemAction}
+                onOpenActions={handleItemActionsButtonClick}
+                onLoadMore={handleLoadMoreObjectResults}
+              />
             </div>
 
             {isInspectorPanelVisible && (

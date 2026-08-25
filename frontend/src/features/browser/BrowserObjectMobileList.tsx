@@ -2,7 +2,10 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 
 import { uiCheckboxClass } from "../../components/ui/styles";
 import { FileIcon, FolderIcon, MoreIcon, TrashIcon, UpIcon } from "./browserIcons";
-import { resolveBrowserItemOpenLabel } from "./browserObjectItemPresentation";
+import {
+  isBrowserInteractiveTarget,
+  resolveBrowserItemOpenLabel,
+} from "./browserObjectItemPresentation";
 import type { BrowserItem } from "./browserTypes";
 
 type BrowserObjectMobileListProps = {
@@ -39,13 +42,6 @@ type BrowserObjectMobileListProps = {
     item: BrowserItem,
   ) => void;
 };
-
-function isInteractiveTarget(target: EventTarget | null): boolean {
-  const element = target as HTMLElement | null;
-  return Boolean(
-    element?.closest("button, a, input, textarea, select, label"),
-  );
-}
 
 export default function BrowserObjectMobileList({
   items,
@@ -110,7 +106,7 @@ export default function BrowserObjectMobileList({
               item.type === "file" && !isDeleted ? item.id : undefined
             }
             onClick={(event) => {
-              if (isInteractiveTarget(event.target) || isDeleted) return;
+              if (isBrowserInteractiveTarget(event.target) || isDeleted) return;
               onSelectItem(event, item);
             }}
             onDoubleClick={(event) => onItemDoubleClick(event, item)}
