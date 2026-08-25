@@ -2,16 +2,12 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Modal from "../../components/Modal";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { extractApiError } from "../../utils/apiError";
-import ObjectPreview, {
-  type ObjectPreviewLoadResult,
-} from "../shared/ObjectPreview";
+import ObjectPreview from "../shared/ObjectPreview";
 import {
-  fetchObjectMetadata,
-  proxyDownload,
   type BrowserObjectVersion,
   type BrowserRequestOptions,
   type PresignedUrl,
@@ -31,7 +27,6 @@ import {
   ARCHIVE_STORAGE_CLASSES,
   OBJECT_LOCK_DISABLED_MESSAGE,
   aclOptions,
-  buildInlinePreviewDisposition,
   formatRestoreStatus,
   nextTabAfterDeleted,
   storageClassOptions,
@@ -52,6 +47,7 @@ import {
   type ObjectRestoreTier,
 } from "./useBrowserObjectArchiveRestore";
 import { useBrowserObjectAcl } from "./useBrowserObjectAcl";
+import { useBrowserObjectPreview } from "./useBrowserObjectPreview";
 
 type BrowserObjectDetailsModalProps = {
   accountId: S3AccountSelector;
@@ -169,6 +165,21 @@ export default function BrowserObjectDetailsModal({
     sseCustomerKeyBase64,
   });
   const {
+    loadBlob: loadObjectPreview,
+    resolveContentType: resolveObjectPreviewContentType,
+  } = useBrowserObjectPreview({
+    accountId,
+    bucketName,
+    metadataContentType: metadata?.content_type,
+    metadataLoaded,
+    objectKey: itemSnapshot.key,
+    objectName: itemSnapshot.name,
+    presignObjectRequest,
+    requestOptions,
+    sseCustomerKeyBase64,
+    useProxyTransfers,
+  });
+  const {
     value: aclValue,
     setValue: setAclValue,
     saving: savingAcl,
@@ -267,86 +278,6 @@ export default function BrowserObjectDetailsModal({
     setActionTone(tone);
   };
 
-  const loadObjectPreview = useCallback(
-    async (signal: AbortSignal): Promise<ObjectPreviewLoadResult> => {
-      const previewRequest: PresignRequest = {
-        key: itemSnapshot.key,
-        operation: "get_object",
-        expires_in: 900,
-        response_content_disposition: buildInlinePreviewDisposition(
-          itemSnapshot.name,
-        ),
-      };
-      const blob = useProxyTransfers
-        ? await proxyDownload(
-            accountId,
-            bucketName,
-            itemSnapshot.key,
-            signal,
-            sseCustomerKeyBase64,
-            requestOptions,
-          )
-        : await (async () => {
-            const presign = await presignObjectRequest(
-              bucketName,
-              previewRequest,
-            );
-            const response = await fetch(presign.url, {
-              headers: presign.headers || undefined,
-              signal,
-            });
-            if (!response.ok) {
-              throw new Error("Preview download failed.");
-            }
-            return response.blob();
-          })();
-      return {
-        blob,
-        contentType: blob.type || null,
-      };
-    },
-    [
-      accountId,
-      bucketName,
-      itemSnapshot.key,
-      itemSnapshot.name,
-      presignObjectRequest,
-      requestOptions,
-      sseCustomerKeyBase64,
-      useProxyTransfers,
-    ],
-  );
-
-  const resolveObjectPreviewContentType = useCallback(
-    async (signal: AbortSignal) => {
-      if (metadataLoaded) return metadata?.content_type ?? null;
-      try {
-        const nextMetadata = await fetchObjectMetadata(
-          accountId,
-          bucketName,
-          itemSnapshot.key,
-          null,
-          sseCustomerKeyBase64,
-          signal,
-          requestOptions,
-        );
-        return nextMetadata.content_type ?? null;
-      } catch (error) {
-        if (signal.aborted) throw error;
-        return null;
-      }
-    },
-    [
-      accountId,
-      bucketName,
-      itemSnapshot.key,
-      metadata?.content_type,
-      metadataLoaded,
-      requestOptions,
-      sseCustomerKeyBase64,
-    ],
-  );
-
   useEffect(() => {
     setItemSnapshot(item);
     setActiveTab(initialTab);
@@ -355,7 +286,6 @@ export default function BrowserObjectDetailsModal({
     setCopyDialogValue(null);
 
     resetObjectProperties(item);
-
   }, [initialTab, item, resetObjectProperties]);
 
   useEffect(() => {
