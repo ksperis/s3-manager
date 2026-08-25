@@ -33,25 +33,27 @@ describe("clientStorage", () => {
   });
 
   it("parses JSON defensively", () => {
-    writeClientStorage(CLIENT_STORAGE_KEYS.sessionUser, "{bad-json");
+    writeClientStorage(CLIENT_STORAGE_KEYS.generalSettingsCache, "{bad-json");
 
-    expect(readClientJson(CLIENT_STORAGE_KEYS.sessionUser)).toBeNull();
+    expect(readClientJson(CLIENT_STORAGE_KEYS.generalSettingsCache)).toBeNull();
 
-    writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { role: "ui_admin" });
+    writeClientJson(CLIENT_STORAGE_KEYS.generalSettingsCache, { portal_enabled: true });
 
-    expect(readClientJson<{ role: string }>(CLIENT_STORAGE_KEYS.sessionUser)).toEqual({ role: "ui_admin" });
+    expect(readClientJson<{ portal_enabled: boolean }>(CLIENT_STORAGE_KEYS.generalSettingsCache)).toEqual({
+      portal_enabled: true,
+    });
   });
 
   it("clears auth storage without touching workspace preferences", () => {
     window.localStorage.setItem("token", "legacy-bearer-token");
-    writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { role: "ui_user" });
+    window.localStorage.setItem("user", JSON.stringify({ role: "ui_user" }));
     writeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint, "https://s3.example.test");
     writeClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace, "browser");
 
     clearAuthStorage();
 
     expect(window.localStorage.getItem("token")).toBeNull();
-    expect(readClientStorage(CLIENT_STORAGE_KEYS.sessionUser)).toBeNull();
+    expect(window.localStorage.getItem("user")).toBeNull();
     expect(readClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint)).toBeNull();
     expect(readClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace)).toBe("browser");
   });

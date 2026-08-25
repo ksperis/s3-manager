@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 export const CLIENT_STORAGE_KEYS = {
-  sessionUser: "user",
   s3SessionEndpoint: "s3SessionEndpoint",
   selectedWorkspace: "selectedWorkspace",
   selectedManagerExecutionContext: "selectedManagerExecutionContextId",
@@ -127,10 +126,9 @@ export function writeSessionJsonToKey(key: ClientStorageKey | ClientStorageRawKe
 }
 
 export function clearAuthStorage(): void {
-  // Remove pre-cutover bearer state as well as the current non-secret caches.
-  // Keeping the raw legacy key out of CLIENT_STORAGE_KEYS prevents new code
-  // from treating browser token storage as a supported contract.
+  // Remove pre-cutover browser auth state without exposing those raw keys as a
+  // supported storage contract.
   removeClientStorageKey("token");
-  removeClientStorage(CLIENT_STORAGE_KEYS.sessionUser);
+  removeClientStorageKey("user");
   removeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
 }
