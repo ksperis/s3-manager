@@ -4,6 +4,7 @@ import { uiCheckboxClass } from "../../components/ui/styles";
 import { BrowserDirectItemActionButton } from "./BrowserActionPresentation";
 import { storageClassChipClasses } from "./browserConstants";
 import { FileIcon, FolderIcon, MoreIcon, TrashIcon } from "./browserIcons";
+import { resolveBrowserItemOpenLabel } from "./browserObjectItemPresentation";
 import { BrowserObjectColumnValue } from "./BrowserObjectTablePresentation";
 import type { BrowserActionId, BrowserActionState } from "./browserActions";
 import type {
@@ -41,13 +42,6 @@ function resolveObjectTypeLabel(item: BrowserItem): string {
     return item.isDeleted ? "Deleted folder" : "Prefix";
   }
   return item.isDeleted ? "Deleted object" : "Object";
-}
-
-function resolveOpenLabel(item: BrowserItem): string {
-  if (item.isDeleted) return `Open versions for ${item.name}`;
-  return item.type === "folder"
-    ? `Open folder ${item.name}`
-    : `Open file ${item.name}`;
 }
 
 export default function BrowserObjectTableRow({
@@ -113,7 +107,7 @@ export default function BrowserObjectTableRow({
           type="button"
           onClick={onNameClick}
           onDoubleClick={(event) => event.preventDefault()}
-          aria-label={resolveOpenLabel(item)}
+          aria-label={resolveBrowserItemOpenLabel(item)}
           className={`flex ${primaryItemButtonHeightClasses} w-full min-w-0 items-center ${nameGapClasses} text-left`}
           title={item.name}
         >
