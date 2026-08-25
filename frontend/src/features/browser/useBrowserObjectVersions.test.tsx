@@ -116,9 +116,14 @@ describe("useBrowserObjectVersions", () => {
     act(() => {
       void result.current.load();
     });
+    const previousLoad = result.current.load;
     await waitFor(() => expect(result.current.loading).toBe(true));
     rerender({ objectKey: "docs/other.txt" });
     await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await previousLoad({ force: true });
+    });
+    expect(apiMocks.listObjectVersions).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       pendingRequest.resolve({

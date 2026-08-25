@@ -11,8 +11,6 @@ import ObjectPreview, {
 } from "../shared/ObjectPreview";
 import {
   fetchObjectMetadata,
-  getObjectLegalHold,
-  getObjectRetention,
   getObjectTags,
   presignObject,
   proxyDownload,
@@ -54,7 +52,6 @@ import {
   aclOptions,
   buildInlinePreviewDisposition,
   formatRestoreStatus,
-  isObjectLockUnavailableMessage,
   nextTabAfterDeleted,
   normalizeObjectDetailPairs,
   storageClassOptions,
@@ -64,6 +61,10 @@ import type {
   ObjectDetailsTabId,
 } from "./browserTypes";
 import { useBrowserObjectVersions } from "./useBrowserObjectVersions";
+import {
+  useBrowserObjectProtection,
+  type ObjectRetentionMode,
+} from "./useBrowserObjectProtection";
 
 type BrowserObjectDetailsModalProps = {
   accountId: S3AccountSelector;
@@ -142,20 +143,6 @@ export default function BrowserObjectDetailsModal({
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [tagsVersionId, setTagsVersionId] = useState<string | null>(null);
 
-  const [legalHoldStatus, setLegalHoldStatus] = useState<"ON" | "OFF">("OFF");
-  const [legalHoldLoading, setLegalHoldLoading] = useState(false);
-  const [legalHoldLoaded, setLegalHoldLoaded] = useState(false);
-  const [legalHoldError, setLegalHoldError] = useState<string | null>(null);
-  const [objectLockUnavailable, setObjectLockUnavailable] = useState(false);
-  const [retentionMode, setRetentionMode] = useState<
-    "" | "GOVERNANCE" | "COMPLIANCE"
-  >("");
-  const [retentionDate, setRetentionDate] = useState("");
-  const [retentionBypass, setRetentionBypass] = useState(false);
-  const [retentionLoading, setRetentionLoading] = useState(false);
-  const [retentionLoaded, setRetentionLoaded] = useState(false);
-  const [retentionError, setRetentionError] = useState<string | null>(null);
-
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>({
     contentType: "",
     cacheControl: "",
@@ -222,6 +209,31 @@ export default function BrowserObjectDetailsModal({
     itemSnapshot.isDeleted || latestVersionRow?.is_delete_marker,
   );
   const versionId = metadata?.version_id ?? tagsVersionId ?? undefined;
+  const {
+    legalHoldStatus,
+    setLegalHoldStatus,
+    legalHoldError,
+    retentionMode,
+    setRetentionMode,
+    retentionDate,
+    setRetentionDate,
+    retentionBypass,
+    setRetentionBypass,
+    retentionError,
+    objectLockUnavailable,
+    loading: protectionLoading,
+    load: loadProtection,
+  } = useBrowserObjectProtection({
+    accountId,
+    bucketName,
+    enabled:
+      activeTab === "protection" &&
+      itemSnapshot.type === "file" &&
+      !isDeletedCurrent,
+    objectKey: itemSnapshot.key,
+    requestOptions,
+    versionId,
+  });
   const currentStorageClass =
     metadata?.storage_class ?? storageClass ?? itemSnapshot.storageClass;
   const hasArchiveTab = Boolean(
@@ -351,119 +363,6 @@ export default function BrowserObjectDetailsModal({
     [metadataLoaded, metadataLoading, performLoadProperties],
   );
 
-  const performLoadProtection = useCallback(async (force = false) => {
-    if (
-      !bucketName ||
-      !accountId ||
-      itemSnapshot.type !== "file" ||
-      isDeletedCurrent
-    ) {
-      return;
-    }
-    let protectionFailed = false;
-    let objectLockUnavailableDetected = false;
-    setLegalHoldLoading(true);
-    setLegalHoldError(null);
-    setRetentionLoading(true);
-    setRetentionError(null);
-    setObjectLockUnavailable(false);
-    try {
-      const [nextLegalHold, nextRetention] = await Promise.allSettled([
-        getObjectLegalHold(accountId, bucketName, itemSnapshot.key, versionId ?? null, requestOptions),
-        getObjectRetention(accountId, bucketName, itemSnapshot.key, versionId ?? null, requestOptions),
-      ]);
-
-      const legalHoldFailure =
-        nextLegalHold.status === "rejected"
-          ? extractApiError(nextLegalHold.reason, "Unable to load legal hold.")
-          : null;
-      const retentionFailure =
-        nextRetention.status === "rejected"
-          ? extractApiError(nextRetention.reason, "Unable to load retention.")
-          : null;
-      objectLockUnavailableDetected = [legalHoldFailure, retentionFailure]
-        .filter((message): message is string => Boolean(message))
-        .some((message) => isObjectLockUnavailableMessage(message));
-
-      if (objectLockUnavailableDetected) {
-        setObjectLockUnavailable(true);
-        setLegalHoldStatus("OFF");
-        setRetentionMode("");
-        setRetentionDate("");
-        setRetentionBypass(false);
-        setLegalHoldLoaded(true);
-        setRetentionLoaded(true);
-        setLegalHoldError(null);
-        setRetentionError(null);
-        return;
-      }
-
-      if (nextLegalHold.status === "fulfilled") {
-        setLegalHoldStatus(nextLegalHold.value.status === "ON" ? "ON" : "OFF");
-        setLegalHoldLoaded(true);
-        setLegalHoldError(null);
-      } else {
-        protectionFailed = true;
-        setLegalHoldLoaded(false);
-        setLegalHoldError(legalHoldFailure);
-      }
-
-      if (nextRetention.status === "fulfilled") {
-        setRetentionMode(nextRetention.value.mode ?? "");
-        setRetentionDate(formatLocalDateTime(nextRetention.value.retain_until));
-        setRetentionLoaded(true);
-        setRetentionError(null);
-      } else {
-        protectionFailed = true;
-        setRetentionLoaded(false);
-        setRetentionError(retentionFailure);
-      }
-
-      if (force && protectionFailed) {
-        if (nextLegalHold.status === "rejected") {
-          setLegalHoldLoaded(false);
-        }
-        if (nextRetention.status === "rejected") {
-          setRetentionLoaded(false);
-        }
-      }
-    } finally {
-      setLegalHoldLoading(false);
-      setRetentionLoading(false);
-      if (!protectionFailed && !objectLockUnavailableDetected) {
-        setLegalHoldError(null);
-        setRetentionError(null);
-      }
-    }
-  }, [
-    accountId,
-    bucketName,
-    isDeletedCurrent,
-    itemSnapshot.key,
-    itemSnapshot.type,
-    requestOptions,
-    versionId,
-  ]);
-
-  const loadProtection = useCallback(
-    async (force = false) => {
-      if (
-        !force &&
-        ((legalHoldLoaded && retentionLoaded) || legalHoldLoading || retentionLoading)
-      ) {
-        return;
-      }
-      await performLoadProtection(force);
-    },
-    [
-      legalHoldLoaded,
-      legalHoldLoading,
-      performLoadProtection,
-      retentionLoaded,
-      retentionLoading,
-    ],
-  );
-
   const loadObjectPreview = useCallback(
     async (signal: AbortSignal): Promise<ObjectPreviewLoadResult> => {
       const previewRequest: PresignRequest = {
@@ -560,18 +459,6 @@ export default function BrowserObjectDetailsModal({
     resetTagsDraft([]);
     setAclValue("private");
 
-    setLegalHoldStatus("OFF");
-    setLegalHoldLoading(false);
-    setLegalHoldLoaded(false);
-    setLegalHoldError(null);
-    setObjectLockUnavailable(false);
-    setRetentionMode("");
-    setRetentionDate("");
-    setRetentionBypass(false);
-    setRetentionLoading(false);
-    setRetentionLoaded(false);
-    setRetentionError(null);
-
     setRestoreDays("7");
     setRestoreTier("Standard");
     setPresignExpires(
@@ -608,16 +495,12 @@ export default function BrowserObjectDetailsModal({
     ) {
       void performLoadProperties();
     }
-    if (activeTab === "protection" && !isDeletedCurrent) {
-      void performLoadProtection();
-    }
     return undefined;
   }, [
     activeTab,
     isDeletedCurrent,
     metadataLoaded,
     performLoadProperties,
-    performLoadProtection,
     loadVersions,
     versioningEnabled,
     versionsLoaded,
@@ -1321,7 +1204,7 @@ export default function BrowserObjectDetailsModal({
           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
             Legal hold
           </p>
-          {legalHoldLoading && (
+          {protectionLoading && (
             <span className="ui-caption text-slate-500 dark:text-slate-400">
               Loading...
             </span>
@@ -1353,7 +1236,7 @@ export default function BrowserObjectDetailsModal({
             type="button"
             className={toolbarPrimaryClasses}
             onClick={() => void handleSaveLegalHold()}
-            disabled={savingLegalHold || legalHoldLoading || objectLockUnavailable}
+            disabled={savingLegalHold || protectionLoading || objectLockUnavailable}
           >
             {savingLegalHold ? "Saving..." : "Update legal hold"}
           </button>
@@ -1367,7 +1250,7 @@ export default function BrowserObjectDetailsModal({
           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
             Retention
           </p>
-          {retentionLoading && (
+          {protectionLoading && (
             <span className="ui-caption text-slate-500 dark:text-slate-400">
               Loading...
             </span>
@@ -1391,7 +1274,7 @@ export default function BrowserObjectDetailsModal({
               value={retentionMode}
               onChange={(event) =>
                 setRetentionMode(
-                  event.target.value as "" | "GOVERNANCE" | "COMPLIANCE",
+                  event.target.value as ObjectRetentionMode,
                 )
               }
               disabled={objectLockUnavailable}
@@ -1427,7 +1310,7 @@ export default function BrowserObjectDetailsModal({
             onClick={() => void handleSaveRetention()}
             disabled={
               savingRetention ||
-              retentionLoading ||
+              protectionLoading ||
               objectLockUnavailable ||
               !retentionMode ||
               !retentionDate

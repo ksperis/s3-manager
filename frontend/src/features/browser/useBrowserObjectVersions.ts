@@ -32,6 +32,13 @@ export function useBrowserObjectVersions({
   objectKey,
   requestOptions,
 }: UseBrowserObjectVersionsOptions) {
+  const scope = JSON.stringify([
+    accountId,
+    bucketName,
+    enabled,
+    objectKey,
+    requestOptions?.workspaceSurface ?? null,
+  ]);
   const [versions, setVersions] = useState<BrowserObjectVersion[]>([]);
   const [deleteMarkers, setDeleteMarkers] = useState<BrowserObjectVersion[]>(
     [],
@@ -43,6 +50,8 @@ export function useBrowserObjectVersions({
   const [versionIdMarker, setVersionIdMarker] = useState<string | null>(null);
   const loadingRef = useRef(false);
   const requestIdRef = useRef(0);
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
 
   const reset = useCallback(() => {
     requestIdRef.current += 1;
@@ -58,6 +67,7 @@ export function useBrowserObjectVersions({
 
   const load = useCallback(
     async ({ append = false, force = false }: LoadVersionsOptions = {}) => {
+      if (scope !== scopeRef.current) return;
       if (!accountId || !bucketName || !enabled || !objectKey) return;
       if (loadingRef.current && !force) return;
 
@@ -109,11 +119,12 @@ export function useBrowserObjectVersions({
       keyMarker,
       objectKey,
       requestOptions,
+      scope,
       versionIdMarker,
     ],
   );
 
-  useEffect(() => reset(), [accountId, bucketName, enabled, objectKey, reset]);
+  useEffect(() => reset(), [reset, scope]);
 
   const rows = useMemo(
     () => buildVersionRows(versions, deleteMarkers),
