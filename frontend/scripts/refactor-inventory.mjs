@@ -65,6 +65,15 @@ function codeFilesUnder(root) {
   return walkFiles(root).filter((file) => CODE_EXTENSIONS.has(path.extname(file)));
 }
 
+function isTestSourceFile(frontendRoot, file) {
+  const rel = relative(frontendRoot, file);
+  return (
+    rel.startsWith("src/test/") ||
+    rel.includes("/__tests__/") ||
+    /\.(test|spec)\.[^.]+$/.test(rel)
+  );
+}
+
 function byTopLevel(root, files, depth) {
   const totals = new Map();
   for (const file of files) {
@@ -145,10 +154,16 @@ const frontendRoot = resolveFrontendRoot();
 const srcRoot = path.join(frontendRoot, "src");
 const frontendFiles = codeFilesUnder(frontendRoot);
 const srcFiles = codeFilesUnder(srcRoot);
-const largest = frontendFiles
+const productionSrcFiles = srcFiles.filter(
+  (file) => !isTestSourceFile(frontendRoot, file),
+);
+const testSrcFiles = srcFiles.filter((file) =>
+  isTestSourceFile(frontendRoot, file),
+);
+const largest = productionSrcFiles
   .map((file) => ({ file: relative(frontendRoot, file), lines: countLines(file) }))
   .sort((a, b) => b.lines - a.lines || a.file.localeCompare(b.file));
-const srcAreaTotals = byTopLevel(srcRoot, srcFiles, 2);
+const srcAreaTotals = byTopLevel(srcRoot, productionSrcFiles, 2);
 const topLevelTotals = byTopLevel(frontendRoot, frontendFiles, 1);
 const routes = routeRows(frontendRoot);
 const routeSurfaceTotals = routes.reduce((acc, route) => {
@@ -159,16 +174,18 @@ const routeSurfaceTotals = routes.reduce((acc, route) => {
 console.log("# Frontend Refactor Inventory");
 console.log(`Generated from: ${frontendRoot}`);
 console.log(`Frontend code files: ${frontendFiles.length}`);
-console.log(`Frontend code lines: ${largest.reduce((sum, item) => sum + item.lines, 0)}`);
-console.log(`Source code files: ${srcFiles.length}`);
-console.log(`Source code lines: ${srcFiles.reduce((sum, file) => sum + countLines(file), 0)}`);
+console.log(`Frontend code lines: ${frontendFiles.reduce((sum, file) => sum + countLines(file), 0)}`);
+console.log(`Production source files: ${productionSrcFiles.length}`);
+console.log(`Production source lines: ${productionSrcFiles.reduce((sum, file) => sum + countLines(file), 0)}`);
+console.log(`Test source files: ${testSrcFiles.length}`);
+console.log(`Test source lines: ${testSrcFiles.reduce((sum, file) => sum + countLines(file), 0)}`);
 
-printList("Largest Top-Level Areas", topLevelTotals, ([area, lines]) => `${area}: ${lines} lines`, 12);
-printList("Largest src Areas", srcAreaTotals, ([area, lines]) => `${area}: ${lines} lines`, 20);
-printList("Largest Files", largest, ({ file, lines }) => `${file}: ${lines} lines`, 20);
+printList("Largest Top-Level Areas (all code)", topLevelTotals, ([area, lines]) => `${area}: ${lines} lines`, 12);
+printList("Largest Production src Areas", srcAreaTotals, ([area, lines]) => `${area}: ${lines} lines`, 20);
+printList("Largest Production Files", largest, ({ file, lines }) => `${file}: ${lines} lines`, 20);
 printList(
-  "Hardening Signals",
-  signalCounts(frontendFiles),
+  "Production Hardening Signals",
+  signalCounts(productionSrcFiles),
   ({ label, occurrences, files }) => `${label}: ${occurrences} occurrences in ${files} files`
 );
 printList(
