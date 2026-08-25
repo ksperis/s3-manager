@@ -2924,6 +2924,38 @@ describe("BrowserPage interactions", () => {
     ).toBeInTheDocument();
   });
 
+  it("commits an edited path and returns to its parent from the context bar", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("docs");
+
+    const toolbar = getContextToolbar();
+    await user.click(within(toolbar).getByText("(root)"));
+    const pathInput = within(toolbar).getByRole("combobox", { name: "Path" });
+    await user.type(pathInput, "docs/{Enter}");
+
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({ prefix: "docs/" }),
+      );
+    });
+    await user.click(
+      within(getContextToolbar()).getByRole("button", {
+        name: "Parent folder",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({ prefix: "" }),
+      );
+    });
+  });
+
   it("falls back cleanly when a stored bucket is no longer available", async () => {
     searchBrowserBucketsMock.mockImplementation(
       (_accountId: string, options?: { search?: string; exact?: boolean }) => {

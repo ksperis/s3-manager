@@ -93,6 +93,7 @@ import {
 } from "./BrowserLayout";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBucketSelector from "./BrowserBucketSelector";
+import BrowserPathNavigator from "./BrowserPathNavigator";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
@@ -237,7 +238,6 @@ import {
   VERSIONS_PAGE_SIZE,
   bulkActionClasses,
   bulkDangerClasses,
-  breadcrumbIconButtonClasses,
   contextMenuItemClasses,
   contextMenuItemDisabledClasses,
   contextMenuSeparatorClasses,
@@ -409,14 +409,10 @@ const browserSubtleSurfaceClasses =
   cx(uiCardMutedClass, "shadow-none");
 const browserToolbarShellClasses =
   "flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between";
-const browserToolbarPathStripClasses =
-  "flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2.5 py-1.5 shadow-[var(--ui-shadow-soft)]";
 const browserToolbarControlsGroupClasses =
   "flex shrink-0 items-center gap-1.5";
 const browserFloatingMenuClasses =
   cx(uiMenuClass, "overflow-hidden p-1.5");
-const browserInputClasses =
-  cx(toolbarCompactInputClasses, "w-full py-2 font-medium");
 const browserSearchInputClasses =
   cx(
     toolbarCompactInputClasses,
@@ -9454,170 +9450,27 @@ export default function BrowserPage({
                   onSelectBucket={handleBucketChange}
                   onLoadMore={handleBucketMenuLoadMore}
                 />
-                <div
-                  className={`${browserToolbarPathStripClasses} ui-caption font-semibold text-slate-500 dark:text-slate-400`}
-                  onClick={isEditingPath ? undefined : startEditingPath}
-                  onDoubleClick={isEditingPath ? undefined : startEditingPath}
-                >
-                  {isEditingPath ? (
-                    <div className="relative min-w-0 flex-1">
-                      <input
-                        ref={pathInputRef}
-                        type="text"
-                        value={pathDraft}
-                        onChange={(event) => setPathDraft(event.target.value)}
-                        onBlur={commitPathDraft}
-                        onKeyDown={handlePathKeyDown}
-                        placeholder="root"
-                        aria-label="Path"
-                        role="combobox"
-                        aria-autocomplete="list"
-                        aria-controls="browser-path-suggestion-list"
-                        aria-expanded={
-                          pathSuggestions.length > 0 || pathSuggestionsLoading
-                        }
-                        aria-activedescendant={
-                          activePathSuggestion
-                            ? `browser-path-suggestion-${pathSuggestionIndex}`
-                            : undefined
-                        }
-                        className={`${browserInputClasses} min-w-0`}
-                        disabled={!bucketName}
-                        spellCheck={false}
-                      />
-                      {(pathSuggestions.length > 0 ||
-                        pathSuggestionsLoading) && (
-                        <div
-                          id="browser-path-suggestion-list"
-                          role="listbox"
-                          className={`absolute left-0 right-0 top-[calc(100%+8px)] z-40 overflow-hidden py-1 ui-caption ${browserFloatingMenuClasses}`}
-                        >
-                          {pathSuggestions.length === 0 ? (
-                            <div className="px-2 py-1.5 text-slate-500 dark:text-slate-300">
-                              Searching folders...
-                            </div>
-                          ) : (
-                            <div className="max-h-56 overflow-y-auto">
-                              {pathSuggestions.map((suggestion, idx) => {
-                                const isActive = idx === pathSuggestionIndex;
-                                const suggestionId = `browser-path-suggestion-${idx}`;
-                                const sourceBadge =
-                                  suggestion.source === "history"
-                                    ? "Recent"
-                                    : suggestion.source === "local"
-                                      ? "Visible"
-                                      : null;
-                                return (
-                                  <button
-                                    id={suggestionId}
-                                    key={`${suggestion.source}-${suggestion.value}`}
-                                    type="button"
-                                    role="option"
-                                    aria-selected={isActive}
-                                    onMouseEnter={() =>
-                                      setPathSuggestionIndex(idx)
-                                    }
-                                    onMouseDown={(event) => {
-                                      event.preventDefault();
-                                      applyPathSuggestion(suggestion, {
-                                        commit: true,
-                                      });
-                                    }}
-                                    className={`flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left transition ${
-                                      isActive
-                                        ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                                        : "text-slate-700 hover:bg-primary-50/70 dark:text-slate-200 dark:hover:bg-slate-800"
-                                    }`}
-                                  >
-                                    <span className="min-w-0 flex-1">
-                                      <span
-                                        className="block truncate font-semibold"
-                                        title={suggestion.label}
-                                      >
-                                        {suggestion.label}
-                                      </span>
-                                      <span
-                                        className="mt-0.5 block break-all text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500"
-                                        title={suggestion.value}
-                                      >
-                                        {suggestion.value}
-                                      </span>
-                                    </span>
-                                    {sourceBadge && (
-                                      <span className="ml-2 shrink-0 self-start rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                                        {sourceBadge}
-                                      </span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                          {pathSuggestionsLoading &&
-                            pathSuggestions.length > 0 && (
-                              <div className="border-t border-slate-200 px-2 py-1 text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                                Searching more folders...
-                              </div>
-                            )}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleGoUp();
-                        }}
-                        className={breadcrumbIconButtonClasses}
-                        disabled={!canGoUp}
-                        aria-label="Parent folder"
-                        title="Parent folder"
-                      >
-                        <UpIcon className="h-3.5 w-3.5" />
-                      </button>
-                      <div className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5">
-                        {breadcrumbs.length === 0 ? (
-                          <span className="shrink-0 text-slate-400">
-                            (root)
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleSelectPrefix("");
-                            }}
-                            className="shrink-0 rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
-                            title="root"
-                          >
-                            root
-                          </button>
-                        )}
-                        {breadcrumbs.map((crumb) => (
-                          <span
-                            key={crumb.prefix}
-                            className="flex shrink-0 items-center gap-1"
-                          >
-                            <span className="text-slate-300">/</span>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleSelectPrefix(crumb.prefix);
-                              }}
-                              className="max-w-[220px] truncate rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 sm:max-w-[320px] md:max-w-[420px]"
-                              title={crumb.prefix}
-                            >
-                              {crumb.label}
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
+                <BrowserPathNavigator
+                  inputRef={pathInputRef}
+                  editing={isEditingPath}
+                  value={pathDraft}
+                  disabled={!bucketName}
+                  suggestions={pathSuggestions}
+                  suggestionsLoading={pathSuggestionsLoading}
+                  activeSuggestionIndex={pathSuggestionIndex}
+                  breadcrumbs={breadcrumbs}
+                  canGoUp={canGoUp}
+                  onStartEditing={startEditingPath}
+                  onChange={setPathDraft}
+                  onBlur={commitPathDraft}
+                  onKeyDown={handlePathKeyDown}
+                  onHoverSuggestion={setPathSuggestionIndex}
+                  onSelectSuggestion={(suggestion) =>
+                    applyPathSuggestion(suggestion, { commit: true })
+                  }
+                  onGoUp={handleGoUp}
+                  onSelectPrefix={handleSelectPrefix}
+                />
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 {!isPortalProfile &&
