@@ -4,7 +4,6 @@
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.db import (
     S3Connection,
@@ -26,10 +25,7 @@ from app.models.user import (
     UiPreferences,
     UserOut,
 )
-from app.services.association_names import (
-    load_s3_user_names,
-    load_shared_s3_connection_names,
-)
+from app.services.association_names import load_s3_user_names
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.user_avatar_service import UserAvatarService
 
@@ -161,27 +157,16 @@ class UserOutputService:
         *,
         preloaded: UserOutputPreload | None = None,
     ) -> UserOut:
-        if preloaded is None:
-            account_links = self._account_links(user)
-            group_ids = self._group_ids(user)
-            s3_user_ids, s3_user_links = self._s3_user_links(user)
-            s3_connection_ids = self._s3_connection_ids(user)
-            s3_user_names = load_s3_user_names(self.db, s3_user_ids)
-            s3_connection_names = load_shared_s3_connection_names(
-                self.db,
-                s3_connection_ids,
-            )
-            group_names = self._group_names(group_ids)
-        else:
-            user_id = int(user.id)
-            account_links = preloaded.account_links_by_user.get(user_id, [])
-            group_ids = preloaded.group_ids_by_user.get(user_id, [])
-            s3_user_links = preloaded.s3_user_links_by_user.get(user_id, [])
-            s3_user_ids = [link.s3_user_id for link in s3_user_links]
-            s3_connection_ids = preloaded.connection_ids_by_user.get(user_id, [])
-            s3_user_names = preloaded.s3_user_names
-            s3_connection_names = preloaded.connection_names
-            group_names = preloaded.group_names
+        projection = preloaded or self.preload([user])
+        user_id = int(user.id)
+        account_links = projection.account_links_by_user.get(user_id, [])
+        group_ids = projection.group_ids_by_user.get(user_id, [])
+        s3_user_links = projection.s3_user_links_by_user.get(user_id, [])
+        s3_user_ids = [link.s3_user_id for link in s3_user_links]
+        s3_connection_ids = projection.connection_ids_by_user.get(user_id, [])
+        s3_user_names = projection.s3_user_names
+        s3_connection_names = projection.connection_names
+        group_names = projection.group_names
         s3_user_details = [
             LinkedS3User(
                 id=s3_user_id,
@@ -257,117 +242,3 @@ class UserOutputService:
             ).to_user_effective_access(user),
             last_login_at=user.last_login_at,
         )
-
-    def _account_links(self, user: User) -> list[AccountMembershipDetail]:
-        try:
-            links = getattr(user, "account_links", None)
-            if links is not None:
-                return [
-                    AccountMembershipDetail(
-                        account_id=link.account_id,
-                        role=link.role,
-                        allow_manager_browser_data_access=bool(
-                            link.allow_manager_browser_data_access
-                        ),
-                        is_root=bool(link.is_root),
-                    )
-                    for link in links
-                ]
-        except DetachedInstanceError:
-            pass
-        rows = (
-            self.db.query(
-                UserS3Account.account_id,
-                UserS3Account.role,
-                UserS3Account.allow_manager_browser_data_access,
-                UserS3Account.is_root,
-            )
-            .filter(UserS3Account.user_id == user.id)
-            .all()
-        )
-        return [
-            AccountMembershipDetail(
-                account_id=row[0],
-                role=row[1],
-                allow_manager_browser_data_access=bool(row[2]),
-                is_root=bool(row[3]),
-            )
-            for row in rows
-        ]
-
-    def _group_ids(self, user: User) -> list[int]:
-        try:
-            links = getattr(user, "ui_group_links", None)
-            if links is not None:
-                return [link.group_id for link in links]
-        except DetachedInstanceError:
-            pass
-        return [
-            row[0]
-            for row in self.db.query(UserUiGroup.group_id)
-            .filter(UserUiGroup.user_id == user.id)
-            .all()
-        ]
-
-    def _s3_user_links(
-        self,
-        user: User,
-    ) -> tuple[list[int], list[S3UserMembership]]:
-        try:
-            links = getattr(user, "s3_user_links", None)
-            if links is not None:
-                return (
-                    [link.s3_user_id for link in links],
-                    [
-                        S3UserMembership(
-                            s3_user_id=link.s3_user_id,
-                            allow_manager_browser_data_access=bool(
-                                link.allow_manager_browser_data_access
-                            ),
-                        )
-                        for link in links
-                    ],
-                )
-        except DetachedInstanceError:
-            pass
-        rows = (
-            self.db.query(UserS3User)
-            .filter(UserS3User.user_id == user.id)
-            .all()
-        )
-        return (
-            [row.s3_user_id for row in rows],
-            [
-                S3UserMembership(
-                    s3_user_id=row.s3_user_id,
-                    allow_manager_browser_data_access=bool(
-                        row.allow_manager_browser_data_access
-                    ),
-                )
-                for row in rows
-            ],
-        )
-
-    def _s3_connection_ids(self, user: User) -> list[int]:
-        try:
-            links = getattr(user, "s3_connection_links", None)
-            if links is not None:
-                return [link.s3_connection_id for link in links]
-        except DetachedInstanceError:
-            pass
-        return [
-            row[0]
-            for row in self.db.query(UserS3Connection.s3_connection_id)
-            .filter(UserS3Connection.user_id == user.id)
-            .all()
-        ]
-
-    def _group_names(self, group_ids: list[int]) -> dict[int, str]:
-        if not group_ids:
-            return {}
-        rows = (
-            self.db.query(UiGroup.id, UiGroup.name)
-            .filter(UiGroup.id.in_(group_ids))
-            .all()
-        )
-        return {row[0]: row[1] for row in rows}

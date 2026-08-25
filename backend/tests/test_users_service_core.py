@@ -438,7 +438,7 @@ def test_update_current_user_password_paths(db_session):
     assert updated.ui_language == "fr"
 
 
-def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
+def test_paginate_users_and_detached_user_use_canonical_preload(db_session, monkeypatch):
     service = UsersService(db_session)
     account = _seed_account(db_session, "acc-a", "RGW-ACC-A")
     user = _seed_user(db_session, "paged@example.com", role=UserRole.UI_USER.value)
@@ -460,22 +460,15 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
         ),
     )
 
-    def fail_per_user_loader(*_args, **_kwargs):
-        raise AssertionError("Paginated projection must use its bulk preload")
+    preload_calls: list[list[int]] = []
+    original_preload = UserOutputService.preload
+
+    def track_preload(output_service, users):
+        preload_calls.append([int(item.id) for item in users])
+        return original_preload(output_service, users)
 
     with monkeypatch.context() as projection_patch:
-        for method_name in (
-            "_account_links",
-            "_group_ids",
-            "_s3_user_links",
-            "_s3_connection_ids",
-            "_group_names",
-        ):
-            projection_patch.setattr(
-                UserOutputService,
-                method_name,
-                fail_per_user_loader,
-            )
+        projection_patch.setattr(UserOutputService, "preload", track_preload)
         rows, total = service.paginate_users(
             page=1,
             page_size=10,
@@ -483,18 +476,21 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
             sort_field="last_login",
             sort_direction="desc",
         )
+        assert preload_calls == [[user.id]]
+
+        db_session.expunge(user)
+        out = service.user_to_out(user)
+        assert preload_calls == [[user.id], [user.id]]
     assert total >= 1
     target = next(item for item in rows if item.id == user.id)
     assert target.account_links[0].account_id == account.id
     assert target.s3_user_details and target.s3_user_details[0].name == "paged-s3-user"
     assert target.s3_connection_details and target.s3_connection_details[0].name == "paged-shared-conn"
 
-    # Detached instance fallback branch in user_to_out.
-    db_session.expunge(user)
-    out = service.user_to_out(user)
     assert out.id > 0
     connection_ids = {connection.id for connection in out.s3_connection_details}
-    assert owned_conn.id in connection_ids or shared_conn.id in connection_ids
+    assert shared_conn.id in connection_ids
+    assert owned_conn.id not in connection_ids
 
 
 def test_admin_user_projection_and_search_hide_private_connection_links(db_session):
