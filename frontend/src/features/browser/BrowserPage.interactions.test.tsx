@@ -2216,6 +2216,29 @@ describe("BrowserPage interactions", () => {
         screen.queryByRole("dialog", { name: "Create folder" }),
       ).not.toBeInTheDocument();
     });
+
+    const operationsPanel = await screen.findByRole("complementary", {
+      name: "Operations",
+    });
+    await user.click(
+      within(operationsPanel).getByRole("button", {
+        name: "Expand operations",
+      }),
+    );
+    expect(within(operationsPanel).getByText("Created")).toBeInTheDocument();
+    expect(
+      within(operationsPanel).getByText("bucket-1/reports/"),
+    ).toBeInTheDocument();
+    await user.click(
+      within(operationsPanel).getByRole("button", {
+        name: "Clear completed/failed",
+      }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("complementary", { name: "Operations" }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("uses shared controls in the create bucket modal", async () => {

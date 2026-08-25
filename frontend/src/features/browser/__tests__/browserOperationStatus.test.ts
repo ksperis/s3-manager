@@ -12,6 +12,7 @@ describe("browserOperationStatus", () => {
     expect(operationInProgressStatusClasses("downloading")).toContain("bg-amber-100");
     expect(operationInProgressStatusClasses("copying")).toContain("bg-sky-100");
     expect(operationInProgressStatusClasses("deleting")).toContain("bg-rose-100");
+    expect(operationInProgressStatusClasses(undefined)).toContain("bg-slate-100");
   });
 
   it("prioritizes failed and queued states for operation status pills", () => {

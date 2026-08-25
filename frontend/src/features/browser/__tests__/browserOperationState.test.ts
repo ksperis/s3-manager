@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   completeOperationById,
   patchOperationById,
+  prependCompletedActivity,
 } from "../browserOperationState";
 import type { OperationItem } from "../browserTypes";
 
@@ -68,5 +69,39 @@ describe("browserOperationState", () => {
       completionStatus: "done",
       errorMessage: undefined,
     });
+  });
+
+  it("caps completed activities without dropping transfer operations", () => {
+    const result = prependCompletedActivity(
+      [
+        operations[0],
+        {
+          id: "previous-activity",
+          label: "Created",
+          path: "bucket/previous/",
+          progress: 100,
+          kind: "activity",
+          completedAt: "12:00:00",
+          completionStatus: "done",
+        },
+        operations[1],
+      ],
+      {
+        id: "latest-activity",
+        label: "Created",
+        path: "bucket/latest/",
+        progress: 100,
+        kind: "activity",
+        completedAt: "12:01:00",
+        completionStatus: "done",
+      },
+      1,
+    );
+
+    expect(result.map((operation) => operation.id)).toEqual([
+      "latest-activity",
+      "target",
+      "other",
+    ]);
   });
 });

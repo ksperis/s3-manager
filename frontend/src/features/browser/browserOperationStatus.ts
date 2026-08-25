@@ -23,7 +23,8 @@ export function operationInProgressStatusClasses(status: OperationItem["status"]
   if (status === "uploading") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
   if (status === "downloading") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
   if (status === "copying") return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200";
-  return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
+  if (status === "deleting") return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
+  return queuedOperationStatusClasses;
 }
 
 export function operationCompletionLabel(status?: OperationItem["completionStatus"]) {

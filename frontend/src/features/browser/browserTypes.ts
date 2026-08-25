@@ -45,9 +45,9 @@ export type OperationItem = {
   label: string;
   path: string;
   progress: number;
-  status: "uploading" | "deleting" | "copying" | "downloading";
+  status?: "uploading" | "deleting" | "copying" | "downloading";
   sizeBytes?: number;
-  kind?: "upload" | "download" | "delete" | "copy" | "other";
+  kind?: "upload" | "download" | "delete" | "copy" | "activity" | "other";
   groupId?: string;
   groupLabel?: string;
   groupKind?: "folder" | "files";
@@ -74,13 +74,6 @@ export type UploadQueueItem = {
   groupLabel: string;
   groupKind: "folder" | "files";
   itemLabel: string;
-};
-
-export type CompletedOperationItem = {
-  id: string;
-  label: string;
-  path: string;
-  when: string;
 };
 
 export type DownloadDetailStatus = "queued" | "downloading" | "done" | "failed" | "cancelled";

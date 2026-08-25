@@ -94,6 +94,7 @@ import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
+import { useBrowserOperationOverview } from "./useBrowserOperationOverview";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
@@ -127,29 +128,16 @@ import {
 } from "./BrowserBucketDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
 import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
-import { buildBrowserOperationDetailsExport } from "./browserOperationDetailsExport";
 import {
   completeOperationById,
   patchOperationById,
+  prependCompletedActivity,
 } from "./browserOperationState";
 import {
   cancelPendingOperationDetails,
   updateOperationDetailById,
   updateOperationDetailsByKey,
 } from "./browserOperationDetailState";
-import {
-  buildCopyOperationGroups,
-  buildDeleteOperationGroups,
-  buildDownloadOperationGroups,
-  buildOperationGroupSortIndexes,
-  buildUploadOperationGroups,
-  collectFinishedOperationIds,
-  filterDetailOperationGroups,
-  filterUploadOperationGroups,
-  omitOperationRecords,
-  omitOperationSectionRecords,
-  summarizeDetailOperationGroups,
-} from "./browserOperationGroups";
 import {
   buildBrowserFolderDownloadPlan,
   downloadBrowserFolderArchive,
@@ -198,7 +186,6 @@ import {
   COMPLETED_OPERATIONS_LIMIT,
   DELETED_RESULTS_TARGET,
   DELETED_VERSIONS_SCAN_LIMIT,
-  DEFAULT_QUEUED_VISIBLE_COUNT,
   MULTIPART_CONCURRENCY,
   MULTIPART_THRESHOLD,
   OBJECTS_LIST_HARD_LIMIT,
@@ -315,7 +302,6 @@ import type {
   BrowserItem,
   BulkMetadataDraft,
   ClipboardState,
-  CompletedOperationItem,
   CopyDetailItem,
   CopyDetailStatus,
   DeleteDetailItem,
@@ -323,7 +309,6 @@ import type {
   DownloadDetailItem,
   DownloadDetailStatus,
   ObjectDetailsTabId,
-  OperationDetailsKind,
   OperationCompletionStatus,
   OperationItem,
   TreeNode,
@@ -704,19 +689,6 @@ export default function BrowserPage({
   const uploadQueueRef = useRef<UploadQueueItem[]>([]);
   const activeUploadsRef = useRef(0);
   const operationControllersRef = useRef(new Map<string, AbortController>());
-  const [showActiveOperations, setShowActiveOperations] = useState(false);
-  const [showQueuedOperations, setShowQueuedOperations] = useState(false);
-  const [showCompletedOperations, setShowCompletedOperations] = useState(false);
-  const [showFailedOperations, setShowFailedOperations] = useState(false);
-  const [expandedOperationGroups, setExpandedOperationGroups] = useState<
-    Record<string, boolean>
-  >({});
-  const [queuedVisibleCountByGroup, setQueuedVisibleCountByGroup] = useState<
-    Record<string, number>
-  >({});
-  const [completedOperations, setCompletedOperations] = useState<
-    CompletedOperationItem[]
-  >([]);
   const [downloadDetails, setDownloadDetails] = useState<
     Record<string, DownloadDetailItem[]>
   >({});
@@ -726,6 +698,60 @@ export default function BrowserPage({
   const [copyDetails, setCopyDetails] = useState<
     Record<string, CopyDetailItem[]>
   >({});
+  const {
+    activeOperationsCount,
+    allOtherOperations,
+    clearFinishedOperations,
+    closeOperationsDetailsModal,
+    completedOperationsCount,
+    copyGroups,
+    deleteGroups,
+    dismissOperationsPanel,
+    downloadGroups,
+    downloadOperationDetails,
+    failedOperationsCount,
+    filtersAllInactive,
+    getSectionVisibleCount,
+    hasFinishedOperations,
+    hasOperationsPanelContent,
+    hasPendingOperations,
+    isGroupExpanded,
+    openOperationsDetailsModal,
+    operationsPanelOpen,
+    operationsPanelTotalCount,
+    operationSortFallback,
+    operationSortIndexById,
+    queuedOperationsCount,
+    showActiveOperations,
+    showCompletedOperations,
+    showFailedOperations,
+    showMoreSection,
+    showOperationsBar,
+    showOperationsDetailsModal,
+    showOperationsPanel,
+    showQueuedOperations,
+    toggleGroupExpanded,
+    toggleOperationFilter,
+    toggleOperationsPanel,
+    uploadGroups,
+    uploadGroupSortIndexById,
+    visibleCopyGroups,
+    visibleDeleteGroups,
+    visibleDownloadGroups,
+    visibleOtherOperations,
+    visibleUploadGroups,
+  } = useBrowserOperationOverview({
+    operations,
+    setOperations,
+    uploadQueue,
+    downloadDetails,
+    setDownloadDetails,
+    deleteDetails,
+    setDeleteDetails,
+    copyDetails,
+    setCopyDetails,
+    setStatusMessage,
+  });
   const [objectDetailsTarget, setObjectDetailsTarget] =
     useState<ObjectDetailsTarget | null>(null);
   const [configBucketName, setConfigBucketName] = useState<string | null>(null);
@@ -735,18 +761,6 @@ export default function BrowserPage({
   const [copyDialog, setCopyDialog] = useState<BrowserCopyDialogState | null>(
     null,
   );
-  const [operationsPanelOpen, setOperationsPanelOpen] = useState(false);
-  const [operationsPanelDismissed, setOperationsPanelDismissed] = useState(false);
-  const operationsPanelVisibleRef = useRef(false);
-  const [showOperationsDetailsModal, setShowOperationsDetailsModal] = useState(false);
-  const showOperationsBar = useCallback(() => {
-    setOperationsPanelOpen((open) => (operationsPanelVisibleRef.current ? open : false));
-    setOperationsPanelDismissed(false);
-  }, []);
-  const dismissOperationsPanel = useCallback(() => {
-    setOperationsPanelOpen(false);
-    setOperationsPanelDismissed(true);
-  }, []);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
   const [pathSuggestions, setPathSuggestions] = useState<PathSuggestion[]>([]);
@@ -5241,16 +5255,23 @@ export default function BrowserPage({
   };
 
   const addActivity = (action: string, path: string) => {
-    setCompletedOperations((prev) =>
-      [
+    const completedAt = new Date().toLocaleTimeString();
+    showOperationsBar();
+    setOperations((previous) =>
+      prependCompletedActivity(
+        previous,
         {
           id: makeId(),
           label: action,
           path,
-          when: new Date().toLocaleTimeString(),
+          progress: 100,
+          kind: "activity",
+          cancelable: false,
+          completedAt,
+          completionStatus: "done",
         },
-        ...prev,
-      ].slice(0, COMPLETED_OPERATIONS_LIMIT),
+        COMPLETED_OPERATIONS_LIMIT,
+      ),
     );
   };
 
@@ -5487,7 +5508,7 @@ export default function BrowserPage({
 
   const startOperation = useCallback(
     (
-      status: OperationItem["status"],
+      status: NonNullable<OperationItem["status"]>,
       label: string,
       path: string,
       options?: {
@@ -8357,94 +8378,12 @@ export default function BrowserPage({
     runItemAction(inspectedItem, actionId);
   };
 
-  const activeOperations = useMemo(
-    () => operations.filter((op) => !op.completedAt),
-    [operations],
-  );
-  const uploadGroups = useMemo(
-    () => buildUploadOperationGroups(operations, uploadQueue),
-    [operations, uploadQueue],
-  );
-  const downloadGroups = useMemo(
-    () => buildDownloadOperationGroups(operations, downloadDetails),
-    [downloadDetails, operations],
-  );
-  const deleteGroups = useMemo(
-    () => buildDeleteOperationGroups(operations, deleteDetails),
-    [deleteDetails, operations],
-  );
-  const copyGroups = useMemo(
-    () => buildCopyOperationGroups(operations, copyDetails),
-    [copyDetails, operations],
-  );
-  const downloadSummary = useMemo(
-    () => summarizeDetailOperationGroups(downloadGroups),
-    [downloadGroups],
-  );
-  const deleteSummary = useMemo(
-    () => summarizeDetailOperationGroups(deleteGroups),
-    [deleteGroups],
-  );
-  const copySummary = useMemo(
-    () => summarizeDetailOperationGroups(copyGroups),
-    [copyGroups],
-  );
-  const failedUploadCount = useMemo(
-    () =>
-      operations.filter(
-        (op) => op.kind === "upload" && op.completionStatus === "failed",
-      ).length,
-    [operations],
-  );
-  const failedOtherOperations = useMemo(
-    () =>
-      operations.filter(
-        (op) =>
-          op.kind !== "upload" &&
-          op.kind !== "download" &&
-          op.kind !== "delete" &&
-          op.kind !== "copy" &&
-          op.completionStatus === "failed",
-      ),
-    [operations],
-  );
-  const totalOperationsCount =
-    activeOperations.length +
-    uploadQueue.length +
-    downloadSummary.queued +
-    deleteSummary.queued +
-    copySummary.queued;
-  const hasPendingOperations = totalOperationsCount > 0;
   const leaveMessage =
     "Operations are in progress (upload, download, copy, delete). Leaving now may interrupt them. Continue?";
   unstable_usePrompt({
     when: hasPendingOperations,
     message: leaveMessage,
   });
-  const completedUploadCount = useMemo(
-    () =>
-      operations.filter(
-        (op) =>
-          op.kind === "upload" &&
-          op.completedAt &&
-          op.completionStatus !== "failed",
-      ).length,
-    [operations],
-  );
-  const completedOtherOperations = useMemo(
-    () =>
-      operations.filter(
-        (op) =>
-          op.kind !== "upload" &&
-          op.kind !== "download" &&
-          op.kind !== "delete" &&
-          op.kind !== "copy" &&
-          op.completedAt &&
-          op.completionStatus !== "failed",
-      ),
-    [operations],
-  );
-
   useEffect(() => {
     if (!hasPendingOperations || typeof window === "undefined") return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -8455,196 +8394,6 @@ export default function BrowserPage({
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasPendingOperations, leaveMessage]);
-  const failedOperationsCount =
-    failedUploadCount +
-    downloadSummary.failed +
-    deleteSummary.failed +
-    copySummary.failed +
-    failedOtherOperations.length;
-  const completedOperationsCount =
-    completedUploadCount +
-    downloadSummary.completed +
-    deleteSummary.completed +
-    copySummary.completed +
-    completedOtherOperations.length;
-  const operationsPanelTotalCount =
-    totalOperationsCount + completedOperationsCount + failedOperationsCount;
-  const hasOperationsPanelContent = operationsPanelTotalCount > 0;
-  const showOperationsPanel =
-    hasOperationsPanelContent && (!operationsPanelDismissed || hasPendingOperations);
-  useEffect(() => {
-    operationsPanelVisibleRef.current = showOperationsPanel;
-  }, [showOperationsPanel]);
-  const hasFinishedOperations =
-    completedOperationsCount > 0 || failedOperationsCount > 0;
-  const filtersAllInactive =
-    !showActiveOperations &&
-    !showQueuedOperations &&
-    !showCompletedOperations &&
-    !showFailedOperations;
-  const showAllOperations = filtersAllInactive;
-  const showActiveFilter = showActiveOperations || showAllOperations;
-  const showQueuedFilter = showQueuedOperations || showAllOperations;
-  const showCompletedFilter = showCompletedOperations || showAllOperations;
-  const showFailedFilter = showFailedOperations || showAllOperations;
-  const operationGroupVisibility = useMemo(
-    () => ({
-      active: showActiveFilter,
-      queued: showQueuedFilter,
-      completed: showCompletedFilter,
-      failed: showFailedFilter,
-    }),
-    [
-      showActiveFilter,
-      showCompletedFilter,
-      showFailedFilter,
-      showQueuedFilter,
-    ],
-  );
-  const activeOtherOperations = useMemo(
-    () =>
-      activeOperations.filter(
-        (op) =>
-          op.kind !== "upload" &&
-          op.kind !== "download" &&
-          op.kind !== "delete" &&
-          op.kind !== "copy",
-      ),
-    [activeOperations],
-  );
-  const visibleOtherOperations = useMemo(() => {
-    return [
-      ...(showActiveFilter ? activeOtherOperations : []),
-      ...(showCompletedFilter ? completedOtherOperations : []),
-      ...(showFailedFilter ? failedOtherOperations : []),
-    ];
-  }, [
-    activeOtherOperations,
-    completedOtherOperations,
-    failedOtherOperations,
-    showActiveFilter,
-    showCompletedFilter,
-    showFailedFilter,
-  ]);
-  const visibleUploadGroups = useMemo(
-    () => filterUploadOperationGroups(uploadGroups, operationGroupVisibility),
-    [operationGroupVisibility, uploadGroups],
-  );
-  const visibleDownloadGroups = useMemo(
-    () =>
-      filterDetailOperationGroups(
-        downloadGroups,
-        "downloading",
-        operationGroupVisibility,
-      ),
-    [downloadGroups, operationGroupVisibility],
-  );
-  const visibleDeleteGroups = useMemo(
-    () =>
-      filterDetailOperationGroups(
-        deleteGroups,
-        "deleting",
-        operationGroupVisibility,
-      ),
-    [deleteGroups, operationGroupVisibility],
-  );
-  const visibleCopyGroups = useMemo(
-    () =>
-      filterDetailOperationGroups(
-        copyGroups,
-        "copying",
-        operationGroupVisibility,
-      ),
-    [copyGroups, operationGroupVisibility],
-  );
-  const operationGroupSortIndexes = useMemo(
-    () => buildOperationGroupSortIndexes(operations, uploadQueue, uploadGroups),
-    [operations, uploadGroups, uploadQueue],
-  );
-  const operationSortIndexById = operationGroupSortIndexes.operationById;
-  const uploadGroupSortIndexById = operationGroupSortIndexes.uploadGroupById;
-  const operationSortFallback = operationGroupSortIndexes.fallback;
-  const isGroupExpanded = (groupId: string) =>
-    Boolean(expandedOperationGroups[groupId]);
-  const toggleGroupExpanded = (groupId: string) => {
-    setExpandedOperationGroups((prev) => ({
-      ...prev,
-      [groupId]: !prev[groupId],
-    }));
-  };
-  const toggleOperationFilter = (
-    filter: "active" | "queued" | "completed" | "failed",
-  ) => {
-    setShowActiveOperations((prev) => (filter === "active" ? !prev : false));
-    setShowQueuedOperations((prev) => (filter === "queued" ? !prev : false));
-    setShowCompletedOperations((prev) =>
-      filter === "completed" ? !prev : false,
-    );
-    setShowFailedOperations((prev) => (filter === "failed" ? !prev : false));
-  };
-  const getSectionVisibleCount = (
-    groupId: string,
-    section: "queued" | "completed" | "failed",
-  ) =>
-    queuedVisibleCountByGroup[`${groupId}:${section}`] ??
-    DEFAULT_QUEUED_VISIBLE_COUNT;
-  const showMoreSection = (
-    groupId: string,
-    section: "queued" | "completed" | "failed",
-  ) => {
-    setQueuedVisibleCountByGroup((prev) => ({
-      ...prev,
-      [`${groupId}:${section}`]:
-        getSectionVisibleCount(groupId, section) + DEFAULT_QUEUED_VISIBLE_COUNT,
-    }));
-  };
-  const downloadOperationDetails = (
-    kind: OperationDetailsKind,
-    operationId: string,
-  ) => {
-    if (typeof window === "undefined") return;
-    const exportedAt = new Date().toISOString();
-    const exported = buildBrowserOperationDetailsExport({
-      kind,
-      operationId,
-      exportedAt,
-      operations,
-      downloadGroups,
-      deleteGroups,
-      copyGroups,
-      uploadGroups,
-    });
-    if (!exported) {
-      setStatusMessage("No details available for this operation.");
-      return;
-    }
-
-    triggerBlobDownload(
-      exported.filename,
-      new Blob([JSON.stringify(exported.payload, null, 2)], {
-        type: "application/json",
-      }),
-    );
-  };
-  const clearFinishedOperations = () => {
-    const finishedIds = collectFinishedOperationIds(operations);
-    if (finishedIds.size === 0 && completedOperations.length === 0) {
-      return;
-    }
-    setOperations((prev) => prev.filter((op) => !finishedIds.has(op.id)));
-    if (finishedIds.size > 0) {
-      setDownloadDetails((prev) => omitOperationRecords(prev, finishedIds));
-      setDeleteDetails((prev) => omitOperationRecords(prev, finishedIds));
-      setCopyDetails((prev) => omitOperationRecords(prev, finishedIds));
-      setExpandedOperationGroups((prev) =>
-        omitOperationRecords(prev, finishedIds),
-      );
-      setQueuedVisibleCountByGroup((prev) =>
-        omitOperationSectionRecords(prev, finishedIds),
-      );
-    }
-    setCompletedOperations([]);
-  };
   const chromeChipButtonClasses = filterChipClasses;
   const chromeToolbarButtonClasses = toolbarButtonClasses;
   const chromeToolbarPrimaryClasses = toolbarPrimaryClasses;
@@ -8862,7 +8611,7 @@ export default function BrowserPage({
                 operationsCount: hasToolbarOperationsAction
                   ? operationsPanelTotalCount
                   : undefined,
-                onOpenOperations: () => setShowOperationsDetailsModal(true),
+                onOpenOperations: openOperationsDetailsModal,
               },
               layout: {
                 folders: showFolderToggle
@@ -9603,24 +9352,15 @@ export default function BrowserPage({
         <BrowserOperationsPanel
           open={operationsPanelOpen}
           totalOperationsCount={operationsPanelTotalCount}
-          activeOperationsCount={activeOperations.length}
-          queuedOperationsCount={
-            uploadQueue.length +
-            downloadSummary.queued +
-            deleteSummary.queued +
-            copySummary.queued
-          }
+          activeOperationsCount={activeOperationsCount}
+          queuedOperationsCount={queuedOperationsCount}
           completedOperationsCount={completedOperationsCount}
           failedOperationsCount={failedOperationsCount}
           downloadGroups={downloadGroups}
           deleteGroups={deleteGroups}
           copyGroups={copyGroups}
           uploadGroups={uploadGroups}
-          otherOperations={[
-            ...activeOtherOperations,
-            ...completedOtherOperations,
-            ...failedOtherOperations,
-          ]}
+          otherOperations={allOtherOperations}
           operationSortIndexById={operationSortIndexById}
           uploadGroupSortIndexById={uploadGroupSortIndexById}
           operationSortFallback={operationSortFallback}
@@ -9630,20 +9370,15 @@ export default function BrowserPage({
           canDismiss={!hasPendingOperations}
           onClearFinishedOperations={clearFinishedOperations}
           onDismiss={dismissOperationsPanel}
-          onOpenDetails={() => setShowOperationsDetailsModal(true)}
-          onToggleOpen={() => setOperationsPanelOpen((open) => !open)}
+          onOpenDetails={openOperationsDetailsModal}
+          onToggleOpen={toggleOperationsPanel}
         />
       )}
       {showOperationsDetailsModal && hasOperationsPanelContent && (
         <BrowserOperationsModal
           totalOperationsCount={operationsPanelTotalCount}
-          activeOperationsCount={activeOperations.length}
-          queuedOperationsCount={
-            uploadQueue.length +
-            downloadSummary.queued +
-            deleteSummary.queued +
-            copySummary.queued
-          }
+          activeOperationsCount={activeOperationsCount}
+          queuedOperationsCount={queuedOperationsCount}
           completedOperationsCount={completedOperationsCount}
           failedOperationsCount={failedOperationsCount}
           showActiveOperations={showActiveOperations}
@@ -9674,7 +9409,7 @@ export default function BrowserPage({
           onDownloadOperationDetails={downloadOperationDetails}
           hasFinishedOperations={hasFinishedOperations}
           onClearFinishedOperations={clearFinishedOperations}
-          onClose={() => setShowOperationsDetailsModal(false)}
+          onClose={closeOperationsDetailsModal}
         />
       )}
     </div>

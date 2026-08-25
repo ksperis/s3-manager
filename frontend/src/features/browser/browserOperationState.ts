@@ -9,6 +9,24 @@ import type {
 } from "./browserTypes";
 
 type OperationPatch = Partial<Omit<OperationItem, "id">>;
+type CompletedActivityOperation = OperationItem & {
+  kind: "activity";
+  completedAt: string;
+  completionStatus: OperationCompletionStatus;
+};
+
+export function prependCompletedActivity(
+  operations: OperationItem[],
+  activity: CompletedActivityOperation,
+  limit: number,
+): OperationItem[] {
+  let retainedActivities = 0;
+  return [activity, ...operations].filter((operation) => {
+    if (operation.kind !== "activity" || !operation.completedAt) return true;
+    retainedActivities += 1;
+    return retainedActivities <= limit;
+  });
+}
 
 export function patchOperationById(
   operations: OperationItem[],
