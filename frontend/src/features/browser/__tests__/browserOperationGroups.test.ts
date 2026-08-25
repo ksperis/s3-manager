@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildOperationGroupSortIndexes,
+  buildOperationTimelineEntries,
   buildDownloadOperationGroups,
   buildUploadOperationGroups,
   collectFinishedOperationIds,
@@ -250,6 +251,40 @@ describe("browserOperationGroups", () => {
       "queued-group": 2,
     });
     expect(indexes.fallback).toBe(1004);
+  });
+
+  it("builds one descending timeline shared by the panel and modal", () => {
+    const downloadGroups = buildDownloadOperationGroups(
+      [operation({ id: "download", kind: "download" })],
+      {},
+    );
+    const uploadGroups = buildUploadOperationGroups(
+      [
+        operation({
+          id: "upload",
+          kind: "upload",
+          status: "uploading",
+          groupId: "upload-group",
+        }),
+      ],
+      [],
+    );
+    const entries = buildOperationTimelineEntries({
+      downloadGroups,
+      deleteGroups: [],
+      copyGroups: [],
+      uploadGroups,
+      otherOperations: [operation({ id: "other", kind: "other" })],
+      operationSortIndexById: { download: 1, other: 3 },
+      uploadGroupSortIndexById: { "upload-group": 2 },
+      operationSortFallback: 1000,
+    });
+
+    expect(entries.map((entry) => entry.key)).toEqual([
+      "other:other",
+      "upload:upload-group",
+      "download:download",
+    ]);
   });
 
   it("removes finished operations from detail and section records", () => {

@@ -11,6 +11,10 @@ import {
   operationStopClasses,
 } from "./browserConstants";
 import { ChevronDownIcon, DownloadIcon, InfoIcon, XIcon } from "./browserIcons";
+import {
+  buildOperationTimelineEntries,
+  type BrowserOperationTimelineEntry,
+} from "./browserOperationGroups";
 import { buildOperationStatusPill, operationCompletionLabel } from "./browserOperationStatus";
 import { formatBadgeCount } from "./browserUtils";
 import type {
@@ -45,13 +49,6 @@ type BrowserOperationsPanelProps = {
   onOpenDetails: () => void;
   onToggleOpen: () => void;
 };
-
-type PanelEntry =
-  | { key: string; type: "download"; group: DownloadOperationGroup }
-  | { key: string; type: "delete"; group: DeleteOperationGroup }
-  | { key: string; type: "copy"; group: CopyOperationGroup }
-  | { key: string; type: "upload"; group: UploadOperationGroup }
-  | { key: string; type: "other"; op: OperationItem };
 
 type OperationRowProps = {
   title: string;
@@ -144,27 +141,19 @@ export default function BrowserOperationsPanel({
           ? "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-100";
 
-  const timelineEntries = useMemo<PanelEntry[]>(() => {
-    const entries: PanelEntry[] = [
-      ...downloadGroups.map((group) => ({ key: `download:${group.op.id}`, type: "download" as const, group })),
-      ...deleteGroups.map((group) => ({ key: `delete:${group.op.id}`, type: "delete" as const, group })),
-      ...copyGroups.map((group) => ({ key: `copy:${group.op.id}`, type: "copy" as const, group })),
-      ...uploadGroups.map((group) => ({ key: `upload:${group.id}`, type: "upload" as const, group })),
-      ...otherOperations.map((op) => ({ key: `other:${op.id}`, type: "other" as const, op })),
-    ];
-    const resolveSortIndex = (entry: PanelEntry) => {
-      if (entry.type === "upload") {
-        return uploadGroupSortIndexById[entry.group.id] ?? -operationSortFallback;
-      }
-      const operationId = entry.type === "other" ? entry.op.id : entry.group.op.id;
-      return operationSortIndexById[operationId] ?? -operationSortFallback;
-    };
-    return entries.sort((a, b) => {
-      const orderDelta = resolveSortIndex(b) - resolveSortIndex(a);
-      if (orderDelta !== 0) return orderDelta;
-      return a.key.localeCompare(b.key);
-    });
-  }, [
+  const timelineEntries = useMemo(
+    () =>
+      buildOperationTimelineEntries({
+        downloadGroups,
+        deleteGroups,
+        copyGroups,
+        uploadGroups,
+        otherOperations,
+        operationSortIndexById,
+        uploadGroupSortIndexById,
+        operationSortFallback,
+      }),
+    [
     copyGroups,
     deleteGroups,
     downloadGroups,
@@ -173,7 +162,8 @@ export default function BrowserOperationsPanel({
     otherOperations,
     uploadGroupSortIndexById,
     uploadGroups,
-  ]);
+    ],
+  );
 
   const overallProgress = useMemo(() => {
     if (pendingOperationsCount === 0 && totalOperationsCount > 0) return 100;
@@ -189,7 +179,7 @@ export default function BrowserOperationsPanel({
     return Math.max(0, Math.min(100, Math.round(average)));
   }, [pendingOperationsCount, timelineEntries, totalOperationsCount]);
 
-  const renderEntry = (entry: PanelEntry) => {
+  const renderEntry = (entry: BrowserOperationTimelineEntry) => {
     if (entry.type === "upload") {
       const { group } = entry;
       const activeCount = group.activeItems.length;

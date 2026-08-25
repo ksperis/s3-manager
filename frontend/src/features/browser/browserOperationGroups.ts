@@ -41,6 +41,13 @@ type OperationGroupSortIndexes = {
   fallback: number;
 };
 
+export type BrowserOperationTimelineEntry =
+  | { key: string; type: "download"; group: DownloadOperationGroup }
+  | { key: string; type: "delete"; group: DeleteOperationGroup }
+  | { key: string; type: "copy"; group: CopyOperationGroup }
+  | { key: string; type: "upload"; group: UploadOperationGroup }
+  | { key: string; type: "other"; op: OperationItem };
+
 const DOWNLOAD_STATUSES: DownloadDetailStatus[] = [
   "queued",
   "downloading",
@@ -329,6 +336,68 @@ export function buildOperationGroupSortIndexes(
     uploadGroupById,
     fallback: operations.length + uploadQueue.length + 1000,
   };
+}
+
+export function buildOperationTimelineEntries({
+  downloadGroups,
+  deleteGroups,
+  copyGroups,
+  uploadGroups,
+  otherOperations,
+  operationSortIndexById,
+  uploadGroupSortIndexById,
+  operationSortFallback,
+}: {
+  downloadGroups: DownloadOperationGroup[];
+  deleteGroups: DeleteOperationGroup[];
+  copyGroups: CopyOperationGroup[];
+  uploadGroups: UploadOperationGroup[];
+  otherOperations: OperationItem[];
+  operationSortIndexById: Record<string, number>;
+  uploadGroupSortIndexById: Record<string, number>;
+  operationSortFallback: number;
+}): BrowserOperationTimelineEntry[] {
+  const entries: BrowserOperationTimelineEntry[] = [
+    ...downloadGroups.map((group) => ({
+      key: `download:${group.op.id}`,
+      type: "download" as const,
+      group,
+    })),
+    ...deleteGroups.map((group) => ({
+      key: `delete:${group.op.id}`,
+      type: "delete" as const,
+      group,
+    })),
+    ...copyGroups.map((group) => ({
+      key: `copy:${group.op.id}`,
+      type: "copy" as const,
+      group,
+    })),
+    ...uploadGroups.map((group) => ({
+      key: `upload:${group.id}`,
+      type: "upload" as const,
+      group,
+    })),
+    ...otherOperations.map((op) => ({
+      key: `other:${op.id}`,
+      type: "other" as const,
+      op,
+    })),
+  ];
+  const resolveSortIndex = (entry: BrowserOperationTimelineEntry): number => {
+    if (entry.type === "upload") {
+      return (
+        uploadGroupSortIndexById[entry.group.id] ?? -operationSortFallback
+      );
+    }
+    const operationId =
+      entry.type === "other" ? entry.op.id : entry.group.op.id;
+    return operationSortIndexById[operationId] ?? -operationSortFallback;
+  };
+  return entries.sort((a, b) => {
+    const orderDelta = resolveSortIndex(b) - resolveSortIndex(a);
+    return orderDelta !== 0 ? orderDelta : a.key.localeCompare(b.key);
+  });
 }
 
 export function collectFinishedOperationIds(
