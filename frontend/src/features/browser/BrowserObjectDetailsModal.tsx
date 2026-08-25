@@ -14,7 +14,6 @@ import {
   getObjectLegalHold,
   getObjectRetention,
   getObjectTags,
-  listObjectVersions,
   presignObject,
   proxyDownload,
   restoreObject,
@@ -46,7 +45,6 @@ import {
   toolbarPrimaryClasses,
 } from "./browserConstants";
 import {
-  buildVersionRows,
   formatLocalDateTime,
   toIsoString,
 } from "./browserUtils";
@@ -65,6 +63,7 @@ import type {
   BrowserItem,
   ObjectDetailsTabId,
 } from "./browserTypes";
+import { useBrowserObjectVersions } from "./useBrowserObjectVersions";
 
 type BrowserObjectDetailsModalProps = {
   accountId: S3AccountSelector;
@@ -143,16 +142,6 @@ export default function BrowserObjectDetailsModal({
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [tagsVersionId, setTagsVersionId] = useState<string | null>(null);
 
-  const [versions, setVersions] = useState<BrowserObjectVersion[]>([]);
-  const [deleteMarkers, setDeleteMarkers] = useState<BrowserObjectVersion[]>(
-    [],
-  );
-  const [versionsLoading, setVersionsLoading] = useState(false);
-  const [versionsLoaded, setVersionsLoaded] = useState(false);
-  const [versionsError, setVersionsError] = useState<string | null>(null);
-  const [versionKeyMarker, setVersionKeyMarker] = useState<string | null>(null);
-  const [versionIdMarker, setVersionIdMarker] = useState<string | null>(null);
-
   const [legalHoldStatus, setLegalHoldStatus] = useState<"ON" | "OFF">("OFF");
   const [legalHoldLoading, setLegalHoldLoading] = useState(false);
   const [legalHoldLoaded, setLegalHoldLoaded] = useState(false);
@@ -214,14 +203,21 @@ export default function BrowserObjectDetailsModal({
     return `meta-${metadataIdRef.current}`;
   }, []);
 
-  const versionRows = useMemo(
-    () => buildVersionRows(versions, deleteMarkers),
-    [deleteMarkers, versions],
-  );
-  const latestVersionRow = useMemo(
-    () => versionRows.find((row) => row.is_latest) ?? null,
-    [versionRows],
-  );
+  const {
+    rows: versionRows,
+    latestRow: latestVersionRow,
+    loading: versionsLoading,
+    loaded: versionsLoaded,
+    error: versionsError,
+    canLoadMore: canLoadMoreVersions,
+    load: loadVersions,
+  } = useBrowserObjectVersions({
+    accountId,
+    bucketName,
+    enabled: versioningEnabled && itemSnapshot.type === "file",
+    objectKey: itemSnapshot.key,
+    requestOptions,
+  });
   const isDeletedCurrent = Boolean(
     itemSnapshot.isDeleted || latestVersionRow?.is_delete_marker,
   );
@@ -353,74 +349,6 @@ export default function BrowserObjectDetailsModal({
       await performLoadProperties(force);
     },
     [metadataLoaded, metadataLoading, performLoadProperties],
-  );
-
-  const performLoadVersions = useCallback(
-    async (options?: {
-      append?: boolean;
-      keyMarker?: string | null;
-      versionIdMarker?: string | null;
-    }) => {
-      if (!bucketName || !accountId || !versioningEnabled || itemSnapshot.type !== "file") return;
-      const append = Boolean(options?.append);
-      if (!append) {
-        setVersionsError(null);
-      }
-      setVersionsLoading(true);
-      try {
-        const data = await listObjectVersions(accountId, bucketName, {
-          key: itemSnapshot.key,
-          keyMarker: append ? options?.keyMarker ?? versionKeyMarker : null,
-          versionIdMarker: append ? options?.versionIdMarker ?? versionIdMarker : null,
-          maxKeys: undefined,
-          requestOptions,
-        });
-        setVersions((prev) =>
-          append ? [...prev, ...(data.versions ?? [])] : data.versions ?? [],
-        );
-        setDeleteMarkers((prev) =>
-          append
-            ? [...prev, ...(data.delete_markers ?? [])]
-            : data.delete_markers ?? [],
-        );
-        setVersionKeyMarker(data.next_key_marker ?? null);
-        setVersionIdMarker(data.next_version_id_marker ?? null);
-        setVersionsLoaded(true);
-      } catch (err) {
-        setVersionsError(extractApiError(err, "Unable to load versions."));
-        if (!append) {
-          setVersions([]);
-          setDeleteMarkers([]);
-          setVersionKeyMarker(null);
-          setVersionIdMarker(null);
-        }
-      } finally {
-        setVersionsLoading(false);
-      }
-    },
-    [
-      accountId,
-      bucketName,
-      itemSnapshot.key,
-      itemSnapshot.type,
-      requestOptions,
-      versionIdMarker,
-      versionKeyMarker,
-      versioningEnabled,
-    ],
-  );
-
-  const loadVersions = useCallback(
-    async (options?: {
-      append?: boolean;
-      keyMarker?: string | null;
-      versionIdMarker?: string | null;
-      force?: boolean;
-    }) => {
-      if (versionsLoading && !options?.force) return;
-      await performLoadVersions(options);
-    },
-    [performLoadVersions, versionsLoading],
   );
 
   const performLoadProtection = useCallback(async (force = false) => {
@@ -632,14 +560,6 @@ export default function BrowserObjectDetailsModal({
     resetTagsDraft([]);
     setAclValue("private");
 
-    setVersions([]);
-    setDeleteMarkers([]);
-    setVersionsLoading(false);
-    setVersionsLoaded(false);
-    setVersionsError(null);
-    setVersionKeyMarker(null);
-    setVersionIdMarker(null);
-
     setLegalHoldStatus("OFF");
     setLegalHoldLoading(false);
     setLegalHoldLoaded(false);
@@ -679,7 +599,7 @@ export default function BrowserObjectDetailsModal({
 
   useEffect(() => {
     if (activeTab === "versions" && versioningEnabled && !versionsLoaded) {
-      void performLoadVersions();
+      void loadVersions();
     }
     if (
       (activeTab === "properties" || activeTab === "archive") &&
@@ -698,7 +618,7 @@ export default function BrowserObjectDetailsModal({
     metadataLoaded,
     performLoadProperties,
     performLoadProtection,
-    performLoadVersions,
+    loadVersions,
     versioningEnabled,
     versionsLoaded,
   ]);
@@ -1010,14 +930,8 @@ export default function BrowserObjectDetailsModal({
         versions={versionRows}
         loading={versionsLoading || savingVersionAction}
         error={versionsError}
-        canLoadMore={Boolean(versionKeyMarker || versionIdMarker)}
-        onLoadMore={() =>
-          void loadVersions({
-            append: true,
-            keyMarker: versionKeyMarker,
-            versionIdMarker: versionIdMarker,
-          })
-        }
+        canLoadMore={canLoadMoreVersions}
+        onLoadMore={() => void loadVersions({ append: true })}
         onRestoreVersion={(version) => void handleVersionAction("restore", version)}
         onDeleteVersion={(version) => void handleVersionAction("delete", version)}
         readOnly={readOnly}
