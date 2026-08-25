@@ -90,6 +90,11 @@ import {
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBucketSelector from "./BrowserBucketSelector";
 import BrowserObjectSearchHeader from "./BrowserObjectSearchHeader";
+import {
+  BrowserColumnResizeHandle,
+  BrowserObjectColumnHeaderContent,
+  BrowserObjectColumnValue,
+} from "./BrowserObjectTablePresentation";
 import BrowserPathNavigator from "./BrowserPathNavigator";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
@@ -293,7 +298,6 @@ import {
 } from "./browserPanelLayout";
 import {
   COLUMN_DEFINITIONS,
-  COLUMN_RESIZER_HITBOX_WIDTH_PX,
   COMFORTABLE_ROW_ACTION_TARGET_SIZE_PX,
   COMPACT_ROW_ACTION_TARGET_SIZE_PX,
   DEFAULT_VISIBLE_COLUMN_IDS,
@@ -310,11 +314,8 @@ import {
   createLazyColumnCacheEntry,
   resolveColumnWidthPx,
   type BrowserColumnId,
-  type BrowserResizableColumnId,
   type BrowserSortKey,
-  type ColumnDefinition,
   type LazyColumnCacheEntry,
-  type LazyFieldStatus,
 } from "./browserObjectTableModel";
 import {
   buildPathSuggestionEntries,
@@ -8941,170 +8942,6 @@ export default function BrowserPage({
     setShowToolbarColumnsMenu(false);
   }, [showToolbarMoreMenu]);
 
-  const renderLazyCellValue = (
-    status: LazyFieldStatus,
-    value: string | number | null,
-  ) => {
-    if (status === "idle") {
-      return "—";
-    }
-    if (status === "error") {
-      return "Unavailable";
-    }
-    if (status === "ready") {
-      if (typeof value === "number") {
-        return value.toLocaleString();
-      }
-      return value || "—";
-    }
-    return (
-      <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-500">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300 dark:bg-slate-600" />
-        Loading...
-      </span>
-    );
-  };
-
-  const formatExpiresCellValue = (value: string | null) => {
-    if (!value) return null;
-    return formatDateTime(value);
-  };
-
-  const formatRestoreStatusCellValue = (value: string | null) => {
-    if (!value) return null;
-    const prefixLabel = "Restored until ";
-    if (!value.startsWith(prefixLabel)) {
-      return value;
-    }
-    const rawDate = value.slice(prefixLabel.length).trim();
-    if (!rawDate) return "Restored";
-    return `${prefixLabel}${formatDateTime(rawDate)}`;
-  };
-
-  const renderColumnCellValue = (
-    item: BrowserItem,
-    columnId: BrowserColumnId,
-  ) => {
-    if (columnId === "type") {
-      if (item.type === "folder") {
-        return item.isHistorical
-          ? "Historical folder"
-          : item.isDeleted
-            ? "Deleted folder"
-            : "Folder";
-      }
-      return item.isDeleted ? "Deleted object" : "Object";
-    }
-    if (columnId === "size") {
-      return item.size;
-    }
-    if (columnId === "modified") {
-      return item.modified;
-    }
-    if (columnId === "storageClass") {
-      return item.storageClass ?? "—";
-    }
-    if (columnId === "etag") {
-      return item.etag ?? "—";
-    }
-
-    if (item.type !== "file" || item.isDeleted) {
-      return "—";
-    }
-    const lazyEntry = lazyColumnCache[item.id] ?? createLazyColumnCacheEntry();
-    if (columnId === "contentType") {
-      return renderLazyCellValue(
-        lazyEntry.metadataStatus,
-        lazyEntry.contentType,
-      );
-    }
-    if (columnId === "tagsCount") {
-      return renderLazyCellValue(lazyEntry.tagsStatus, lazyEntry.tagsCount);
-    }
-    if (columnId === "metadataCount") {
-      return renderLazyCellValue(
-        lazyEntry.metadataStatus,
-        lazyEntry.metadataCount,
-      );
-    }
-    if (columnId === "cacheControl") {
-      return renderLazyCellValue(
-        lazyEntry.metadataStatus,
-        lazyEntry.cacheControl,
-      );
-    }
-    if (columnId === "expires") {
-      return renderLazyCellValue(
-        lazyEntry.metadataStatus,
-        formatExpiresCellValue(lazyEntry.expires),
-      );
-    }
-    if (columnId === "restoreStatus") {
-      return renderLazyCellValue(
-        lazyEntry.metadataStatus,
-        formatRestoreStatusCellValue(lazyEntry.restoreStatus),
-      );
-    }
-    return "—";
-  };
-
-  const renderColumnHeaderContent = (column: ColumnDefinition) => {
-    if (!column.sortable) {
-      return <span className="inline-flex h-6 items-center">{column.label}</span>;
-    }
-    const active = sortKey === column.sortable;
-    return (
-      <button
-        type="button"
-        onClick={() => handleSortToggle(column.sortable as BrowserSortKey)}
-        className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
-      >
-        <span>{column.label}</span>
-        <ChevronDownIcon
-          className={`h-3 w-3 transition ${active ? "opacity-100" : "opacity-30"} ${
-            active && sortDirection === "asc" ? "-rotate-180" : ""
-          }`}
-        />
-      </button>
-    );
-  };
-
-  const renderColumnResizeHandle = (
-    columnId: BrowserResizableColumnId,
-    label: string,
-  ) => (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label={`Resize ${label} column`}
-      title={`Resize ${label} column`}
-      className="absolute inset-y-0 right-0 z-10 translate-x-1/2 cursor-col-resize touch-none select-none"
-      style={{ width: `${COLUMN_RESIZER_HITBOX_WIDTH_PX}px` }}
-      onPointerDown={startColumnResize(columnId)}
-      onDoubleClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        resetColumnWidth(columnId);
-      }}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-    >
-      <div
-        className={`mx-auto h-full w-0.5 rounded-full bg-slate-200 transition dark:bg-slate-700 ${
-          activeColumnResize?.columnId === columnId
-            ? "bg-primary dark:bg-primary-300"
-            : "hover:bg-slate-300 dark:hover:bg-slate-500"
-        }`}
-      />
-    </div>
-  );
-
   const handleSearchScopeChange = (scope: SearchScope) => {
     setSearchScope(scope);
     if (scope === "bucket") {
@@ -9987,7 +9824,12 @@ export default function BrowserPage({
                           className={`relative px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                         >
                           {renderNameHeaderContent()}
-                          {renderColumnResizeHandle("name", "Name")}
+                          <BrowserColumnResizeHandle
+                            label="Name"
+                            active={activeColumnResize?.columnId === "name"}
+                            onPointerDown={startColumnResize("name")}
+                            onReset={() => resetColumnWidth("name")}
+                          />
                         </th>
                         {visibleColumnDefinitions.map((column) => (
                           <th
@@ -10004,9 +9846,21 @@ export default function BrowserPage({
                                 column.align === "right" ? "flex justify-end" : ""
                               }`}
                             >
-                              {renderColumnHeaderContent(column)}
+                              <BrowserObjectColumnHeaderContent
+                                column={column}
+                                sortKey={sortKey}
+                                sortDirection={sortDirection}
+                                onSort={handleSortToggle}
+                              />
                             </div>
-                            {renderColumnResizeHandle(column.id, column.label)}
+                            <BrowserColumnResizeHandle
+                              label={column.label}
+                              active={
+                                activeColumnResize?.columnId === column.id
+                              }
+                              onPointerDown={startColumnResize(column.id)}
+                              onReset={() => resetColumnWidth(column.id)}
+                            />
                           </th>
                         ))}
                         <th
@@ -10280,7 +10134,11 @@ export default function BrowserPage({
                                   column.align === "right" ? "text-right" : ""
                                 }`}
                               >
-                                {renderColumnCellValue(item, column.id)}
+                                <BrowserObjectColumnValue
+                                  item={item}
+                                  columnId={column.id}
+                                  lazyEntry={lazyColumnCache[item.id]}
+                                />
                               </td>
                             ))}
                             <td
