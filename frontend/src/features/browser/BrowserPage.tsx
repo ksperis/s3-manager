@@ -93,6 +93,10 @@ import BrowserObjectSearchHeader from "./BrowserObjectSearchHeader";
 import BrowserPathNavigator from "./BrowserPathNavigator";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
+import {
+  BrowserColumnsMenu,
+  BrowserUploadQuickMenu,
+} from "./BrowserToolbarMenus";
 import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
 import { useBrowserBucketCors } from "./useBrowserBucketCors";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
@@ -8846,52 +8850,10 @@ export default function BrowserPage({
   const handleToolbarOpen = () => {
     runSelectionAction("open");
   };
-  const openQuickUploadFiles = () => {
+  const runQuickUploadAction = (action: "uploadFiles" | "uploadFolder") => {
     closeUploadQuickMenu();
-    runPathAction("uploadFiles");
+    runPathAction(action);
   };
-  const openQuickUploadFolder = () => {
-    closeUploadQuickMenu();
-    runPathAction("uploadFolder");
-  };
-  const renderUploadQuickMenu = (placement: "bottom-end" | "bottom-start") => (
-    <AnchoredPortalMenu
-      open={showUploadQuickMenu}
-      anchorRef={uploadQuickButtonRef}
-      placement={placement}
-      offset={6}
-      minWidth={224}
-      className={`w-56 ${browserFloatingMenuClasses}`}
-    >
-      <div
-        ref={uploadQuickMenuRef}
-        role="menu"
-        aria-label="Upload"
-        className="max-h-[min(70vh,20rem)] overflow-y-auto"
-      >
-        <button
-          type="button"
-          role="menuitem"
-          className={`${contextMenuItemClasses} ${!toolbarCanUploadFiles ? contextMenuItemDisabledClasses : ""}`}
-          onClick={openQuickUploadFiles}
-          disabled={!toolbarCanUploadFiles}
-        >
-          <UploadIcon className="h-3.5 w-3.5" />
-          Upload files
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          className={`${contextMenuItemClasses} ${!toolbarCanUploadFolder ? contextMenuItemDisabledClasses : ""}`}
-          onClick={openQuickUploadFolder}
-          disabled={!toolbarCanUploadFolder}
-        >
-          <FolderIcon className="h-3.5 w-3.5" />
-          Upload folder
-        </button>
-      </div>
-    </AnchoredPortalMenu>
-  );
   const browserActionIconById: Partial<
     Record<BrowserActionState["id"], ReactNode>
   > = {
@@ -9195,62 +9157,6 @@ export default function BrowserPage({
     />
   );
 
-  const renderToolbarColumnsSubmenu = () => (
-    <AnchoredPortalMenu
-      open={showToolbarColumnsMenu}
-      anchorRef={toolbarColumnsButtonRef}
-      placement="bottom-end"
-      offset={6}
-      minWidth={256}
-      className={`w-72 ${browserFloatingMenuClasses}`}
-    >
-      <div
-        ref={toolbarColumnsMenuRef}
-        role="menu"
-        aria-label="Columns"
-        className="max-h-[min(70vh,24rem)] overflow-y-auto"
-      >
-        <div className="px-3 pb-2 pt-2">
-          <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">
-            Object columns
-          </p>
-          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-            Only base listing columns can be sorted.
-          </p>
-        </div>
-        <div className={contextMenuSeparatorClasses} />
-        {COLUMN_DEFINITIONS.map((column) => {
-          const checked = visibleColumnSet.has(column.id);
-          return (
-            <button
-              key={column.id}
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={checked}
-              className={contextMenuItemClasses}
-              onClick={() => handleToggleVisibleColumn(column.id)}
-            >
-              <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[11px] font-bold">
-                {checked ? "✓" : ""}
-              </span>
-              <span className="min-w-0 flex-1">{column.label}</span>
-            </button>
-          );
-        })}
-        <div className={contextMenuSeparatorClasses} />
-        <button
-          type="button"
-          role="menuitem"
-          className={contextMenuItemClasses}
-          onClick={handleResetVisibleColumns}
-        >
-          <SlidersIcon className="h-3.5 w-3.5" />
-          Reset columns
-        </button>
-      </div>
-    </AnchoredPortalMenu>
-  );
-
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       {isEmbeddedBrowserPath ? (
@@ -9386,7 +9292,19 @@ export default function BrowserPage({
                     >
                       <UploadIcon className="h-3.5 w-3.5" />
                     </button>
-                    {renderUploadQuickMenu("bottom-end")}
+                    <BrowserUploadQuickMenu
+                      open={showUploadQuickMenu}
+                      anchorRef={uploadQuickButtonRef}
+                      menuRef={uploadQuickMenuRef}
+                      canUploadFiles={toolbarCanUploadFiles}
+                      canUploadFolder={toolbarCanUploadFolder}
+                      onUploadFiles={() =>
+                        runQuickUploadAction("uploadFiles")
+                      }
+                      onUploadFolder={() =>
+                        runQuickUploadAction("uploadFolder")
+                      }
+                    />
                     <button
                       type="button"
                       className={chromeToolbarIconButtonClasses}
@@ -9651,7 +9569,15 @@ export default function BrowserPage({
                           }`}
                         />
                       </button>
-                      {renderToolbarColumnsSubmenu()}
+                      <BrowserColumnsMenu
+                        open={showToolbarColumnsMenu}
+                        anchorRef={toolbarColumnsButtonRef}
+                        menuRef={toolbarColumnsMenuRef}
+                        columns={COLUMN_DEFINITIONS}
+                        visibleColumnIds={visibleColumnSet}
+                        onToggleColumn={handleToggleVisibleColumn}
+                        onReset={handleResetVisibleColumns}
+                      />
                     </>
                   )}
                   {hasToolbarSecondaryActionsSection && (
