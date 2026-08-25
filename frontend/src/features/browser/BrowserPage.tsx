@@ -92,9 +92,9 @@ import BrowserBucketSelector from "./BrowserBucketSelector";
 import { BrowserToolbarActionMenuItem } from "./BrowserActionPresentation";
 import BrowserObjectSearchHeader from "./BrowserObjectSearchHeader";
 import {
-  BrowserColumnResizeHandle,
-  BrowserObjectColumnHeaderContent,
-} from "./BrowserObjectTablePresentation";
+  BrowserObjectTableScaffold,
+  BrowserParentFolderRow,
+} from "./BrowserObjectTableScaffold";
 import BrowserObjectTableRow from "./BrowserObjectTableRow";
 import BrowserPathNavigator from "./BrowserPathNavigator";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
@@ -9717,137 +9717,40 @@ export default function BrowserPage({
                       })}
                     </div>
                   ) : (
-                  <table
-                    className="manager-table min-w-full border-separate border-spacing-0 divide-y divide-slate-200 dark:divide-slate-800"
-                    style={{ minWidth: `${objectTableMinWidthPx}px` }}
+                  <BrowserObjectTableScaffold
+                    minWidthPx={objectTableMinWidthPx}
+                    selectionColumnWidthPx={SELECTION_COLUMN_WIDTH_PX}
+                    nameColumnWidthPx={nameColumnWidthPx}
+                    actionsColumnWidthPx={actionsColumnWidthPx}
+                    columns={visibleColumnDefinitions}
+                    columnWidthsPx={visibleColumnWidthsPx}
+                    headerPaddingClasses={headerPadding}
+                    allSelected={allSelected}
+                    selectionDisabled={selectableListItems.length === 0}
+                    nameHeader={renderNameHeaderContent()}
+                    sortKey={sortKey}
+                    sortDirection={sortDirection}
+                    activeResizeColumnId={
+                      activeColumnResize?.columnId ?? null
+                    }
+                    onToggleAll={toggleAllSelection}
+                    onSort={handleSortToggle}
+                    onStartResize={startColumnResize}
+                    onResetColumnWidth={resetColumnWidth}
+                    onHeaderContextMenu={handleHeaderContextMenu}
                   >
-                    <colgroup>
-                      <col style={{ width: `${SELECTION_COLUMN_WIDTH_PX}px` }} />
-                      <col style={{ width: `${nameColumnWidthPx}px` }} />
-                      {visibleColumnDefinitions.map((column) => (
-                        <col
-                          key={column.id}
-                          style={{
-                            width: `${visibleColumnWidthsPx[column.id]}px`,
-                          }}
-                        />
-                      ))}
-                      <col style={{ width: `${actionsColumnWidthPx}px` }} />
-                    </colgroup>
-                    <thead
-                      className="sticky top-0 z-[1] border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
-                      onContextMenu={handleHeaderContextMenu}
-                    >
-                      <tr>
-                        <th
-                          aria-label="Select all"
-                          className={`px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold text-slate-500 dark:text-slate-400`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={allSelected}
-                            onChange={toggleAllSelection}
-                            aria-label="Select all"
-                            className={uiCheckboxClass}
-                            disabled={selectableListItems.length === 0}
-                          />
-                        </th>
-                        <th
-                          aria-label="Name"
-                          className={`relative px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold text-slate-500 dark:text-slate-400`}
-                        >
-                          {renderNameHeaderContent()}
-                          <BrowserColumnResizeHandle
-                            label="Name"
-                            active={activeColumnResize?.columnId === "name"}
-                            onPointerDown={startColumnResize("name")}
-                            onReset={() => resetColumnWidth("name")}
-                          />
-                        </th>
-                        {visibleColumnDefinitions.map((column) => (
-                          <th
-                            key={column.id}
-                            aria-label={column.label}
-                            className={`relative px-2 ${headerPadding} !align-middle ${
-                              column.align === "right"
-                                ? "text-right"
-                                : "text-left"
-                            } ui-caption font-semibold text-slate-500 dark:text-slate-400`}
-                          >
-                            <div
-                              className={`pr-3 ${
-                                column.align === "right" ? "flex justify-end" : ""
-                              }`}
-                            >
-                              <BrowserObjectColumnHeaderContent
-                                column={column}
-                                sortKey={sortKey}
-                                sortDirection={sortDirection}
-                                onSort={handleSortToggle}
-                              />
-                            </div>
-                            <BrowserColumnResizeHandle
-                              label={column.label}
-                              active={
-                                activeColumnResize?.columnId === column.id
-                              }
-                              onPointerDown={startColumnResize(column.id)}
-                              onReset={() => resetColumnWidth(column.id)}
-                            />
-                          </th>
-                        ))}
-                        <th
-                          aria-label="Actions"
-                          className={`px-2 ${headerPadding} !align-middle text-right ui-caption font-semibold text-slate-500 dark:text-slate-400`}
-                        >
-                          <span className="inline-flex h-6 items-center">
-                            Actions
-                          </span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800">
                       {canGoUp &&
                         bucketName &&
                         showFolderItems &&
                         !isSearchingInWholeBucket && (
-                          <tr
-                            className={`${rowHeightClasses} text-slate-600 transition-colors hover:bg-slate-50/70 dark:text-slate-300 dark:hover:bg-slate-800/40`}
-                          >
-                            <td
-                              className={`px-2 ${rowCellClasses} !align-middle`}
-                            />
-                            <td
-                              className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle ui-body`}
-                              style={{ maxWidth: `${nameColumnWidthPx}px` }}
-                            >
-                              <button
-                                type="button"
-                                onClick={handleGoUp}
-                                className="flex min-w-0 items-center gap-3 text-left font-semibold text-slate-700 hover:text-primary-700 dark:text-slate-200 dark:hover:text-primary-200"
-                              >
-                                <span
-                                  className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200`}
-                                >
-                                  <UpIcon className="h-3.5 w-3.5" />
-                                </span>
-                                <span className="truncate">Parent folder</span>
-                              </button>
-                            </td>
-                            {visibleColumnDefinitions.map((column) => (
-                              <td
-                                key={column.id}
-                                className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis ${
-                                  column.align === "right" ? "text-right" : ""
-                                }`}
-                              >
-                                -
-                              </td>
-                            ))}
-                            <td
-                              className={`px-2 ${rowCellClasses} !align-middle text-right ui-caption text-slate-400`}
-                            />
-                          </tr>
+                          <BrowserParentFolderRow
+                            columns={visibleColumnDefinitions}
+                            nameColumnWidthPx={nameColumnWidthPx}
+                            rowHeightClasses={rowHeightClasses}
+                            rowCellClasses={rowCellClasses}
+                            iconBoxClasses={iconBoxClasses}
+                            onGoUp={handleGoUp}
+                          />
                         )}
                       {objectsLoading && listItems.length === 0 && (
                         <TableEmptyState
@@ -9950,8 +9853,7 @@ export default function BrowserPage({
                           />
                         );
                       })}
-                    </tbody>
-                  </table>
+                  </BrowserObjectTableScaffold>
                   )}
                 </div>
                 {canLoadMoreObjectResults && (
