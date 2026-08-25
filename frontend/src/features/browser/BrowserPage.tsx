@@ -23,10 +23,6 @@ import {
 } from "react-router-dom";
 import type { UploadProgressEvent } from "../../api/browser";
 import TableEmptyState from "../../components/TableEmptyState";
-import {
-  toolbarCompactInputClasses,
-  toolbarCompactSelectClasses,
-} from "../../components/toolbarControlClasses";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import UiBadge from "../../components/ui/UiBadge";
 import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
@@ -93,6 +89,7 @@ import {
 } from "./BrowserLayout";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBucketSelector from "./BrowserBucketSelector";
+import BrowserObjectSearchHeader from "./BrowserObjectSearchHeader";
 import BrowserPathNavigator from "./BrowserPathNavigator";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
@@ -214,7 +211,6 @@ import {
   RefreshIcon,
   SettingsIcon,
   SlidersIcon,
-  SearchIcon,
   TrashIcon,
   UpIcon,
   UploadIcon,
@@ -413,15 +409,6 @@ const browserToolbarControlsGroupClasses =
   "flex shrink-0 items-center gap-1.5";
 const browserFloatingMenuClasses =
   cx(uiMenuClass, "overflow-hidden p-1.5");
-const browserSearchInputClasses =
-  cx(
-    toolbarCompactInputClasses,
-    "h-8 w-full py-1.5 text-sm font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500",
-  );
-const browserSelectClasses =
-  cx(toolbarCompactSelectClasses, "h-9 w-full");
-const browserOptionCardClasses =
-  "inline-flex items-center gap-2 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2.5 py-1.5 ui-caption font-medium text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)]";
 const browserSearchLabelClasses =
   cx("ui-caption font-medium", uiMutedTextClass);
 const browserSearchStatusChipClasses =
@@ -913,6 +900,7 @@ export default function BrowserPage({
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const bucketMenuRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchControlRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsButtonRef = useRef<HTMLButtonElement | null>(null);
   const uploadQuickButtonRef = useRef<HTMLButtonElement | null>(null);
   const uploadQuickMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1669,7 +1657,7 @@ export default function BrowserPage({
 
   useDismissibleLayer({
     open: showSearchOptionsMenu,
-    insideRefs: [searchOptionsButtonRef, searchOptionsMenuRef],
+    insideRefs: [searchControlRef, searchOptionsMenuRef],
     onDismiss: () => setShowSearchOptionsMenu(false),
   });
 
@@ -3326,7 +3314,7 @@ export default function BrowserPage({
   const hasSearchQuery = normalizedSearchQuery.length > 0;
   const isSearchingInWholeBucket = hasSearchQuery && searchScope === "bucket";
   const hasAdvancedSearchOptionsActive =
-      !isPortalProfile &&
+    !isPortalProfile &&
     (searchScope !== "prefix" ||
       searchRecursive ||
       searchExactMatch ||
@@ -3334,23 +3322,7 @@ export default function BrowserPage({
       typeFilter !== "all" ||
       storageFilter !== "all");
   const hasActiveSearchFilters =
-    hasSearchQuery ||
-      (!isPortalProfile &&
-      (searchScope === "bucket" ||
-        searchRecursive ||
-        searchExactMatch ||
-        searchCaseSensitive ||
-        typeFilter !== "all" ||
-        storageFilter !== "all"));
-  const canResetSearchFilters =
-    hasSearchQuery ||
-      (!isPortalProfile &&
-      (searchScope !== "prefix" ||
-        searchRecursive ||
-        searchExactMatch ||
-        searchCaseSensitive ||
-        typeFilter !== "all" ||
-        storageFilter !== "all"));
+    hasSearchQuery || hasAdvancedSearchOptionsActive;
   const searchResultScopeLabel = hasSearchQuery
     ? isSearchingInWholeBucket
       ? "Whole bucket"
@@ -9171,180 +9143,56 @@ export default function BrowserPage({
     </div>
   );
 
+  const handleSearchScopeChange = (scope: SearchScope) => {
+    setSearchScope(scope);
+    if (scope === "bucket") {
+      setSearchRecursive(false);
+    }
+  };
+
+  const clearSearchFilters = () => {
+    setFilter("");
+    setSearchScope("prefix");
+    setSearchRecursive(false);
+    setSearchExactMatch(false);
+    setSearchCaseSensitive(false);
+    setTypeFilter("all");
+    setStorageFilter("all");
+  };
+
   const renderNameHeaderContent = () => (
-    <div className="flex min-w-0 items-center gap-2 pr-3">
-      <button
-        type="button"
-        onClick={() => handleSortToggle("name")}
-        className="group inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
-      >
-        <span>Name</span>
-        <ChevronDownIcon
-          className={`h-3 w-3 transition ${
-            sortKey === "name" ? "opacity-100" : "opacity-30"
-          } ${sortKey === "name" && sortDirection === "asc" ? "-rotate-180" : ""}`}
-        />
-      </button>
-      <div
-        ref={searchOptionsMenuRef}
-        className="relative w-48 min-w-0 flex-1 sm:w-56 md:w-64 normal-case"
-      >
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-          <SearchIcon className="h-3 w-3" />
-        </span>
-        <input
-          type="text"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-          placeholder={`Search ${workspaceObjectNounPlural}`}
-          aria-label={`Search ${workspaceObjectNounPlural}`}
-          className={`${browserSearchInputClasses} pl-9 ${
-            isPortalProfile ? "pr-3" : "pr-9"
-          } normal-case`}
-        />
-        {!isPortalProfile && (
-          <button
-            ref={searchOptionsButtonRef}
-            type="button"
-            onClick={() => setShowSearchOptionsMenu((prev) => !prev)}
-            className={`absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
-              hasAdvancedSearchOptionsActive
-                ? "text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-500/20"
-                : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-            }`}
-            aria-haspopup="menu"
-            aria-expanded={showSearchOptionsMenu}
-            aria-label="Search options"
-            title="Search options"
-          >
-            <SlidersIcon className="h-3 w-3" />
-          </button>
-        )}
-        <AnchoredPortalMenu
-          open={!isPortalProfile && showSearchOptionsMenu}
-          anchorRef={searchOptionsButtonRef}
-          placement="bottom-end"
-          offset={8}
-          minWidth={288}
-          className={`w-72 ${browserFloatingMenuClasses}`}
-        >
-          <div ref={searchOptionsMenuRef} className="space-y-3">
-            <label className="block space-y-1">
-              <span className={browserSearchLabelClasses}>Scope</span>
-              <select
-                value={searchScope}
-                onChange={(event) => {
-                  const scope = event.target.value as SearchScope;
-                  setSearchScope(scope);
-                  if (scope === "bucket") {
-                    setSearchRecursive(false);
-                  }
-                }}
-                className={browserSelectClasses}
-                aria-label="Search scope"
-                disabled={!hasSearchQuery}
-              >
-                <option value="prefix">Current path</option>
-                <option value="bucket">Whole bucket</option>
-              </select>
-            </label>
-            <label className={browserOptionCardClasses}>
-              <input
-                type="checkbox"
-                checked={searchRecursive}
-                onChange={(event) => setSearchRecursive(event.target.checked)}
-                disabled={!hasSearchQuery || searchScope === "bucket"}
-                className={uiCheckboxClass}
-                aria-label="Search recursively in subfolders"
-              />
-              <span>Recursive</span>
-            </label>
-            <label className={browserOptionCardClasses}>
-              <input
-                type="checkbox"
-                checked={searchExactMatch}
-                onChange={(event) => setSearchExactMatch(event.target.checked)}
-                disabled={!hasSearchQuery}
-                className={uiCheckboxClass}
-                aria-label="Use exact match"
-              />
-              <span>Exact match</span>
-            </label>
-            <label className={browserOptionCardClasses}>
-              <input
-                type="checkbox"
-                checked={searchCaseSensitive}
-                onChange={(event) =>
-                  setSearchCaseSensitive(event.target.checked)
-                }
-                disabled={!hasSearchQuery}
-                className={uiCheckboxClass}
-                aria-label="Case-sensitive search"
-              />
-              <span>Case-sensitive</span>
-            </label>
-            <label className="block space-y-1">
-              <span className={browserSearchLabelClasses}>Type</span>
-              <select
-                value={typeFilter}
-                onChange={(event) =>
-                  setTypeFilter(
-                    event.target.value as "all" | "file" | "folder",
-                  )
-                }
-                className={browserSelectClasses}
-                aria-label="Object type filter"
-              >
-                <option value="all">All</option>
-                <option value="file">Files</option>
-                <option value="folder">Folders</option>
-              </select>
-            </label>
-            <label className="block space-y-1">
-              <span className={browserSearchLabelClasses}>Storage class</span>
-              <select
-                value={storageFilter}
-                onChange={(event) => setStorageFilter(event.target.value)}
-                className={browserSelectClasses}
-                aria-label="Storage class filter"
-              >
-                <option value="all">All classes</option>
-                {searchableStorageClasses.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex items-center justify-end gap-1.5 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setFilter("");
-                  setSearchScope("prefix");
-                  setSearchRecursive(false);
-                  setSearchExactMatch(false);
-                  setSearchCaseSensitive(false);
-                  setTypeFilter("all");
-                  setStorageFilter("all");
-                }}
-                className={chromeChipButtonClasses}
-                disabled={!canResetSearchFilters}
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowSearchOptionsMenu(false)}
-                className={chromeChipButtonClasses}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </AnchoredPortalMenu>
-      </div>
-    </div>
+    <BrowserObjectSearchHeader
+      rootRef={searchControlRef}
+      optionsButtonRef={searchOptionsButtonRef}
+      optionsMenuRef={searchOptionsMenuRef}
+      portalProfile={isPortalProfile}
+      optionsOpen={showSearchOptionsMenu}
+      filter={filter}
+      objectNounPlural={workspaceObjectNounPlural}
+      nameSortActive={sortKey === "name"}
+      sortDirection={sortDirection}
+      advancedOptionsActive={hasAdvancedSearchOptionsActive}
+      hasSearchQuery={hasSearchQuery}
+      searchScope={searchScope}
+      recursive={searchRecursive}
+      exactMatch={searchExactMatch}
+      caseSensitive={searchCaseSensitive}
+      typeFilter={typeFilter}
+      storageFilter={storageFilter}
+      storageClasses={searchableStorageClasses}
+      canReset={hasActiveSearchFilters}
+      onSortName={() => handleSortToggle("name")}
+      onFilterChange={setFilter}
+      onToggleOptions={() => setShowSearchOptionsMenu((current) => !current)}
+      onScopeChange={handleSearchScopeChange}
+      onRecursiveChange={setSearchRecursive}
+      onExactMatchChange={setSearchExactMatch}
+      onCaseSensitiveChange={setSearchCaseSensitive}
+      onTypeFilterChange={setTypeFilter}
+      onStorageFilterChange={setStorageFilter}
+      onClear={clearSearchFilters}
+      onClose={() => setShowSearchOptionsMenu(false)}
+    />
   );
 
   const renderToolbarColumnsSubmenu = () => (

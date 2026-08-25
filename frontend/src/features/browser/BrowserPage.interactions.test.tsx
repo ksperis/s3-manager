@@ -2404,7 +2404,44 @@ describe("BrowserPage interactions", () => {
       screen.getByRole("checkbox", { name: "Case-sensitive search" }),
     ).toBeInTheDocument();
 
+    await user.type(
+      screen.getByRole("textbox", { name: "Search objects" }),
+      "a",
+    );
+    const recursiveSearch = screen.getByRole("checkbox", {
+      name: "Search recursively in subfolders",
+    });
+    await user.click(recursiveSearch);
+    expect(recursiveSearch).toBeChecked();
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Search scope" }),
+      "bucket",
+    );
+    expect(recursiveSearch).not.toBeChecked();
+    expect(recursiveSearch).toBeDisabled();
+
     await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("combobox", { name: "Search scope" }),
+      ).not.toBeInTheDocument();
+    });
+
+    const optionsButton = screen.getByRole("button", {
+      name: "Search options",
+    });
+    await user.click(optionsButton);
+    await screen.findByRole("combobox", { name: "Search scope" });
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("combobox", { name: "Search scope" }),
+      ).not.toBeInTheDocument();
+    });
+
+    await user.click(optionsButton);
+    await screen.findByRole("combobox", { name: "Search scope" });
+    fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => {
       expect(
         screen.queryByRole("combobox", { name: "Search scope" }),
