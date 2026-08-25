@@ -16,16 +16,12 @@ import {
   restoreObject,
   updateObjectAcl,
   updateObjectLegalHold,
-  updateObjectMetadata,
   updateObjectRetention,
-  updateObjectTags,
   type BrowserObjectVersion,
   type BrowserRequestOptions,
   type ObjectLegalHold,
-  type ObjectMetadataUpdate,
   type ObjectRetention,
   type ObjectRestoreRequest,
-  type ObjectTags,
   type PresignedUrl,
   type PresignRequest,
 } from "../../api/browser";
@@ -50,7 +46,6 @@ import {
   buildInlinePreviewDisposition,
   formatRestoreStatus,
   nextTabAfterDeleted,
-  normalizeObjectDetailPairs,
   storageClassOptions,
 } from "./browserObjectDetailsModel";
 import type {
@@ -136,9 +131,6 @@ export default function BrowserObjectDetailsModal({
   >(null);
   const [presignError, setPresignError] = useState<string | null>(null);
 
-  const [savingMetadata, setSavingMetadata] = useState(false);
-  const [savingTags, setSavingTags] = useState(false);
-  const [savingStorage, setSavingStorage] = useState(false);
   const [savingAcl, setSavingAcl] = useState(false);
   const [savingLegalHold, setSavingLegalHold] = useState(false);
   const [savingRetention, setSavingRetention] = useState(false);
@@ -178,10 +170,17 @@ export default function BrowserObjectDetailsModal({
     setTagsDraft,
     storageClass,
     setStorageClass,
+    savingMetadata,
+    savingTags,
+    savingStorageClass: savingStorage,
     nextTagId,
     nextMetadataId,
     load: loadProperties,
     reset: resetObjectProperties,
+    isCurrentScope: isPropertiesScopeCurrent,
+    saveMetadata,
+    saveTags,
+    saveStorageClass,
   } = useBrowserObjectProperties({
     accountId,
     bucketName,
@@ -377,75 +376,46 @@ export default function BrowserObjectDetailsModal({
   ]);
 
   const handleSaveMetadata = async () => {
-    if (!bucketName || !itemSnapshot.key) return;
-    setSavingMetadata(true);
     setActionMessage(null);
     try {
-      const payload: ObjectMetadataUpdate = {
-        key: itemSnapshot.key,
-        version_id: versionId ?? null,
-        content_type: metadataDraft.contentType,
-        cache_control: metadataDraft.cacheControl,
-        content_disposition: metadataDraft.contentDisposition,
-        content_encoding: metadataDraft.contentEncoding,
-        content_language: metadataDraft.contentLanguage,
-        expires: toIsoString(metadataDraft.expires),
-        metadata: normalizeObjectDetailPairs(metadataItems),
-      };
-      await updateObjectMetadata(accountId, bucketName, payload, undefined, requestOptions);
-      await loadProperties(true);
+      if (!(await saveMetadata()) || !isPropertiesScopeCurrent()) return;
       await onRefreshBrowserObjects(itemSnapshot.key);
+      if (!isPropertiesScopeCurrent()) return;
       pushStatus("Metadata updated.", "success");
     } catch (err) {
       pushStatus(extractApiError(err, "Unable to update metadata."), "error");
-    } finally {
-      setSavingMetadata(false);
     }
   };
 
   const handleSaveTags = async () => {
-    if (!bucketName || !itemSnapshot.key) return;
-    setSavingTags(true);
     setActionMessage(null);
     try {
-      await updateObjectTags(accountId, bucketName, {
-        key: itemSnapshot.key,
-        version_id: versionId ?? null,
-        tags: tagsDraft
-          .filter((tag) => tag.key.trim().length > 0)
-          .map((tag) => ({ key: tag.key, value: tag.value })),
-      } satisfies ObjectTags, undefined, requestOptions);
-      await loadProperties(true);
+      if (!(await saveTags()) || !isPropertiesScopeCurrent()) return;
       await onRefreshBrowserObjects(itemSnapshot.key);
+      if (!isPropertiesScopeCurrent()) return;
       pushStatus("Tags updated.", "success");
     } catch (err) {
       pushStatus(extractApiError(err, "Unable to update tags."), "error");
-    } finally {
-      setSavingTags(false);
     }
   };
 
   const handleSaveStorageClass = async () => {
-    if (!bucketName || !itemSnapshot.key || !storageClass) return;
-    setSavingStorage(true);
     setActionMessage(null);
     try {
-      await updateObjectMetadata(accountId, bucketName, {
-        key: itemSnapshot.key,
-        version_id: versionId ?? null,
-        storage_class: storageClass,
-      }, undefined, requestOptions);
-      setItemSnapshot((prev) => ({ ...prev, storageClass }));
-      await loadProperties(true);
+      const savedStorageClass = await saveStorageClass();
+      if (!savedStorageClass || !isPropertiesScopeCurrent()) return;
+      setItemSnapshot((prev) => ({
+        ...prev,
+        storageClass: savedStorageClass,
+      }));
       await onRefreshBrowserObjects(itemSnapshot.key);
+      if (!isPropertiesScopeCurrent()) return;
       pushStatus("Storage class updated.", "success");
     } catch (err) {
       pushStatus(
         extractApiError(err, "Unable to update storage class."),
         "error",
       );
-    } finally {
-      setSavingStorage(false);
     }
   };
 

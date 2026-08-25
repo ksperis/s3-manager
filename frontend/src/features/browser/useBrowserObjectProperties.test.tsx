@@ -7,6 +7,8 @@ import { useBrowserObjectProperties } from "./useBrowserObjectProperties";
 const apiMocks = vi.hoisted(() => ({
   fetchObjectMetadata: vi.fn(),
   getObjectTags: vi.fn(),
+  updateObjectMetadata: vi.fn(),
+  updateObjectTags: vi.fn(),
 }));
 
 vi.mock("../../api/browser", async () => {
@@ -19,6 +21,10 @@ vi.mock("../../api/browser", async () => {
     fetchObjectMetadata: (...args: unknown[]) =>
       apiMocks.fetchObjectMetadata(...args),
     getObjectTags: (...args: unknown[]) => apiMocks.getObjectTags(...args),
+    updateObjectMetadata: (...args: unknown[]) =>
+      apiMocks.updateObjectMetadata(...args),
+    updateObjectTags: (...args: unknown[]) =>
+      apiMocks.updateObjectTags(...args),
   };
 });
 
@@ -71,6 +77,8 @@ describe("useBrowserObjectProperties", () => {
       version_id: null,
     });
     apiMocks.getObjectTags.mockResolvedValue(tags("docs/report.txt", "v2"));
+    apiMocks.updateObjectMetadata.mockResolvedValue(undefined);
+    apiMocks.updateObjectTags.mockResolvedValue(undefined);
   });
 
   it("loads object properties and builds editable drafts", async () => {
@@ -139,6 +147,124 @@ describe("useBrowserObjectProperties", () => {
     expect(apiMocks.fetchObjectMetadata).toHaveBeenCalledTimes(2);
     expect(result.current.versionId).toBe("v3");
     expect(result.current.metadataDraft.contentType).toBe("application/json");
+  });
+
+  it("saves metadata, tags, and storage class through the current version", async () => {
+    const item = browserItem("docs/report.txt");
+    const { result } = renderHook(() =>
+      useBrowserObjectProperties({
+        accountId: "acc-1",
+        bucketName: "bucket-a",
+        isDeleted: false,
+        item,
+      }),
+    );
+    await act(async () => {
+      await result.current.load();
+    });
+
+    act(() => {
+      result.current.setMetadataDraft((current) => ({
+        ...current,
+        contentType: "application/json",
+        cacheControl: "no-store",
+      }));
+      result.current.setMetadataItems([
+        { id: "custom-1", key: " owner ", value: "platform" },
+      ]);
+    });
+    await act(async () => {
+      expect(await result.current.saveMetadata()).toBe(true);
+    });
+    expect(apiMocks.updateObjectMetadata).toHaveBeenNthCalledWith(
+      1,
+      "acc-1",
+      "bucket-a",
+      expect.objectContaining({
+        key: "docs/report.txt",
+        version_id: "v2",
+        content_type: "application/json",
+        cache_control: "no-store",
+        metadata: { owner: "platform" },
+      }),
+      undefined,
+      undefined,
+    );
+
+    act(() => {
+      result.current.setTagsDraft([
+        { id: "tag-custom", key: "team", value: "storage" },
+        { id: "tag-empty", key: " ", value: "ignored" },
+      ]);
+    });
+    await act(async () => {
+      expect(await result.current.saveTags()).toBe(true);
+    });
+    expect(apiMocks.updateObjectTags).toHaveBeenCalledWith(
+      "acc-1",
+      "bucket-a",
+      {
+        key: "docs/report.txt",
+        version_id: "v2",
+        tags: [{ key: "team", value: "storage" }],
+      },
+      undefined,
+      undefined,
+    );
+
+    act(() => result.current.setStorageClass("DEEP_ARCHIVE"));
+    await act(async () => {
+      expect(await result.current.saveStorageClass()).toBe("DEEP_ARCHIVE");
+    });
+    expect(apiMocks.updateObjectMetadata).toHaveBeenNthCalledWith(
+      2,
+      "acc-1",
+      "bucket-a",
+      {
+        key: "docs/report.txt",
+        version_id: "v2",
+        storage_class: "DEEP_ARCHIVE",
+      },
+      undefined,
+      undefined,
+    );
+    expect(result.current.savingMetadata).toBe(false);
+    expect(result.current.savingTags).toBe(false);
+    expect(result.current.savingStorageClass).toBe(false);
+  });
+
+  it("does not reload an object after its pending save becomes stale", async () => {
+    const pendingUpdate = deferred<void>();
+    const { result, rerender } = renderHook(
+      ({ item }) =>
+        useBrowserObjectProperties({
+          accountId: "acc-1",
+          bucketName: "bucket-a",
+          isDeleted: false,
+          item,
+        }),
+      { initialProps: { item: browserItem("docs/old.txt") } },
+    );
+    await act(async () => {
+      await result.current.load();
+    });
+    apiMocks.updateObjectMetadata.mockReturnValueOnce(pendingUpdate.promise);
+
+    let savePromise!: Promise<boolean>;
+    act(() => {
+      savePromise = result.current.saveMetadata();
+    });
+    await waitFor(() => expect(result.current.savingMetadata).toBe(true));
+
+    const currentItem = browserItem("docs/current.txt");
+    rerender({ item: currentItem });
+    act(() => result.current.reset(currentItem));
+    await act(async () => {
+      pendingUpdate.resolve(undefined);
+      expect(await savePromise).toBe(false);
+    });
+    expect(apiMocks.fetchObjectMetadata).toHaveBeenCalledTimes(1);
+    expect(result.current.savingMetadata).toBe(false);
   });
 
   it("ignores property responses from a previously selected object", async () => {

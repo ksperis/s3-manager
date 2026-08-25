@@ -7,12 +7,17 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   fetchObjectMetadata,
   getObjectTags,
+  updateObjectMetadata,
+  updateObjectTags,
   type BrowserRequestOptions,
   type ObjectMetadata,
+  type ObjectMetadataUpdate,
   type ObjectTag,
+  type ObjectTags,
 } from "../../api/browser";
 import { extractApiError } from "../../utils/apiError";
-import { formatLocalDateTime } from "./browserUtils";
+import { formatLocalDateTime, toIsoString } from "./browserUtils";
+import { normalizeObjectDetailPairs } from "./browserObjectDetailsModel";
 import type { BrowserItem } from "./browserTypes";
 
 type MetadataDraft = {
@@ -71,6 +76,9 @@ export function useBrowserObjectProperties({
   const [metadataItems, setMetadataItems] = useState<MetadataDraftItem[]>([]);
   const [tagsDraft, setTagsDraft] = useState<TagDraft[]>([]);
   const [storageClass, setStorageClass] = useState("");
+  const [savingMetadata, setSavingMetadata] = useState(false);
+  const [savingTags, setSavingTags] = useState(false);
+  const [savingStorageClass, setSavingStorageClass] = useState(false);
   const tagIdRef = useRef(0);
   const metadataIdRef = useRef(0);
   const loadingRef = useRef(false);
@@ -140,10 +148,38 @@ export function useBrowserObjectProperties({
       setLoaded(false);
       setError(null);
       setTagsVersionId(null);
+      setSavingMetadata(false);
+      setSavingTags(false);
+      setSavingStorageClass(false);
       resetPropertiesDrafts(null, baseItem);
       resetTagsDraft([]);
     },
     [resetPropertiesDrafts, resetTagsDraft],
+  );
+
+  const isCurrentScope = useCallback(
+    () => scope === scopeRef.current,
+    [scope],
+  );
+
+  const runSave = useCallback(
+    async <T>(
+      setSaving: (value: boolean) => void,
+      operation: () => Promise<T>,
+    ): Promise<T | null> => {
+      if (!isCurrentScope()) return null;
+      setSaving(true);
+      try {
+        const result = await operation();
+        return isCurrentScope() ? result : null;
+      } catch (saveError) {
+        if (!isCurrentScope()) return null;
+        throw saveError;
+      } finally {
+        if (isCurrentScope()) setSaving(false);
+      }
+    },
+    [isCurrentScope],
   );
 
   const load = useCallback(
@@ -214,6 +250,122 @@ export function useBrowserObjectProperties({
     ],
   );
 
+  const saveMetadata = useCallback(async () => {
+    if (!isCurrentScope() || !accountId || !bucketName || !item.key) {
+      return false;
+    }
+    return (
+      (await runSave(setSavingMetadata, async () => {
+        const payload: ObjectMetadataUpdate = {
+          key: item.key,
+          version_id: metadata?.version_id ?? tagsVersionId ?? null,
+          content_type: metadataDraft.contentType,
+          cache_control: metadataDraft.cacheControl,
+          content_disposition: metadataDraft.contentDisposition,
+          content_encoding: metadataDraft.contentEncoding,
+          content_language: metadataDraft.contentLanguage,
+          expires: toIsoString(metadataDraft.expires),
+          metadata: normalizeObjectDetailPairs(metadataItems),
+        };
+        await updateObjectMetadata(
+          accountId,
+          bucketName,
+          payload,
+          undefined,
+          requestOptions,
+        );
+        await load(true);
+        return true;
+      })) ?? false
+    );
+  }, [
+    accountId,
+    bucketName,
+    isCurrentScope,
+    item.key,
+    load,
+    metadata?.version_id,
+    metadataDraft,
+    metadataItems,
+    requestOptions,
+    runSave,
+    tagsVersionId,
+  ]);
+
+  const saveTags = useCallback(async () => {
+    if (!isCurrentScope() || !accountId || !bucketName || !item.key) {
+      return false;
+    }
+    return (
+      (await runSave(setSavingTags, async () => {
+        await updateObjectTags(
+          accountId,
+          bucketName,
+          {
+            key: item.key,
+            version_id: metadata?.version_id ?? tagsVersionId ?? null,
+            tags: tagsDraft
+              .filter((tag) => tag.key.trim().length > 0)
+              .map((tag) => ({ key: tag.key, value: tag.value })),
+          } satisfies ObjectTags,
+          undefined,
+          requestOptions,
+        );
+        await load(true);
+        return true;
+      })) ?? false
+    );
+  }, [
+    accountId,
+    bucketName,
+    isCurrentScope,
+    item.key,
+    load,
+    metadata?.version_id,
+    requestOptions,
+    runSave,
+    tagsDraft,
+    tagsVersionId,
+  ]);
+
+  const saveStorageClass = useCallback(async () => {
+    if (
+      !isCurrentScope() ||
+      !accountId ||
+      !bucketName ||
+      !item.key ||
+      !storageClass
+    ) {
+      return null;
+    }
+    return runSave(setSavingStorageClass, async () => {
+      await updateObjectMetadata(
+        accountId,
+        bucketName,
+        {
+          key: item.key,
+          version_id: metadata?.version_id ?? tagsVersionId ?? null,
+          storage_class: storageClass,
+        },
+        undefined,
+        requestOptions,
+      );
+      await load(true);
+      return storageClass;
+    });
+  }, [
+    accountId,
+    bucketName,
+    isCurrentScope,
+    item.key,
+    load,
+    metadata?.version_id,
+    requestOptions,
+    runSave,
+    storageClass,
+    tagsVersionId,
+  ]);
+
   return {
     metadata,
     loading,
@@ -228,9 +380,16 @@ export function useBrowserObjectProperties({
     setTagsDraft,
     storageClass,
     setStorageClass,
+    savingMetadata,
+    savingTags,
+    savingStorageClass,
     nextTagId,
     nextMetadataId,
     load,
     reset,
+    isCurrentScope,
+    saveMetadata,
+    saveTags,
+    saveStorageClass,
   };
 }
