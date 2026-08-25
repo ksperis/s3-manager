@@ -112,8 +112,6 @@ export default function BrowserObjectDetailsModal({
   );
   const [copyDialogValue, setCopyDialogValue] = useState<string | null>(null);
 
-  const [savingVersionAction, setSavingVersionAction] = useState(false);
-
   const {
     rows: versionRows,
     latestRow: latestVersionRow,
@@ -122,10 +120,15 @@ export default function BrowserObjectDetailsModal({
     error: versionsError,
     canLoadMore: canLoadMoreVersions,
     load: loadVersions,
+    savingAction: savingVersionAction,
+    isCurrentScope: isVersionsScopeCurrent,
+    runAction: runVersionAction,
   } = useBrowserObjectVersions({
     accountId,
     bucketName,
     enabled: versioningEnabled && itemSnapshot.type === "file",
+    onDeleteVersion,
+    onRestoreVersion,
     objectKey: itemSnapshot.key,
     requestOptions,
   });
@@ -353,7 +356,6 @@ export default function BrowserObjectDetailsModal({
 
     resetObjectProperties(item);
 
-    setSavingVersionAction(false);
   }, [initialTab, item, resetObjectProperties]);
 
   useEffect(() => {
@@ -515,19 +517,9 @@ export default function BrowserObjectDetailsModal({
     action: "restore" | "delete",
     version: BrowserObjectVersion,
   ) => {
-    setSavingVersionAction(true);
     setActionMessage(null);
-    try {
-      if (action === "restore") {
-        await onRestoreVersion(version);
-      } else {
-        await onDeleteVersion(version);
-      }
-      await loadVersions({ force: true });
-      await loadProperties(true);
-    } finally {
-      setSavingVersionAction(false);
-    }
+    if (!(await runVersionAction(action, version)) || !isVersionsScopeCurrent()) return;
+    await loadProperties(true);
   };
 
   const tabs = useMemo<TabButton[]>(() => {

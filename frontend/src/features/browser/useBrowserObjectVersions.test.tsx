@@ -61,6 +61,8 @@ describe("useBrowserObjectVersions", () => {
         accountId: "acc-1",
         bucketName: "bucket-a",
         enabled: true,
+        onDeleteVersion: vi.fn(),
+        onRestoreVersion: vi.fn(),
         objectKey: "docs/report.txt",
       }),
     );
@@ -108,6 +110,8 @@ describe("useBrowserObjectVersions", () => {
           accountId: "acc-1",
           bucketName: "bucket-a",
           enabled: true,
+          onDeleteVersion: vi.fn(),
+          onRestoreVersion: vi.fn(),
           objectKey,
         }),
       { initialProps: { objectKey: "docs/report.txt" } },
@@ -135,5 +139,73 @@ describe("useBrowserObjectVersions", () => {
     });
     expect(result.current.rows).toEqual([]);
     expect(result.current.loaded).toBe(false);
+  });
+
+  it("runs restore and delete actions before reloading the version list", async () => {
+    const onDeleteVersion = vi.fn().mockResolvedValue(undefined);
+    const onRestoreVersion = vi.fn().mockResolvedValue(undefined);
+    apiMocks.listObjectVersions.mockResolvedValue({
+      versions: [],
+      delete_markers: [],
+      is_truncated: false,
+    });
+    const { result } = renderHook(() =>
+      useBrowserObjectVersions({
+        accountId: "acc-1",
+        bucketName: "bucket-a",
+        enabled: true,
+        onDeleteVersion,
+        onRestoreVersion,
+        objectKey: "docs/report.txt",
+      }),
+    );
+    const targetVersion = version("v1");
+
+    await act(async () => {
+      expect(await result.current.runAction("restore", targetVersion)).toBe(
+        true,
+      );
+    });
+    await act(async () => {
+      expect(await result.current.runAction("delete", targetVersion)).toBe(
+        true,
+      );
+    });
+
+    expect(onRestoreVersion).toHaveBeenCalledWith(targetVersion);
+    expect(onDeleteVersion).toHaveBeenCalledWith(targetVersion);
+    expect(apiMocks.listObjectVersions).toHaveBeenCalledTimes(2);
+    expect(result.current.savingAction).toBe(false);
+  });
+
+  it("does not reload versions after an action on a previously selected object", async () => {
+    const pendingRestore = deferred<void>();
+    const onRestoreVersion = vi.fn().mockReturnValue(pendingRestore.promise);
+    const { result, rerender } = renderHook(
+      ({ objectKey }) =>
+        useBrowserObjectVersions({
+          accountId: "acc-1",
+          bucketName: "bucket-a",
+          enabled: true,
+          onDeleteVersion: vi.fn(),
+          onRestoreVersion,
+          objectKey,
+        }),
+      { initialProps: { objectKey: "docs/report.txt" } },
+    );
+
+    let actionPromise!: ReturnType<typeof result.current.runAction>;
+    act(() => {
+      actionPromise = result.current.runAction("restore", version("v1"));
+    });
+    expect(result.current.savingAction).toBe(true);
+    rerender({ objectKey: "docs/other.txt" });
+    expect(result.current.savingAction).toBe(false);
+
+    await act(async () => {
+      pendingRestore.resolve();
+      expect(await actionPromise).toBe(false);
+    });
+    expect(apiMocks.listObjectVersions).not.toHaveBeenCalled();
   });
 });

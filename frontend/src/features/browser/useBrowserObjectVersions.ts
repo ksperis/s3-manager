@@ -10,12 +10,17 @@ import {
   type BrowserRequestOptions,
 } from "../../api/browser";
 import { extractApiError } from "../../utils/apiError";
+import { runBrowserScopedSave } from "./browserScopedSave";
 import { buildVersionRows } from "./browserUtils";
+
+type ObjectVersionAction = "restore" | "delete";
 
 type UseBrowserObjectVersionsOptions = {
   accountId: S3AccountSelector;
   bucketName: string;
   enabled: boolean;
+  onDeleteVersion: (version: BrowserObjectVersion) => Promise<void> | void;
+  onRestoreVersion: (version: BrowserObjectVersion) => Promise<void> | void;
   objectKey: string;
   requestOptions?: BrowserRequestOptions;
 };
@@ -29,6 +34,8 @@ export function useBrowserObjectVersions({
   accountId,
   bucketName,
   enabled,
+  onDeleteVersion,
+  onRestoreVersion,
   objectKey,
   requestOptions,
 }: UseBrowserObjectVersionsOptions) {
@@ -46,6 +53,7 @@ export function useBrowserObjectVersions({
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savingAction, setSavingAction] = useState(false);
   const [keyMarker, setKeyMarker] = useState<string | null>(null);
   const [versionIdMarker, setVersionIdMarker] = useState<string | null>(null);
   const loadingRef = useRef(false);
@@ -61,6 +69,7 @@ export function useBrowserObjectVersions({
     setLoading(false);
     setLoaded(false);
     setError(null);
+    setSavingAction(false);
     setKeyMarker(null);
     setVersionIdMarker(null);
   }, []);
@@ -124,6 +133,40 @@ export function useBrowserObjectVersions({
     ],
   );
 
+  const isCurrentScope = useCallback(
+    () => scope === scopeRef.current,
+    [scope],
+  );
+
+  const runAction = useCallback(
+    async (action: ObjectVersionAction, version: BrowserObjectVersion) => {
+      if (!isCurrentScope() || !enabled) return false;
+      return (
+        (await runBrowserScopedSave(
+          isCurrentScope,
+          setSavingAction,
+          async () => {
+            if (action === "restore") {
+              await onRestoreVersion(version);
+            } else {
+              await onDeleteVersion(version);
+            }
+            if (!isCurrentScope()) return false;
+            await load({ force: true });
+            return true;
+          },
+        )) ?? false
+      );
+    },
+    [
+      enabled,
+      isCurrentScope,
+      load,
+      onDeleteVersion,
+      onRestoreVersion,
+    ],
+  );
+
   useEffect(() => reset(), [reset, scope]);
 
   const rows = useMemo(
@@ -137,7 +180,10 @@ export function useBrowserObjectVersions({
     loading,
     loaded,
     error,
+    savingAction,
     canLoadMore: Boolean(keyMarker || versionIdMarker),
     load,
+    isCurrentScope,
+    runAction,
   };
 }
