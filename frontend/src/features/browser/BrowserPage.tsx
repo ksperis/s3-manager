@@ -92,6 +92,7 @@ import {
   type BrowserSidebarBodyRenderer,
 } from "./BrowserLayout";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
+import BrowserBucketSelector from "./BrowserBucketSelector";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbarToggleMenuItem from "./BrowserToolbarToggleMenuItem";
@@ -194,7 +195,6 @@ import {
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
 import {
-  BucketIcon,
   ChevronDownIcon,
   CopyIcon,
   CutIcon,
@@ -235,7 +235,6 @@ import {
   TREE_PREFIXES_PAGE_SIZE,
   VERSIONS_LIST_HARD_LIMIT,
   VERSIONS_PAGE_SIZE,
-  bucketButtonClasses,
   bulkActionClasses,
   bulkDangerClasses,
   breadcrumbIconButtonClasses,
@@ -404,8 +403,6 @@ const LAZY_COLUMN_CONCURRENCY = 4;
 const LAZY_COLUMN_BATCH_SIZE = 24;
 const LAZY_COLUMN_ROOT_MARGIN = "200px";
 
-const browserSectionEyebrowClasses =
-  cx("ui-caption font-semibold", uiMutedTextClass);
 const browserShellClasses =
   "flex min-h-0 flex-1 flex-col overflow-hidden";
 const browserSubtleSurfaceClasses =
@@ -3383,10 +3380,6 @@ export default function BrowserPage({
     () => prefix.split("/").filter(Boolean),
     [prefix],
   );
-  const bucketOptions = useMemo(
-    () => bucketMenuItems.map((bucket) => bucket.name),
-    [bucketMenuItems],
-  );
   const bucketDisplayNameByName = useMemo(() => {
     const next = new Map<string, string>();
     bucketMenuItems.forEach((bucket) => {
@@ -3421,12 +3414,6 @@ export default function BrowserPage({
   ]);
   const bucketSelectorNeedsAttention =
     hasS3AccountContext && !bucketName && bucketTotalCount > 0;
-  const bucketButtonClassName = cx(
-    bucketButtonClasses,
-    bucketSelectorNeedsAttention
-      ? "border-amber-300 bg-amber-50 text-amber-800 ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
-      : "border-slate-200 bg-white text-slate-700 hover:border-primary/60 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:bg-slate-800",
-  );
   const bucketButtonActionLabel = resolvedLockedBucketName
     ? `Selected ${selectorWorkspaceNoun}`
     : `Select ${selectorWorkspaceNoun}`;
@@ -9437,153 +9424,36 @@ export default function BrowserPage({
               className={browserToolbarShellClasses}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-stretch lg:items-center">
-                <div
-                  ref={bucketMenuRef}
-                  className="relative flex shrink-0 items-stretch"
-                >
-                  <button
-                    type="button"
-                    className={`${bucketButtonClassName} min-h-9`}
-                    onClick={
-                      resolvedLockedBucketName
-                        ? undefined
-                        : () => setShowBucketMenu((prev) => !prev)
-                    }
-                    disabled={!hasS3AccountContext}
-                    aria-haspopup={resolvedLockedBucketName ? undefined : "listbox"}
-                    aria-expanded={resolvedLockedBucketName ? undefined : showBucketMenu}
-                    aria-label={bucketButtonActionLabel}
-                    title={bucketButtonActionLabel}
-                  >
-                    <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
-                    <span className="max-w-[200px] truncate sm:max-w-[260px]">
-                      {bucketButtonLabel}
-                    </span>
-                    {!resolvedLockedBucketName && (
-                      <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
-                    )}
-                  </button>
-                  {showBucketMenu && !resolvedLockedBucketName && (
-                    <div
-                      className={`absolute left-0 top-[calc(100%+8px)] z-[60] w-80 max-w-[calc(100vw-1rem)] ui-caption ${browserFloatingMenuClasses}`}
-                    >
-                      <div className="flex items-center justify-between gap-3 px-2 pb-2 pt-1">
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                          <div className="min-w-0">
-                            <p className={browserSectionEyebrowClasses}>
-                              {selectorWorkspaceNounTitle}
-                            </p>
-                          </div>
-                        </div>
-                        {bucketManagementEnabled && (
-                          <button
-                            type="button"
-                            onClick={openCreateBucketDialog}
-                            disabled={!hasS3AccountContext}
-                            className={chromeChipButtonClasses}
-                            title="Create bucket"
-                            aria-label="Create bucket"
-                          >
-                            + Bucket
-                          </button>
-                        )}
-                      </div>
-                      <div className="px-2 pb-2">
-                        <div className="relative">
-                          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                          <input
-                            ref={bucketMenuFilterRef}
-                            type="text"
-                            value={bucketFilter}
-                            onChange={(event) =>
-                              setBucketFilter(event.target.value)
-                            }
-                            placeholder={
-                              `Filter ${selectorWorkspaceNounPlural}`
-                            }
-                            className={`${browserInputClasses} pl-9`}
-                            spellCheck={false}
-                          />
-                        </div>
-                      </div>
-                      <div className="max-h-56 overflow-y-auto px-1 pb-1">
-                        {loadingBuckets && bucketOptions.length === 0 ? (
-                          <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                            {`Loading ${selectorWorkspaceNounPlural}...`}
-                          </div>
-                        ) : bucketTotalCount === 0 ? (
-                          <div className="space-y-2 px-2 py-2">
-                            <div className="ui-caption text-slate-500 dark:text-slate-400">
-                              {bucketError
-                                ? `Unable to load ${selectorWorkspaceNounPlural}.`
-                                : `No ${selectorWorkspaceNounPlural} available.`}
-                            </div>
-                            <button
-                              type="button"
-                              className={chromeChipButtonClasses}
-                              onClick={() => void refreshBucketList()}
-                              disabled={loadingBuckets || !hasS3AccountContext}
-                            >
-                              {loadingBuckets ? "Retrying..." : "Retry"}
-                            </button>
-                          </div>
-                        ) : bucketOptions.length === 0 ? (
-                          <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                            {`No ${selectorWorkspaceNounPlural} match this filter.`}
-                          </div>
-                        ) : (
-                          bucketMenuItems.map((bucket) => {
-                            const isActive = bucket.name === bucketName;
-                            const label =
-                              bucketDisplayNameByName.get(bucket.name) ??
-                              bucket.name;
-                            return (
-                              <button
-                                key={bucket.name}
-                                type="button"
-                                onClick={() => handleBucketChange(bucket.name)}
-                                className={`flex w-full min-w-0 items-center justify-between rounded-md border px-3 py-2 text-left font-semibold transition ${
-                                  isActive
-                                    ? "border-primary-200 bg-primary-50 text-primary-800 shadow-sm dark:border-primary-500/40 dark:bg-primary-500/20 dark:text-primary-100"
-                                    : "border-transparent text-slate-700 hover:border-primary-200 hover:bg-slate-50 dark:text-slate-200 dark:hover:border-primary-500/40 dark:hover:bg-slate-800"
-                                }`}
-                              >
-                                  <span className="flex min-w-0 items-center gap-2">
-                                    <BucketIcon className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="truncate">{label}</span>
-                                  </span>
-                                {isActive && (
-                                  <span className="ui-caption font-semibold text-primary-600 dark:text-primary-200">
-                                    Active
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })
-                        )}
-                      </div>
-                      {!loadingBuckets && bucketTotalCount > 0 && (
-                        <div className="border-t border-slate-200 px-2.5 py-2 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                          {`${bucketOptions.length} of ${bucketMenuTotal} ${
-                            `${selectorWorkspaceNoun}${bucketMenuTotal === 1 ? "" : "s"}`
-                          }`}
-                        </div>
-                      )}
-                      {canLoadMoreBucketResults && (
-                        <div className="border-t border-slate-200 px-2.5 py-2 dark:border-slate-700">
-                          <button
-                            type="button"
-                            onClick={handleBucketMenuLoadMore}
-                            disabled={bucketMenuLoadingMore}
-                            className={chromeChipButtonClasses}
-                          >
-                            {bucketMenuLoadingMore ? "Loading..." : "Load more"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <BrowserBucketSelector
+                  rootRef={bucketMenuRef}
+                  filterInputRef={bucketMenuFilterRef}
+                  lockedBucketName={resolvedLockedBucketName}
+                  hasContext={hasS3AccountContext}
+                  open={showBucketMenu}
+                  buttonLabel={bucketButtonLabel}
+                  buttonActionLabel={bucketButtonActionLabel}
+                  needsAttention={bucketSelectorNeedsAttention}
+                  workspaceNoun={selectorWorkspaceNoun}
+                  workspaceNounPlural={selectorWorkspaceNounPlural}
+                  workspaceNounTitle={selectorWorkspaceNounTitle}
+                  bucketManagementEnabled={bucketManagementEnabled}
+                  filter={bucketFilter}
+                  loading={loadingBuckets}
+                  hasError={Boolean(bucketError)}
+                  totalCount={bucketTotalCount}
+                  total={bucketMenuTotal}
+                  items={bucketMenuItems}
+                  activeBucketName={bucketName}
+                  displayNameByBucket={bucketDisplayNameByName}
+                  canLoadMore={canLoadMoreBucketResults}
+                  loadingMore={bucketMenuLoadingMore}
+                  onToggle={() => setShowBucketMenu((current) => !current)}
+                  onCreateBucket={openCreateBucketDialog}
+                  onFilterChange={setBucketFilter}
+                  onRetry={() => void refreshBucketList()}
+                  onSelectBucket={handleBucketChange}
+                  onLoadMore={handleBucketMenuLoadMore}
+                />
                 <div
                   className={`${browserToolbarPathStripClasses} ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                   onClick={isEditingPath ? undefined : startEditingPath}
