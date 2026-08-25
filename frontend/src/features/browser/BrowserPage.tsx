@@ -89,6 +89,10 @@ import {
 } from "./BrowserLayout";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBucketSelector from "./BrowserBucketSelector";
+import {
+  BrowserDirectItemActionButton,
+  BrowserToolbarActionMenuItem,
+} from "./BrowserActionPresentation";
 import BrowserObjectSearchHeader from "./BrowserObjectSearchHeader";
 import {
   BrowserColumnResizeHandle,
@@ -122,7 +126,6 @@ import {
   type BrowserDensity,
   type BrowserFunctionalProfile,
   type BrowserLayoutMode,
-  type BrowserActionState,
   getVisibleBrowserActions,
   resolveBrowserActions,
   runBrowserAction,
@@ -204,7 +207,6 @@ import { shouldUseStsPresigner } from "./sseBrowserLogic";
 import {
   ChevronDownIcon,
   CopyIcon,
-  CutIcon,
   DownloadIcon,
   EyeIcon,
   FileIcon,
@@ -213,10 +215,8 @@ import {
   HistoryIcon,
   InfoIcon,
   ListIcon,
-  LinkIcon,
   MoreIcon,
   OpenIcon,
-  PasteIcon,
   RefreshIcon,
   SettingsIcon,
   SlidersIcon,
@@ -8855,82 +8855,6 @@ export default function BrowserPage({
     closeUploadQuickMenu();
     runPathAction(action);
   };
-  const browserActionIconById: Partial<
-    Record<BrowserActionState["id"], ReactNode>
-  > = {
-    uploadFiles: <UploadIcon className="h-3.5 w-3.5" />,
-    uploadFolder: <FolderIcon className="h-3.5 w-3.5" />,
-    newFolder: <FolderPlusIcon className="h-3.5 w-3.5" />,
-    paste: <PasteIcon className="h-3.5 w-3.5" />,
-    versions: <ListIcon className="h-3.5 w-3.5" />,
-    restoreToDate: <HistoryIcon className="h-3.5 w-3.5" />,
-    cleanOldVersions: <TrashIcon className="h-3.5 w-3.5" />,
-    toggleShowDeleted: <TrashIcon className="h-3.5 w-3.5" />,
-    multipartUploads: <UploadIcon className="h-3.5 w-3.5" />,
-    configureBucket: <SettingsIcon className="h-3.5 w-3.5" />,
-    copyPath: <CopyIcon className="h-3.5 w-3.5" />,
-    details: <InfoIcon className="h-3.5 w-3.5" />,
-    open: <OpenIcon className="h-3.5 w-3.5" />,
-    preview: <EyeIcon className="h-3.5 w-3.5" />,
-    download: <DownloadIcon className="h-3.5 w-3.5" />,
-    createPublicLink: <LinkIcon className="h-3.5 w-3.5" />,
-    restore: <HistoryIcon className="h-3.5 w-3.5" />,
-    copyUrl: <LinkIcon className="h-3.5 w-3.5" />,
-    copy: <CopyIcon className="h-3.5 w-3.5" />,
-    cut: <CutIcon className="h-3.5 w-3.5" />,
-    bulkAttributes: <SlidersIcon className="h-3.5 w-3.5" />,
-    advanced: <SettingsIcon className="h-3.5 w-3.5" />,
-    delete: <TrashIcon className="h-3.5 w-3.5" />,
-  };
-  const renderDirectItemActionButton = (
-    item: BrowserItem,
-    action: BrowserActionState,
-  ) => {
-    const accessibleLabel = `${action.label} ${item.name}`;
-    const disabledLabel =
-      !action.enabled && action.disabledReason
-        ? `${accessibleLabel}. Unavailable: ${action.disabledReason}`
-        : accessibleLabel;
-    return (
-      <button
-        key={action.id}
-        type="button"
-        className={`${rowActionButtonClasses} ${
-          action.id === "delete"
-            ? "text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
-            : ""
-        }`}
-        aria-label={disabledLabel}
-        title={action.enabled ? action.label : action.disabledReason}
-        disabled={!action.enabled}
-        onClick={(event) => {
-          event.stopPropagation();
-          runItemAction(item, action.id);
-        }}
-      >
-        {browserActionIconById[action.id]}
-      </button>
-    );
-  };
-  const renderToolbarMoreActionButton = (
-    action: BrowserActionState,
-    onClick: () => void,
-  ) => (
-    <button
-      key={action.id}
-      type="button"
-      role="menuitem"
-      className={`${contextMenuItemClasses} ${!action.enabled ? contextMenuItemDisabledClasses : ""}`}
-      onClick={() => {
-        runToolbarMoreAction(onClick);
-      }}
-      disabled={!action.enabled}
-      title={action.disabledReason}
-    >
-      {browserActionIconById[action.id]}
-      {action.label}
-    </button>
-  );
   useEffect(() => {
     if (!hasToolbarMoreMenu && showToolbarMoreMenu) {
       setShowToolbarMoreMenu(false);
@@ -9429,11 +9353,17 @@ export default function BrowserPage({
                           <p className={toolbarOverflowSectionTitleClasses}>
                             Current path
                           </p>
-                          {toolbarPathActions.map((action) =>
-                            renderToolbarMoreActionButton(action, () =>
-                              runPathAction(action.id),
-                            ),
-                          )}
+                          {toolbarPathActions.map((action) => (
+                            <BrowserToolbarActionMenuItem
+                              key={action.id}
+                              action={action}
+                              onSelect={() =>
+                                runToolbarMoreAction(() =>
+                                  runPathAction(action.id),
+                                )
+                              }
+                            />
+                          ))}
                         </>
                       )}
                       {hasToolbarSelectionActions && (
@@ -9446,11 +9376,17 @@ export default function BrowserPage({
                               ? "Selection overflow"
                               : "Selection actions"}
                           </p>
-                          {toolbarSelectionActions.map((action) =>
-                            renderToolbarMoreActionButton(action, () =>
-                              runSelectionAction(action.id),
-                            ),
-                          )}
+                          {toolbarSelectionActions.map((action) => (
+                            <BrowserToolbarActionMenuItem
+                              key={action.id}
+                              action={action}
+                              onSelect={() =>
+                                runToolbarMoreAction(() =>
+                                  runSelectionAction(action.id),
+                                )
+                              }
+                            />
+                          ))}
                         </>
                       )}
                       {showSseControls && (
@@ -10145,9 +10081,17 @@ export default function BrowserPage({
                               className={`px-2 ${rowCellClasses} !align-middle text-right`}
                             >
                               <div className="flex items-center justify-end gap-1">
-                                {directItemActions.map((action) =>
-                                  renderDirectItemActionButton(item, action),
-                                )}
+                                {directItemActions.map((action) => (
+                                  <BrowserDirectItemActionButton
+                                    key={action.id}
+                                    action={action}
+                                    itemName={item.name}
+                                    className={rowActionButtonClasses}
+                                    onSelect={() =>
+                                      runItemAction(item, action.id)
+                                    }
+                                  />
+                                ))}
                                 <button
                                   type="button"
                                   className={rowActionButtonClasses}
