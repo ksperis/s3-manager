@@ -73,6 +73,7 @@ import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserDeleteItems } from "./useBrowserDeleteItems";
 import { useBrowserDownloads } from "./useBrowserDownloads";
+import { useBrowserFolderTree } from "./useBrowserFolderTree";
 import { useBrowserLazyColumns } from "./useBrowserLazyColumns";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
@@ -146,8 +147,6 @@ import { shouldUseStsPresigner } from "./sseBrowserLogic";
 import { InfoIcon } from "./browserIcons";
 import { resolveBrowserContextQuotas } from "./browserQuota";
 import {
-  TREE_PREFIXES_HARD_LIMIT,
-  TREE_PREFIXES_PAGE_SIZE,
   VERSIONS_LIST_HARD_LIMIT,
   VERSIONS_PAGE_SIZE,
   bulkActionClasses,
@@ -158,12 +157,9 @@ import {
 } from "./browserConstants";
 import type { BrowserPageProps } from "./browserPageContract";
 import {
-  buildTreeNodes,
-  findTreeNodeByPrefix,
   formatDateTime,
   getSelectionInfo,
   normalizePrefix,
-  updateTreeNodes,
 } from "./browserUtils";
 import {
   CORS_DIRECT_TRANSFER_WARNING,
@@ -206,7 +202,6 @@ import { resolveBrowserWorkspaceContext } from "./browserPageContextModel";
 import type {
   BrowserItem,
   ObjectDetailsTabId,
-  TreeNode,
   UploadQueueItem,
 } from "./browserTypes";
 
@@ -226,7 +221,6 @@ type BrowserConfirmDialogState = {
   onConfirm: () => Promise<void> | void;
 };
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
-const TREE_PREFIXES_PAGE_BUDGET = 50;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
 
 const browserShellClasses =
@@ -472,7 +466,6 @@ export default function BrowserPage({
   const [browserSettings, setBrowserSettings] =
     useState<BrowserSettings | null>(null);
   const [useProxyTransfers, setUseProxyTransfers] = useState(false);
-  const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
   const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
@@ -1225,6 +1218,20 @@ export default function BrowserPage({
   const currentBucketUnavailable = bucketName
     ? currentBucketAccess.status === "unavailable"
     : false;
+  const {
+    loadTreeChildren,
+    toggleTreeNode: handleToggleTreeNode,
+    treeRootNode,
+  } = useBrowserFolderTree({
+    accountId: accountIdForApi,
+    accountSwitchInFlight,
+    bucketName,
+    currentBucketUnavailable,
+    enabled: hasS3AccountContext,
+    onWarning: setWarningMessage,
+    prefix,
+    requestOptions: browserRequestOptions,
+  });
   const objectsIssueDescription = useMemo<ReactNode>(() => {
     if (!objectsIssue) {
       return null;
@@ -1254,209 +1261,6 @@ export default function BrowserPage({
     objectsIssue,
     setShowObjectsIssueTechnicalDetails,
     showObjectsIssueTechnicalDetails,
-  ]);
-
-  const listTreePrefixes = useCallback(
-    async (targetPrefix: string) => {
-      if (!bucketName || !hasS3AccountContext) {
-        return { prefixes: [] as string[], truncated: false };
-      }
-      const prefixesCollected: string[] = [];
-      let continuationToken: string | null = null;
-      let hasMore = true;
-      let pagesScanned = 0;
-
-      while (
-        hasMore &&
-        pagesScanned < TREE_PREFIXES_PAGE_BUDGET &&
-        prefixesCollected.length < TREE_PREFIXES_HARD_LIMIT
-      ) {
-        const data = await listBrowserObjects(accountIdForApi, bucketName, {
-          prefix: targetPrefix,
-          continuationToken: continuationToken ?? undefined,
-          maxKeys: TREE_PREFIXES_PAGE_SIZE,
-          ...browserRequestOptions,
-        });
-        if (data.prefixes.length > 0) {
-          prefixesCollected.push(...data.prefixes);
-        }
-        continuationToken = data.next_continuation_token ?? null;
-        hasMore = Boolean(data.is_truncated && continuationToken);
-        pagesScanned += 1;
-      }
-
-      const uniquePrefixes = Array.from(new Set(prefixesCollected));
-      const reachedHardLimit = uniquePrefixes.length > TREE_PREFIXES_HARD_LIMIT;
-      const truncated = hasMore || reachedHardLimit;
-      return {
-        prefixes: uniquePrefixes.slice(0, TREE_PREFIXES_HARD_LIMIT),
-        truncated,
-      };
-    },
-    [accountIdForApi, browserRequestOptions, bucketName, hasS3AccountContext],
-  );
-
-  const loadTreeChildren = useCallback(
-    async (targetPrefix: string, options?: { expand?: boolean }) => {
-      if (!bucketName || !hasS3AccountContext || currentBucketUnavailable) return;
-      const normalized = targetPrefix ? normalizePrefix(targetPrefix) : "";
-      const shouldExpand = options?.expand ?? true;
-      setTreeNodes((prev) =>
-        updateTreeNodes(prev, targetPrefix, (node) => ({
-          ...node,
-          isLoading: true,
-        })),
-      );
-      try {
-        const data = await listTreePrefixes(normalized);
-        const children = buildTreeNodes(data.prefixes, normalized);
-        if (data.truncated) {
-          setWarningMessage(
-            `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`,
-          );
-        }
-        setTreeNodes((prev) =>
-          updateTreeNodes(prev, targetPrefix, (node) => ({
-            ...node,
-            children,
-            isExpanded: shouldExpand ? true : node.isExpanded,
-            isLoaded: true,
-            isLoading: false,
-          })),
-        );
-      } catch {
-        setTreeNodes((prev) =>
-          updateTreeNodes(prev, targetPrefix, (node) => ({
-            ...node,
-            isLoaded: true,
-            isLoading: false,
-          })),
-        );
-      }
-    },
-    [bucketName, currentBucketUnavailable, hasS3AccountContext, listTreePrefixes],
-  );
-
-  useEffect(() => {
-    if (
-      accountSwitchInFlight ||
-      !bucketName ||
-      !hasS3AccountContext ||
-      currentBucketUnavailable
-    ) {
-      setTreeNodes([]);
-      return;
-    }
-    let isMounted = true;
-    const rootNode: TreeNode = {
-      id: "root",
-      name: bucketName,
-      prefix: "",
-      children: [],
-      isExpanded: true,
-      isLoaded: false,
-      isLoading: true,
-    };
-    setTreeNodes([rootNode]);
-    const loadRoot = async () => {
-      try {
-        const data = await listTreePrefixes("");
-        if (!isMounted) return;
-        const children = buildTreeNodes(data.prefixes, "");
-        if (data.truncated) {
-          setWarningMessage(
-            `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`,
-          );
-        }
-        setTreeNodes([
-          {
-            ...rootNode,
-            children,
-            isExpanded: true,
-            isLoaded: true,
-            isLoading: false,
-          },
-        ]);
-      } catch {
-        if (!isMounted) return;
-        setTreeNodes([{ ...rootNode, isLoaded: true, isLoading: false }]);
-      }
-    };
-    loadRoot();
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    accountSwitchInFlight,
-    bucketName,
-    currentBucketUnavailable,
-    hasS3AccountContext,
-    listTreePrefixes,
-  ]);
-
-  useEffect(() => {
-    if (
-      !bucketName ||
-      !hasS3AccountContext ||
-      currentBucketUnavailable ||
-      treeNodes.length === 0
-    )
-      return;
-    const rootNode = treeNodes.find((node) => node.prefix === "");
-    if (!rootNode || rootNode.isLoading) return;
-    const targetPrefix = prefix ? normalizePrefix(prefix) : "";
-    if (!targetPrefix) {
-      if (!rootNode.isExpanded) {
-        setTreeNodes((prev) =>
-          updateTreeNodes(prev, "", (node) => ({ ...node, isExpanded: true })),
-        );
-      }
-      return;
-    }
-    const segments = targetPrefix.split("/").filter(Boolean);
-    let currentPrefix = "";
-    const prefixesToExpand: string[] = [];
-    for (const segment of segments) {
-      currentPrefix = `${currentPrefix}${segment}/`;
-      prefixesToExpand.push(currentPrefix);
-      const node = findTreeNodeByPrefix(treeNodes, currentPrefix);
-      if (!node) return;
-      if (!node.isLoaded && !node.isLoading) {
-        loadTreeChildren(currentPrefix);
-        return;
-      }
-    }
-    const prefixesNeedingExpansion = prefixesToExpand.filter((prefixKey) => {
-      const node = findTreeNodeByPrefix(treeNodes, prefixKey);
-      return Boolean(node && !node.isExpanded);
-    });
-    const needsRootExpansion = !rootNode.isExpanded;
-    if (!needsRootExpansion && prefixesNeedingExpansion.length === 0) return;
-    setTreeNodes((prev) => {
-      let next = prev;
-      if (needsRootExpansion) {
-        next = updateTreeNodes(next, "", (node) => ({
-          ...node,
-          isExpanded: true,
-        }));
-      }
-      prefixesNeedingExpansion.forEach((prefixKey) => {
-        const node = findTreeNodeByPrefix(next, prefixKey);
-        if (!node || node.isExpanded) return;
-        next = updateTreeNodes(next, prefixKey, (entry) => ({
-          ...entry,
-          isExpanded: true,
-        }));
-      });
-      return next;
-    });
-  }, [
-    bucketName,
-    currentBucketUnavailable,
-    hasS3AccountContext,
-    loadTreeChildren,
-    prefix,
-    treeNodes,
   ]);
 
   useEffect(() => {
@@ -1660,10 +1464,6 @@ export default function BrowserPage({
         access: resolveBucketAccessEntry(bucket.name, bucketAccessByName),
       })),
     [bucketAccessByName, bucketMenuItems],
-  );
-  const treeRootNode = useMemo(
-    () => treeNodes.find((node) => node.prefix === "") ?? null,
-    [treeNodes],
   );
   const handleBucketChange = useCallback(
     (value: string) => {
@@ -2955,28 +2755,6 @@ export default function BrowserPage({
     if (deletedObjectsIsTruncated) {
       void loadObjects({ append: true, loadDeletedOnly: true });
     }
-  };
-
-  const handleToggleTreeNode = (node: TreeNode) => {
-    if (node.isExpanded) {
-      setTreeNodes((prev) =>
-        updateTreeNodes(prev, node.prefix, (entry) => ({
-          ...entry,
-          isExpanded: false,
-        })),
-      );
-      return;
-    }
-    if (!node.isLoaded) {
-      loadTreeChildren(node.prefix);
-      return;
-    }
-    setTreeNodes((prev) =>
-      updateTreeNodes(prev, node.prefix, (entry) => ({
-        ...entry,
-        isExpanded: true,
-      })),
-    );
   };
 
   const handleGoUp = () => {
