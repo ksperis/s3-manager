@@ -16,132 +16,50 @@ import {
   storageClassOptions,
   toolbarPrimaryClasses,
 } from "./browserConstants";
-import type { BulkMetadataDraft } from "./browserTypes";
-
-type Setter<T> = Dispatch<SetStateAction<T>>;
+import type { BrowserBulkAttributesDraft } from "./useBrowserBulkAttributes";
 
 type BrowserBulkAttributesModalProps = {
-  bulkActionFileCount: number;
-  bulkActionFolderCount: number;
-  bulkAttributesError: string | null;
-  bulkAttributesSummary: string | null;
-  bulkApplyMetadata: boolean;
-  setBulkApplyMetadata: Setter<boolean>;
-  bulkMetadataDraft: BulkMetadataDraft;
-  setBulkMetadataDraft: Setter<BulkMetadataDraft>;
-  bulkMetadataEntries: string;
-  setBulkMetadataEntries: Setter<string>;
-  bulkApplyTags: boolean;
-  setBulkApplyTags: Setter<boolean>;
-  bulkTagsDraft: string;
-  setBulkTagsDraft: Setter<string>;
-  bulkApplyStorageClass: boolean;
-  setBulkApplyStorageClass: Setter<boolean>;
-  bulkStorageClass: string;
-  setBulkStorageClass: Setter<string>;
-  bulkApplyAcl: boolean;
-  setBulkApplyAcl: Setter<boolean>;
-  bulkAclValue: string;
-  setBulkAclValue: Setter<string>;
-  bulkApplyLegalHold: boolean;
-  setBulkApplyLegalHold: Setter<boolean>;
-  bulkLegalHoldStatus: "ON" | "OFF";
-  setBulkLegalHoldStatus: Setter<"ON" | "OFF">;
-  bulkApplyRetention: boolean;
-  setBulkApplyRetention: Setter<boolean>;
-  bulkRetentionMode: "" | "GOVERNANCE" | "COMPLIANCE";
-  setBulkRetentionMode: Setter<"" | "GOVERNANCE" | "COMPLIANCE">;
-  bulkRetentionDate: string;
-  setBulkRetentionDate: Setter<string>;
-  bulkRetentionBypass: boolean;
-  setBulkRetentionBypass: Setter<boolean>;
-  bulkAttributesLoading: boolean;
+  draft: BrowserBulkAttributesDraft;
+  error: string | null;
+  fileCount: number;
+  folderCount: number;
+  loading: boolean;
   onApply: () => void;
   onClose: () => void;
+  setDraft: Dispatch<SetStateAction<BrowserBulkAttributesDraft>>;
+  summary: string | null;
 };
 
 export default function BrowserBulkAttributesModal({
-  bulkActionFileCount,
-  bulkActionFolderCount,
-  bulkAttributesError,
-  bulkAttributesSummary,
-  bulkApplyMetadata,
-  setBulkApplyMetadata,
-  bulkMetadataDraft,
-  setBulkMetadataDraft,
-  bulkMetadataEntries,
-  setBulkMetadataEntries,
-  bulkApplyTags,
-  setBulkApplyTags,
-  bulkTagsDraft,
-  setBulkTagsDraft,
-  bulkApplyStorageClass,
-  setBulkApplyStorageClass,
-  bulkStorageClass,
-  setBulkStorageClass,
-  bulkApplyAcl,
-  setBulkApplyAcl,
-  bulkAclValue,
-  setBulkAclValue,
-  bulkApplyLegalHold,
-  setBulkApplyLegalHold,
-  bulkLegalHoldStatus,
-  setBulkLegalHoldStatus,
-  bulkApplyRetention,
-  setBulkApplyRetention,
-  bulkRetentionMode,
-  setBulkRetentionMode,
-  bulkRetentionDate,
-  setBulkRetentionDate,
-  bulkRetentionBypass,
-  setBulkRetentionBypass,
-  bulkAttributesLoading,
+  draft,
+  error,
+  fileCount,
+  folderCount,
+  loading,
   onApply,
   onClose,
+  setDraft,
+  summary,
 }: BrowserBulkAttributesModalProps) {
-  const currentSignature = useMemo(
-    () =>
-      stableSignature({
-        bulkApplyMetadata,
-        bulkMetadataDraft,
-        bulkMetadataEntries,
-        bulkApplyTags,
-        bulkTagsDraft,
-        bulkApplyStorageClass,
-        bulkStorageClass,
-        bulkApplyAcl,
-        bulkAclValue,
-        bulkApplyLegalHold,
-        bulkLegalHoldStatus,
-        bulkApplyRetention,
-        bulkRetentionMode,
-        bulkRetentionDate,
-        bulkRetentionBypass,
-      }),
-    [
-      bulkAclValue,
-      bulkApplyAcl,
-      bulkApplyLegalHold,
-      bulkApplyMetadata,
-      bulkApplyRetention,
-      bulkApplyStorageClass,
-      bulkApplyTags,
-      bulkLegalHoldStatus,
-      bulkMetadataDraft,
-      bulkMetadataEntries,
-      bulkRetentionBypass,
-      bulkRetentionDate,
-      bulkRetentionMode,
-      bulkStorageClass,
-      bulkTagsDraft,
-    ]
-  );
+  const currentSignature = useMemo(() => stableSignature(draft), [draft]);
   const [initialSignature] = useState(currentSignature);
   const closeGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: currentSignature !== initialSignature,
     onClose,
-    disabled: bulkAttributesLoading,
+    disabled: loading,
   });
+  const updateDraft = <Key extends keyof BrowserBulkAttributesDraft>(
+    key: Key,
+    value: BrowserBulkAttributesDraft[Key],
+  ) => setDraft((previous) => ({ ...previous, [key]: value }));
+  const updateMetadata = (
+    key: keyof BrowserBulkAttributesDraft["metadata"],
+    value: string,
+  ) =>
+    setDraft((previous) => ({
+      ...previous,
+      metadata: { ...previous.metadata, [key]: value },
+    }));
 
   return (
     <Modal title="Bulk attributes" onClose={closeGuard.requestClose} maxWidthClass="max-w-3xl">
@@ -149,71 +67,59 @@ export default function BrowserBulkAttributesModal({
         <div className="space-y-1">
           <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
           <p>
-            {bulkActionFileCount} file(s) · {bulkActionFolderCount} folder(s)
-            {bulkActionFolderCount > 0 && " (folders expanded to files)"}
+            {fileCount} file(s) · {folderCount} folder(s)
+            {folderCount > 0 && " (folders expanded to files)"}
           </p>
         </div>
-        {bulkAttributesError && <UiInlineMessage tone="error">{bulkAttributesError}</UiInlineMessage>}
-        {bulkAttributesSummary && <UiInlineMessage tone="success">{bulkAttributesSummary}</UiInlineMessage>}
+        {error && <UiInlineMessage tone="error">{error}</UiInlineMessage>}
+        {summary && <UiInlineMessage tone="success">{summary}</UiInlineMessage>}
         <div className="space-y-3">
           <div className={browserPanelCardClasses}>
             <UiCheckboxField
-              checked={bulkApplyMetadata}
-              onChange={(event) => setBulkApplyMetadata(event.target.checked)}
+              checked={draft.applyMetadata}
+              onChange={(event) => updateDraft("applyMetadata", event.target.checked)}
               className="font-semibold text-slate-700 dark:text-slate-200"
             >
               Metadata headers
             </UiCheckboxField>
-            {bulkApplyMetadata && (
+            {draft.applyMetadata && (
               <div className="mt-3 grid gap-2">
                 <input
                   className={formInputClasses}
                   placeholder="Content-Type"
-                  value={bulkMetadataDraft.contentType}
-                  onChange={(event) =>
-                    setBulkMetadataDraft((prev) => ({ ...prev, contentType: event.target.value }))
-                  }
+                  value={draft.metadata.contentType}
+                  onChange={(event) => updateMetadata("contentType", event.target.value)}
                 />
                 <input
                   className={formInputClasses}
                   placeholder="Cache-Control"
-                  value={bulkMetadataDraft.cacheControl}
-                  onChange={(event) =>
-                    setBulkMetadataDraft((prev) => ({ ...prev, cacheControl: event.target.value }))
-                  }
+                  value={draft.metadata.cacheControl}
+                  onChange={(event) => updateMetadata("cacheControl", event.target.value)}
                 />
                 <input
                   className={formInputClasses}
                   placeholder="Content-Disposition"
-                  value={bulkMetadataDraft.contentDisposition}
-                  onChange={(event) =>
-                    setBulkMetadataDraft((prev) => ({ ...prev, contentDisposition: event.target.value }))
-                  }
+                  value={draft.metadata.contentDisposition}
+                  onChange={(event) => updateMetadata("contentDisposition", event.target.value)}
                 />
                 <input
                   className={formInputClasses}
                   placeholder="Content-Encoding"
-                  value={bulkMetadataDraft.contentEncoding}
-                  onChange={(event) =>
-                    setBulkMetadataDraft((prev) => ({ ...prev, contentEncoding: event.target.value }))
-                  }
+                  value={draft.metadata.contentEncoding}
+                  onChange={(event) => updateMetadata("contentEncoding", event.target.value)}
                 />
                 <input
                   className={formInputClasses}
                   placeholder="Content-Language"
-                  value={bulkMetadataDraft.contentLanguage}
-                  onChange={(event) =>
-                    setBulkMetadataDraft((prev) => ({ ...prev, contentLanguage: event.target.value }))
-                  }
+                  value={draft.metadata.contentLanguage}
+                  onChange={(event) => updateMetadata("contentLanguage", event.target.value)}
                 />
                 <input
                   type="datetime-local"
                   className={formInputClasses}
                   placeholder="Expires"
-                  value={bulkMetadataDraft.expires}
-                  onChange={(event) =>
-                    setBulkMetadataDraft((prev) => ({ ...prev, expires: event.target.value }))
-                  }
+                  value={draft.metadata.expires}
+                  onChange={(event) => updateMetadata("expires", event.target.value)}
                 />
                 <div className="space-y-1">
                   <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">
@@ -222,8 +128,8 @@ export default function BrowserBulkAttributesModal({
                   <textarea
                     rows={3}
                     className={formInputClasses}
-                    value={bulkMetadataEntries}
-                    onChange={(event) => setBulkMetadataEntries(event.target.value)}
+                    value={draft.metadataEntries}
+                    onChange={(event) => updateDraft("metadataEntries", event.target.value)}
                   />
                 </div>
               </div>
@@ -231,34 +137,34 @@ export default function BrowserBulkAttributesModal({
           </div>
           <div className={browserPanelCardClasses}>
             <UiCheckboxField
-              checked={bulkApplyTags}
-              onChange={(event) => setBulkApplyTags(event.target.checked)}
+              checked={draft.applyTags}
+              onChange={(event) => updateDraft("applyTags", event.target.checked)}
               className="font-semibold text-slate-700 dark:text-slate-200"
             >
               Tags (key=value per line)
             </UiCheckboxField>
-            {bulkApplyTags && (
+            {draft.applyTags && (
               <textarea
                 rows={3}
                 className={`${formInputClasses} mt-3`}
-                value={bulkTagsDraft}
-                onChange={(event) => setBulkTagsDraft(event.target.value)}
+                value={draft.tags}
+                onChange={(event) => updateDraft("tags", event.target.value)}
               />
             )}
           </div>
           <div className={browserPanelCardClasses}>
             <UiCheckboxField
-              checked={bulkApplyStorageClass}
-              onChange={(event) => setBulkApplyStorageClass(event.target.checked)}
+              checked={draft.applyStorageClass}
+              onChange={(event) => updateDraft("applyStorageClass", event.target.checked)}
               className="font-semibold text-slate-700 dark:text-slate-200"
             >
               Storage class
             </UiCheckboxField>
-            {bulkApplyStorageClass && (
+            {draft.applyStorageClass && (
               <select
                 className={`${formInputClasses} mt-3`}
-                value={bulkStorageClass}
-                onChange={(event) => setBulkStorageClass(event.target.value)}
+                value={draft.storageClass}
+                onChange={(event) => updateDraft("storageClass", event.target.value)}
               >
                 <option value="">Select storage class</option>
                 {storageClassOptions.map((option) => (
@@ -271,17 +177,17 @@ export default function BrowserBulkAttributesModal({
           </div>
           <div className={browserPanelCardClasses}>
             <UiCheckboxField
-              checked={bulkApplyAcl}
-              onChange={(event) => setBulkApplyAcl(event.target.checked)}
+              checked={draft.applyAcl}
+              onChange={(event) => updateDraft("applyAcl", event.target.checked)}
               className="font-semibold text-slate-700 dark:text-slate-200"
             >
               ACL
             </UiCheckboxField>
-            {bulkApplyAcl && (
+            {draft.applyAcl && (
               <select
                 className={`${formInputClasses} mt-3`}
-                value={bulkAclValue}
-                onChange={(event) => setBulkAclValue(event.target.value)}
+                value={draft.aclValue}
+                onChange={(event) => updateDraft("aclValue", event.target.value)}
               >
                 {aclOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -293,17 +199,17 @@ export default function BrowserBulkAttributesModal({
           </div>
           <div className={browserPanelCardClasses}>
             <UiCheckboxField
-              checked={bulkApplyLegalHold}
-              onChange={(event) => setBulkApplyLegalHold(event.target.checked)}
+              checked={draft.applyLegalHold}
+              onChange={(event) => updateDraft("applyLegalHold", event.target.checked)}
               className="font-semibold text-slate-700 dark:text-slate-200"
             >
               Legal hold
             </UiCheckboxField>
-            {bulkApplyLegalHold && (
+            {draft.applyLegalHold && (
               <select
                 className={`${formInputClasses} mt-3`}
-                value={bulkLegalHoldStatus}
-                onChange={(event) => setBulkLegalHoldStatus(event.target.value as "ON" | "OFF")}
+                value={draft.legalHoldStatus}
+                onChange={(event) => updateDraft("legalHoldStatus", event.target.value as "ON" | "OFF")}
               >
                 <option value="OFF">OFF</option>
                 <option value="ON">ON</option>
@@ -312,19 +218,19 @@ export default function BrowserBulkAttributesModal({
           </div>
           <div className={browserPanelCardClasses}>
             <UiCheckboxField
-              checked={bulkApplyRetention}
-              onChange={(event) => setBulkApplyRetention(event.target.checked)}
+              checked={draft.applyRetention}
+              onChange={(event) => updateDraft("applyRetention", event.target.checked)}
               className="font-semibold text-slate-700 dark:text-slate-200"
             >
               Retention
             </UiCheckboxField>
-            {bulkApplyRetention && (
+            {draft.applyRetention && (
               <div className="mt-3 grid gap-2">
                 <select
                   className={formInputClasses}
-                  value={bulkRetentionMode}
+                  value={draft.retentionMode}
                   onChange={(event) =>
-                    setBulkRetentionMode(event.target.value as "" | "GOVERNANCE" | "COMPLIANCE")
+                    updateDraft("retentionMode", event.target.value as "" | "GOVERNANCE" | "COMPLIANCE")
                   }
                 >
                   <option value="">Select mode</option>
@@ -334,12 +240,12 @@ export default function BrowserBulkAttributesModal({
                 <input
                   type="datetime-local"
                   className={formInputClasses}
-                  value={bulkRetentionDate}
-                  onChange={(event) => setBulkRetentionDate(event.target.value)}
+                  value={draft.retentionDate}
+                  onChange={(event) => updateDraft("retentionDate", event.target.value)}
                 />
                 <UiCheckboxField
-                  checked={bulkRetentionBypass}
-                  onChange={(event) => setBulkRetentionBypass(event.target.checked)}
+                  checked={draft.retentionBypass}
+                  onChange={(event) => updateDraft("retentionBypass", event.target.checked)}
                   className="ui-caption text-slate-500 dark:text-slate-400"
                 >
                   Bypass governance
@@ -356,9 +262,9 @@ export default function BrowserBulkAttributesModal({
             type="button"
             className={toolbarPrimaryClasses}
             onClick={onApply}
-            disabled={bulkAttributesLoading}
+            disabled={loading}
           >
-            {bulkAttributesLoading ? "Updating..." : "Apply changes"}
+            {loading ? "Updating..." : "Apply changes"}
           </button>
         </div>
       </div>

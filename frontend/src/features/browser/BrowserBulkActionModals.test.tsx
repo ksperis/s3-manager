@@ -3,16 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
-import type { BulkMetadataDraft } from "./browserTypes";
-
-const metadataDraft: BulkMetadataDraft = {
-  contentType: "",
-  cacheControl: "",
-  contentDisposition: "",
-  contentEncoding: "",
-  contentLanguage: "",
-  expires: "",
-};
+import { createBrowserBulkAttributesDraft } from "./useBrowserBulkAttributes";
 
 describe("Browser bulk action modals", () => {
   it("renders cleanup feedback with shared inline messages", () => {
@@ -67,43 +58,15 @@ describe("Browser bulk action modals", () => {
   it("renders bulk attributes feedback with shared inline messages", () => {
     render(
       <BrowserBulkAttributesModal
-        bulkActionFileCount={2}
-        bulkActionFolderCount={1}
-        bulkAttributesError="Attributes failed"
-        bulkAttributesSummary="Attributes updated"
-        bulkApplyMetadata={false}
-        setBulkApplyMetadata={vi.fn()}
-        bulkMetadataDraft={metadataDraft}
-        setBulkMetadataDraft={vi.fn()}
-        bulkMetadataEntries=""
-        setBulkMetadataEntries={vi.fn()}
-        bulkApplyTags={false}
-        setBulkApplyTags={vi.fn()}
-        bulkTagsDraft=""
-        setBulkTagsDraft={vi.fn()}
-        bulkApplyStorageClass={false}
-        setBulkApplyStorageClass={vi.fn()}
-        bulkStorageClass="STANDARD"
-        setBulkStorageClass={vi.fn()}
-        bulkApplyAcl={false}
-        setBulkApplyAcl={vi.fn()}
-        bulkAclValue="private"
-        setBulkAclValue={vi.fn()}
-        bulkApplyLegalHold={false}
-        setBulkApplyLegalHold={vi.fn()}
-        bulkLegalHoldStatus="OFF"
-        setBulkLegalHoldStatus={vi.fn()}
-        bulkApplyRetention={false}
-        setBulkApplyRetention={vi.fn()}
-        bulkRetentionMode=""
-        setBulkRetentionMode={vi.fn()}
-        bulkRetentionDate=""
-        setBulkRetentionDate={vi.fn()}
-        bulkRetentionBypass={false}
-        setBulkRetentionBypass={vi.fn()}
-        bulkAttributesLoading={false}
+        draft={createBrowserBulkAttributesDraft()}
+        error="Attributes failed"
+        fileCount={2}
+        folderCount={1}
+        loading={false}
         onApply={vi.fn()}
         onClose={vi.fn()}
+        setDraft={vi.fn()}
+        summary="Attributes updated"
       />
     );
 

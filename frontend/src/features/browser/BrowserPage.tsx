@@ -64,11 +64,6 @@ import {
   listObjectVersions,
   searchBrowserBuckets,
   fetchBrowserUsageSummary,
-  updateObjectAcl,
-  updateObjectLegalHold,
-  updateObjectMetadata,
-  updateObjectRetention,
-  updateObjectTags,
   fetchBrowserSettings,
   presignPart,
   presignObject,
@@ -88,6 +83,7 @@ import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbar from "./BrowserToolbar";
 import { useBrowserBucketCors } from "./useBrowserBucketCors";
+import { useBrowserBulkAttributes } from "./useBrowserBulkAttributes";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
@@ -208,10 +204,7 @@ import {
   makeId,
   normalizePrefix,
   normalizeUploadPath,
-  parseKeyValueLines,
-  pairsToRecord,
   shortName,
-  toIsoString,
   updateTreeNodes,
 } from "./browserUtils";
 import {
@@ -282,7 +275,6 @@ import {
 } from "./browserMultipartUpload";
 import type {
   BrowserItem,
-  BulkMetadataDraft,
   ClipboardState,
   CopyDetailItem,
   CopyDetailStatus,
@@ -727,44 +719,8 @@ export default function BrowserPage({
     contextMenuRef,
     openContextMenu,
   } = useBrowserContextMenu();
-  const [showBulkAttributesModal, setShowBulkAttributesModal] = useState(false);
   const [showBulkRestoreModal, setShowBulkRestoreModal] = useState(false);
-  const [bulkActionItems, setBulkActionItems] = useState<BrowserItem[]>([]);
-  const [bulkAttributesLoading, setBulkAttributesLoading] = useState(false);
-  const [bulkAttributesError, setBulkAttributesError] = useState<string | null>(
-    null,
-  );
-  const [bulkAttributesSummary, setBulkAttributesSummary] = useState<
-    string | null
-  >(null);
-  const [bulkApplyMetadata, setBulkApplyMetadata] = useState(false);
-  const [bulkApplyTags, setBulkApplyTags] = useState(false);
-  const [bulkApplyStorageClass, setBulkApplyStorageClass] = useState(false);
-  const [bulkApplyAcl, setBulkApplyAcl] = useState(false);
-  const [bulkApplyLegalHold, setBulkApplyLegalHold] = useState(false);
-  const [bulkApplyRetention, setBulkApplyRetention] = useState(false);
-  const [bulkMetadataDraft, setBulkMetadataDraft] = useState<BulkMetadataDraft>(
-    {
-      contentType: "",
-      cacheControl: "",
-      contentDisposition: "",
-      contentEncoding: "",
-      contentLanguage: "",
-      expires: "",
-    },
-  );
-  const [bulkMetadataEntries, setBulkMetadataEntries] = useState("");
-  const [bulkTagsDraft, setBulkTagsDraft] = useState("");
-  const [bulkStorageClass, setBulkStorageClass] = useState("");
-  const [bulkAclValue, setBulkAclValue] = useState("private");
-  const [bulkLegalHoldStatus, setBulkLegalHoldStatus] = useState<"ON" | "OFF">(
-    "OFF",
-  );
-  const [bulkRetentionMode, setBulkRetentionMode] = useState<
-    "" | "GOVERNANCE" | "COMPLIANCE"
-  >("");
-  const [bulkRetentionDate, setBulkRetentionDate] = useState("");
-  const [bulkRetentionBypass, setBulkRetentionBypass] = useState(false);
+  const [bulkRestoreItems, setBulkRestoreItems] = useState<BrowserItem[]>([]);
   const [bulkRestoreDate, setBulkRestoreDate] = useState("");
   const [bulkRestoreDeleteMissing, setBulkRestoreDeleteMissing] =
     useState(false);
@@ -3244,13 +3200,13 @@ export default function BrowserPage({
     [items, selectedSet],
   );
   const selectedCount = selectedItems.length;
-  const bulkActionFileCount = useMemo(
-    () => bulkActionItems.filter((item) => item.type === "file").length,
-    [bulkActionItems],
+  const bulkRestoreFileCount = useMemo(
+    () => bulkRestoreItems.filter((item) => item.type === "file").length,
+    [bulkRestoreItems],
   );
-  const bulkActionFolderCount = useMemo(
-    () => bulkActionItems.filter((item) => item.type === "folder").length,
-    [bulkActionItems],
+  const bulkRestoreFolderCount = useMemo(
+    () => bulkRestoreItems.filter((item) => item.type === "folder").length,
+    [bulkRestoreItems],
   );
   const selectedBytes = useMemo(() => {
     return selectedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
@@ -4767,33 +4723,6 @@ export default function BrowserPage({
     onCreated: handleBrowserFolderCreated,
   });
 
-  const resetBulkAttributesDraft = () => {
-    setBulkApplyMetadata(false);
-    setBulkApplyTags(false);
-    setBulkApplyStorageClass(false);
-    setBulkApplyAcl(false);
-    setBulkApplyLegalHold(false);
-    setBulkApplyRetention(false);
-    setBulkMetadataDraft({
-      contentType: "",
-      cacheControl: "",
-      contentDisposition: "",
-      contentEncoding: "",
-      contentLanguage: "",
-      expires: "",
-    });
-    setBulkMetadataEntries("");
-    setBulkTagsDraft("");
-    setBulkStorageClass("");
-    setBulkAclValue("private");
-    setBulkLegalHoldStatus("OFF");
-    setBulkRetentionMode("");
-    setBulkRetentionDate("");
-    setBulkRetentionBypass(false);
-    setBulkAttributesError(null);
-    setBulkAttributesSummary(null);
-  };
-
   const resetBulkRestoreDraft = () => {
     setBulkRestoreDate(formatLocalDateTime(new Date()));
     setBulkRestoreDeleteMissing(false);
@@ -4803,22 +4732,6 @@ export default function BrowserPage({
     setBulkRestoreSummary(null);
     setBulkRestorePreview(null);
     setBulkRestoreTargetPath(null);
-  };
-
-  const openBulkAttributesModal = (items: BrowserItem[]) => {
-    const eligibleItems = items.filter((item) => !item.isDeleted);
-    if (eligibleItems.length === 0) {
-      setStatusMessage("Deleted objects cannot receive bulk attributes.");
-      return;
-    }
-    if (eligibleItems.length !== items.length) {
-      setWarningMessage("Deleted objects were skipped for bulk attributes.");
-    } else {
-      setWarningMessage(null);
-    }
-    setBulkActionItems(eligibleItems);
-    resetBulkAttributesDraft();
-    setShowBulkAttributesModal(true);
   };
 
   const buildBulkRestorePathTarget = () => {
@@ -4845,7 +4758,7 @@ export default function BrowserPage({
     const resolvedItems =
       items.length > 0 ? items : pathTarget ? [pathTarget] : [];
     if (resolvedItems.length === 0) return;
-    setBulkActionItems(resolvedItems);
+    setBulkRestoreItems(resolvedItems);
     resetBulkRestoreDraft();
     if (items.length === 0 && pathTarget && bucketName) {
       setBulkRestoreTargetPath(currentPath || bucketName);
@@ -5647,6 +5560,39 @@ export default function BrowserPage({
     [accountIdForApi, browserRequestOptions, bucketName, hasS3AccountContext],
   );
 
+  const {
+    apply: handleBulkAttributesApply,
+    close: closeBulkAttributesModal,
+    draft: bulkAttributesDraft,
+    error: bulkAttributesError,
+    fileCount: bulkAttributesFileCount,
+    folderCount: bulkAttributesFolderCount,
+    loading: bulkAttributesLoading,
+    open: showBulkAttributesModal,
+    setDraft: setBulkAttributesDraft,
+    show: openBulkAttributesModal,
+    summary: bulkAttributesSummary,
+  } = useBrowserBulkAttributes({
+    accountId: accountIdForApi,
+    bucketName,
+    clearOperationController,
+    completeOperation,
+    createOperationController,
+    currentPath,
+    enabled: hasS3AccountContext,
+    listAllObjectsForPrefix,
+    onRefresh: requestObjectsRefresh,
+    onRefreshNow: refreshObjectsNow,
+    onStatus: setStatusMessage,
+    onWarning: setWarningMessage,
+    parallelism: otherOperationsParallelism,
+    prefix,
+    requestOptions: browserRequestOptions,
+    showOperations: showOperationsBar,
+    startOperation,
+    updateOperation,
+  });
+
   const listAllVersionsForPrefix = async (targetPrefix: string) => {
     if (!bucketName || !hasS3AccountContext || !isVersioningEnabled)
       return { versions: [], deleteMarkers: [] };
@@ -5695,20 +5641,6 @@ export default function BrowserPage({
       hasMore = Boolean(data.is_truncated && keyMarker);
     }
     return { versions, deleteMarkers };
-  };
-
-  const resolveBulkAttributeKeys = async (items: BrowserItem[]) => {
-    const keys = new Set<string>();
-    items
-      .filter((item) => item.type === "file")
-      .forEach((item) => keys.add(item.key));
-    const folders = items.filter((item) => item.type === "folder");
-    for (const folder of folders) {
-      const folderPrefix = normalizePrefix(folder.key);
-      const objects = await listAllObjectsForPrefix(folderPrefix);
-      objects.forEach((obj) => keys.add(obj.key));
-    }
-    return Array.from(keys);
   };
 
   const updateDeleteDetailsStatus = (
@@ -6392,252 +6324,6 @@ export default function BrowserPage({
     }
   };
 
-  const handleBulkAttributesApply = async () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const shouldApplyMetadata = bulkApplyMetadata;
-    const shouldApplyTags = bulkApplyTags;
-    const shouldApplyStorage = bulkApplyStorageClass;
-    const shouldApplyAcl = bulkApplyAcl;
-    const shouldApplyLegalHold = bulkApplyLegalHold;
-    const shouldApplyRetention = bulkApplyRetention;
-    if (
-      !shouldApplyMetadata &&
-      !shouldApplyTags &&
-      !shouldApplyStorage &&
-      !shouldApplyAcl &&
-      !shouldApplyLegalHold &&
-      !shouldApplyRetention
-    ) {
-      setBulkAttributesError("Select at least one attribute to update.");
-      return;
-    }
-
-    const metadataPairs = parseKeyValueLines(bulkMetadataEntries);
-    const tagsPairs = parseKeyValueLines(bulkTagsDraft);
-    const expiresIso = bulkMetadataDraft.expires.trim()
-      ? toIsoString(bulkMetadataDraft.expires)
-      : "";
-    const metadataHasValues =
-      Boolean(bulkMetadataDraft.contentType.trim()) ||
-      Boolean(bulkMetadataDraft.cacheControl.trim()) ||
-      Boolean(bulkMetadataDraft.contentDisposition.trim()) ||
-      Boolean(bulkMetadataDraft.contentEncoding.trim()) ||
-      Boolean(bulkMetadataDraft.contentLanguage.trim()) ||
-      Boolean(expiresIso) ||
-      metadataPairs.length > 0;
-
-    if (shouldApplyMetadata && !metadataHasValues) {
-      setBulkAttributesError("Provide at least one metadata field.");
-      return;
-    }
-    if (shouldApplyStorage && !bulkStorageClass) {
-      setBulkAttributesError("Select a storage class.");
-      return;
-    }
-    if (
-      shouldApplyMetadata &&
-      bulkMetadataDraft.expires.trim() &&
-      !expiresIso
-    ) {
-      setBulkAttributesError("Provide a valid expires date.");
-      return;
-    }
-    if (shouldApplyTags && tagsPairs.length === 0) {
-      setBulkAttributesError("Provide at least one tag.");
-      return;
-    }
-    const retentionIso = bulkRetentionDate
-      ? toIsoString(bulkRetentionDate)
-      : "";
-    if (
-      shouldApplyRetention &&
-      (!bulkRetentionMode || !bulkRetentionDate || !retentionIso)
-    ) {
-      setBulkAttributesError("Provide retention mode and date.");
-      return;
-    }
-
-    setBulkAttributesLoading(true);
-    setBulkAttributesError(null);
-    setBulkAttributesSummary(null);
-    let operationId: string | null = null;
-    let controller: AbortController | null = null;
-    try {
-      const keys = await resolveBulkAttributeKeys(bulkActionItems);
-      if (keys.length === 0) {
-        setBulkAttributesError("No objects to update.");
-        return;
-      }
-      if (keys.length > 1) {
-        showOperationsBar();
-      }
-      operationId = startOperation(
-        "copying",
-        "Updating attributes",
-        currentPath || bucketName,
-        { kind: "other", cancelable: true },
-        0,
-      );
-      controller = createOperationController(operationId);
-      const total = keys.length;
-      let completed = 0;
-      let succeeded = 0;
-      let failures = 0;
-      let cancelled = false;
-
-      const updateProgress = () => {
-        const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
-        updateOperation(operationId, { progress: percent });
-      };
-
-      const metadataRecord =
-        metadataPairs.length > 0 ? pairsToRecord(metadataPairs) : undefined;
-
-      const applyForKey = async (key: string) => {
-        if (shouldApplyMetadata || shouldApplyStorage) {
-          const payload = {
-            key,
-            content_type:
-              shouldApplyMetadata && bulkMetadataDraft.contentType.trim()
-                ? bulkMetadataDraft.contentType.trim()
-                : undefined,
-            cache_control:
-              shouldApplyMetadata && bulkMetadataDraft.cacheControl.trim()
-                ? bulkMetadataDraft.cacheControl.trim()
-                : undefined,
-            content_disposition:
-              shouldApplyMetadata && bulkMetadataDraft.contentDisposition.trim()
-                ? bulkMetadataDraft.contentDisposition.trim()
-                : undefined,
-            content_encoding:
-              shouldApplyMetadata && bulkMetadataDraft.contentEncoding.trim()
-                ? bulkMetadataDraft.contentEncoding.trim()
-                : undefined,
-            content_language:
-              shouldApplyMetadata && bulkMetadataDraft.contentLanguage.trim()
-                ? bulkMetadataDraft.contentLanguage.trim()
-                : undefined,
-            expires: shouldApplyMetadata && expiresIso ? expiresIso : undefined,
-            metadata:
-              shouldApplyMetadata && metadataRecord
-                ? metadataRecord
-                : undefined,
-            storage_class: shouldApplyStorage ? bulkStorageClass : undefined,
-          };
-          await updateObjectMetadata(
-            accountIdForApi,
-            bucketName,
-            payload,
-            controller?.signal,
-            browserRequestOptions,
-          );
-        }
-        if (shouldApplyTags) {
-          await updateObjectTags(
-            accountIdForApi,
-            bucketName,
-            {
-              key,
-              tags: tagsPairs,
-            },
-            controller?.signal,
-            browserRequestOptions,
-          );
-        }
-        if (shouldApplyAcl) {
-          await updateObjectAcl(
-            accountIdForApi,
-            bucketName,
-            {
-              key,
-              acl: bulkAclValue,
-            },
-            controller?.signal,
-            browserRequestOptions,
-          );
-        }
-        if (shouldApplyLegalHold) {
-          await updateObjectLegalHold(
-            accountIdForApi,
-            bucketName,
-            {
-              key,
-              status: bulkLegalHoldStatus,
-            },
-            controller?.signal,
-            browserRequestOptions,
-          );
-        }
-        if (shouldApplyRetention) {
-          await updateObjectRetention(
-            accountIdForApi,
-            bucketName,
-            {
-              key,
-              mode: bulkRetentionMode || null,
-              retain_until: retentionIso,
-              bypass_governance: bulkRetentionBypass,
-            },
-            controller?.signal,
-            browserRequestOptions,
-          );
-        }
-      };
-
-      await runWithConcurrency(
-        keys,
-        otherOperationsParallelismRef.current,
-        async (key) => {
-          if (controller?.signal.aborted) {
-            cancelled = true;
-            return;
-          }
-          try {
-            await applyForKey(key);
-            succeeded += 1;
-          } catch {
-            if (controller?.signal.aborted) {
-              cancelled = true;
-              return;
-            }
-            failures += 1;
-          } finally {
-            completed += 1;
-            updateProgress();
-          }
-        },
-        () => cancelled,
-      );
-      if (cancelled || controller?.signal.aborted) {
-        const summary = `Update cancelled after ${succeeded} of ${total} item(s).`;
-        completeOperation(operationId, "cancelled");
-        setBulkAttributesSummary(summary);
-        setStatusMessage(summary);
-        await refreshObjectsNow(prefix);
-        return;
-      }
-      const completionError =
-        failures > 0 ? "Some objects failed to update attributes." : undefined;
-      completeOperation(
-        operationId,
-        failures > 0 ? "failed" : "done",
-        completionError,
-      );
-      const successCount = Math.max(0, total - failures);
-      const summary = `Updated ${successCount} of ${total} object(s).`;
-      setBulkAttributesSummary(summary);
-      setStatusMessage(summary);
-      requestObjectsRefresh(prefix);
-    } catch {
-      setBulkAttributesError("Unable to update attributes.");
-    } finally {
-      if (operationId) {
-        clearOperationController(operationId);
-      }
-      setBulkAttributesLoading(false);
-    }
-  };
-
   const handleBulkRestoreApply = async () => {
     if (!bucketName || !hasS3AccountContext) return;
     if (!isVersioningEnabled) {
@@ -6665,7 +6351,7 @@ export default function BrowserPage({
     try {
       const { restoreList, deleteList, unchangedKeys } =
         await buildBulkRestorePlan({
-          items: bulkActionItems,
+          items: bulkRestoreItems,
           restoreLatestDeleted: isLatestRestoreMode,
           targetTime,
           deleteMissing: allowDeleteMissing,
@@ -8451,49 +8137,21 @@ export default function BrowserPage({
       )}
       {showBulkAttributesModal && (
         <BrowserBulkAttributesModal
-          bulkActionFileCount={bulkActionFileCount}
-          bulkActionFolderCount={bulkActionFolderCount}
-          bulkAttributesError={bulkAttributesError}
-          bulkAttributesSummary={bulkAttributesSummary}
-          bulkApplyMetadata={bulkApplyMetadata}
-          setBulkApplyMetadata={setBulkApplyMetadata}
-          bulkMetadataDraft={bulkMetadataDraft}
-          setBulkMetadataDraft={setBulkMetadataDraft}
-          bulkMetadataEntries={bulkMetadataEntries}
-          setBulkMetadataEntries={setBulkMetadataEntries}
-          bulkApplyTags={bulkApplyTags}
-          setBulkApplyTags={setBulkApplyTags}
-          bulkTagsDraft={bulkTagsDraft}
-          setBulkTagsDraft={setBulkTagsDraft}
-          bulkApplyStorageClass={bulkApplyStorageClass}
-          setBulkApplyStorageClass={setBulkApplyStorageClass}
-          bulkStorageClass={bulkStorageClass}
-          setBulkStorageClass={setBulkStorageClass}
-          bulkApplyAcl={bulkApplyAcl}
-          setBulkApplyAcl={setBulkApplyAcl}
-          bulkAclValue={bulkAclValue}
-          setBulkAclValue={setBulkAclValue}
-          bulkApplyLegalHold={bulkApplyLegalHold}
-          setBulkApplyLegalHold={setBulkApplyLegalHold}
-          bulkLegalHoldStatus={bulkLegalHoldStatus}
-          setBulkLegalHoldStatus={setBulkLegalHoldStatus}
-          bulkApplyRetention={bulkApplyRetention}
-          setBulkApplyRetention={setBulkApplyRetention}
-          bulkRetentionMode={bulkRetentionMode}
-          setBulkRetentionMode={setBulkRetentionMode}
-          bulkRetentionDate={bulkRetentionDate}
-          setBulkRetentionDate={setBulkRetentionDate}
-          bulkRetentionBypass={bulkRetentionBypass}
-          setBulkRetentionBypass={setBulkRetentionBypass}
-          bulkAttributesLoading={bulkAttributesLoading}
+          draft={bulkAttributesDraft}
+          error={bulkAttributesError}
+          fileCount={bulkAttributesFileCount}
+          folderCount={bulkAttributesFolderCount}
+          loading={bulkAttributesLoading}
           onApply={handleBulkAttributesApply}
-          onClose={() => setShowBulkAttributesModal(false)}
+          onClose={closeBulkAttributesModal}
+          setDraft={setBulkAttributesDraft}
+          summary={bulkAttributesSummary}
         />
       )}
       {showBulkRestoreModal && (
         <BrowserBulkRestoreModal
-          bulkActionFileCount={bulkActionFileCount}
-          bulkActionFolderCount={bulkActionFolderCount}
+          bulkActionFileCount={bulkRestoreFileCount}
+          bulkActionFolderCount={bulkRestoreFolderCount}
           bulkRestoreError={bulkRestoreError}
           bulkRestoreSummary={bulkRestoreSummary}
           bulkRestoreTargetPath={bulkRestoreTargetPath}
