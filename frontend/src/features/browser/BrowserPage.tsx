@@ -150,6 +150,7 @@ import BrowserObjectDetailsModal from "./BrowserObjectDetailsModal";
 import BrowserOperationsModal from "./BrowserOperationsModal";
 import BrowserOperationsPanel from "./BrowserOperationsPanel";
 import BrowserMultipartUploadsModal from "./BrowserMultipartUploadsModal";
+import BrowserMobileSelectionActions from "./BrowserMobileSelectionActions";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import {
   transferClipboardObjectBetweenContexts,
@@ -168,13 +169,7 @@ import {
 } from "./browserRootUiState";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
-import {
-  DownloadIcon,
-  InfoIcon,
-  MoreIcon,
-  OpenIcon,
-  XIcon,
-} from "./browserIcons";
+import { InfoIcon } from "./browserIcons";
 import { resolveBrowserContextQuotas } from "./browserQuota";
 import {
   BUCKET_MENU_LIMIT,
@@ -190,13 +185,10 @@ import {
   VERSIONS_LIST_HARD_LIMIT,
   VERSIONS_PAGE_SIZE,
   bulkActionClasses,
-  bulkDangerClasses,
   filterChipClasses,
   iconButtonClasses,
   storageClassOptions,
   toolbarButtonClasses,
-  toolbarIconButtonClasses,
-  toolbarPrimaryClasses,
 } from "./browserConstants";
 import type { BrowserPageProps } from "./browserPageContract";
 import {
@@ -616,7 +608,6 @@ export default function BrowserPage({
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
   const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
-  const [showMobileActionsSheet, setShowMobileActionsSheet] = useState(false);
   const [showToolbarColumnsMenu, setShowToolbarColumnsMenu] = useState(false);
   const [showUploadQuickMenu, setShowUploadQuickMenu] = useState(false);
   const [lazyColumnCache, setLazyColumnCache] = useState<
@@ -859,8 +850,6 @@ export default function BrowserPage({
   const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
   const searchControlRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsButtonRef = useRef<HTMLButtonElement | null>(null);
-  const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null);
-  const mobileActionsSheetRef = useRef<HTMLDivElement | null>(null);
   const objectsListViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
   const bucketPanelViewportRef = useRef<HTMLDivElement | null>(null);
@@ -1611,49 +1600,6 @@ export default function BrowserPage({
     insideRefs: [searchControlRef, searchOptionsMenuRef],
     onDismiss: () => setShowSearchOptionsMenu(false),
   });
-
-  useEffect(() => {
-    if (!showMobileActionsSheet) return;
-    const sheet = mobileActionsSheetRef.current;
-    const focusable = () =>
-      Array.from(
-        sheet?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      );
-    focusable()[0]?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setShowMobileActionsSheet(false);
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const nodes = focusable();
-      if (nodes.length === 0) return;
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    const triggerButton = mobileMoreButtonRef.current;
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      triggerButton?.focus();
-    };
-  }, [showMobileActionsSheet]);
-
-  useEffect(() => {
-    if (!isMobileViewport || selectedIds.length === 0) {
-      setShowMobileActionsSheet(false);
-    }
-  }, [isMobileViewport, selectedIds.length]);
 
   useEffect(() => {
     if (operations.length === 0) return;
@@ -8258,10 +8204,7 @@ export default function BrowserPage({
   }, [hasPendingOperations, leaveMessage]);
   const chromeChipButtonClasses = filterChipClasses;
   const chromeToolbarButtonClasses = toolbarButtonClasses;
-  const chromeToolbarPrimaryClasses = toolbarPrimaryClasses;
-  const chromeToolbarIconButtonClasses = toolbarIconButtonClasses;
   const chromeBulkActionClasses = bulkActionClasses;
-  const chromeDangerActionClasses = bulkDangerClasses;
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
   const isActionBarVisible = selectedCount > 0;
@@ -8833,102 +8776,15 @@ export default function BrowserPage({
       </div>
       </div>
       {isMobileViewport && selectedCount > 0 && (
-        <div
-          role="toolbar"
-          aria-label="Selected object actions"
-          className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 gap-2 border-t border-slate-200 bg-white/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-slate-700 dark:bg-slate-950/95"
-        >
-          <button
-            type="button"
-            className={`${chromeToolbarButtonClasses} min-h-11 justify-center`}
-            onClick={handleToolbarOpen}
-            disabled={!toolbarCanOpen}
-          >
-            <OpenIcon className="h-4 w-4" />
-            Open
-          </button>
-          <button
-            type="button"
-            className={`${chromeToolbarPrimaryClasses} min-h-11 justify-center`}
-            onClick={handleToolbarDownload}
-            disabled={!toolbarCanDownload}
-          >
-            <DownloadIcon className="h-4 w-4" />
-            Download
-          </button>
-          <button
-            ref={mobileMoreButtonRef}
-            type="button"
-            className={`${chromeToolbarButtonClasses} min-h-11 justify-center`}
-            onClick={() => setShowMobileActionsSheet(true)}
-            aria-haspopup="dialog"
-            aria-expanded={showMobileActionsSheet}
-          >
-            <MoreIcon className="h-4 w-4" />
-            More
-          </button>
-        </div>
-      )}
-      {showMobileActionsSheet && (
-        <div
-          className="fixed inset-0 z-50 flex items-end bg-slate-950/45"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setShowMobileActionsSheet(false);
-            }
-          }}
-        >
-          <div
-            ref={mobileActionsSheetRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="browser-mobile-actions-title"
-            className="max-h-[75vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl dark:bg-slate-900"
-          >
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h2 id="browser-mobile-actions-title" className="font-semibold text-slate-900 dark:text-slate-100">
-                  {toolbarSelectionSummary}
-                </h2>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Available actions for the current selection
-                </p>
-              </div>
-              <button
-                type="button"
-                className={`${chromeToolbarIconButtonClasses} min-h-11 min-w-11`}
-                onClick={() => setShowMobileActionsSheet(false)}
-                aria-label="Close actions"
-              >
-                <XIcon className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="grid gap-2">
-              {toolbarMoreSelectionFullActions
-                .filter((action) => action.id !== "open" && action.id !== "download")
-                .map((action) => (
-                  <button
-                    key={action.id}
-                    type="button"
-                    className={`${action.id === "delete" ? chromeDangerActionClasses : chromeToolbarButtonClasses} min-h-11 w-full justify-start`}
-                    disabled={!action.enabled}
-                    title={action.disabledReason}
-                    onClick={() => {
-                      runSelectionAction(action.id);
-                      setShowMobileActionsSheet(false);
-                    }}
-                  >
-                    <span className="min-w-0 flex-1 text-left">{action.label}</span>
-                    {!action.enabled && action.disabledReason && (
-                      <span className="ml-3 max-w-[55%] text-right ui-caption font-normal text-slate-500 dark:text-slate-400">
-                        {action.disabledReason}
-                      </span>
-                    )}
-                  </button>
-                ))}
-            </div>
-          </div>
-        </div>
+        <BrowserMobileSelectionActions
+          actions={toolbarMoreSelectionFullActions}
+          canDownload={toolbarCanDownload}
+          canOpen={toolbarCanOpen}
+          onDownload={handleToolbarDownload}
+          onOpen={handleToolbarOpen}
+          onRunAction={runSelectionAction}
+          summary={toolbarSelectionSummary}
+        />
       )}
       <BrowserContextMenu
         contextMenu={contextMenu}
