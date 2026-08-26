@@ -82,6 +82,7 @@ import { useBrowserClipboard } from "./useBrowserClipboard";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
+import { useBrowserDeleteItems } from "./useBrowserDeleteItems";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
@@ -125,7 +126,6 @@ import BrowserContextMenu from "./BrowserContextMenu";
 import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
 import {
   updateOperationDetailById,
-  updateOperationDetailsByKey,
 } from "./browserOperationDetailState";
 import {
   buildBrowserFolderDownloadPlan,
@@ -185,7 +185,6 @@ import {
   buildTreeNodes,
   buildUploadCandidates,
   buildUploadGrouping,
-  chunkItems,
   collectDroppedFiles,
   findTreeNodeByPrefix,
   formatDateTime,
@@ -260,7 +259,6 @@ import {
 import { uploadBrowserFileMultipart } from "./browserMultipartUpload";
 import type {
   BrowserItem,
-  DeleteDetailStatus,
   DownloadDetailStatus,
   ObjectDetailsTabId,
   OperationCompletionStatus,
@@ -1208,10 +1206,6 @@ export default function BrowserPage({
     downloadParallelismRef.current = downloadParallelism;
   }, [downloadParallelism]);
   const otherOperationsParallelism = transferParallelism.otherOperations;
-  const otherOperationsParallelismRef = useRef(otherOperationsParallelism);
-  useEffect(() => {
-    otherOperationsParallelismRef.current = otherOperationsParallelism;
-  }, [otherOperationsParallelism]);
   const proxyAllowed = browserSettings?.allow_proxy_transfers ?? false;
   const useStsPresigner = shouldUseStsPresigner({ stsAvailable, sseActive });
   const presignObjectRequest = useCallback(
@@ -3260,6 +3254,14 @@ export default function BrowserPage({
     [loadObjects, loadTreeChildren],
   );
 
+  const reloadObjects = useCallback(
+    async (prefixOverride: string) => {
+      await loadObjects({ prefixOverride });
+      loadTreeChildren(prefixOverride);
+    },
+    [loadObjects, loadTreeChildren],
+  );
+
   const listAllObjectsForPrefix = useCallback(
     async (
       targetPrefix: string,
@@ -5290,92 +5292,40 @@ export default function BrowserPage({
     updateOperation,
   });
 
-  const updateDeleteDetailsStatus = (
-    operationId: string,
-    keys: string[],
-    status: DeleteDetailStatus,
-    errorMessage?: string,
-  ) => {
-    setDeleteDetails((prev) =>
-      updateOperationDetailsByKey(
-        prev,
-        operationId,
-        keys,
-        status,
-        errorMessage,
-      ),
-    );
-  };
-
-  const deleteObjectsInBatches = async (
-    keys: string[],
-    onProgress?: (deleted: number, total: number) => void,
-    detailOperationId?: string,
-    signal?: AbortSignal,
-  ) => {
-    if (!bucketName || !hasS3AccountContext || keys.length === 0) return 0;
-    const uniqueKeys = Array.from(new Set(keys));
-    const total = uniqueKeys.length;
-    const chunks = chunkItems(uniqueKeys, 1000);
-    let deletedCount = 0;
-    let hasError: unknown = null;
-    await runWithConcurrency(
-      chunks,
-      otherOperationsParallelismRef.current,
-      async (chunk) => {
-        if (signal?.aborted) {
-          hasError = new DOMException("Aborted", "AbortError");
-          return;
-        }
-        try {
-          if (detailOperationId) {
-            updateDeleteDetailsStatus(detailOperationId, chunk, "deleting");
-          }
-          await deleteObjects(
-            accountIdForApi,
-            bucketName,
-            chunk.map((key) => ({ key })),
-            signal,
-            browserRequestOptions,
-          );
-          if (signal?.aborted) {
-            if (detailOperationId) {
-              updateDeleteDetailsStatus(detailOperationId, chunk, "cancelled");
-            }
-            hasError = new DOMException("Aborted", "AbortError");
-            return;
-          }
-          if (detailOperationId) {
-            updateDeleteDetailsStatus(detailOperationId, chunk, "done");
-          }
-          deletedCount += chunk.length;
-          onProgress?.(deletedCount, total);
-        } catch (err) {
-          if (isAbortError(err) || signal?.aborted) {
-            if (detailOperationId) {
-              updateDeleteDetailsStatus(detailOperationId, chunk, "cancelled");
-            }
-            hasError = err;
-            return;
-          }
-          if (detailOperationId) {
-            updateDeleteDetailsStatus(
-              detailOperationId,
-              chunk,
-              "failed",
-              formatOperationError(err, "Delete failed."),
-            );
-          }
-          hasError = err;
-        }
-      },
-      () => Boolean(hasError),
-    );
-    if (hasError) {
-      throw hasError;
-    }
-    return deletedCount;
-  };
+  const {
+    deleteObjectsInBatches,
+    remove: handleDeleteItems,
+  } = useBrowserDeleteItems({
+    accountId: accountIdForApi,
+    bucketName,
+    cancelDeleteDetails,
+    clearOperationController,
+    completeOperation,
+    createOperationController,
+    currentPath,
+    enabled: hasS3AccountContext,
+    isOperationAborted,
+    listAllObjectsForPrefix,
+    onConfirm: openConfirmDialog,
+    onProcessed: (processedItems) => {
+      setSelectedIds((previous) =>
+        previous.filter(
+          (id) => !processedItems.some((item) => item.id === id),
+        ),
+      );
+    },
+    onRefresh: reloadObjects,
+    onRefreshNow: refreshObjectsNow,
+    onStatus: setStatusMessage,
+    onWarning: setWarningMessage,
+    parallelism: otherOperationsParallelism,
+    prefix,
+    requestOptions: browserRequestOptions,
+    setDeleteDetails,
+    showOperations: showOperationsBar,
+    startOperation,
+    updateOperation,
+  });
 
   const {
     apply: handleBulkRestoreApply,
@@ -5444,97 +5394,6 @@ export default function BrowserPage({
     startOperation,
     versioningEnabled: isVersioningEnabled,
   });
-
-  const deleteFolderRecursive = async (
-    folderItem: BrowserItem,
-  ): Promise<OperationCompletionStatus | undefined> => {
-    if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder")
-      return;
-    showOperationsBar();
-    const folderPrefix = normalizePrefix(folderItem.key);
-    const operationId = startOperation(
-      "deleting",
-      "Deleting folder",
-      `${bucketName}/${folderPrefix}`,
-      { kind: "delete", cancelable: true },
-      0,
-    );
-    const controller = createOperationController(operationId);
-    let completionStatus: OperationCompletionStatus = "done";
-    let completionError: string | undefined;
-    let deletedCount = 0;
-    let total = 0;
-    try {
-      const objects = await listAllObjectsForPrefix(
-        folderPrefix,
-        undefined,
-        undefined,
-        controller.signal,
-      );
-      const keys = Array.from(
-        new Set([...objects.map((obj) => obj.key), folderPrefix]),
-      );
-      total = keys.length;
-      if (keys.length === 0) {
-        setStatusMessage("Folder is empty.");
-        return completionStatus;
-      }
-      const detailItems = objects.map((obj) => {
-        const relativeKey = obj.key.startsWith(folderPrefix)
-          ? obj.key.slice(folderPrefix.length)
-          : obj.key;
-        return {
-          id: makeId(),
-          key: obj.key,
-          label: relativeKey || obj.key,
-          status: "queued" as DeleteDetailStatus,
-        };
-      });
-      if (detailItems.length === 0) {
-        detailItems.push({
-          id: makeId(),
-          key: folderPrefix,
-          label: folderItem.name || folderPrefix,
-          status: "queued",
-        });
-      }
-      if (detailItems.length > 0) {
-        setDeleteDetails((prev) => ({ ...prev, [operationId]: detailItems }));
-      }
-      deletedCount = await deleteObjectsInBatches(
-        keys,
-        (deleted, total) => {
-          const progress =
-            total > 0 ? Math.min(100, Math.round((deleted / total) * 100)) : 0;
-          updateOperation(operationId, { progress });
-        },
-        detailItems.length > 0 ? operationId : undefined,
-        controller.signal,
-      );
-      setStatusMessage(`Deleted folder ${folderItem.name}`);
-    } catch (err) {
-      if (isOperationAborted(err, controller)) {
-        completionStatus = "cancelled";
-        cancelDeleteDetails(operationId);
-        setStatusMessage(
-          `Delete cancelled after ${deletedCount} of ${total} item(s).`,
-        );
-        await refreshObjectsNow(prefix);
-      } else {
-        completionStatus = "failed";
-        completionError = formatOperationError(
-          err,
-          "Unable to delete folder.",
-          "Unable to delete folder.",
-        );
-        setStatusMessage(completionError);
-      }
-    } finally {
-      clearOperationController(operationId);
-      completeOperation(operationId, completionStatus, completionError);
-    }
-    return completionStatus;
-  };
 
   const updateDownloadDetail = (
     operationId: string,
@@ -5881,142 +5740,6 @@ export default function BrowserPage({
       return;
     }
     void handleDownloadItems([item]);
-  };
-
-  const handleDeleteItems = async (
-    targets: BrowserItem[],
-    options?: { skipConfirm?: boolean },
-  ) => {
-    if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
-    const fileTargets = targets.filter(
-      (item) => item.type === "file" && !item.isDeleted,
-    );
-    const folderTargets = targets.filter(
-      (item) => item.type === "folder" && !item.isDeleted,
-    );
-    const hasDeletedTargets = targets.some((item) => item.isDeleted);
-    if (hasDeletedTargets) {
-      setWarningMessage(
-        "Deleted items are shown from delete markers. Use versions to restore or remove markers.",
-      );
-    } else {
-      setWarningMessage(null);
-    }
-    if (fileTargets.length === 0 && folderTargets.length === 0) return;
-    if (!options?.skipConfirm) {
-      const message =
-        folderTargets.length > 0
-          ? `Delete ${fileTargets.length} object(s) and ${folderTargets.length} folder(s)? This removes all objects within the selected folders.`
-          : `Delete ${fileTargets.length} object(s)?`;
-      openConfirmDialog({
-        title: "Delete objects",
-        message,
-        confirmLabel: "Delete",
-        tone: "danger",
-        onConfirm: () => handleDeleteItems(targets, { skipConfirm: true }),
-      });
-      return;
-    }
-    if (fileTargets.length > 1 || folderTargets.length > 0) {
-      showOperationsBar();
-    }
-    try {
-      let deleteCancelled = false;
-      if (fileTargets.length > 0) {
-        const targetPath =
-          fileTargets.length === 1
-            ? `${bucketName}/${fileTargets[0].key}`
-            : currentPath || bucketName;
-        const operationLabel =
-          fileTargets.length === 1
-            ? "Deleting object"
-            : `Deleting ${fileTargets.length} objects`;
-        const operationKind = fileTargets.length > 1 ? "delete" : "other";
-        const operationId = startOperation(
-          "deleting",
-          operationLabel,
-          targetPath,
-          {
-            kind: operationKind,
-            cancelable: fileTargets.length > 1,
-          },
-          0,
-        );
-        const controller =
-          fileTargets.length > 1
-            ? createOperationController(operationId)
-            : null;
-        let completionStatus: OperationCompletionStatus = "done";
-        let completionError: string | undefined;
-        let deletedCount = 0;
-        try {
-          if (fileTargets.length > 1) {
-            setDeleteDetails((prev) => ({
-              ...prev,
-              [operationId]: fileTargets.map((item) => ({
-                id: makeId(),
-                key: item.key,
-                label: item.name,
-                status: "queued",
-              })),
-            }));
-          }
-          deletedCount = await deleteObjectsInBatches(
-            fileTargets.map((item) => item.key),
-            (deleted, total) => {
-              const progress =
-                total > 0
-                  ? Math.min(100, Math.round((deleted / total) * 100))
-                  : 0;
-              updateOperation(operationId, { progress });
-            },
-            fileTargets.length > 1 ? operationId : undefined,
-            controller?.signal,
-          );
-          setStatusMessage(`Deleted ${fileTargets.length} object(s)`);
-        } catch (err) {
-          if (isOperationAborted(err, controller)) {
-            completionStatus = "cancelled";
-            cancelDeleteDetails(operationId);
-            setStatusMessage(
-              `Delete cancelled after ${deletedCount} of ${fileTargets.length} item(s).`,
-            );
-            await refreshObjectsNow(prefix);
-            deleteCancelled = true;
-          } else {
-            completionStatus = "failed";
-            completionError = formatOperationError(
-              err,
-              "Unable to delete selected objects.",
-              "Unable to delete selected objects.",
-            );
-            setStatusMessage(completionError);
-          }
-        } finally {
-          if (controller) {
-            clearOperationController(operationId);
-          }
-          completeOperation(operationId, completionStatus, completionError);
-        }
-      }
-      if (deleteCancelled) {
-        return;
-      }
-      for (const folder of folderTargets) {
-        const folderStatus = await deleteFolderRecursive(folder);
-        if (folderStatus === "cancelled") {
-          return;
-        }
-      }
-      const processedTargets = [...fileTargets, ...folderTargets];
-      setSelectedIds((prev) =>
-        prev.filter((id) => !processedTargets.some((item) => item.id === id)),
-      );
-      await loadObjects({ prefixOverride: prefix });
-      loadTreeChildren(prefix);
-    } catch {
-      setStatusMessage("Unable to delete objects.");
-    }
   };
 
   useEffect(() => {
