@@ -71,6 +71,7 @@ import { useBrowserBulkAttributes } from "./useBrowserBulkAttributes";
 import { useBrowserBulkRestore } from "./useBrowserBulkRestore";
 import { useBrowserClipboard } from "./useBrowserClipboard";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
+import { useBrowserContextCounts } from "./useBrowserContextCounts";
 import {
   useBrowserCopyActions,
   type BrowserCopyDialogState,
@@ -518,15 +519,6 @@ export default function BrowserPage({
   const [searchRecursive, setSearchRecursive] = useState(false);
   const [searchExactMatch, setSearchExactMatch] = useState(false);
   const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
-  const [contextCounts, setContextCounts] = useState<{
-    objects: number;
-    versions: number;
-    deleteMarkers: number;
-  } | null>(null);
-  const [contextCountsLoading, setContextCountsLoading] = useState(false);
-  const [contextCountsError, setContextCountsError] = useState<string | null>(
-    null,
-  );
   const [bucketInspectorByName, setBucketInspectorByName] = useState<
     Record<string, BucketInspectorData>
   >({});
@@ -720,7 +712,6 @@ export default function BrowserPage({
   const accountIdForApiRef = useRef(accountIdForApi);
   const bucketAccessByNameRef = useRef(bucketAccessByName);
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
-  const contextCountIdRef = useRef(0);
   const bucketInspectorRequestIdRef = useRef(0);
   const browserRootSelectionPersistenceReadyRef = useRef(false);
   const browserRootSelectionContextIdRef = useRef<string | null>(
@@ -1402,13 +1393,6 @@ export default function BrowserPage({
     const latest = primaryOps[0];
     setStatusMessage(`Queued: ${latest.label}.`);
   }, [operations]);
-
-  useEffect(() => {
-    contextCountIdRef.current += 1;
-    setContextCounts(null);
-    setContextCountsError(null);
-    setContextCountsLoading(false);
-  }, [bucketName, prefix]);
 
   const refreshBucketList = useCallback(
     async (options?: { preferredBucket?: string | null }) => {
@@ -3274,6 +3258,21 @@ export default function BrowserPage({
   );
 
   const {
+    count: handleContextCount,
+    counts: contextCounts,
+    error: contextCountsError,
+    loading: contextCountsLoading,
+  } = useBrowserContextCounts({
+    accountId: accountIdForApi,
+    bucketName,
+    enabled: hasS3AccountContext,
+    listAllObjectsForPrefix,
+    prefix: normalizedPrefix,
+    requestOptions: browserRequestOptions,
+    versioningEnabled: isVersioningEnabled,
+  });
+
+  const {
     canPaste: canPasteInFunctionalProfile,
     clipboard,
     copy: handleCopyItems,
@@ -4503,106 +4502,6 @@ export default function BrowserPage({
       observer.disconnect();
     };
   }, [hasActiveLazyColumns, listItems, scheduleLazyColumnLoad]);
-
-  const listVersionStats = async (opts: {
-    prefix?: string;
-    key?: string | null;
-  }) => {
-    if (!isVersioningEnabled) {
-      return {
-        objectCount: 0,
-        totalBytes: 0,
-        versionsCount: 0,
-        deleteMarkersCount: 0,
-      };
-    }
-    let versionsCount = 0;
-    let deleteMarkersCount = 0;
-    const latestByKey = new Map<string, { isDelete: boolean; size: number }>();
-    let keyMarker: string | null = null;
-    let versionIdMarker: string | null = null;
-    let isTruncated = true;
-    let pageGuard = 0;
-
-    while (isTruncated) {
-      const data = await listObjectVersions(accountIdForApi, bucketName, {
-        prefix: opts.prefix ?? "",
-        key: opts.key ?? undefined,
-        keyMarker: keyMarker ?? undefined,
-        versionIdMarker: versionIdMarker ?? undefined,
-        maxKeys: VERSIONS_PAGE_SIZE,
-        requestOptions: browserRequestOptions,
-      });
-      versionsCount += data.versions.length;
-      deleteMarkersCount += data.delete_markers.length;
-      data.versions.forEach((version) => {
-        if (!version.is_latest) return;
-        latestByKey.set(version.key, {
-          isDelete: false,
-          size: version.size ?? 0,
-        });
-      });
-      data.delete_markers.forEach((marker) => {
-        if (!marker.is_latest) return;
-        latestByKey.set(marker.key, { isDelete: true, size: 0 });
-      });
-      isTruncated = data.is_truncated;
-      keyMarker = data.next_key_marker ?? null;
-      versionIdMarker = data.next_version_id_marker ?? null;
-      pageGuard += 1;
-      if (
-        !isTruncated ||
-        pageGuard > 1000 ||
-        (!keyMarker && !versionIdMarker)
-      ) {
-        break;
-      }
-    }
-
-    let objectCount = 0;
-    let totalBytes = 0;
-    latestByKey.forEach((entry) => {
-      if (entry.isDelete) return;
-      objectCount += 1;
-      totalBytes += entry.size;
-    });
-
-    return { objectCount, totalBytes, versionsCount, deleteMarkersCount };
-  };
-
-  const handleContextCount = async () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const requestId = contextCountIdRef.current + 1;
-    contextCountIdRef.current = requestId;
-    setContextCountsLoading(true);
-    setContextCountsError(null);
-    try {
-      if (!isVersioningEnabled) {
-        const objects = await listAllObjectsForPrefix(normalizedPrefix);
-        if (contextCountIdRef.current !== requestId) return;
-        setContextCounts({
-          objects: objects.length,
-          versions: 0,
-          deleteMarkers: 0,
-        });
-        return;
-      }
-      const stats = await listVersionStats({ prefix: normalizedPrefix });
-      if (contextCountIdRef.current !== requestId) return;
-      setContextCounts({
-        objects: stats.objectCount,
-        versions: stats.versionsCount,
-        deleteMarkers: stats.deleteMarkersCount,
-      });
-    } catch {
-      if (contextCountIdRef.current !== requestId) return;
-      setContextCountsError("Unable to count objects for this prefix.");
-    } finally {
-      if (contextCountIdRef.current === requestId) {
-        setContextCountsLoading(false);
-      }
-    }
-  };
 
   const handleSortToggle = (key: BrowserSortKey) => {
     setSortId((prev) => {
