@@ -100,6 +100,7 @@ import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserPathEditor } from "./useBrowserPathEditor";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
+import { useBrowserVersionListing } from "./useBrowserVersionListing";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
@@ -196,7 +197,6 @@ import {
   buildTreeNodes,
   buildUploadCandidates,
   buildUploadGrouping,
-  buildVersionRows,
   chunkItems,
   collectDroppedFiles,
   findTreeNodeByPrefix,
@@ -547,41 +547,6 @@ export default function BrowserPage({
   );
   const setCompactMode = (value: boolean) =>
     setDensity(value ? "compact" : "comfortable");
-  const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>(
-    [],
-  );
-  const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<
-    BrowserObjectVersion[]
-  >([]);
-  const [prefixVersionsLoading, setPrefixVersionsLoading] = useState(false);
-  const [prefixVersionsError, setPrefixVersionsError] = useState<string | null>(
-    null,
-  );
-  const [prefixVersionKeyMarker, setPrefixVersionKeyMarker] = useState<
-    string | null
-  >(null);
-  const [prefixVersionIdMarker, setPrefixVersionIdMarker] = useState<
-    string | null
-  >(null);
-  const [objectVersions, setObjectVersions] = useState<BrowserObjectVersion[]>(
-    [],
-  );
-  const [objectDeleteMarkers, setObjectDeleteMarkers] = useState<
-    BrowserObjectVersion[]
-  >([]);
-  const [objectVersionsLoading, setObjectVersionsLoading] = useState(false);
-  const [objectVersionsError, setObjectVersionsError] = useState<string | null>(
-    null,
-  );
-  const [objectVersionKeyMarker, setObjectVersionKeyMarker] = useState<
-    string | null
-  >(null);
-  const [objectVersionIdMarker, setObjectVersionIdMarker] = useState<
-    string | null
-  >(null);
-  const [objectVersionsTargetKey, setObjectVersionsTargetKey] = useState<
-    string | null
-  >(null);
   const [bucketVersioningAvailable, setBucketVersioningAvailable] =
     useState(false);
   const [loadingBuckets, setLoadingBuckets] = useState(false);
@@ -874,15 +839,6 @@ export default function BrowserPage({
     deletedObjectsNextVersionIdMarker,
   );
   const deletedObjectsIsTruncatedRef = useRef(deletedObjectsIsTruncated);
-  const prefixVersionsRef = useRef(prefixVersions);
-  const prefixDeleteMarkersRef = useRef(prefixDeleteMarkers);
-  const prefixVersionKeyMarkerRef = useRef(prefixVersionKeyMarker);
-  const prefixVersionIdMarkerRef = useRef(prefixVersionIdMarker);
-  const objectVersionsRef = useRef(objectVersions);
-  const objectDeleteMarkersRef = useRef(objectDeleteMarkers);
-  const objectVersionKeyMarkerRef = useRef(objectVersionKeyMarker);
-  const objectVersionIdMarkerRef = useRef(objectVersionIdMarker);
-  const objectVersionsTargetKeyRef = useRef(objectVersionsTargetKey);
   const lazyColumnCacheRef = useRef<Record<string, LazyColumnCacheEntry>>({});
   const lazyListItemsByIdRef = useRef<Map<string, BrowserItem>>(new Map());
   const lazyQueueRef = useRef<string[]>([]);
@@ -900,7 +856,6 @@ export default function BrowserPage({
   const operationIdsRef = useRef(new Set<string>());
   const bucketNameRef = useRef(bucketName);
   const prefixRef = useRef(prefix);
-  const inspectedItemRef = useRef<BrowserItem | null>(null);
   const storageEndpointCaps = useMemo(() => {
     if (selectedContext?.storage_endpoint_capabilities) {
       return selectedContext.storage_endpoint_capabilities;
@@ -2420,166 +2375,6 @@ export default function BrowserPage({
     ],
   );
 
-  const loadPrefixVersions = useCallback(
-    async (opts?: {
-      append?: boolean;
-      keyMarker?: string | null;
-      versionIdMarker?: string | null;
-    }) => {
-      if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
-      if (!opts?.append) {
-        setPrefixVersionsLoading(true);
-        setPrefixVersionsError(null);
-      } else {
-        setPrefixVersionsLoading(true);
-      }
-      const resolvedKeyMarker =
-        opts?.keyMarker !== undefined
-          ? opts.keyMarker
-          : prefixVersionKeyMarkerRef.current;
-      const resolvedVersionIdMarker =
-        opts?.versionIdMarker !== undefined
-          ? opts.versionIdMarker
-          : prefixVersionIdMarkerRef.current;
-      try {
-        const data = await listObjectVersions(accountIdForApi, bucketName, {
-          prefix: normalizedPrefix,
-          keyMarker: resolvedKeyMarker ?? undefined,
-          versionIdMarker: resolvedVersionIdMarker ?? undefined,
-          maxKeys: VERSIONS_PAGE_SIZE,
-          requestOptions: browserRequestOptions,
-        });
-        const mergedVersions = opts?.append
-          ? [...prefixVersionsRef.current, ...data.versions]
-          : data.versions;
-        const mergedDeleteMarkers = opts?.append
-          ? [...prefixDeleteMarkersRef.current, ...data.delete_markers]
-          : data.delete_markers;
-        const versionsLimitReached =
-          mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
-          mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
-        setPrefixVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
-        setPrefixDeleteMarkers(
-          mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
-        );
-        if (versionsLimitReached) {
-          setPrefixVersionKeyMarker(null);
-          setPrefixVersionIdMarker(null);
-          setWarningMessage(
-            `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
-          );
-        } else {
-          setPrefixVersionKeyMarker(data.next_key_marker ?? null);
-          setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
-        }
-      } catch (err) {
-        setPrefixVersionsError(
-          extractApiError(err, "Unable to list versions for this prefix."),
-        );
-        if (!opts?.append) {
-          setPrefixVersions([]);
-          setPrefixDeleteMarkers([]);
-        }
-      } finally {
-        setPrefixVersionsLoading(false);
-      }
-    },
-    [
-      accountIdForApi,
-      browserRequestOptions,
-      bucketName,
-      hasS3AccountContext,
-      isVersioningEnabled,
-      normalizedPrefix,
-    ],
-  );
-
-  const loadObjectVersions = useCallback(
-    async (opts?: {
-      append?: boolean;
-      keyMarker?: string | null;
-      versionIdMarker?: string | null;
-      targetKey?: string | null;
-    }) => {
-      if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
-      const targetKey = opts?.targetKey ?? inspectedItemRef.current?.key ?? null;
-      if (!targetKey) return;
-      if (!opts?.append) {
-        setObjectVersionsLoading(true);
-        setObjectVersionsError(null);
-        setObjectVersionsTargetKey(targetKey);
-        objectVersionsTargetKeyRef.current = targetKey;
-      } else {
-        setObjectVersionsLoading(true);
-      }
-      const resolvedKeyMarker =
-        opts?.keyMarker !== undefined
-          ? opts.keyMarker
-          : objectVersionKeyMarkerRef.current;
-      const resolvedVersionIdMarker =
-        opts?.versionIdMarker !== undefined
-          ? opts.versionIdMarker
-          : objectVersionIdMarkerRef.current;
-      try {
-        const data = await listObjectVersions(accountIdForApi, bucketName, {
-          key: targetKey,
-          keyMarker: resolvedKeyMarker ?? undefined,
-          versionIdMarker: resolvedVersionIdMarker ?? undefined,
-          maxKeys: VERSIONS_PAGE_SIZE,
-          requestOptions: browserRequestOptions,
-        });
-        if (objectVersionsTargetKeyRef.current !== targetKey) {
-          return;
-        }
-        const mergedVersions = opts?.append
-          ? [...objectVersionsRef.current, ...data.versions]
-          : data.versions;
-        const mergedDeleteMarkers = opts?.append
-          ? [...objectDeleteMarkersRef.current, ...data.delete_markers]
-          : data.delete_markers;
-        const versionsLimitReached =
-          mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
-          mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
-        setObjectVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
-        setObjectDeleteMarkers(
-          mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
-        );
-        if (versionsLimitReached) {
-          setObjectVersionKeyMarker(null);
-          setObjectVersionIdMarker(null);
-          setWarningMessage(
-            `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
-          );
-        } else {
-          setObjectVersionKeyMarker(data.next_key_marker ?? null);
-          setObjectVersionIdMarker(data.next_version_id_marker ?? null);
-        }
-      } catch (err) {
-        if (objectVersionsTargetKeyRef.current !== targetKey) {
-          return;
-        }
-        setObjectVersionsError(
-          extractApiError(err, "Unable to list versions for this object."),
-        );
-        if (!opts?.append) {
-          setObjectVersions([]);
-          setObjectDeleteMarkers([]);
-        }
-      } finally {
-        if (objectVersionsTargetKeyRef.current === targetKey) {
-          setObjectVersionsLoading(false);
-        }
-      }
-    },
-    [
-      accountIdForApi,
-      browserRequestOptions,
-      bucketName,
-      hasS3AccountContext,
-      isVersioningEnabled,
-    ],
-  );
-
   useLayoutEffect(() => {
     if (previousAccountIdRef.current === accountIdForApi) {
       return;
@@ -2722,37 +2517,6 @@ export default function BrowserPage({
   ]);
 
   useEffect(() => {
-    if (
-      !showPrefixVersions ||
-      !bucketName ||
-      !hasS3AccountContext ||
-      !isVersioningEnabled
-    ) {
-      setPrefixVersions([]);
-      setPrefixDeleteMarkers([]);
-      setPrefixVersionsError(null);
-      setPrefixVersionKeyMarker(null);
-      setPrefixVersionIdMarker(null);
-      return;
-    }
-    setPrefixVersionKeyMarker(null);
-    setPrefixVersionIdMarker(null);
-    loadPrefixVersions({
-      append: false,
-      keyMarker: null,
-      versionIdMarker: null,
-    });
-  }, [
-    accountIdForApi,
-    bucketName,
-    hasS3AccountContext,
-    isVersioningEnabled,
-    loadPrefixVersions,
-    normalizedPrefix,
-    showPrefixVersions,
-  ]);
-
-  useEffect(() => {
     if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
       setBucketVersioningAvailable(false);
       return;
@@ -2789,11 +2553,6 @@ export default function BrowserPage({
     setDeletedObjectsNextVersionIdMarker(null);
     setDeletedObjectsIsTruncated(false);
     setShowPrefixVersions(false);
-    setPrefixVersions([]);
-    setPrefixDeleteMarkers([]);
-    setPrefixVersionsError(null);
-    setPrefixVersionKeyMarker(null);
-    setPrefixVersionIdMarker(null);
     setObjectDetailsTarget((prev) =>
       prev?.initialTab === "versions" ? null : prev,
     );
@@ -3530,52 +3289,58 @@ export default function BrowserPage({
     return null;
   }, [activeItem, items]);
 
-  useEffect(() => {
-    inspectedItemRef.current = inspectedItem;
-  }, [inspectedItem]);
-
-  useEffect(() => {
-    if (
-      !isInspectorPanelVisible ||
-      inspectorTab !== "details" ||
-      !bucketName ||
-      !hasS3AccountContext ||
-      !inspectedItem ||
-      inspectedItem.type !== "file" ||
-      !isVersioningEnabled
-    ) {
-      setObjectVersions([]);
-      setObjectDeleteMarkers([]);
-      setObjectVersionsError(null);
-      setObjectVersionKeyMarker(null);
-      setObjectVersionIdMarker(null);
-      setObjectVersionsLoading(false);
-      setObjectVersionsTargetKey(null);
-      objectVersionsTargetKeyRef.current = null;
-      return;
-    }
-    setObjectVersions([]);
-    setObjectDeleteMarkers([]);
-    setObjectVersionsError(null);
-    setObjectVersionKeyMarker(null);
-    setObjectVersionIdMarker(null);
-    setObjectVersionsTargetKey(inspectedItem.key);
-    objectVersionsTargetKeyRef.current = inspectedItem.key;
-    void loadObjectVersions({
-      append: false,
-      keyMarker: null,
-      versionIdMarker: null,
-      targetKey: inspectedItem.key,
-    });
-  }, [
+  const handleVersionsHardLimit = useCallback(() => {
+    setWarningMessage(
+      `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
+    );
+  }, []);
+  const {
+    error: prefixVersionsError,
+    keyMarker: prefixVersionKeyMarker,
+    load: loadPrefixVersions,
+    loading: prefixVersionsLoading,
+    rows: prefixVersionRows,
+    versionIdMarker: prefixVersionIdMarker,
+  } = useBrowserVersionListing({
+    accountId: accountIdForApi,
+    autoLoad: true,
     bucketName,
-    hasS3AccountContext,
-    inspectedItem,
-    inspectorTab,
-    isInspectorPanelVisible,
-    isVersioningEnabled,
-    loadObjectVersions,
-  ]);
+    enabled:
+      showPrefixVersions &&
+      hasS3AccountContext &&
+      isVersioningEnabled,
+    errorMessage: "Unable to list versions for this prefix.",
+    hardLimit: VERSIONS_LIST_HARD_LIMIT,
+    onHardLimit: handleVersionsHardLimit,
+    pageSize: VERSIONS_PAGE_SIZE,
+    prefix: normalizedPrefix,
+    requestOptions: browserRequestOptions,
+  });
+  const inspectedObjectKey =
+    inspectedItem?.type === "file" ? inspectedItem.key : null;
+  const {
+    canLoadMore: canLoadMoreObjectVersions,
+    error: objectVersionsError,
+    load: loadObjectVersions,
+    loading: objectVersionsLoading,
+    rows: objectVersionRows,
+  } = useBrowserVersionListing({
+    accountId: accountIdForApi,
+    autoLoad: true,
+    bucketName,
+    enabled:
+      isInspectorPanelVisible &&
+      inspectorTab === "details" &&
+      hasS3AccountContext &&
+      Boolean(inspectedObjectKey) &&
+      isVersioningEnabled,
+    errorMessage: "Unable to list versions for this object.",
+    hardLimit: VERSIONS_LIST_HARD_LIMIT,
+    objectKey: inspectedObjectKey,
+    onHardLimit: handleVersionsHardLimit,
+    pageSize: VERSIONS_PAGE_SIZE,
+    requestOptions: browserRequestOptions,
+  });
 
   const selectionItems = selectedItems;
   const selectionInfo = getSelectionInfo(selectionItems);
@@ -3596,15 +3361,6 @@ export default function BrowserPage({
   const rowActionButtonClasses = compactMode
     ? `${iconButtonClasses} !h-6 !w-6`
     : iconButtonClasses;
-  const prefixVersionRows = useMemo(
-    () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
-    [prefixDeleteMarkers, prefixVersions],
-  );
-  const objectVersionRows = useMemo(
-    () => buildVersionRows(objectVersions, objectDeleteMarkers),
-    [objectDeleteMarkers, objectVersions],
-  );
-
   const currentPath = useMemo(() => {
     if (!bucketName) return "";
     if (!prefix) return bucketName;
@@ -3942,32 +3698,6 @@ export default function BrowserPage({
     deletedPrefixes,
     objects,
     prefixes,
-  ]);
-
-  useEffect(() => {
-    prefixVersionsRef.current = prefixVersions;
-    prefixDeleteMarkersRef.current = prefixDeleteMarkers;
-    prefixVersionKeyMarkerRef.current = prefixVersionKeyMarker;
-    prefixVersionIdMarkerRef.current = prefixVersionIdMarker;
-  }, [
-    prefixDeleteMarkers,
-    prefixVersionIdMarker,
-    prefixVersionKeyMarker,
-    prefixVersions,
-  ]);
-
-  useEffect(() => {
-    objectVersionsRef.current = objectVersions;
-    objectDeleteMarkersRef.current = objectDeleteMarkers;
-    objectVersionKeyMarkerRef.current = objectVersionKeyMarker;
-    objectVersionIdMarkerRef.current = objectVersionIdMarker;
-    objectVersionsTargetKeyRef.current = objectVersionsTargetKey;
-  }, [
-    objectDeleteMarkers,
-    objectVersionIdMarker,
-    objectVersionKeyMarker,
-    objectVersions,
-    objectVersionsTargetKey,
   ]);
 
   useEffect(() => {
@@ -4954,11 +4684,7 @@ export default function BrowserPage({
     }
     loadObjects({ prefixOverride: prefix, forceRefresh: true });
     if (showPrefixVersions) {
-      loadPrefixVersions({
-        append: false,
-        keyMarker: null,
-        versionIdMarker: null,
-      });
+      void loadPrefixVersions({ force: true });
     }
   };
 
@@ -7668,11 +7394,7 @@ export default function BrowserPage({
   const refreshObjectListing = async (_targetKey: string) => {
     await loadObjects({ prefixOverride: prefix, forceRefresh: true });
     if (showPrefixVersions) {
-      await loadPrefixVersions({
-        append: false,
-        keyMarker: null,
-        versionIdMarker: null,
-      });
+      await loadPrefixVersions({ force: true });
     }
   };
 
@@ -7682,12 +7404,7 @@ export default function BrowserPage({
       inspectedItem?.type === "file" &&
       inspectedItem.key === targetKey
     ) {
-      await loadObjectVersions({
-        append: false,
-        keyMarker: null,
-        versionIdMarker: null,
-        targetKey,
-      });
+      await loadObjectVersions({ force: true });
     }
   };
 
@@ -8499,17 +8216,11 @@ export default function BrowserPage({
                     loading: objectVersionsLoading,
                     error: objectVersionsError,
                     canLoadMore: Boolean(
-                      inspectedItem &&
-                        (objectVersionKeyMarker || objectVersionIdMarker),
+                      inspectedItem && canLoadMoreObjectVersions,
                     ),
                     onLoadMore: inspectedItem
                       ? () =>
-                          void loadObjectVersions({
-                            append: true,
-                            keyMarker: objectVersionKeyMarker,
-                            versionIdMarker: objectVersionIdMarker,
-                            targetKey: inspectedItem.key,
-                          })
+                          void loadObjectVersions({ append: true })
                       : undefined,
                     onRestoreVersion: handleRestoreVersion,
                     onDeleteVersion: handleDeleteVersion,
@@ -8732,13 +8443,7 @@ export default function BrowserPage({
           prefixVersionKeyMarker={prefixVersionKeyMarker}
           prefixVersionIdMarker={prefixVersionIdMarker}
           onClose={() => setShowPrefixVersions(false)}
-          onRefresh={() =>
-            loadPrefixVersions({
-              append: false,
-              keyMarker: null,
-              versionIdMarker: null,
-            })
-          }
+          onRefresh={() => loadPrefixVersions({ force: true })}
           onLoadMore={() => loadPrefixVersions({ append: true })}
           onRestoreVersion={handleRestoreVersion}
           onDeleteVersion={handleDeleteVersion}
