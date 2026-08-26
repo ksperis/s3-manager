@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { BrowserObjectVersion } from "../../api/browser";
 import BrowserObjectArchiveTab from "./BrowserObjectArchiveTab";
+import BrowserObjectPropertiesTab from "./BrowserObjectPropertiesTab";
 import BrowserObjectProtectionTab from "./BrowserObjectProtectionTab";
 import BrowserObjectVersionsTab from "./BrowserObjectVersionsTab";
 import { OBJECT_LOCK_DISABLED_MESSAGE } from "./browserObjectDetailsModel";
@@ -13,6 +14,15 @@ const version: BrowserObjectVersion = {
   version_id: "version-a",
   is_latest: true,
   is_delete_marker: false,
+};
+
+const metadataDraft = {
+  contentType: "text/plain",
+  cacheControl: "max-age=60",
+  contentDisposition: "inline",
+  contentEncoding: "",
+  contentLanguage: "en",
+  expires: "",
 };
 
 describe("Browser object detail tabs", () => {
@@ -84,6 +94,151 @@ describe("Browser object detail tabs", () => {
     expect(onRestore).toHaveBeenCalledOnce();
     expect(screen.getByText("GLACIER")).toBeInTheDocument();
     expect(screen.getByText("Restore in progress.")).toBeInTheDocument();
+  });
+
+  it("forwards property draft, row, refresh, and save actions", async () => {
+    const user = userEvent.setup();
+    const onRefresh = vi.fn();
+    const onMetadataDraftChange = vi.fn();
+    const onAddMetadata = vi.fn();
+    const onMetadataItemChange = vi.fn();
+    const onRemoveMetadata = vi.fn();
+    const onSaveMetadata = vi.fn();
+    const onAddTag = vi.fn();
+    const onTagChange = vi.fn();
+    const onRemoveTag = vi.fn();
+    const onSaveTags = vi.fn();
+    const onStorageClassChange = vi.fn();
+    const onSaveStorageClass = vi.fn();
+    render(
+      <BrowserObjectPropertiesTab
+        readOnly={false}
+        loading={false}
+        loaded
+        error={null}
+        metadataDraft={metadataDraft}
+        onMetadataDraftChange={onMetadataDraftChange}
+        savingMetadata={false}
+        onSaveMetadata={onSaveMetadata}
+        metadataItems={[{ id: "meta-1", key: "project", value: "reef" }]}
+        onAddMetadata={onAddMetadata}
+        onMetadataItemChange={onMetadataItemChange}
+        onRemoveMetadata={onRemoveMetadata}
+        tags={[{ id: "tag-1", key: "environment", value: "test" }]}
+        onAddTag={onAddTag}
+        onTagChange={onTagChange}
+        onRemoveTag={onRemoveTag}
+        savingTags={false}
+        onSaveTags={onSaveTags}
+        storageClass="STANDARD"
+        onStorageClassChange={onStorageClassChange}
+        savingStorageClass={false}
+        onSaveStorageClass={onSaveStorageClass}
+        onRefresh={onRefresh}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Content type" }), {
+      target: { value: "application/json" },
+    });
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await user.click(screen.getByRole("button", { name: "Save metadata" }));
+
+    const metadataCard = screen.getByText("Custom metadata").parentElement
+      ?.parentElement as HTMLElement;
+    await user.click(
+      within(metadataCard).getByRole("button", { name: "Add metadata" }),
+    );
+    fireEvent.change(
+      within(metadataCard).getByRole("textbox", {
+        name: "Custom metadata key 1",
+      }),
+      { target: { value: "owner" } },
+    );
+    await user.click(
+      within(metadataCard).getByRole("button", { name: "Remove" }),
+    );
+
+    const tagsCard = screen.getByText("Tags").parentElement
+      ?.parentElement as HTMLElement;
+    await user.click(within(tagsCard).getByRole("button", { name: "Add tag" }));
+    fireEvent.change(
+      within(tagsCard).getByRole("textbox", { name: "Tags value 1" }),
+      { target: { value: "production" } },
+    );
+    await user.click(
+      within(tagsCard).getByRole("button", { name: "Remove" }),
+    );
+    await user.click(
+      within(tagsCard).getByRole("button", { name: "Save tags" }),
+    );
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Storage class" }),
+      "GLACIER",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Save storage class" }),
+    );
+
+    expect(onMetadataDraftChange).toHaveBeenCalledWith(
+      "contentType",
+      "application/json",
+    );
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(onSaveMetadata).toHaveBeenCalledOnce();
+    expect(onAddMetadata).toHaveBeenCalledOnce();
+    expect(onMetadataItemChange).toHaveBeenCalledWith(
+      "meta-1",
+      "key",
+      "owner",
+    );
+    expect(onRemoveMetadata).toHaveBeenCalledWith("meta-1");
+    expect(onAddTag).toHaveBeenCalledOnce();
+    expect(onTagChange).toHaveBeenCalledWith(
+      "tag-1",
+      "value",
+      "production",
+    );
+    expect(onRemoveTag).toHaveBeenCalledWith("tag-1");
+    expect(onSaveTags).toHaveBeenCalledOnce();
+    expect(onStorageClassChange).toHaveBeenCalledWith("GLACIER");
+    expect(onSaveStorageClass).toHaveBeenCalledOnce();
+  });
+
+  it("disables property editing in the read-only Browser profile", () => {
+    render(
+      <BrowserObjectPropertiesTab
+        readOnly
+        loading={false}
+        loaded
+        error={null}
+        metadataDraft={metadataDraft}
+        onMetadataDraftChange={vi.fn()}
+        savingMetadata={false}
+        onSaveMetadata={vi.fn()}
+        metadataItems={[]}
+        onAddMetadata={vi.fn()}
+        onMetadataItemChange={vi.fn()}
+        onRemoveMetadata={vi.fn()}
+        tags={[]}
+        onAddTag={vi.fn()}
+        onTagChange={vi.fn()}
+        onRemoveTag={vi.fn()}
+        savingTags={false}
+        onSaveTags={vi.fn()}
+        storageClass="STANDARD"
+        onStorageClassChange={vi.fn()}
+        savingStorageClass={false}
+        onSaveStorageClass={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Properties are read-only/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Content type" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save metadata" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add tag" })).toBeDisabled();
   });
 
   it("forwards access controls and disables unavailable Object Lock actions", async () => {

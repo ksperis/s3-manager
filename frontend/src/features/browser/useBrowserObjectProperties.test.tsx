@@ -164,14 +164,11 @@ describe("useBrowserObjectProperties", () => {
     });
 
     act(() => {
-      result.current.setMetadataDraft((current) => ({
-        ...current,
-        contentType: "application/json",
-        cacheControl: "no-store",
-      }));
-      result.current.setMetadataItems([
-        { id: "custom-1", key: " owner ", value: "platform" },
-      ]);
+      result.current.updateMetadataDraft("contentType", "application/json");
+      result.current.updateMetadataDraft("cacheControl", "no-store");
+      const metadataItemId = result.current.metadataItems[0].id;
+      result.current.updateMetadataItem(metadataItemId, "key", " owner ");
+      result.current.updateMetadataItem(metadataItemId, "value", "platform");
     });
     await act(async () => {
       expect(await result.current.saveMetadata()).toBe(true);
@@ -192,10 +189,10 @@ describe("useBrowserObjectProperties", () => {
     );
 
     act(() => {
-      result.current.setTagsDraft([
-        { id: "tag-custom", key: "team", value: "storage" },
-        { id: "tag-empty", key: " ", value: "ignored" },
-      ]);
+      const tagId = result.current.tagsDraft[0].id;
+      result.current.updateTag(tagId, "key", "team");
+      result.current.updateTag(tagId, "value", "storage");
+      result.current.addTag();
     });
     await act(async () => {
       expect(await result.current.saveTags()).toBe(true);

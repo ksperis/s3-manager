@@ -12,26 +12,6 @@ export const ARCHIVE_STORAGE_CLASSES = new Set([
   "DEEP_ARCHIVE",
 ]);
 
-export const storageClassOptions = [
-  { value: "STANDARD", label: "STANDARD" },
-  { value: "STANDARD_IA", label: "STANDARD_IA" },
-  { value: "ONEZONE_IA", label: "ONEZONE_IA" },
-  { value: "INTELLIGENT_TIERING", label: "INTELLIGENT_TIERING" },
-  { value: "GLACIER", label: "GLACIER" },
-  { value: "GLACIER_IR", label: "GLACIER_IR" },
-  { value: "DEEP_ARCHIVE", label: "DEEP_ARCHIVE" },
-];
-
-export const aclOptions = [
-  { value: "private", label: "private" },
-  { value: "public-read", label: "public-read" },
-  { value: "public-read-write", label: "public-read-write" },
-  { value: "authenticated-read", label: "authenticated-read" },
-  { value: "bucket-owner-read", label: "bucket-owner-read" },
-  { value: "bucket-owner-full-control", label: "bucket-owner-full-control" },
-  { value: "aws-exec-read", label: "aws-exec-read" },
-];
-
 export const normalizeObjectDetailPairs = (items: ObjectTag[]) =>
   items.reduce<Record<string, string>>((acc, item) => {
     const key = item.key.trim();

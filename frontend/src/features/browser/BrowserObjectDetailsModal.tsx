@@ -15,20 +15,14 @@ import {
 import type { S3AccountSelector } from "../../api/accountParams";
 import { BrowserCopyValueModal } from "./BrowserDialogModals";
 import BrowserObjectArchiveTab from "./BrowserObjectArchiveTab";
+import BrowserObjectPropertiesTab from "./BrowserObjectPropertiesTab";
 import BrowserObjectProtectionTab from "./BrowserObjectProtectionTab";
 import BrowserObjectVersionsTab from "./BrowserObjectVersionsTab";
-import {
-  browserPanelCardClasses,
-  bulkActionClasses,
-  formInputClasses,
-  toolbarButtonClasses,
-  toolbarPrimaryClasses,
-} from "./browserConstants";
+import { bulkActionClasses } from "./browserConstants";
 import {
   ARCHIVE_STORAGE_CLASSES,
   formatRestoreStatus,
   nextTabAfterDeleted,
-  storageClassOptions,
 } from "./browserObjectDetailsModel";
 import type {
   BrowserItem,
@@ -131,18 +125,20 @@ export default function BrowserObjectDetailsModal({
     error: metadataError,
     versionId,
     metadataDraft,
-    setMetadataDraft,
+    updateMetadataDraft,
     metadataItems,
-    setMetadataItems,
+    addMetadataItem,
+    updateMetadataItem,
+    removeMetadataItem,
     tagsDraft,
-    setTagsDraft,
+    addTag,
+    updateTag,
+    removeTag,
     storageClass,
     setStorageClass,
     savingMetadata,
     savingTags,
     savingStorageClass: savingStorage,
-    nextTagId,
-    nextMetadataId,
     load: loadProperties,
     reset: resetObjectProperties,
     isCurrentScope: isPropertiesScopeCurrent,
@@ -506,343 +502,31 @@ export default function BrowserObjectDetailsModal({
   );
 
   const renderPropertiesContent = () => (
-    <>
-    {readOnly && (
-      <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
-        Properties are read-only in the Standard Browser profile.
-      </p>
-    )}
-    <fieldset disabled={readOnly} className="space-y-4">
-      {metadataLoading && !metadataLoaded && (
-        <p className="ui-caption text-slate-500 dark:text-slate-400">
-          Loading object details...
-        </p>
-      )}
-      {metadataError && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-caption font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-900/30 dark:text-rose-100">
-          <span>{metadataError}</span>
-          <button
-            type="button"
-            className={toolbarButtonClasses}
-            onClick={() => void loadProperties(true)}
-            disabled={metadataLoading}
-          >
-            Retry
-          </button>
-        </div>
-      )}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="space-y-4">
-          <div className={browserPanelCardClasses}>
-            <div className="flex items-center justify-between">
-              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-                Standard metadata
-              </p>
-              <button
-                type="button"
-                className={toolbarButtonClasses}
-                onClick={() => void loadProperties(true)}
-                disabled={metadataLoading}
-              >
-                Refresh
-              </button>
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                <span>Content type</span>
-                <input
-                  className={formInputClasses}
-                  value={metadataDraft.contentType}
-                  onChange={(event) =>
-                    setMetadataDraft((prev) => ({
-                      ...prev,
-                      contentType: event.target.value,
-                    }))
-                  }
-                  placeholder="application/octet-stream"
-                />
-              </label>
-              <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                <span>Cache control</span>
-                <input
-                  className={formInputClasses}
-                  value={metadataDraft.cacheControl}
-                  onChange={(event) =>
-                    setMetadataDraft((prev) => ({
-                      ...prev,
-                      cacheControl: event.target.value,
-                    }))
-                  }
-                  placeholder="max-age=3600"
-                />
-              </label>
-              <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                <span>Content disposition</span>
-                <input
-                  className={formInputClasses}
-                  value={metadataDraft.contentDisposition}
-                  onChange={(event) =>
-                    setMetadataDraft((prev) => ({
-                      ...prev,
-                      contentDisposition: event.target.value,
-                    }))
-                  }
-                  placeholder="inline"
-                />
-              </label>
-              <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                <span>Content encoding</span>
-                <input
-                  className={formInputClasses}
-                  value={metadataDraft.contentEncoding}
-                  onChange={(event) =>
-                    setMetadataDraft((prev) => ({
-                      ...prev,
-                      contentEncoding: event.target.value,
-                    }))
-                  }
-                  placeholder="gzip"
-                />
-              </label>
-              <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                <span>Content language</span>
-                <input
-                  className={formInputClasses}
-                  value={metadataDraft.contentLanguage}
-                  onChange={(event) =>
-                    setMetadataDraft((prev) => ({
-                      ...prev,
-                      contentLanguage: event.target.value,
-                    }))
-                  }
-                  placeholder="en"
-                />
-              </label>
-              <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                <span>Expires</span>
-                <input
-                  type="datetime-local"
-                  className={formInputClasses}
-                  value={metadataDraft.expires}
-                  onChange={(event) =>
-                    setMetadataDraft((prev) => ({
-                      ...prev,
-                      expires: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="mt-3 flex items-center justify-end">
-              <button
-                type="button"
-                className={toolbarPrimaryClasses}
-                onClick={() => void handleSaveMetadata()}
-                disabled={savingMetadata || metadataLoading || !metadataLoaded}
-              >
-                {savingMetadata ? "Saving..." : "Save metadata"}
-              </button>
-            </div>
-          </div>
-
-          <div className={browserPanelCardClasses}>
-            <div className="flex items-center justify-between">
-              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-                Custom metadata
-              </p>
-              <button
-                type="button"
-                className={toolbarButtonClasses}
-                onClick={() =>
-                  setMetadataItems((prev) => [
-                    ...prev,
-                    { id: nextMetadataId(), key: "", value: "" },
-                  ])
-                }
-              >
-                Add metadata
-              </button>
-            </div>
-            {metadataItems.length === 0 ? (
-              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                No custom metadata defined.
-              </p>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {metadataItems.map((metadataItem) => (
-                  <div
-                    key={metadataItem.id}
-                    className="grid gap-2 md:grid-cols-[1fr_1fr_auto]"
-                  >
-                    <input
-                      className={formInputClasses}
-                      value={metadataItem.key}
-                      onChange={(event) =>
-                        setMetadataItems((prev) =>
-                          prev.map((entry) =>
-                            entry.id === metadataItem.id
-                              ? { ...entry, key: event.target.value }
-                              : entry,
-                          ),
-                        )
-                      }
-                      placeholder="x-custom-key"
-                    />
-                    <input
-                      className={formInputClasses}
-                      value={metadataItem.value}
-                      onChange={(event) =>
-                        setMetadataItems((prev) =>
-                          prev.map((entry) =>
-                            entry.id === metadataItem.id
-                              ? { ...entry, value: event.target.value }
-                              : entry,
-                          ),
-                        )
-                      }
-                      placeholder="value"
-                    />
-                    <button
-                      type="button"
-                      className={toolbarButtonClasses}
-                      onClick={() =>
-                        setMetadataItems((prev) =>
-                          prev.filter((entry) => entry.id !== metadataItem.id),
-                        )
-                      }
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className={browserPanelCardClasses}>
-            <div className="flex items-center justify-between">
-              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-                Tags
-              </p>
-              <button
-                type="button"
-                className={toolbarButtonClasses}
-                onClick={() =>
-                  setTagsDraft((prev) => [
-                    ...prev,
-                    { id: nextTagId(), key: "", value: "" },
-                  ])
-                }
-              >
-                Add tag
-              </button>
-            </div>
-            {tagsDraft.length === 0 ? (
-              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                No tags defined.
-              </p>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {tagsDraft.map((tag, idx) => (
-                  <div
-                    key={tag.id}
-                    className="grid gap-2 md:grid-cols-[1fr_1fr_auto]"
-                  >
-                    <input
-                      className={formInputClasses}
-                      value={tag.key}
-                      onChange={(event) =>
-                        setTagsDraft((prev) =>
-                          prev.map((entry, index) =>
-                            index === idx
-                              ? { ...entry, key: event.target.value }
-                              : entry,
-                          ),
-                        )
-                      }
-                      placeholder="Key"
-                    />
-                    <input
-                      className={formInputClasses}
-                      value={tag.value}
-                      onChange={(event) =>
-                        setTagsDraft((prev) =>
-                          prev.map((entry, index) =>
-                            index === idx
-                              ? { ...entry, value: event.target.value }
-                              : entry,
-                          ),
-                        )
-                      }
-                      placeholder="Value"
-                    />
-                    <button
-                      type="button"
-                      className={toolbarButtonClasses}
-                      onClick={() =>
-                        setTagsDraft((prev) =>
-                          prev.filter((_, index) => index !== idx),
-                        )
-                      }
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-3 flex items-center justify-end">
-              <button
-                type="button"
-                className={toolbarPrimaryClasses}
-                onClick={() => void handleSaveTags()}
-                disabled={savingTags || metadataLoading}
-              >
-                {savingTags ? "Saving..." : "Save tags"}
-              </button>
-            </div>
-          </div>
-
-          <div className={browserPanelCardClasses}>
-            <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-              Storage class
-            </p>
-            <label className="mt-2 block space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-              <span>Storage class</span>
-              <select
-                className={formInputClasses}
-                value={storageClass}
-                onChange={(event) => setStorageClass(event.target.value)}
-              >
-                <option value="">Select storage class</option>
-                {storageClassOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-              Changing storage class triggers a copy of the object with the new
-              storage tier.
-            </p>
-            <div className="mt-3 flex items-center justify-end">
-              <button
-                type="button"
-                className={toolbarPrimaryClasses}
-                onClick={() => void handleSaveStorageClass()}
-                disabled={savingStorage || !storageClass}
-              >
-                {savingStorage ? "Saving..." : "Save storage class"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </fieldset>
-    </>
+    <BrowserObjectPropertiesTab
+      readOnly={readOnly}
+      loading={metadataLoading}
+      loaded={metadataLoaded}
+      error={metadataError}
+      metadataDraft={metadataDraft}
+      onMetadataDraftChange={updateMetadataDraft}
+      savingMetadata={savingMetadata}
+      onSaveMetadata={handleSaveMetadata}
+      metadataItems={metadataItems}
+      onAddMetadata={addMetadataItem}
+      onMetadataItemChange={updateMetadataItem}
+      onRemoveMetadata={removeMetadataItem}
+      tags={tagsDraft}
+      onAddTag={addTag}
+      onTagChange={updateTag}
+      onRemoveTag={removeTag}
+      savingTags={savingTags}
+      onSaveTags={handleSaveTags}
+      storageClass={storageClass}
+      onStorageClassChange={setStorageClass}
+      savingStorageClass={savingStorage}
+      onSaveStorageClass={handleSaveStorageClass}
+      onRefresh={() => loadProperties(true)}
+    />
   );
 
   const renderProtectionContent = () => (

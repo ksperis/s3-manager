@@ -5,15 +5,13 @@
 import type { PresignedUrl } from "../../api/browser";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import {
+  aclOptions,
   browserPanelCardClasses,
   formInputClasses,
   toolbarButtonClasses,
   toolbarPrimaryClasses,
 } from "./browserConstants";
-import {
-  OBJECT_LOCK_DISABLED_MESSAGE,
-  aclOptions,
-} from "./browserObjectDetailsModel";
+import { OBJECT_LOCK_DISABLED_MESSAGE } from "./browserObjectDetailsModel";
 import type { ObjectRetentionMode } from "./useBrowserObjectProtection";
 
 type BrowserObjectProtectionTabProps = {

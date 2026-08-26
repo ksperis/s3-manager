@@ -21,7 +21,7 @@ import { normalizeObjectDetailPairs } from "./browserObjectDetailsModel";
 import { runBrowserScopedSave } from "./browserScopedSave";
 import type { BrowserItem } from "./browserTypes";
 
-type MetadataDraft = {
+export type BrowserObjectMetadataDraft = {
   contentType: string;
   cacheControl: string;
   contentDisposition: string;
@@ -30,8 +30,8 @@ type MetadataDraft = {
   expires: string;
 };
 
-type MetadataDraftItem = ObjectTag & { id: string };
-type TagDraft = ObjectTag & { id: string };
+export type BrowserObjectPropertyEntry = ObjectTag & { id: string };
+export type BrowserObjectPropertyEntryField = "key" | "value";
 
 type UseBrowserObjectPropertiesOptions = {
   accountId: S3AccountSelector;
@@ -42,7 +42,7 @@ type UseBrowserObjectPropertiesOptions = {
   sseCustomerKeyBase64?: string | null;
 };
 
-const emptyMetadataDraft = (): MetadataDraft => ({
+const emptyMetadataDraft = (): BrowserObjectMetadataDraft => ({
   contentType: "",
   cacheControl: "",
   contentDisposition: "",
@@ -74,8 +74,10 @@ export function useBrowserObjectProperties({
   const [error, setError] = useState<string | null>(null);
   const [tagsVersionId, setTagsVersionId] = useState<string | null>(null);
   const [metadataDraft, setMetadataDraft] = useState(emptyMetadataDraft);
-  const [metadataItems, setMetadataItems] = useState<MetadataDraftItem[]>([]);
-  const [tagsDraft, setTagsDraft] = useState<TagDraft[]>([]);
+  const [metadataItems, setMetadataItems] = useState<
+    BrowserObjectPropertyEntry[]
+  >([]);
+  const [tagsDraft, setTagsDraft] = useState<BrowserObjectPropertyEntry[]>([]);
   const [storageClass, setStorageClass] = useState("");
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [savingTags, setSavingTags] = useState(false);
@@ -96,6 +98,67 @@ export function useBrowserObjectProperties({
   const nextMetadataId = useCallback(() => {
     metadataIdRef.current += 1;
     return `meta-${metadataIdRef.current}`;
+  }, []);
+
+  const updateMetadataDraft = useCallback(
+    (field: keyof BrowserObjectMetadataDraft, value: string) => {
+      setMetadataDraft((current) => ({ ...current, [field]: value }));
+    },
+    [],
+  );
+
+  const addMetadataItem = useCallback(() => {
+    setMetadataItems((current) => [
+      ...current,
+      { id: nextMetadataId(), key: "", value: "" },
+    ]);
+  }, [nextMetadataId]);
+
+  const updateMetadataItem = useCallback(
+    (
+      id: string,
+      field: BrowserObjectPropertyEntryField,
+      value: string,
+    ) => {
+      setMetadataItems((current) =>
+        current.map((entry) =>
+          entry.id === id ? { ...entry, [field]: value } : entry,
+        ),
+      );
+    },
+    [],
+  );
+
+  const removeMetadataItem = useCallback((id: string) => {
+    setMetadataItems((current) =>
+      current.filter((entry) => entry.id !== id),
+    );
+  }, []);
+
+  const addTag = useCallback(() => {
+    setTagsDraft((current) => [
+      ...current,
+      { id: nextTagId(), key: "", value: "" },
+    ]);
+  }, [nextTagId]);
+
+  const updateTag = useCallback(
+    (
+      id: string,
+      field: BrowserObjectPropertyEntryField,
+      value: string,
+    ) => {
+      setTagsDraft((current) =>
+        current.map((entry) =>
+          entry.id === id ? { ...entry, [field]: value } : entry,
+        ),
+      );
+    },
+    [],
+  );
+
+  const removeTag = useCallback((id: string) => {
+    setTagsDraft((current) => current.filter((entry) => entry.id !== id));
   }, []);
 
   const resetPropertiesDrafts = useCallback(
@@ -351,18 +414,20 @@ export function useBrowserObjectProperties({
     error,
     versionId: metadata?.version_id ?? tagsVersionId ?? undefined,
     metadataDraft,
-    setMetadataDraft,
+    updateMetadataDraft,
     metadataItems,
-    setMetadataItems,
+    addMetadataItem,
+    updateMetadataItem,
+    removeMetadataItem,
     tagsDraft,
-    setTagsDraft,
+    addTag,
+    updateTag,
+    removeTag,
     storageClass,
     setStorageClass,
     savingMetadata,
     savingTags,
     savingStorageClass,
-    nextTagId,
-    nextMetadataId,
     load,
     reset,
     isCurrentScope,
