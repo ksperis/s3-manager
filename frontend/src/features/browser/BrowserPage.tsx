@@ -46,8 +46,6 @@ import {
   BrowserSettings,
   PresignPartRequest,
   PresignRequest,
-  copyObject,
-  deleteObjects,
   getBucketVersioning,
   fetchBrowserObjectColumns,
   initiateMultipartUpload,
@@ -93,6 +91,7 @@ import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 import { useBrowserVersionListing } from "./useBrowserVersionListing";
 import { useBrowserVersionCleanup } from "./useBrowserVersionCleanup";
+import { useBrowserVersionActions } from "./useBrowserVersionActions";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
@@ -247,7 +246,6 @@ import { uploadBrowserFileMultipart } from "./browserMultipartUpload";
 import type {
   BrowserItem,
   ObjectDetailsTabId,
-  OperationCompletionStatus,
   TreeNode,
   UploadCandidate,
   UploadQueueItem,
@@ -5512,138 +5510,26 @@ export default function BrowserPage({
     }
   };
 
-  const handleRestoreVersion = async (item: BrowserObjectVersion) => {
-    if (
-      !bucketName ||
-      !hasS3AccountContext ||
-      !item.version_id ||
-      item.is_delete_marker ||
-      !isVersioningEnabled
-    )
-      return;
-    setWarningMessage(null);
-    const operationId = startOperation(
-      "copying",
-      "Restoring version",
-      `${bucketName}/${item.key}`,
-      { cancelable: true },
-    );
-    const controller = createOperationController(operationId);
-    let completionStatus: OperationCompletionStatus = "done";
-    let completionError: string | undefined;
-    try {
-      await copyObject(
-        accountIdForApi,
-        bucketName,
-        {
-          source_key: item.key,
-          source_version_id: item.version_id,
-          destination_key: item.key,
-          replace_metadata: false,
-          move: false,
-        },
-        controller.signal,
-        browserRequestOptions,
-      );
-      setStatusMessage(`Restored version ${item.version_id}`);
-      await refreshObjectListing(item.key);
-      await refreshVersionsForKey(item.key);
-    } catch (err) {
-      if (isOperationAborted(err, controller)) {
-        completionStatus = "cancelled";
-        setStatusMessage("Restore version cancelled.");
-        await refreshObjectListing(item.key);
-        await refreshVersionsForKey(item.key);
-      } else {
-        completionStatus = "failed";
-        completionError = formatOperationError(
-          err,
-          "Unable to restore version.",
-          "Unable to restore version.",
-        );
-        setStatusMessage(completionError);
-      }
-    } finally {
-      clearOperationController(operationId);
-      completeOperation(operationId, completionStatus, completionError);
-    }
-  };
-
-  const handleDeleteVersion = async (
-    item: BrowserObjectVersion,
-    options?: { skipConfirm?: boolean },
-  ) => {
-    if (
-      !bucketName ||
-      !hasS3AccountContext ||
-      !item.version_id ||
-      !isVersioningEnabled
-    )
-      return;
-    setWarningMessage(null);
-    const label = item.is_delete_marker ? "delete marker" : "version";
-    if (!options?.skipConfirm) {
-      openConfirmDialog({
-        title: `Delete ${label}`,
-        message: `Delete ${label} for ${item.key}?`,
-        confirmLabel: "Delete",
-        tone: "danger",
-        onConfirm: () => handleDeleteVersion(item, { skipConfirm: true }),
-      });
-      return;
-    }
-    const operationLabel = item.is_delete_marker
-      ? "Removing delete marker"
-      : "Deleting version";
-    const operationId = startOperation(
-      "deleting",
-      operationLabel,
-      `${bucketName}/${item.key}`,
-      { cancelable: true },
-    );
-    const controller = createOperationController(operationId);
-    let completionStatus: OperationCompletionStatus = "done";
-    let completionError: string | undefined;
-    try {
-      await deleteObjects(
-        accountIdForApi,
-        bucketName,
-        [{ key: item.key, version_id: item.version_id }],
-        controller.signal,
-      );
-      setStatusMessage(
-        item.is_delete_marker ? "Delete marker removed." : "Version deleted.",
-      );
-      await refreshObjectListing(item.key);
-      await refreshVersionsForKey(item.key);
-    } catch (err) {
-      if (isOperationAborted(err, controller)) {
-        completionStatus = "cancelled";
-        setStatusMessage(
-          item.is_delete_marker
-            ? "Delete marker removal cancelled."
-            : "Delete version cancelled.",
-        );
-        await refreshObjectListing(item.key);
-        await refreshVersionsForKey(item.key);
-      } else {
-        completionStatus = "failed";
-        completionError = formatOperationError(
-          err,
-          item.is_delete_marker
-            ? "Unable to delete marker."
-            : "Unable to delete version.",
-          item.is_delete_marker
-            ? "Unable to delete marker."
-            : "Unable to delete version.",
-        );
-        setWarningMessage(completionError);
-      }
-    } finally {
-      clearOperationController(operationId);
-      completeOperation(operationId, completionStatus, completionError);
-    }
-  };
+  const {
+    remove: handleDeleteVersion,
+    restore: handleRestoreVersion,
+  } = useBrowserVersionActions({
+    accountId: accountIdForApi,
+    bucketName,
+    clearOperationController,
+    completeOperation,
+    createOperationController,
+    enabled: hasS3AccountContext,
+    isOperationAborted,
+    onConfirm: openConfirmDialog,
+    onRefreshListing: refreshObjectListing,
+    onRefreshVersions: refreshVersionsForKey,
+    onStatus: setStatusMessage,
+    onWarning: setWarningMessage,
+    requestOptions: browserRequestOptions,
+    startOperation,
+    versioningEnabled: isVersioningEnabled,
+  });
 
   const handleCopyUrl = async (item: BrowserItem | null) => {
     if (
