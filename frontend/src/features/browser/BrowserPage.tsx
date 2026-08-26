@@ -97,6 +97,7 @@ import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
 import { useBrowserOperationOverview } from "./useBrowserOperationOverview";
 import { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
+import { useBrowserPathEditor } from "./useBrowserPathEditor";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
@@ -250,13 +251,8 @@ import {
 } from "./browserObjectTableModel";
 import { isBrowserInteractiveTarget } from "./browserObjectItemPresentation";
 import {
-  buildPathSuggestionEntries,
-  mergePathSuggestions,
-  normalizePathDraftValue,
   pushBucketPathHistory,
   readBucketPathHistory,
-  resolvePathDraftContext,
-  type PathSuggestion,
 } from "./browserPathSuggestions";
 import {
   extractBucketListError,
@@ -322,8 +318,6 @@ type BrowserCopyDialogState = {
 };
 
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
-const PATH_SUGGESTIONS_DEBOUNCE_MS = 200;
-const PATH_SUGGESTIONS_API_LIMIT = 50;
 const TREE_PREFIXES_PAGE_BUDGET = 50;
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
@@ -761,11 +755,6 @@ export default function BrowserPage({
   const [copyDialog, setCopyDialog] = useState<BrowserCopyDialogState | null>(
     null,
   );
-  const [isEditingPath, setIsEditingPath] = useState(false);
-  const [pathDraft, setPathDraft] = useState("");
-  const [pathSuggestions, setPathSuggestions] = useState<PathSuggestion[]>([]);
-  const [pathSuggestionsLoading, setPathSuggestionsLoading] = useState(false);
-  const [pathSuggestionIndex, setPathSuggestionIndex] = useState(-1);
   const [pathHistory, setPathHistory] = useState<string[]>([]);
   const {
     closeContextMenu,
@@ -854,8 +843,6 @@ export default function BrowserPage({
   const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
   const bucketPanelViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketPanelLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-  const pathInputRef = useRef<HTMLInputElement | null>(null);
-  const pathSuggestionsDebounceRef = useRef<number | null>(null);
   const bucketSearchDebounceRef = useRef<number | null>(null);
   const bucketSearchValueRef = useRef("");
   const bucketSearchRequestIdRef = useRef(0);
@@ -873,7 +860,6 @@ export default function BrowserPage({
   const objectsAbortControllerRef = useRef<AbortController | null>(null);
   const objectsSearchDebounceRef = useRef<number | null>(null);
   const objectsNavigationKeyRef = useRef<string | null>(null);
-  const pathSuggestionsRequestIdRef = useRef(0);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const uploadRefreshTimeoutRef = useRef<number | null>(null);
   const pendingUploadedKeysByBucketRef = useRef<Map<string, Set<string>>>(
@@ -1528,19 +1514,6 @@ export default function BrowserPage({
     folderInputRef.current.setAttribute("webkitdirectory", "");
     folderInputRef.current.setAttribute("directory", "");
   }, []);
-
-  useBrowserNavigationHistory({
-    bucketName,
-    prefix,
-    onNavigate: ({ bucketName: nextBucket, prefix: nextPrefix }) => {
-      if (nextBucket !== bucketNameRef.current) {
-        setBucketName(nextBucket);
-      }
-      setPrefix(nextPrefix);
-      setActiveItem(null);
-      setIsEditingPath(false);
-    },
-  });
 
   useEffect(() => {
     setInspectorTab("context");
@@ -3280,10 +3253,6 @@ export default function BrowserPage({
   );
   const canLoadMoreBucketResults =
     bucketMenuHasNext && !loadingBuckets && !bucketMenuLoadingMore;
-  const activePathSuggestion =
-    pathSuggestionIndex >= 0 && pathSuggestionIndex < pathSuggestions.length
-      ? pathSuggestions[pathSuggestionIndex]
-      : null;
   const handleBucketMenuLoadMore = useCallback(() => {
     if (loadingBuckets || bucketMenuLoadingMore || !bucketMenuHasNext) {
       return;
@@ -3891,109 +3860,52 @@ export default function BrowserPage({
     handleSelectPrefix(item.key);
   };
 
-  const handleSelectPrefix = (nextPrefix: string) => {
-    setPrefix(nextPrefix);
-    setActiveItem(null);
-    if (bucketName) {
-      setPathHistory(pushBucketPathHistory(bucketName, nextPrefix));
-    }
-  };
-
-  const startEditingPath = useCallback(() => {
-    if (!bucketName) return;
-    setPathDraft(prefix);
-    setPathSuggestionIndex(-1);
-    setIsEditingPath(true);
-  }, [bucketName, prefix]);
-
-  const commitPathDraft = () => {
-    const trimmed = normalizePathDraftValue(pathDraft);
-    const nextPrefix = trimmed ? normalizePrefix(trimmed) : "";
-    if (pathSuggestionsDebounceRef.current !== null) {
-      window.clearTimeout(pathSuggestionsDebounceRef.current);
-      pathSuggestionsDebounceRef.current = null;
-    }
-    pathSuggestionsRequestIdRef.current += 1;
-    setPathSuggestions([]);
-    setPathSuggestionsLoading(false);
-    setPathSuggestionIndex(-1);
-    setIsEditingPath(false);
-    if (nextPrefix !== prefix) {
-      handleSelectPrefix(nextPrefix);
-    }
-  };
-
-  const cancelPathEdit = () => {
-    if (pathSuggestionsDebounceRef.current !== null) {
-      window.clearTimeout(pathSuggestionsDebounceRef.current);
-      pathSuggestionsDebounceRef.current = null;
-    }
-    pathSuggestionsRequestIdRef.current += 1;
-    setPathDraft(prefix);
-    setPathSuggestions([]);
-    setPathSuggestionsLoading(false);
-    setPathSuggestionIndex(-1);
-    setIsEditingPath(false);
-  };
-
-  const applyPathSuggestion = (
-    suggestion: PathSuggestion,
-    options?: { commit?: boolean },
-  ) => {
-    const nextPrefix = suggestion.value
-      ? normalizePrefix(suggestion.value)
-      : "";
-    setPathDraft(nextPrefix);
-    setPathSuggestionIndex(-1);
-    if (!options?.commit) return;
-    if (pathSuggestionsDebounceRef.current !== null) {
-      window.clearTimeout(pathSuggestionsDebounceRef.current);
-      pathSuggestionsDebounceRef.current = null;
-    }
-    pathSuggestionsRequestIdRef.current += 1;
-    setPathSuggestions([]);
-    setPathSuggestionsLoading(false);
-    setIsEditingPath(false);
-    if (nextPrefix !== prefix) {
-      handleSelectPrefix(nextPrefix);
-    }
-  };
-
-  const handlePathKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown") {
-      if (pathSuggestions.length === 0) return;
-      event.preventDefault();
-      setPathSuggestionIndex((prev) =>
-        prev < pathSuggestions.length - 1 ? prev + 1 : 0,
-      );
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      if (pathSuggestions.length === 0) return;
-      event.preventDefault();
-      setPathSuggestionIndex((prev) =>
-        prev > 0 ? prev - 1 : pathSuggestions.length - 1,
-      );
-      return;
-    }
-    if (event.key === "Tab" && activePathSuggestion) {
-      event.preventDefault();
-      applyPathSuggestion(activePathSuggestion);
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      if (activePathSuggestion) {
-        applyPathSuggestion(activePathSuggestion, { commit: true });
-        return;
+  const handleSelectPrefix = useCallback(
+    (nextPrefix: string) => {
+      setPrefix(nextPrefix);
+      setActiveItem(null);
+      if (bucketName) {
+        setPathHistory(pushBucketPathHistory(bucketName, nextPrefix));
       }
-      commitPathDraft();
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
+    },
+    [bucketName],
+  );
+  const {
+    activeSuggestionIndex: pathSuggestionIndex,
+    applySuggestion: applyPathSuggestion,
+    cancel: cancelPathEdit,
+    commit: commitPathDraft,
+    editing: isEditingPath,
+    handleKeyDown: handlePathKeyDown,
+    inputRef: pathInputRef,
+    setActiveSuggestionIndex: setPathSuggestionIndex,
+    setValue: setPathDraft,
+    startEditing: startEditingPath,
+    suggestions: pathSuggestions,
+    suggestionsLoading: pathSuggestionsLoading,
+    value: pathDraft,
+  } = useBrowserPathEditor({
+    accountId: accountIdForApi,
+    bucketName,
+    enabled: hasS3AccountContext,
+    history: pathHistory,
+    localPrefixes: prefixes,
+    onCommit: handleSelectPrefix,
+    prefix,
+    requestOptions: browserRequestOptions,
+  });
+  useBrowserNavigationHistory({
+    bucketName,
+    prefix,
+    onNavigate: ({ bucketName: nextBucket, prefix: nextPrefix }) => {
+      if (nextBucket !== bucketNameRef.current) {
+        setBucketName(nextBucket);
+      }
+      setPrefix(nextPrefix);
+      setActiveItem(null);
       cancelPathEdit();
-    }
-  };
+    },
+  });
 
   useEffect(() => {
     setSelectedIds([]);
@@ -4006,7 +3918,6 @@ export default function BrowserPage({
     lazyInFlightRef.current = 0;
     setStatusMessage(null);
     setWarningMessage(null);
-    setIsEditingPath(false);
     setObjectDetailsTarget(null);
   }, [accountIdForApi, bucketName, prefix]);
 
@@ -4097,128 +4008,12 @@ export default function BrowserPage({
   }, [listItems]);
 
   useEffect(() => {
-    if (!isEditingPath) {
-      setPathDraft(prefix);
-      return;
-    }
-    pathInputRef.current?.focus();
-    pathInputRef.current?.select();
-  }, [isEditingPath, prefix]);
-
-  useEffect(() => {
     if (!bucketName) {
       setPathHistory([]);
       return;
     }
     setPathHistory(readBucketPathHistory(bucketName));
   }, [bucketName]);
-
-  useEffect(() => {
-    if (!isEditingPath || !bucketName || !hasS3AccountContext) {
-      if (pathSuggestionsDebounceRef.current !== null) {
-        window.clearTimeout(pathSuggestionsDebounceRef.current);
-        pathSuggestionsDebounceRef.current = null;
-      }
-      pathSuggestionsRequestIdRef.current += 1;
-      setPathSuggestions([]);
-      setPathSuggestionsLoading(false);
-      setPathSuggestionIndex(-1);
-      return;
-    }
-
-    const { parentPrefix, fragment } = resolvePathDraftContext(pathDraft);
-    const localCandidates =
-      parentPrefix === normalizePrefix(prefix) ? prefixes : [];
-    const localSuggestions = buildPathSuggestionEntries(
-      localCandidates,
-      parentPrefix,
-      fragment,
-      "local",
-    );
-    const historySuggestions = buildPathSuggestionEntries(
-      pathHistory,
-      parentPrefix,
-      fragment,
-      "history",
-    );
-    const localOnlySuggestions = mergePathSuggestions(
-      fragment,
-      historySuggestions,
-      localSuggestions,
-    );
-    setPathSuggestions(localOnlySuggestions);
-    setPathSuggestionIndex(-1);
-
-    if (pathSuggestionsDebounceRef.current !== null) {
-      window.clearTimeout(pathSuggestionsDebounceRef.current);
-    }
-    const requestId = pathSuggestionsRequestIdRef.current + 1;
-    pathSuggestionsRequestIdRef.current = requestId;
-    setPathSuggestionsLoading(true);
-    pathSuggestionsDebounceRef.current = window.setTimeout(() => {
-      pathSuggestionsDebounceRef.current = null;
-      listBrowserObjects(accountIdForApi, bucketName, {
-        prefix: parentPrefix,
-        query: fragment || undefined,
-        type: "folder",
-        maxKeys: PATH_SUGGESTIONS_API_LIMIT,
-        ...browserRequestOptions,
-      })
-        .then((data) => {
-          if (pathSuggestionsRequestIdRef.current !== requestId) return;
-          const remoteSuggestions = buildPathSuggestionEntries(
-            data.prefixes || [],
-            parentPrefix,
-            fragment,
-            "remote",
-          );
-          setPathSuggestions(
-            mergePathSuggestions(
-              fragment,
-              historySuggestions,
-              localSuggestions,
-              remoteSuggestions,
-            ),
-          );
-        })
-        .catch(() => {
-          if (pathSuggestionsRequestIdRef.current !== requestId) return;
-          setPathSuggestions(localOnlySuggestions);
-        })
-        .finally(() => {
-          if (pathSuggestionsRequestIdRef.current === requestId) {
-            setPathSuggestionsLoading(false);
-          }
-        });
-    }, PATH_SUGGESTIONS_DEBOUNCE_MS);
-
-    return () => {
-      if (pathSuggestionsDebounceRef.current !== null) {
-        window.clearTimeout(pathSuggestionsDebounceRef.current);
-        pathSuggestionsDebounceRef.current = null;
-      }
-    };
-  }, [
-    accountIdForApi,
-    browserRequestOptions,
-    bucketName,
-    hasS3AccountContext,
-    isEditingPath,
-    pathDraft,
-    pathHistory,
-    prefix,
-    prefixes,
-  ]);
-
-  useEffect(() => {
-    if (pathSuggestions.length === 0 && pathSuggestionIndex !== -1) {
-      setPathSuggestionIndex(-1);
-      return;
-    }
-    if (pathSuggestionIndex >= pathSuggestions.length) {
-      setPathSuggestionIndex(pathSuggestions.length - 1);
-    }
-  }, [pathSuggestionIndex, pathSuggestions.length]);
 
   useEffect(() => {
     setSelectedIds((prev) =>
