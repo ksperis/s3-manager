@@ -46,7 +46,6 @@ import {
   PresignPartRequest,
   PresignRequest,
   getBucketVersioning,
-  fetchBrowserObjectColumns,
   listBrowserObjects,
   listObjectVersions,
   searchBrowserBuckets,
@@ -80,6 +79,7 @@ import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserDeleteItems } from "./useBrowserDeleteItems";
 import { useBrowserDownloads } from "./useBrowserDownloads";
+import { useBrowserLazyColumns } from "./useBrowserLazyColumns";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
@@ -211,11 +211,9 @@ import {
   buildBrowserItems,
   buildBrowserPathStats,
   collectAvailableStorageClasses,
-  createLazyColumnCacheEntry,
   resolveColumnWidthPx,
   type BrowserColumnId,
   type BrowserSortKey,
-  type LazyColumnCacheEntry,
 } from "./browserObjectTableModel";
 import { isBrowserInteractiveTarget } from "./browserObjectItemPresentation";
 import {
@@ -264,9 +262,6 @@ const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 const TREE_PREFIXES_PAGE_BUDGET = 50;
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
-const LAZY_COLUMN_CONCURRENCY = 4;
-const LAZY_COLUMN_BATCH_SIZE = 24;
-const LAZY_COLUMN_ROOT_MARGIN = "200px";
 
 const browserShellClasses =
   "flex min-h-0 flex-1 flex-col overflow-hidden";
@@ -512,9 +507,6 @@ export default function BrowserPage({
   const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
   const [showToolbarColumnsMenu, setShowToolbarColumnsMenu] = useState(false);
   const [showUploadQuickMenu, setShowUploadQuickMenu] = useState(false);
-  const [lazyColumnCache, setLazyColumnCache] = useState<
-    Record<string, LazyColumnCacheEntry>
-  >({});
   const [searchScope, setSearchScope] = useState<SearchScope>("prefix");
   const [searchRecursive, setSearchRecursive] = useState(false);
   const [searchExactMatch, setSearchExactMatch] = useState(false);
@@ -704,11 +696,6 @@ export default function BrowserPage({
     deletedObjectsNextVersionIdMarker,
   );
   const deletedObjectsIsTruncatedRef = useRef(deletedObjectsIsTruncated);
-  const lazyColumnCacheRef = useRef<Record<string, LazyColumnCacheEntry>>({});
-  const lazyListItemsByIdRef = useRef<Map<string, BrowserItem>>(new Map());
-  const lazyQueueRef = useRef<string[]>([]);
-  const lazyQueuedIdsRef = useRef(new Set<string>());
-  const lazyInFlightRef = useRef(0);
   const accountIdForApiRef = useRef(accountIdForApi);
   const bucketAccessByNameRef = useRef(bucketAccessByName);
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
@@ -2704,10 +2691,6 @@ export default function BrowserPage({
         : items.filter((item) => item.type !== "folder"),
     [items, showFolderItems],
   );
-  const listItemById = useMemo(
-    () => new Map(listItems.map((item) => [item.id, item])),
-    [listItems],
-  );
   const effectiveVisibleColumns = isPortalProfile
     ? DEFAULT_VISIBLE_COLUMN_IDS
     : visibleColumns;
@@ -2762,8 +2745,18 @@ export default function BrowserPage({
     visibleColumnSet.has("expires") ||
     visibleColumnSet.has("restoreStatus");
   const lazyTagsColumnsVisible = visibleColumnSet.has("tagsCount");
-  const hasActiveLazyColumns =
-    lazyMetadataColumnsVisible || lazyTagsColumnsVisible;
+  const lazyColumnCache = useBrowserLazyColumns({
+    accountId: accountIdForApi,
+    bucketName,
+    enabled: hasS3AccountContext,
+    items: listItems,
+    metadataColumnsVisible: lazyMetadataColumnsVisible,
+    prefix,
+    requestOptions: browserRequestOptions,
+    sseCustomerKeyBase64,
+    tagsColumnVisible: lazyTagsColumnsVisible,
+    viewportRef: objectsListViewportRef,
+  });
   const normalizedSearchQuery = filter.trim();
   const hasSearchQuery = normalizedSearchQuery.length > 0;
   const isSearchingInWholeBucket = hasSearchQuery && searchScope === "bucket";
@@ -3604,18 +3597,10 @@ export default function BrowserPage({
     setSelectionAnchorId(null);
     setActiveRowId(null);
     setActiveItem(null);
-    setLazyColumnCache({});
-    lazyQueueRef.current = [];
-    lazyQueuedIdsRef.current.clear();
-    lazyInFlightRef.current = 0;
     setStatusMessage(null);
     setWarningMessage(null);
     setObjectDetailsTarget(null);
   }, [accountIdForApi, bucketName, prefix]);
-
-  useEffect(() => {
-    lazyColumnCacheRef.current = lazyColumnCache;
-  }, [lazyColumnCache]);
 
   useEffect(() => {
     objectsRef.current = objects;
@@ -3643,35 +3628,6 @@ export default function BrowserPage({
   useEffect(() => {
     bucketAccessByNameRef.current = bucketAccessByName;
   }, [bucketAccessByName]);
-
-  useEffect(() => {
-    lazyListItemsByIdRef.current = listItemById;
-  }, [listItemById]);
-
-  useEffect(() => {
-    const listItemIds = new Set(listItems.map((item) => item.id));
-    setLazyColumnCache((prev) => {
-      let changed = false;
-      const next: Record<string, LazyColumnCacheEntry> = {};
-      Object.entries(prev).forEach(([itemId, entry]) => {
-        if (listItemIds.has(itemId)) {
-          next[itemId] = entry;
-          return;
-        }
-        changed = true;
-      });
-      return changed ? next : prev;
-    });
-    if (lazyQueueRef.current.length > 0) {
-      const filteredQueue = lazyQueueRef.current.filter((itemId) =>
-        listItemIds.has(itemId),
-      );
-      if (filteredQueue.length !== lazyQueueRef.current.length) {
-        lazyQueueRef.current = filteredQueue;
-        lazyQueuedIdsRef.current = new Set(filteredQueue);
-      }
-    }
-  }, [listItems]);
 
   useEffect(() => {
     if (!bucketName) {
@@ -4196,312 +4152,6 @@ export default function BrowserPage({
       setSidebarBody(null);
     };
   }, [renderWorkspaceSidebarBody, setSidebarBody, showWorkspaceSidebar]);
-
-  const loadLazyColumnDataForItems = useCallback(
-    async (itemIds: string[]) => {
-      const batchIds = Array.from(new Set(itemIds));
-      if (batchIds.length === 0) return;
-
-      const loadPlan = new Map<
-        string,
-        { key: string; loadMetadata: boolean; loadTags: boolean }
-      >();
-      batchIds.forEach((itemId) => {
-        const currentEntry =
-          lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
-        const loadMetadata =
-          lazyMetadataColumnsVisible &&
-          (currentEntry.metadataStatus === "loading" ||
-            currentEntry.metadataStatus === "idle");
-        const loadTags =
-          lazyTagsColumnsVisible &&
-          (currentEntry.tagsStatus === "loading" ||
-            currentEntry.tagsStatus === "idle");
-        if (!loadMetadata && !loadTags) {
-          return;
-        }
-        const item = lazyListItemsByIdRef.current.get(itemId);
-        if (!item || item.type !== "file" || item.isDeleted) {
-          loadPlan.set(itemId, {
-            key: itemId,
-            loadMetadata,
-            loadTags,
-          });
-          return;
-        }
-        loadPlan.set(itemId, {
-          key: item.key,
-          loadMetadata,
-          loadTags,
-        });
-      });
-      if (loadPlan.size === 0) return;
-
-      if (!bucketName || !hasS3AccountContext) {
-        setLazyColumnCache((prev) => {
-          const next = { ...prev };
-          loadPlan.forEach((plan, itemId) => {
-            const entry = next[itemId];
-            if (!entry) return;
-            next[itemId] = {
-              ...entry,
-              metadataStatus:
-                plan.loadMetadata && entry.metadataStatus === "loading"
-                  ? "error"
-                  : entry.metadataStatus,
-              tagsStatus:
-                plan.loadTags && entry.tagsStatus === "loading"
-                  ? "error"
-                  : entry.tagsStatus,
-            };
-          });
-          return next;
-        });
-        return;
-      }
-
-      const requestedColumns: Array<
-        | "content_type"
-        | "tags_count"
-        | "metadata_count"
-        | "cache_control"
-        | "expires"
-        | "restore_status"
-      > = [];
-      if (Array.from(loadPlan.values()).some((plan) => plan.loadMetadata)) {
-        requestedColumns.push(
-          "content_type",
-          "metadata_count",
-          "cache_control",
-          "expires",
-          "restore_status",
-        );
-      }
-      if (Array.from(loadPlan.values()).some((plan) => plan.loadTags)) {
-        requestedColumns.push("tags_count");
-      }
-      if (requestedColumns.length === 0) return;
-
-      const keys = Array.from(
-        new Set(
-          Array.from(loadPlan.values())
-            .map((plan) => plan.key)
-            .filter((value) => value.length > 0),
-        ),
-      );
-      try {
-        const response = await fetchBrowserObjectColumns(
-          accountIdForApi,
-          bucketName,
-          {
-            keys,
-            columns: requestedColumns,
-          },
-          {
-            sseCustomerKeyBase64,
-            ...browserRequestOptions,
-          },
-        );
-        if (
-          accountIdForApiRef.current !== accountIdForApi ||
-          bucketNameRef.current !== bucketName ||
-          prefixRef.current !== prefix
-        ) {
-          return;
-        }
-
-        const valuesByKey = new Map(
-          response.items.map((entry) => [entry.key, entry]),
-        );
-        setLazyColumnCache((prev) => {
-          const next = { ...prev };
-          loadPlan.forEach((plan, itemId) => {
-            const entry = next[itemId] ?? createLazyColumnCacheEntry();
-            const values = valuesByKey.get(plan.key);
-            let nextEntry = entry;
-
-            if (plan.loadMetadata) {
-              if (values && values.metadata_status === "ready") {
-                nextEntry = {
-                  ...nextEntry,
-                  contentType: values.content_type ?? null,
-                  metadataCount: values.metadata_count ?? 0,
-                  cacheControl: values.cache_control ?? null,
-                  expires: values.expires ?? null,
-                  restoreStatus: values.restore_status ?? null,
-                  metadataStatus: "ready",
-                };
-              } else {
-                nextEntry = { ...nextEntry, metadataStatus: "error" };
-              }
-            }
-
-            if (plan.loadTags) {
-              if (values && values.tags_status === "ready") {
-                nextEntry = {
-                  ...nextEntry,
-                  tagsCount: values.tags_count ?? 0,
-                  tagsStatus: "ready",
-                };
-              } else {
-                nextEntry = { ...nextEntry, tagsStatus: "error" };
-              }
-            }
-
-            next[itemId] = nextEntry;
-          });
-          return next;
-        });
-      } catch {
-        setLazyColumnCache((prev) => {
-          const next = { ...prev };
-          loadPlan.forEach((plan, itemId) => {
-            const entry = next[itemId];
-            if (!entry) return;
-            next[itemId] = {
-              ...entry,
-              metadataStatus:
-                plan.loadMetadata && entry.metadataStatus === "loading"
-                  ? "error"
-                  : entry.metadataStatus,
-              tagsStatus:
-                plan.loadTags && entry.tagsStatus === "loading"
-                  ? "error"
-                  : entry.tagsStatus,
-            };
-          });
-          return next;
-        });
-      }
-    },
-    [
-      accountIdForApi,
-      browserRequestOptions,
-      bucketName,
-      hasS3AccountContext,
-      lazyMetadataColumnsVisible,
-      lazyTagsColumnsVisible,
-      prefix,
-      sseCustomerKeyBase64,
-    ],
-  );
-
-  const drainLazyColumnQueue = useCallback(() => {
-    while (lazyInFlightRef.current < LAZY_COLUMN_CONCURRENCY) {
-      const nextItemIds = lazyQueueRef.current.splice(0, LAZY_COLUMN_BATCH_SIZE);
-      if (nextItemIds.length === 0) {
-        return;
-      }
-      nextItemIds.forEach((itemId) => {
-        lazyQueuedIdsRef.current.delete(itemId);
-      });
-      lazyInFlightRef.current += 1;
-      void loadLazyColumnDataForItems(nextItemIds)
-        .catch(() => undefined)
-        .finally(() => {
-          lazyInFlightRef.current -= 1;
-          drainLazyColumnQueue();
-        });
-    }
-  }, [loadLazyColumnDataForItems]);
-
-  const scheduleLazyColumnLoad = useCallback(
-    (itemId: string) => {
-      if (!hasActiveLazyColumns) return;
-      const item = lazyListItemsByIdRef.current.get(itemId);
-      if (!item || item.type !== "file" || item.isDeleted) return;
-
-      const currentEntry =
-        lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
-      const shouldLoadMetadata =
-        lazyMetadataColumnsVisible && currentEntry.metadataStatus === "idle";
-      const shouldLoadTags =
-        lazyTagsColumnsVisible && currentEntry.tagsStatus === "idle";
-      if (!shouldLoadMetadata && !shouldLoadTags) return;
-
-      setLazyColumnCache((prev) => {
-        const entry = prev[itemId] ?? createLazyColumnCacheEntry();
-        let nextEntry = entry;
-        if (shouldLoadMetadata && entry.metadataStatus === "idle") {
-          nextEntry = { ...nextEntry, metadataStatus: "loading" };
-        }
-        if (shouldLoadTags && entry.tagsStatus === "idle") {
-          nextEntry = { ...nextEntry, tagsStatus: "loading" };
-        }
-        return { ...prev, [itemId]: nextEntry };
-      });
-
-      if (!lazyQueuedIdsRef.current.has(itemId)) {
-        lazyQueuedIdsRef.current.add(itemId);
-        lazyQueueRef.current.push(itemId);
-      }
-      drainLazyColumnQueue();
-    },
-    [
-      drainLazyColumnQueue,
-      hasActiveLazyColumns,
-      lazyMetadataColumnsVisible,
-      lazyTagsColumnsVisible,
-    ],
-  );
-
-  useEffect(() => {
-    if (!hasActiveLazyColumns) return;
-    const root = objectsListViewportRef.current;
-    if (!root) return;
-
-    const rowNodes = Array.from(
-      root.querySelectorAll<HTMLElement>("[data-lazy-item-id]"),
-    );
-    if (rowNodes.length === 0) return;
-
-    const rootRect = root.getBoundingClientRect();
-    const rootMarginPx = Number.parseInt(LAZY_COLUMN_ROOT_MARGIN, 10) || 0;
-    const viewportTop = rootRect.top - rootMarginPx;
-    const viewportBottom = rootRect.bottom + rootMarginPx;
-    rowNodes.forEach((node) => {
-      const itemId = node.dataset.lazyItemId;
-      if (!itemId) return;
-      if (rootRect.height <= 0 || rootRect.width <= 0) {
-        scheduleLazyColumnLoad(itemId);
-        return;
-      }
-      const rowRect = node.getBoundingClientRect();
-      const intersectsViewport =
-        rowRect.bottom >= viewportTop && rowRect.top <= viewportBottom;
-      if (intersectsViewport) {
-        scheduleLazyColumnLoad(itemId);
-      }
-    });
-
-    if (typeof window === "undefined" || !("IntersectionObserver" in window)) {
-      rowNodes.forEach((node) => {
-        const itemId = node.dataset.lazyItemId;
-        if (itemId) {
-          scheduleLazyColumnLoad(itemId);
-        }
-      });
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const itemId = (entry.target as HTMLElement).dataset.lazyItemId;
-          if (itemId) {
-            scheduleLazyColumnLoad(itemId);
-          }
-          observer.unobserve(entry.target);
-        });
-      },
-      { root, rootMargin: LAZY_COLUMN_ROOT_MARGIN },
-    );
-    rowNodes.forEach((node) => observer.observe(node));
-    return () => {
-      observer.disconnect();
-    };
-  }, [hasActiveLazyColumns, listItems, scheduleLazyColumnLoad]);
 
   const handleSortToggle = (key: BrowserSortKey) => {
     setSortId((prev) => {
