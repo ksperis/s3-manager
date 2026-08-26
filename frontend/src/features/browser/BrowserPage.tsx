@@ -66,6 +66,7 @@ import BrowserToolbar from "./BrowserToolbar";
 import { useBrowserBucketCors } from "./useBrowserBucketCors";
 import { useBrowserBulkAttributes } from "./useBrowserBulkAttributes";
 import { useBrowserBulkRestore } from "./useBrowserBulkRestore";
+import { useBrowserBucketAccess } from "./useBrowserBucketAccess";
 import { useBrowserClipboard } from "./useBrowserClipboard";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
 import { useBrowserContextCounts } from "./useBrowserContextCounts";
@@ -218,7 +219,6 @@ import {
   extractBucketListError,
   normalizeBrowserListingIssue,
   resolveBucketAccessEntry,
-  sanitizeBucketAccessEntries,
   splitBucketPanelBuckets,
   UNKNOWN_BUCKET_ACCESS,
   type BrowserListingIssue,
@@ -253,7 +253,6 @@ type BrowserConfirmDialogState = {
 };
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 const TREE_PREFIXES_PAGE_BUDGET = 50;
-const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
 
 const browserShellClasses =
@@ -378,9 +377,6 @@ export default function BrowserPage({
   const [bucketMenuTotal, setBucketMenuTotal] = useState(0);
   const [bucketTotalCount, setBucketTotalCount] = useState(0);
   const [bucketMenuLoadingMore, setBucketMenuLoadingMore] = useState(false);
-  const [bucketAccessByName, setBucketAccessByName] = useState<
-    Record<string, BucketAccessEntry>
-  >({});
   const [usageSummary, setUsageSummary] =
     useState<BrowserUsageSummary | null>(null);
   const [usageSummaryLoading, setUsageSummaryLoading] = useState(false);
@@ -397,6 +393,20 @@ export default function BrowserPage({
     [searchParams],
   );
   const [prefix, setPrefix] = useState("");
+  const {
+    accessByName: bucketAccessByName,
+    clearBucketAccessEntries,
+    getBucketAccessEntry,
+    resetBucketAccessQueue,
+    scheduleBucketAccessProbe,
+    updateBucketAccessEntry,
+  } = useBrowserBucketAccess({
+    accountId: accountIdForApi,
+    activeBucketName: bucketName,
+    contextKey: bucketAccessContextKey,
+    enabled: hasS3AccountContext,
+    requestOptions: browserRequestOptions,
+  });
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [deletedObjects, setDeletedObjects] = useState<BrowserObject[]>([]);
   const [deletedPrefixes, setDeletedPrefixes] = useState<string[]>([]);
@@ -655,16 +665,6 @@ export default function BrowserPage({
   const bucketSearchDebounceRef = useRef<number | null>(null);
   const bucketSearchValueRef = useRef("");
   const bucketSearchRequestIdRef = useRef(0);
-  const bucketAccessCacheRef = useRef<
-    Map<string, Record<string, BucketAccessEntry>>
-  >(new Map());
-  const bucketAccessQueueRef = useRef<string[]>([]);
-  const bucketAccessQueuedRef = useRef(new Set<string>());
-  const bucketAccessInFlightRef = useRef(0);
-  const bucketAccessAbortControllersRef = useRef<Map<string, AbortController>>(
-    new Map(),
-  );
-  const bucketAccessSessionRef = useRef(0);
   const objectsRequestSeqRef = useRef(0);
   const objectsAbortControllerRef = useRef<AbortController | null>(null);
   const objectsSearchDebounceRef = useRef<number | null>(null);
@@ -680,7 +680,6 @@ export default function BrowserPage({
   );
   const deletedObjectsIsTruncatedRef = useRef(deletedObjectsIsTruncated);
   const accountIdForApiRef = useRef(accountIdForApi);
-  const bucketAccessByNameRef = useRef(bucketAccessByName);
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
   const bucketInspectorRequestIdRef = useRef(0);
   const browserRootSelectionPersistenceReadyRef = useRef(false);
@@ -881,188 +880,6 @@ export default function BrowserPage({
     },
     [isMainBrowserPath, resolvedFunctionalProfile, setPanelWidths],
   );
-
-  const updateBucketAccessEntry = useCallback(
-    (targetBucketName: string, nextEntry: BucketAccessEntry) => {
-      if (!targetBucketName) return;
-      setBucketAccessByName((prev) => {
-        const normalizedNext = {
-          status: nextEntry.status,
-          detail: nextEntry.detail ?? null,
-        } satisfies BucketAccessEntry;
-        const previousEntry = prev[targetBucketName];
-        if (
-          previousEntry?.status === normalizedNext.status &&
-          previousEntry?.detail === normalizedNext.detail
-        ) {
-          return prev;
-        }
-        const next = {
-          ...prev,
-          [targetBucketName]: normalizedNext,
-        };
-        if (bucketAccessContextKey) {
-          bucketAccessCacheRef.current.set(bucketAccessContextKey, next);
-        }
-        return next;
-      });
-    },
-    [bucketAccessContextKey],
-  );
-
-  const resetBucketAccessQueue = useCallback(() => {
-    bucketAccessSessionRef.current += 1;
-    bucketAccessQueueRef.current = [];
-    bucketAccessQueuedRef.current.clear();
-    bucketAccessAbortControllersRef.current.forEach((controller) =>
-      controller.abort(),
-    );
-    bucketAccessAbortControllersRef.current.clear();
-    bucketAccessInFlightRef.current = 0;
-    setBucketAccessByName((prev) => {
-      const sanitized = sanitizeBucketAccessEntries(prev);
-      const sameShape =
-        Object.keys(prev).length === Object.keys(sanitized).length &&
-        Object.entries(prev).every(([bucket, entry]) => {
-          const nextEntry = sanitized[bucket];
-          return (
-            nextEntry?.status === entry.status &&
-            nextEntry?.detail === entry.detail
-          );
-        });
-      if (sameShape) {
-        return prev;
-      }
-      if (bucketAccessContextKey) {
-        bucketAccessCacheRef.current.set(bucketAccessContextKey, sanitized);
-      }
-      return sanitized;
-    });
-  }, [bucketAccessContextKey]);
-
-  const drainBucketAccessQueue = useCallback(() => {
-    if (!hasS3AccountContext || !accountIdForApi) {
-      return;
-    }
-    const requestSession = bucketAccessSessionRef.current;
-    while (
-      bucketAccessInFlightRef.current < BUCKET_ACCESS_PROBE_CONCURRENCY &&
-      bucketAccessQueueRef.current.length > 0
-    ) {
-      const targetBucketName = bucketAccessQueueRef.current.shift();
-      if (!targetBucketName) {
-        continue;
-      }
-      bucketAccessQueuedRef.current.delete(targetBucketName);
-      bucketAccessInFlightRef.current += 1;
-      const controller = new AbortController();
-      bucketAccessAbortControllersRef.current.set(targetBucketName, controller);
-      void listBrowserObjects(accountIdForApi, targetBucketName, {
-        maxKeys: 1,
-        signal: controller.signal,
-        ...browserRequestOptions,
-      })
-        .then(() => {
-          if (requestSession !== bucketAccessSessionRef.current) {
-            return;
-          }
-          updateBucketAccessEntry(targetBucketName, {
-            status: "available",
-            detail: null,
-          });
-        })
-        .catch((error) => {
-          if (
-            isAbortError(error) ||
-            requestSession !== bucketAccessSessionRef.current
-          ) {
-            return;
-          }
-          const issue = normalizeBrowserListingIssue(
-            error,
-            "Unable to list bucket.",
-          );
-          updateBucketAccessEntry(
-            targetBucketName,
-            issue.kind === "access_denied"
-              ? {
-                  status: "unavailable",
-                  detail: issue.technicalDetail,
-                }
-              : UNKNOWN_BUCKET_ACCESS,
-          );
-        })
-        .finally(() => {
-          bucketAccessAbortControllersRef.current.delete(targetBucketName);
-          bucketAccessInFlightRef.current = Math.max(
-            0,
-            bucketAccessInFlightRef.current - 1,
-          );
-          if (requestSession === bucketAccessSessionRef.current) {
-            drainBucketAccessQueue();
-          }
-        });
-    }
-  }, [
-    accountIdForApi,
-    browserRequestOptions,
-    hasS3AccountContext,
-    updateBucketAccessEntry,
-  ]);
-
-  const scheduleBucketAccessProbe = useCallback(
-    (targetBucketName: string) => {
-      if (
-        !targetBucketName ||
-        !hasS3AccountContext ||
-        !accountIdForApi ||
-        targetBucketName === bucketName
-      ) {
-        return;
-      }
-      const currentAccess = resolveBucketAccessEntry(
-        targetBucketName,
-        bucketAccessByName,
-      );
-      if (currentAccess.status !== "unknown") {
-        return;
-      }
-      if (
-        bucketAccessQueuedRef.current.has(targetBucketName) ||
-        bucketAccessAbortControllersRef.current.has(targetBucketName)
-      ) {
-        return;
-      }
-      bucketAccessQueuedRef.current.add(targetBucketName);
-      bucketAccessQueueRef.current.push(targetBucketName);
-      updateBucketAccessEntry(targetBucketName, {
-        status: "checking",
-        detail: null,
-      });
-      drainBucketAccessQueue();
-    },
-    [
-      accountIdForApi,
-      bucketAccessByName,
-      bucketName,
-      drainBucketAccessQueue,
-      hasS3AccountContext,
-      updateBucketAccessEntry,
-    ],
-  );
-
-  useEffect(() => {
-    resetBucketAccessQueue();
-    if (!bucketAccessContextKey || !hasS3AccountContext) {
-      setBucketAccessByName({});
-      return;
-    }
-    const cached = sanitizeBucketAccessEntries(
-      bucketAccessCacheRef.current.get(bucketAccessContextKey) ?? {},
-    );
-    bucketAccessCacheRef.current.set(bucketAccessContextKey, cached);
-    setBucketAccessByName(cached);
-  }, [bucketAccessContextKey, hasS3AccountContext, resetBucketAccessQueue]);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   const isVersioningEnabled = bucketVersioningAvailable;
@@ -1314,15 +1131,7 @@ export default function BrowserPage({
   }, [showBucketMenu]);
 
   useEffect(() => {
-    const queuedBuckets = bucketAccessQueuedRef.current;
-    const abortControllers = bucketAccessAbortControllersRef.current;
     return () => {
-      bucketAccessSessionRef.current += 1;
-      bucketAccessQueueRef.current = [];
-      queuedBuckets.clear();
-      abortControllers.forEach((controller) => controller.abort());
-      abortControllers.clear();
-      bucketAccessInFlightRef.current = 0;
       if (bucketSearchDebounceRef.current !== null) {
         window.clearTimeout(bucketSearchDebounceRef.current);
         bucketSearchDebounceRef.current = null;
@@ -1368,7 +1177,7 @@ export default function BrowserPage({
         setBucketMenuTotal(0);
         setBucketTotalCount(0);
         bucketSearchValueRef.current = "";
-        setBucketAccessByName({});
+        clearBucketAccessEntries();
         setBucketName("");
         setPrefix("");
         setDeletedObjects([]);
@@ -1390,7 +1199,7 @@ export default function BrowserPage({
         setBucketMenuTotal(1);
         setBucketTotalCount(1);
         bucketSearchValueRef.current = "";
-        setBucketAccessByName({});
+        clearBucketAccessEntries();
         setBucketName(resolvedLockedBucketName);
         setPrefix(
           requestedPrefix || (previousBucket === resolvedLockedBucketName ? previousPrefix : ""),
@@ -1522,6 +1331,7 @@ export default function BrowserPage({
       accountIdForApi,
       browserRootContextId,
       browserRequestOptions,
+      clearBucketAccessEntries,
       hasS3AccountContext,
       isCephAdminContext,
       isMainBrowserPath,
@@ -2123,10 +1933,7 @@ export default function BrowserPage({
           err,
           "Unable to list objects for this prefix.",
         );
-        const previousAccess = resolveBucketAccessEntry(
-          bucketName,
-          bucketAccessByNameRef.current,
-        );
+        const previousAccess = getBucketAccessEntry(bucketName);
         if (issue.kind === "access_denied") {
           updateBucketAccessEntry(bucketName, {
             status: "unavailable",
@@ -2165,6 +1972,7 @@ export default function BrowserPage({
       browserRequestOptions,
       bucketName,
       filter,
+      getBucketAccessEntry,
       hasS3AccountContext,
       isVersioningEnabled,
       listDeletedObjectsForPrefix,
@@ -3597,10 +3405,6 @@ export default function BrowserPage({
   useEffect(() => {
     accountIdForApiRef.current = accountIdForApi;
   }, [accountIdForApi]);
-
-  useEffect(() => {
-    bucketAccessByNameRef.current = bucketAccessByName;
-  }, [bucketAccessByName]);
 
   useEffect(() => {
     if (!bucketName) {
