@@ -15,12 +15,15 @@ import {
 import type { S3AccountSelector } from "../../api/accountParams";
 import { BrowserCopyValueModal } from "./BrowserDialogModals";
 import BrowserObjectArchiveTab from "./BrowserObjectArchiveTab";
+import BrowserObjectDetailsHeader, {
+  type BrowserObjectDetailsStatus,
+} from "./BrowserObjectDetailsHeader";
 import BrowserObjectPropertiesTab from "./BrowserObjectPropertiesTab";
 import BrowserObjectProtectionTab from "./BrowserObjectProtectionTab";
 import BrowserObjectVersionsTab from "./BrowserObjectVersionsTab";
-import { bulkActionClasses } from "./browserConstants";
 import {
   ARCHIVE_STORAGE_CLASSES,
+  buildObjectDetailsTabs,
   formatRestoreStatus,
   nextTabAfterDeleted,
 } from "./browserObjectDetailsModel";
@@ -61,11 +64,6 @@ type BrowserObjectDetailsModalProps = {
   requestOptions?: BrowserRequestOptions;
 };
 
-type TabButton = {
-  id: ObjectDetailsTabId;
-  label: string;
-};
-
 export default function BrowserObjectDetailsModal({
   accountId,
   bucketName,
@@ -89,10 +87,8 @@ export default function BrowserObjectDetailsModal({
 }: BrowserObjectDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<ObjectDetailsTabId>(initialTab);
   const [itemSnapshot, setItemSnapshot] = useState(item);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [actionTone, setActionTone] = useState<"success" | "error" | null>(
-    null,
-  );
+  const [actionStatus, setActionStatus] =
+    useState<BrowserObjectDetailsStatus | null>(null);
   const [copyDialogValue, setCopyDialogValue] = useState<string | null>(null);
 
   const {
@@ -254,24 +250,14 @@ export default function BrowserObjectDetailsModal({
     requestOptions,
     sseCustomerKeyBase64,
   });
-  const statusClassName = useMemo(() => {
-    if (!actionTone) return "";
-    if (actionTone === "error") {
-      return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-900/30 dark:text-rose-100";
-    }
-    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-900/30 dark:text-emerald-100";
-  }, [actionTone]);
-
   const pushStatus = (message: string, tone: "success" | "error") => {
-    setActionMessage(message);
-    setActionTone(tone);
+    setActionStatus({ message, tone });
   };
 
   useEffect(() => {
     setItemSnapshot(item);
     setActiveTab(initialTab);
-    setActionMessage(null);
-    setActionTone(null);
+    setActionStatus(null);
     setCopyDialogValue(null);
 
     resetObjectProperties(item);
@@ -313,7 +299,7 @@ export default function BrowserObjectDetailsModal({
   ]);
 
   const handleSaveMetadata = async () => {
-    setActionMessage(null);
+    setActionStatus(null);
     try {
       if (!(await saveMetadata()) || !isPropertiesScopeCurrent()) return;
       await onRefreshBrowserObjects(itemSnapshot.key);
@@ -325,7 +311,7 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleSaveTags = async () => {
-    setActionMessage(null);
+    setActionStatus(null);
     try {
       if (!(await saveTags()) || !isPropertiesScopeCurrent()) return;
       await onRefreshBrowserObjects(itemSnapshot.key);
@@ -337,7 +323,7 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleSaveStorageClass = async () => {
-    setActionMessage(null);
+    setActionStatus(null);
     try {
       const savedStorageClass = await saveStorageClass();
       if (!savedStorageClass || !isPropertiesScopeCurrent()) return;
@@ -357,7 +343,7 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleSaveAcl = async () => {
-    setActionMessage(null);
+    setActionStatus(null);
     try {
       if (!(await saveAcl()) || !isAclScopeCurrent()) return;
       pushStatus("ACL updated.", "success");
@@ -367,7 +353,7 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleSaveLegalHold = async () => {
-    setActionMessage(null);
+    setActionStatus(null);
     try {
       if (!(await saveLegalHold()) || !isProtectionScopeCurrent()) return;
       pushStatus("Legal hold updated.", "success");
@@ -380,7 +366,7 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleSaveRetention = async () => {
-    setActionMessage(null);
+    setActionStatus(null);
     try {
       const result = await saveRetention();
       if (result === "invalid") {
@@ -398,7 +384,7 @@ export default function BrowserObjectDetailsModal({
   };
 
   const handleRestoreArchive = async () => {
-    setActionMessage(null);
+    setActionStatus(null);
     try {
       const result = await restoreArchive();
       if (result === "invalid") {
@@ -436,28 +422,21 @@ export default function BrowserObjectDetailsModal({
     action: "restore" | "delete",
     version: BrowserObjectVersion,
   ) => {
-    setActionMessage(null);
+    setActionStatus(null);
     if (!(await runVersionAction(action, version)) || !isVersionsScopeCurrent()) return;
     await loadProperties(true);
   };
 
-  const tabs = useMemo<TabButton[]>(() => {
-    if (isDeletedCurrent) {
-      return versioningEnabled ? [{ id: "versions", label: "Versions" }] : [];
-    }
-    const nextTabs: TabButton[] = [{ id: "preview", label: "Preview" }];
-    if (versioningEnabled && !readOnly) {
-      nextTabs.push({ id: "versions", label: "Versions" });
-    }
-    nextTabs.push({ id: "properties", label: "Properties" });
-    if (!readOnly) {
-      nextTabs.push({ id: "protection", label: "Access & Protection" });
-    }
-    if (hasArchiveTab && !readOnly) {
-      nextTabs.push({ id: "archive", label: "Archive" });
-    }
-    return nextTabs;
-  }, [hasArchiveTab, isDeletedCurrent, readOnly, versioningEnabled]);
+  const tabs = useMemo(
+    () =>
+      buildObjectDetailsTabs({
+        hasArchiveTab,
+        isDeleted: isDeletedCurrent,
+        readOnly,
+        versioningEnabled,
+      }),
+    [hasArchiveTab, isDeletedCurrent, readOnly, versioningEnabled],
+  );
 
   const renderPreviewContent = () => {
     if (isDeletedCurrent) {
@@ -615,100 +594,21 @@ export default function BrowserObjectDetailsModal({
         maxBodyHeightClass="h-[88vh]"
       >
         <div className="space-y-4">
-          <div className="sticky top-0 z-10 -mx-6 -mt-4 space-y-4 border-b border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/95">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0 space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  {isDeletedCurrent && (
-                    <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 ui-caption font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-900/30 dark:text-rose-100">
-                      Deleted
-                    </span>
-                  )}
-                  {restoreStatusLabel && (
-                    <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-900/20 dark:text-amber-100">
-                      {restoreStatusLabel}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <p className="break-all ui-subtitle font-semibold text-slate-900 dark:text-slate-50">
-                    {itemSnapshot.name}
-                  </p>
-                  <p className="break-all ui-caption text-slate-500 dark:text-slate-400">
-                    {bucketName} / {itemSnapshot.key}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 ui-caption text-slate-600 dark:text-slate-300">
-                  <span>Size: {itemSnapshot.size}</span>
-                  <span>Modified: {itemSnapshot.modified}</span>
-                  <span>Storage class: {currentStorageClass ?? "-"}</span>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {!isDeletedCurrent && (
-                  <button
-                    type="button"
-                    className={bulkActionClasses}
-                    onClick={() => onDownload(itemSnapshot)}
-                  >
-                    Download
-                  </button>
-                )}
-                {!isDeletedCurrent && !copyUrlDisabled && (
-                  <button
-                    type="button"
-                    className={bulkActionClasses}
-                    onClick={() => void onCopyUrl(itemSnapshot)}
-                  >
-                    Copy URL
-                  </button>
-                )}
-                {!isDeletedCurrent && copyUrlDisabled && (
-                  <button
-                    type="button"
-                    className={bulkActionClasses}
-                    disabled
-                    title={copyUrlDisabledReason ?? "Copy URL is unavailable."}
-                  >
-                    Copy URL
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {actionMessage && (
-              <div
-                className={`rounded-lg border px-3 py-2 ui-caption font-semibold ${statusClassName}`}
-              >
-                {actionMessage}
-              </div>
-            )}
-
-            {tabs.length > 0 && (
-              <div className="flex flex-wrap gap-2" role="tablist" aria-label="Object details tabs">
-                {tabs.map((tab) => {
-                  const isActive = tab.id === activeTab;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={isActive}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={[
-                        "rounded-md px-3 py-1.5 ui-caption font-semibold transition",
-                        isActive
-                          ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                          : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
-                      ].join(" ")}
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <BrowserObjectDetailsHeader
+            activeTab={activeTab}
+            bucketName={bucketName}
+            copyUrlDisabled={copyUrlDisabled}
+            copyUrlDisabledReason={copyUrlDisabledReason}
+            currentStorageClass={currentStorageClass}
+            isDeleted={isDeletedCurrent}
+            item={itemSnapshot}
+            onCopyUrl={() => onCopyUrl(itemSnapshot)}
+            onDownload={() => onDownload(itemSnapshot)}
+            onTabChange={setActiveTab}
+            restoreStatusLabel={restoreStatusLabel}
+            status={actionStatus}
+            tabs={tabs}
+          />
 
           <div>{renderContent()}</div>
         </div>

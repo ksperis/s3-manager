@@ -55,6 +55,42 @@ export const isObjectLockUnavailableMessage = (message: string) => {
 export const nextTabAfterDeleted = (versioningEnabled: boolean): ObjectDetailsTabId =>
   versioningEnabled ? "versions" : "preview";
 
+export type BrowserObjectDetailsTab = {
+  id: ObjectDetailsTabId;
+  label: string;
+};
+
+export const buildObjectDetailsTabs = ({
+  hasArchiveTab,
+  isDeleted,
+  readOnly,
+  versioningEnabled,
+}: {
+  hasArchiveTab: boolean;
+  isDeleted: boolean;
+  readOnly: boolean;
+  versioningEnabled: boolean;
+}): BrowserObjectDetailsTab[] => {
+  if (isDeleted) {
+    return versioningEnabled ? [{ id: "versions", label: "Versions" }] : [];
+  }
+
+  const tabs: BrowserObjectDetailsTab[] = [
+    { id: "preview", label: "Preview" },
+  ];
+  if (versioningEnabled && !readOnly) {
+    tabs.push({ id: "versions", label: "Versions" });
+  }
+  tabs.push({ id: "properties", label: "Properties" });
+  if (!readOnly) {
+    tabs.push({ id: "protection", label: "Access & Protection" });
+  }
+  if (hasArchiveTab && !readOnly) {
+    tabs.push({ id: "archive", label: "Archive" });
+  }
+  return tabs;
+};
+
 export const buildInlinePreviewDisposition = (filename: string) => {
   const fallback = filename.replace(/[^\x20-\x7E]+/g, "_").replace(/"/g, '\\"');
   const encoded = encodeURIComponent(filename);

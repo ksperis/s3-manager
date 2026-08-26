@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ARCHIVE_STORAGE_CLASSES,
   buildInlinePreviewDisposition,
+  buildObjectDetailsTabs,
   formatRestoreStatus,
   isObjectLockUnavailableMessage,
   nextTabAfterDeleted,
@@ -41,6 +42,47 @@ describe("browserObjectDetailsModel", () => {
     expect(nextTabAfterDeleted(true)).toBe("versions");
     expect(nextTabAfterDeleted(false)).toBe("preview");
     expect(buildInlinePreviewDisposition('rapport "été".txt')).toContain('filename="rapport \\"_t_\\".txt"');
+  });
+
+  it("builds tabs for editable, read-only, and deleted object states", () => {
+    expect(
+      buildObjectDetailsTabs({
+        hasArchiveTab: true,
+        isDeleted: false,
+        readOnly: false,
+        versioningEnabled: true,
+      }).map((tab) => tab.id),
+    ).toEqual([
+      "preview",
+      "versions",
+      "properties",
+      "protection",
+      "archive",
+    ]);
+    expect(
+      buildObjectDetailsTabs({
+        hasArchiveTab: true,
+        isDeleted: false,
+        readOnly: true,
+        versioningEnabled: true,
+      }).map((tab) => tab.id),
+    ).toEqual(["preview", "properties"]);
+    expect(
+      buildObjectDetailsTabs({
+        hasArchiveTab: false,
+        isDeleted: true,
+        readOnly: false,
+        versioningEnabled: true,
+      }).map((tab) => tab.id),
+    ).toEqual(["versions"]);
+    expect(
+      buildObjectDetailsTabs({
+        hasArchiveTab: false,
+        isDeleted: true,
+        readOnly: false,
+        versioningEnabled: false,
+      }),
+    ).toEqual([]);
   });
 
   it("documents archive storage classes", () => {
