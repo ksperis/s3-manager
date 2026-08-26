@@ -59,6 +59,7 @@ import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbar from "./BrowserToolbar";
 import { useBrowserBucketCors } from "./useBrowserBucketCors";
+import { useBrowserBucketInspector } from "./useBrowserBucketInspector";
 import { useBrowserBulkAttributes } from "./useBrowserBulkAttributes";
 import { useBrowserBulkRestore } from "./useBrowserBulkRestore";
 import { useBrowserBucketCatalog } from "./useBrowserBucketCatalog";
@@ -119,11 +120,6 @@ import {
   BrowserSseCustomerKeyModal,
 } from "./BrowserBucketDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
-import {
-  buildBucketInspectorFeatures,
-  fetchBucketInspectorData,
-  type BucketInspectorData,
-} from "./browserBucketInspectorModel";
 import BrowserInspectorPanel, {
   type BrowserInspectorTab,
 } from "./BrowserInspectorPanel";
@@ -475,13 +471,6 @@ export default function BrowserPage({
   const [searchRecursive, setSearchRecursive] = useState(false);
   const [searchExactMatch, setSearchExactMatch] = useState(false);
   const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
-  const [bucketInspectorByName, setBucketInspectorByName] = useState<
-    Record<string, BucketInspectorData>
-  >({});
-  const [bucketInspectorLoading, setBucketInspectorLoading] = useState(false);
-  const [bucketInspectorError, setBucketInspectorError] = useState<
-    string | null
-  >(null);
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(
@@ -663,7 +652,6 @@ export default function BrowserPage({
   const bucketPanelLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const accountIdForApiRef = useRef(accountIdForApi);
-  const bucketInspectorRequestIdRef = useRef(0);
   const operationIdsRef = useRef(new Set<string>());
   const storageEndpointCaps = useMemo(() => {
     if (selectedContext?.storage_endpoint_capabilities) {
@@ -736,6 +724,19 @@ export default function BrowserPage({
     : true;
   const bucketInspectorStaticWebsiteEnabled =
     effectiveCaps?.static_website ?? true;
+  const {
+    data: bucketInspectorData,
+    error: bucketInspectorError,
+    features: bucketInspectorFeatures,
+    load: loadBucketInspectorData,
+    loading: bucketInspectorLoading,
+  } = useBrowserBucketInspector({
+    accountId: accountIdForApi,
+    bucketName,
+    enabled: hasS3AccountContext,
+    includeStaticWebsite: bucketInspectorStaticWebsiteEnabled,
+    includeUsage: bucketInspectorUsageEnabled,
+  });
   const openSseCustomerKeyCopyDialog = useCallback((keyBase64: string) => {
     setCopyDialog({
       title: "Copy SSE-C key",
@@ -1050,12 +1051,6 @@ export default function BrowserPage({
   useEffect(() => {
     setShowToolbarMoreMenu(false);
   }, [bucketName, prefix, selectedIds]);
-
-  useEffect(() => {
-    bucketInspectorRequestIdRef.current += 1;
-    setBucketInspectorLoading(false);
-    setBucketInspectorError(null);
-  }, [bucketName, hasS3AccountContext]);
 
   useDismissibleLayer({
     open: showBucketMenu,
@@ -1694,17 +1689,9 @@ export default function BrowserPage({
 
   const pathStats = useMemo(() => buildBrowserPathStats(items), [items]);
 
-  const bucketInspectorData = useMemo(
-    () => (bucketName ? (bucketInspectorByName[bucketName] ?? null) : null),
-    [bucketInspectorByName, bucketName],
-  );
   const cephQuotaScopeLabel = isS3UserContext
     ? "User quota"
     : "Account quota";
-  const bucketInspectorFeatures = useMemo(
-    () => buildBucketInspectorFeatures(bucketInspectorData),
-    [bucketInspectorData],
-  );
   const inspectedItem = useMemo(() => {
     if (activeItem && items.some((entry) => entry.id === activeItem.id)) {
       return activeItem;
@@ -2259,61 +2246,10 @@ export default function BrowserPage({
     }
   }, [searchableStorageClasses, storageFilter]);
 
-  const loadBucketInspectorData = useCallback(
-    async (force = false) => {
-      if (!bucketName || !hasS3AccountContext) return;
-      if (!force && bucketInspectorByName[bucketName]) {
-        setBucketInspectorError(null);
-        return;
-      }
-      const requestId = bucketInspectorRequestIdRef.current + 1;
-      bucketInspectorRequestIdRef.current = requestId;
-      setBucketInspectorLoading(true);
-      setBucketInspectorError(null);
-      try {
-        const payload = await fetchBucketInspectorData({
-          accountId: accountIdForApi,
-          bucketName,
-          includeUsage: bucketInspectorUsageEnabled,
-          includeStaticWebsite: bucketInspectorStaticWebsiteEnabled,
-        });
-        if (bucketInspectorRequestIdRef.current !== requestId) return;
-        setBucketInspectorByName((prev) => ({
-          ...prev,
-          [bucketName]: payload,
-        }));
-      } catch (err) {
-        if (bucketInspectorRequestIdRef.current !== requestId) return;
-        setBucketInspectorError(
-          extractApiError(err, "Unable to load bucket stats and features."),
-        );
-      } finally {
-        if (bucketInspectorRequestIdRef.current === requestId) {
-          setBucketInspectorLoading(false);
-        }
-      }
-    },
-    [
-      accountIdForApi,
-      bucketInspectorByName,
-      bucketName,
-      bucketInspectorStaticWebsiteEnabled,
-      bucketInspectorUsageEnabled,
-      hasS3AccountContext,
-    ],
-  );
   const handleOpenBucketInspector = useCallback(() => {
     setInspectorTab("bucket");
-    if (!bucketName || !hasS3AccountContext || bucketInspectorLoading) return;
-    if (bucketInspectorByName[bucketName]) return;
     void loadBucketInspectorData();
-  }, [
-    bucketInspectorByName,
-    bucketInspectorLoading,
-    bucketName,
-    hasS3AccountContext,
-    loadBucketInspectorData,
-  ]);
+  }, [loadBucketInspectorData]);
 
   const syncInspectorTabWithSelection = useCallback(
     (nextSelectedCount: number) => {
