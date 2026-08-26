@@ -21,7 +21,6 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router-dom";
-import type { UploadProgressEvent } from "../../api/browser";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import {
@@ -48,7 +47,6 @@ import {
   PresignRequest,
   getBucketVersioning,
   fetchBrowserObjectColumns,
-  initiateMultipartUpload,
   listBrowserObjects,
   listObjectVersions,
   searchBrowserBuckets,
@@ -56,9 +54,6 @@ import {
   fetchBrowserSettings,
   presignPart,
   presignObject,
-  proxyUpload,
-  completeMultipartUpload,
-  abortMultipartUpload,
 } from "../../api/browser";
 import { useBrowserContext } from "./BrowserContext";
 import {
@@ -87,6 +82,7 @@ import { useBrowserOperationOverview } from "./useBrowserOperationOverview";
 import { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserPathEditor } from "./useBrowserPathEditor";
+import { useBrowserQueuedUpload } from "./useBrowserQueuedUpload";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 import { useBrowserVersionListing } from "./useBrowserVersionListing";
@@ -121,7 +117,6 @@ import {
   BrowserSseCustomerKeyModal,
 } from "./BrowserBucketDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
-import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
 import {
   buildBucketInspectorFeatures,
   fetchBucketInspectorData,
@@ -155,11 +150,8 @@ import {
   BUCKET_MENU_LIMIT,
   DELETED_RESULTS_TARGET,
   DELETED_VERSIONS_SCAN_LIMIT,
-  MULTIPART_CONCURRENCY,
-  MULTIPART_THRESHOLD,
   OBJECTS_LIST_HARD_LIMIT,
   OBJECTS_PAGE_SIZE,
-  PART_SIZE,
   TREE_PREFIXES_HARD_LIMIT,
   TREE_PREFIXES_PAGE_SIZE,
   VERSIONS_LIST_HARD_LIMIT,
@@ -180,7 +172,6 @@ import {
   formatDateTime,
   getSelectionInfo,
   isAbortError,
-  isLikelyCorsError,
   makeId,
   normalizePrefix,
   normalizeUploadPath,
@@ -241,8 +232,6 @@ import {
   mergeUniqueStringsWithLimit,
 } from "./browserListingState";
 import { resolveBrowserWorkspaceContext } from "./browserPageContextModel";
-import { uploadBrowserFile } from "./browserFileUpload";
-import { uploadBrowserFileMultipart } from "./browserMultipartUpload";
 import type {
   BrowserItem,
   ObjectDetailsTabId,
@@ -4756,6 +4745,23 @@ export default function BrowserPage({
     next.set(bucket, new Set([key]));
   };
 
+  const startQueuedUpload = useBrowserQueuedUpload({
+    clearOperationController,
+    completeOperation,
+    createOperationController,
+    onStatus: setStatusMessage,
+    onUploaded: recordUploadedKey,
+    onWarning: setWarningMessage,
+    presignObject: presignObjectRequest,
+    presignPart: presignPartRequest,
+    requestOptions: browserRequestOptions,
+    sseCustomerKeyBase64,
+    startOperation,
+    transferReporter,
+    updateOperation,
+    useProxyTransfers,
+  });
+
   const flushUploadRefreshIfIdle = () => {
     if (typeof window === "undefined") return;
     if (activeUploadsRef.current > 0) return;
@@ -4945,188 +4951,6 @@ export default function BrowserPage({
     }
   };
 
-  const uploadSimple = async (
-    accountId: string,
-    bucket: string,
-    file: File,
-    key: string,
-    onProgress: (event: UploadProgressEvent) => void,
-    controller?: AbortController,
-  ) => {
-    await uploadBrowserFile({
-      file,
-      mode: useProxyTransfers ? "proxy" : "direct",
-      signal: controller?.signal,
-      onProgress,
-      uploadProxy: () =>
-        proxyUpload(
-          accountId,
-          bucket,
-          key,
-          file,
-          onProgress,
-          controller?.signal,
-          sseCustomerKeyBase64,
-          undefined,
-          browserRequestOptions,
-        ),
-      presign: () =>
-        presignObjectRequest(bucket, {
-          key,
-          operation: "put_object",
-          content_type: file.type || undefined,
-          expires_in: 1800,
-        }),
-    });
-  };
-
-  const uploadMultipart = async (
-    accountId: string,
-    bucket: string,
-    file: File,
-    key: string,
-    operationId: string,
-    controller: AbortController,
-  ) => {
-    updateOperation(operationId, { label: "Multipart upload" });
-    await uploadBrowserFileMultipart({
-      file,
-      partSize: PART_SIZE,
-      concurrency: MULTIPART_CONCURRENCY,
-      controller,
-      lifecycle: {
-        initiate: async () => {
-          const result = await initiateMultipartUpload(
-            accountId,
-            bucket,
-            {
-              key,
-              content_type: file.type || undefined,
-            },
-            sseCustomerKeyBase64,
-            browserRequestOptions,
-          );
-          return result.upload_id;
-        },
-        presignPart: (uploadId, partNumber) =>
-          presignPartRequest(bucket, uploadId, {
-            key,
-            part_number: partNumber,
-            expires_in: 1800,
-          }),
-        complete: (uploadId, parts) =>
-          completeMultipartUpload(
-            accountId,
-            bucket,
-            uploadId,
-            key,
-            { parts },
-            browserRequestOptions,
-          ),
-        abort: (uploadId) =>
-          abortMultipartUpload(
-            accountId,
-            bucket,
-            uploadId,
-            key,
-            browserRequestOptions,
-          ),
-      },
-      onProgress: (progress) => {
-        updateOperation(operationId, { progress });
-      },
-    });
-  };
-
-  const startQueuedUpload = async (item: UploadQueueItem) => {
-    if (!item.bucket || !item.accountId) return;
-    const {
-      file,
-      relativePath,
-      key,
-      bucket,
-      accountId,
-      groupId,
-      groupLabel,
-      groupKind,
-      itemLabel,
-    } = item;
-    const operationId = startOperation(
-      "uploading",
-      "Uploading",
-      `${bucket}/${key}`,
-      {
-        kind: "upload",
-        groupId,
-        groupLabel,
-        groupKind,
-        itemLabel,
-        cancelable: true,
-        sizeBytes: file.size,
-      },
-    );
-    const controller = createOperationController(operationId);
-    const reportedTransferId = startReportedTransfer({
-      direction: "Upload",
-      bucketName: bucket,
-      key,
-      name: itemLabel || relativePath || file.name,
-      sizeBytes: file.size,
-    });
-    try {
-      if (!useProxyTransfers && file.size >= MULTIPART_THRESHOLD) {
-        await uploadMultipart(
-          accountId,
-          bucket,
-          file,
-          key,
-          operationId,
-          controller,
-        );
-      } else {
-        const onProgress = (event: UploadProgressEvent) => {
-          const total = event.total ?? file.size;
-          const progress = total ? Math.round((event.loaded / total) * 100) : 0;
-          updateOperation(operationId, { progress });
-        };
-        await uploadSimple(
-          accountId,
-          bucket,
-          file,
-          key,
-          onProgress,
-          controller,
-        );
-      }
-      completeOperation(operationId, "done");
-      completeReportedTransfer(reportedTransferId, itemLabel || relativePath || file.name);
-      setStatusMessage(`Uploaded ${relativePath}`);
-      recordUploadedKey(bucket, key);
-    } catch (err) {
-      if (isAbortError(err)) {
-        completeOperation(operationId, "cancelled");
-        failReportedTransfer(reportedTransferId, `Upload cancelled for ${relativePath}`);
-        setStatusMessage(`Upload cancelled for ${relativePath}`);
-      } else {
-        const completionError = formatOperationError(
-          err,
-          `Upload failed for ${relativePath}`,
-          `Upload failed for ${relativePath}`,
-        );
-        completeOperation(operationId, "failed", completionError);
-        failReportedTransfer(reportedTransferId, completionError);
-        setStatusMessage(completionError);
-        if (!useProxyTransfers && isLikelyCorsError(err)) {
-          setWarningMessage(
-            `Direct transfer failed before S3 returned an HTTP response. Possible causes: network reachability, TLS/certificate issue, CORS policy, or endpoint/proxy configuration.`,
-          );
-        }
-      }
-    } finally {
-      clearOperationController(operationId);
-    }
-  };
-
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? Array.from(event.target.files) : [];
     handleUploadFiles(buildUploadCandidates(files));
@@ -5186,22 +5010,6 @@ export default function BrowserPage({
       return;
     }
     handleUploadFiles(files);
-  };
-
-  const startReportedTransfer = (input: {
-    direction: "Upload" | "Download";
-    bucketName: string;
-    key: string;
-    name: string;
-    sizeBytes?: number | null;
-  }) => transferReporter?.start(input) ?? null;
-
-  const completeReportedTransfer = (id: string | null | undefined, name?: string) => {
-    if (id) transferReporter?.complete(id, name);
-  };
-
-  const failReportedTransfer = (id: string | null | undefined, message: string) => {
-    if (id) transferReporter?.fail(id, message);
   };
 
   const {
