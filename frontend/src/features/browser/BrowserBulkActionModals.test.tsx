@@ -5,23 +5,24 @@ import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import { createBrowserBulkAttributesDraft } from "./useBrowserBulkAttributes";
 import { createBrowserBulkRestoreDraft } from "./useBrowserBulkRestore";
+import { createBrowserVersionCleanupDraft } from "./useBrowserVersionCleanup";
 
 describe("Browser bulk action modals", () => {
   it("renders cleanup feedback with shared inline messages", () => {
     render(
       <BrowserCleanupModal
         currentPath="reports/"
-        cleanupKeepLast="3"
-        setCleanupKeepLast={vi.fn()}
-        cleanupOlderThanDays="30"
-        setCleanupOlderThanDays={vi.fn()}
-        cleanupDeleteOrphanMarkers={false}
-        setCleanupDeleteOrphanMarkers={vi.fn()}
-        cleanupError="Cleanup failed"
-        cleanupSummary="Cleanup preview ready"
-        cleanupLoading={false}
+        draft={{
+          ...createBrowserVersionCleanupDraft(),
+          keepLast: "3",
+          olderThanDays: "30",
+        }}
+        error="Cleanup failed"
+        loading={false}
         onApply={vi.fn()}
         onClose={vi.fn()}
+        setDraft={vi.fn()}
+        summary="Cleanup preview ready"
       />
     );
 

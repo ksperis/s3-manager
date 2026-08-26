@@ -2,58 +2,50 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { browserPanelCardClasses, bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
 import { stableSignature } from "../../utils/stableSignature";
+import type { BrowserVersionCleanupDraft } from "./useBrowserVersionCleanup";
 
 type BrowserCleanupModalProps = {
   currentPath: string;
-  cleanupKeepLast: string;
-  setCleanupKeepLast: (value: string) => void;
-  cleanupOlderThanDays: string;
-  setCleanupOlderThanDays: (value: string) => void;
-  cleanupDeleteOrphanMarkers: boolean;
-  setCleanupDeleteOrphanMarkers: (value: boolean) => void;
-  cleanupError: string | null;
-  cleanupSummary: string | null;
-  cleanupLoading: boolean;
+  draft: BrowserVersionCleanupDraft;
+  error: string | null;
+  loading: boolean;
   onApply: () => void;
   onClose: () => void;
+  setDraft: Dispatch<SetStateAction<BrowserVersionCleanupDraft>>;
+  summary: string | null;
 };
 
 export default function BrowserCleanupModal({
   currentPath,
-  cleanupKeepLast,
-  setCleanupKeepLast,
-  cleanupOlderThanDays,
-  setCleanupOlderThanDays,
-  cleanupDeleteOrphanMarkers,
-  setCleanupDeleteOrphanMarkers,
-  cleanupError,
-  cleanupSummary,
-  cleanupLoading,
+  draft,
+  error,
+  loading,
   onApply,
   onClose,
+  setDraft,
+  summary,
 }: BrowserCleanupModalProps) {
   const currentSignature = useMemo(
-    () =>
-      stableSignature({
-        cleanupKeepLast,
-        cleanupOlderThanDays,
-        cleanupDeleteOrphanMarkers,
-      }),
-    [cleanupDeleteOrphanMarkers, cleanupKeepLast, cleanupOlderThanDays]
+    () => stableSignature(draft),
+    [draft],
   );
   const [initialSignature] = useState(currentSignature);
   const closeGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: currentSignature !== initialSignature,
     onClose,
-    disabled: cleanupLoading,
+    disabled: loading,
   });
+  const updateDraft = <Key extends keyof BrowserVersionCleanupDraft>(
+    key: Key,
+    value: BrowserVersionCleanupDraft[Key],
+  ) => setDraft((previous) => ({ ...previous, [key]: value }));
 
   return (
     <Modal title="Clean old versions" onClose={closeGuard.requestClose} maxWidthClass="max-w-2xl">
@@ -62,8 +54,8 @@ export default function BrowserCleanupModal({
           <p className="font-semibold text-slate-800 dark:text-slate-100">Context</p>
           <p className="break-all">{currentPath || "Select a bucket to get started."}</p>
         </div>
-        {cleanupError && <UiInlineMessage tone="error">{cleanupError}</UiInlineMessage>}
-        {cleanupSummary && <UiInlineMessage tone="success">{cleanupSummary}</UiInlineMessage>}
+        {error && <UiInlineMessage tone="error">{error}</UiInlineMessage>}
+        {summary && <UiInlineMessage tone="success">{summary}</UiInlineMessage>}
         <div className={browserPanelCardClasses}>
           <label className="ui-caption font-semibold text-slate-500 dark:text-slate-400">
             Keep only the N most recent versions per object
@@ -73,8 +65,8 @@ export default function BrowserCleanupModal({
             min={1}
             inputMode="numeric"
             className={`${formInputClasses} mt-2`}
-            value={cleanupKeepLast}
-            onChange={(event) => setCleanupKeepLast(event.target.value)}
+            value={draft.keepLast}
+            onChange={(event) => updateDraft("keepLast", event.target.value)}
             placeholder="e.g. 3"
           />
           <label className="mt-3 ui-caption font-semibold text-slate-500 dark:text-slate-400">
@@ -85,13 +77,13 @@ export default function BrowserCleanupModal({
             min={1}
             inputMode="numeric"
             className={`${formInputClasses} mt-2`}
-            value={cleanupOlderThanDays}
-            onChange={(event) => setCleanupOlderThanDays(event.target.value)}
+            value={draft.olderThanDays}
+            onChange={(event) => updateDraft("olderThanDays", event.target.value)}
             placeholder="e.g. 30"
           />
           <UiCheckboxField
-            checked={cleanupDeleteOrphanMarkers}
-            onChange={(event) => setCleanupDeleteOrphanMarkers(event.target.checked)}
+            checked={draft.deleteOrphanMarkers}
+            onChange={(event) => updateDraft("deleteOrphanMarkers", event.target.checked)}
             className="mt-3 ui-caption text-slate-500 dark:text-slate-400"
           >
             Delete orphan delete markers (runs after version cleanup)
@@ -108,9 +100,9 @@ export default function BrowserCleanupModal({
             type="button"
             className={toolbarPrimaryClasses}
             onClick={onApply}
-            disabled={cleanupLoading}
+            disabled={loading}
           >
-            {cleanupLoading ? "Cleaning..." : "Run cleanup"}
+            {loading ? "Cleaning..." : "Run cleanup"}
           </button>
         </div>
       </div>

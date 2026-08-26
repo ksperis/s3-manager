@@ -52,7 +52,6 @@ import {
   PresignPartRequest,
   PresignRequest,
   copyObject,
-  cleanupObjectVersions,
   createFolder,
   deleteObjects,
   getBucketVersioning,
@@ -98,6 +97,7 @@ import { useBrowserPathEditor } from "./useBrowserPathEditor";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 import { useBrowserVersionListing } from "./useBrowserVersionListing";
+import { useBrowserVersionCleanup } from "./useBrowserVersionCleanup";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
@@ -718,14 +718,6 @@ export default function BrowserPage({
     contextMenuRef,
     openContextMenu,
   } = useBrowserContextMenu();
-  const [showCleanupModal, setShowCleanupModal] = useState(false);
-  const [cleanupKeepLast, setCleanupKeepLast] = useState("");
-  const [cleanupOlderThanDays, setCleanupOlderThanDays] = useState("");
-  const [cleanupDeleteOrphanMarkers, setCleanupDeleteOrphanMarkers] =
-    useState(false);
-  const [cleanupLoading, setCleanupLoading] = useState(false);
-  const [cleanupError, setCleanupError] = useState<string | null>(null);
-  const [cleanupSummary, setCleanupSummary] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
@@ -5635,6 +5627,36 @@ export default function BrowserPage({
     versioningEnabled: isVersioningEnabled,
   });
 
+  const {
+    apply: handleCleanupApply,
+    close: closeCleanupModal,
+    draft: cleanupDraft,
+    error: cleanupError,
+    loading: cleanupLoading,
+    open: showCleanupModal,
+    setDraft: setCleanupDraft,
+    show: openCleanupModal,
+    summary: cleanupSummary,
+  } = useBrowserVersionCleanup({
+    accountId: accountIdForApi,
+    bucketName,
+    clearOperationController,
+    completeOperation,
+    createOperationController,
+    currentPath,
+    enabled: hasS3AccountContext,
+    isOperationAborted,
+    normalizedPrefix,
+    onRefresh: requestObjectsRefresh,
+    onRefreshNow: refreshObjectsNow,
+    onStatus: setStatusMessage,
+    prefix,
+    requestOptions: browserRequestOptions,
+    showOperations: showOperationsBar,
+    startOperation,
+    versioningEnabled: isVersioningEnabled,
+  });
+
   const deleteFolderRecursive = async (
     folderItem: BrowserItem,
   ): Promise<OperationCompletionStatus | undefined> => {
@@ -6226,84 +6248,6 @@ export default function BrowserPage({
       loadTreeChildren(prefix);
     } catch {
       setStatusMessage("Unable to delete objects.");
-    }
-  };
-
-  const openCleanupModal = () => {
-    if (!isVersioningEnabled) return;
-    setCleanupError(null);
-    setCleanupSummary(null);
-    setShowCleanupModal(true);
-  };
-
-  const handleCleanupApply = async () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const keepLast = Number.parseInt(cleanupKeepLast, 10);
-    const olderThan = Number.parseInt(cleanupOlderThanDays, 10);
-    const keepLastValue = Number.isNaN(keepLast) ? undefined : keepLast;
-    const olderThanValue = Number.isNaN(olderThan) ? undefined : olderThan;
-    if (!keepLastValue && !olderThanValue && !cleanupDeleteOrphanMarkers) {
-      setCleanupError("Select at least one cleanup rule.");
-      return;
-    }
-    if (keepLastValue !== undefined && keepLastValue < 1) {
-      setCleanupError("Keep last versions must be at least 1.");
-      return;
-    }
-    if (olderThanValue !== undefined && olderThanValue < 1) {
-      setCleanupError("Older than days must be at least 1.");
-      return;
-    }
-    setCleanupLoading(true);
-    setCleanupError(null);
-    setCleanupSummary(null);
-    showOperationsBar();
-    const operationId = startOperation(
-      "deleting",
-      "Cleaning old versions",
-      currentPath || bucketName,
-      { kind: "other", cancelable: true },
-      0,
-    );
-    const controller = createOperationController(operationId);
-    let cleanupCompletionStatus: OperationCompletionStatus = "done";
-    let cleanupCompletionError: string | undefined;
-    try {
-      const result = await cleanupObjectVersions(
-        accountIdForApi,
-        bucketName,
-        {
-          prefix: normalizedPrefix,
-          keep_last_n: keepLastValue,
-          older_than_days: olderThanValue,
-          delete_orphan_markers: cleanupDeleteOrphanMarkers,
-        },
-        controller.signal,
-        browserRequestOptions,
-      );
-      const summary = `Removed ${result.deleted_versions} version(s) and ${result.deleted_delete_markers} delete marker(s).`;
-      setCleanupSummary(summary);
-      setStatusMessage(summary);
-      requestObjectsRefresh(prefix);
-    } catch (err) {
-      if (isOperationAborted(err, controller)) {
-        cleanupCompletionStatus = "cancelled";
-        setCleanupSummary("Cleanup cancelled.");
-        setStatusMessage("Cleanup cancelled.");
-        await refreshObjectsNow(prefix);
-      } else {
-        cleanupCompletionStatus = "failed";
-        cleanupCompletionError = "Unable to clean old versions for this prefix.";
-        setCleanupError("Unable to clean old versions for this prefix.");
-      }
-    } finally {
-      clearOperationController(operationId);
-      completeOperation(
-        operationId,
-        cleanupCompletionStatus,
-        cleanupCompletionError,
-      );
-      setCleanupLoading(false);
     }
   };
 
@@ -7891,17 +7835,13 @@ export default function BrowserPage({
       {showCleanupModal && (
         <BrowserCleanupModal
           currentPath={currentPath}
-          cleanupKeepLast={cleanupKeepLast}
-          setCleanupKeepLast={setCleanupKeepLast}
-          cleanupOlderThanDays={cleanupOlderThanDays}
-          setCleanupOlderThanDays={setCleanupOlderThanDays}
-          cleanupDeleteOrphanMarkers={cleanupDeleteOrphanMarkers}
-          setCleanupDeleteOrphanMarkers={setCleanupDeleteOrphanMarkers}
-          cleanupError={cleanupError}
-          cleanupSummary={cleanupSummary}
-          cleanupLoading={cleanupLoading}
+          draft={cleanupDraft}
+          error={cleanupError}
+          loading={cleanupLoading}
           onApply={handleCleanupApply}
-          onClose={() => setShowCleanupModal(false)}
+          onClose={closeCleanupModal}
+          setDraft={setCleanupDraft}
+          summary={cleanupSummary}
         />
       )}
       {showNewFolderModal && (
