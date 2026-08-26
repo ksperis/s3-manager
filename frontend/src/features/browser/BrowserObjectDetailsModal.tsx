@@ -4,7 +4,6 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../../components/Modal";
-import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { extractApiError } from "../../utils/apiError";
 import ObjectPreview from "../shared/ObjectPreview";
 import {
@@ -15,7 +14,9 @@ import {
 } from "../../api/browser";
 import type { S3AccountSelector } from "../../api/accountParams";
 import { BrowserCopyValueModal } from "./BrowserDialogModals";
-import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
+import BrowserObjectArchiveTab from "./BrowserObjectArchiveTab";
+import BrowserObjectProtectionTab from "./BrowserObjectProtectionTab";
+import BrowserObjectVersionsTab from "./BrowserObjectVersionsTab";
 import {
   browserPanelCardClasses,
   bulkActionClasses,
@@ -25,8 +26,6 @@ import {
 } from "./browserConstants";
 import {
   ARCHIVE_STORAGE_CLASSES,
-  OBJECT_LOCK_DISABLED_MESSAGE,
-  aclOptions,
   formatRestoreStatus,
   nextTabAfterDeleted,
   storageClassOptions,
@@ -36,16 +35,10 @@ import type {
   ObjectDetailsTabId,
 } from "./browserTypes";
 import { useBrowserObjectVersions } from "./useBrowserObjectVersions";
-import {
-  useBrowserObjectProtection,
-  type ObjectRetentionMode,
-} from "./useBrowserObjectProtection";
+import { useBrowserObjectProtection } from "./useBrowserObjectProtection";
 import { useBrowserObjectProperties } from "./useBrowserObjectProperties";
 import { useBrowserObjectSignedUrl } from "./useBrowserObjectSignedUrl";
-import {
-  useBrowserObjectArchiveRestore,
-  type ObjectRestoreTier,
-} from "./useBrowserObjectArchiveRestore";
+import { useBrowserObjectArchiveRestore } from "./useBrowserObjectArchiveRestore";
 import { useBrowserObjectAcl } from "./useBrowserObjectAcl";
 import { useBrowserObjectPreview } from "./useBrowserObjectPreview";
 
@@ -494,33 +487,22 @@ export default function BrowserObjectDetailsModal({
   };
 
   const renderVersionsContent = () => (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="ui-caption text-slate-500 dark:text-slate-400">
-          Inspect previous object states, delete markers, and restore the latest
-          state when needed.
-        </p>
-        <button
-          type="button"
-          className={toolbarButtonClasses}
-          onClick={() => void loadVersions({ force: true })}
-          disabled={versionsLoading || savingVersionAction}
-        >
-          Refresh
-        </button>
-      </div>
-      <BrowserObjectVersionsList
-        title="Versions"
-        versions={versionRows}
-        loading={versionsLoading || savingVersionAction}
-        error={versionsError}
-        canLoadMore={canLoadMoreVersions}
-        onLoadMore={() => void loadVersions({ append: true })}
-        onRestoreVersion={(version) => void handleVersionAction("restore", version)}
-        onDeleteVersion={(version) => void handleVersionAction("delete", version)}
-        readOnly={readOnly}
-      />
-    </div>
+    <BrowserObjectVersionsTab
+      versions={versionRows}
+      loading={versionsLoading}
+      savingAction={savingVersionAction}
+      error={versionsError}
+      canLoadMore={canLoadMoreVersions}
+      onRefresh={() => void loadVersions({ force: true })}
+      onLoadMore={() => void loadVersions({ append: true })}
+      onRestoreVersion={(version) =>
+        void handleVersionAction("restore", version)
+      }
+      onDeleteVersion={(version) =>
+        void handleVersionAction("delete", version)
+      }
+      readOnly={readOnly}
+    />
   );
 
   const renderPropertiesContent = () => (
@@ -864,308 +846,51 @@ export default function BrowserObjectDetailsModal({
   );
 
   const renderProtectionContent = () => (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <div className={browserPanelCardClasses}>
-        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-          Access
-        </p>
-        <label className="mt-3 block space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-          <span>Canned ACL</span>
-          <select
-            className={formInputClasses}
-            value={aclValue}
-            onChange={(event) => setAclValue(event.target.value)}
-          >
-            {aclOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-          Updating the ACL overrides any custom grants currently applied.
-        </p>
-        <div className="mt-3 flex items-center justify-end">
-          <button
-            type="button"
-            className={toolbarPrimaryClasses}
-            onClick={() => void handleSaveAcl()}
-            disabled={savingAcl}
-          >
-            {savingAcl ? "Saving..." : "Save ACL"}
-          </button>
-        </div>
-      </div>
-
-      <div
-        className={`${browserPanelCardClasses} ${objectLockUnavailable ? "opacity-60" : ""}`}
-      >
-        <div className="flex items-center justify-between">
-          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-            Legal hold
-          </p>
-          {protectionLoading && (
-            <span className="ui-caption text-slate-500 dark:text-slate-400">
-              Loading...
-            </span>
-          )}
-        </div>
-        {legalHoldError && (
-          <p className="mt-2 ui-caption text-rose-600 dark:text-rose-200">
-            {legalHoldError}
-          </p>
-        )}
-        {objectLockUnavailable && (
-          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-            {OBJECT_LOCK_DISABLED_MESSAGE}
-          </p>
-        )}
-        <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
-          <select
-            className={formInputClasses}
-            value={legalHoldStatus}
-            onChange={(event) =>
-              setLegalHoldStatus(event.target.value as "ON" | "OFF")
-            }
-            disabled={objectLockUnavailable}
-          >
-            <option value="OFF">OFF</option>
-            <option value="ON">ON</option>
-          </select>
-          <button
-            type="button"
-            className={toolbarPrimaryClasses}
-            onClick={() => void handleSaveLegalHold()}
-            disabled={savingLegalHold || protectionLoading || objectLockUnavailable}
-          >
-            {savingLegalHold ? "Saving..." : "Update legal hold"}
-          </button>
-        </div>
-      </div>
-
-      <div
-        className={`${browserPanelCardClasses} ${objectLockUnavailable ? "opacity-60" : ""}`}
-      >
-        <div className="flex items-center justify-between">
-          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-            Retention
-          </p>
-          {protectionLoading && (
-            <span className="ui-caption text-slate-500 dark:text-slate-400">
-              Loading...
-            </span>
-          )}
-        </div>
-        {retentionError && (
-          <p className="mt-2 ui-caption text-rose-600 dark:text-rose-200">
-            {retentionError}
-          </p>
-        )}
-        {objectLockUnavailable && (
-          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-            {OBJECT_LOCK_DISABLED_MESSAGE}
-          </p>
-        )}
-        <div className="mt-2 grid gap-2 md:grid-cols-2">
-          <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-            <span>Mode</span>
-            <select
-              className={formInputClasses}
-              value={retentionMode}
-              onChange={(event) =>
-                setRetentionMode(
-                  event.target.value as ObjectRetentionMode,
-                )
-              }
-              disabled={objectLockUnavailable}
-            >
-              <option value="">Select mode</option>
-              <option value="GOVERNANCE">GOVERNANCE</option>
-              <option value="COMPLIANCE">COMPLIANCE</option>
-            </select>
-          </label>
-          <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-            <span>Retain until</span>
-            <input
-              type="datetime-local"
-              className={formInputClasses}
-              value={retentionDate}
-              onChange={(event) => setRetentionDate(event.target.value)}
-              disabled={objectLockUnavailable}
-            />
-          </label>
-        </div>
-        <UiCheckboxField
-          checked={retentionBypass}
-          onChange={(event) => setRetentionBypass(event.target.checked)}
-          disabled={objectLockUnavailable}
-          className="mt-2 ui-caption text-slate-500 dark:text-slate-400"
-        >
-          Bypass governance retention
-        </UiCheckboxField>
-        <div className="mt-3 flex items-center justify-end">
-          <button
-            type="button"
-            className={toolbarPrimaryClasses}
-            onClick={() => void handleSaveRetention()}
-            disabled={
-              savingRetention ||
-              protectionLoading ||
-              objectLockUnavailable ||
-              !retentionMode ||
-              !retentionDate
-            }
-          >
-            {savingRetention ? "Saving..." : "Update retention"}
-          </button>
-        </div>
-      </div>
-
-      <div className={browserPanelCardClasses}>
-        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-          Signed URL
-        </p>
-        <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-          Generate a temporary signed URL for this object (valid for up to 12
-          hours).
-        </p>
-        {sseCustomerKeyBase64 && (
-          <p className="mt-2 ui-caption font-semibold text-amber-600 dark:text-amber-200">
-            SSE-C is active: URL alone is insufficient without the required
-            SSE-C headers.
-          </p>
-        )}
-        <label className="mt-3 block space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-          <span>Expires at</span>
-          <input
-            type="datetime-local"
-            className={formInputClasses}
-            value={presignExpires}
-            onChange={(event) => setPresignExpires(event.target.value)}
-          />
-        </label>
-        {presignError && (
-          <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-200">
-            {presignError}
-          </p>
-        )}
-        <div className="mt-3 flex items-center justify-end">
-          <button
-            type="button"
-            className={toolbarPrimaryClasses}
-            onClick={() => void handleGeneratePresign()}
-            disabled={savingPresign}
-          >
-            {savingPresign ? "Generating..." : "Generate URL"}
-          </button>
-        </div>
-        {presignUrl && (
-          <div className="mt-3 space-y-2 rounded-lg border border-slate-200/80 bg-white px-3 py-3 ui-caption dark:border-slate-700 dark:bg-slate-950/60">
-            <div className="flex items-center justify-between">
-              <span className="ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                {presignMethod || "GET"}
-              </span>
-              <button
-                type="button"
-                className={toolbarButtonClasses}
-                onClick={() => void handleCopyPresign()}
-              >
-                Copy URL
-              </button>
-            </div>
-            <textarea
-              className={`${formInputClasses} h-24 font-mono`}
-              readOnly
-              value={presignUrl}
-              spellCheck={false}
-            />
-            {presignHeaders && Object.keys(presignHeaders).length > 0 && (
-              <div className="space-y-1">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-                  Headers
-                </p>
-                <pre className="overflow-auto rounded-md bg-slate-900/90 p-2 ui-caption text-slate-100">
-                  {JSON.stringify(presignHeaders, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+    <BrowserObjectProtectionTab
+      aclValue={aclValue}
+      onAclChange={setAclValue}
+      savingAcl={savingAcl}
+      onSaveAcl={handleSaveAcl}
+      protectionLoading={protectionLoading}
+      objectLockUnavailable={objectLockUnavailable}
+      legalHoldStatus={legalHoldStatus}
+      onLegalHoldStatusChange={setLegalHoldStatus}
+      legalHoldError={legalHoldError}
+      savingLegalHold={savingLegalHold}
+      onSaveLegalHold={handleSaveLegalHold}
+      retentionMode={retentionMode}
+      onRetentionModeChange={setRetentionMode}
+      retentionDate={retentionDate}
+      onRetentionDateChange={setRetentionDate}
+      retentionBypass={retentionBypass}
+      onRetentionBypassChange={setRetentionBypass}
+      retentionError={retentionError}
+      savingRetention={savingRetention}
+      onSaveRetention={handleSaveRetention}
+      sseCustomerKeyActive={Boolean(sseCustomerKeyBase64)}
+      presignExpires={presignExpires}
+      onPresignExpiresChange={setPresignExpires}
+      presignError={presignError}
+      savingPresign={savingPresign}
+      presignUrl={presignUrl}
+      presignMethod={presignMethod}
+      presignHeaders={presignHeaders}
+      onGeneratePresign={handleGeneratePresign}
+      onCopyPresign={handleCopyPresign}
+    />
   );
 
   const renderArchiveContent = () => (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-      <div className={browserPanelCardClasses}>
-        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-          Archive restore
-        </p>
-        <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-          Restore archived objects (GLACIER, GLACIER_IR, DEEP_ARCHIVE) for a
-          limited duration.
-        </p>
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-            <span>Days</span>
-            <input
-              type="number"
-              min={1}
-              className={formInputClasses}
-              value={restoreDays}
-              onChange={(event) => setRestoreDays(event.target.value)}
-            />
-          </label>
-          <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-            <span>Tier</span>
-            <select
-              className={formInputClasses}
-              value={restoreTier}
-              onChange={(event) =>
-                setRestoreTier(
-                  event.target.value as ObjectRestoreTier,
-                )
-              }
-            >
-              <option value="Standard">Standard</option>
-              <option value="Bulk">Bulk</option>
-              <option value="Expedited">Expedited</option>
-            </select>
-          </label>
-        </div>
-        <div className="mt-3 flex items-center justify-end">
-          <button
-            type="button"
-            className={toolbarPrimaryClasses}
-            onClick={() => void handleRestoreArchive()}
-            disabled={savingRestore}
-          >
-            {savingRestore ? "Submitting..." : "Request restore"}
-          </button>
-        </div>
-      </div>
-
-      <div className={browserPanelCardClasses}>
-        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
-          Current status
-        </p>
-        <div className="mt-2 space-y-2 ui-caption text-slate-600 dark:text-slate-300">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500">Storage class</span>
-            <span className="font-semibold text-slate-700 dark:text-slate-100">
-              {currentStorageClass ?? "-"}
-            </span>
-          </div>
-          <div className="flex items-start justify-between gap-3">
-            <span className="text-slate-500">Restore status</span>
-            <span className="max-w-[24rem] text-right font-semibold text-slate-700 dark:text-slate-100">
-              {restoreStatusLabel ?? "No active restore."}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <BrowserObjectArchiveTab
+      days={restoreDays}
+      onDaysChange={setRestoreDays}
+      tier={restoreTier}
+      onTierChange={setRestoreTier}
+      saving={savingRestore}
+      onRestore={handleRestoreArchive}
+      currentStorageClass={currentStorageClass}
+      restoreStatusLabel={restoreStatusLabel}
+    />
   );
 
   const renderContent = () => {
