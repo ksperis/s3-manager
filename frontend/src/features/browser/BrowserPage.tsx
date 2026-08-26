@@ -30,8 +30,6 @@ import {
   uiMenuClass,
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-import { runWithConcurrency } from "../../utils/concurrency";
-import { triggerBlobDownload } from "../../utils/download";
 import {
   CLIENT_STORAGE_KEYS,
   writeClientStorage,
@@ -83,6 +81,7 @@ import { useBrowserContextMenu } from "./useBrowserContextMenu";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserDeleteItems } from "./useBrowserDeleteItems";
+import { useBrowserDownloads } from "./useBrowserDownloads";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
@@ -124,14 +123,6 @@ import {
 } from "./BrowserBucketDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
 import { formatBrowserOperationError as formatOperationError } from "./browserOperationErrors";
-import {
-  updateOperationDetailById,
-} from "./browserOperationDetailState";
-import {
-  buildBrowserFolderDownloadPlan,
-  downloadBrowserFolderArchive,
-  resolveBrowserFolderArchiveLabel,
-} from "./browserFolderDownload";
 import {
   buildBucketInspectorFeatures,
   fetchBucketInspectorData,
@@ -252,14 +243,9 @@ import {
 } from "./browserListingState";
 import { resolveBrowserWorkspaceContext } from "./browserPageContextModel";
 import { uploadBrowserFile } from "./browserFileUpload";
-import {
-  downloadBrowserTransferBlob,
-  downloadBrowserTransferStream,
-} from "./browserObjectTransferTransport";
 import { uploadBrowserFileMultipart } from "./browserMultipartUpload";
 import type {
   BrowserItem,
-  DownloadDetailStatus,
   ObjectDetailsTabId,
   OperationCompletionStatus,
   TreeNode,
@@ -1201,10 +1187,6 @@ export default function BrowserPage({
     uploadParallelismRef.current = uploadParallelism;
   }, [uploadParallelism]);
   const downloadParallelism = transferParallelism.download;
-  const downloadParallelismRef = useRef(downloadParallelism);
-  useEffect(() => {
-    downloadParallelismRef.current = downloadParallelism;
-  }, [downloadParallelism]);
   const otherOperationsParallelism = transferParallelism.otherOperations;
   const proxyAllowed = browserSettings?.allow_proxy_transfers ?? false;
   const useStsPresigner = shouldUseStsPresigner({ stsAvailable, sseActive });
@@ -5224,41 +5206,6 @@ export default function BrowserPage({
     if (id) transferReporter?.fail(id, message);
   };
 
-  async function downloadObjectBlob(key: string, signal?: AbortSignal) {
-    if (!bucketName || !hasS3AccountContext) {
-      throw new Error("Missing bucket context.");
-    }
-    return downloadBrowserTransferBlob({
-      selector: accountIdForApi,
-      bucket: bucketName,
-      key,
-      mode: useProxyTransfers ? "proxy" : "direct",
-      signal,
-      sseCustomerKeyBase64,
-      options: browserRequestOptions,
-      directPresign: (payload) => presignObjectRequest(bucketName, payload),
-    });
-  }
-
-  const downloadObjectStream = async (
-    key: string,
-    signal?: AbortSignal,
-  ): Promise<ReadableStream<Uint8Array>> => {
-    if (!bucketName || !hasS3AccountContext) {
-      throw new Error("Missing bucket context.");
-    }
-    return downloadBrowserTransferStream({
-      selector: accountIdForApi,
-      bucket: bucketName,
-      key,
-      mode: useProxyTransfers ? "proxy" : "direct",
-      signal,
-      sseCustomerKeyBase64,
-      options: browserRequestOptions,
-      directPresign: (payload) => presignObjectRequest(bucketName, payload),
-    });
-  };
-
   const {
     apply: handleBulkAttributesApply,
     close: closeBulkAttributesModal,
@@ -5395,335 +5342,36 @@ export default function BrowserPage({
     versioningEnabled: isVersioningEnabled,
   });
 
-  const updateDownloadDetail = (
-    operationId: string,
-    detailId: string,
-    status: DownloadDetailStatus,
-    errorMessage?: string,
-  ) => {
-    setDownloadDetails((prev) =>
-      updateOperationDetailById(
-        prev,
-        operationId,
-        detailId,
-        status,
-        errorMessage,
-      ),
-    );
-  };
-
-  const handleDownloadFolder = async (folderItem: BrowserItem) => {
-    if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder")
-      return;
-    showOperationsBar();
-    setWarningMessage(null);
-    const folderPrefix = normalizePrefix(folderItem.key);
-    const folderLabel = resolveBrowserFolderArchiveLabel(
-      folderItem.name,
-      folderPrefix,
-    );
-    const operationId = startOperation(
-      "downloading",
-      "Preparing download",
-      `${bucketName}/${folderPrefix}`,
-      { kind: "download", cancelable: true },
-    );
-    const controller = createOperationController(operationId);
-    let completionStatus: OperationCompletionStatus = "done";
-    let completionError: string | undefined;
-    try {
-      const objects = await listAllObjectsForPrefix(folderPrefix);
-      if (controller.signal.aborted) {
-        completionStatus = "cancelled";
-        setStatusMessage(`Download cancelled for ${folderLabel}`);
-        return;
-      }
-      const plan = buildBrowserFolderDownloadPlan(
-        objects,
-        folderPrefix,
-        makeId,
-      );
-      if (plan.targets.length === 0) {
-        setStatusMessage("Folder is empty.");
-        return;
-      }
-      setDownloadDetails((prev) => ({
-        ...prev,
-        [operationId]: plan.targets.map((target) => ({
-          id: target.detailId,
-          key: target.key,
-          label: target.relativeKey,
-          status: "queued",
-          sizeBytes: target.sizeBytes,
-        })),
-      }));
-      const streamingZipThresholdBytes =
-        Math.max(
-          0,
-          browserSettings?.streaming_zip_threshold_mb ??
-            DEFAULT_STREAMING_ZIP_THRESHOLD_MB,
-        ) *
-        1024 *
-        1024;
-      const archiveResult = await downloadBrowserFolderArchive({
-        controller,
-        downloadBlob: downloadObjectBlob,
-        downloadStream: downloadObjectStream,
-        folderLabel,
-        onDetailChange: (detailId, status, errorMessage) =>
-          updateDownloadDetail(
-            operationId,
-            detailId,
-            status,
-            errorMessage,
-          ),
-        onPhaseChange: (label) => updateOperation(operationId, { label }),
-        onProgress: (progress) => updateOperation(operationId, { progress }),
-        parallelism: downloadParallelismRef.current,
-        streamingThresholdBytes: streamingZipThresholdBytes,
-        targets: plan.targets,
-        totalBytes: plan.totalBytes,
-      });
-      if (archiveResult.cancelled) {
-        completionStatus = "cancelled";
-        setStatusMessage(`Download cancelled for ${folderLabel}`);
-        cancelDownloadDetails(operationId);
-        return;
-      }
-      if (archiveResult.failedKeys.length > 0) {
-        completionStatus = "failed";
-        completionError = `Downloaded ${folderLabel} with ${archiveResult.failedKeys.length} failed file(s).`;
-        setStatusMessage(completionError);
-      } else {
-        setStatusMessage(`Downloaded ${folderLabel}`);
-      }
-    } catch (err) {
-      if (isAbortError(err) || controller.signal.aborted) {
-        completionStatus = "cancelled";
-        setStatusMessage(`Download cancelled for ${folderLabel}`);
-      } else {
-        completionStatus = "failed";
-        console.error(err);
-        completionError = formatOperationError(
-          err,
-          "Unable to download folder.",
-          "Unable to download folder.",
-        );
-        setStatusMessage(completionError);
-      }
-    } finally {
-      clearOperationController(operationId);
-      completeOperation(operationId, completionStatus, completionError);
-    }
-  };
-
-  const handleDownloadMultipleFiles = async (targets: BrowserItem[]) => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const files = targets.filter(
-      (item) => item.type === "file" && !item.isDeleted,
-    );
-    if (files.length <= 1) {
-      await handleDownloadItems(files);
-      return;
-    }
-    showOperationsBar();
-    const operationId = startOperation(
-      "downloading",
-      `Downloading ${files.length} files`,
-      currentPath || bucketName,
-      { kind: "download", cancelable: true },
-    );
-    const controller = createOperationController(operationId);
-    let completionStatus: OperationCompletionStatus = "done";
-    let completionError: string | undefined;
-    const downloadTargets = files.map((item) => ({
-      item,
-      detailId: makeId(),
-    }));
-    setDownloadDetails((prev) => ({
-      ...prev,
-      [operationId]: downloadTargets.map((target) => ({
-        id: target.detailId,
-        key: target.item.key,
-        label: target.item.name,
-        status: "queued",
-        sizeBytes: target.item.sizeBytes ?? undefined,
-      })),
-    }));
-    const totalBytes = downloadTargets.reduce(
-      (sum, target) => sum + (target.item.sizeBytes ?? 0),
-      0,
-    );
-    const totalCount = downloadTargets.length;
-    let downloadedBytes = 0;
-    let completed = 0;
-    let aborted = false;
-    let failedCount = 0;
-
-    const updateProgress = () => {
-      const base =
-        totalBytes > 0 ? downloadedBytes / totalBytes : completed / totalCount;
-      const percent = Math.min(100, Math.round(base * 100));
-      updateOperation(operationId, { progress: percent });
-    };
-
-    try {
-      await runWithConcurrency(
-        downloadTargets,
-        downloadParallelismRef.current,
-        async (target) => {
-          if (controller.signal.aborted) {
-            aborted = true;
-            return;
-          }
-          updateDownloadDetail(operationId, target.detailId, "downloading");
-          const reportedTransferId = startReportedTransfer({
-            direction: "Download",
-            bucketName,
-            key: target.item.key,
-            name: target.item.name || target.item.key,
-            sizeBytes: target.item.sizeBytes,
-          });
-          try {
-            const blob = await downloadObjectBlob(
-              target.item.key,
-              controller.signal,
-            );
-            triggerBlobDownload(target.item.name || "download", blob);
-            updateDownloadDetail(operationId, target.detailId, "done");
-            completeReportedTransfer(reportedTransferId, target.item.name || "download");
-          } catch (err) {
-            if (isAbortError(err) || controller.signal.aborted) {
-              updateDownloadDetail(operationId, target.detailId, "cancelled");
-              failReportedTransfer(reportedTransferId, "Download cancelled.");
-              aborted = true;
-              controller.abort();
-              return;
-            }
-            console.error(err);
-            const errorMessage = formatOperationError(err, "Download failed.");
-            updateDownloadDetail(
-              operationId,
-              target.detailId,
-              "failed",
-              errorMessage,
-            );
-            failReportedTransfer(reportedTransferId, errorMessage);
-            failedCount += 1;
-          } finally {
-            completed += 1;
-            downloadedBytes += target.item.sizeBytes ?? 0;
-            updateProgress();
-          }
-        },
-        () => aborted,
-      );
-      if (aborted || controller.signal.aborted) {
-        completionStatus = "cancelled";
-        setStatusMessage("Download cancelled.");
-        cancelDownloadDetails(operationId);
-        return;
-      }
-      updateOperation(operationId, { progress: 100 });
-      setStatusMessage(`Downloaded ${files.length} files`);
-      if (failedCount > 0) {
-        completionStatus = "failed";
-        completionError = `Downloaded ${files.length - failedCount} of ${files.length} files.`;
-        setStatusMessage(completionError);
-      }
-    } catch (err) {
-      if (isAbortError(err) || controller.signal.aborted) {
-        completionStatus = "cancelled";
-        setStatusMessage("Download cancelled.");
-      } else {
-        completionStatus = "failed";
-        completionError = formatOperationError(
-          err,
-          "Unable to download files.",
-          "Unable to download files.",
-        );
-        setStatusMessage(completionError);
-      }
-    } finally {
-      clearOperationController(operationId);
-      completeOperation(operationId, completionStatus, completionError);
-    }
-  };
-
-  const handleDownloadItems = async (targets: BrowserItem[]) => {
-    if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
-    const files = targets.filter(
-      (item) => item.type === "file" && !item.isDeleted,
-    );
-    const deletedCount = targets.filter(
-      (item) => item.type === "file" && item.isDeleted,
-    ).length;
-    if (files.length === 0) {
-      if (deletedCount > 0) {
-        setWarningMessage("Deleted objects cannot be downloaded directly.");
-      }
-      return;
-    }
-    if (deletedCount > 0) {
-      setWarningMessage(
-        "Deleted objects were skipped. Open versions to restore before download.",
-      );
-    } else {
-      setWarningMessage(null);
-    }
-    if (files.length > 1) {
-      await handleDownloadMultipleFiles(files);
-      return;
-    }
-    try {
-      for (const item of files) {
-        const reportsControlledDownload = useProxyTransfers || sseActive;
-        const reportedTransferId = reportsControlledDownload
-          ? startReportedTransfer({
-              direction: "Download",
-              bucketName,
-              key: item.key,
-              name: item.name || item.key,
-              sizeBytes: item.sizeBytes,
-            })
-          : null;
-        if (useProxyTransfers) {
-          try {
-            const blob = await downloadObjectBlob(item.key);
-            triggerBlobDownload(item.name || "download", blob);
-            completeReportedTransfer(reportedTransferId, item.name || "download");
-          } catch (err) {
-            failReportedTransfer(reportedTransferId, formatOperationError(err, "Unable to download object."));
-            throw err;
-          }
-        } else {
-          if (sseActive) {
-            try {
-              const blob = await downloadObjectBlob(item.key);
-              triggerBlobDownload(item.name || "download", blob);
-              completeReportedTransfer(reportedTransferId, item.name || "download");
-            } catch (err) {
-              failReportedTransfer(reportedTransferId, formatOperationError(err, "Unable to download object."));
-              throw err;
-            }
-          } else {
-            const presign = await presignObjectRequest(bucketName, {
-              key: item.key,
-              operation: "get_object",
-              expires_in: 900,
-            });
-            window.open(presign.url, "_blank");
-          }
-        }
-      }
-    } catch {
-      setStatusMessage(
-        useProxyTransfers || sseActive
-          ? "Unable to download object."
-          : "Unable to generate download URL.",
-      );
-    }
-  };
+  const {
+    downloadFolder: handleDownloadFolder,
+    downloadItems: handleDownloadItems,
+  } = useBrowserDownloads({
+    accountId: accountIdForApi,
+    bucketName,
+    cancelDownloadDetails,
+    clearOperationController,
+    completeOperation,
+    createOperationController,
+    currentPath,
+    enabled: hasS3AccountContext,
+    listAllObjectsForPrefix,
+    onStatus: setStatusMessage,
+    onWarning: setWarningMessage,
+    parallelism: downloadParallelism,
+    presignDownload: presignObjectRequest,
+    requestOptions: browserRequestOptions,
+    setDownloadDetails,
+    showOperations: showOperationsBar,
+    sseActive,
+    sseCustomerKeyBase64,
+    startOperation,
+    streamingZipThresholdMb:
+      browserSettings?.streaming_zip_threshold_mb ??
+      DEFAULT_STREAMING_ZIP_THRESHOLD_MB,
+    transferReporter,
+    updateOperation,
+    useProxyTransfers,
+  });
 
   const handleDownloadTarget = (item: BrowserItem) => {
     if (item.isDeleted) {
