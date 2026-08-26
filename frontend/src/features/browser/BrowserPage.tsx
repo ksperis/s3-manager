@@ -9,8 +9,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
-  type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -90,6 +88,7 @@ import { useBrowserPathEditor } from "./useBrowserPathEditor";
 import { useBrowserQueuedUpload } from "./useBrowserQueuedUpload";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
+import { useBrowserUploadQueue } from "./useBrowserUploadQueue";
 import { useBrowserVersionListing } from "./useBrowserVersionListing";
 import { useBrowserVersionCleanup } from "./useBrowserVersionCleanup";
 import { useBrowserVersionActions } from "./useBrowserVersionActions";
@@ -170,16 +169,11 @@ import {
 import type { BrowserPageProps } from "./browserPageContract";
 import {
   buildTreeNodes,
-  buildUploadCandidates,
-  buildUploadGrouping,
-  collectDroppedFiles,
   findTreeNodeByPrefix,
   formatDateTime,
   getSelectionInfo,
   isAbortError,
-  makeId,
   normalizePrefix,
-  normalizeUploadPath,
   updateTreeNodes,
 } from "./browserUtils";
 import {
@@ -239,7 +233,6 @@ import type {
   BrowserItem,
   ObjectDetailsTabId,
   TreeNode,
-  UploadCandidate,
   UploadQueueItem,
 } from "./browserTypes";
 
@@ -552,8 +545,6 @@ export default function BrowserPage({
     return sortKey;
   }, [sortKey]);
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
-  const uploadQueueRef = useRef<UploadQueueItem[]>([]);
-  const activeUploadsRef = useRef(0);
   const {
     cancelCopyDetails,
     cancelDeleteDetails,
@@ -653,10 +644,6 @@ export default function BrowserPage({
     contextMenuRef,
     openContextMenu,
   } = useBrowserContextMenu();
-  const [dragging, setDragging] = useState(false);
-  const dragCounter = useRef(0);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const bucketMenuRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
   const searchControlRef = useRef<HTMLDivElement | null>(null);
@@ -683,10 +670,6 @@ export default function BrowserPage({
   const objectsSearchDebounceRef = useRef<number | null>(null);
   const objectsNavigationKeyRef = useRef<string | null>(null);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
-  const uploadRefreshTimeoutRef = useRef<number | null>(null);
-  const pendingUploadedKeysByBucketRef = useRef<Map<string, Set<string>>>(
-    new Map(),
-  );
   const objectsRef = useRef(objects);
   const prefixesRef = useRef(prefixes);
   const deletedObjectsRef = useRef(deletedObjects);
@@ -1144,10 +1127,6 @@ export default function BrowserPage({
     [browserSettings, useProxyTransfers],
   );
   const uploadParallelism = transferParallelism.upload;
-  const uploadParallelismRef = useRef(uploadParallelism);
-  useEffect(() => {
-    uploadParallelismRef.current = uploadParallelism;
-  }, [uploadParallelism]);
   const downloadParallelism = transferParallelism.download;
   const otherOperationsParallelism = transferParallelism.otherOperations;
   const proxyAllowed = browserSettings?.allow_proxy_transfers ?? false;
@@ -1304,12 +1283,6 @@ export default function BrowserPage({
       useProxyTransfers,
     ],
   );
-  useEffect(() => {
-    if (!folderInputRef.current) return;
-    folderInputRef.current.setAttribute("webkitdirectory", "");
-    folderInputRef.current.setAttribute("directory", "");
-  }, []);
-
   useEffect(() => {
     setInspectorTab("context");
   }, [bucketName, prefix]);
@@ -4290,23 +4263,11 @@ export default function BrowserPage({
     refreshToken,
   ]);
 
-  const recordUploadedKey = (bucket: string, key: string) => {
-    if (!bucket || !key) return;
-    const next = pendingUploadedKeysByBucketRef.current;
-    const existing = next.get(bucket);
-    if (existing) {
-      existing.add(key);
-      return;
-    }
-    next.set(bucket, new Set([key]));
-  };
-
   const startQueuedUpload = useBrowserQueuedUpload({
     clearOperationController,
     completeOperation,
     createOperationController,
     onStatus: setStatusMessage,
-    onUploaded: recordUploadedKey,
     onWarning: setWarningMessage,
     presignObject: presignObjectRequest,
     presignPart: presignPartRequest,
@@ -4318,54 +4279,54 @@ export default function BrowserPage({
     useProxyTransfers,
   });
 
-  const flushUploadRefreshIfIdle = () => {
-    if (typeof window === "undefined") return;
-    if (activeUploadsRef.current > 0) return;
-    if (uploadQueueRef.current.length > 0) return;
-    if (uploadRefreshTimeoutRef.current !== null) return;
-    uploadRefreshTimeoutRef.current = window.setTimeout(() => {
-      uploadRefreshTimeoutRef.current = null;
-      if (activeUploadsRef.current > 0 || uploadQueueRef.current.length > 0) {
-        return;
-      }
-      const currentBucket = bucketNameRef.current;
-      if (!currentBucket) {
-        pendingUploadedKeysByBucketRef.current.clear();
-        return;
-      }
-      const currentPrefixValue = prefixRef.current;
-      const normalizedCurrentPrefix = normalizePrefix(currentPrefixValue);
-      const bucketKeys =
-        pendingUploadedKeysByBucketRef.current.get(currentBucket);
-      const shouldRefreshCurrentPath = Boolean(
-        bucketKeys &&
-        Array.from(bucketKeys).some((key) =>
-          key.startsWith(normalizedCurrentPrefix),
-        ),
-      );
-      pendingUploadedKeysByBucketRef.current.clear();
-      if (!shouldRefreshCurrentPath) return;
+  const refreshUploadedListing = useCallback(
+    (targetPrefix: string) => {
       void loadObjects({
-        prefixOverride: currentPrefixValue,
+        prefixOverride: targetPrefix,
         silent: true,
         forceRefresh: true,
       });
-      loadTreeChildren(currentPrefixValue, { expand: false });
-    }, 300);
-  };
+      loadTreeChildren(targetPrefix, { expand: false });
+    },
+    [loadObjects, loadTreeChildren],
+  );
+
+  const {
+    cancelUploadGroup,
+    dragging,
+    fileInputRef,
+    folderInputRef,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+    handleFileInputChange,
+    handleFolderInputChange,
+    removeQueuedUpload,
+  } = useBrowserUploadQueue({
+    accountId: accountIdForApi,
+    bucketName,
+    cancelOperationController,
+    enabled: hasS3AccountContext,
+    normalizedPrefix,
+    onRefreshListing: refreshUploadedListing,
+    onShowOperations: showOperationsBar,
+    onStatus: setStatusMessage,
+    onWarning: setWarningMessage,
+    operations,
+    parallelism: uploadParallelism,
+    prefix,
+    setUploadQueue,
+    startUpload: startQueuedUpload,
+    workspaceNoun,
+  });
 
   useEffect(() => {
-    const pendingUploadedKeysByBucket = pendingUploadedKeysByBucketRef.current;
     return () => {
       if (objectsRefreshTimeoutRef.current !== null) {
         window.clearTimeout(objectsRefreshTimeoutRef.current);
         objectsRefreshTimeoutRef.current = null;
       }
-      if (uploadRefreshTimeoutRef.current !== null) {
-        window.clearTimeout(uploadRefreshTimeoutRef.current);
-        uploadRefreshTimeoutRef.current = null;
-      }
-      pendingUploadedKeysByBucket.clear();
     };
   }, []);
 
@@ -4411,161 +4372,6 @@ export default function BrowserPage({
     } finally {
       setConfirmDialogLoading(false);
     }
-  };
-
-  const updateUploadQueue = (nextQueue: UploadQueueItem[]) => {
-    uploadQueueRef.current = nextQueue;
-    setUploadQueue([...nextQueue]);
-  };
-
-  const removeQueuedUpload = (uploadId: string) => {
-    updateUploadQueue(
-      uploadQueueRef.current.filter((item) => item.id !== uploadId),
-    );
-  };
-
-  const removeQueuedUploadsByGroup = (groupId: string) => {
-    updateUploadQueue(
-      uploadQueueRef.current.filter((item) => item.groupId !== groupId),
-    );
-  };
-
-  const cancelUploadGroup = (groupId: string) => {
-    removeQueuedUploadsByGroup(groupId);
-    const activeGroupOperations = operations.filter(
-      (op) => op.kind === "upload" && op.groupId === groupId && !op.completedAt,
-    );
-    activeGroupOperations.forEach((op) => cancelOperationController(op.id));
-  };
-
-  const processUploadQueue = () => {
-    if (!hasS3AccountContext) return;
-    const parallelism = uploadParallelismRef.current;
-    if (activeUploadsRef.current >= parallelism) return;
-    if (uploadQueueRef.current.length === 0) return;
-    const availableSlots = Math.max(0, parallelism - activeUploadsRef.current);
-    const nextBatch = uploadQueueRef.current.splice(0, availableSlots);
-    if (nextBatch.length === 0) return;
-    updateUploadQueue(uploadQueueRef.current);
-    nextBatch.forEach((item) => {
-      activeUploadsRef.current += 1;
-      startQueuedUpload(item)
-        .catch(() => undefined)
-        .finally(() => {
-          activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1);
-          processUploadQueue();
-          flushUploadRefreshIfIdle();
-        });
-    });
-  };
-
-  const handleUploadFiles = (items: UploadCandidate[]) => {
-    if (
-      !bucketName ||
-      !hasS3AccountContext ||
-      !accountIdForApi ||
-      items.length === 0
-    )
-      return;
-    if (items.length > 1) {
-      showOperationsBar();
-    }
-    setWarningMessage(null);
-    const batchId = makeId();
-    const previousQueueCount = uploadQueueRef.current.length;
-    const parallelism = uploadParallelismRef.current;
-    const availableSlots = Math.max(0, parallelism - activeUploadsRef.current);
-    const queuedItems = items.map((item) => {
-      const file = item.file;
-      const relativePath = normalizeUploadPath(item.relativePath || file.name);
-      const key = `${normalizedPrefix}${relativePath}`;
-      const grouping = buildUploadGrouping(relativePath, batchId);
-      return {
-        id: makeId(),
-        file,
-        relativePath,
-        key,
-        bucket: bucketName,
-        accountId: String(accountIdForApi),
-        groupId: grouping.groupId,
-        groupLabel: grouping.groupLabel,
-        groupKind: grouping.groupKind,
-        itemLabel: grouping.itemLabel,
-      };
-    });
-    const availableForNew = Math.max(0, availableSlots - previousQueueCount);
-    const queuedFromBatch = Math.max(0, queuedItems.length - availableForNew);
-    uploadQueueRef.current = [...uploadQueueRef.current, ...queuedItems];
-    updateUploadQueue(uploadQueueRef.current);
-    processUploadQueue();
-    if (queuedFromBatch > 0) {
-      setStatusMessage(
-        queuedFromBatch === 1
-          ? "1 upload queued."
-          : `${queuedFromBatch} uploads queued.`,
-      );
-    }
-  };
-
-  const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files ? Array.from(event.target.files) : [];
-    handleUploadFiles(buildUploadCandidates(files));
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const handleFolderInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files ? Array.from(event.target.files) : [];
-    handleUploadFiles(buildUploadCandidates(files));
-    if (folderInputRef.current) {
-      folderInputRef.current.value = "";
-    }
-  };
-
-  const isFileDrag = (event: DragEvent<HTMLDivElement>) => {
-    const types = Array.from(event.dataTransfer?.types || []);
-    if (types.includes("Files")) return true;
-    return Array.from(event.dataTransfer?.items || []).some(
-      (item) => item.kind === "file",
-    );
-  };
-
-  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    dragCounter.current += 1;
-    setDragging(true);
-  };
-
-  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-    setDragging(true);
-  };
-
-  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
-    if (!dragging) return;
-    event.preventDefault();
-    dragCounter.current = Math.max(0, dragCounter.current - 1);
-    if (dragCounter.current === 0) {
-      setDragging(false);
-    }
-  };
-
-  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    dragCounter.current = 0;
-    setDragging(false);
-    const files = await collectDroppedFiles(event.dataTransfer);
-    if (files.length === 0) return;
-    if (!bucketName || !hasS3AccountContext) {
-      setStatusMessage(`Select a ${workspaceNoun} before uploading.`);
-      return;
-    }
-    handleUploadFiles(files);
   };
 
   const {

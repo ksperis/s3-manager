@@ -50,7 +50,6 @@ function createOptions() {
     completeOperation: vi.fn(),
     createOperationController: vi.fn(() => new AbortController()),
     onStatus: vi.fn(),
-    onUploaded: vi.fn(),
     onWarning: vi.fn(),
     presignObject: vi.fn().mockResolvedValue({
       url: "https://example.test/upload",
@@ -102,7 +101,10 @@ describe("useBrowserQueuedUpload", () => {
     const item = makeItem();
     const { result } = renderHook(() => useBrowserQueuedUpload(options));
 
-    await act(async () => result.current(item));
+    let uploaded = false;
+    await act(async () => {
+      uploaded = await result.current(item);
+    });
 
     expect(options.presignObject).toHaveBeenCalledWith("bucket-a", {
       key: "prefix/docs/report.txt",
@@ -118,10 +120,7 @@ describe("useBrowserQueuedUpload", () => {
       "transfer-1",
       "report.txt",
     );
-    expect(options.onUploaded).toHaveBeenCalledWith(
-      "bucket-a",
-      "prefix/docs/report.txt",
-    );
+    expect(uploaded).toBe(true);
   });
 
   it("delegates large direct files to the multipart lifecycle", async () => {
@@ -192,7 +191,10 @@ describe("useBrowserQueuedUpload", () => {
     const options = createOptions();
     const { result } = renderHook(() => useBrowserQueuedUpload(options));
 
-    await act(async () => result.current(makeItem()));
+    let uploaded = true;
+    await act(async () => {
+      uploaded = await result.current(makeItem());
+    });
 
     expect(options.completeOperation).toHaveBeenCalledWith(
       "op-1",
@@ -205,7 +207,7 @@ describe("useBrowserQueuedUpload", () => {
     expect(options.onStatus).toHaveBeenCalledWith(
       "Upload cancelled for docs/report.txt",
     );
-    expect(options.onUploaded).not.toHaveBeenCalled();
+    expect(uploaded).toBe(false);
     expect(options.clearOperationController).toHaveBeenCalledWith("op-1");
   });
 });

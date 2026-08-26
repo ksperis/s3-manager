@@ -35,7 +35,6 @@ type UseBrowserQueuedUploadOptions = {
   completeOperation: OperationRegistry["completeOperation"];
   createOperationController: OperationRegistry["createOperationController"];
   onStatus: (message: string) => void;
-  onUploaded: (bucket: string, key: string) => void;
   onWarning: (message: string | null) => void;
   presignObject: (
     bucket: string,
@@ -59,7 +58,6 @@ export function useBrowserQueuedUpload({
   completeOperation,
   createOperationController,
   onStatus,
-  onUploaded,
   onWarning,
   presignObject,
   presignPart,
@@ -72,7 +70,7 @@ export function useBrowserQueuedUpload({
 }: UseBrowserQueuedUploadOptions) {
   return useCallback(
     async (item: UploadQueueItem) => {
-      if (!item.bucket || !item.accountId) return;
+      if (!item.bucket || !item.accountId) return false;
       const {
         file,
         relativePath,
@@ -200,7 +198,7 @@ export function useBrowserQueuedUpload({
           );
         }
         onStatus(`Uploaded ${relativePath}`);
-        onUploaded(bucket, key);
+        return true;
       } catch (caughtError) {
         if (isAbortError(caughtError)) {
           completeOperation(operationId, "cancelled");
@@ -222,6 +220,7 @@ export function useBrowserQueuedUpload({
             );
           }
         }
+        return false;
       } finally {
         clearOperationController(operationId);
       }
@@ -231,7 +230,6 @@ export function useBrowserQueuedUpload({
       completeOperation,
       createOperationController,
       onStatus,
-      onUploaded,
       onWarning,
       presignObject,
       presignPart,
