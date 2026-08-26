@@ -71,6 +71,10 @@ import { useBrowserBulkAttributes } from "./useBrowserBulkAttributes";
 import { useBrowserBulkRestore } from "./useBrowserBulkRestore";
 import { useBrowserClipboard } from "./useBrowserClipboard";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
+import {
+  useBrowserCopyActions,
+  type BrowserCopyDialogState,
+} from "./useBrowserCopyActions";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserDeleteItems } from "./useBrowserDeleteItems";
@@ -255,13 +259,6 @@ type BrowserConfirmDialogState = {
   tone?: "danger" | "primary";
   onConfirm: () => Promise<void> | void;
 };
-type BrowserCopyDialogState = {
-  title: string;
-  label: string;
-  value: string;
-  successMessage?: string;
-};
-
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 const TREE_PREFIXES_PAGE_BUDGET = 50;
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
@@ -1270,6 +1267,16 @@ export default function BrowserPage({
       useStsPresigner,
     ],
   );
+  const { copyPath: handleCopyPath, copyUrl: handleCopyUrl } =
+    useBrowserCopyActions({
+      bucketName,
+      enabled: hasS3AccountContext,
+      onFallback: setCopyDialog,
+      onStatus: setStatusMessage,
+      onWarning: setWarningMessage,
+      presignObject: presignObjectRequest,
+      sseActive,
+    });
   const warnings = useMemo(
     () =>
       buildBrowserTransferWarnings({
@@ -5338,66 +5345,6 @@ export default function BrowserPage({
     startOperation,
     versioningEnabled: isVersioningEnabled,
   });
-
-  const handleCopyUrl = async (item: BrowserItem | null) => {
-    if (
-      !bucketName ||
-      !hasS3AccountContext ||
-      !item ||
-      item.type !== "file" ||
-      item.isDeleted
-    ) {
-      if (item?.isDeleted) {
-        setWarningMessage("Deleted objects do not have a direct download URL.");
-      }
-      return;
-    }
-    if (sseActive) {
-      setWarningMessage(
-        "Copy URL is disabled in SSE-C mode: required encryption headers are missing.",
-      );
-      return;
-    }
-    try {
-      const presign = await presignObjectRequest(bucketName, {
-        key: item.key,
-        operation: "get_object",
-        expires_in: 900,
-      });
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(presign.url);
-        setStatusMessage("URL copied to clipboard.");
-      } else {
-        setCopyDialog({
-          title: "Copy URL",
-          label: "Object URL",
-          value: presign.url,
-          successMessage: "URL copied to clipboard.",
-        });
-      }
-    } catch {
-      setStatusMessage("Unable to copy URL.");
-    }
-  };
-
-  const handleCopyPath = async (path: string) => {
-    if (!path) return;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(path);
-        setStatusMessage("Path copied to clipboard.");
-      } else {
-        setCopyDialog({
-          title: "Copy path",
-          label: "Object path",
-          value: path,
-          successMessage: "Path copied to clipboard.",
-        });
-      }
-    } catch {
-      setStatusMessage("Unable to copy path.");
-    }
-  };
 
   const runPathAction = (actionId: BrowserActionId) => {
     runBrowserAction(pathActionStates[actionId], {
