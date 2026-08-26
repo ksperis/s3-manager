@@ -84,6 +84,7 @@ import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbar from "./BrowserToolbar";
 import { useBrowserBucketCors } from "./useBrowserBucketCors";
 import { useBrowserBulkAttributes } from "./useBrowserBulkAttributes";
+import { useBrowserBulkRestore } from "./useBrowserBulkRestore";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
@@ -197,7 +198,6 @@ import {
   collectDroppedFiles,
   findTreeNodeByPrefix,
   formatDateTime,
-  formatLocalDateTime,
   getSelectionInfo,
   isAbortError,
   isLikelyCorsError,
@@ -262,7 +262,6 @@ import {
   mergeUniqueStringsWithLimit,
 } from "./browserListingState";
 import { resolveBrowserWorkspaceContext } from "./browserPageContextModel";
-import { buildBulkRestorePlan } from "./browserBulkRestorePlan";
 import { uploadBrowserFile } from "./browserFileUpload";
 import {
   downloadBrowserTransferBlob,
@@ -719,30 +718,6 @@ export default function BrowserPage({
     contextMenuRef,
     openContextMenu,
   } = useBrowserContextMenu();
-  const [showBulkRestoreModal, setShowBulkRestoreModal] = useState(false);
-  const [bulkRestoreItems, setBulkRestoreItems] = useState<BrowserItem[]>([]);
-  const [bulkRestoreDate, setBulkRestoreDate] = useState("");
-  const [bulkRestoreDeleteMissing, setBulkRestoreDeleteMissing] =
-    useState(false);
-  const [bulkRestoreRestoreDeleted, setBulkRestoreRestoreDeleted] =
-    useState(false);
-  const [bulkRestoreDryRun, setBulkRestoreDryRun] = useState(false);
-  const [bulkRestoreLoading, setBulkRestoreLoading] = useState(false);
-  const [bulkRestoreError, setBulkRestoreError] = useState<string | null>(null);
-  const [bulkRestoreSummary, setBulkRestoreSummary] = useState<string | null>(
-    null,
-  );
-  const [bulkRestorePreview, setBulkRestorePreview] = useState<{
-    restoreKeys: string[];
-    deleteKeys: string[];
-    unchangedKeys: string[];
-    totalRestore: number;
-    totalDelete: number;
-    totalUnchanged: number;
-  } | null>(null);
-  const [bulkRestoreTargetPath, setBulkRestoreTargetPath] = useState<
-    string | null
-  >(null);
   const [showCleanupModal, setShowCleanupModal] = useState(false);
   const [cleanupKeepLast, setCleanupKeepLast] = useState("");
   const [cleanupOlderThanDays, setCleanupOlderThanDays] = useState("");
@@ -3200,14 +3175,6 @@ export default function BrowserPage({
     [items, selectedSet],
   );
   const selectedCount = selectedItems.length;
-  const bulkRestoreFileCount = useMemo(
-    () => bulkRestoreItems.filter((item) => item.type === "file").length,
-    [bulkRestoreItems],
-  );
-  const bulkRestoreFolderCount = useMemo(
-    () => bulkRestoreItems.filter((item) => item.type === "folder").length,
-    [bulkRestoreItems],
-  );
   const selectedBytes = useMemo(() => {
     return selectedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
   }, [selectedItems]);
@@ -4723,56 +4690,6 @@ export default function BrowserPage({
     onCreated: handleBrowserFolderCreated,
   });
 
-  const resetBulkRestoreDraft = () => {
-    setBulkRestoreDate(formatLocalDateTime(new Date()));
-    setBulkRestoreDeleteMissing(false);
-    setBulkRestoreRestoreDeleted(false);
-    setBulkRestoreDryRun(false);
-    setBulkRestoreError(null);
-    setBulkRestoreSummary(null);
-    setBulkRestorePreview(null);
-    setBulkRestoreTargetPath(null);
-  };
-
-  const buildBulkRestorePathTarget = () => {
-    if (!bucketName) return null;
-    const key = normalizedPrefix;
-    const name = key ? key.replace(/\/$/, "") : bucketName;
-    return {
-      id: makeId(),
-      key,
-      name,
-      type: "folder",
-      size: "",
-      modified: "",
-      owner: "",
-      sizeBytes: null,
-      modifiedAt: null,
-      storageClass: undefined,
-    } as BrowserItem;
-  };
-
-  const openBulkRestoreModal = (items: BrowserItem[]) => {
-    if (!isVersioningEnabled) return;
-    const pathTarget = buildBulkRestorePathTarget();
-    const resolvedItems =
-      items.length > 0 ? items : pathTarget ? [pathTarget] : [];
-    if (resolvedItems.length === 0) return;
-    setBulkRestoreItems(resolvedItems);
-    resetBulkRestoreDraft();
-    if (items.length === 0 && pathTarget && bucketName) {
-      setBulkRestoreTargetPath(currentPath || bucketName);
-    }
-    setShowBulkRestoreModal(true);
-  };
-
-  const handleBulkRestoreRestoreDeletedChange = (value: boolean) => {
-    setBulkRestoreRestoreDeleted(value);
-    if (value) {
-      setBulkRestoreDeleteMissing(false);
-    }
-  };
-
   const openObjectVersionsModal = (item: BrowserItem) => {
     openObjectDetails(item, "versions");
   };
@@ -5593,56 +5510,6 @@ export default function BrowserPage({
     updateOperation,
   });
 
-  const listAllVersionsForPrefix = async (targetPrefix: string) => {
-    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled)
-      return { versions: [], deleteMarkers: [] };
-    const versions: BrowserObjectVersion[] = [];
-    const deleteMarkers: BrowserObjectVersion[] = [];
-    let keyMarker: string | null = null;
-    let versionIdMarker: string | null = null;
-    let hasMore = true;
-    while (hasMore) {
-      const data = await listObjectVersions(accountIdForApi, bucketName, {
-        prefix: targetPrefix,
-        keyMarker,
-        versionIdMarker,
-        maxKeys: 1000,
-        requestOptions: browserRequestOptions,
-      });
-      versions.push(...data.versions);
-      deleteMarkers.push(...data.delete_markers);
-      keyMarker = data.next_key_marker ?? null;
-      versionIdMarker = data.next_version_id_marker ?? null;
-      hasMore = Boolean(data.is_truncated && keyMarker);
-    }
-    return { versions, deleteMarkers };
-  };
-
-  const listAllVersionsForKey = async (key: string) => {
-    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled)
-      return { versions: [], deleteMarkers: [] };
-    const versions: BrowserObjectVersion[] = [];
-    const deleteMarkers: BrowserObjectVersion[] = [];
-    let keyMarker: string | null = null;
-    let versionIdMarker: string | null = null;
-    let hasMore = true;
-    while (hasMore) {
-      const data = await listObjectVersions(accountIdForApi, bucketName, {
-        key,
-        keyMarker,
-        versionIdMarker,
-        maxKeys: 1000,
-        requestOptions: browserRequestOptions,
-      });
-      versions.push(...data.versions);
-      deleteMarkers.push(...data.delete_markers);
-      keyMarker = data.next_key_marker ?? null;
-      versionIdMarker = data.next_version_id_marker ?? null;
-      hasMore = Boolean(data.is_truncated && keyMarker);
-    }
-    return { versions, deleteMarkers };
-  };
-
   const updateDeleteDetailsStatus = (
     operationId: string,
     keys: string[],
@@ -5729,6 +5596,44 @@ export default function BrowserPage({
     }
     return deletedCount;
   };
+
+  const {
+    apply: handleBulkRestoreApply,
+    close: closeBulkRestoreModal,
+    draft: bulkRestoreDraft,
+    error: bulkRestoreError,
+    fileCount: bulkRestoreFileCount,
+    folderCount: bulkRestoreFolderCount,
+    loading: bulkRestoreLoading,
+    open: showBulkRestoreModal,
+    preview: bulkRestorePreview,
+    setDraft: setBulkRestoreDraft,
+    show: openBulkRestoreModal,
+    summary: bulkRestoreSummary,
+    targetPath: bulkRestoreTargetPath,
+  } = useBrowserBulkRestore({
+    accountId: accountIdForApi,
+    bucketName,
+    clearOperationController,
+    completeOperation,
+    createOperationController,
+    currentPath,
+    deleteObjectsInBatches,
+    enabled: hasS3AccountContext,
+    isOperationAborted,
+    listAllObjectsForPrefix,
+    normalizedPrefix,
+    onRefresh: requestObjectsRefresh,
+    onRefreshNow: refreshObjectsNow,
+    onStatus: setStatusMessage,
+    parallelism: otherOperationsParallelism,
+    prefix,
+    requestOptions: browserRequestOptions,
+    showOperations: showOperationsBar,
+    startOperation,
+    updateOperation,
+    versioningEnabled: isVersioningEnabled,
+  });
 
   const deleteFolderRecursive = async (
     folderItem: BrowserItem,
@@ -6321,186 +6226,6 @@ export default function BrowserPage({
       loadTreeChildren(prefix);
     } catch {
       setStatusMessage("Unable to delete objects.");
-    }
-  };
-
-  const handleBulkRestoreApply = async () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    if (!isVersioningEnabled) {
-      setBulkRestoreError("Versioning is not enabled for this bucket.");
-      return;
-    }
-    const isLatestRestoreMode = bulkRestoreRestoreDeleted;
-    const allowDeleteMissing = !isLatestRestoreMode && bulkRestoreDeleteMissing;
-    const targetTime = bulkRestoreDate
-      ? new Date(bulkRestoreDate).getTime()
-      : Number.NaN;
-    if (
-      !isLatestRestoreMode &&
-      (!bulkRestoreDate || Number.isNaN(targetTime))
-    ) {
-      setBulkRestoreError("Select a valid date.");
-      return;
-    }
-    setBulkRestoreLoading(true);
-    setBulkRestoreError(null);
-    setBulkRestoreSummary(null);
-    setBulkRestorePreview(null);
-    let operationId: string | null = null;
-    let controller: AbortController | null = null;
-    try {
-      const { restoreList, deleteList, unchangedKeys } =
-        await buildBulkRestorePlan({
-          items: bulkRestoreItems,
-          restoreLatestDeleted: isLatestRestoreMode,
-          targetTime,
-          deleteMissing: allowDeleteMissing,
-          listVersionsForKey: listAllVersionsForKey,
-          listVersionsForPrefix: listAllVersionsForPrefix,
-          listObjectsForPrefix: (targetPrefix) =>
-            listAllObjectsForPrefix(targetPrefix),
-        });
-      const unchangedCount = unchangedKeys.size;
-      const total = restoreList.length + deleteList.length;
-      if (total === 0) {
-        if (unchangedCount > 0) {
-          const summary = bulkRestoreDryRun
-            ? `Dry run: unchanged ${unchangedCount} object(s).`
-            : `Unchanged ${unchangedCount} object(s).`;
-          setBulkRestoreSummary(summary);
-          setStatusMessage(summary);
-          if (bulkRestoreDryRun) {
-            setBulkRestorePreview({
-              restoreKeys: [],
-              deleteKeys: [],
-              unchangedKeys: Array.from(unchangedKeys).slice(0, 20),
-              totalRestore: 0,
-              totalDelete: 0,
-              totalUnchanged: unchangedCount,
-            });
-          }
-        } else {
-          setBulkRestoreError(
-            isLatestRestoreMode
-              ? "No deleted objects can be restored to their latest version."
-              : "No objects matched the selected date.",
-          );
-        }
-        return;
-      }
-
-      if (bulkRestoreDryRun) {
-        const summary = `Dry run: would restore ${restoreList.length} object(s), delete ${deleteList.length} object(s), unchanged ${unchangedCount} object(s).`;
-        setBulkRestoreSummary(summary);
-        setBulkRestorePreview({
-          restoreKeys: restoreList.slice(0, 20).map((item) => item.key),
-          deleteKeys: deleteList.slice(0, 20),
-          unchangedKeys: Array.from(unchangedKeys).slice(0, 20),
-          totalRestore: restoreList.length,
-          totalDelete: deleteList.length,
-          totalUnchanged: unchangedCount,
-        });
-        return;
-      }
-
-      if (total > 1) {
-        showOperationsBar();
-      }
-      operationId = startOperation(
-        "copying",
-        "Restoring snapshot",
-        currentPath || bucketName,
-        { kind: "other", cancelable: true },
-        0,
-      );
-      controller = createOperationController(operationId);
-      let completed = 0;
-      let restoredCount = 0;
-      let deletedCount = 0;
-      let restoreFailures = 0;
-      let deleteFailures = 0;
-      let cancelled = false;
-
-      const updateProgress = (count: number) => {
-        const percent = total > 0 ? Math.round((count / total) * 100) : 100;
-        updateOperation(operationId, { progress: percent });
-      };
-
-      if (restoreList.length > 0) {
-        await runWithConcurrency(
-          restoreList,
-          otherOperationsParallelismRef.current,
-          async (item) => {
-            if (controller?.signal.aborted) {
-              cancelled = true;
-              return;
-            }
-            try {
-              await copyObject(accountIdForApi, bucketName, {
-                source_key: item.key,
-                source_version_id: item.versionId,
-                destination_key: item.key,
-                replace_metadata: false,
-                move: false,
-              }, controller?.signal, browserRequestOptions);
-              restoredCount += 1;
-            } catch {
-              if (controller?.signal.aborted) {
-                cancelled = true;
-                return;
-              }
-              restoreFailures += 1;
-            } finally {
-              completed += 1;
-              updateProgress(completed);
-            }
-          },
-          () => cancelled,
-        );
-      }
-
-      if (!cancelled && deleteList.length > 0) {
-        try {
-          deletedCount = await deleteObjectsInBatches(deleteList, (deleted) => {
-            updateProgress(completed + deleted);
-          }, undefined, controller?.signal);
-        } catch (err) {
-          if (isOperationAborted(err, controller)) {
-            cancelled = true;
-          } else {
-            deleteFailures = deleteList.length;
-          }
-        }
-      }
-
-      if (cancelled || controller?.signal.aborted) {
-        const summary = `Restore cancelled after ${restoredCount + deletedCount} of ${total} item(s).`;
-        completeOperation(operationId, "cancelled");
-        setBulkRestoreSummary(summary);
-        setStatusMessage(summary);
-        await refreshObjectsNow(prefix);
-        return;
-      }
-
-      const failures = restoreFailures + deleteFailures;
-      const completionError =
-        failures > 0 ? "Some objects failed to restore or delete." : undefined;
-      completeOperation(
-        operationId,
-        failures > 0 ? "failed" : "done",
-        completionError,
-      );
-      const summary = `Restored ${restoreList.length - restoreFailures} object(s), deleted ${deleteList.length - deleteFailures} object(s), unchanged ${unchangedCount} object(s).`;
-      setBulkRestoreSummary(summary);
-      setStatusMessage(summary);
-      requestObjectsRefresh(prefix);
-    } catch {
-      setBulkRestoreError("Unable to restore objects.");
-    } finally {
-      if (operationId) {
-        clearOperationController(operationId);
-      }
-      setBulkRestoreLoading(false);
     }
   };
 
@@ -8150,23 +7875,17 @@ export default function BrowserPage({
       )}
       {showBulkRestoreModal && (
         <BrowserBulkRestoreModal
-          bulkActionFileCount={bulkRestoreFileCount}
-          bulkActionFolderCount={bulkRestoreFolderCount}
-          bulkRestoreError={bulkRestoreError}
-          bulkRestoreSummary={bulkRestoreSummary}
-          bulkRestoreTargetPath={bulkRestoreTargetPath}
-          bulkRestoreDryRun={bulkRestoreDryRun}
-          setBulkRestoreDryRun={setBulkRestoreDryRun}
-          bulkRestorePreview={bulkRestorePreview}
-          bulkRestoreDate={bulkRestoreDate}
-          setBulkRestoreDate={setBulkRestoreDate}
-          bulkRestoreDeleteMissing={bulkRestoreDeleteMissing}
-          setBulkRestoreDeleteMissing={setBulkRestoreDeleteMissing}
-          bulkRestoreRestoreDeleted={bulkRestoreRestoreDeleted}
-          setBulkRestoreRestoreDeleted={handleBulkRestoreRestoreDeletedChange}
-          bulkRestoreLoading={bulkRestoreLoading}
+          draft={bulkRestoreDraft}
+          error={bulkRestoreError}
+          fileCount={bulkRestoreFileCount}
+          folderCount={bulkRestoreFolderCount}
+          loading={bulkRestoreLoading}
           onApply={handleBulkRestoreApply}
-          onClose={() => setShowBulkRestoreModal(false)}
+          onClose={closeBulkRestoreModal}
+          preview={bulkRestorePreview}
+          setDraft={setBulkRestoreDraft}
+          summary={bulkRestoreSummary}
+          targetPath={bulkRestoreTargetPath}
         />
       )}
       {showCleanupModal && (

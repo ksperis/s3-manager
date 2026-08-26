@@ -2,76 +2,66 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { browserPanelCardClasses, bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
 import { stableSignature } from "../../utils/stableSignature";
+import type {
+  BrowserBulkRestoreDraft,
+  BrowserBulkRestorePreview,
+} from "./useBrowserBulkRestore";
 
 type BrowserBulkRestoreModalProps = {
-  bulkActionFileCount: number;
-  bulkActionFolderCount: number;
-  bulkRestoreError: string | null;
-  bulkRestoreSummary: string | null;
-  bulkRestoreTargetPath?: string | null;
-  bulkRestoreDryRun: boolean;
-  setBulkRestoreDryRun: (value: boolean) => void;
-  bulkRestorePreview?: {
-    restoreKeys: string[];
-    deleteKeys: string[];
-    unchangedKeys: string[];
-    totalRestore: number;
-    totalDelete: number;
-    totalUnchanged: number;
-  } | null;
-  bulkRestoreDate: string;
-  setBulkRestoreDate: (value: string) => void;
-  bulkRestoreDeleteMissing: boolean;
-  setBulkRestoreDeleteMissing: (value: boolean) => void;
-  bulkRestoreRestoreDeleted: boolean;
-  setBulkRestoreRestoreDeleted: (value: boolean) => void;
-  bulkRestoreLoading: boolean;
+  draft: BrowserBulkRestoreDraft;
+  error: string | null;
+  fileCount: number;
+  folderCount: number;
+  loading: boolean;
   onApply: () => void;
   onClose: () => void;
+  preview?: BrowserBulkRestorePreview | null;
+  setDraft: Dispatch<SetStateAction<BrowserBulkRestoreDraft>>;
+  summary: string | null;
+  targetPath?: string | null;
 };
 
 export default function BrowserBulkRestoreModal({
-  bulkActionFileCount,
-  bulkActionFolderCount,
-  bulkRestoreError,
-  bulkRestoreSummary,
-  bulkRestoreTargetPath,
-  bulkRestoreDryRun,
-  setBulkRestoreDryRun,
-  bulkRestorePreview,
-  bulkRestoreDate,
-  setBulkRestoreDate,
-  bulkRestoreDeleteMissing,
-  setBulkRestoreDeleteMissing,
-  bulkRestoreRestoreDeleted,
-  setBulkRestoreRestoreDeleted,
-  bulkRestoreLoading,
+  draft,
+  error,
+  fileCount,
+  folderCount,
+  loading,
   onApply,
   onClose,
+  preview,
+  setDraft,
+  summary,
+  targetPath,
 }: BrowserBulkRestoreModalProps) {
   const currentSignature = useMemo(
-    () =>
-      stableSignature({
-        bulkRestoreDryRun,
-        bulkRestoreDate,
-        bulkRestoreDeleteMissing,
-        bulkRestoreRestoreDeleted,
-      }),
-    [bulkRestoreDate, bulkRestoreDeleteMissing, bulkRestoreDryRun, bulkRestoreRestoreDeleted]
+    () => stableSignature(draft),
+    [draft],
   );
   const [initialSignature] = useState(currentSignature);
   const closeGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: currentSignature !== initialSignature,
     onClose,
-    disabled: bulkRestoreLoading,
+    disabled: loading,
   });
+  const updateDraft = <Key extends keyof BrowserBulkRestoreDraft>(
+    key: Key,
+    value: BrowserBulkRestoreDraft[Key],
+  ) =>
+    setDraft((previous) => ({
+      ...previous,
+      [key]: value,
+      ...(key === "restoreDeleted" && value === true
+        ? { deleteMissing: false }
+        : {}),
+    }));
 
   return (
     <Modal title="Restore to date" onClose={closeGuard.requestClose} maxWidthClass="max-w-2xl">
@@ -79,112 +69,112 @@ export default function BrowserBulkRestoreModal({
         <div className="space-y-1">
           <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
           <p>
-            {bulkActionFileCount} file(s) · {bulkActionFolderCount} folder(s)
-            {bulkActionFolderCount > 0 && " (folders use prefix history)"}
+            {fileCount} file(s) · {folderCount} folder(s)
+            {folderCount > 0 && " (folders use prefix history)"}
           </p>
-          {bulkRestoreTargetPath && (
+          {targetPath && (
             <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Path: <span className="font-semibold text-slate-700 dark:text-slate-100">{bulkRestoreTargetPath}</span>
+              Path: <span className="font-semibold text-slate-700 dark:text-slate-100">{targetPath}</span>
             </p>
           )}
         </div>
-        {bulkRestoreError && <UiInlineMessage tone="error">{bulkRestoreError}</UiInlineMessage>}
-        {bulkRestoreSummary && <UiInlineMessage tone="success">{bulkRestoreSummary}</UiInlineMessage>}
+        {error && <UiInlineMessage tone="error">{error}</UiInlineMessage>}
+        {summary && <UiInlineMessage tone="success">{summary}</UiInlineMessage>}
         <div className={browserPanelCardClasses}>
           <UiCheckboxField
-            checked={bulkRestoreRestoreDeleted}
-            onChange={(event) => setBulkRestoreRestoreDeleted(event.target.checked)}
+            checked={draft.restoreDeleted}
+            onChange={(event) => updateDraft("restoreDeleted", event.target.checked)}
             className="ui-caption text-slate-500 dark:text-slate-400"
           >
             Restore deleted objects to their latest version
           </UiCheckboxField>
-          <div className={`mt-3 space-y-2 ${bulkRestoreRestoreDeleted ? "opacity-60" : ""}`}>
+          <div className={`mt-3 space-y-2 ${draft.restoreDeleted ? "opacity-60" : ""}`}>
             <label className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Target date</label>
             <input
               type="datetime-local"
               className={formInputClasses}
-              value={bulkRestoreDate}
-              onChange={(event) => setBulkRestoreDate(event.target.value)}
-              disabled={bulkRestoreRestoreDeleted}
+              value={draft.date}
+              onChange={(event) => updateDraft("date", event.target.value)}
+              disabled={draft.restoreDeleted}
             />
-            {bulkRestoreRestoreDeleted && (
+            {draft.restoreDeleted && (
               <p className="ui-caption text-slate-400">Date is ignored while latest deleted-object restore is enabled.</p>
             )}
           </div>
           <UiCheckboxField
-            checked={bulkRestoreDeleteMissing}
-            onChange={(event) => setBulkRestoreDeleteMissing(event.target.checked)}
-            disabled={bulkRestoreRestoreDeleted}
+            checked={draft.deleteMissing}
+            onChange={(event) => updateDraft("deleteMissing", event.target.checked)}
+            disabled={draft.restoreDeleted}
             className={`mt-3 ui-caption ${
-              bulkRestoreRestoreDeleted ? "text-slate-400 dark:text-slate-500" : "text-slate-500 dark:text-slate-400"
+              draft.restoreDeleted ? "text-slate-400 dark:text-slate-500" : "text-slate-500 dark:text-slate-400"
             }`}
           >
             Delete objects not present at the selected date
           </UiCheckboxField>
           <UiCheckboxField
-            checked={bulkRestoreDryRun}
-            onChange={(event) => setBulkRestoreDryRun(event.target.checked)}
+            checked={draft.dryRun}
+            onChange={(event) => updateDraft("dryRun", event.target.checked)}
             className="mt-3 ui-caption text-slate-500 dark:text-slate-400"
           >
             Dry run (preview only)
           </UiCheckboxField>
         </div>
-        {bulkRestorePreview && (
+        {preview && (
           <div className={browserPanelCardClasses}>
             <p className="font-semibold text-slate-800 dark:text-slate-100">Preview</p>
             <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Restore {bulkRestorePreview.totalRestore} · Delete {bulkRestorePreview.totalDelete} · Unchanged{" "}
-              {bulkRestorePreview.totalUnchanged}
+              Restore {preview.totalRestore} · Delete {preview.totalDelete} · Unchanged{" "}
+              {preview.totalUnchanged}
             </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <div className="space-y-1">
                 <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Restore</p>
-                {bulkRestorePreview.restoreKeys.length === 0 ? (
+                {preview.restoreKeys.length === 0 ? (
                   <p className="ui-caption text-slate-400">No items</p>
                 ) : (
-                  bulkRestorePreview.restoreKeys.map((key) => (
+                  preview.restoreKeys.map((key) => (
                     <p key={`restore-${key}`} className="truncate ui-caption text-slate-600 dark:text-slate-300">
                       {key}
                     </p>
                   ))
                 )}
-                {bulkRestorePreview.totalRestore > bulkRestorePreview.restoreKeys.length && (
+                {preview.totalRestore > preview.restoreKeys.length && (
                   <p className="ui-caption text-slate-400">
-                    +{bulkRestorePreview.totalRestore - bulkRestorePreview.restoreKeys.length} more
+                    +{preview.totalRestore - preview.restoreKeys.length} more
                   </p>
                 )}
               </div>
               <div className="space-y-1">
                 <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Delete</p>
-                {bulkRestorePreview.deleteKeys.length === 0 ? (
+                {preview.deleteKeys.length === 0 ? (
                   <p className="ui-caption text-slate-400">No items</p>
                 ) : (
-                  bulkRestorePreview.deleteKeys.map((key) => (
+                  preview.deleteKeys.map((key) => (
                     <p key={`delete-${key}`} className="truncate ui-caption text-slate-600 dark:text-slate-300">
                       {key}
                     </p>
                   ))
                 )}
-                {bulkRestorePreview.totalDelete > bulkRestorePreview.deleteKeys.length && (
+                {preview.totalDelete > preview.deleteKeys.length && (
                   <p className="ui-caption text-slate-400">
-                    +{bulkRestorePreview.totalDelete - bulkRestorePreview.deleteKeys.length} more
+                    +{preview.totalDelete - preview.deleteKeys.length} more
                   </p>
                 )}
               </div>
               <div className="space-y-1">
                 <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Unchanged</p>
-                {bulkRestorePreview.unchangedKeys.length === 0 ? (
+                {preview.unchangedKeys.length === 0 ? (
                   <p className="ui-caption text-slate-400">No items</p>
                 ) : (
-                  bulkRestorePreview.unchangedKeys.map((key) => (
+                  preview.unchangedKeys.map((key) => (
                     <p key={`unchanged-${key}`} className="truncate ui-caption text-slate-600 dark:text-slate-300">
                       {key}
                     </p>
                   ))
                 )}
-                {bulkRestorePreview.totalUnchanged > bulkRestorePreview.unchangedKeys.length && (
+                {preview.totalUnchanged > preview.unchangedKeys.length && (
                   <p className="ui-caption text-slate-400">
-                    +{bulkRestorePreview.totalUnchanged - bulkRestorePreview.unchangedKeys.length} more
+                    +{preview.totalUnchanged - preview.unchangedKeys.length} more
                   </p>
                 )}
               </div>
@@ -192,7 +182,7 @@ export default function BrowserBulkRestoreModal({
           </div>
         )}
         <p className="ui-caption text-slate-500 dark:text-slate-400">
-          {bulkRestoreRestoreDeleted
+          {draft.restoreDeleted
             ? "Restores deleted objects to their latest non-delete-marker version. Target date is ignored in this mode."
             : "Restores the latest version at or before the selected date. Objects with a delete marker at that date are skipped unless deletion is enabled or deleted-object restore is selected."}
         </p>
@@ -204,9 +194,9 @@ export default function BrowserBulkRestoreModal({
             type="button"
             className={toolbarPrimaryClasses}
             onClick={onApply}
-            disabled={bulkRestoreLoading}
+            disabled={loading}
           >
-            {bulkRestoreLoading ? (bulkRestoreDryRun ? "Previewing..." : "Restoring...") : bulkRestoreDryRun ? "Preview changes" : "Run restore"}
+            {loading ? (draft.dryRun ? "Previewing..." : "Restoring...") : draft.dryRun ? "Preview changes" : "Run restore"}
           </button>
         </div>
       </div>

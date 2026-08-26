@@ -4,6 +4,7 @@ import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import { createBrowserBulkAttributesDraft } from "./useBrowserBulkAttributes";
+import { createBrowserBulkRestoreDraft } from "./useBrowserBulkRestore";
 
 describe("Browser bulk action modals", () => {
   it("renders cleanup feedback with shared inline messages", () => {
@@ -31,23 +32,21 @@ describe("Browser bulk action modals", () => {
   it("renders bulk restore feedback with shared inline messages", () => {
     render(
       <BrowserBulkRestoreModal
-        bulkActionFileCount={2}
-        bulkActionFolderCount={1}
-        bulkRestoreError="Restore failed"
-        bulkRestoreSummary="Restore preview ready"
-        bulkRestoreTargetPath="reports/"
-        bulkRestoreDryRun
-        setBulkRestoreDryRun={vi.fn()}
-        bulkRestorePreview={null}
-        bulkRestoreDate="2026-03-10T09:10"
-        setBulkRestoreDate={vi.fn()}
-        bulkRestoreDeleteMissing={false}
-        setBulkRestoreDeleteMissing={vi.fn()}
-        bulkRestoreRestoreDeleted={false}
-        setBulkRestoreRestoreDeleted={vi.fn()}
-        bulkRestoreLoading={false}
+        draft={{
+          ...createBrowserBulkRestoreDraft(),
+          date: "2026-03-10T09:10",
+          dryRun: true,
+        }}
+        error="Restore failed"
+        fileCount={2}
+        folderCount={1}
+        loading={false}
         onApply={vi.fn()}
         onClose={vi.fn()}
+        preview={null}
+        setDraft={vi.fn()}
+        summary="Restore preview ready"
+        targetPath="reports/"
       />
     );
 
