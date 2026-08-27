@@ -62,10 +62,8 @@ import { useBrowserClipboard } from "./useBrowserClipboard";
 import { useBrowserConfirmDialog } from "./useBrowserConfirmDialog";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
 import { useBrowserContextCounts } from "./useBrowserContextCounts";
-import {
-  useBrowserCopyActions,
-  type BrowserCopyDialogState,
-} from "./useBrowserCopyActions";
+import { useBrowserCopyActions } from "./useBrowserCopyActions";
+import { useBrowserCopyDialog } from "./useBrowserCopyDialog";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserDeleteItems } from "./useBrowserDeleteItems";
@@ -487,6 +485,13 @@ export default function BrowserPage({
     scopeKey: JSON.stringify([accountIdForApi, bucketName, prefix]),
   });
   const {
+    close: closeCopyDialog,
+    dialog: copyDialog,
+    notifyCopySuccess,
+    open: openCopyDialog,
+    openSseCustomerKey: openSseCustomerKeyCopyDialog,
+  } = useBrowserCopyDialog({ onStatus: setStatusMessage });
+  const {
     activeSearchStatusChips,
     changeSearchScope,
     clearSearchFilters,
@@ -661,9 +666,6 @@ export default function BrowserPage({
     open: openConfirmDialog,
     submit: submitConfirmDialog,
   } = useBrowserConfirmDialog();
-  const [copyDialog, setCopyDialog] = useState<BrowserCopyDialogState | null>(
-    null,
-  );
   const { history: pathHistory, record: recordPathHistory } =
     useBrowserPathHistory({ bucketName });
   const {
@@ -766,14 +768,6 @@ export default function BrowserPage({
     includeStaticWebsite: bucketInspectorStaticWebsiteEnabled,
     includeUsage: bucketInspectorUsageEnabled,
   });
-  const openSseCustomerKeyCopyDialog = useCallback((keyBase64: string) => {
-    setCopyDialog({
-      title: "Copy SSE-C key",
-      label: "SSE-C key",
-      value: keyBase64,
-      successMessage: "SSE-C key copied to clipboard.",
-    });
-  }, []);
   const {
     keyBase64: sseCustomerKeyBase64,
     active: sseActive,
@@ -943,7 +937,7 @@ export default function BrowserPage({
     useBrowserCopyActions({
       bucketName,
       enabled: hasS3AccountContext,
-      onFallback: setCopyDialog,
+      onFallback: openCopyDialog,
       onStatus: setStatusMessage,
       onWarning: setWarningMessage,
       presignObject: presignObjectRequest,
@@ -3496,12 +3490,8 @@ export default function BrowserPage({
           title={copyDialog.title}
           label={copyDialog.label}
           value={copyDialog.value}
-          onCopySuccess={() => {
-            if (copyDialog.successMessage) {
-              setStatusMessage(copyDialog.successMessage);
-            }
-          }}
-          onClose={() => setCopyDialog(null)}
+          onCopySuccess={notifyCopySuccess}
+          onClose={closeCopyDialog}
         />
       )}
       {showOperationsPanel && (

@@ -4,14 +4,8 @@
  */
 import { useCallback } from "react";
 import type { PresignRequest, PresignedUrl } from "../../api/browser";
+import type { BrowserCopyDialogState } from "./useBrowserCopyDialog";
 import type { BrowserItem } from "./browserTypes";
-
-export type BrowserCopyDialogState = {
-  title: string;
-  label: string;
-  value: string;
-  successMessage?: string;
-};
 
 type UseBrowserCopyActionsOptions = {
   bucketName: string;
