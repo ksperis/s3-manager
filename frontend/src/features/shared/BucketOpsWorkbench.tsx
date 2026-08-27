@@ -98,6 +98,7 @@ import {
   buildBucketSelectionJsonPayload,
   serializeBucketSelectionCsv,
 } from "./bucketOpsExportModel";
+import { loadBucketOpsBucketsByNames } from "./bucketOpsNamedBucketLoader";
 import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
@@ -1424,62 +1425,23 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     if (!selectedEndpointId || bucketNames.length === 0) {
       return { targets: [] as BucketTagTarget[], missingNames: bucketNames };
     }
-    const chunks: string[][] = [];
-    const chunkSize = 50;
-    for (let start = 0; start < bucketNames.length; start += chunkSize) {
-      chunks.push(bucketNames.slice(start, start + chunkSize));
-    }
-    let completed = 0;
-    let failed = 0;
-    const total = bucketNames.length;
-    const chunkResults = await runWithConcurrencySettled(
-      chunks,
-      4,
-      async (chunk) => {
-        const resolved: BucketTagTarget[] = [];
-        let nextPage = 1;
-        const advancedFilter = JSON.stringify({
-          match: "any",
-          rules: [{ field: "name", op: "in", value: chunk }],
-        });
-        while (true) {
-          const response = await listBuckets(selectedEndpointId, {
-            page: nextPage,
-            page_size: 200,
-            advanced_filter: advancedFilter,
-            with_stats: false,
-          });
-          (response.items ?? []).forEach((bucket) => {
-            const target = resolveBucketTagTarget(bucket);
-            if (target) resolved.push(target);
-          });
-          if (!response.has_next) break;
-          nextPage += 1;
-        }
-        return resolved;
-      },
-      (result, index) => {
-        const chunkLength = chunks[index]?.length ?? 0;
-        completed += chunkLength;
-        if (result.status === "rejected") {
-          failed += chunkLength;
-        }
-        options?.onProgress?.({ completed: Math.min(total, completed), total, failed });
-      }
-    );
-    const rejectedChunk = chunkResults.find((result) => result.status === "rejected");
-    if (rejectedChunk?.status === "rejected") {
-      throw rejectedChunk.reason;
-    }
+    const bucketsByName = await loadBucketOpsBucketsByNames({
+      bucketNames,
+      concurrency: 4,
+      listBuckets,
+      onProgress: options?.onProgress,
+      scopeId: selectedEndpointId,
+      withStats: false,
+    });
     const targetByKey = new Map<string, BucketTagTarget>();
     const existingNames = new Set<string>();
-    chunkResults
-      .filter((result): result is PromiseFulfilledResult<BucketTagTarget[]> => result.status === "fulfilled")
-      .flatMap((result) => result.value)
-      .forEach((target) => {
+    bucketsByName.forEach((bucket) => {
+      const target = resolveBucketTagTarget(bucket);
+      if (target) {
         targetByKey.set(target.key, target);
         existingNames.add(target.name);
-      });
+      }
+    });
     const missingNames = bucketNames.filter((name) => !existingNames.has(name));
     const targets = Array.from(targetByKey.values()).sort((a, b) => {
       if (a.name !== b.name) return a.name.localeCompare(b.name);
@@ -1685,35 +1647,17 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       return bucketsByName;
     }
 
-    const chunkSize = 50;
-    const total = selectedBucketList.length;
-    let completed = 0;
-    for (let start = 0; start < selectedBucketList.length; start += chunkSize) {
-      const chunk = selectedBucketList.slice(start, start + chunkSize);
-      const advancedFilter = JSON.stringify({
-        match: "any",
-        rules: [{ field: "name", op: "in", value: chunk }],
-      });
-      let nextPage = 1;
-      while (true) {
-        const response = await listBuckets(selectedEndpointId, {
-          page: nextPage,
-          page_size: 200,
-          advanced_filter: advancedFilter,
-          include: includeParams.length > 0 ? includeParams : undefined,
-          with_stats: exportWithStats,
-        });
-        (response.items ?? []).forEach((bucket) => {
-          if (selectedBuckets.has(bucket.name)) {
-            bucketsByName.set(bucket.name, bucket);
-          }
-        });
-        if (!response.has_next) break;
-        nextPage += 1;
-      }
-      completed += chunk.length;
-      options?.onProgress?.(Math.min(total, completed), total);
-    }
+    const loadedBuckets = await loadBucketOpsBucketsByNames({
+      bucketNames: selectedBucketList,
+      include: includeParams,
+      listBuckets,
+      onProgress: ({ completed, total }) => options?.onProgress?.(completed, total),
+      scopeId: selectedEndpointId,
+      withStats: exportWithStats,
+    });
+    loadedBuckets.forEach((bucket) => {
+      if (selectedBuckets.has(bucket.name)) bucketsByName.set(bucket.name, bucket);
+    });
 
     return bucketsByName;
   };
