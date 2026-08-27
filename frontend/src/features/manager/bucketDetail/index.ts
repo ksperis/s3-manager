@@ -23,11 +23,11 @@ export {
   defaultNotificationTemplate,
   useBucketNotificationsController,
 } from "./useBucketNotificationsController";
+export { useBucketPublicAccessController } from "./useBucketPublicAccessController";
 export {
   jsonTextSignature,
   normalizeAclDraft,
   normalizeBucketTagsDraft,
-  normalizePublicAccessDraft,
   normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,

@@ -34,7 +34,6 @@ import {
   getBucketWebsite,
   getBucketAcl,
   getBucketLifecycle,
-  getBucketPublicAccessBlock,
   listBuckets,
   putBucketTags,
   putBucketReplication,
@@ -43,7 +42,6 @@ import {
   setBucketVersioning,
   updateBucketAcl,
   updateBucketObjectLock,
-  updateBucketPublicAccessBlock,
   updateBucketQuota,
 } from "../../api/buckets";
 import {
@@ -56,7 +54,6 @@ import {
   getCephAdminBucketObjectLock,
   getCephAdminBucketReplication,
   getCephAdminBucketVersioning,
-  getCephAdminBucketPublicAccessBlock,
   getCephAdminBucketTags,
   getCephAdminBucketWebsite,
   listCephAdminBucketObjects,
@@ -69,7 +66,6 @@ import {
   updateCephAdminBucketAcl,
   updateCephAdminBucketObjectLock,
   updateCephAdminBucketQuota,
-  updateCephAdminBucketPublicAccessBlock,
 } from "../../api/cephAdmin";
 import {
   listObjects,
@@ -122,7 +118,6 @@ import {
   isLifecycleSimpleDraftEmpty,
   normalizeAclDraft,
   normalizeBucketTagsDraft,
-  normalizePublicAccessDraft,
   normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
@@ -132,6 +127,7 @@ import {
   useBucketEncryptionController,
   useBucketNotificationsController,
   useBucketPolicyController,
+  useBucketPublicAccessController,
 } from "./bucketDetail";
 import {
   buildBucketDetailBreadcrumbs,
@@ -275,13 +271,6 @@ type LifecycleRuleRecord = Record<string, unknown> & {
   Filter?: LifecycleFilter;
 };
 
-const defaultPublicAccessBlock: BucketPublicAccessBlock = {
-  block_public_acls: false,
-  ignore_public_acls: false,
-  block_public_policy: false,
-  restrict_public_buckets: false,
-};
-
 const publicAccessOptions: { key: keyof BucketPublicAccessBlock; label: string; description: string }[] = [
   {
     key: "block_public_acls",
@@ -305,7 +294,6 @@ const publicAccessOptions: { key: keyof BucketPublicAccessBlock; label: string; 
   },
 ];
 
-const publicAccessKeys = publicAccessOptions.map((option) => option.key);
 const bucketFeaturePrimaryActionClass = cx(uiButtonBaseClass, uiButtonVariants.primary, "px-3 py-1");
 const bucketFeatureSecondaryActionClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-3 py-1");
 const bucketFeatureDangerActionClass = cx(
@@ -317,9 +305,6 @@ const bucketFeatureJsonInputClass = cx(uiInputClass, "px-3 py-2 font-mono ui-cap
 const bucketFeatureLabelClass =
   "flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200";
 const bucketDetailHintClass = "ui-caption text-slate-500 dark:text-slate-400";
-
-const isPublicAccessFullyEnabled = (config?: BucketPublicAccessBlock | null) =>
-  Boolean(config) && publicAccessKeys.every((key) => (config as Record<string, boolean | null | undefined>)[key] === true);
 
 const defaultLifecycleJsonExample = `[
   {
@@ -460,11 +445,6 @@ export default function BucketDetailPage({
   const [versioningSaveError, setVersioningSaveError] = useState<string | null>(null);
   const [updatingVersioning, setUpdatingVersioning] = useState(false);
   const [versioningDraftEnabled, setVersioningDraftEnabled] = useState(false);
-  const [publicAccessBlock, setPublicAccessBlock] = useState<BucketPublicAccessBlock>(defaultPublicAccessBlock);
-  const [publicAccessError, setPublicAccessError] = useState<string | null>(null);
-  const [publicAccessStatus, setPublicAccessStatus] = useState<string | null>(null);
-  const [publicAccessLoading, setPublicAccessLoading] = useState(false);
-  const [savingPublicAccess, setSavingPublicAccess] = useState(false);
   const [showNotificationExample, setShowNotificationExample] = useState(false);
   const [websiteConfig, setWebsiteConfig] = useState<BucketWebsiteConfiguration | null>(null);
   const [websiteMode, setWebsiteMode] = useState<"hosting" | "redirect">("hosting");
@@ -542,7 +522,6 @@ export default function BucketDetailPage({
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
-  const [publicAccessSnapshot, setPublicAccessSnapshot] = useState<BucketPublicAccessBlock>(defaultPublicAccessBlock);
   const [bucketTagsSnapshot, setBucketTagsSnapshot] = useState<BucketTag[]>([]);
   const [quotaSizeGb, setQuotaSizeGb] = useState<string>("");
   const [quotaSizeUnit, setQuotaSizeUnit] = useState<"MiB" | "GiB" | "TiB">("GiB");
@@ -657,6 +636,25 @@ export default function BucketDetailPage({
     text: notificationText,
     updateText: updateNotificationText,
   } = useBucketNotificationsController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
+  const {
+    config: publicAccessBlock,
+    dirty: publicAccessDirty,
+    error: publicAccessError,
+    fullyEnabled: publicAccessBlockEnabled,
+    load: loadPublicAccessBlock,
+    loading: publicAccessLoading,
+    partiallyEnabled: publicAccessBlockPartial,
+    save: savePublicAccessBlock,
+    saving: savingPublicAccess,
+    status: publicAccessStatus,
+    update: updatePublicAccessField,
+  } = useBucketPublicAccessController({
     accountId,
     bucketName,
     cephAdmin: isCephAdmin,
@@ -980,47 +978,6 @@ export default function BucketDetailPage({
       setLifecycleLoading(false);
     }
   }, [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]);
-
-  const loadPublicAccessBlock = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setPublicAccessBlock({ ...defaultPublicAccessBlock });
-      setPublicAccessSnapshot({ ...defaultPublicAccessBlock });
-      setPublicAccessError(null);
-      setPublicAccessStatus(null);
-      return;
-    }
-    setPublicAccessLoading(true);
-    setPublicAccessError(null);
-    setPublicAccessStatus(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketPublicAccessBlock(endpointId, bucketName)
-          : defaultPublicAccessBlock
-        : await getBucketPublicAccessBlock(accountId, bucketName);
-      setPublicAccessBlock({
-        ...defaultPublicAccessBlock,
-        block_public_acls: Boolean(data.block_public_acls),
-        ignore_public_acls: Boolean(data.ignore_public_acls),
-        block_public_policy: Boolean(data.block_public_policy),
-        restrict_public_buckets: Boolean(data.restrict_public_buckets),
-      });
-      setPublicAccessSnapshot({
-        ...defaultPublicAccessBlock,
-        block_public_acls: Boolean(data.block_public_acls),
-        ignore_public_acls: Boolean(data.ignore_public_acls),
-        block_public_policy: Boolean(data.block_public_policy),
-        restrict_public_buckets: Boolean(data.restrict_public_buckets),
-      });
-    } catch (err) {
-      const message = extractApiError(err, "Unable to load public access block settings.");
-      setPublicAccessError(message);
-      setPublicAccessBlock({ ...defaultPublicAccessBlock });
-      setPublicAccessSnapshot({ ...defaultPublicAccessBlock });
-    } finally {
-      setPublicAccessLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadWebsite = useCallback(async () => {
     if (!bucketName || !hasContext || !staticWebsiteEnabled) {
@@ -1610,12 +1567,6 @@ export default function BucketDetailPage({
   const replicationConfigured = isReplicationConfigurationConfigured(replicationConfiguration);
   const replicationBusy = replicationLoading || savingReplication || clearingReplication;
   const replicationBlocked = !replicationFeatureEnabled;
-  const publicAccessBlockConfig = publicAccessBlock;
-  const publicAccessBlockEnabled = isPublicAccessFullyEnabled(publicAccessBlockConfig);
-  const publicAccessBlockPartial =
-    Boolean(publicAccessBlockConfig) &&
-    !publicAccessBlockEnabled &&
-    publicAccessKeys.some((key) => (publicAccessBlockConfig as Record<string, boolean | null | undefined>)[key] === true);
   const websiteRoutingDraftSignature = jsonTextSignature(
     websiteRoutingRules,
     Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : []
@@ -1668,9 +1619,6 @@ export default function BucketDetailPage({
   };
   const lifecycleSimpleDirty = !isLifecycleSimpleDraftEmpty(lifecycleSimpleDraft);
   const lifecycleDirty = lifecycleMode === "json" ? lifecycleJsonDirty : lifecycleSimpleDirty;
-  const publicAccessDraftSignature = stableBucketJsonSignature(normalizePublicAccessDraft(publicAccessBlock));
-  const publicAccessSnapshotSignature = stableBucketJsonSignature(normalizePublicAccessDraft(publicAccessSnapshot));
-  const publicAccessDirty = publicAccessDraftSignature !== publicAccessSnapshotSignature;
   const aclDraftSignature = stableBucketJsonSignature(normalizeAclDraft(bucketAclPreset, bucketAclCustom));
   const aclSnapshotSignature = stableBucketJsonSignature(normalizeAclDraft(inferBucketAclPreset(bucketAcl), ""));
   const aclDirty = aclDraftSignature !== aclSnapshotSignature;
@@ -2022,14 +1970,6 @@ export default function BucketDetailPage({
     return items.map((item, index) => (index === 1 ? { ...item, to: basePath } : item));
   }, [basePath, bucketName, mode]);
 
-  const handleTogglePublicAccessField = (key: keyof BucketPublicAccessBlock, value: boolean) => {
-    setPublicAccessBlock((prev) => ({
-      ...defaultPublicAccessBlock,
-      ...prev,
-      [key]: value,
-    }));
-  };
-
   const saveVersioning = async () => {
     if (!bucketName || !hasContext || versioningLoading || versioningLoadError) return;
     if (versioningDisableBlocked && !versioningDraftEnabled) return;
@@ -2048,46 +1988,6 @@ export default function BucketDetailPage({
       setVersioningSaveError(extractApiError(err, "Failed to update versioning."));
     } finally {
       setUpdatingVersioning(false);
-    }
-  };
-
-  const savePublicAccessBlock = async () => {
-    if (!bucketName || !hasContext) return;
-    setSavingPublicAccess(true);
-    setPublicAccessError(null);
-    setPublicAccessStatus(null);
-    const payload: BucketPublicAccessBlock = {
-      block_public_acls: Boolean(publicAccessBlock.block_public_acls),
-      ignore_public_acls: Boolean(publicAccessBlock.ignore_public_acls),
-      block_public_policy: Boolean(publicAccessBlock.block_public_policy),
-      restrict_public_buckets: Boolean(publicAccessBlock.restrict_public_buckets),
-    };
-    try {
-      const saved = isCephAdmin
-        ? endpointId
-          ? await updateCephAdminBucketPublicAccessBlock(endpointId, bucketName, payload)
-          : payload
-        : await updateBucketPublicAccessBlock(accountId, bucketName, payload);
-      setPublicAccessBlock({
-        ...defaultPublicAccessBlock,
-        block_public_acls: Boolean(saved.block_public_acls),
-        ignore_public_acls: Boolean(saved.ignore_public_acls),
-        block_public_policy: Boolean(saved.block_public_policy),
-        restrict_public_buckets: Boolean(saved.restrict_public_buckets),
-      });
-      setPublicAccessSnapshot({
-        ...defaultPublicAccessBlock,
-        block_public_acls: Boolean(saved.block_public_acls),
-        ignore_public_acls: Boolean(saved.ignore_public_acls),
-        block_public_policy: Boolean(saved.block_public_policy),
-        restrict_public_buckets: Boolean(saved.restrict_public_buckets),
-      });
-      setPublicAccessStatus("Public access block updated.");
-    } catch (err) {
-      const message = extractApiError(err, "Unable to update public access block.");
-      setPublicAccessError(message);
-    } finally {
-      setSavingPublicAccess(false);
     }
   };
 
@@ -3586,7 +3486,7 @@ export default function BucketDetailPage({
                         <input
                           type="checkbox"
                           checked={Boolean(publicAccessBlock[option.key])}
-                          onChange={(e) => handleTogglePublicAccessField(option.key, e.target.checked)}
+                          onChange={(e) => updatePublicAccessField(option.key, e.target.checked)}
                           disabled={publicAccessNotImplemented || publicAccessLoading || savingPublicAccess}
                           className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                         />
