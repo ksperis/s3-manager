@@ -5654,7 +5654,7 @@ describe("BrowserPage interactions", () => {
     await waitFor(() => {
       expect(restoreToDateAction).toBeEnabled();
     });
-    await user.click(restoreToDateAction);
+    fireEvent.click(restoreToDateAction);
 
     const modal = await screen.findByRole(
       "dialog",
