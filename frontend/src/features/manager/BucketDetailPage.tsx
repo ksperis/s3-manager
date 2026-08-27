@@ -26,7 +26,6 @@ import {
   listBuckets,
   putBucketReplication,
   putBucketLifecycle,
-  updateBucketQuota,
 } from "../../api/buckets";
 import {
   deleteCephAdminBucketLifecycle,
@@ -37,7 +36,6 @@ import {
   listCephAdminBuckets,
   putCephAdminBucketLifecycle,
   putCephAdminBucketReplication,
-  updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
 import {
   listObjects,
@@ -83,13 +81,13 @@ import {
   BucketFeatureModeToggle,
   bucketAclOptions,
   buildNotificationExample,
+  type BucketQuotaUnit,
   buildPolicyExample,
   defaultCorsExample,
   defaultEncryptionExample,
   defaultNotificationTemplate,
   jsonTextSignature,
   isLifecycleSimpleDraftEmpty,
-  normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
   stableBucketJsonSignature,
@@ -101,6 +99,7 @@ import {
   useBucketObjectLockController,
   useBucketPolicyController,
   useBucketPublicAccessController,
+  useBucketQuotaController,
   useBucketTagsController,
   useBucketVersioningController,
   useBucketWebsiteController,
@@ -266,7 +265,24 @@ const bucketDetailWideTableHeaderClass =
   "px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
 const bucketDetailTableCellClass =
   "px-4 py-2 text-slate-600 dark:text-slate-300";
+const bucketDetailCompactCellClass =
+  "px-3 py-1.5 text-slate-700 dark:text-slate-200";
+const bucketDetailCompactStackClass = "space-y-2";
+const bucketDetailDividerClass =
+  "divide-y divide-slate-200 dark:divide-slate-800";
+const bucketDetailEndActionClass = "mt-2 flex justify-end";
+const bucketDetailFieldStackClass = "flex flex-col gap-1";
+const bucketDetailInlineActionsClass = "flex gap-2";
+const bucketDetailMutedBodyClass =
+  "ui-caption text-slate-600 dark:text-slate-300";
+const bucketDetailMutedTitleClass =
+  "ui-caption font-semibold text-slate-700 dark:text-slate-100";
+const bucketDetailSectionStackClass = "space-y-4";
 const bucketDetailStackClass = "space-y-3";
+const bucketDetailTableButtonCellClass = "px-3 py-2 text-left";
+const bucketDetailTextActionClass =
+  "ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60";
+const bucketDetailTightStackClass = "space-y-1";
 const bucketDetailWrapActionsClass = "flex flex-wrap gap-2";
 
 const defaultLifecycleJsonExample = `[
@@ -443,13 +459,6 @@ export default function BucketDetailPage({
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
-  const [quotaSizeGb, setQuotaSizeGb] = useState<string>("");
-  const [quotaSizeUnit, setQuotaSizeUnit] = useState<"MiB" | "GiB" | "TiB">("GiB");
-  const [quotaObjects, setQuotaObjects] = useState<string>("");
-  const [quotaStatus, setQuotaStatus] = useState<string | null>(null);
-  const [quotaError, setQuotaError] = useState<string | null>(null);
-  const [updatingQuota, setUpdatingQuota] = useState(false);
-
   const selectedS3Account = useMemo(() => {
     if (isCephAdmin) return null;
     if (accountIdOverride) {
@@ -780,26 +789,6 @@ export default function BucketDetailPage({
   const objectLockFormId = "bucket-object-lock-form";
   const quotaFormId = "bucket-quota-form";
 
-  useEffect(() => {
-    if (!bucket || !quotaFeatureEnabled) {
-      setQuotaSizeGb("");
-      setQuotaSizeUnit("GiB");
-      setQuotaObjects("");
-      setQuotaStatus(null);
-      setQuotaError(null);
-      return;
-    }
-    const toGbString = (bytes?: number | null) => {
-      if (bytes === null || bytes === undefined || bytes <= 0) return "";
-      const gb = bytes / (1024 ** 3);
-      return gb % 1 === 0 ? String(gb) : gb.toFixed(1);
-    };
-    setQuotaSizeGb(toGbString(bucket.quota_max_size_bytes ?? null));
-    setQuotaSizeUnit("GiB");
-    const objects = bucket.quota_max_objects;
-    setQuotaObjects(objects != null && objects > 0 ? String(objects) : "");
-  }, [bucket, quotaFeatureEnabled]);
-
   const emptySimpleLifecycleRule = useCallback(
     (): SimpleLifecycleRule => ({
       id: "",
@@ -855,6 +844,31 @@ export default function BucketDetailPage({
       setLoadingBucket(false);
     }
   }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, usageFeatureEnabled]);
+
+  const {
+    configured: quotaConfigured,
+    dirty: quotaDirty,
+    error: quotaError,
+    maxObjects: quotaObjects,
+    maxSize: quotaSizeGb,
+    save: saveQuota,
+    saving: updatingQuota,
+    status: quotaStatus,
+    unit: quotaSizeUnit,
+    updateMaxObjects: updateQuotaObjects,
+    updateMaxSize: updateQuotaSize,
+    updateUnit: updateQuotaSizeUnit,
+  } = useBucketQuotaController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    editable: canEditQuota,
+    enabled: quotaFeatureEnabled,
+    endpointId,
+    maxObjects: bucket?.quota_max_objects,
+    maxSizeBytes: bucket?.quota_max_size_bytes,
+    onSaved: refreshBucketMeta,
+  });
 
   useEffect(() => {
     if (activeTab !== "overview" && activeTab !== "metrics") return;
@@ -1395,9 +1409,6 @@ export default function BucketDetailPage({
 
   const lifecycleRuleCount = lifecycle.rules?.length ?? 0;
   const hasLifecycleRules = lifecycleRuleCount > 0;
-  const quotaConfigured = Boolean(
-    (bucket?.quota_max_size_bytes ?? 0) > 0 || (bucket?.quota_max_objects ?? 0) > 0
-  );
   const replicationConfiguration = replicationConfig.configuration ?? {};
   const replicationConfigured = isReplicationConfigurationConfigured(replicationConfiguration);
   const replicationBusy = replicationLoading || savingReplication || clearingReplication;
@@ -1432,21 +1443,6 @@ export default function BucketDetailPage({
   };
   const lifecycleSimpleDirty = !isLifecycleSimpleDraftEmpty(lifecycleSimpleDraft);
   const lifecycleDirty = lifecycleMode === "json" ? lifecycleJsonDirty : lifecycleSimpleDirty;
-  const quotaSnapshotSignature = stableBucketJsonSignature(
-    normalizeQuotaDraft(
-      (() => {
-        const bytes = bucket?.quota_max_size_bytes ?? null;
-        if (bytes == null || bytes <= 0) return "";
-        const divider = quotaSizeUnit === "MiB" ? 1024 ** 2 : quotaSizeUnit === "GiB" ? 1024 ** 3 : 1024 ** 4;
-        const value = bytes / divider;
-        return value % 1 === 0 ? String(value) : value.toFixed(1);
-      })(),
-      quotaSizeUnit,
-      (bucket?.quota_max_objects ?? 0) > 0 ? String(bucket?.quota_max_objects) : ""
-    )
-  );
-  const quotaDraftSignature = stableBucketJsonSignature(normalizeQuotaDraft(quotaSizeGb, quotaSizeUnit, quotaObjects));
-  const quotaDirty = quotaDraftSignature !== quotaSnapshotSignature;
   const versioningNotImplemented = isApiFeatureNotImplemented(versioningLoadError);
   const objectLockNotImplemented = isApiFeatureNotImplemented(objectLockLoadError);
   const lifecycleNotImplemented = isApiFeatureNotImplemented(lifecycleError);
@@ -1975,44 +1971,9 @@ export default function BucketDetailPage({
     return parts.length > 0 ? parts.join("/") + "/" : "";
   }, [currentPrefix]);
 
-  const handleUpdateQuota = async (e: React.FormEvent) => {
+  const handleUpdateQuota = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bucketName || !canEditQuota) return;
-    setUpdatingQuota(true);
-    setQuotaStatus(null);
-    setQuotaError(null);
-    try {
-      const maxSizeGb = quotaSizeGb.trim() === "" ? null : Number(quotaSizeGb);
-      const maxObjects = quotaObjects.trim() === "" ? null : Number(quotaObjects);
-      if (
-        (maxSizeGb !== null && Number.isNaN(maxSizeGb)) ||
-        (maxObjects !== null && Number.isNaN(maxObjects)) ||
-        (maxSizeGb !== null && maxSizeGb < 0) ||
-        (maxObjects !== null && maxObjects < 0)
-      ) {
-        setQuotaError("Invalid quota values.");
-        setUpdatingQuota(false);
-        return;
-      }
-      const payload = {
-        max_size_gb: maxSizeGb ?? undefined,
-        max_size_unit: maxSizeGb != null ? quotaSizeUnit : undefined,
-        max_objects: maxObjects ?? undefined,
-      };
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await updateCephAdminBucketQuota(endpointId, bucketName, payload);
-      } else {
-        if (!accountId) return;
-        await updateBucketQuota(accountId, bucketName, payload);
-      }
-      setQuotaStatus("Quota updated");
-      await refreshBucketMeta();
-    } catch (err) {
-      setQuotaError(extractApiError(err, "Unable to update the quota."));
-    } finally {
-      setUpdatingQuota(false);
-    }
+    void saveQuota();
   };
 
   const configurationDeleteLoading =
@@ -2035,7 +1996,7 @@ export default function BucketDetailPage({
                     : false;
 
   return (
-    <div className="space-y-4">
+    <div className={bucketDetailSectionStackClass}>
       {!embedded && (
         <PageHeader
           title={bucketName ?? "Bucket"}
@@ -2079,7 +2040,7 @@ export default function BucketDetailPage({
             label: "Overview",
             content: (
               <section className="space-y-4 px-1 py-2">
-                <header className="space-y-1">
+                <header className={bucketDetailTightStackClass}>
                   <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
                     {bucketName ? `Bucket ${bucketName}` : "Bucket overview"}
                   </h3>
@@ -2129,7 +2090,7 @@ export default function BucketDetailPage({
                       left={
                   <div className="p-3 space-y-2">
                     <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Prefixes</p>
-                    <div className="space-y-1">
+                    <div className={bucketDetailTightStackClass}>
                       <button
                         className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left ui-caption ${
                           currentPrefix === ""
@@ -2172,7 +2133,7 @@ export default function BucketDetailPage({
                 right={
                   <div className="space-y-3 p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="space-y-1">
+                      <div className={bucketDetailTightStackClass}>
                         <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Path</p>
                         <div className="ui-caption text-slate-500 dark:text-slate-300">
                           {bucketName}/{currentPrefix || "(root)"}
@@ -2216,7 +2177,7 @@ export default function BucketDetailPage({
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        <tbody className={bucketDetailDividerClass}>
                           {objectsLoading && (
                             <tr>
                               <td colSpan={4} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
@@ -2274,7 +2235,7 @@ export default function BucketDetailPage({
             id: "properties",
             label: "Properties",
             content: (
-              <div className="space-y-4">
+              <div className={bucketDetailSectionStackClass}>
                 <div className={bucketDetailTwoColumnGridClass}>
                   <BucketFeatureCard
                     title="Versioning"
@@ -2301,7 +2262,7 @@ export default function BucketDetailPage({
                       </button>
                     }
                   >
-                    <div className="space-y-2">
+                    <div className={bucketDetailCompactStackClass}>
                       {versioningLoading && (
                         <UiInlineMessage>Loading versioning...</UiInlineMessage>
                       )}
@@ -2347,7 +2308,7 @@ export default function BucketDetailPage({
                     testId="bucket-feature-encryption"
                     className="md:col-start-2 md:row-start-1 md:row-span-2 space-y-3"
                     actions={
-                      <div className="flex gap-2">
+                      <div className={bucketDetailInlineActionsClass}>
                         <button
                           type="button"
                           onClick={() => setPendingConfigurationDelete("encryption")}
@@ -2428,7 +2389,7 @@ export default function BucketDetailPage({
                       </div>
                     }
                   >
-                    <div className="space-y-2">
+                    <div className={bucketDetailCompactStackClass}>
                       {objectLockLoading && (
                         <UiInlineMessage>Loading Object Lock configuration...</UiInlineMessage>
                       )}
@@ -2443,7 +2404,7 @@ export default function BucketDetailPage({
                       )}
                       <form
                         id={objectLockFormId}
-                        className="space-y-2"
+                        className={bucketDetailCompactStackClass}
                         onSubmit={(event) => {
                           event.preventDefault();
                           void saveObjectLock();
@@ -2524,7 +2485,7 @@ export default function BucketDetailPage({
                           </label>
                         </div>
                         {objectLockConfig?.mode && (objectLockConfig.days != null || objectLockConfig.years != null) && (
-                          <p className="ui-caption text-slate-600 dark:text-slate-300">
+                          <p className={bucketDetailMutedBodyClass}>
                             Current retention: {objectLockConfig.mode}
                             {objectLockConfig.days != null ? ` · ${objectLockConfig.days} day(s)` : ""}
                             {objectLockConfig.years != null ? ` · ${objectLockConfig.years} year(s)` : ""}
@@ -2576,7 +2537,7 @@ export default function BucketDetailPage({
                       )}
                       <div className={cx(uiCardMutedClass, "mt-3 px-3 py-2")}>
                         {(lifecycle.rules?.length ?? 0) === 0 ? (
-                          <p className="ui-caption text-slate-600 dark:text-slate-300">No rules configured on this bucket.</p>
+                          <p className={bucketDetailMutedBodyClass}>No rules configured on this bucket.</p>
                         ) : (
                           <div className="overflow-x-auto">
                             <table className={cx(uiDataTableClass, "min-w-full ui-caption")}>
@@ -2599,7 +2560,7 @@ export default function BucketDetailPage({
                                   </th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                              <tbody className={bucketDetailDividerClass}>
                                 {lifecycle.rules?.map((rawRule, idx) => {
                                   const rule = rawRule as LifecycleRuleRecord;
                                   const ruleId = lifecycleRuleId(rule);
@@ -2613,7 +2574,7 @@ export default function BucketDetailPage({
                                       <td className="px-3 py-1.5 font-semibold text-slate-900 dark:text-slate-100">
                                         {ruleId ?? "(no ID)"}
                                       </td>
-                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">
+                                      <td className={bucketDetailCompactCellClass}>
                                         <button
                                           type="button"
                                           onClick={() => toggleRuleStatusAt(idx)}
@@ -2627,9 +2588,9 @@ export default function BucketDetailPage({
                                           {status}
                                         </button>
                                       </td>
-                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{filterLabel}</td>
-                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{describeLifecycleActions(rule)}</td>
-                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">
+                                      <td className={bucketDetailCompactCellClass}>{filterLabel}</td>
+                                      <td className={bucketDetailCompactCellClass}>{describeLifecycleActions(rule)}</td>
+                                      <td className={bucketDetailCompactCellClass}>
                                         <div className={bucketDetailWrapActionsClass}>
                                           <button
                                             type="button"
@@ -2668,18 +2629,18 @@ export default function BucketDetailPage({
                               {simpleLifecycleWarning && (
                                 <UiInlineMessage tone="warning">{simpleLifecycleWarning}</UiInlineMessage>
                               )}
-                              <p className="ui-caption text-slate-600 dark:text-slate-300">
+                              <p className={bucketDetailMutedBodyClass}>
                                 Quickly add one of the preconfigured rules below (appended to the existing configuration).
                               </p>
                               <div className={bucketDetailStackClass}>
                                 <div className={cx(uiCardMutedClass, "px-3 py-2")}>
-                                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                                  <p className={bucketDetailMutedTitleClass}>
                                     Rule 1: noncurrent 90d + multipart 30d + delete markers (explicit)
                                   </p>
                                   <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                                     Cleans noncurrent versions after 90d, removes incomplete multipart uploads after 30d, and deletes expired delete markers.
                                   </p>
-                                  <div className="mt-2 flex justify-end">
+                                  <div className={bucketDetailEndActionClass}>
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -2691,7 +2652,7 @@ export default function BucketDetailPage({
                                           Expiration: { ExpiredObjectDeleteMarker: true },
                                         })
                                       }
-                                      className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
+                                      className={bucketDetailTextActionClass}
                                       disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >
                                       Add
@@ -2700,9 +2661,9 @@ export default function BucketDetailPage({
                                 </div>
 
                                 <div className={cx(uiCardMutedClass, "px-3 py-2")}>
-                                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Rule 2: current/noncurrent transitions</p>
+                                  <p className={bucketDetailMutedTitleClass}>Rule 2: current/noncurrent transitions</p>
                                   <div className="mt-2 flex flex-wrap items-end gap-3 ui-caption">
-                                    <label className="flex flex-col gap-1">
+                                    <label className={bucketDetailFieldStackClass}>
                                       Current versions expiration (days)
                                       <input
                                         type="number"
@@ -2713,7 +2674,7 @@ export default function BucketDetailPage({
                                         disabled={lifecycleNotImplemented}
                                       />
                                     </label>
-                                    <label className="flex flex-col gap-1">
+                                    <label className={bucketDetailFieldStackClass}>
                                       Noncurrent versions expiration (days)
                                       <input
                                         type="number"
@@ -2724,7 +2685,7 @@ export default function BucketDetailPage({
                                         disabled={lifecycleNotImplemented}
                                       />
                                     </label>
-                                    <label className="flex flex-col gap-1">
+                                    <label className={bucketDetailFieldStackClass}>
                                       Storage class
                                       <input
                                         type="text"
@@ -2735,7 +2696,7 @@ export default function BucketDetailPage({
                                         disabled={lifecycleNotImplemented}
                                       />
                                     </label>
-                                    <label className="flex flex-col gap-1">
+                                    <label className={bucketDetailFieldStackClass}>
                                       Prefix (optional)
                                       <input
                                         type="text"
@@ -2747,7 +2708,7 @@ export default function BucketDetailPage({
                                       />
                                     </label>
                                   </div>
-                                  <div className="mt-2 flex justify-end">
+                                  <div className={bucketDetailEndActionClass}>
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -2765,7 +2726,7 @@ export default function BucketDetailPage({
                                           ],
                                         })
                                       }
-                                      className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
+                                      className={bucketDetailTextActionClass}
                                       disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >
                                       Add
@@ -2774,9 +2735,9 @@ export default function BucketDetailPage({
                                 </div>
 
                                 <div className={cx(uiCardMutedClass, "px-3 py-2")}>
-                                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Rule 3: current/noncurrent expiration</p>
+                                  <p className={bucketDetailMutedTitleClass}>Rule 3: current/noncurrent expiration</p>
                                   <div className="mt-2 flex flex-wrap items-end gap-3 ui-caption">
-                                    <label className="flex flex-col gap-1">
+                                    <label className={bucketDetailFieldStackClass}>
                                       Current versions expiration (days)
                                       <input
                                         type="number"
@@ -2787,7 +2748,7 @@ export default function BucketDetailPage({
                                         disabled={lifecycleNotImplemented}
                                       />
                                     </label>
-                                    <label className="flex flex-col gap-1">
+                                    <label className={bucketDetailFieldStackClass}>
                                       Noncurrent versions expiration (days)
                                       <input
                                         type="number"
@@ -2798,7 +2759,7 @@ export default function BucketDetailPage({
                                         disabled={lifecycleNotImplemented}
                                       />
                                     </label>
-                                    <label className="flex flex-col gap-1">
+                                    <label className={bucketDetailFieldStackClass}>
                                       Prefix (optional)
                                       <input
                                         type="text"
@@ -2810,11 +2771,11 @@ export default function BucketDetailPage({
                                       />
                                     </label>
                                   </div>
-                                  <div className="mt-2 flex justify-end">
+                                  <div className={bucketDetailEndActionClass}>
                                     <button
                                       type="button"
                                       onClick={addExpirationExampleRule}
-                                      className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
+                                      className={bucketDetailTextActionClass}
                                       disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >
                                       Add
@@ -2887,7 +2848,7 @@ export default function BucketDetailPage({
                       {bucketTagsLoading ? (
                         <UiInlineMessage>Loading bucket tags...</UiInlineMessage>
                       ) : (
-                        <div className="space-y-2">
+                        <div className={bucketDetailCompactStackClass}>
                           {bucketTags.length === 0 && (
                             <p className={bucketDetailHintClass}>No tags configured on this bucket.</p>
                           )}
@@ -2946,7 +2907,7 @@ export default function BucketDetailPage({
             id: "permissions",
             label: "Permissions",
             content: (
-              <div className="space-y-4">
+              <div className={bucketDetailSectionStackClass}>
                 <BucketFeatureCard
                   title="Block public access"
                   description="Manage the four S3 public access block flags. Configure each option below."
@@ -3062,12 +3023,12 @@ export default function BucketDetailPage({
                           <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
                             <thead className="bg-slate-50 ui-caption uppercase tracking-wide text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
                               <tr>
-                                <th className="px-3 py-2 text-left">Grantee</th>
-                                <th className="px-3 py-2 text-left">Type</th>
-                                <th className="px-3 py-2 text-left">Permission</th>
+                                <th className={bucketDetailTableButtonCellClass}>Grantee</th>
+                                <th className={bucketDetailTableButtonCellClass}>Type</th>
+                                <th className={bucketDetailTableButtonCellClass}>Permission</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                            <tbody className={bucketDetailDividerClass}>
                               {bucketAcl?.grants.map((grant, index) => {
                                 const { grantee } = grant;
                                 const label =
@@ -3099,9 +3060,9 @@ export default function BucketDetailPage({
                   mode="json"
                   visualState={policyCardState}
                   testId="bucket-feature-policy"
-                  className="space-y-4"
+                  className={bucketDetailSectionStackClass}
                   actions={
-                    <div className="flex gap-2">
+                    <div className={bucketDetailInlineActionsClass}>
                       <button
                         type="button"
                         onClick={() => setPendingConfigurationDelete("policy")}
@@ -3149,7 +3110,7 @@ export default function BucketDetailPage({
                   testId="bucket-feature-cors"
                   className={bucketDetailStackClass}
                   actions={
-                    <div className="flex gap-2">
+                    <div className={bucketDetailInlineActionsClass}>
                       <button
                         type="button"
                         onClick={() => setPendingConfigurationDelete("cors")}
@@ -3290,7 +3251,7 @@ export default function BucketDetailPage({
                           />
                         </label>
                       </div>
-                      <div className="space-y-2">
+                      <div className={bucketDetailCompactStackClass}>
                         <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">
                           Routing rules (JSON array)
                         </label>
@@ -3522,7 +3483,7 @@ export default function BucketDetailPage({
                         </div>
                       </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className={bucketDetailCompactStackClass}>
                         <textarea
                           value={replicationText}
                           onChange={(e) => {
@@ -3711,7 +3672,7 @@ export default function BucketDetailPage({
             label: "Metrics",
             disabled: !canViewBucketMetrics,
             content: (
-              <div className="space-y-4">
+              <div className={bucketDetailSectionStackClass}>
                 <MetricsCard
                   title="Current usage and quota"
                   description="Live usage, quotas, and traffic sourced from backend metrics."
@@ -3805,20 +3766,20 @@ export default function BucketDetailPage({
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <label className={bucketFeatureLabelClass}>
                         Size
-                        <div className="flex gap-2">
+                        <div className={bucketDetailInlineActionsClass}>
                           <input
                             type="number"
                             min={0}
                             step="0.1"
                             value={quotaSizeGb}
-                            onChange={(e) => setQuotaSizeGb(e.target.value)}
+                            onChange={(e) => updateQuotaSize(e.target.value)}
                             className={cx(bucketFeatureInputClass, "flex-1")}
                             placeholder="e.g. 100"
                             disabled={!canEditQuota}
                           />
                           <select
                             value={quotaSizeUnit}
-                            onChange={(e) => setQuotaSizeUnit(e.target.value as "MiB" | "GiB" | "TiB")}
+                            onChange={(e) => updateQuotaSizeUnit(e.target.value as BucketQuotaUnit)}
                             className={cx(bucketFeatureInputClass, "w-20")}
                             disabled={!canEditQuota}
                           >
@@ -3835,7 +3796,7 @@ export default function BucketDetailPage({
                           min={0}
                           step="1"
                           value={quotaObjects}
-                          onChange={(e) => setQuotaObjects(e.target.value)}
+                          onChange={(e) => updateQuotaObjects(e.target.value)}
                           className={bucketFeatureInputClass}
                           placeholder="e.g. 1000000"
                           disabled={!canEditQuota}

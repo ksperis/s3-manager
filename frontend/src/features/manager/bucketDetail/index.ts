@@ -29,12 +29,15 @@ export {
   useBucketAclController,
 } from "./useBucketAclController";
 export { useBucketObjectLockController } from "./useBucketObjectLockController";
+export {
+  useBucketQuotaController,
+  type BucketQuotaUnit,
+} from "./useBucketQuotaController";
 export { useBucketTagsController } from "./useBucketTagsController";
 export { useBucketVersioningController } from "./useBucketVersioningController";
 export { useBucketWebsiteController } from "./useBucketWebsiteController";
 export {
   jsonTextSignature,
-  normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
   stableBucketJsonSignature,

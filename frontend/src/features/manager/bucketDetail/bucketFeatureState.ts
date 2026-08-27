@@ -91,14 +91,6 @@ export function normalizeAccessLoggingDraft(config: BucketLoggingConfiguration |
   };
 }
 
-export function normalizeQuotaDraft(maxSize: string, unit: "MiB" | "GiB" | "TiB", maxObjects: string): Record<string, unknown> {
-  return {
-    max_size: normalizeString(maxSize),
-    max_size_unit: unit,
-    max_objects: normalizeString(maxObjects),
-  };
-}
-
 export function normalizeNotificationConfiguration(configuration: unknown): Record<string, unknown> {
   if (!isPlainObject(configuration)) return {};
   const normalized: Record<string, unknown> = {};
