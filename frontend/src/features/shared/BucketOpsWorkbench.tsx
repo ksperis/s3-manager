@@ -46,7 +46,6 @@ import {
 } from "../../api/cephAdmin";
 import {
   STORAGE_OPS_SCOPE_ID,
-  decodeStorageOpsBucketRef,
   type StorageOpsBucket,
 } from "../../api/storageOps";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
@@ -79,11 +78,8 @@ import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModa
 import CephAdminBucketIndexCheckPage from "../cephAdmin/CephAdminBucketIndexCheckPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
-import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
 import BucketPurgeRunModal from "./BucketPurgeRunModal";
-import type { BucketPurgeUiTarget } from "./BucketPurgeRunModal";
 import BucketUsageStatsRunModal from "./BucketUsageStatsRunModal";
-import type { BucketUsageStatsUiTarget } from "./BucketUsageStatsRunModal";
 import BucketConfigBackupModal from "./BucketConfigBackupModal";
 import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal";
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
@@ -97,6 +93,7 @@ import BucketUiTagSettingsBadge, {
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
+import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
@@ -1379,23 +1376,36 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
   };
 
-  const selectedCount = selectedBuckets.size;
-  const selectedOnPageCount = items.filter((bucket) => selectedBuckets.has(bucket.name)).length;
-  const hasResolvedFilteredNames =
-    allFilteredBucketNamesKey === selectionQueryKey && Array.isArray(allFilteredBucketNames) && allFilteredBucketNames.length > 0;
-  const selectedOnFilteredCount = hasResolvedFilteredNames
-    ? allFilteredBucketNames.reduce((count, bucketName) => count + (selectedBuckets.has(bucketName) ? 1 : 0), 0)
-    : selectedOnPageCount;
-  const allSelectedOnFiltered =
-    hasResolvedFilteredNames && total > 0 && allFilteredBucketNames.length === total && selectedOnFilteredCount === total;
-  const fullyResolvedFilteredSelection =
-    allSelectedOnFiltered && selectedCount === total && allFilteredBucketNames?.length === total;
-  const hiddenSelectedCount = Math.max(selectedCount - selectedOnPageCount, 0);
-  const allSelectedOnPage = items.length > 0 && selectedOnPageCount === items.length;
-  const headerChecked = hasResolvedFilteredNames ? allSelectedOnFiltered : allSelectedOnPage;
-  const headerIndeterminate = hasResolvedFilteredNames
-    ? selectedOnFilteredCount > 0 && !allSelectedOnFiltered
-    : selectedOnPageCount > 0 && !allSelectedOnPage;
+  const {
+    fullyResolvedFilteredSelection,
+    headerChecked,
+    headerIndeterminate,
+    hiddenSelectedCount,
+    selectedBucketList,
+    selectedCount,
+    selectedOperationTargets,
+    selectedUiTagSuggestions,
+  } = useMemo(
+    () =>
+      buildBucketOpsSelectionProjection({
+        allFilteredBucketNames,
+        allFilteredBucketNamesKey,
+        isStorageOps,
+        items,
+        selectedBuckets,
+        selectionQueryKey,
+        total,
+      }),
+    [
+      allFilteredBucketNames,
+      allFilteredBucketNamesKey,
+      isStorageOps,
+      items,
+      selectedBuckets,
+      selectionQueryKey,
+      total,
+    ],
+  );
 
   useEffect(() => {
     if (!selectionHeaderRef.current) return;
@@ -1513,56 +1523,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
   };
 
-  const selectedBucketList = useMemo(
-    () => Array.from(selectedBuckets.values()).sort((a, b) => a.localeCompare(b)),
-    [selectedBuckets]
-  );
-  const selectedBucketItemByName = useMemo(() => {
-    const next = new Map<string, CephAdminBucket>();
-    items.forEach((bucket) => {
-      next.set(bucket.name, bucket);
-    });
-    return next;
-  }, [items]);
-  const selectedIntegrityTargets = useMemo<BucketIntegrityUiTarget[]>(() => {
-    if (!isStorageOps) {
-      return selectedBucketList.map((bucketName) => ({ bucketName }));
-    }
-    return selectedBucketList
-      .map((selectedName) => {
-        const bucket = selectedBucketItemByName.get(selectedName);
-        if (bucket) {
-          return {
-            bucketName: getStorageOpsBucketName(bucket),
-            contextId: getStorageOpsContextId(bucket),
-            contextName: (bucket as { context_name?: string | null }).context_name ?? null,
-          };
-        }
-        const decoded = decodeStorageOpsBucketRef(selectedName);
-        return {
-          bucketName: decoded?.bucketName ?? selectedName,
-          contextId: decoded?.contextId ?? "",
-        };
-      })
-      .filter((target) => target.bucketName.trim().length > 0);
-  }, [isStorageOps, selectedBucketItemByName, selectedBucketList]);
-  const selectedUsageStatsTargets = useMemo<BucketUsageStatsUiTarget[]>(
-    () => selectedIntegrityTargets.map((target) => ({ ...target })),
-    [selectedIntegrityTargets]
-  );
-  const selectedPurgeTargets = useMemo<BucketPurgeUiTarget[]>(
-    () => selectedIntegrityTargets.map((target) => ({ ...target })),
-    [selectedIntegrityTargets]
-  );
-  const selectedUiTagSuggestions = useMemo(() => {
-    if (selectedBucketList.length === 0) return [];
-    const tags = selectedBucketList.flatMap(
-      (selectedName) => selectedBucketItemByName.get(selectedName)?.ui_tags ?? []
-    );
-    return Array.from(new Map(tags.map((tag) => [tag.id, tag])).values()).sort(
-      (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }) || a.id - b.id
-    );
-  }, [selectedBucketItemByName, selectedBucketList]);
   const parsedSelectionTagAddInput = useMemo(() => parseUiTags(selectionTagAddInput), [selectionTagAddInput]);
 
   const applyUiTagToSelection = async (
@@ -7280,51 +7240,51 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           onClose={() => setIndexCheckTargets(null)}
         />
       )}
-      {!isStorageOps && showIntegrityModal && selectedEndpointId && selectedIntegrityTargets.length > 0 && (
+      {!isStorageOps && showIntegrityModal && selectedEndpointId && selectedOperationTargets.length > 0 && (
         <BucketIntegrityCheckModal
           mode="ceph-admin"
           endpointId={selectedEndpointId}
           endpointName={selectedEndpoint?.name}
-          targets={selectedIntegrityTargets}
+          targets={selectedOperationTargets}
           onClose={() => setShowIntegrityModal(false)}
         />
       )}
-      {isStorageOps && showIntegrityModal && selectedIntegrityTargets.length > 0 && (
+      {isStorageOps && showIntegrityModal && selectedOperationTargets.length > 0 && (
         <BucketIntegrityCheckModal
           mode="storage-ops"
-          targets={selectedIntegrityTargets}
+          targets={selectedOperationTargets}
           onClose={() => setShowIntegrityModal(false)}
         />
       )}
-      {!isStorageOps && showPurgeModal && selectedEndpointId && selectedPurgeTargets.length > 0 && (
+      {!isStorageOps && showPurgeModal && selectedEndpointId && selectedOperationTargets.length > 0 && (
         <BucketPurgeRunModal
           mode="ceph-admin"
           endpointId={selectedEndpointId}
           endpointName={selectedEndpoint?.name}
-          targets={selectedPurgeTargets}
+          targets={selectedOperationTargets}
           onClose={() => setShowPurgeModal(false)}
         />
       )}
-      {isStorageOps && showPurgeModal && selectedPurgeTargets.length > 0 && (
+      {isStorageOps && showPurgeModal && selectedOperationTargets.length > 0 && (
         <BucketPurgeRunModal
           mode="storage-ops"
-          targets={selectedPurgeTargets}
+          targets={selectedOperationTargets}
           onClose={() => setShowPurgeModal(false)}
         />
       )}
-      {!isStorageOps && showUsageStatsModal && selectedEndpointId && selectedUsageStatsTargets.length > 0 && (
+      {!isStorageOps && showUsageStatsModal && selectedEndpointId && selectedOperationTargets.length > 0 && (
         <BucketUsageStatsRunModal
           mode="ceph-admin"
           endpointId={selectedEndpointId}
           endpointName={selectedEndpoint?.name}
-          targets={selectedUsageStatsTargets}
+          targets={selectedOperationTargets}
           onClose={() => setShowUsageStatsModal(false)}
         />
       )}
-      {isStorageOps && showUsageStatsModal && selectedUsageStatsTargets.length > 0 && (
+      {isStorageOps && showUsageStatsModal && selectedOperationTargets.length > 0 && (
         <BucketUsageStatsRunModal
           mode="storage-ops"
-          targets={selectedUsageStatsTargets}
+          targets={selectedOperationTargets}
           onClose={() => setShowUsageStatsModal(false)}
         />
       )}

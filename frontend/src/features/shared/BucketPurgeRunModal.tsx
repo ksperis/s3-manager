@@ -25,6 +25,7 @@ import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 import { formatCompactNumber, formatNumber } from "../../utils/format";
 import { BucketOperationSummaryStat } from "./bucketOperationRunUi";
+import type { BucketOperationUiTarget } from "./bucketOpsSelectionModel";
 import {
   CEPH_ADMIN_PAGE_CONTRACTS,
   MANAGER_PAGE_CONTRACTS,
@@ -32,14 +33,8 @@ import {
   buildWorkspacePageBreadcrumbs,
 } from "../../navigation/workspacePages";
 
-export type BucketPurgeUiTarget = {
-  bucketName: string;
-  contextId?: string | null;
-  contextName?: string | null;
-};
-
 type CommonProps = {
-  targets: BucketPurgeUiTarget[];
+  targets: BucketOperationUiTarget[];
   onClose: () => void;
   onFinished?: (result: BucketPurgeResult) => void;
 };

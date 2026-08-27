@@ -28,20 +28,15 @@ import {
   bucketOperationTableHeaderClass,
   bucketOperationTableHeaderRightClass,
 } from "./bucketOperationRunUi";
+import type { BucketOperationUiTarget } from "./bucketOpsSelectionModel";
 import {
   CEPH_ADMIN_PAGE_CONTRACTS,
   STORAGE_OPS_PAGE_CONTRACTS,
   buildWorkspacePageBreadcrumbs,
 } from "../../navigation/workspacePages";
 
-export type BucketUsageStatsUiTarget = {
-  bucketName: string;
-  contextId?: string | null;
-  contextName?: string | null;
-};
-
 type CommonProps = {
-  targets: BucketUsageStatsUiTarget[];
+  targets: BucketOperationUiTarget[];
   onClose: () => void;
   onCompleted?: () => void;
 };
