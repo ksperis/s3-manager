@@ -17,7 +17,6 @@ import {
 import {
   Bucket,
   BucketAcl,
-  BucketCors,
   BucketEncryptionConfiguration,
   BucketLifecycleConfig,
   BucketLoggingConfiguration,
@@ -26,7 +25,6 @@ import {
   BucketPublicAccessBlock,
   BucketTag,
   BucketWebsiteConfiguration,
-  deleteBucketCors,
   deleteBucketEncryption,
   deleteBucketLogging,
   deleteBucketNotifications,
@@ -34,7 +32,6 @@ import {
   deleteBucketTags,
   deleteBucketWebsite,
   deleteBucketLifecycle,
-  getBucketCors,
   getBucketEncryption,
   getBucketTags,
   getBucketLogging,
@@ -47,7 +44,6 @@ import {
   getBucketLifecycle,
   getBucketPublicAccessBlock,
   listBuckets,
-  putBucketCors,
   putBucketEncryption,
   putBucketTags,
   putBucketLogging,
@@ -62,7 +58,6 @@ import {
   updateBucketQuota,
 } from "../../api/buckets";
 import {
-  deleteCephAdminBucketCors,
   deleteCephAdminBucketEncryption,
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketLogging,
@@ -71,7 +66,6 @@ import {
   deleteCephAdminBucketTags,
   deleteCephAdminBucketWebsite,
   getCephAdminBucketAcl,
-  getCephAdminBucketCors,
   getCephAdminBucketEncryption,
   getCephAdminBucketLifecycle,
   getCephAdminBucketLogging,
@@ -84,7 +78,6 @@ import {
   getCephAdminBucketWebsite,
   listCephAdminBucketObjects,
   listCephAdminBuckets,
-  putCephAdminBucketCors,
   putCephAdminBucketEncryption,
   putCephAdminBucketLifecycle,
   putCephAdminBucketLogging,
@@ -140,6 +133,8 @@ import {
   BucketFeatureCard,
   BucketFeatureJsonExample,
   BucketFeatureModeToggle,
+  buildPolicyExample,
+  defaultCorsExample,
   jsonTextSignature,
   isLifecycleSimpleDraftEmpty,
   normalizeAclDraft,
@@ -151,6 +146,7 @@ import {
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
   stableBucketJsonSignature,
+  useBucketCorsController,
   useBucketPolicyController,
 } from "./bucketDetail";
 import {
@@ -334,18 +330,13 @@ const bucketFeatureDangerActionClass = cx(
 );
 const bucketFeatureInputClass = cx(uiInputClass, "px-2 py-1 ui-body");
 const bucketFeatureJsonInputClass = cx(uiInputClass, "px-3 py-2 font-mono ui-caption");
+const bucketFeatureLabelClass =
+  "flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200";
 
 const isPublicAccessFullyEnabled = (config?: BucketPublicAccessBlock | null) =>
   Boolean(config) && publicAccessKeys.every((key) => (config as Record<string, boolean | null | undefined>)[key] === true);
 
 const defaultNotificationTemplate = '{\n  "TopicConfigurations": []\n}';
-const defaultCorsExample = `[
-  {
-    "AllowedMethods": ["GET", "PUT"],
-    "AllowedOrigins": ["https://app.example.com"],
-    "AllowedHeaders": ["*"]
-  }
-]`;
 const defaultEncryptionExample = `[
   {
     "ApplyServerSideEncryptionByDefault": {
@@ -497,12 +488,6 @@ export default function BucketDetailPage({
   const [publicAccessStatus, setPublicAccessStatus] = useState<string | null>(null);
   const [publicAccessLoading, setPublicAccessLoading] = useState(false);
   const [savingPublicAccess, setSavingPublicAccess] = useState(false);
-  const [cors, setCors] = useState<BucketCors | null>(null);
-  const [corsText, setCorsText] = useState("");
-  const [corsError, setCorsError] = useState<string | null>(null);
-  const [corsLoading, setCorsLoading] = useState(false);
-  const [savingCors, setSavingCors] = useState(false);
-  const [deletingCors, setDeletingCors] = useState(false);
   const [encryption, setEncryption] = useState<BucketEncryptionConfiguration | null>(null);
   const [encryptionText, setEncryptionText] = useState("[]");
   const [encryptionError, setEncryptionError] = useState<string | null>(null);
@@ -646,7 +631,6 @@ export default function BucketDetailPage({
     deleting: deletingPolicy,
     dirty: policyDirty,
     error: policyError,
-    example: policyExample,
     load: loadPolicy,
     loading: policyLoading,
     remove: removePolicy,
@@ -655,6 +639,26 @@ export default function BucketDetailPage({
     setText: setPolicyText,
     text: policyText,
   } = useBucketPolicyController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
+  const policyExample = buildPolicyExample(bucketName);
+  const {
+    configured: corsConfigured,
+    deleting: deletingCors,
+    dirty: corsDirty,
+    error: corsError,
+    load: loadCors,
+    loading: corsLoading,
+    remove: removeCors,
+    save: saveCors,
+    saving: savingCors,
+    setText: setCorsText,
+    text: corsText,
+  } = useBucketCorsController({
     accountId,
     bucketName,
     cephAdmin: isCephAdmin,
@@ -986,31 +990,6 @@ export default function BucketDetailPage({
       setLifecycleLoading(false);
     }
   }, [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]);
-
-  const loadCors = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setCors(null);
-      setCorsText("");
-      return;
-    }
-    setCorsLoading(true);
-    setCorsError(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketCors(endpointId, bucketName)
-          : { rules: [] }
-        : await getBucketCors(accountId, bucketName);
-      setCors(data);
-      setCorsText(data.rules && data.rules.length > 0 ? JSON.stringify(data.rules, null, 2) : "[]");
-    } catch (err) {
-      setCorsError(extractApiError(err, "Unable to load the CORS configuration."));
-      setCors(null);
-      setCorsText("");
-    } finally {
-      setCorsLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadEncryption = useCallback(async () => {
     if (!bucketName || !hasContext || !sseFeatureEnabled) {
@@ -1714,7 +1693,6 @@ export default function BucketDetailPage({
   const quotaConfigured = Boolean(
     (bucket?.quota_max_size_bytes ?? 0) > 0 || (bucket?.quota_max_objects ?? 0) > 0
   );
-  const corsConfigured = Boolean(cors?.rules && cors.rules.length > 0);
   const encryptionConfigured = Boolean(encryption?.rules && encryption.rules.length > 0);
   const accessLoggingConfigured = Boolean(
     accessLoggingConfig?.enabled && (accessLoggingConfig.target_bucket ?? "").trim().length > 0
@@ -1735,9 +1713,6 @@ export default function BucketDetailPage({
     Boolean(publicAccessBlockConfig) &&
     !publicAccessBlockEnabled &&
     publicAccessKeys.some((key) => (publicAccessBlockConfig as Record<string, boolean | null | undefined>)[key] === true);
-  const corsSnapshotSignature = stableBucketJsonSignature(cors?.rules ?? []);
-  const corsDraftSignature = jsonTextSignature(corsText, cors?.rules ?? []);
-  const corsDirty = corsDraftSignature.signature !== corsSnapshotSignature;
   const encryptionSnapshotSignature = stableBucketJsonSignature(encryption?.rules ?? []);
   const encryptionDraftSignature = jsonTextSignature(encryptionText, encryption?.rules ?? []);
   const encryptionDirty = encryptionDraftSignature.signature !== encryptionSnapshotSignature;
@@ -2231,49 +2206,6 @@ export default function BucketDetailPage({
       setPublicAccessError(message);
     } finally {
       setSavingPublicAccess(false);
-    }
-  };
-
-  const saveCors = async () => {
-    if (!bucketName || !hasContext) return;
-    setSavingCors(true);
-    setCorsError(null);
-    try {
-      const parsed = corsText.trim() ? JSON.parse(corsText) : [];
-      if (!Array.isArray(parsed)) {
-        throw new Error("CORS must be an array of rules.");
-      }
-      const saved = isCephAdmin
-        ? endpointId
-          ? await putCephAdminBucketCors(endpointId, bucketName, parsed as Record<string, unknown>[])
-          : { rules: parsed as Record<string, unknown>[] }
-        : await putBucketCors(accountId, bucketName, parsed as Record<string, unknown>[]);
-      setCors(saved);
-      setCorsText(JSON.stringify(saved.rules ?? parsed, null, 2));
-    } catch {
-      setCorsError("Invalid or unsaved CORS (JSON array required).");
-    } finally {
-      setSavingCors(false);
-    }
-  };
-
-  const removeCors = async () => {
-    if (!bucketName || !hasContext) return;
-    setDeletingCors(true);
-    setCorsError(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await deleteCephAdminBucketCors(endpointId, bucketName);
-      } else {
-        await deleteBucketCors(accountId, bucketName);
-      }
-      setCors({ rules: [] });
-      setCorsText("[]");
-    } catch (err) {
-      setCorsError(extractApiError(err, "Unable to delete the CORS configuration."));
-    } finally {
-      setDeletingCors(false);
     }
   };
 
@@ -3418,7 +3350,7 @@ export default function BucketDetailPage({
                           </UiInlineMessage>
                         )}
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                          <label className={bucketFeatureLabelClass}>
                             Mode
                             <select
                               value={objectLockMode}
@@ -3431,7 +3363,7 @@ export default function BucketDetailPage({
                               <option value="COMPLIANCE">Compliance</option>
                             </select>
                           </label>
-                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                          <label className={bucketFeatureLabelClass}>
                             Retention (days)
                             <input
                               type="number"
@@ -3444,7 +3376,7 @@ export default function BucketDetailPage({
                               disabled={objectLockNotImplemented}
                             />
                           </label>
-                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                          <label className={bucketFeatureLabelClass}>
                             Retention (years)
                             <input
                               type="number"
@@ -3953,7 +3885,7 @@ export default function BucketDetailPage({
                     <UiInlineMessage tone="success">{bucketAclStatus}</UiInlineMessage>
                   )}
                   <div className="grid gap-3 md:grid-cols-2">
-                    <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                    <label className={bucketFeatureLabelClass}>
                       Canned ACL
                       <select
                         value={bucketAclPreset}
@@ -3973,7 +3905,7 @@ export default function BucketDetailPage({
                       </select>
                     </label>
                     {bucketAclPreset === "custom" && (
-                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                      <label className={bucketFeatureLabelClass}>
                         Custom ACL
                         <input
                           type="text"
@@ -4217,7 +4149,7 @@ export default function BucketDetailPage({
                   {websiteMode === "hosting" ? (
                     <div className="space-y-3">
                       <div className="grid gap-3 md:grid-cols-2">
-                        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                        <label className={bucketFeatureLabelClass}>
                           Index document
                           <input
                             type="text"
@@ -4231,7 +4163,7 @@ export default function BucketDetailPage({
                             disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                           />
                         </label>
-                        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                        <label className={bucketFeatureLabelClass}>
                           Error document (optional)
                           <input
                             type="text"
@@ -4279,7 +4211,7 @@ export default function BucketDetailPage({
                     </div>
                   ) : (
                     <div className="grid gap-3 md:grid-cols-2">
-                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                      <label className={bucketFeatureLabelClass}>
                         Redirect hostname
                         <input
                           type="text"
@@ -4293,7 +4225,7 @@ export default function BucketDetailPage({
                           disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         />
                       </label>
-                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                      <label className={bucketFeatureLabelClass}>
                         Protocol (optional)
                         <input
                           type="text"
@@ -4369,7 +4301,7 @@ export default function BucketDetailPage({
                       <UiInlineMessage>Loading replication configuration...</UiInlineMessage>
                     ) : replicationMode === "graphical" ? (
                       <div className="space-y-3">
-                        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                        <label className={bucketFeatureLabelClass}>
                           Role ARN
                           <input
                             type="text"
@@ -4401,7 +4333,7 @@ export default function BucketDetailPage({
                                 </button>
                               </div>
                               <div className="grid gap-3 md:grid-cols-2">
-                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                <label className={bucketFeatureLabelClass}>
                                   ID
                                   <input
                                     type="text"
@@ -4412,7 +4344,7 @@ export default function BucketDetailPage({
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
-                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                <label className={bucketFeatureLabelClass}>
                                   Status
                                   <select
                                     value={rule.status}
@@ -4424,7 +4356,7 @@ export default function BucketDetailPage({
                                     <option value="Disabled">Disabled</option>
                                   </select>
                                 </label>
-                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                <label className={bucketFeatureLabelClass}>
                                   Priority
                                   <input
                                     type="number"
@@ -4437,7 +4369,7 @@ export default function BucketDetailPage({
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
-                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                <label className={bucketFeatureLabelClass}>
                                   Prefix (optional)
                                   <input
                                     type="text"
@@ -4448,7 +4380,7 @@ export default function BucketDetailPage({
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
-                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                <label className={bucketFeatureLabelClass}>
                                   Destination bucket ARN
                                   <input
                                     type="text"
@@ -4459,7 +4391,7 @@ export default function BucketDetailPage({
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
-                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                <label className={bucketFeatureLabelClass}>
                                   Delete marker replication
                                   <select
                                     value={rule.deleteMarkerStatus}
@@ -4572,7 +4504,7 @@ export default function BucketDetailPage({
                     Enable server access logging
                   </label>
                   <div className="grid gap-3 md:grid-cols-2">
-                    <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                    <label className={bucketFeatureLabelClass}>
                       Target bucket
                       <input
                         type="text"
@@ -4587,7 +4519,7 @@ export default function BucketDetailPage({
                         disabled={accessLoggingNotImplemented || accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
                       />
                     </label>
-                    <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                    <label className={bucketFeatureLabelClass}>
                       Target prefix (optional)
                       <input
                         type="text"
@@ -4792,7 +4724,7 @@ export default function BucketDetailPage({
                     onSubmit={handleUpdateQuota}
                   >
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                      <label className={bucketFeatureLabelClass}>
                         Size
                         <div className="flex gap-2">
                           <input
@@ -4817,7 +4749,7 @@ export default function BucketDetailPage({
                           </select>
                         </div>
                       </label>
-                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                      <label className={bucketFeatureLabelClass}>
                         Object count
                         <input
                           type="number"

@@ -1,6 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useBucketPolicyController } from "../useBucketPolicyController";
+import {
+  buildPolicyExample,
+  useBucketPolicyController,
+} from "../useBucketPolicyController";
 
 const apiMocks = vi.hoisted(() => ({
   deleteBucketPolicy: vi.fn(),
@@ -108,7 +111,7 @@ describe("useBucketPolicyController", () => {
     );
     expect(apiMocks.putBucketPolicy).not.toHaveBeenCalled();
 
-    act(() => result.current.setText(result.current.example));
+    act(() => result.current.setText(buildPolicyExample("reports")));
     expect(result.current.text).toContain("arn:aws:s3:::reports/*");
   });
 });

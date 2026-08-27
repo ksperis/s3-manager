@@ -8,7 +8,6 @@ import {
   deleteBucketPolicyApi,
   getBucketPolicy,
   putBucketPolicy,
-  type BucketPolicy,
 } from "../../../api/buckets";
 import {
   deleteCephAdminBucketPolicy,
@@ -29,7 +28,7 @@ type UseBucketPolicyControllerOptions = {
   endpointId?: number | null;
 };
 
-function buildPolicyExample(bucketName?: string) {
+export function buildPolicyExample(bucketName?: string) {
   return `{
   "Version": "2012-10-17",
   "Statement": [
@@ -50,14 +49,12 @@ export function useBucketPolicyController({
   enabled,
   endpointId,
 }: UseBucketPolicyControllerOptions) {
-  const [policy, setPolicy] = useState<BucketPolicy | null>(null);
+  const [policy, setPolicy] = useState<Record<string, unknown> | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const example = buildPolicyExample(bucketName);
-
   const load = useCallback(async () => {
     if (!bucketName || !enabled) {
       setPolicy(null);
@@ -72,7 +69,7 @@ export function useBucketPolicyController({
           ? await getCephAdminBucketPolicy(endpointId, bucketName)
           : { policy: null }
         : await getBucketPolicy(accountId, bucketName);
-      setPolicy(data);
+      setPolicy(data.policy);
       setText(data.policy ? JSON.stringify(data.policy, null, 2) : "");
     } catch (loadError) {
       setError(extractApiError(loadError, "Unable to load the bucket policy."));
@@ -83,7 +80,7 @@ export function useBucketPolicyController({
     }
   }, [accountId, bucketName, cephAdmin, enabled, endpointId]);
 
-  const save = useCallback(async () => {
+  const save = async () => {
     if (!bucketName || !enabled) return;
     setSaving(true);
     setError(null);
@@ -94,16 +91,17 @@ export function useBucketPolicyController({
           ? await putCephAdminBucketPolicy(endpointId, bucketName, parsed)
           : { policy: parsed }
         : await putBucketPolicy(accountId, bucketName, parsed);
-      setPolicy(saved);
-      setText(JSON.stringify(saved.policy ?? parsed, null, 2));
+      const savedPolicy = saved.policy ?? parsed;
+      setPolicy(savedPolicy);
+      setText(JSON.stringify(savedPolicy, null, 2));
     } catch {
       setError("Invalid or unsaved policy (JSON required).");
     } finally {
       setSaving(false);
     }
-  }, [accountId, bucketName, cephAdmin, enabled, endpointId, text]);
+  };
 
-  const remove = useCallback(async () => {
+  const remove = async () => {
     if (!bucketName || !enabled) return;
     setDeleting(true);
     setError(null);
@@ -114,7 +112,7 @@ export function useBucketPolicyController({
       } else {
         await deleteBucketPolicyApi(accountId, bucketName);
       }
-      setPolicy({ policy: null });
+      setPolicy(null);
       setText("");
     } catch (removeError) {
       setError(
@@ -123,9 +121,9 @@ export function useBucketPolicyController({
     } finally {
       setDeleting(false);
     }
-  }, [accountId, bucketName, cephAdmin, enabled, endpointId]);
+  };
 
-  const policyValue = policy?.policy ?? {};
+  const policyValue = policy ?? {};
   const configured = Boolean(Object.keys(policyValue).length);
   const snapshotSignature = stableBucketJsonSignature(policyValue);
   const draftSignature = jsonTextSignature(text, policyValue);
@@ -135,7 +133,6 @@ export function useBucketPolicyController({
     deleting,
     dirty,
     error,
-    example,
     load,
     loading,
     remove,

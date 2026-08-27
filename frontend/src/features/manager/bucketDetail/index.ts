@@ -5,7 +5,14 @@
 export { default as BucketFeatureCard } from "./BucketFeatureCard";
 export { default as BucketFeatureJsonExample } from "./BucketFeatureJsonExample";
 export { default as BucketFeatureModeToggle } from "./BucketFeatureModeToggle";
-export { useBucketPolicyController } from "./useBucketPolicyController";
+export {
+  buildPolicyExample,
+  useBucketPolicyController,
+} from "./useBucketPolicyController";
+export {
+  defaultCorsExample,
+  useBucketCorsController,
+} from "./useBucketCorsController";
 export {
   jsonTextSignature,
   normalizeAclDraft,
