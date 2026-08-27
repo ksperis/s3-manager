@@ -5,6 +5,7 @@
 export { default as BucketFeatureCard } from "./BucketFeatureCard";
 export { default as BucketFeatureJsonExample } from "./BucketFeatureJsonExample";
 export { default as BucketFeatureModeToggle } from "./BucketFeatureModeToggle";
+export { useBucketPolicyController } from "./useBucketPolicyController";
 export {
   jsonTextSignature,
   normalizeAclDraft,

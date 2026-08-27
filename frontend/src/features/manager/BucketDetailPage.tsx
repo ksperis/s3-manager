@@ -22,7 +22,6 @@ import {
   BucketLifecycleConfig,
   BucketLoggingConfiguration,
   BucketObjectLockConfiguration,
-  BucketPolicy,
   BucketReplicationConfiguration,
   BucketPublicAccessBlock,
   BucketTag,
@@ -31,7 +30,6 @@ import {
   deleteBucketEncryption,
   deleteBucketLogging,
   deleteBucketNotifications,
-  deleteBucketPolicyApi,
   deleteBucketReplication,
   deleteBucketTags,
   deleteBucketWebsite,
@@ -42,7 +40,6 @@ import {
   getBucketLogging,
   getBucketNotifications,
   getBucketObjectLock,
-  getBucketPolicy,
   getBucketReplication,
   getBucketVersioning,
   getBucketWebsite,
@@ -55,7 +52,6 @@ import {
   putBucketTags,
   putBucketLogging,
   putBucketNotifications,
-  putBucketPolicy,
   putBucketReplication,
   putBucketWebsite,
   putBucketLifecycle,
@@ -71,7 +67,6 @@ import {
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketLogging,
   deleteCephAdminBucketNotifications,
-  deleteCephAdminBucketPolicy,
   deleteCephAdminBucketReplication,
   deleteCephAdminBucketTags,
   deleteCephAdminBucketWebsite,
@@ -82,7 +77,6 @@ import {
   getCephAdminBucketLogging,
   getCephAdminBucketNotifications,
   getCephAdminBucketObjectLock,
-  getCephAdminBucketPolicy,
   getCephAdminBucketReplication,
   getCephAdminBucketVersioning,
   getCephAdminBucketPublicAccessBlock,
@@ -95,7 +89,6 @@ import {
   putCephAdminBucketLifecycle,
   putCephAdminBucketLogging,
   putCephAdminBucketNotifications,
-  putCephAdminBucketPolicy,
   putCephAdminBucketReplication,
   putCephAdminBucketTags,
   putCephAdminBucketWebsite,
@@ -158,6 +151,7 @@ import {
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
   stableBucketJsonSignature,
+  useBucketPolicyController,
 } from "./bucketDetail";
 import {
   buildBucketDetailBreadcrumbs,
@@ -498,12 +492,6 @@ export default function BucketDetailPage({
   const [versioningSaveError, setVersioningSaveError] = useState<string | null>(null);
   const [updatingVersioning, setUpdatingVersioning] = useState(false);
   const [versioningDraftEnabled, setVersioningDraftEnabled] = useState(false);
-  const [policy, setPolicy] = useState<BucketPolicy | null>(null);
-  const [policyText, setPolicyText] = useState("");
-  const [policyError, setPolicyError] = useState<string | null>(null);
-  const [policyLoading, setPolicyLoading] = useState(false);
-  const [savingPolicy, setSavingPolicy] = useState(false);
-  const [deletingPolicy, setDeletingPolicy] = useState(false);
   const [publicAccessBlock, setPublicAccessBlock] = useState<BucketPublicAccessBlock>(defaultPublicAccessBlock);
   const [publicAccessError, setPublicAccessError] = useState<string | null>(null);
   const [publicAccessStatus, setPublicAccessStatus] = useState<string | null>(null);
@@ -653,6 +641,26 @@ export default function BucketDetailPage({
   const endpointId = selectedEndpointId ?? null;
   const hasCephContext = Boolean(endpointId);
   const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
+  const {
+    configured: policyConfigured,
+    deleting: deletingPolicy,
+    dirty: policyDirty,
+    error: policyError,
+    example: policyExample,
+    load: loadPolicy,
+    loading: policyLoading,
+    remove: removePolicy,
+    save: savePolicy,
+    saving: savingPolicy,
+    setText: setPolicyText,
+    text: policyText,
+  } = useBucketPolicyController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
   const quotaFeatureEnabled = isCephAdmin ? isCephEndpoint : Boolean(isCephEndpoint && managerBucketQuotaEnabled);
   const showQuotaTab = !hideQuotaTab && (isCephAdmin || Boolean(quotaFeatureEnabled && hasAccountContext));
   const showObjectsTab = !hideObjectsTab;
@@ -978,31 +986,6 @@ export default function BucketDetailPage({
       setLifecycleLoading(false);
     }
   }, [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]);
-
-  const loadPolicy = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setPolicy(null);
-      setPolicyText("");
-      return;
-    }
-    setPolicyLoading(true);
-    setPolicyError(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketPolicy(endpointId, bucketName)
-          : { policy: null }
-        : await getBucketPolicy(accountId, bucketName);
-      setPolicy(data);
-      setPolicyText(data.policy ? JSON.stringify(data.policy, null, 2) : "");
-    } catch (err) {
-      setPolicyError(extractApiError(err, "Unable to load the bucket policy."));
-      setPolicy(null);
-      setPolicyText("");
-    } finally {
-      setPolicyLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadCors = useCallback(async () => {
     if (!bucketName || !hasContext) {
@@ -1731,7 +1714,6 @@ export default function BucketDetailPage({
   const quotaConfigured = Boolean(
     (bucket?.quota_max_size_bytes ?? 0) > 0 || (bucket?.quota_max_objects ?? 0) > 0
   );
-  const policyConfigured = Boolean(policy?.policy && Object.keys(policy.policy).length > 0);
   const corsConfigured = Boolean(cors?.rules && cors.rules.length > 0);
   const encryptionConfigured = Boolean(encryption?.rules && encryption.rules.length > 0);
   const accessLoggingConfigured = Boolean(
@@ -1753,9 +1735,6 @@ export default function BucketDetailPage({
     Boolean(publicAccessBlockConfig) &&
     !publicAccessBlockEnabled &&
     publicAccessKeys.some((key) => (publicAccessBlockConfig as Record<string, boolean | null | undefined>)[key] === true);
-  const policySnapshotSignature = stableBucketJsonSignature(policy?.policy ?? {});
-  const policyDraftSignature = jsonTextSignature(policyText, policy?.policy ?? {});
-  const policyDirty = policyDraftSignature.signature !== policySnapshotSignature;
   const corsSnapshotSignature = stableBucketJsonSignature(cors?.rules ?? []);
   const corsDraftSignature = jsonTextSignature(corsText, cors?.rules ?? []);
   const corsDirty = corsDraftSignature.signature !== corsSnapshotSignature;
@@ -2252,26 +2231,6 @@ export default function BucketDetailPage({
       setPublicAccessError(message);
     } finally {
       setSavingPublicAccess(false);
-    }
-  };
-
-  const savePolicy = async () => {
-    if (!bucketName || !hasContext) return;
-    setSavingPolicy(true);
-    setPolicyError(null);
-    try {
-      const parsed = policyText.trim() ? JSON.parse(policyText) : {};
-      const saved = isCephAdmin
-        ? endpointId
-          ? await putCephAdminBucketPolicy(endpointId, bucketName, parsed)
-          : { policy: parsed }
-        : await putBucketPolicy(accountId, bucketName, parsed);
-      setPolicy(saved);
-      setPolicyText(JSON.stringify(saved.policy ?? parsed, null, 2));
-    } catch {
-      setPolicyError("Invalid or unsaved policy (JSON required).");
-    } finally {
-      setSavingPolicy(false);
     }
   };
 
@@ -2779,26 +2738,6 @@ export default function BucketDetailPage({
       setWebsiteError(extractApiError(err, "Unable to delete website configuration."));
     } finally {
       setClearingWebsite(false);
-    }
-  };
-
-  const removePolicy = async () => {
-    if (!bucketName || !hasContext) return;
-    setDeletingPolicy(true);
-    setPolicyError(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await deleteCephAdminBucketPolicy(endpointId, bucketName);
-      } else {
-        await deleteBucketPolicyApi(accountId, bucketName);
-      }
-      setPolicy({ policy: null });
-      setPolicyText("");
-    } catch (err) {
-      setPolicyError(extractApiError(err, "Unable to delete the bucket policy."));
-    } finally {
-      setDeletingPolicy(false);
     }
   };
 
@@ -4138,30 +4077,8 @@ export default function BucketDetailPage({
                   <BucketFeatureJsonExample
                     show={showPolicyExample}
                     onToggle={() => setShowPolicyExample((prev) => !prev)}
-                    example={`{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::${bucketName || "bucket"}/*"
-    }
-  ]
-}`}
-                    onUseExample={() =>
-                      setPolicyText(`{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::${bucketName || "bucket"}/*"
-    }
-  ]
-}`)
-                    }
+                    example={policyExample}
+                    onUseExample={() => setPolicyText(policyExample)}
                     disabled={policyNotImplemented}
                   />
                 </BucketFeatureCard>
