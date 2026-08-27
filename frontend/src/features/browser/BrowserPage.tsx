@@ -82,6 +82,7 @@ import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserPathEditor } from "./useBrowserPathEditor";
 import { useBrowserQueuedUpload } from "./useBrowserQueuedUpload";
 import { useBrowserRuntimeData } from "./useBrowserRuntimeData";
+import { useBrowserSelection } from "./useBrowserSelection";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 import { useBrowserUploadQueue } from "./useBrowserUploadQueue";
@@ -497,12 +498,6 @@ export default function BrowserPage({
   const [searchRecursive, setSearchRecursive] = useState(false);
   const [searchExactMatch, setSearchExactMatch] = useState(false);
   const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
-  const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(
-    null,
-  );
-  const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [internalShowDeletedObjects, setInternalShowDeletedObjects] =
     useState(false);
   const showDeletedObjects =
@@ -1000,16 +995,8 @@ export default function BrowserPage({
     ],
   );
   useEffect(() => {
-    setInspectorTab("context");
-  }, [bucketName, prefix]);
-
-  useEffect(() => {
     setShowSearchOptionsMenu(false);
   }, [bucketName, prefix]);
-
-  useEffect(() => {
-    setShowToolbarMoreMenu(false);
-  }, [bucketName, prefix, selectedIds]);
 
   useDismissibleLayer({
     open: showBucketMenu,
@@ -1040,11 +1027,6 @@ export default function BrowserPage({
     const latest = primaryOps[0];
     setStatusMessage(`Queued: ${latest.label}.`);
   }, [operations]);
-
-  useLayoutEffect(() => {
-    if (!accountSwitchInFlight) return;
-    setActiveItem(null);
-  }, [accountSwitchInFlight]);
 
   useEffect(() => {
     if (isPortalProfile) {
@@ -1192,6 +1174,45 @@ export default function BrowserPage({
         : items.filter((item) => item.type !== "folder"),
     [items, showFolderItems],
   );
+  const {
+    activateItem,
+    allSelected,
+    clearActiveItem,
+    handleItemSelectionClick,
+    handleListBackgroundClick,
+    handleListKeyDown: handleSelectionKeyDown,
+    inspectedItem,
+    prepareItemActionsMenu,
+    prepareItemContextMenu,
+    removeItemsFromSelection,
+    selectAllItems,
+    selectableListItems,
+    selectedBytes,
+    selectedCount,
+    selectedIds,
+    selectedItems,
+    selectedSet,
+    selectItemDetails,
+    toggleAllSelection,
+    toggleSelection,
+  } = useBrowserSelection({
+    inspectorTab,
+    inspectorVisible: isInspectorPanelVisible,
+    items,
+    listItems,
+    scopeKey: JSON.stringify([accountIdForApi, bucketName, prefix]),
+    setInspectorTab,
+  });
+
+  useEffect(() => {
+    setShowToolbarMoreMenu(false);
+  }, [bucketName, prefix, selectedIds]);
+
+  useLayoutEffect(() => {
+    if (!accountSwitchInFlight) return;
+    clearActiveItem();
+  }, [accountSwitchInFlight, clearActiveItem]);
+
   const effectiveVisibleColumns = isPortalProfile
     ? DEFAULT_VISIBLE_COLUMN_IDS
     : visibleColumns;
@@ -1349,9 +1370,9 @@ export default function BrowserPage({
   const handleBucketChange = useCallback(
     (value: string) => {
       setShowBucketMenu(false);
-      if (selectBucket(value)) setActiveItem(null);
+      if (selectBucket(value)) clearActiveItem();
     },
-    [selectBucket],
+    [clearActiveItem, selectBucket],
   );
   const workspaceAccountActionTarget = useMemo<"manager" | "portal" | null>(() => {
     if (
@@ -1543,23 +1564,6 @@ export default function BrowserPage({
   }, [prefixParts]);
   const canGoUp = prefixParts.length > 0;
 
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const selectableListItems = useMemo(
-    () => listItems.filter((item) => !item.isDeleted),
-    [listItems],
-  );
-  const allSelected =
-    selectableListItems.length > 0 &&
-    selectableListItems.every((item) => selectedSet.has(item.id));
-  const selectedItems = useMemo(
-    () => items.filter((item) => selectedSet.has(item.id)),
-    [items, selectedSet],
-  );
-  const selectedCount = selectedItems.length;
-  const selectedBytes = useMemo(() => {
-    return selectedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
-  }, [selectedItems]);
-
   const availableStorageClasses = useMemo(
     () => collectAvailableStorageClasses(items),
     [items],
@@ -1578,13 +1582,6 @@ export default function BrowserPage({
   const cephQuotaScopeLabel = isS3UserContext
     ? "User quota"
     : "Account quota";
-  const inspectedItem = useMemo(() => {
-    if (activeItem && items.some((entry) => entry.id === activeItem.id)) {
-      return activeItem;
-    }
-    return null;
-  }, [activeItem, items]);
-
   const handleVersionsHardLimit = useCallback(() => {
     setWarningMessage(
       `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
@@ -1925,7 +1922,7 @@ export default function BrowserPage({
     } else if (requestedTab === "versions" && !isVersioningEnabled) {
       initialTab = "preview";
     }
-    setActiveItem(item);
+    activateItem(item);
     setObjectDetailsTarget({ item, initialTab });
   };
 
@@ -1976,11 +1973,7 @@ export default function BrowserPage({
       return;
     }
     if (!canUseInspectorPanel) return;
-    setSelectedIds([item.id]);
-    setSelectionAnchorId(item.id);
-    setActiveRowId(item.id);
-    setActiveItem(item);
-    setInspectorTab("details");
+    selectItemDetails(item);
     openInspectorPanel();
   };
 
@@ -2012,12 +2005,12 @@ export default function BrowserPage({
   const handleSelectPrefix = useCallback(
     (nextPrefix: string) => {
       setPrefix(nextPrefix);
-      setActiveItem(null);
+      clearActiveItem();
       if (bucketName) {
         setPathHistory(pushBucketPathHistory(bucketName, nextPrefix));
       }
     },
-    [bucketName, setPrefix],
+    [bucketName, clearActiveItem, setPrefix],
   );
   const {
     activeSuggestionIndex: pathSuggestionIndex,
@@ -2049,16 +2042,12 @@ export default function BrowserPage({
     onNavigate: ({ bucketName: nextBucket, prefix: nextPrefix }) => {
       setBucketName(nextBucket);
       setPrefix(nextPrefix);
-      setActiveItem(null);
+      clearActiveItem();
       cancelPathEdit();
     },
   });
 
   useEffect(() => {
-    setSelectedIds([]);
-    setSelectionAnchorId(null);
-    setActiveRowId(null);
-    setActiveItem(null);
     setStatusMessage(null);
     setWarningMessage(null);
     setObjectDetailsTarget(null);
@@ -2077,52 +2066,6 @@ export default function BrowserPage({
   }, [bucketName]);
 
   useEffect(() => {
-    setSelectedIds((prev) =>
-      prev.filter((id) => items.some((item) => item.id === id)),
-    );
-    if (activeItem && !items.some((item) => item.id === activeItem.id)) {
-      setActiveItem(null);
-    }
-  }, [activeItem, items]);
-
-  useEffect(() => {
-    if (!isInspectorPanelVisible || inspectorTab !== "details") {
-      return;
-    }
-    if (selectedIds.length !== 1) {
-      setActiveItem((prev) => (prev ? null : prev));
-      return;
-    }
-    const [selectedId] = selectedIds;
-    const nextItem = items.find((item) => item.id === selectedId) ?? null;
-    setActiveItem((prev) => {
-      if (!nextItem) {
-        return prev ? null : prev;
-      }
-      if (prev?.id === nextItem.id) {
-        return prev;
-      }
-      return nextItem;
-    });
-  }, [inspectorTab, isInspectorPanelVisible, items, selectedIds]);
-
-  useEffect(() => {
-    setSelectionAnchorId((prev) => {
-      if (!prev) return null;
-      return listItems.some((item) => item.id === prev) ? prev : null;
-    });
-    setActiveRowId((prev) => {
-      if (prev && listItems.some((item) => item.id === prev)) {
-        return prev;
-      }
-      const firstVisibleSelected = listItems.find((item) =>
-        selectedIds.includes(item.id),
-      );
-      return firstVisibleSelected?.id ?? null;
-    });
-  }, [listItems, selectedIds]);
-
-  useEffect(() => {
     if (
       storageFilter !== "all" &&
       !searchableStorageClasses.includes(storageFilter)
@@ -2136,85 +2079,6 @@ export default function BrowserPage({
     void loadBucketInspectorData();
   }, [loadBucketInspectorData]);
 
-  const syncInspectorTabWithSelection = useCallback(
-    (nextSelectedCount: number) => {
-      setInspectorTab((currentTab) => {
-        if (isInspectorPanelVisible && currentTab === "details") {
-          return "details";
-        }
-        return nextSelectedCount > 0 ? "selection" : "context";
-      });
-    },
-    [isInspectorPanelVisible],
-  );
-
-  const selectRangeBetweenRows = (anchorId: string, targetId: string) => {
-    const anchorIndex = listItems.findIndex((item) => item.id === anchorId);
-    const targetIndex = listItems.findIndex((item) => item.id === targetId);
-    if (anchorIndex < 0 || targetIndex < 0) {
-      setSelectedIds([targetId]);
-      setSelectionAnchorId(targetId);
-      setActiveRowId(targetId);
-      syncInspectorTabWithSelection(1);
-      return;
-    }
-    const [start, end] =
-      anchorIndex <= targetIndex
-        ? [anchorIndex, targetIndex]
-        : [targetIndex, anchorIndex];
-    const rangeIds = listItems.slice(start, end + 1).map((item) => item.id);
-    setSelectedIds(rangeIds);
-    setSelectionAnchorId(anchorId);
-    setActiveRowId(targetId);
-    syncInspectorTabWithSelection(rangeIds.length);
-  };
-
-  const toggleSelection = (id: string) => {
-    setSelectedIds((prev) => {
-      const isSelected = prev.includes(id);
-      const next = isSelected
-        ? prev.filter((itemId) => itemId !== id)
-        : [...prev, id];
-      syncInspectorTabWithSelection(next.length);
-      return next;
-    });
-    setSelectionAnchorId(id);
-    setActiveRowId(id);
-  };
-
-  const selectSingleRow = (id: string) => {
-    setSelectedIds([id]);
-    setSelectionAnchorId(id);
-    setActiveRowId(id);
-    syncInspectorTabWithSelection(1);
-  };
-
-  const handleItemSelectionClick = (
-    event: ReactMouseEvent<HTMLElement>,
-    itemId: string,
-  ) => {
-    if (event.detail > 1) return;
-    if (event.shiftKey) {
-      const anchorId =
-        (selectionAnchorId &&
-        listItems.some((item) => item.id === selectionAnchorId)
-          ? selectionAnchorId
-          : null) ??
-        (activeRowId && listItems.some((item) => item.id === activeRowId)
-          ? activeRowId
-          : null) ??
-        listItems.find((item) => selectedSet.has(item.id))?.id ??
-        itemId;
-      selectRangeBetweenRows(anchorId, itemId);
-      return;
-    }
-    if (event.metaKey || event.ctrlKey) {
-      toggleSelection(itemId);
-      return;
-    }
-    selectSingleRow(itemId);
-  };
-
   const handleItemNameClick = (
     event: ReactMouseEvent<HTMLElement>,
     item: BrowserItem,
@@ -2223,40 +2087,15 @@ export default function BrowserPage({
     openItemPrimaryAction(item);
   };
 
-  const toggleAllSelection = () => {
-    if (allSelected) {
-      setSelectedIds([]);
-      setSelectionAnchorId(null);
-      setActiveRowId(null);
-      syncInspectorTabWithSelection(0);
-      return;
-    }
-    const nextIds = selectableListItems.map((item) => item.id);
-    setSelectedIds(nextIds);
-    setSelectionAnchorId(nextIds[0] ?? null);
-    setActiveRowId(nextIds[0] ?? null);
-    syncInspectorTabWithSelection(nextIds.length);
-  };
-
   const handleItemContextMenu = (
     event: ReactMouseEvent<HTMLElement>,
     item: BrowserItem,
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    const isSelected = selectedSet.has(item.id);
-    const itemsForMenu = isSelected ? selectedItems : [item];
-    if (!isSelected && !item.isDeleted) {
-      setSelectedIds([item.id]);
-      setSelectionAnchorId(item.id);
-      setActiveRowId(item.id);
-    }
+    const menuSelection = prepareItemContextMenu(item);
     openContextMenu(
-      {
-        kind: isSelected && selectedItems.length > 1 ? "selection" : "item",
-        item,
-        items: itemsForMenu,
-      },
+      menuSelection,
       { x: event.clientX, y: event.clientY },
     );
   };
@@ -2267,12 +2106,7 @@ export default function BrowserPage({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    if (!item.isDeleted && (selectedIds.length !== 1 || selectedIds[0] !== item.id)) {
-      selectSingleRow(item.id);
-    } else {
-      setSelectionAnchorId(item.id);
-      setActiveRowId(item.id);
-    }
+    prepareItemActionsMenu(item);
     const rect = event.currentTarget.getBoundingClientRect();
     openContextMenu(
       { kind: "item", item, items: [item] },
@@ -2308,111 +2142,7 @@ export default function BrowserPage({
   };
 
   const handleListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (isBrowserInteractiveTarget(event.target)) {
-      return;
-    }
-    if (listItems.length === 0) {
-      return;
-    }
-    const getCurrentIndex = () => {
-      if (activeRowId) {
-        const activeIndex = listItems.findIndex(
-          (item) => item.id === activeRowId,
-        );
-        if (activeIndex >= 0) {
-          return activeIndex;
-        }
-      }
-      const selectedIndex = listItems.findIndex((item) =>
-        selectedSet.has(item.id),
-      );
-      return selectedIndex;
-    };
-    const currentIndex = getCurrentIndex();
-    const applyRowSelection = (nextIndex: number, extendRange: boolean) => {
-      const clampedIndex = Math.max(
-        0,
-        Math.min(listItems.length - 1, nextIndex),
-      );
-      const targetId = listItems[clampedIndex]?.id;
-      if (!targetId) return;
-      if (extendRange) {
-        const anchorId =
-          (selectionAnchorId &&
-          listItems.some((item) => item.id === selectionAnchorId)
-            ? selectionAnchorId
-            : null) ??
-          listItems[Math.max(0, currentIndex)]?.id ??
-          targetId;
-        selectRangeBetweenRows(anchorId, targetId);
-        return;
-      }
-      selectSingleRow(targetId);
-    };
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      const nextIndex =
-        currentIndex < 0 ? 0 : Math.min(listItems.length - 1, currentIndex + 1);
-      applyRowSelection(nextIndex, event.shiftKey);
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      const nextIndex =
-        currentIndex < 0 ? listItems.length - 1 : Math.max(0, currentIndex - 1);
-      applyRowSelection(nextIndex, event.shiftKey);
-      return;
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      applyRowSelection(0, event.shiftKey);
-      return;
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      applyRowSelection(listItems.length - 1, event.shiftKey);
-      return;
-    }
-    if (event.key === " " || event.key === "Spacebar") {
-      event.preventDefault();
-      const targetIndex = currentIndex < 0 ? 0 : currentIndex;
-      const targetId = listItems[targetIndex]?.id;
-      if (!targetId) return;
-      toggleSelection(targetId);
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const targetIndex = currentIndex < 0 ? 0 : currentIndex;
-      const targetItem = listItems[targetIndex];
-      if (!targetItem) return;
-      openItemPrimaryAction(targetItem);
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setSelectedIds([]);
-      setSelectionAnchorId(null);
-      setActiveRowId(null);
-      setActiveItem(null);
-      syncInspectorTabWithSelection(0);
-    }
-  };
-
-  const handleListBackgroundClick = (event: ReactMouseEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("button, a, input, textarea, select, label")) {
-      return;
-    }
-    if (target.closest("[data-browser-item]")) {
-      return;
-    }
-    setSelectedIds([]);
-    setSelectionAnchorId(null);
-    setActiveRowId(null);
-    setActiveItem(null);
-    syncInspectorTabWithSelection(0);
+    handleSelectionKeyDown(event, openItemPrimaryAction);
   };
 
   const openBucketConfigurationModal = (targetBucket: string) => {
@@ -2762,13 +2492,7 @@ export default function BrowserPage({
     isOperationAborted,
     listAllObjectsForPrefix,
     onConfirm: openConfirmDialog,
-    onProcessed: (processedItems) => {
-      setSelectedIds((previous) =>
-        previous.filter(
-          (id) => !processedItems.some((item) => item.id === id),
-        ),
-      );
-    },
+    onProcessed: removeItemsFromSelection,
     onRefresh: reloadObjects,
     onRefreshNow: refreshObjectsNow,
     onStatus: setStatusMessage,
@@ -2935,11 +2659,7 @@ export default function BrowserPage({
       if (key === "a") {
         if (selectableListItems.length === 0) return;
         event.preventDefault();
-        const nextIds = selectableListItems.map((item) => item.id);
-        setSelectedIds(nextIds);
-        setSelectionAnchorId(nextIds[0] ?? null);
-        setActiveRowId(nextIds[0] ?? null);
-        syncInspectorTabWithSelection(nextIds.length);
+        selectAllItems();
         return;
       }
 
@@ -2984,10 +2704,9 @@ export default function BrowserPage({
     hasS3AccountContext,
     resolvedCapabilityFacts.canWriteObjects,
     resolvedFunctionalProfile,
+    selectAllItems,
     selectableListItems,
     selectedItems,
-    setActiveRowId,
-    setSelectionAnchorId,
     startEditingPath,
     objectDetailsTarget,
     showNewFolderModal,
@@ -3000,7 +2719,6 @@ export default function BrowserPage({
     copyDialog,
     showMultipartUploadsModal,
     showPrefixVersions,
-    syncInspectorTabWithSelection,
   ]);
 
   const refreshObjectListing = async (_targetKey: string) => {
