@@ -4,6 +4,8 @@ import type { BrowserLayoutMode } from "./browserActions";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 
 const rootUiMocks = vi.hoisted(() => ({
+  readBrowserRootUiState: vi.fn(),
+  writeBrowserRootActiveLayout: vi.fn(),
   writeBrowserRootUiLayout: vi.fn(),
 }));
 
@@ -14,6 +16,9 @@ vi.mock("./browserRootUiState", async () => {
     );
   return {
     ...actual,
+    readBrowserRootUiState: () => rootUiMocks.readBrowserRootUiState(),
+    writeBrowserRootActiveLayout: (...args: unknown[]) =>
+      rootUiMocks.writeBrowserRootActiveLayout(...args),
     writeBrowserRootUiLayout: (...args: unknown[]) =>
       rootUiMocks.writeBrowserRootUiLayout(...args),
   };
@@ -31,19 +36,30 @@ function PanelLayoutHarness({
   const layout = useBrowserPanelLayout({
     allowFoldersPanel: allowPanels,
     allowInspectorPanel: allowPanels,
+    canChangeLayout: true,
     initialFoldersPanelWidthPx: 280,
     initialInspectorPanelWidthPx: 320,
-    layoutMode,
-    persistWidths: true,
-    showFolders: true,
-    showInspector: true,
+    initialLayoutMode: layoutMode,
+    initialShowFolders: true,
+    initialShowInspector: true,
+    persistLayout: true,
   });
   return (
     <div
       ref={layout.layoutContainerRef}
       data-testid="layout"
+      data-layout-mode={layout.activeLayoutMode}
       style={{ gridTemplateColumns: layout.layoutTemplateColumns }}
     >
+      <button type="button" onClick={layout.toggleFoldersPanel}>
+        Toggle folders
+      </button>
+      <button type="button" onClick={layout.toggleInspectorPanel}>
+        Toggle inspector
+      </button>
+      <button type="button" onClick={() => layout.changeLayoutMode("standard")}>
+        Use standard
+      </button>
       {layout.isFoldersPanelVisible && (
         <div
           role="separator"
@@ -70,6 +86,29 @@ describe("useBrowserPanelLayout", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    rootUiMocks.readBrowserRootUiState.mockReturnValue({
+      activeLayout: "workbench",
+      density: "comfortable",
+      layouts: {
+        standard: {
+          showFolders: false,
+          showInspector: false,
+          foldersPanelWidthPx: 240,
+          inspectorPanelWidthPx: 300,
+          objectColumns: [],
+          objectColumnWidths: {},
+        },
+        workbench: {
+          showFolders: true,
+          showInspector: true,
+          foldersPanelWidthPx: 360,
+          inspectorPanelWidthPx: 400,
+          objectColumns: [],
+          objectColumnWidths: {},
+        },
+      },
+      contextSelections: {},
+    });
     mediaQueryMatches = false;
     mediaQueryListeners = new Set();
     Object.defineProperty(window, "matchMedia", {
@@ -130,7 +169,12 @@ describe("useBrowserPanelLayout", () => {
       ),
     );
     expect(rootUiMocks.writeBrowserRootUiLayout).toHaveBeenLastCalledWith(
-      { foldersPanelWidthPx: 354, inspectorPanelWidthPx: 320 },
+      {
+        foldersPanelWidthPx: 354,
+        inspectorPanelWidthPx: 320,
+        showFolders: true,
+        showInspector: true,
+      },
       "workbench",
     );
     expect(document.body.style.cursor).toBe("");
@@ -157,5 +201,42 @@ describe("useBrowserPanelLayout", () => {
 
     unmount();
     expect(mediaQueryListeners).toHaveLength(0);
+  });
+
+  it("owns panel visibility and restores the selected layout atomically", async () => {
+    render(<PanelLayoutHarness />);
+    rootUiMocks.writeBrowserRootUiLayout.mockClear();
+    rootUiMocks.writeBrowserRootActiveLayout.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle folders" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("separator", { name: "Resize folders panel" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(rootUiMocks.writeBrowserRootUiLayout).toHaveBeenCalledWith(
+      {
+        foldersPanelWidthPx: 280,
+        inspectorPanelWidthPx: 320,
+        showFolders: false,
+        showInspector: true,
+      },
+      "workbench",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Use standard" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("layout")).toHaveAttribute(
+        "data-layout-mode",
+        "standard",
+      ),
+    );
+    expect(
+      screen.queryByRole("separator", { name: "Resize inspector panel" }),
+    ).not.toBeInTheDocument();
+    expect(rootUiMocks.writeBrowserRootActiveLayout).toHaveBeenLastCalledWith(
+      "standard",
+    );
+    expect(rootUiMocks.readBrowserRootUiState).toHaveBeenCalledOnce();
   });
 });

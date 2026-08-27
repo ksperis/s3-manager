@@ -129,11 +129,8 @@ import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import {
   DEFAULT_FOLDERS_PANEL_WIDTH_PX,
   DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-  readBrowserRootUiState,
   readStoredBrowserRootUiState,
-  writeBrowserRootActiveLayout,
   writeBrowserRootDensity,
-  writeBrowserRootUiLayout,
 } from "./browserRootUiState";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
@@ -393,18 +390,48 @@ export default function BrowserPage({
     usePortalWorkspaceLabels,
   });
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
-  const [showFolders, setShowFolders] = useState(() =>
-    isMainBrowserPath
+  const {
+    activeLayoutMode,
+    activePanelResize,
+    canUseFoldersPanel,
+    canUseInspectorPanel,
+    changeLayoutMode,
+    isFoldersPanelVisible,
+    isInspectorPanelVisible,
+    layoutContainerRef,
+    layoutTemplateColumns,
+    openInspectorPanel,
+    resolvedFoldersWidth,
+    resolvedInspectorWidth,
+    resetFoldersPanelWidth,
+    resetInspectorPanelWidth,
+    showFolders,
+    showInspector,
+    startPanelResize,
+    toggleFoldersPanel,
+    toggleInspectorPanel,
+  } = useBrowserPanelLayout({
+    allowFoldersPanel:
+      allowFoldersPanel && resolvedFunctionalProfile === "advanced",
+    allowInspectorPanel:
+      allowInspectorPanel && resolvedFunctionalProfile === "advanced",
+    canChangeLayout:
+      isMainBrowserPath && resolvedFunctionalProfile === "advanced",
+    initialFoldersPanelWidthPx:
+      initialRootUiLayout?.foldersPanelWidthPx ??
+      DEFAULT_FOLDERS_PANEL_WIDTH_PX,
+    initialInspectorPanelWidthPx:
+      initialRootUiLayout?.inspectorPanelWidthPx ??
+      DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
+    initialLayoutMode,
+    initialShowFolders: isMainBrowserPath
       ? (initialRootUiLayout?.showFolders ?? defaultShowFolders)
       : defaultShowFolders,
-  );
-  const [showInspector, setShowInspector] = useState(() =>
-    isMainBrowserPath
+    initialShowInspector: isMainBrowserPath
       ? (initialRootUiLayout?.showInspector ?? defaultShowInspector)
       : defaultShowInspector,
-  );
-  const [activeLayoutMode, setActiveLayoutMode] =
-    useState<BrowserLayoutMode>(initialLayoutMode);
+    persistLayout: isMainBrowserPath,
+  });
   const {
     activeColumnResize,
     columnWidths,
@@ -771,83 +798,10 @@ export default function BrowserPage({
   const showSseControls = Boolean(
     sseFeatureEnabled && hasS3AccountContext && bucketName,
   );
-  const {
-    activePanelResize,
-    canUseFoldersPanel,
-    canUseInspectorPanel,
-    isFoldersPanelVisible,
-    isInspectorPanelVisible,
-    layoutContainerRef,
-    layoutTemplateColumns,
-    resolvedFoldersWidth,
-    resolvedInspectorWidth,
-    resetFoldersPanelWidth,
-    resetInspectorPanelWidth,
-    setPanelWidths,
-    startPanelResize,
-  } = useBrowserPanelLayout({
-    allowFoldersPanel:
-      allowFoldersPanel &&
-      activeLayoutMode === "workbench" &&
-      resolvedFunctionalProfile === "advanced",
-    allowInspectorPanel:
-      allowInspectorPanel &&
-      activeLayoutMode === "workbench" &&
-      resolvedFunctionalProfile === "advanced",
-    initialFoldersPanelWidthPx:
-      initialRootUiLayout?.foldersPanelWidthPx ??
-      DEFAULT_FOLDERS_PANEL_WIDTH_PX,
-    initialInspectorPanelWidthPx:
-      initialRootUiLayout?.inspectorPanelWidthPx ??
-      DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-    layoutMode: activeLayoutMode,
-    persistWidths: isMainBrowserPath,
-    showFolders,
-    showInspector,
-  });
-
-  useEffect(() => {
-    if (!isMainBrowserPath) return;
-    writeBrowserRootUiLayout({
-      showFolders,
-      showInspector,
-    }, activeLayoutMode);
-  }, [activeLayoutMode, isMainBrowserPath, showFolders, showInspector]);
-
-  useEffect(() => {
-    if (!isMainBrowserPath || resolvedFunctionalProfile !== "advanced") return;
-    writeBrowserRootActiveLayout(activeLayoutMode);
-  }, [activeLayoutMode, isMainBrowserPath, resolvedFunctionalProfile]);
-
   useEffect(() => {
     if (!isMainBrowserPath || resolvedFunctionalProfile !== "advanced") return;
     writeBrowserRootDensity(density);
   }, [density, isMainBrowserPath, resolvedFunctionalProfile]);
-
-  const toggleFoldersPanel = useCallback(() => {
-    if (!canUseFoldersPanel) return;
-    setShowFolders((prev) => !prev);
-  }, [canUseFoldersPanel]);
-
-  const toggleInspectorPanel = useCallback(() => {
-    if (!canUseInspectorPanel) return;
-    setShowInspector((prev) => !prev);
-  }, [canUseInspectorPanel]);
-
-  const changeLayoutMode = useCallback(
-    (nextMode: BrowserLayoutMode) => {
-      if (!isMainBrowserPath || resolvedFunctionalProfile !== "advanced") return;
-      const nextLayout = readBrowserRootUiState().layouts[nextMode];
-      setShowFolders(nextLayout.showFolders);
-      setShowInspector(nextLayout.showInspector);
-      setPanelWidths(
-        nextLayout.foldersPanelWidthPx,
-        nextLayout.inspectorPanelWidthPx,
-      );
-      setActiveLayoutMode(nextMode);
-    },
-    [isMainBrowserPath, resolvedFunctionalProfile, setPanelWidths],
-  );
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   const uiOrigin = useMemo(
@@ -2027,7 +1981,7 @@ export default function BrowserPage({
     setActiveRowId(item.id);
     setActiveItem(item);
     setInspectorTab("details");
-    setShowInspector(true);
+    openInspectorPanel();
   };
 
   const handleItemDoubleClick = (
