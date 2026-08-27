@@ -22,22 +22,18 @@ import {
   BucketReplicationConfiguration,
   BucketPublicAccessBlock,
   BucketTag,
-  BucketWebsiteConfiguration,
   deleteBucketReplication,
   deleteBucketTags,
-  deleteBucketWebsite,
   deleteBucketLifecycle,
   getBucketTags,
   getBucketObjectLock,
   getBucketReplication,
   getBucketVersioning,
-  getBucketWebsite,
   getBucketAcl,
   getBucketLifecycle,
   listBuckets,
   putBucketTags,
   putBucketReplication,
-  putBucketWebsite,
   putBucketLifecycle,
   setBucketVersioning,
   updateBucketAcl,
@@ -48,20 +44,17 @@ import {
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketReplication,
   deleteCephAdminBucketTags,
-  deleteCephAdminBucketWebsite,
   getCephAdminBucketAcl,
   getCephAdminBucketLifecycle,
   getCephAdminBucketObjectLock,
   getCephAdminBucketReplication,
   getCephAdminBucketVersioning,
   getCephAdminBucketTags,
-  getCephAdminBucketWebsite,
   listCephAdminBucketObjects,
   listCephAdminBuckets,
   putCephAdminBucketLifecycle,
   putCephAdminBucketReplication,
   putCephAdminBucketTags,
-  putCephAdminBucketWebsite,
   setCephAdminBucketVersioning,
   updateCephAdminBucketAcl,
   updateCephAdminBucketObjectLock,
@@ -128,6 +121,7 @@ import {
   useBucketNotificationsController,
   useBucketPolicyController,
   useBucketPublicAccessController,
+  useBucketWebsiteController,
 } from "./bucketDetail";
 import {
   buildBucketDetailBreadcrumbs,
@@ -446,18 +440,6 @@ export default function BucketDetailPage({
   const [updatingVersioning, setUpdatingVersioning] = useState(false);
   const [versioningDraftEnabled, setVersioningDraftEnabled] = useState(false);
   const [showNotificationExample, setShowNotificationExample] = useState(false);
-  const [websiteConfig, setWebsiteConfig] = useState<BucketWebsiteConfiguration | null>(null);
-  const [websiteMode, setWebsiteMode] = useState<"hosting" | "redirect">("hosting");
-  const [websiteIndexDocument, setWebsiteIndexDocument] = useState("");
-  const [websiteErrorDocument, setWebsiteErrorDocument] = useState("");
-  const [websiteRedirectHost, setWebsiteRedirectHost] = useState("");
-  const [websiteRedirectProtocol, setWebsiteRedirectProtocol] = useState("");
-  const [websiteRoutingRules, setWebsiteRoutingRules] = useState("[]");
-  const [websiteError, setWebsiteError] = useState<string | null>(null);
-  const [websiteStatus, setWebsiteStatus] = useState<string | null>(null);
-  const [websiteLoading, setWebsiteLoading] = useState(false);
-  const [savingWebsite, setSavingWebsite] = useState(false);
-  const [clearingWebsite, setClearingWebsite] = useState(false);
   const [showWebsiteRulesExample, setShowWebsiteRulesExample] = useState(false);
   const [showEncryptionExample, setShowEncryptionExample] = useState(false);
   const [showLifecycleJsonExample, setShowLifecycleJsonExample] = useState(false);
@@ -679,6 +661,36 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.static_website === true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
+  const {
+    clear: clearWebsite,
+    clearing: clearingWebsite,
+    configured: websiteConfigured,
+    dirty: websiteDirty,
+    error: websiteError,
+    errorDocument: websiteErrorDocument,
+    indexDocument: websiteIndexDocument,
+    load: loadWebsite,
+    loading: websiteLoading,
+    mode: websiteMode,
+    redirectHost: websiteRedirectHost,
+    redirectProtocol: websiteRedirectProtocol,
+    routingRules: websiteRoutingRules,
+    save: saveWebsite,
+    saving: savingWebsite,
+    status: websiteStatus,
+    updateErrorDocument: updateWebsiteErrorDocument,
+    updateIndexDocument: updateWebsiteIndexDocument,
+    updateMode: updateWebsiteMode,
+    updateRedirectHost: updateWebsiteRedirectHost,
+    updateRedirectProtocol: updateWebsiteRedirectProtocol,
+    updateRoutingRules: updateWebsiteRoutingRules,
+  } = useBucketWebsiteController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext && staticWebsiteEnabled,
+    endpointId,
+  });
   const sseFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.sse === true;
@@ -790,35 +802,6 @@ export default function BucketDetailPage({
     setObjectLockDays(config.days != null ? String(config.days) : "");
     setObjectLockYears(config.years != null ? String(config.years) : "");
     setObjectLockConfig(config);
-  }, []);
-
-  const applyWebsiteState = useCallback((config?: BucketWebsiteConfiguration | null) => {
-    if (!config) {
-      setWebsiteConfig(null);
-      setWebsiteMode("hosting");
-      setWebsiteIndexDocument("");
-      setWebsiteErrorDocument("");
-      setWebsiteRedirectHost("");
-      setWebsiteRedirectProtocol("");
-      setWebsiteRoutingRules("[]");
-      return;
-    }
-    setWebsiteConfig(config);
-    const redirect = config.redirect_all_requests_to ?? null;
-    const redirectHost = redirect?.host_name ?? "";
-    if (redirectHost) {
-      setWebsiteMode("redirect");
-      setWebsiteRedirectHost(redirectHost);
-      setWebsiteRedirectProtocol(redirect?.protocol ?? "");
-    } else {
-      setWebsiteMode("hosting");
-      setWebsiteRedirectHost("");
-      setWebsiteRedirectProtocol("");
-    }
-    setWebsiteIndexDocument(config.index_document ?? "");
-    setWebsiteErrorDocument(config.error_document ?? "");
-    const rules = Array.isArray(config.routing_rules) ? config.routing_rules : [];
-    setWebsiteRoutingRules(rules.length > 0 ? JSON.stringify(rules, null, 2) : "[]");
   }, []);
 
   const emptySimpleLifecycleRule = useCallback(
@@ -978,31 +961,6 @@ export default function BucketDetailPage({
       setLifecycleLoading(false);
     }
   }, [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]);
-
-  const loadWebsite = useCallback(async () => {
-    if (!bucketName || !hasContext || !staticWebsiteEnabled) {
-      applyWebsiteState(null);
-      setWebsiteError(null);
-      setWebsiteStatus(null);
-      return;
-    }
-    setWebsiteLoading(true);
-    setWebsiteError(null);
-    setWebsiteStatus(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketWebsite(endpointId, bucketName)
-          : null
-        : await getBucketWebsite(accountId, bucketName);
-      applyWebsiteState(data);
-    } catch (err) {
-      applyWebsiteState(null);
-      setWebsiteError(extractApiError(err, "Unable to load bucket website configuration."));
-    } finally {
-      setWebsiteLoading(false);
-    }
-  }, [accountId, applyWebsiteState, bucketName, endpointId, hasContext, isCephAdmin, staticWebsiteEnabled]);
 
   const loadReplication = useCallback(async () => {
     if (!bucketName || !hasContext || !isCephEndpoint || !replicationFeatureEnabled) {
@@ -1557,38 +1515,10 @@ export default function BucketDetailPage({
   const quotaConfigured = Boolean(
     (bucket?.quota_max_size_bytes ?? 0) > 0 || (bucket?.quota_max_objects ?? 0) > 0
   );
-  const websiteRoutingRulesList = Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : [];
-  const websiteConfigured = Boolean(
-    (websiteConfig?.redirect_all_requests_to?.host_name ?? "").trim() ||
-      (websiteConfig?.index_document ?? "").trim() ||
-      websiteRoutingRulesList.length > 0
-  );
   const replicationConfiguration = replicationConfig.configuration ?? {};
   const replicationConfigured = isReplicationConfigurationConfigured(replicationConfiguration);
   const replicationBusy = replicationLoading || savingReplication || clearingReplication;
   const replicationBlocked = !replicationFeatureEnabled;
-  const websiteRoutingDraftSignature = jsonTextSignature(
-    websiteRoutingRules,
-    Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : []
-  );
-  const websiteDraftSignature = stableBucketJsonSignature({
-    mode: websiteMode,
-    index_document: websiteIndexDocument.trim(),
-    error_document: websiteErrorDocument.trim(),
-    redirect_host: websiteRedirectHost.trim(),
-    redirect_protocol: websiteRedirectProtocol.trim(),
-    routing_rules:
-      websiteMode === "hosting" ? websiteRoutingDraftSignature.signature : stableBucketJsonSignature([] as Record<string, unknown>[]),
-  });
-  const websiteSnapshotSignature = stableBucketJsonSignature({
-    mode: (websiteConfig?.redirect_all_requests_to?.host_name ?? "").trim() ? "redirect" : "hosting",
-    index_document: (websiteConfig?.index_document ?? "").trim(),
-    error_document: (websiteConfig?.error_document ?? "").trim(),
-    redirect_host: (websiteConfig?.redirect_all_requests_to?.host_name ?? "").trim(),
-    redirect_protocol: (websiteConfig?.redirect_all_requests_to?.protocol ?? "").trim(),
-    routing_rules: stableBucketJsonSignature(Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : []),
-  });
-  const websiteDirty = websiteDraftSignature !== websiteSnapshotSignature;
   const replicationGraphicalSnapshot = parseReplicationConfigurationForGraphical(replicationConfiguration);
   const replicationJsonDraftSignature = jsonTextSignature(replicationText, replicationConfiguration);
   const replicationGraphicalDraftSignature = stableBucketJsonSignature(
@@ -2218,93 +2148,6 @@ export default function BucketDetailPage({
       setBucketAclError(message);
     } finally {
       setSavingBucketAcl(false);
-    }
-  };
-
-  const saveWebsite = async () => {
-    if (!bucketName || !hasContext || !staticWebsiteEnabled) return;
-    setWebsiteError(null);
-    setWebsiteStatus(null);
-
-    const mode = websiteMode;
-    const indexDocument = websiteIndexDocument.trim();
-    const errorDocument = websiteErrorDocument.trim();
-    const redirectHost = websiteRedirectHost.trim();
-    const redirectProtocol = websiteRedirectProtocol.trim();
-
-    if (mode === "redirect" && !redirectHost) {
-      setWebsiteError("Redirect hostname is required.");
-      return;
-    }
-    if (mode === "hosting" && !indexDocument) {
-      setWebsiteError("Index document is required.");
-      return;
-    }
-
-    let routingRules: Record<string, unknown>[] = [];
-    if (mode === "hosting") {
-      if (websiteRoutingRules.trim()) {
-        try {
-          const parsed = JSON.parse(websiteRoutingRules);
-          if (!Array.isArray(parsed)) {
-            setWebsiteError("Routing rules must be a JSON array.");
-            return;
-          }
-          routingRules = parsed as Record<string, unknown>[];
-        } catch {
-          setWebsiteError("Routing rules must be valid JSON.");
-          return;
-        }
-      }
-    }
-
-    setSavingWebsite(true);
-    try {
-      const payload: BucketWebsiteConfiguration = {
-        index_document: mode === "hosting" ? indexDocument : null,
-        error_document: mode === "hosting" ? (errorDocument || null) : null,
-        redirect_all_requests_to:
-          mode === "redirect"
-            ? {
-                host_name: redirectHost,
-                protocol: redirectProtocol || undefined,
-              }
-            : null,
-        routing_rules: mode === "hosting" ? routingRules : [],
-      };
-      const saved = isCephAdmin
-        ? endpointId
-          ? await putCephAdminBucketWebsite(endpointId, bucketName, payload)
-          : payload
-        : await putBucketWebsite(accountId, bucketName, payload);
-      applyWebsiteState(saved);
-      setWebsiteStatus("Website configuration updated.");
-    } catch (err) {
-      const message = extractApiError(err, "Unable to update website configuration.");
-      setWebsiteError(message);
-    } finally {
-      setSavingWebsite(false);
-    }
-  };
-
-  const clearWebsite = async () => {
-    if (!bucketName || !hasContext || !staticWebsiteEnabled) return;
-    setClearingWebsite(true);
-    setWebsiteError(null);
-    setWebsiteStatus(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await deleteCephAdminBucketWebsite(endpointId, bucketName);
-      } else {
-        await deleteBucketWebsite(accountId, bucketName);
-      }
-      applyWebsiteState(null);
-      setWebsiteStatus("Website configuration cleared.");
-    } catch (err) {
-      setWebsiteError(extractApiError(err, "Unable to delete website configuration."));
-    } finally {
-      setClearingWebsite(false);
     }
   };
 
@@ -3746,11 +3589,7 @@ export default function BucketDetailPage({
                       <input
                         type="radio"
                         checked={websiteMode === "hosting"}
-                        onChange={() => {
-                          setWebsiteMode("hosting");
-                          setWebsiteStatus(null);
-                          setWebsiteError(null);
-                        }}
+                        onChange={() => updateWebsiteMode("hosting")}
                         disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
                       />
@@ -3765,11 +3604,7 @@ export default function BucketDetailPage({
                       <input
                         type="radio"
                         checked={websiteMode === "redirect"}
-                        onChange={() => {
-                          setWebsiteMode("redirect");
-                          setWebsiteStatus(null);
-                          setWebsiteError(null);
-                        }}
+                        onChange={() => updateWebsiteMode("redirect")}
                         disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
                       />
@@ -3789,10 +3624,7 @@ export default function BucketDetailPage({
                           <input
                             type="text"
                             value={websiteIndexDocument}
-                            onChange={(e) => {
-                              setWebsiteIndexDocument(e.target.value);
-                              setWebsiteStatus(null);
-                            }}
+                            onChange={(e) => updateWebsiteIndexDocument(e.target.value)}
                             className={bucketFeatureInputClass}
                             placeholder="index.html"
                             disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
@@ -3803,10 +3635,7 @@ export default function BucketDetailPage({
                           <input
                             type="text"
                             value={websiteErrorDocument}
-                            onChange={(e) => {
-                              setWebsiteErrorDocument(e.target.value);
-                              setWebsiteStatus(null);
-                            }}
+                            onChange={(e) => updateWebsiteErrorDocument(e.target.value)}
                             className={bucketFeatureInputClass}
                             placeholder="error.html"
                             disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
@@ -3819,10 +3648,7 @@ export default function BucketDetailPage({
                         </label>
                         <textarea
                           value={websiteRoutingRules}
-                          onChange={(e) => {
-                            setWebsiteRoutingRules(e.target.value);
-                            setWebsiteStatus(null);
-                          }}
+                          onChange={(e) => updateWebsiteRoutingRules(e.target.value)}
                           rows={6}
                           className={cx(bucketFeatureJsonInputClass, "w-full")}
                           placeholder="[]"
@@ -3834,11 +3660,7 @@ export default function BucketDetailPage({
                             show={showWebsiteRulesExample}
                             onToggle={() => setShowWebsiteRulesExample((prev) => !prev)}
                             example={defaultWebsiteRoutingRulesExample}
-                            onUseExample={() => {
-                              setWebsiteRoutingRules(defaultWebsiteRoutingRulesExample);
-                              setWebsiteStatus(null);
-                              setWebsiteError(null);
-                            }}
+                            onUseExample={() => updateWebsiteRoutingRules(defaultWebsiteRoutingRulesExample)}
                             disabled={websiteNotImplemented}
                           />
                         </div>
@@ -3851,10 +3673,7 @@ export default function BucketDetailPage({
                         <input
                           type="text"
                           value={websiteRedirectHost}
-                          onChange={(e) => {
-                            setWebsiteRedirectHost(e.target.value);
-                            setWebsiteStatus(null);
-                          }}
+                          onChange={(e) => updateWebsiteRedirectHost(e.target.value)}
                           className={bucketFeatureInputClass}
                           placeholder="www.example.com"
                           disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
@@ -3865,10 +3684,7 @@ export default function BucketDetailPage({
                         <input
                           type="text"
                           value={websiteRedirectProtocol}
-                          onChange={(e) => {
-                            setWebsiteRedirectProtocol(e.target.value);
-                            setWebsiteStatus(null);
-                          }}
+                          onChange={(e) => updateWebsiteRedirectProtocol(e.target.value)}
                           className={bucketFeatureInputClass}
                           placeholder="https"
                           disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}

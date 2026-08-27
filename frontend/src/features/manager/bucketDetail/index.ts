@@ -24,6 +24,7 @@ export {
   useBucketNotificationsController,
 } from "./useBucketNotificationsController";
 export { useBucketPublicAccessController } from "./useBucketPublicAccessController";
+export { useBucketWebsiteController } from "./useBucketWebsiteController";
 export {
   jsonTextSignature,
   normalizeAclDraft,
