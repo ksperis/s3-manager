@@ -71,6 +71,7 @@ import { useBrowserDensity } from "./useBrowserDensity";
 import { useBrowserDownloads } from "./useBrowserDownloads";
 import { useBrowserFolderTree } from "./useBrowserFolderTree";
 import { useBrowserLazyColumns } from "./useBrowserLazyColumns";
+import { useBrowserKeyboardShortcuts } from "./useBrowserKeyboardShortcuts";
 import { useBrowserListingRefresh } from "./useBrowserListingRefresh";
 import { useBrowserListingVisibility } from "./useBrowserListingVisibility";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
@@ -2457,104 +2458,33 @@ export default function BrowserPage({
     void handleDownloadItems([item]);
   };
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const shortcutsBlocked =
-      Boolean(objectDetailsTarget) ||
-      showNewFolderModal ||
-      showBulkAttributesModal ||
-      showBulkRestoreModal ||
-      showOperationsDetailsModal ||
-      showSseCustomerModal ||
-      showCleanupModal ||
-      showPrefixVersions ||
-      showMultipartUploadsModal ||
-      Boolean(confirmDialog) ||
-      Boolean(copyDialog);
-    const isEditableTarget = (target: EventTarget | null) => {
-      if (!(target instanceof Element)) return false;
-      const element = target as HTMLElement;
-      if (element.isContentEditable) return true;
-      return Boolean(
-        element.closest(
-          "input, textarea, select, [contenteditable='true'], [contenteditable=''], [role='textbox']",
-        ),
-      );
-    };
-    const handleShortcut = (event: KeyboardEvent) => {
-      if (shortcutsBlocked) return;
-      if (event.defaultPrevented) return;
-      if (event.altKey) return;
-      if (isEditableTarget(event.target)) return;
-      if (!hasS3AccountContext || !bucketName) return;
-      const hasModifier = event.metaKey || event.ctrlKey;
-      if (!hasModifier) return;
-      const key = event.key.toLowerCase();
-
-      if (key === "a") {
-        if (selectableListItems.length === 0) return;
-        event.preventDefault();
-        selectAllItems();
-        return;
-      }
-
-      if (key === "l") {
-        event.preventDefault();
-        startEditingPath();
-        return;
-      }
-
-      if (key === "c") {
-        if (resolvedFunctionalProfile === "portal" || !resolvedCapabilityFacts.canWriteObjects) return;
-        const targets = selectedItems;
-        if (targets.length === 0) return;
-        event.preventDefault();
-        handleCopyItems(targets);
-        return;
-      }
-
-      if (key === "x") {
-        if (resolvedFunctionalProfile === "portal" || !resolvedCapabilityFacts.canWriteObjects) return;
-        const targets = selectedItems;
-        if (targets.length === 0) return;
-        event.preventDefault();
-        handleCutItems(targets);
-        return;
-      }
-
-      if (key === "v") {
-        if (!canPasteInFunctionalProfile) return;
-        event.preventDefault();
-        void handlePasteItems();
-      }
-    };
-    document.addEventListener("keydown", handleShortcut);
-    return () => document.removeEventListener("keydown", handleShortcut);
-  }, [
-    bucketName,
-    canPasteInFunctionalProfile,
-    handleCopyItems,
-    handleCutItems,
-    handlePasteItems,
-    hasS3AccountContext,
-    resolvedCapabilityFacts.canWriteObjects,
-    resolvedFunctionalProfile,
-    selectAllItems,
-    selectableListItems,
+  const keyboardShortcutsBlocked =
+    Boolean(objectDetailsTarget) ||
+    showNewFolderModal ||
+    showBulkAttributesModal ||
+    showBulkRestoreModal ||
+    showOperationsDetailsModal ||
+    showSseCustomerModal ||
+    showCleanupModal ||
+    showPrefixVersions ||
+    showMultipartUploadsModal ||
+    Boolean(confirmDialog) ||
+    Boolean(copyDialog);
+  useBrowserKeyboardShortcuts({
+    blocked: keyboardShortcutsBlocked,
+    canCopyAndCut:
+      resolvedFunctionalProfile !== "portal" &&
+      resolvedCapabilityFacts.canWriteObjects,
+    canPaste: canPasteInFunctionalProfile,
+    enabled: hasS3AccountContext && Boolean(bucketName),
+    hasSelectableItems: selectableListItems.length > 0,
+    onCopy: handleCopyItems,
+    onCut: handleCutItems,
+    onEditPath: startEditingPath,
+    onPaste: handlePasteItems,
+    onSelectAll: selectAllItems,
     selectedItems,
-    startEditingPath,
-    objectDetailsTarget,
-    showNewFolderModal,
-    showBulkAttributesModal,
-    showBulkRestoreModal,
-    showOperationsDetailsModal,
-    showSseCustomerModal,
-    showCleanupModal,
-    confirmDialog,
-    copyDialog,
-    showMultipartUploadsModal,
-    showPrefixVersions,
-  ]);
+  });
 
   const refreshObjectListing = async (_targetKey: string) => {
     await loadObjects({ prefixOverride: prefix, forceRefresh: true });
