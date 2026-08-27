@@ -1421,6 +1421,7 @@ export default function StorageEndpointsPage() {
           emptyMessage="No endpoints configured yet."
           primaryColumnId="endpoint"
           responsiveCards
+          stickyActions={false}
           tableClassName="compact-table"
           containerClassName="rounded-t-none border-x-0 border-b-0"
         />

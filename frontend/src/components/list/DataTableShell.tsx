@@ -63,6 +63,7 @@ type DataTableShellProps<Row, SortField extends string = string> = {
   expandedRowClassName?: string | ((row: Row) => string | undefined);
   overflowXHidden?: boolean;
   responsiveCards?: boolean;
+  stickyActions?: boolean;
 };
 
 export default function DataTableShell<Row, SortField extends string = string>({
@@ -85,6 +86,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
   expandedRowClassName = "bg-slate-50/70 dark:bg-slate-900/40",
   overflowXHidden = false,
   responsiveCards = false,
+  stickyActions = true,
 }: DataTableShellProps<Row, SortField>) {
   const resolveRowClassName = (row: Row) => (typeof rowClassName === "function" ? rowClassName(row) : rowClassName);
   const resolveExpandedRowClassName = (row: Row) =>
@@ -113,7 +115,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
                 column.header || column.mobileRole === "actions" ? (
                   <th
                     key={column.id}
-                    data-table-actions={column.mobileRole === "actions" ? "true" : undefined}
+                    data-table-actions={stickyActions && column.mobileRole === "actions" ? "true" : undefined}
                     className={cx(
                       "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
                       (column.align ?? "left") === "right" ? "text-right" : "text-left",
@@ -166,7 +168,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
                           data-mobile-primary={responsiveCards && mobileRole === "primary" ? "true" : undefined}
                           data-mobile-actions={responsiveCards && mobileRole === "actions" ? "true" : undefined}
                           data-mobile-hidden={responsiveCards && column.mobileHidden ? "true" : undefined}
-                          data-table-actions={mobileRole === "actions" ? "true" : undefined}
+                          data-table-actions={stickyActions && mobileRole === "actions" ? "true" : undefined}
                         >
                           {column.render(row)}
                         </td>

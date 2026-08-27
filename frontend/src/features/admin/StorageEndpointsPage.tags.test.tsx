@@ -186,7 +186,10 @@ describe("StorageEndpointsPage tags", () => {
     expect(endpointRow.getAllByText("(secret stored)")).toHaveLength(3);
     expect(endpointRow.getByRole("button", { name: "Open endpoint Ceph Endpoint" })).toBeInTheDocument();
     expect(endpointRow.getByRole("button", { name: "Edit" })).toBeInTheDocument();
-    expect(endpointRow.getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
+    const actionCell = endpointRow.getByRole("button", { name: "Edit" }).closest("td");
+    expect(actionCell).toHaveAttribute("data-mobile-actions", "true");
+    expect(actionCell).not.toHaveAttribute("data-table-actions");
+    expect(within(table).getByRole("columnheader", { name: "Actions" })).not.toHaveAttribute("data-table-actions");
     expect(endpointRow.getByRole("button", { name: "Delete" })).toBeInTheDocument();
 
     fireEvent.click(endpointRow.getByRole("button", { name: "Open endpoint Ceph Endpoint" }));

@@ -142,6 +142,36 @@ describe("DataTableShell", () => {
     expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveAttribute("data-table-actions", "true");
   });
 
+  it("can keep responsive actions in the table flow without making them sticky", () => {
+    render(
+      <DataTableShell
+        columns={[
+          { ...columns[0], primary: true },
+          {
+            id: "actions",
+            label: "Actions",
+            align: "right",
+            mobileRole: "actions",
+            render: () => <button type="button">Open</button>,
+          },
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        responsiveCards
+        stickyActions={false}
+      />
+    );
+
+    const actionCell = screen.getByRole("button", { name: "Open" }).closest("td");
+    expect(actionCell).toHaveAttribute("data-mobile-actions", "true");
+    expect(actionCell).not.toHaveAttribute("data-table-actions");
+    expect(screen.getByRole("columnheader", { name: "Actions" })).not.toHaveAttribute("data-table-actions");
+  });
+
   it("renders custom column headers for selection controls", () => {
     render(
       <DataTableShell
