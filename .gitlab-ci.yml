@@ -258,6 +258,7 @@ backend-postgresql-tests:
     POSTGRES_TEST_DATABASE_URL: postgresql://bucketreef:bucketreef-test-password@postgres:5432/bucketreef_bootstrap_test
     APP_ENV: test
     OIDC_PROVIDERS: "{}"
+    LDAP_PROVIDERS: "{}"
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
@@ -271,6 +272,10 @@ backend-postgresql-tests:
     - pip install -r backend/requirements-test.txt
     - rm -f backend/.env
     - mkdir -p gl-test-reports
+    - for var in $(env | cut -d= -f1 | grep '^OIDC_PROVIDERS__' || true); do unset "$var"; done
+    - for var in $(env | cut -d= -f1 | grep '^LDAP_PROVIDERS__' || true); do unset "$var"; done
+    - export OIDC_PROVIDERS="{}"
+    - export LDAP_PROVIDERS="{}"
     - until pg_isready --host postgres --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"; do sleep 1; done
   script:
     - cd backend

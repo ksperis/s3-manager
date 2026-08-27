@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+from app.services.storage_endpoint_normalization import (
+    normalize_env_storage_endpoint_states,
+    parse_env_storage_endpoints,
+)
 from tests_ceph_functional import run_ci
 
 
@@ -29,7 +33,12 @@ def test_ci_endpoint_payload_enables_replication(monkeypatch):
     assert payload[0]["name"] == "Lab Ceph"
     assert payload[0]["endpoint_url"] == "https://s3.example.test"
     assert payload[0]["is_default"] is True
+    assert payload[0]["features"]["account"] == {"enabled": True}
     assert payload[0]["features"]["replication"] == {"enabled": True}
+    states = normalize_env_storage_endpoint_states(
+        parse_env_storage_endpoints(json.dumps(payload))
+    )
+    assert len(states) == 1
 
 
 def test_ci_app_settings_payload_enables_portal_features():
@@ -69,7 +78,7 @@ def test_ci_endpoint_payload_can_use_env_storage_endpoints():
             "verify_tls": True,
             "features": {
                 "admin": {"enabled": True, "endpoint": "https://admin-z1.example.test"},
-                "account": {"enabled": True, "endpoint": "https://admin-z1.example.test"},
+                "account": {"enabled": True},
                 "sns": {"enabled": True},
             },
             "admin_access_key": "admin-ak",

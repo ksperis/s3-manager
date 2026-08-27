@@ -214,7 +214,7 @@ def _build_endpoint_payload(source: dict[str, str] | None = None) -> str:
             **common_credentials,
             "features": {
                 "admin": {"enabled": True, "endpoint": admin_endpoint},
-                "account": {"enabled": True, "endpoint": admin_endpoint},
+                "account": {"enabled": True},
                 "sts": {"enabled": True, "endpoint": endpoint_url},
                 "usage": {"enabled": True},
                 "metrics": {"enabled": True},
