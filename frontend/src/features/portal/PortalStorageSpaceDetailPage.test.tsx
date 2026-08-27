@@ -21,7 +21,9 @@ const mocks = vi.hoisted(() => ({
   fetchTrafficMock: vi.fn(),
   fetchStorageSpaceSettingsMock: vi.fn(),
   grantShareMock: vi.fn(),
+  listPublicLinksMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
+  revokePublicLinkMock: vi.fn(),
   revokeShareMock: vi.fn(),
   streamHistoryCleanupMock: vi.fn(),
   streamDeletedPrefixRestoreMock: vi.fn(),
@@ -138,6 +140,32 @@ const accessSummaryFixture = {
   can_create_public_links: true,
 };
 
+const publicLinksFixture = [
+  {
+    id: 42,
+    storage_space_id: "research-data",
+    storage_space_name: "Research Data",
+    object_key: "reports/active.csv",
+    object_name: "active.csv",
+    url: "https://portal.example.test/api/portal/public-links/active/download",
+    status: "Active",
+    created_at: "2026-06-01T10:00:00Z",
+    expires_at: "2026-09-01T10:00:00Z",
+  },
+  {
+    id: 43,
+    storage_space_id: "research-data",
+    storage_space_name: "Research Data",
+    object_key: "reports/revoked.csv",
+    object_name: "revoked.csv",
+    url: "https://portal.example.test/api/portal/public-links/revoked/download",
+    status: "Revoked",
+    created_at: "2026-05-01T10:00:00Z",
+    expires_at: null,
+    revoked_at: "2026-06-15T10:00:00Z",
+  },
+];
+
 vi.mock("./usePortalWorkspaceData", () => ({
   usePortalWorkspaceData: (...args: unknown[]) => {
     mocks.usePortalWorkspaceDataMock(...args);
@@ -159,9 +187,11 @@ vi.mock("../../api/portal", () => ({
   fetchPortalStorageSpaceSettings: (...args: unknown[]) => mocks.fetchStorageSpaceSettingsMock(...args),
   fetchPortalTraffic: (...args: unknown[]) => mocks.fetchTrafficMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
+  listPortalStorageSpacePublicLinks: (...args: unknown[]) => mocks.listPublicLinksMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
   portalStorageSpaceVersionCleanupConfirmationPhrase: (spaceName: string) => `CLEAN HISTORY ${spaceName.toUpperCase()}`,
   revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShareMock(...args),
+  revokePortalStorageSpacePublicLink: (...args: unknown[]) => mocks.revokePublicLinkMock(...args),
   restorePortalStorageSpaceObject: (...args: unknown[]) => mocks.restoreObjectMock(...args),
   streamPortalDeletedPrefixRestore: (...args: unknown[]) =>
     mocks.streamDeletedPrefixRestoreMock(...args),
@@ -356,6 +386,11 @@ describe("PortalStorageSpaceDetailPage", () => {
       },
     ]);
     mocks.grantShareMock.mockResolvedValue({ id: "research-data:13" });
+    mocks.listPublicLinksMock.mockResolvedValue(publicLinksFixture);
+    mocks.revokePublicLinkMock.mockResolvedValue([
+      { ...publicLinksFixture[0], status: "Revoked", revoked_at: "2026-08-27T10:00:00Z" },
+      publicLinksFixture[1],
+    ]);
     mocks.revokeShareMock.mockResolvedValue([]);
     mocks.updateShareMock.mockResolvedValue({ id: "research-data:12", role: "Editor" });
     mocks.streamHistoryCleanupMock.mockImplementation((_accountId, _spaceId, _payload, options) => {
@@ -440,6 +475,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Trash" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Collaborators" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "External links" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Statistics" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Files" })).not.toBeInTheDocument();
@@ -479,12 +515,148 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(embedProps.transferReporter).toBeUndefined();
   });
 
+  it("loads scoped external links lazily and supports copying and confirmed revocation", async () => {
+    let resolveLinks: ((links: typeof publicLinksFixture) => void) | undefined;
+    mocks.listPublicLinksMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveLinks = resolve;
+      }),
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    await renderPage();
+
+    expect(mocks.listPublicLinksMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("tab", { name: "External links" }));
+
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      "?tab=external-links",
+    );
+    expect(screen.getByText("Loading links...")).toBeInTheDocument();
+    expect(mocks.listPublicLinksMock).toHaveBeenCalledWith(
+      "101",
+      "research-data",
+      { includeRevoked: true },
+    );
+
+    await act(async () => {
+      resolveLinks?.(publicLinksFixture);
+    });
+
+    const activeRow = (await screen.findByText("active.csv")).closest("tr");
+    const revokedRow = screen.getByText("revoked.csv").closest("tr");
+    if (!activeRow || !revokedRow) throw new Error("External link row not found");
+    expect(within(activeRow).getByText("Active")).toBeInTheDocument();
+    expect(within(revokedRow).getByText("Revoked")).toBeInTheDocument();
+    expect(
+      within(revokedRow).queryByRole("button", { name: "Revoke" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(within(revokedRow).getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith(publicLinksFixture[1].url);
+    expect(await screen.findByText("Link copied.")).toBeInTheDocument();
+
+    fireEvent.click(within(activeRow).getByRole("button", { name: "Revoke" }));
+    const dialog = screen.getByRole("dialog", { name: "Revoke public link" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke link" }));
+
+    await waitFor(() => {
+      expect(mocks.revokePublicLinkMock).toHaveBeenCalledWith(
+        "101",
+        "research-data",
+        42,
+      );
+    });
+    expect(await screen.findByText("Public link revoked.")).toBeInTheDocument();
+    expect(screen.getAllByText("Revoked")).toHaveLength(2);
+  });
+
+  it("opens the external links tab directly from the URL", async () => {
+    await renderPage([
+      "/portal/storage-spaces/research-data?tab=external-links",
+    ]);
+
+    expect(
+      await screen.findByRole("tabpanel", { name: "External links" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("active.csv")).toBeInTheDocument();
+    expect(mocks.listPublicLinksMock).toHaveBeenCalledWith(
+      "101",
+      "research-data",
+      { includeRevoked: true },
+    );
+  });
+
+  it("lists suspended links for the owner of a private active space", async () => {
+    mocks.hookResult.workspace.spaces[0].role = "Owner";
+    mocks.hookResult.workspace.spaces[0].visibility = "private";
+
+    await renderPage([
+      "/portal/storage-spaces/research-data?tab=external-links",
+    ]);
+
+    expect(await screen.findByText("active.csv")).toBeInTheDocument();
+    expect(mocks.listPublicLinksMock).toHaveBeenCalledWith(
+      "101",
+      "research-data",
+      { includeRevoked: true },
+    );
+  });
+
+  it("shows an empty external links state", async () => {
+    mocks.listPublicLinksMock.mockResolvedValue([]);
+
+    await renderPage([
+      "/portal/storage-spaces/research-data?tab=external-links",
+    ]);
+
+    expect(
+      await screen.findByText("No external links for this space."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an external links loading error", async () => {
+    mocks.listPublicLinksMock.mockRejectedValue(new Error("Network Error"));
+
+    await renderPage([
+      "/portal/storage-spaces/research-data?tab=external-links",
+    ]);
+
+    expect(
+      await screen.findByText("Unable to load external links."),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["Viewer", "Active", "Only owners and managers"],
+    ["Editor", "Active", "Only owners and managers"],
+    ["Manager", "Archived", "Restore this archived space"],
+  ])(
+    "does not load external links for a %s space with %s status",
+    async (role, status, expectedMessage) => {
+      mocks.hookResult.workspace.spaces[0].role = role;
+      mocks.hookResult.workspace.spaces[0].status = status;
+
+      await renderPage([
+        "/portal/storage-spaces/research-data?tab=external-links",
+      ]);
+
+      expect(await screen.findByText(new RegExp(expectedMessage))).toBeInTheDocument();
+      expect(mocks.listPublicLinksMock).not.toHaveBeenCalled();
+    },
+  );
+
   it("loads Storage Space statistics lazily and keeps the tab in the URL", async () => {
     await renderPage();
 
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "Files",
       "Collaborators",
+      "External links",
       "Statistics",
       "Settings",
     ]);
@@ -945,11 +1117,13 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getAllByText("viewer@example.com").length).toBeGreaterThan(0);
     expect(screen.getByRole("combobox", { name: "Access for viewer@example.com" })).toHaveClass("ui-control");
     expect(screen.queryByLabelText("People")).not.toBeInTheDocument();
-    expect(screen.getByText("2 public links")).toHaveAttribute(
-      "href",
-      "/portal/shares?view=links&space_id=research-data"
-    );
-    expect(screen.getByText("Roles below apply only to this space.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "2 public links" }));
+    expect(await screen.findByRole("tabpanel", { name: "External links" })).toBeInTheDocument();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("?tab=external-links");
+    fireEvent.click(screen.getByRole("tab", { name: "Collaborators" }));
+    expect(
+      await screen.findByText("Roles below apply only to this space."),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Manage collaborators" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Add people" }));

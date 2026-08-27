@@ -10,6 +10,7 @@ import {
   fetchPortalStorageSpaceAccessSummary,
   fetchPortalStorageSpaceSettings,
   grantPortalStorageSpaceShare,
+  listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShareCandidates,
   portalStorageSpaceVersionCleanupConfirmationPhrase,
   revokePortalStorageSpaceShare,
@@ -35,6 +36,7 @@ import {
 import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
@@ -82,6 +84,9 @@ import {
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
+import PortalPublicLinkCreateDialog from "./PortalPublicLinkCreateDialog";
+import PortalPublicLinkRevokeDialog from "./PortalPublicLinkRevokeDialog";
+import PortalPublicLinksTable from "./PortalPublicLinksTable";
 import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
 import PortalStorageSpaceStatistics from "./PortalStorageSpaceStatistics";
 import {
@@ -96,6 +101,7 @@ import {
   portalStatusLabel,
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import { usePortalPublicLinkActions } from "./usePortalPublicLinkActions";
 import StorageSpaceIconPickerModal from "./StorageSpaceIconPickerModal";
 
 function decodeRouteValue(value?: string): string {
@@ -123,7 +129,12 @@ type PublicLinkTarget = {
   name: string;
 };
 
-type SpaceDetailTab = "files" | "collaborators" | "statistics" | "settings";
+type SpaceDetailTab =
+  | "files"
+  | "collaborators"
+  | "external-links"
+  | "statistics"
+  | "settings";
 
 function ObjectMetricCard({
   label,
@@ -163,7 +174,7 @@ export default function PortalStorageSpaceDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SpaceDetailTab>(() => {
     const requestedTab = new URLSearchParams(location.search).get("tab");
-    return requestedTab === "collaborators" || requestedTab === "statistics" || requestedTab === "settings"
+    return requestedTab === "collaborators" || requestedTab === "external-links" || requestedTab === "statistics" || requestedTab === "settings"
       ? requestedTab
       : "files";
   });
@@ -229,6 +240,10 @@ export default function PortalStorageSpaceDetailPage() {
   const [publicLinkError, setPublicLinkError] = useState<string | null>(null);
   const [createdPublicLink, setCreatedPublicLink] = useState<PortalPublicLink | null>(null);
   const [publicLinkCopyMessage, setPublicLinkCopyMessage] = useState<string | null>(null);
+  const [externalLinks, setExternalLinks] = useState<PortalPublicLink[]>([]);
+  const [externalLinksLoading, setExternalLinksLoading] = useState(false);
+  const [externalLinksError, setExternalLinksError] = useState<string | null>(null);
+  const [pendingExternalLinkRevoke, setPendingExternalLinkRevoke] = useState<PortalPublicLink | null>(null);
   const {
     workspace,
     state,
@@ -246,6 +261,16 @@ export default function PortalStorageSpaceDetailPage() {
   });
   const decodedSpaceId = decodeRouteValue(spaceId);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
+  const {
+    busyLinkId: busyExternalLinkId,
+    copyLink: copyExternalLink,
+    revokeLink: revokeExternalLink,
+  } = usePortalPublicLinkActions({
+    accountId: accountIdForApi,
+    onLinksUpdated: (links) => setExternalLinks(links),
+    onMessage: setMessage,
+    onError: setExternalLinksError,
+  });
   const startGuideStorageKey = space
     ? `portal.storage-space-detail.start-guide.dismissed.${accountIdForApi ?? "default"}.${space.id}`
     : null;
@@ -356,12 +381,65 @@ export default function PortalStorageSpaceDetailPage() {
     if (
       requestedTab === "files" ||
       requestedTab === "collaborators" ||
+      requestedTab === "external-links" ||
       requestedTab === "statistics" ||
       requestedTab === "settings"
     ) {
       setActiveTab(requestedTab);
     }
   }, [requestedTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const canListExternalLinks = Boolean(
+      space &&
+        space.status !== "Archived" &&
+        (space.role === "Owner" || space.role === "Manager"),
+    );
+    if (
+      activeTab !== "external-links" ||
+      !space ||
+      !accountIdForApi ||
+      !canListExternalLinks
+    ) {
+      setExternalLinks([]);
+      setExternalLinksLoading(false);
+      setExternalLinksError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setExternalLinksLoading(true);
+    setExternalLinksError(null);
+    listPortalStorageSpacePublicLinks(accountIdForApi, space.id, {
+      includeRevoked: true,
+    })
+      .then((links) => {
+        if (!cancelled) setExternalLinks(links);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) {
+          setExternalLinks([]);
+          setExternalLinksError(
+            extractApiError(
+              err,
+              t({
+                en: "Unable to load external links.",
+                fr: "Impossible de charger les liens externes.",
+                de: "Externe Links können nicht geladen werden.",
+              }),
+            ),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setExternalLinksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, activeTab, space, t]);
 
   useEffect(() => {
     if (!startGuideStorageKey) {
@@ -881,6 +959,24 @@ export default function PortalStorageSpaceDetailPage() {
     space.visibility === "shared" &&
     accessSummary?.can_create_public_links
   );
+  const externalLinksUnavailableReason = isArchived
+    ? t({
+        en: "Restore this archived space to review links.",
+        fr: "Restaurez cet espace archivé pour voir ses liens.",
+        de: "Archivierte Bereiche zeigen keine externen Links.",
+      })
+    : !hasFullAccess
+      ? t({
+          en: "Only owners and managers can review links.",
+          fr: "Accès propriétaire ou gestionnaire requis.",
+          de: "Nur Owner und Manager sehen externe Links.",
+        })
+      : null;
+  const externalLinksTableStatus = resolveListTableStatus({
+    loading: externalLinksLoading,
+    error: externalLinksError,
+    rowCount: externalLinks.length,
+  });
   const historyCleanupEnabled = Boolean(state?.storage_space_version_cleanup_enabled);
   const canCleanHistory = Boolean(historyCleanupEnabled && !isArchived && hasFullAccess);
   const deletionStatsKnown = space.objectCount != null && space.usedBytes != null;
@@ -1615,6 +1711,7 @@ export default function PortalStorageSpaceDetailPage() {
         tabs={[
           { id: "files", label: t({ en: "Files", fr: "Fichiers", de: "Dateien" }) },
           { id: "collaborators", label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }) },
+          { id: "external-links", label: t({ en: "External links", fr: "Liens externes", de: "Externe Links" }) },
           { id: "statistics", label: t({ en: "Statistics", fr: "Statistiques", de: "Statistiken" }) },
           { id: "settings", label: t({ en: "Settings", fr: "Réglages", de: "Einstellungen" }) },
         ]}
@@ -1697,8 +1794,9 @@ export default function PortalStorageSpaceDetailPage() {
                 <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
                   {t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}
                 </div>
-                <Link
-                  to={`/portal/shares?view=links&space_id=${encodeURIComponent(space.id)}`}
+                <button
+                  type="button"
+                  onClick={() => selectSpaceDetailTab("external-links")}
                   className="mt-1 inline-flex text-sm font-bold text-primary hover:underline dark:text-primary-200"
                 >
                   {t({
@@ -1706,7 +1804,7 @@ export default function PortalStorageSpaceDetailPage() {
                     fr: `${accessSummary.public_link_count} lien${accessSummary.public_link_count > 1 ? "s" : ""} public${accessSummary.public_link_count > 1 ? "s" : ""}`,
                     de: `${accessSummary.public_link_count} öffentliche Links`,
                   })}
-                </Link>
+                </button>
               </div>
             </div>
 
@@ -1842,6 +1940,36 @@ export default function PortalStorageSpaceDetailPage() {
         </PortalTabPanel>
       ) : null}
 
+      {activeTab === "external-links" ? (
+        <PortalTabPanel idPrefix="portal-space-detail" tabId="external-links">
+          {externalLinksUnavailableReason ? (
+            <PageBanner tone={isArchived ? "warning" : "info"}>
+              {externalLinksUnavailableReason}
+            </PageBanner>
+          ) : (
+            <div className="space-y-3">
+              {externalLinksError && externalLinks.length > 0 ? (
+                <PageBanner tone="error">{externalLinksError}</PageBanner>
+              ) : null}
+              <PortalPublicLinksTable
+                links={externalLinks}
+                status={externalLinksTableStatus}
+                busyLinkId={busyExternalLinkId}
+                showCopyForInactive
+                onCopy={copyExternalLink}
+                onRevoke={setPendingExternalLinkRevoke}
+                errorMessage={externalLinksError ?? undefined}
+                emptyMessage={t({
+                  en: "No external links for this space.",
+                  fr: "Aucun lien externe pour cet espace.",
+                  de: "Keine externen Links für diesen Bereich.",
+                })}
+              />
+            </div>
+          )}
+        </PortalTabPanel>
+      ) : null}
+
       {activeTab === "settings" ? (
         <PortalTabPanel idPrefix="portal-space-detail" tabId="settings">
           {storageSpaceSettingsCard}
@@ -1903,68 +2031,21 @@ export default function PortalStorageSpaceDetailPage() {
       ) : null}
 
       {publicLinkTarget ? (
-        <Modal
-          title={t({ en: "Create public link", fr: "Créer un lien public", de: "Öffentlichen Link erstellen" })}
+        <PortalPublicLinkCreateDialog
+          fileName={publicLinkTarget.name}
+          path={publicLinkTarget.key}
+          spaceName={space.name}
+          expiration={publicLinkExpiration}
+          busy={publicLinkBusy}
+          canCreate={canCreatePublicLinks}
+          error={publicLinkError}
+          message={publicLinkCopyMessage}
+          createdLink={createdPublicLink}
+          onExpirationChange={setPublicLinkExpiration}
           onClose={closePublicLinkDialog}
-          closeOnBackdropClick={!publicLinkBusy}
-          closeOnEscape={!publicLinkBusy}
-        >
-          <div className="space-y-4">
-            {publicLinkError ? <PageBanner tone="warning">{publicLinkError}</PageBanner> : null}
-            {publicLinkCopyMessage ? <PageBanner tone="info">{publicLinkCopyMessage}</PageBanner> : null}
-            <dl className="grid gap-3 text-xs">
-              <div className="grid grid-cols-[130px_1fr] gap-3">
-                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "File", fr: "Fichier", de: "Datei" })}</dt>
-                <dd className={cx("min-w-0 break-all font-bold", uiTitleTextClass)}>{publicLinkTarget.name}</dd>
-              </div>
-              <div className="grid grid-cols-[130px_1fr] gap-3">
-                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Path", fr: "Chemin", de: "Pfad" })}</dt>
-                <dd className="min-w-0 break-all font-mono text-[11px]">{publicLinkTarget.key}</dd>
-              </div>
-              <div className="grid grid-cols-[130px_1fr] gap-3">
-                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</dt>
-                <dd className={cx("min-w-0 font-bold", uiTitleTextClass)}>{space.name}</dd>
-              </div>
-            </dl>
-            <UiInput
-              type="datetime-local"
-              label={t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}
-              size="compact"
-              className="h-9"
-              value={publicLinkExpiration}
-              disabled={publicLinkBusy || Boolean(createdPublicLink)}
-              onChange={(event) => setPublicLinkExpiration(event.target.value)}
-              aria-label={t({ en: "Public link expiration", fr: "Expiration du lien public", de: "Ablauf des öffentlichen Links" })}
-            />
-            {createdPublicLink ? (
-              <div className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-3">
-                <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
-                  {t({ en: "Public link", fr: "Lien public", de: "Öffentlicher Link" })}
-                </div>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <code className="min-w-0 flex-1 break-all rounded-md bg-[var(--ui-surface)] px-2 py-1 text-[11px]">{createdPublicLink.url}</code>
-                  <UiButton size="sm" variant="secondary" onClick={copyCreatedPublicLink}>
-                    {t({ en: "Copy link", fr: "Copier le lien", de: "Link kopieren" })}
-                  </UiButton>
-                </div>
-              </div>
-            ) : null}
-            <div className="flex flex-wrap justify-end gap-2">
-              <UiButton variant="secondary" onClick={closePublicLinkDialog} disabled={publicLinkBusy}>
-                {createdPublicLink ? t({ en: "Done", fr: "Terminer", de: "Fertig" }) : t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
-              </UiButton>
-              <UiButton
-                onClick={handleCreatePublicLink}
-                loading={publicLinkBusy}
-                disabled={Boolean(createdPublicLink) || !canCreatePublicLinks}
-              >
-                {publicLinkBusy
-                  ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
-                  : t({ en: "Create link", fr: "Créer le lien", de: "Link erstellen" })}
-              </UiButton>
-            </div>
-          </div>
-        </Modal>
+          onCreate={handleCreatePublicLink}
+          onCopy={copyCreatedPublicLink}
+        />
       ) : null}
 
       {accessPeopleDialogOpen && accessSummary?.can_manage_access && savedAccessMode === "restricted" ? (
@@ -2561,6 +2642,19 @@ export default function PortalStorageSpaceDetailPage() {
           space={space}
           onClose={() => setIconDialogOpen(false)}
           onSaved={refreshWorkspaceData}
+        />
+      ) : null}
+
+      {pendingExternalLinkRevoke ? (
+        <PortalPublicLinkRevokeDialog
+          link={pendingExternalLinkRevoke}
+          loading={busyExternalLinkId === pendingExternalLinkRevoke.id}
+          onCancel={() => setPendingExternalLinkRevoke(null)}
+          onConfirm={() =>
+            void revokeExternalLink(pendingExternalLinkRevoke).finally(() =>
+              setPendingExternalLinkRevoke(null),
+            )
+          }
         />
       ) : null}
 

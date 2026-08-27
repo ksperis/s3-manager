@@ -12,26 +12,19 @@ import {
   fetchPortalStorageSpaceObjectVersions,
   listPortalStorageSpacePublicLinks,
   restorePortalStorageSpaceObject,
-  revokePortalStorageSpacePublicLink,
   type PortalPublicLink,
   type PortalStorageObjectDetail,
   type PortalStorageObjectVersion,
   type PortalStorageObjectVersionsResponse,
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
-import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageShell from "../../components/PageShell";
-import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
-import UiInput from "../../components/ui/UiInput";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
-import { copyTextToClipboard } from "../../utils/clipboard";
 import { triggerBlobDownload } from "../../utils/download";
 import { formatBytes } from "../../utils/format";
 import ObjectPreview, {
@@ -40,13 +33,17 @@ import ObjectPreview, {
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import PortalObjectHistoryPanel from "./PortalObjectHistoryPanel";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
+import PortalPublicLinkCreateDialog from "./PortalPublicLinkCreateDialog";
+import PortalPublicLinkRevokeDialog from "./PortalPublicLinkRevokeDialog";
+import PortalPublicLinksTable from "./PortalPublicLinksTable";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
   PortalPageState,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
-import { portalDateTimeLabel, portalPublicLinkStatusLabel } from "./portalI18n";
+import { portalDateTimeLabel } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import { usePortalPublicLinkActions } from "./usePortalPublicLinkActions";
 
 type ObjectTab = "preview" | "history" | "sharing" | "details";
 
@@ -172,6 +169,21 @@ export default function PortalObjectDetailPage() {
   const decodedSpaceId = decodeRouteValue(params.spaceId);
   const objectPath = decodeObjectPath(params["*"]);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
+  const {
+    busyLinkId: busyPublicLinkId,
+    copyLink: copyPublicLink,
+    revokeLink: revokePublicLink,
+  } = usePortalPublicLinkActions({
+    accountId: accountIdForApi,
+    onLinksUpdated: (links) => setPublicLinks(links),
+    onMessage: setDownloadMessage,
+    onError: setDownloadMessage,
+    copySuccessMessage: t({
+      en: "Public link copied.",
+      fr: "Lien public copié.",
+      de: "Öffentlicher Link kopiert.",
+    }),
+  });
 
   useEffect(() => {
     setActiveTab(requestedObjectTab);
@@ -388,18 +400,6 @@ export default function PortalObjectDetailPage() {
     setPublicLinkDialogOpen(false);
     setLinkExpiration("");
   };
-  const copyPath = async () => {
-    if (!navigator.clipboard) {
-      setDownloadMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(object.path);
-      setDownloadMessage(t({ en: "File location copied.", fr: "Emplacement du fichier copié.", de: "Dateispeicherort kopiert." }));
-    } catch {
-      setDownloadMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
-    }
-  };
   const handleCreatePublicLink = async () => {
     if (!accountIdForApi || !space || linkBusy || !canCreatePublicLink) return;
     setLinkBusy(true);
@@ -421,35 +421,21 @@ export default function PortalObjectDetailPage() {
       setLinkBusy(false);
     }
   };
-  const handleRevokePublicLink = (link: PortalPublicLink) => {
-    if (!accountIdForApi || !space || linkBusy) return;
-    setPendingAction({ type: "revoke-public-link", link });
-  };
-  const copyPublicLink = async (link: PortalPublicLink) => {
-    setDownloadMessage(null);
+  const copyPath = async () => {
+    if (!navigator.clipboard) {
+      setDownloadMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
+      return;
+    }
     try {
-      await copyTextToClipboard(link.url);
-      setDownloadMessage(t({ en: "Public link copied.", fr: "Lien public copié.", de: "Öffentlicher Link kopiert." }));
+      await navigator.clipboard.writeText(object.path);
+      setDownloadMessage(t({ en: "File location copied.", fr: "Emplacement du fichier copié.", de: "Dateispeicherort kopiert." }));
     } catch {
       setDownloadMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
     }
   };
-  const confirmRevokePublicLink = async (link: PortalPublicLink) => {
-    if (!accountIdForApi || !space || linkBusy) return;
-    setLinkBusy(true);
-    setDownloadMessage(null);
-    try {
-      const links = await revokePortalStorageSpacePublicLink(accountIdForApi, space.id, link.id);
-      setPublicLinks(links);
-      setDownloadMessage(t({ en: "Public link revoked.", fr: "Lien public révoqué.", de: "Öffentlicher Link widerrufen." }));
-      setPendingAction(null);
-    } catch (err) {
-      console.error(err);
-      setDownloadMessage(extractApiError(err, t({ en: "Unable to revoke public link.", fr: "Impossible de révoquer le lien public.", de: "Öffentlicher Link kann nicht widerrufen werden." })));
-      setPendingAction(null);
-    } finally {
-      setLinkBusy(false);
-    }
+  const handleRevokePublicLink = (link: PortalPublicLink) => {
+    if (!accountIdForApi || !space || busyPublicLinkId != null) return;
+    setPendingAction({ type: "revoke-public-link", link });
   };
   const handleDownload = async () => {
     if (!accountIdForApi || downloading) return;
@@ -564,50 +550,6 @@ export default function PortalObjectDetailPage() {
     }
   };
   const publicLinksTableStatus = publicLinks.length === 0 ? "empty" : "ready";
-  const publicLinkColumns: DataTableColumn<PortalPublicLink>[] = [
-    {
-      id: "file",
-      label: t({ en: "File", fr: "Fichier", de: "Datei" }),
-      primary: true,
-      render: (link) => link.object_name,
-    },
-    {
-      id: "status",
-      label: t({ en: "Status", fr: "Statut", de: "Status" }),
-      render: (link) => <UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{portalPublicLinkStatusLabel(link.status, t)}</UiBadge>,
-    },
-    {
-      id: "expiration",
-      label: t({ en: "Expiration", fr: "Expiration", de: "Ablauf" }),
-      render: (link) => (link.expires_at ? portalDateTimeLabel(link.expires_at, locale) : "-"),
-    },
-    {
-      id: "link",
-      label: t({ en: "Link", fr: "Lien", de: "Link" }),
-      cellClassName: "max-w-[260px] truncate text-primary dark:text-primary-200",
-      render: (link) => link.url,
-    },
-    {
-      id: "action",
-      label: t({ en: "Action", fr: "Action", de: "Aktion" }),
-      align: "right",
-      mobileRole: "actions",
-      render: (link) => (
-        <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
-          {link.status === "Active" ? (
-            <>
-              <button type="button" onClick={() => copyPublicLink(link)} className={tableActionButtonClasses}>
-                {t({ en: "Copy link", fr: "Copier le lien", de: "Link kopieren" })}
-              </button>
-              <button type="button" onClick={() => handleRevokePublicLink(link)} className={tableDeleteActionClasses}>
-                {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
-              </button>
-            </>
-          ) : null}
-        </div>
-      ),
-    },
-  ];
 
   return (
     <PageShell
@@ -842,15 +784,13 @@ export default function PortalObjectDetailPage() {
               </div>
             ) : null}
             {space.role === "Manager" ? (
-              <DataTableShell
-                columns={publicLinkColumns}
-                rows={publicLinks}
-                rowKey={(link) => link.id}
+              <PortalPublicLinksTable
+                links={publicLinks}
                 status={publicLinksTableStatus}
-                loadingMessage={t({ en: "Loading public links...", fr: "Chargement des liens publics...", de: "Öffentliche Links werden geladen..." })}
-                errorMessage={t({ en: "Unable to load public links.", fr: "Impossible de charger les liens publics.", de: "Öffentliche Links können nicht geladen werden." })}
+                busyLinkId={busyPublicLinkId}
+                onCopy={copyPublicLink}
+                onRevoke={handleRevokePublicLink}
                 emptyMessage={t({ en: "No public links for this file.", fr: "Aucun lien public pour ce fichier.", de: "Keine öffentlichen Links für diese Datei." })}
-                responsiveCards
               />
             ) : null}
           </UiCard>
@@ -1029,68 +969,29 @@ export default function PortalObjectDetailPage() {
       ) : null}
 
       {publicLinkDialogOpen ? (
-        <Modal
-          title={t({ en: "Create public link", fr: "Créer un lien public", de: "Öffentlichen Link erstellen" })}
+        <PortalPublicLinkCreateDialog
+          fileName={object.name || objectName(object.path)}
+          path={object.path}
+          spaceName={space.name}
+          expiration={linkExpiration}
+          busy={linkBusy}
+          canCreate={canCreatePublicLink}
+          onExpirationChange={setLinkExpiration}
           onClose={closePublicLinkDialog}
-          closeOnBackdropClick={!linkBusy}
-          closeOnEscape={!linkBusy}
-        >
-          <div className="space-y-4">
-            <dl className="grid gap-3 text-xs">
-              <div className="grid grid-cols-[110px_1fr] gap-3">
-                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "File", fr: "Fichier", de: "Datei" })}</dt>
-                <dd className={cx("min-w-0 break-all font-bold", uiTitleTextClass)}>{object.name || objectName(object.path)}</dd>
-              </div>
-              <div className="grid grid-cols-[110px_1fr] gap-3">
-                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</dt>
-                <dd className={cx("min-w-0 font-bold", uiTitleTextClass)}>{space.name}</dd>
-              </div>
-              <div className="grid grid-cols-[110px_1fr] gap-3">
-                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Path", fr: "Chemin", de: "Pfad" })}</dt>
-                <dd className="min-w-0 break-all font-mono text-[11px]">{object.path}</dd>
-              </div>
-            </dl>
-            <UiInput
-              type="datetime-local"
-              label={t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}
-              size="compact"
-              className="h-9"
-              value={linkExpiration}
-              disabled={linkBusy}
-              onChange={(event) => setLinkExpiration(event.target.value)}
-              aria-label={t({ en: "Public link expiration", fr: "Expiration du lien public", de: "Ablauf des öffentlichen Links" })}
-            />
-            <div className="flex flex-wrap justify-end gap-2">
-              <UiButton variant="secondary" onClick={closePublicLinkDialog} disabled={linkBusy}>
-                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
-              </UiButton>
-              <UiButton onClick={handleCreatePublicLink} loading={linkBusy} disabled={!canCreatePublicLink || linkBusy}>
-                {linkBusy
-                  ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
-                  : t({ en: "Create link", fr: "Créer le lien", de: "Link erstellen" })}
-              </UiButton>
-            </div>
-          </div>
-        </Modal>
+          onCreate={handleCreatePublicLink}
+        />
       ) : null}
 
       {pendingAction?.type === "revoke-public-link" ? (
-        <ConfirmActionDialog
-          title={t({ en: "Revoke public link", fr: "Révoquer le lien public", de: "Öffentlichen Link widerrufen" })}
-          description={t({ en: "Confirm that you want to revoke this public link.", fr: "Confirmez que vous voulez révoquer ce lien public.", de: "Bestätigen Sie, dass Sie diesen öffentlichen Link widerrufen möchten." })}
-          confirmLabel={t({ en: "Revoke link", fr: "Révoquer le lien", de: "Link widerrufen" })}
-          loading={linkBusy}
-          details={[
-            { label: t({ en: "File", fr: "Fichier", de: "Datei" }), value: pendingAction.link.object_name },
-            { label: t({ en: "Link", fr: "Lien", de: "Link" }), value: pendingAction.link.url, mono: true },
-          ]}
-          impacts={[
-            t({ en: "Anyone using this URL loses access immediately.", fr: "Toute personne utilisant cette URL perd immédiatement l'accès.", de: "Alle, die diese URL verwenden, verlieren sofort den Zugriff." }),
-            t({ en: "The file remains in the space.", fr: "Le fichier reste dans l'espace.", de: "Die Datei bleibt im Bereich." }),
-            t({ en: "You can create a new public link later if sharing is still allowed.", fr: "Vous pourrez créer un nouveau lien public plus tard si le partage reste autorisé.", de: "Sie können später einen neuen öffentlichen Link erstellen, wenn Freigaben weiter erlaubt sind." }),
-          ]}
+        <PortalPublicLinkRevokeDialog
+          link={pendingAction.link}
+          loading={busyPublicLinkId === pendingAction.link.id}
           onCancel={() => setPendingAction(null)}
-          onConfirm={() => confirmRevokePublicLink(pendingAction.link)}
+          onConfirm={() =>
+            void revokePublicLink(pendingAction.link).finally(() =>
+              setPendingAction(null),
+            )
+          }
         />
       ) : null}
     </PageShell>

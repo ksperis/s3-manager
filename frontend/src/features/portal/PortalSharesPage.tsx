@@ -12,12 +12,10 @@ import {
 import { Link, useSearchParams } from "react-router-dom";
 import {
   listPortalStorageSpacePublicLinks,
-  revokePortalStorageSpacePublicLink,
   type PortalCollaborator,
   type PortalPublicLink,
 } from "../../api/portal";
 import { createPortalRequest } from "../../api/portalRequests";
-import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
@@ -25,10 +23,7 @@ import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageShell from "../../components/PageShell";
 import Modal from "../../components/Modal";
-import {
-  tableActionButtonClasses,
-  tableDeleteActionClasses,
-} from "../../components/tableActionClasses";
+import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
@@ -46,8 +41,9 @@ import {
 } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
-import { copyTextToClipboard } from "../../utils/clipboard";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
+import PortalPublicLinkRevokeDialog from "./PortalPublicLinkRevokeDialog";
+import PortalPublicLinksTable from "./PortalPublicLinksTable";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import {
   storageSpacePath,
@@ -57,13 +53,12 @@ import {
   portalAccessSourceLabel,
   portalAccountRoleLabel,
   portalDateLabel,
-  portalPublicLinkStatusLabel,
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import { usePortalPublicLinkActions } from "./usePortalPublicLinkActions";
 
 type CollaboratorsViewTab = "members" | "links";
 type PendingShareAction = { type: "revoke-public-link"; link: PortalPublicLink };
-type PublicLinkRow = PortalPublicLink & { rowKey: string };
 
 function CollaboratorsInventory({
   collaborators,
@@ -278,7 +273,7 @@ function CollaboratorsInventory({
 }
 
 export default function PortalSharesPage() {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeViewTab, setActiveViewTab] = useState<CollaboratorsViewTab>(
     searchParams.get("view") === "links" ? "links" : "members",
@@ -288,7 +283,6 @@ export default function PortalSharesPage() {
   const [selectedLinkSpaceId, setSelectedLinkSpaceId] = useState("");
   const [collaboratorQuery, setCollaboratorQuery] = useState("");
   const [sharesMessage, setSharesMessage] = useState<string | null>(null);
-  const [busyShareId, setBusyShareId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingShareAction | null>(
     null,
   );
@@ -329,6 +323,26 @@ export default function PortalSharesPage() {
   const selectedPublicLinkSpace =
     activeManagedTeamSpaces.find((space) => space.id === selectedLinkSpaceId) ??
     null;
+  const updateLinksAfterRevoke = useCallback(
+    (updated: PortalPublicLink[], link: PortalPublicLink) =>
+      setPublicLinks((current) => [
+        ...current.filter(
+          (item) => item.storage_space_id !== link.storage_space_id,
+        ),
+        ...updated,
+      ]),
+    [],
+  );
+  const {
+    busyLinkId: busyPublicLinkId,
+    copyLink: copyPublicLink,
+    revokeLink: revokePublicLink,
+  } = usePortalPublicLinkActions({
+    accountId: accountIdForApi,
+    onLinksUpdated: updateLinksAfterRevoke,
+    onMessage: setSharesMessage,
+    onError: setSharesError,
+  });
 
   useEffect(() => {
     const requestedSpaceId = searchParams.get("space_id");
@@ -431,72 +445,14 @@ export default function PortalSharesPage() {
     }
   };
 
-  const copyPublicLink = useCallback(
-    async (link: PortalPublicLink) => {
-      setSharesMessage(null);
-      setSharesError(null);
-      try {
-        await copyTextToClipboard(link.url);
-        setSharesMessage(
-          t({ en: "Link copied.", fr: "Lien copié.", de: "Link kopiert." }),
-        );
-      } catch {
-        setSharesMessage(
-          t({
-            en: "Clipboard is unavailable in this browser.",
-            fr: "Le presse-papiers est indisponible dans ce navigateur.",
-            de: "Die Zwischenablage ist in diesem Browser nicht verfügbar.",
-          }),
-        );
-      }
-    },
-    [t],
-  );
-
-  const confirmRevokePublicLink = async (link: PortalPublicLink) => {
-    if (!accountIdForApi) return;
-    setBusyShareId(`public-link-${link.id}`);
-    setSharesError(null);
-    try {
-      const updated = await revokePortalStorageSpacePublicLink(
-        accountIdForApi,
-        link.storage_space_id,
-        link.id,
-      );
-      setPublicLinks((current) => [
-        ...current.filter(
-          (item) => item.storage_space_id !== link.storage_space_id,
-        ),
-        ...updated,
-      ]);
-      setPendingAction(null);
-    } catch (err) {
-      console.error(err);
-      setSharesError(
-        extractApiError(
-          err,
-          t({
-            en: "Unable to revoke public link.",
-            fr: "Impossible de révoquer le lien public.",
-            de: "Öffentlicher Link kann nicht widerrufen werden.",
-          }),
-        ),
-      );
-      setPendingAction(null);
-    } finally {
-      setBusyShareId(null);
-    }
-  };
-
-  const publicLinkRows = useMemo<PublicLinkRow[]>(
+  const publicLinkRows = useMemo(
     () =>
       publicLinks
         .filter(
           (link) =>
             !selectedLinkSpaceId ||
             link.storage_space_id === selectedLinkSpaceId,
-        )
-        .map((link) => ({ ...link, rowKey: String(link.id) })),
+        ),
     [publicLinks, selectedLinkSpaceId],
   );
   const activePublicLinkCount = publicLinkRows.filter(
@@ -504,72 +460,6 @@ export default function PortalSharesPage() {
   ).length;
   const publicLinksTableStatus =
     publicLinkRows.length === 0 ? "empty" : "ready";
-  const publicLinkColumns = useMemo<DataTableColumn<PublicLinkRow>[]>(
-    () => [
-      {
-        id: "space",
-        label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
-        primary: true,
-        render: (link) => link.storage_space_name,
-      },
-      {
-        id: "file",
-        label: t({ en: "File", fr: "Fichier", de: "Datei" }),
-        render: (link) => link.object_name,
-      },
-      {
-        id: "status",
-        label: t({ en: "Status", fr: "Statut", de: "Status" }),
-        render: (link) => (
-          <UiBadge tone={link.status === "Active" ? "success" : "neutral"}>
-            {portalPublicLinkStatusLabel(link.status, t)}
-          </UiBadge>
-        ),
-      },
-      {
-        id: "expires",
-        label: t({ en: "Expires", fr: "Expire", de: "Läuft ab" }),
-        render: (link) =>
-          link.expires_at ? portalDateLabel(link.expires_at, locale) : "-",
-      },
-      {
-        id: "url",
-        label: t({ en: "URL", fr: "URL", de: "URL" }),
-        cellClassName:
-          "max-w-[260px] truncate text-primary dark:text-primary-200",
-        render: (link) => link.url,
-      },
-      {
-        id: "action",
-        label: t({ en: "Action", fr: "Action", de: "Aktion" }),
-        align: "right",
-        mobileRole: "actions",
-        render: (link) => (
-          <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
-            <button
-              type="button"
-              onClick={() => copyPublicLink(link)}
-              className={tableActionButtonClasses}
-            >
-              {t({ en: "Copy", fr: "Copier", de: "Kopieren" })}
-            </button>
-            {link.status === "Active" ? (
-              <button
-                type="button"
-                disabled={busyShareId === `public-link-${link.id}`}
-                onClick={() => handleRevokePublicLink(link)}
-                className={tableDeleteActionClasses}
-              >
-                {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
-              </button>
-            ) : null}
-          </div>
-        ),
-      },
-    ],
-    [busyShareId, copyPublicLink, handleRevokePublicLink, locale, t],
-  );
-
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
     loading,
@@ -768,27 +658,21 @@ export default function PortalSharesPage() {
                 </PageBanner>
               )}
             </section>
-            <DataTableShell
-              columns={publicLinkColumns}
-              rows={publicLinkRows}
-              rowKey={(link) => link.rowKey}
+            <PortalPublicLinksTable
+              links={publicLinkRows}
               status={publicLinksTableStatus}
-              loadingMessage={t({
-                en: "Loading external links...",
-                fr: "Chargement des liens externes...",
-                de: "Externe Links werden geladen...",
-              })}
-              errorMessage={t({
-                en: "Unable to load external links.",
-                fr: "Impossible de charger les liens externes.",
-                de: "Externe Links können nicht geladen werden.",
-              })}
+              busyLinkId={busyPublicLinkId}
+              showSpaceColumn
+              showCopyForInactive
+              expirationFormat="date"
+              copyLabel={t({ en: "Copy", fr: "Copier", de: "Kopieren" })}
+              onCopy={copyPublicLink}
+              onRevoke={handleRevokePublicLink}
               emptyMessage={t({
                 en: "No external links in this view.",
                 fr: "Aucun lien externe dans cette vue.",
                 de: "Keine externen Links in dieser Ansicht.",
               })}
-              responsiveCards
             />
             </div>
           </UiCard>
@@ -855,57 +739,15 @@ export default function PortalSharesPage() {
       ) : null}
 
       {pendingAction?.type === "revoke-public-link" ? (
-        <ConfirmActionDialog
-          title={t({
-            en: "Revoke public link",
-            fr: "Révoquer le lien public",
-            de: "Öffentlichen Link widerrufen",
-          })}
-          description={t({
-            en: "Confirm that you want to revoke this public link.",
-            fr: "Confirmez que vous voulez révoquer ce lien public.",
-            de: "Bestätigen Sie, dass Sie diesen öffentlichen Link widerrufen möchten.",
-          })}
-          confirmLabel={t({
-            en: "Revoke link",
-            fr: "Révoquer le lien",
-            de: "Link widerrufen",
-          })}
-          loading={busyShareId === `public-link-${pendingAction.link.id}`}
-          details={[
-            {
-              label: t({ en: "File", fr: "Fichier", de: "Datei" }),
-              value: pendingAction.link.object_name,
-            },
-            {
-              label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
-              value: pendingAction.link.storage_space_name,
-            },
-            {
-              label: t({ en: "Link", fr: "Lien", de: "Link" }),
-              value: pendingAction.link.url,
-              mono: true,
-            },
-          ]}
-          impacts={[
-            t({
-              en: "Anyone using this URL loses access immediately.",
-              fr: "Toute personne utilisant cette URL perd immédiatement l'accès.",
-              de: "Alle, die diese URL verwenden, verlieren sofort den Zugriff.",
-            }),
-            t({
-              en: "The file remains in the space.",
-              fr: "Le fichier reste dans l'espace.",
-              de: "Die Datei bleibt im Bereich.",
-            }),
-            t({
-              en: "You can create a new public link later if sharing is still allowed.",
-              fr: "Vous pourrez créer un nouveau lien public plus tard si le partage reste autorisé.",
-              de: "Sie können später einen neuen öffentlichen Link erstellen, wenn Freigaben weiter erlaubt sind.",
-            }),
-          ]}
+        <PortalPublicLinkRevokeDialog
+          link={pendingAction.link}
+          loading={busyPublicLinkId === pendingAction.link.id}
           onCancel={() => setPendingAction(null)}
-          onConfirm={() => confirmRevokePublicLink(pendingAction.link)}
+          onConfirm={() =>
+            void revokePublicLink(pendingAction.link).finally(() =>
+              setPendingAction(null),
+            )
+          }
         />
       ) : null}
     </PageShell>

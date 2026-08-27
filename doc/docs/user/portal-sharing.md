@@ -64,9 +64,11 @@ Portal managers can browse and manage every project space.
 11. Change a direct collaborator's role from the space's **Collaborators** tab.
    Review the person, current role, new role, and space in the confirmation
    dialog before applying the change.
-12. To share outside the project, open **External links** in the global
-   Collaborators page. Filter by space to copy or revoke an existing link. New
-   links are always created from the actions of the file being shared.
+12. To review links for the current Storage Space, open its **External links**
+   tab. Owners and managers can copy any listed link or revoke an active one.
+   Use **External links** in the global Collaborators page for a multi-space
+   inventory. New links are always created from the actions of the file being
+   shared.
 
 ## You are done when
 
