@@ -24,6 +24,7 @@ const QUERY_SECRET_PATTERN =
 const NETWORK_UNAVAILABLE_PATTERN =
   /\b(?:network error|failed to fetch|load failed|connection (?:refused|reset)|econnrefused|enotfound|name or service not known)\b/i;
 const TIMEOUT_MESSAGE_PATTERN = /\b(?:timed? out|timeout)\b/i;
+const RECENT_WEBAUTHN_REQUIRED_DETAIL = "Recent WebAuthn verification required";
 
 export function sanitizeErrorMessage(message: string, fallback = "Unexpected error"): string {
   const trimmed = message.trim();
@@ -40,6 +41,12 @@ export function sanitizeErrorMessage(message: string, fallback = "Unexpected err
 
 export function extractApiError(error: unknown, fallback: string): string {
   return classifyApiError(error, fallback).message;
+}
+
+export function isRecentWebAuthnRequired(error: unknown): boolean {
+  if (!isApiError(error) || error.response?.status !== 403) return false;
+  const detail = (error.response.data as { detail?: unknown } | undefined)?.detail;
+  return detail === RECENT_WEBAUTHN_REQUIRED_DETAIL;
 }
 
 export function classifyApiError(error: unknown, fallback: string): ApiFailure {

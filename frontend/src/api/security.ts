@@ -36,6 +36,7 @@ export type ExternalLinkRequest = {
   created_at: string;
   expires_at: string;
 };
+export type RecentWebAuthnVerification = { mfa_verified_at: string };
 
 export async function listSecurityCredentials(): Promise<SecurityCredential[]> {
   return (await client.get<SecurityCredential[]>("/auth/security/webauthn/credentials")).data;
@@ -45,6 +46,12 @@ export async function beginSecurityPasskey(): Promise<Record<string, unknown> & 
 }
 export async function finishSecurityPasskey(credential: unknown, name: string): Promise<void> {
   await client.post("/auth/security/webauthn/registration/verify", { credential, name });
+}
+export async function beginRecentWebAuthnVerification(): Promise<Record<string, unknown> & { challenge: string }> {
+  return (await client.post<Record<string, unknown> & { challenge: string }>("/auth/security/webauthn/authentication/options")).data;
+}
+export async function finishRecentWebAuthnVerification(credential: unknown): Promise<RecentWebAuthnVerification> {
+  return (await client.post<RecentWebAuthnVerification>("/auth/security/webauthn/authentication/verify", { credential })).data;
 }
 export async function revokeSecurityCredential(id: string): Promise<void> {
   await client.delete(`/auth/security/webauthn/credentials/${encodeURIComponent(id)}`);

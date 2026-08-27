@@ -15,8 +15,10 @@ from app.models.auth import (
     CurrentSessionResponse,
     ExternalIdentityInfo,
     LinkDecisionRequest,
+    RecentWebAuthnVerificationResponse,
     RefreshResponse,
     SessionInfo,
+    WebAuthnAuthenticationRequest,
     WebAuthnCredentialInfo,
     WebAuthnCredentialRequest,
 )
@@ -38,7 +40,7 @@ from app.services.auth_session_service import AuthSessionError, AuthSessionServi
 from app.services.external_identity_user_service import ExternalIdentityUserService
 from app.services.users_service import get_users_service
 from app.services.webauthn_service import WebAuthnSecurityError, WebAuthnService
-from app.utils.request_security import require_trusted_origin
+from app.utils.request_security import client_ip, require_trusted_origin
 
 
 router = APIRouter()
@@ -309,6 +311,58 @@ def list_external_identities(
         )
         for row in rows
     ]
+
+
+@router.post("/security/webauthn/authentication/options")
+def profile_webauthn_authentication_options(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    session = current_auth_session(request, db)
+    try:
+        return WebAuthnService(db).begin_authentication(
+            current_user,
+            binding_sid=session.id,
+        )
+    except WebAuthnSecurityError as exc:
+        raise HTTPException(status_code=400, detail="WebAuthn authentication is unavailable") from exc
+
+
+@router.post(
+    "/security/webauthn/authentication/verify",
+    response_model=RecentWebAuthnVerificationResponse,
+)
+def profile_webauthn_authentication_verify(
+    request: Request,
+    payload: WebAuthnAuthenticationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> RecentWebAuthnVerificationResponse:
+    session = current_auth_session(request, db)
+    try:
+        WebAuthnService(db).finish_authentication(
+            current_user,
+            credential=payload.credential,
+            binding_sid=session.id,
+        )
+    except WebAuthnSecurityError as exc:
+        raise HTTPException(status_code=400, detail="Invalid WebAuthn authentication response") from exc
+    verified_session = AuthSessionService(db).mark_webauthn_verified(session)
+    audit_service.record_action(
+        user=current_user,
+        scope="security",
+        action="webauthn_step_up_success",
+        entity_type="ui_session",
+        entity_id=session.id,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        request_id=request.headers.get("x-request-id"),
+    )
+    return RecentWebAuthnVerificationResponse(
+        mfa_verified_at=verified_session.mfa_verified_at,
+    )
 
 
 @router.delete("/security/external-identities/{identity_id}", status_code=status.HTTP_204_NO_CONTENT)

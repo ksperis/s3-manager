@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/client";
 
-import { classifyApiError, extractApiError, isApiFeatureNotImplemented, sanitizeErrorMessage } from "./apiError";
+import {
+  classifyApiError,
+  extractApiError,
+  isApiFeatureNotImplemented,
+  isRecentWebAuthnRequired,
+  sanitizeErrorMessage,
+} from "./apiError";
 
 describe("extractApiError", () => {
   it("prefers backend detail when available", () => {
@@ -113,5 +119,22 @@ describe("extractApiError", () => {
     expect(isApiFeatureNotImplemented("The request you provided implies functionality that is not implemented.")).toBe(true);
     expect(isApiFeatureNotImplemented("AccessDenied")).toBe(false);
     expect(isApiFeatureNotImplemented(null)).toBe(false);
+  });
+
+  it("detects only the exact recent WebAuthn guard response", () => {
+    const required = new ApiError("Request failed", {
+      response: {
+        status: 403,
+        data: { detail: "Recent WebAuthn verification required" },
+        headers: {},
+      },
+    });
+    const unrelated = new ApiError("Request failed", {
+      response: { status: 403, data: { detail: "Forbidden by policy" }, headers: {} },
+    });
+
+    expect(isRecentWebAuthnRequired(required)).toBe(true);
+    expect(isRecentWebAuthnRequired(unrelated)).toBe(false);
+    expect(isRecentWebAuthnRequired(new Error("Recent WebAuthn verification required"))).toBe(false);
   });
 });

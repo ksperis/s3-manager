@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api/client";
 import ApiTokensPage from "./ApiTokensPage";
 
 const listApiTokensMock = vi.fn();
 const createApiTokenMock = vi.fn();
 const revokeApiTokenMock = vi.fn();
+const beginRecentWebAuthnVerificationMock = vi.fn();
+const finishRecentWebAuthnVerificationMock = vi.fn();
+const authenticatePasskeyMock = vi.fn();
 
 vi.mock("../../api/apiTokens", () => ({
   listApiTokens: (includeRevoked?: boolean) => listApiTokensMock(includeRevoked),
@@ -12,11 +16,33 @@ vi.mock("../../api/apiTokens", () => ({
   revokeApiToken: (...args: unknown[]) => revokeApiTokenMock(...args),
 }));
 
+vi.mock("../../api/security", () => ({
+  beginRecentWebAuthnVerification: (...args: unknown[]) => beginRecentWebAuthnVerificationMock(...args),
+  finishRecentWebAuthnVerification: (...args: unknown[]) => finishRecentWebAuthnVerificationMock(...args),
+}));
+
+vi.mock("../../auth/webauthn", () => ({
+  authenticatePasskey: (...args: unknown[]) => authenticatePasskeyMock(...args),
+}));
+
+function recentWebAuthnRequiredError() {
+  return new ApiError("Request failed", {
+    response: {
+      status: 403,
+      data: { detail: "Recent WebAuthn verification required" },
+      headers: {},
+    },
+  });
+}
+
 describe("ApiTokensPage list states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listApiTokensMock.mockResolvedValue([]);
     revokeApiTokenMock.mockResolvedValue(undefined);
+    beginRecentWebAuthnVerificationMock.mockResolvedValue({ challenge: "challenge" });
+    authenticatePasskeyMock.mockResolvedValue({ id: "credential" });
+    finishRecentWebAuthnVerificationMock.mockResolvedValue({ mfa_verified_at: "2026-08-14T10:00:00Z" });
   });
 
   it("shows the load error once in the table when no rows are available", async () => {
@@ -112,5 +138,96 @@ describe("ApiTokensPage list states", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Revoke token" }));
     await waitFor(() => expect(revokeApiTokenMock).toHaveBeenCalledWith("tok-1"));
+  });
+
+  it("replaces the raw guard error with a passkey banner and reloads the token list", async () => {
+    listApiTokensMock.mockRejectedValueOnce(recentWebAuthnRequiredError());
+
+    render(<ApiTokensPage />);
+
+    expect(await screen.findByText("API tokens are locked. Verify your identity with a passkey to continue.")).toBeInTheDocument();
+    expect(screen.queryByText("Recent WebAuthn verification required")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Verify with passkey" }));
+
+    await waitFor(() => expect(listApiTokensMock).toHaveBeenCalledTimes(2));
+    expect(beginRecentWebAuthnVerificationMock).toHaveBeenCalledOnce();
+    expect(finishRecentWebAuthnVerificationMock).toHaveBeenCalledOnce();
+    expect(await screen.findByText("No API tokens.")).toBeInTheDocument();
+  });
+
+  it("keeps the create form and retries token creation once after passkey verification", async () => {
+    createApiTokenMock
+      .mockRejectedValueOnce(recentWebAuthnRequiredError())
+      .mockResolvedValueOnce({
+        access_token: "step-up-secret",
+        api_token: {
+          id: "tok-step-up",
+          name: "step-up-automation",
+          scopes: ["profile:read"],
+          created_at: "2026-03-01T00:00:00.000Z",
+          expires_at: "2099-06-01T00:00:00.000Z",
+          last_used_at: null,
+          revoked_at: null,
+        },
+      });
+
+    render(<ApiTokensPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Create token" }));
+    const createDialog = screen.getByRole("dialog", { name: "Create API token" });
+    fireEvent.change(within(createDialog).getByPlaceholderText("ansible-production"), { target: { value: "step-up-automation" } });
+    fireEvent.click(within(createDialog).getByRole("button", { name: "Create token" }));
+
+    const verificationDialog = await screen.findByRole("dialog", { name: "Verify with passkey" });
+    fireEvent.click(within(verificationDialog).getByRole("button", { name: "Verify with passkey" }));
+
+    await waitFor(() => expect(createApiTokenMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("New API token: step-up-automation")).toBeInTheDocument();
+  });
+
+  it("retries a confirmed revocation once after passkey verification", async () => {
+    listApiTokensMock.mockResolvedValue([
+      {
+        id: "tok-step-up-revoke",
+        name: "deployment-bot",
+        scopes: ["manager:read"],
+        created_at: "2026-03-01T00:00:00.000Z",
+        expires_at: "2099-06-01T00:00:00.000Z",
+        last_used_at: null,
+        revoked_at: null,
+      },
+    ]);
+    revokeApiTokenMock
+      .mockRejectedValueOnce(recentWebAuthnRequiredError())
+      .mockResolvedValueOnce(undefined);
+
+    render(<ApiTokensPage />);
+    await screen.findByText("deployment-bot");
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Revoke API token?" })).getByRole("button", { name: "Revoke token" }));
+
+    const verificationDialog = await screen.findByRole("dialog", { name: "Verify with passkey" });
+    fireEvent.click(within(verificationDialog).getByRole("button", { name: "Verify with passkey" }));
+
+    await waitFor(() => expect(revokeApiTokenMock).toHaveBeenCalledTimes(2));
+    expect(revokeApiTokenMock).toHaveBeenNthCalledWith(2, "tok-step-up-revoke");
+  });
+
+  it("surfaces a second guard response without opening another verification prompt", async () => {
+    createApiTokenMock
+      .mockRejectedValueOnce(recentWebAuthnRequiredError())
+      .mockRejectedValueOnce(recentWebAuthnRequiredError());
+
+    render(<ApiTokensPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Create token" }));
+    const createDialog = screen.getByRole("dialog", { name: "Create API token" });
+    fireEvent.change(within(createDialog).getByPlaceholderText("ansible-production"), { target: { value: "still-locked" } });
+    fireEvent.click(within(createDialog).getByRole("button", { name: "Create token" }));
+    const verificationDialog = await screen.findByRole("dialog", { name: "Verify with passkey" });
+    fireEvent.click(within(verificationDialog).getByRole("button", { name: "Verify with passkey" }));
+
+    expect(await within(createDialog).findByText("Recent WebAuthn verification required")).toBeInTheDocument();
+    expect(createApiTokenMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("dialog", { name: "Verify with passkey" })).not.toBeInTheDocument();
   });
 });

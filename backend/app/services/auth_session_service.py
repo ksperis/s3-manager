@@ -213,6 +213,14 @@ class AuthSessionService:
     def validate_csrf(self, session: AuthSession, token: Optional[str]) -> bool:
         return bool(token) and secrets.compare_digest(hash_refresh_token(token), session.csrf_token_hash)
 
+    def mark_webauthn_verified(self, session: AuthSession) -> AuthSession:
+        session.auth_type = "webauthn"
+        session.mfa_verified_at = utcnow()
+        self.db.add(session)
+        self.db.commit()
+        self.db.refresh(session)
+        return session
+
     def revoke_session(self, session_id: str, reason: str) -> None:
         session = self.db.query(AuthSession).filter(AuthSession.id == session_id).first()
         if session is None:

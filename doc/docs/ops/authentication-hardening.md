@@ -22,6 +22,13 @@ Browser requests must never send a Bearer token. A request containing both a UI 
 
 After enrollment, ten recovery codes are displayed once. Store them outside the browser. Each code is hashed in the database and can be consumed once. Passkey changes, recovery-code regeneration, API-token management, external-identity revocation or decisions, and administrative session revocation require a WebAuthn-authenticated session from the last `MFA_RECENT_MINUTES` (15 minutes by default). Revoking an external identity invalidates every UI session and API token owned by that user.
 
+When that freshness window expires, the Profile Security and API tokens surfaces
+offer an in-session passkey verification. The challenge is bound to the current
+UI session; successful verification updates that session's `mfa_verified_at`
+without issuing new access or refresh tokens, then retries the protected request
+once. `MFA_RECENT_MINUTES` remains the backend source of truth, and recovery
+codes do not satisfy this WebAuthn freshness requirement.
+
 Emergency recovery is restricted to the sole active superadmin:
 
 ```bash

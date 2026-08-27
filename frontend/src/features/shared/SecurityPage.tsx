@@ -22,16 +22,20 @@ import {
 } from "../../api/security";
 import { createPasskey } from "../../auth/webauthn";
 import { useSession } from "../../auth/SessionProvider";
+import {
+  isRecentWebAuthnVerificationCancelled,
+  useRecentWebAuthnStepUp,
+} from "../../auth/useRecentWebAuthnStepUp";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiMutedTextClass, uiPanelMutedClass } from "../../components/ui/styles";
-import { extractApiError } from "../../utils/apiError";
+import { extractApiError, isRecentWebAuthnRequired } from "../../utils/apiError";
 import { isSuperAdminRole } from "../../utils/workspaces";
 
-type LoadStatus = "loading" | "ready" | "error";
+type LoadStatus = "loading" | "ready" | "error" | "verification_required";
 
 type SectionState<T> = {
   data: T;
@@ -84,6 +88,9 @@ function SecuritySectionState({
       </PageBanner>
     );
   }
+  if (status === "verification_required") {
+    return <p className={cx("ui-body", uiMutedTextClass)}>Passkey verification is required to unlock this section.</p>;
+  }
   if (isEmpty) {
     return <p className={cx("ui-body", uiMutedTextClass)}>{emptyLabel}</p>;
   }
@@ -103,6 +110,13 @@ export default function SecurityPage() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const {
+    runWithStepUp,
+    verificationDialog,
+    verificationError,
+    verifying,
+    verifyNow,
+  } = useRecentWebAuthnStepUp();
 
   const loadCredentials = useCallback(async () => {
     setCredentials((current) => ({ ...current, status: "loading", error: null }));
@@ -140,6 +154,10 @@ export default function SecurityPage() {
     try {
       setAdminSessions({ data: await listAdminSessions(), status: "ready", error: null });
     } catch (error) {
+      if (isRecentWebAuthnRequired(error)) {
+        setAdminSessions({ data: [], status: "verification_required", error: null });
+        return;
+      }
       setAdminSessions({ data: [], status: "error", error: extractApiError(error, "Unable to load active sessions.") });
     }
   }, [superAdmin]);
@@ -153,6 +171,10 @@ export default function SecurityPage() {
     try {
       setRequests({ data: await listExternalLinkRequests(), status: "ready", error: null });
     } catch (error) {
+      if (isRecentWebAuthnRequired(error)) {
+        setRequests({ data: [], status: "verification_required", error: null });
+        return;
+      }
       setRequests({ data: [], status: "error", error: extractApiError(error, "Unable to load identity link requests.") });
     }
   }, [superAdmin]);
@@ -166,15 +188,25 @@ export default function SecurityPage() {
     setActionError(null);
     setActionMessage(null);
     try {
-      await action();
+      await runWithStepUp(action);
       if (successMessage) setActionMessage(successMessage);
     } catch (error) {
-      setActionError(extractApiError(error, "Unable to update security settings."));
+      if (!isRecentWebAuthnVerificationCancelled(error)) {
+        setActionError(extractApiError(error, "Unable to update security settings."));
+      }
       throw error;
     } finally {
       setPendingAction(null);
     }
-  }, []);
+  }, [runWithStepUp]);
+
+  const verificationRequired =
+    adminSessions.status === "verification_required" || requests.status === "verification_required";
+
+  const unlockProtectedSections = async () => {
+    if (!(await verifyNow())) return;
+    await Promise.all([loadAdminSessions(), loadRequests()]);
+  };
 
   const signOut = useCallback(() => {
     clear();
@@ -287,6 +319,21 @@ export default function SecurityPage() {
 
   return (
     <div className="space-y-4">
+      {verificationRequired ? (
+        <PageBanner tone={verificationError ? "error" : "warning"}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{verificationError ?? "Sensitive security data is locked. Verify your identity with a passkey to continue."}</span>
+            <UiButton
+              variant="secondary"
+              size="xs"
+              onClick={() => void unlockProtectedSections()}
+              loading={verifying}
+            >
+              Verify with passkey
+            </UiButton>
+          </div>
+        </PageBanner>
+      ) : null}
       {actionError ? <PageBanner tone="error">{actionError}</PageBanner> : null}
       {actionMessage ? <PageBanner tone="success">{actionMessage}</PageBanner> : null}
 
@@ -450,6 +497,7 @@ export default function SecurityPage() {
           onConfirm={() => void confirmPendingAction()}
         />
       ) : null}
+      {verificationDialog}
     </div>
   );
 }

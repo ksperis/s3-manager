@@ -64,6 +64,10 @@ class WebAuthnAuthenticationRequest(ApiModel):
     credential: dict[str, Any]
 
 
+class RecentWebAuthnVerificationResponse(ApiModel):
+    mfa_verified_at: datetime
+
+
 class RecoveryCodeRequest(ApiModel):
     code: str = Field(min_length=8, max_length=128)
 

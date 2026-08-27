@@ -61,6 +61,14 @@ require recent WebAuthn verification. Superadmins use `/api/auth/admin/sessions`
 and `/api/auth/external-link-requests` to revoke sessions and decide manual
 federated-identity links.
 
+An authenticated UI user can renew recent WebAuthn verification without
+creating a new session through
+`POST /api/auth/security/webauthn/authentication/options` followed by
+`POST /api/auth/security/webauthn/authentication/verify`. Both calls require the
+normal trusted-origin and session-bound CSRF checks. The challenge is bound to
+the current session, and the verify response contains the updated
+`mfa_verified_at` timestamp.
+
 ## Audit and Portal access-log APIs
 
 - `/api/admin/audit/logs` keeps the existing model and pagination contract but

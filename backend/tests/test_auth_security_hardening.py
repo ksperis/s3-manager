@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +14,7 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlalchemy import text
 from starlette.requests import Request
+from webauthn.helpers import bytes_to_base64url
 
 from app.core.config import Settings, get_settings
 from app.core.security import (
@@ -21,7 +23,7 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.db import AuthSession, ExternalIdentity, RefreshToken, S3Session, User, UserRole, WebAuthnCredential
+from app.db import AuthChallenge, AuthSession, ExternalIdentity, RefreshToken, S3Session, User, UserRole, WebAuthnCredential
 from app.db import AuditLog
 from app.main import app
 from app.models.user import UserUpdate
@@ -32,6 +34,7 @@ from app.services.auth_session_service import AuthSessionError, AuthSessionServi
 from app.services.external_identity_user_service import ExternalIdentityLinkRequiredError
 from app.services.oidc_service import OIDCStateError
 from app.services.users_service import UsersService
+from app.services.webauthn_service import WebAuthnService
 from app.utils.request_security import client_ip
 from app.utils.time import utcnow
 from tests.auth_test_utils import authenticate_ui_client, clear_ui_client, trusted_origin_headers
@@ -201,6 +204,158 @@ def test_enrolled_passkey_requires_mfa_for_a_non_admin_login(auth_client, db_ses
     assert response.status_code == 200
     assert response.json()["status"] == "mfa_required"
     assert "access_token" not in response.text
+
+
+def test_profile_webauthn_step_up_renews_current_session_without_issuing_tokens(
+    auth_client,
+    db_session,
+    monkeypatch,
+):
+    superadmin = _user(
+        db_session,
+        email="step-up@example.com",
+        role=UserRole.UI_SUPERADMIN.value,
+    )
+    credential_id = bytes_to_base64url(b"step-up-credential")
+    db_session.add(
+        WebAuthnCredential(
+            id="step-up-passkey",
+            user_id=superadmin.id,
+            credential_id=credential_id,
+            public_key=bytes_to_base64url(b"step-up-public-key"),
+            sign_count=0,
+            transports_json="[]",
+            name="Step-up passkey",
+        )
+    )
+    credentials = authenticate_ui_client(auth_client, db_session, superadmin)
+    credentials.session.auth_type = "recovery_code"
+    credentials.session.mfa_verified_at = utcnow() - timedelta(minutes=get_settings().mfa_recent_minutes + 1)
+    db_session.add(credentials.session)
+    db_session.commit()
+    refresh_token_ids = {
+        row.id
+        for row in db_session.query(RefreshToken)
+        .filter(RefreshToken.auth_session_id == credentials.session.id)
+        .all()
+    }
+
+    denied = auth_client.get("/api/auth/admin/sessions")
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == "Recent WebAuthn verification required"
+
+    headers = trusted_origin_headers(csrf_token=credentials.csrf_token)
+    options = auth_client.post(
+        "/api/auth/security/webauthn/authentication/options",
+        headers=headers,
+    )
+    assert options.status_code == 200
+    challenge = db_session.query(AuthChallenge).filter(AuthChallenge.consumed_at.is_(None)).one()
+    assert challenge.binding_sid == credentials.session.id
+
+    monkeypatch.setattr(
+        "app.services.webauthn_service.verify_authentication_response",
+        lambda **_kwargs: SimpleNamespace(new_sign_count=1),
+    )
+    verified = auth_client.post(
+        "/api/auth/security/webauthn/authentication/verify",
+        json={"credential": {"id": credential_id}},
+        headers=headers,
+    )
+
+    assert verified.status_code == 200
+    assert verified.headers.get_list("set-cookie") == []
+    db_session.refresh(credentials.session)
+    assert credentials.session.auth_type == "webauthn"
+    assert credentials.session.mfa_verified_at.isoformat().replace("+00:00", "Z") == verified.json()["mfa_verified_at"]
+    assert WebAuthnService(db_session).is_recent(credentials.session) is True
+    assert {
+        row.id
+        for row in db_session.query(RefreshToken)
+        .filter(RefreshToken.auth_session_id == credentials.session.id)
+        .all()
+    } == refresh_token_ids
+    assert auth_client.get("/api/auth/admin/sessions").status_code == 200
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "webauthn_step_up_success").one()
+    assert audit.entity_id == credentials.session.id
+
+
+def test_profile_webauthn_step_up_rejects_missing_csrf_wrong_session_and_replay(
+    auth_client,
+    db_session,
+    monkeypatch,
+):
+    user = _user(db_session, email="step-up-binding@example.com")
+    credential_id = bytes_to_base64url(b"step-up-binding-credential")
+    db_session.add(
+        WebAuthnCredential(
+            id="step-up-binding-passkey",
+            user_id=user.id,
+            credential_id=credential_id,
+            public_key=bytes_to_base64url(b"step-up-binding-public-key"),
+            sign_count=0,
+            transports_json="[]",
+            name="Binding passkey",
+        )
+    )
+    first = authenticate_ui_client(auth_client, db_session, user, mfa_verified=False)
+    first_headers = trusted_origin_headers(csrf_token=first.csrf_token)
+
+    missing_csrf = auth_client.post(
+        "/api/auth/security/webauthn/authentication/options",
+        headers=trusted_origin_headers(),
+    )
+    assert missing_csrf.status_code == 403
+
+    options = auth_client.post(
+        "/api/auth/security/webauthn/authentication/options",
+        headers=first_headers,
+    )
+    assert options.status_code == 200
+    second = authenticate_ui_client(auth_client, db_session, user, mfa_verified=False)
+    second_headers = trusted_origin_headers(csrf_token=second.csrf_token)
+    wrong_session = auth_client.post(
+        "/api/auth/security/webauthn/authentication/verify",
+        json={"credential": {"id": credential_id}},
+        headers=second_headers,
+    )
+    assert wrong_session.status_code == 400
+    db_session.refresh(second.session)
+    assert second.session.mfa_verified_at is None
+
+    assert auth_client.post(
+        "/api/auth/security/webauthn/authentication/options",
+        headers=second_headers,
+    ).status_code == 200
+    monkeypatch.setattr(
+        "app.services.webauthn_service.verify_authentication_response",
+        lambda **_kwargs: SimpleNamespace(new_sign_count=1),
+    )
+    valid = auth_client.post(
+        "/api/auth/security/webauthn/authentication/verify",
+        json={"credential": {"id": credential_id}},
+        headers=second_headers,
+    )
+    assert valid.status_code == 200
+    replay = auth_client.post(
+        "/api/auth/security/webauthn/authentication/verify",
+        json={"credential": {"id": credential_id}},
+        headers=second_headers,
+    )
+    assert replay.status_code == 400
+
+
+def test_profile_webauthn_step_up_requires_an_active_passkey(auth_client, db_session):
+    user = _user(db_session, email="step-up-no-passkey@example.com")
+    credentials = authenticate_ui_client(auth_client, db_session, user, mfa_verified=False)
+
+    response = auth_client.post(
+        "/api/auth/security/webauthn/authentication/options",
+        headers=trusted_origin_headers(csrf_token=credentials.csrf_token),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "WebAuthn authentication is unavailable"
 
 
 def test_external_identity_inventory_and_revocation_require_a_recent_passkey(auth_client, db_session):
