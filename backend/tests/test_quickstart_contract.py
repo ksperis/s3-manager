@@ -354,3 +354,18 @@ def test_kind_checksum_uses_busybox_compatible_check_flag():
 
     assert "sha256sum -c" in gitlab_ci
     assert "sha256sum --check" not in gitlab_ci
+
+
+def test_kind_smoke_routes_the_api_through_the_dind_service():
+    gitlab_ci = yaml.safe_load(
+        (REPOSITORY_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+    )
+    smoke_job = gitlab_ci["helm-kind-onboarding-smoke"]
+    smoke_script = (
+        REPOSITORY_ROOT / "ops" / "ci" / "kind-onboarding-smoke.sh"
+    ).read_text(encoding="utf-8")
+
+    assert smoke_job["variables"]["KIND_API_HOST"] == "docker"
+    assert 'apiServerAddress: "0.0.0.0"' in smoke_script
+    assert 'certSANs:' in smoke_script
+    assert '--server="https://${KIND_API_HOST}:${api_port}"' in smoke_script

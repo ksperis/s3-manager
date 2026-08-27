@@ -9,6 +9,7 @@ readonly RELEASE="bucketreef-smoke"
 readonly PUBLIC_HOST="bucketreef.local"
 readonly PUBLIC_ORIGIN="https://${PUBLIC_HOST}"
 readonly FRONTEND_PORT="18080"
+readonly KIND_API_HOST="${KIND_API_HOST:-}"
 
 : "${BACKEND_IMAGE_REPOSITORY:?BACKEND_IMAGE_REPOSITORY is required}"
 : "${FRONTEND_IMAGE_REPOSITORY:?FRONTEND_IMAGE_REPOSITORY is required}"
@@ -59,6 +60,30 @@ load_kind_image() {
       -
 }
 
+configure_kind_api_access() {
+  [[ -n "$KIND_API_HOST" ]] || return 0
+
+  local api_port api_server kube_cluster
+  api_server="$(
+    kubectl config view --raw --minify \
+      -o jsonpath='{.clusters[0].cluster.server}'
+  )"
+  api_port="${api_server##*:}"
+  kube_cluster="$(
+    kubectl config view --raw --minify \
+      -o jsonpath='{.contexts[0].context.cluster}'
+  )"
+
+  if [[ ! "$api_port" =~ ^[0-9]+$ || -z "$kube_cluster" ]]; then
+    printf 'Unable to resolve the Kind API endpoint from kubeconfig.\n' >&2
+    exit 1
+  fi
+
+  kubectl config set-cluster "$kube_cluster" \
+    --server="https://${KIND_API_HOST}:${api_port}" \
+    >/dev/null
+}
+
 if [[ "${KIND_SMOKE_USE_LOCAL_IMAGES:-false}" == "true" ]]; then
   docker image inspect "$BACKEND_IMAGE" "$FRONTEND_IMAGE" >/dev/null
 else
@@ -66,7 +91,28 @@ else
   docker pull "$FRONTEND_IMAGE"
 fi
 docker pull "$POSTGRES_IMAGE"
-kind create cluster --name "$CLUSTER_NAME" --wait 120s
+kind_config_args=()
+if [[ -n "$KIND_API_HOST" ]]; then
+  if [[ ! "$KIND_API_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+    printf 'Invalid KIND_API_HOST: %s\n' "$KIND_API_HOST" >&2
+    exit 1
+  fi
+  cat >"${temporary_directory}/kind-config.yaml" <<EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  apiServerAddress: "0.0.0.0"
+kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      certSANs:
+        - "${KIND_API_HOST}"
+EOF
+  kind_config_args=(--config "${temporary_directory}/kind-config.yaml")
+fi
+kind create cluster --name "$CLUSTER_NAME" --wait 120s "${kind_config_args[@]}"
+configure_kind_api_access
 load_kind_image "$BACKEND_IMAGE"
 load_kind_image "$FRONTEND_IMAGE"
 load_kind_image "$POSTGRES_IMAGE"
