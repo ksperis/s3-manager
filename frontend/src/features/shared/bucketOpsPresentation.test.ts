@@ -5,6 +5,7 @@ import {
   buildBucketUiTagKey,
   computeQuotaUsagePercent,
   csvEscape,
+  formatBucketColumnDetail,
   formatBucketNamesPreview,
   formatOwnerSuspended,
   formatQuotaPercent,
@@ -13,6 +14,7 @@ import {
   getBucketDisplayName,
   getStorageOpsBucketName,
   getStorageOpsContextId,
+  isBucketQuotaConfigured,
   normalizeVersioningStatus,
   ownerFilterFromSearch,
   sanitizeExportFilenamePart,
@@ -42,6 +44,29 @@ describe("bucketOpsPresentation", () => {
     expect(computeQuotaUsagePercent(25, 0)).toBeNull();
     expect(formatQuotaPercent(9.876)).toBe("9.88%");
     expect(formatQuotaUsageValue(25, 100)).toBe("25.0%");
+    expect(isBucketQuotaConfigured(bucket({ quota_max_size_bytes: 1 }))).toBe(true);
+    expect(isBucketQuotaConfigured(bucket({ quota_max_size_bytes: 0, quota_max_objects: null }))).toBe(false);
+  });
+
+  it("formats canonical feature detail values", () => {
+    const details = bucket({
+      column_details: {
+        cors_allowed_methods: ["PUT", " GET ", "PUT"],
+        lifecycle_transition_days: [30, "7", 30],
+        policy_has_conditions: true,
+        policy_statement_count: 3,
+        logging_target_bucket: " logs ",
+        logging_target_prefix: {},
+      },
+    });
+
+    expect(formatBucketColumnDetail(details, "cors_allowed_methods")).toBe("PUT, GET");
+    expect(formatBucketColumnDetail(details, "lifecycle_transition_days")).toBe("7, 30");
+    expect(formatBucketColumnDetail(details, "policy_has_conditions")).toBe("Yes");
+    expect(formatBucketColumnDetail(details, "policy_statement_count")).toBe("3");
+    expect(formatBucketColumnDetail(details, "logging_target_bucket")).toBe("logs");
+    expect(formatBucketColumnDetail(details, "logging_target_prefix")).toBe("-");
+    expect(formatBucketColumnDetail(details, "website_index_document")).toBe("-");
   });
 
   it("formats compact previews and nullable booleans", () => {

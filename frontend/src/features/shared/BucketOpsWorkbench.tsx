@@ -93,6 +93,11 @@ import BucketUiTagSettingsBadge, {
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
+import {
+  buildBucketExportColumns,
+  buildBucketSelectionJsonPayload,
+  serializeBucketSelectionCsv,
+} from "./bucketOpsExportModel";
 import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
@@ -264,7 +269,7 @@ import {
 } from "./bucketBulkPasteModel";
 import {
   buildBucketUiTagKey,
-  csvEscape,
+  formatBucketColumnDetail,
   formatBucketNamesPreview,
   formatOptionalBytes,
   formatOptionalCount,
@@ -277,6 +282,7 @@ import {
   getStorageOpsBucketName,
   getStorageOpsContextId,
   getTagColors,
+  isBucketQuotaConfigured,
   isStatsSortField,
   normalizeBucketName,
   normalizeVersioningStatus,
@@ -316,9 +322,6 @@ type OrphanedTagBucketDetail = {
   tenant: string | null;
   tags: string[];
 };
-
-const bucketUiTagDisplayLabel = (tag: BucketUiTagDefinition, showVisibility: boolean) =>
-  showVisibility ? `${tag.label} (${tag.visibility === "shared" ? "Shared" : "Private"})` : tag.label;
 
 type BucketOpsWorkbenchProps = {
   mode: BucketOpsMode;
@@ -1715,209 +1718,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     return bucketsByName;
   };
 
-  const buildExportColumns = (columnIds: ColumnId[]) => {
-    const featureColumnById = new Map(featureColumnOptions.map((column) => [column.id, column]));
-    const exportColumns: Array<{ id: string; label: string; getValue: (bucket: CephAdminBucket) => string }> = [
-      { id: "name", label: "Name", getValue: (bucket) => getBucketDisplayName(bucket, useExplicitBucketName) },
-    ];
-
-    columnIds.forEach((col) => {
-      if (col === "context_name") {
-        exportColumns.push({
-          id: col,
-          label: "Context",
-          getValue: (bucket) => ((bucket as { context_name?: string | null }).context_name ?? "-"),
-        });
-        return;
-      }
-      if (col === "endpoint_name") {
-        exportColumns.push({
-          id: col,
-          label: "Endpoint",
-          getValue: (bucket) => ((bucket as { endpoint_name?: string | null }).endpoint_name ?? "-"),
-        });
-        return;
-      }
-      if (col === "context_kind") {
-        exportColumns.push({
-          id: col,
-          label: "Kind",
-          getValue: (bucket) => {
-            const kind = (bucket as { context_kind?: string | null }).context_kind;
-            if (kind === "account") return "Account";
-            if (kind === "connection") return "Connection";
-            if (kind === "s3_user") return "S3 user";
-            return "-";
-          },
-        });
-        return;
-      }
-      if (col === "tenant") {
-        exportColumns.push({ id: col, label: "Tenant", getValue: (bucket) => bucket.tenant ?? "-" });
-        return;
-      }
-      if (col === "owner") {
-        exportColumns.push({ id: col, label: "Owner", getValue: (bucket) => bucket.owner ?? "-" });
-        return;
-      }
-      if (col === "owner_name") {
-        exportColumns.push({ id: col, label: "Owner name", getValue: (bucket) => bucket.owner_name ?? "-" });
-        return;
-      }
-      if (col === "owner_suspended") {
-        exportColumns.push({
-          id: col,
-          label: "Owner suspended",
-          getValue: (bucket) => formatOwnerSuspended(bucket.owner_suspended),
-        });
-        return;
-      }
-      if (col === "owner_used_bytes") {
-        exportColumns.push({
-          id: col,
-          label: "Owner used",
-          getValue: (bucket) => formatOptionalBytes(bucket.owner_used_bytes),
-        });
-        return;
-      }
-      if (col === "owner_quota_max_size_bytes") {
-        exportColumns.push({
-          id: col,
-          label: "Owner quota",
-          getValue: (bucket) => formatQuotaBytes(bucket.owner_quota_max_size_bytes),
-        });
-        return;
-      }
-      if (col === "owner_quota_usage_size_percent") {
-        exportColumns.push({
-          id: col,
-          label: "Owner quota %",
-          getValue: (bucket) => formatQuotaUsageValue(bucket.owner_used_bytes, bucket.owner_quota_max_size_bytes),
-        });
-        return;
-      }
-      if (col === "owner_object_count") {
-        exportColumns.push({
-          id: col,
-          label: "Owner objects",
-          getValue: (bucket) => formatOptionalCount(bucket.owner_object_count),
-        });
-        return;
-      }
-      if (col === "owner_quota_max_objects") {
-        exportColumns.push({
-          id: col,
-          label: "Owner object quota",
-          getValue: (bucket) => formatQuotaObjects(bucket.owner_quota_max_objects),
-        });
-        return;
-      }
-      if (col === "owner_quota_usage_object_percent") {
-        exportColumns.push({
-          id: col,
-          label: "Owner object quota %",
-          getValue: (bucket) => formatQuotaUsageValue(bucket.owner_object_count, bucket.owner_quota_max_objects),
-        });
-        return;
-      }
-      if (col === "used_bytes") {
-        exportColumns.push({ id: col, label: "Used", getValue: (bucket) => formatBytes(bucket.used_bytes) });
-        return;
-      }
-      if (col === "quota_max_size_bytes") {
-        exportColumns.push({
-          id: col,
-          label: "Quota",
-          getValue: (bucket) => formatQuotaBytes(bucket.quota_max_size_bytes),
-        });
-        return;
-      }
-      if (col === "quota_usage_size_percent") {
-        exportColumns.push({
-          id: col,
-          label: "Quota %",
-          getValue: (bucket) => formatQuotaUsageValue(bucket.used_bytes, bucket.quota_max_size_bytes),
-        });
-        return;
-      }
-      if (col === "object_count") {
-        exportColumns.push({ id: col, label: "Objects", getValue: (bucket) => formatNumber(bucket.object_count) });
-        return;
-      }
-      if (col === "quota_max_objects") {
-        exportColumns.push({
-          id: col,
-          label: "Object quota",
-          getValue: (bucket) => formatQuotaObjects(bucket.quota_max_objects),
-        });
-        return;
-      }
-      if (col === "quota_usage_object_percent") {
-        exportColumns.push({
-          id: col,
-          label: "Object quota %",
-          getValue: (bucket) => formatQuotaUsageValue(bucket.object_count, bucket.quota_max_objects),
-        });
-        return;
-      }
-      if (col === "tags") {
-        exportColumns.push({
-          id: col,
-          label: "Tags",
-          getValue: (bucket) => {
-            const tags = Array.isArray(bucket.tags) ? bucket.tags : [];
-            if (tags.length === 0) return "-";
-            return tags
-              .filter((tag) => (tag.key ?? "").trim())
-              .map((tag) => `${tag.key}=${tag.value}`)
-              .join(", ");
-          },
-        });
-        return;
-      }
-      if (col === "ui_tags") {
-        exportColumns.push({
-          id: col,
-          label: "UI tags",
-          getValue: (bucket) => {
-            const tags = bucket.ui_tags ?? [];
-            return tags.length > 0
-              ? tags.map((tag) => bucketUiTagDisplayLabel(tag, !isStorageOps)).join(", ")
-              : "-";
-          },
-        });
-        return;
-      }
-      if (col === "quota_status") {
-        exportColumns.push({
-          id: col,
-          label: "Quota status",
-          getValue: (bucket) => (quotaConfigured(bucket) ? "Configured" : "Not set"),
-        });
-        return;
-      }
-      const detailColumn = FEATURE_DETAIL_COLUMN_OPTIONS.find((option) => option.id === col);
-      if (detailColumn) {
-        exportColumns.push({
-          id: col,
-          label: detailColumn.label,
-          getValue: (bucket) => formatColumnDetail(bucket, detailColumn.id),
-        });
-        return;
-      }
-      const featureColumn = featureColumnById.get(col as FeatureKey);
-      if (featureColumn) {
-        exportColumns.push({
-          id: col,
-          label: featureColumn.label,
-          getValue: (bucket) => bucket.features?.[featureColumn.key]?.state ?? "-",
-        });
-      }
-    });
-
-    return exportColumns;
-  };
-
   const exportSelectedBuckets = async (format: SelectionExportFormat) => {
     if (selectedBucketList.length === 0 || selectionExportLoading) return;
     const withProgress = format === "csv" || format === "json";
@@ -1963,39 +1763,36 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           );
         },
       });
-      const exportColumns = buildExportColumns(visibleColumns);
+      const exportColumns = buildBucketExportColumns({
+        columnIds: visibleColumns,
+        featureColumns: featureColumnOptions,
+        isStorageOps,
+        useExplicitBucketName,
+      });
       if (format === "csv") {
-        const lines = [
-          exportColumns.map((column) => csvEscape(column.label)).join(","),
-          ...selectedBucketList.map((bucketName) => {
-            const bucket = bucketsByName.get(bucketName);
-            const values = exportColumns.map((column) => (bucket ? column.getValue(bucket) : "-"));
-            return values.map((value) => csvEscape(String(value ?? "-"))).join(",");
-          }),
-        ];
         triggerDownload(
           `${exportPrefix}-buckets-${endpointPart}-${timestamp}.csv`,
-          lines.join("\n"),
+          serializeBucketSelectionCsv({
+            bucketNames: selectedBucketList,
+            bucketsByName,
+            columns: exportColumns,
+          }),
           "text/csv;charset=utf-8"
         );
         return;
       }
 
-      const jsonPayload = {
-        generated_at: exportedAt,
-        [exportScopeKey]: {
+      const jsonPayload = buildBucketSelectionJsonPayload({
+        bucketNames: selectedBucketList,
+        bucketsByName,
+        columns: exportColumns,
+        generatedAt: exportedAt,
+        scopeKey: exportScopeKey,
+        scope: {
           id: selectedEndpointId ?? null,
           name: selectedEndpoint?.name ?? null,
         },
-        items: selectedBucketList.map((bucketName) => {
-          const bucket = bucketsByName.get(bucketName);
-          const row: Record<string, string> = {};
-          exportColumns.forEach((column) => {
-            row[column.id] = bucket ? column.getValue(bucket) : "-";
-          });
-          return row;
-        }),
-      };
+      });
       triggerDownload(
         `${exportPrefix}-buckets-${endpointPart}-${timestamp}.json`,
         JSON.stringify(jsonPayload, null, 2),
@@ -4490,9 +4287,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const expensiveColumnClass = "bg-amber-50/60 dark:bg-amber-900/20";
   const defaultColumnMinWidthClass = "min-w-[9rem]";
 
-  const quotaConfigured = (bucket: CephAdminBucket) =>
-    Boolean((bucket.quota_max_size_bytes ?? 0) > 0 || (bucket.quota_max_objects ?? 0) > 0);
-
   const renderTagList = (tags: CephAdminBucket["tags"] | undefined, bucket: CephAdminBucket) => {
     const safeTags = Array.isArray(tags) ? tags.filter((t) => (t.key ?? "").trim()) : [];
     if (safeTags.length === 0) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
@@ -4896,30 +4690,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     );
   };
 
-  const formatColumnDetail = (bucket: CephAdminBucket, detailKey: ColumnId): string => {
-    const details = bucket.column_details as Record<string, unknown> | null | undefined;
-    const raw = details?.[detailKey];
-    if (raw === null || raw === undefined) return "-";
-    if (Array.isArray(raw)) {
-      if (raw.length === 0) return "None";
-      const numericValues = raw
-        .map((item) => Number(item))
-        .filter((item) => Number.isFinite(item))
-        .map((item) => Math.trunc(item))
-        .sort((a, b) => a - b);
-      if (numericValues.length === raw.length) {
-        return Array.from(new Set(numericValues)).join(", ");
-      }
-      const textValues = raw.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
-      if (textValues.length === 0) return "None";
-      return Array.from(new Set(textValues)).join(", ");
-    }
-    if (typeof raw === "boolean") return raw ? "Yes" : "No";
-    if (typeof raw === "number") return formatNumber(raw);
-    if (typeof raw === "string") return raw.trim() || "-";
-    return "-";
-  };
-
   const openBucketConfiguration = (bucket: CephAdminBucket) => {
     if (!selectedEndpointId) return;
     persistBucketListState(bucketsStateStorageKey, selectedEndpointId, {
@@ -5255,7 +5025,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         headerClassName: "min-w-[10rem] max-w-[18rem]",
         cellClassName: "min-w-[10rem] max-w-[20rem]",
         render: (bucket) => {
-          const value = formatColumnDetail(bucket, detail.id);
+          const value = formatBucketColumnDetail(bucket, detail.id);
           return (
             <span className="block truncate" title={value}>
               {value}
@@ -5274,9 +5044,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         render: (bucket) => (
           <PropertySummaryChip
             compact
-            state={quotaConfigured(bucket) ? "Configured" : "Not set"}
-            tone={quotaConfigured(bucket) ? "active" : "inactive"}
-            title={`Quota: ${quotaConfigured(bucket) ? "Configured" : "Not set"}`}
+            state={isBucketQuotaConfigured(bucket) ? "Configured" : "Not set"}
+            tone={isBucketQuotaConfigured(bucket) ? "active" : "inactive"}
+            title={`Quota: ${isBucketQuotaConfigured(bucket) ? "Configured" : "Not set"}`}
           />
         ),
       });

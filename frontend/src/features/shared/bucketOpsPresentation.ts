@@ -6,7 +6,7 @@ import type { CephAdminBucket } from "../../api/cephAdmin";
 import { decodeStorageOpsBucketRef } from "../../api/storageOps";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { normalizeQuotaLimit } from "./bucketBulkOperationsModel";
-import type { SortField } from "./bucketOpsListState";
+import type { ColumnId, SortField } from "./bucketOpsListState";
 
 const BUCKET_UI_TAG_KEY_SEPARATOR = "\u001f";
 
@@ -89,6 +89,38 @@ export const formatQuotaUsageValue = (
 export const formatOwnerSuspended = (value?: boolean | null) => {
   if (value === true) return "Yes";
   if (value === false) return "No";
+  return "-";
+};
+
+export const isBucketQuotaConfigured = (bucket: CephAdminBucket) =>
+  Boolean((bucket.quota_max_size_bytes ?? 0) > 0 || (bucket.quota_max_objects ?? 0) > 0);
+
+export const formatBucketColumnDetail = (
+  bucket: CephAdminBucket,
+  detailKey: ColumnId,
+): string => {
+  const details = bucket.column_details as Record<string, unknown> | null | undefined;
+  const raw = details?.[detailKey];
+  if (raw === null || raw === undefined) return "-";
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return "None";
+    const numericValues = raw
+      .map((item) => Number(item))
+      .filter((item) => Number.isFinite(item))
+      .map((item) => Math.trunc(item))
+      .sort((left, right) => left - right);
+    if (numericValues.length === raw.length) {
+      return Array.from(new Set(numericValues)).join(", ");
+    }
+    const textValues = raw
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
+    if (textValues.length === 0) return "None";
+    return Array.from(new Set(textValues)).join(", ");
+  }
+  if (typeof raw === "boolean") return raw ? "Yes" : "No";
+  if (typeof raw === "number") return formatNumber(raw);
+  if (typeof raw === "string") return raw.trim() || "-";
   return "-";
 };
 
