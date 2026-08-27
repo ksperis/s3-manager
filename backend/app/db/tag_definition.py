@@ -33,6 +33,13 @@ class TagDefinition(Base):
             sqlite_where=text("owner_user_id IS NOT NULL"),
             postgresql_where=text("owner_user_id IS NOT NULL"),
         ),
+        Index(
+            "uq_tag_definitions_bucket_ui_ceph_admin_label",
+            "label_key",
+            unique=True,
+            sqlite_where=text("domain_kind = 'bucket_ui_ceph_admin'"),
+            postgresql_where=text("domain_kind = 'bucket_ui_ceph_admin'"),
+        ),
     )
 
     id = Column(Integer, primary_key=True)

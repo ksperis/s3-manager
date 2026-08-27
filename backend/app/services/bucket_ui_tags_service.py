@@ -23,6 +23,7 @@ from app.utils.tagging import (
     TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
     TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
     TAG_SCOPE_STANDARD,
+    build_tag_label_key,
     tag_definition_sort_key,
 )
 
@@ -50,6 +51,28 @@ class PhysicalBucketTarget:
 class _BucketUiTagMutationPlan:
     additions_by_id: dict[int, TagDefinition]
     ids_to_remove: set[int]
+
+
+@dataclass(frozen=True)
+class BucketUiTagDefinitionUpdate:
+    definition: BucketUiTagDefinitionSummary
+    previous_visibility: BucketUiTagVisibility
+    changed_fields: frozenset[str]
+
+    @property
+    def involves_shared(self) -> bool:
+        return (
+            self.previous_visibility == "shared"
+            or self.definition.visibility == "shared"
+        )
+
+
+class BucketUiTagDefinitionNotFoundError(LookupError):
+    pass
+
+
+class BucketUiTagNameConflictError(RuntimeError):
+    pass
 
 
 class BucketUiTagsService:
@@ -285,17 +308,74 @@ class BucketUiTagsService:
             visibility != "private" for _, _, visibility in create_tags
         ):
             raise ValueError("Storage Ops UI tags are always private.")
-        return [
-            self.tags.resolve_definition(
-                domain_kind=domain_kind,
-                owner_user_id=None if visibility == "shared" else actor_user_id,
-                label=label,
-                color_key=color_key,
-                scope=DEFAULT_TAG_SCOPE,
-                update_existing=False,
+        definitions: list[TagDefinition] = []
+        for label, color_key, visibility in create_tags:
+            owner_user_id = None if visibility == "shared" else actor_user_id
+            if domain_kind == TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN:
+                existing = self.db.query(TagDefinition).filter(
+                    TagDefinition.domain_kind == domain_kind,
+                    TagDefinition.label_key == build_tag_label_key(label),
+                ).first()
+                if existing is not None:
+                    if existing.owner_user_id != owner_user_id:
+                        raise BucketUiTagNameConflictError(
+                            "A Ceph Admin UI tag already reserves this name."
+                        )
+                    definitions.append(existing)
+                    continue
+            definitions.append(
+                self.tags.resolve_definition(
+                    domain_kind=domain_kind,
+                    owner_user_id=owner_user_id,
+                    label=label,
+                    color_key=color_key,
+                    scope=DEFAULT_TAG_SCOPE,
+                    update_existing=False,
+                )
             )
-            for label, color_key, visibility in create_tags
-        ]
+        return definitions
+
+    def update_definition(
+        self,
+        *,
+        domain_kind: str,
+        actor_user_id: int,
+        tag_id: int,
+        color_key: str | None = None,
+        visibility: BucketUiTagVisibility | None = None,
+    ) -> BucketUiTagDefinitionUpdate:
+        domain = self._validate_domain(domain_kind)
+        definition = self._visible_definition_query(
+            domain_kind=domain,
+            actor_user_id=actor_user_id,
+        ).filter(TagDefinition.id == int(tag_id)).first()
+        if definition is None:
+            raise BucketUiTagDefinitionNotFoundError(
+                "Bucket UI tag definition was not found."
+            )
+        if domain == TAG_DOMAIN_BUCKET_UI_STORAGE_OPS and visibility is not None:
+            raise ValueError("Storage Ops UI tags are always private.")
+
+        previous_visibility: BucketUiTagVisibility = (
+            "shared" if definition.owner_user_id is None else "private"
+        )
+        changed_fields: set[str] = set()
+        if color_key is not None and definition.color_key != color_key:
+            definition.color_key = color_key
+            changed_fields.add("color_key")
+        if visibility is not None and visibility != previous_visibility:
+            definition.owner_user_id = (
+                None if visibility == "shared" else int(actor_user_id)
+            )
+            changed_fields.add("visibility")
+        if changed_fields:
+            self.db.add(definition)
+            self.db.flush()
+        return BucketUiTagDefinitionUpdate(
+            definition=self._to_definition(definition),
+            previous_visibility=previous_visibility,
+            changed_fields=frozenset(changed_fields),
+        )
 
     def _resolve_mutation_plan(
         self,

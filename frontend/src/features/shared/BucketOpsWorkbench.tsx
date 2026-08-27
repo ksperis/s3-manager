@@ -25,10 +25,10 @@ import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
+import { UiTagBadge } from "../../components/UiTagSettings";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiDetails from "../../components/ui/UiDetails";
 import UiButton from "../../components/ui/UiButton";
-import UiRemoveIcon from "../../components/ui/UiRemoveIcon";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   cx,
@@ -54,8 +54,10 @@ import {
 } from "../../api/storageOps";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
 import type { BucketIndexCheckTarget } from "../../api/bucketIndexCheck";
-import type { BucketUiTagDefinition, BucketUiTagVisibility } from "../../api/bucketUiTags";
-import { getTagColorOption, TAG_COLOR_OPTIONS } from "../../utils/tagPalette";
+import type {
+  BucketUiTagDefinition,
+  BucketUiTagDefinitionPatch,
+} from "../../api/bucketUiTags";
 import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
 import {
   deleteNotificationConfigurations,
@@ -92,6 +94,9 @@ import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
+import BucketUiTagSettingsBadge, {
+  type BucketUiTagDraft,
+} from "./BucketUiTagSettingsBadge";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
@@ -321,15 +326,6 @@ type OrphanedTagBucketDetail = {
 const bucketUiTagDisplayLabel = (tag: BucketUiTagDefinition, showVisibility: boolean) =>
   showVisibility ? `${tag.label} (${tag.visibility === "shared" ? "Shared" : "Private"})` : tag.label;
 
-const bucketUiTagDefaultColorKey = (label: string) => {
-  const hash = Array.from(label).reduce(
-    (value, character) => (value * 31 + (character.codePointAt(0) ?? 0)) >>> 0,
-    0
-  );
-  const palette = TAG_COLOR_OPTIONS.filter((option) => option.key !== "neutral");
-  return palette[hash % palette.length]?.key ?? "neutral";
-};
-
 type BucketOpsWorkbenchProps = {
   mode: BucketOpsMode;
   shell: {
@@ -506,6 +502,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     error: uiTagsError,
     reload: reloadUiTags,
     applyTags: persistUiTagChanges,
+    updateDefinition: persistUiTagDefinition,
+    updatingDefinitionIds,
     removeTargets: removeUiTagTargets,
   } = useBucketUiTags(surface.mode, isStorageOps ? null : selectedEndpointId);
   const resolveBucketTagTarget = useCallback(
@@ -636,7 +634,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [selectionActionProgress, setSelectionActionProgress] = useState<ActionProgressState | null>(null);
   const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
-  const [tagVisibilityDrafts, setTagVisibilityDrafts] = useState<Record<string, BucketUiTagVisibility>>({});
+  const [tagCreationDrafts, setTagCreationDrafts] = useState<
+    Record<string, BucketUiTagDraft[]>
+  >({});
   const [activeOwnerTooltipKey, setActiveOwnerTooltipKey] = useState<string | null>(null);
   const ownerTooltipAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [ownerTooltipState, setOwnerTooltipState] = useState<Record<string, OwnerTooltipState>>({});
@@ -1534,19 +1534,65 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setPage(1);
   };
 
-  const addTagsForBucket = async (target: BucketTagTarget, raw: string) => {
-    const parsed = parseUiTags(raw);
-    if (parsed.length === 0) return;
+  const stageTagsForBucket = (target: BucketTagTarget, raw: string) => {
+    const nextDrafts = parseUiTags(raw).map((label, index) => ({
+      draftId: `${Date.now()}:${index}:${label}`,
+      label,
+      color_key: "neutral",
+      scope: "standard" as const,
+      visibility: "private" as const,
+    }));
+    if (nextDrafts.length === 0) return;
+    setTagCreationDrafts((current) => ({
+      ...current,
+      [target.key]: [...(current[target.key] ?? []), ...nextDrafts],
+    }));
+    updateTagDraft(target.key, "");
+    setTagSuggestionBucket(null);
+  };
+
+  const updateTagCreationDraft = (
+    targetKey: string,
+    draftId: string,
+    changes: BucketUiTagDefinitionPatch
+  ) => {
+    setTagCreationDrafts((current) => ({
+      ...current,
+      [targetKey]: (current[targetKey] ?? []).map((draft) =>
+        draft.draftId === draftId ? { ...draft, ...changes } : draft
+      ),
+    }));
+  };
+
+  const removeTagCreationDraft = (targetKey: string, draftId: string) => {
+    setTagCreationDrafts((current) => ({
+      ...current,
+      [targetKey]: (current[targetKey] ?? []).filter(
+        (draft) => draft.draftId !== draftId
+      ),
+    }));
+  };
+
+  const addTagDraftForBucket = async (
+    target: BucketTagTarget,
+    draft: BucketUiTagDraft
+  ) => {
     try {
-      await persistUiTagChanges(
-        [target],
-        parsed.map((label) => ({
-          label,
-          color_key: bucketUiTagDefaultColorKey(label),
-          visibility: isStorageOps ? "private" : tagVisibilityDrafts[target.key] ?? "private",
-        })),
-        []
-      );
+      await persistUiTagChanges([target], [draft], []);
+      removeTagCreationDraft(target.key, draft.draftId);
+      refreshBuckets();
+    } catch (err) {
+      setError(extractError(err));
+      refreshBuckets();
+    }
+  };
+
+  const updateBucketUiTagDefinition = async (
+    tag: BucketUiTagDefinition,
+    changes: BucketUiTagDefinitionPatch
+  ) => {
+    try {
+      await persistUiTagDefinition(tag.id, changes);
       refreshBuckets();
     } catch (err) {
       setError(extractError(err));
@@ -1761,16 +1807,17 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const parsedSelectionTagAddInput = useMemo(() => parseUiTags(selectionTagAddInput), [selectionTagAddInput]);
 
   const applyUiTagToSelection = async (
-    tag: BucketUiTagDefinition | string,
-    action: "add" | "remove",
-    visibility: BucketUiTagVisibility = "private"
+    tag: BucketUiTagDefinition | BucketUiTagDraft[],
+    action: "add" | "remove"
   ) => {
     if (!selectedEndpointId || selectedBucketList.length === 0 || selectionTagActionLoading) return;
-    const parsedTagValues =
-      typeof tag === "string"
-        ? parseUiTags(tag).map((label) => ({ label, color_key: bucketUiTagDefaultColorKey(label), visibility }))
-        : [tag];
-    if (parsedTagValues.length === 0 || (action === "remove" && typeof tag === "string")) return;
+    const parsedTagValues = Array.isArray(tag) ? tag : [tag];
+    if (
+      parsedTagValues.length === 0 ||
+      (action === "remove" && Array.isArray(tag))
+    ) {
+      return;
+    }
     const runToken = selectionActionRunTokenRef.current + 1;
     selectionActionRunTokenRef.current = runToken;
     const progressLabel = action === "add" ? "Applying UI tags" : "Removing UI tags";
@@ -4702,7 +4749,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         tagFilters,
         tagFilterMode,
         tagLabelById: new Map(
-          availableUiTags.map((tag) => [tag.id, bucketUiTagDisplayLabel(tag, !isStorageOps)])
+          availableUiTags.map((tag) => [tag.id, tag.label])
         ),
         advanced: advancedApplied,
         isStorageOps,
@@ -4772,7 +4819,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             endpointId: entry?.target.endpointId ?? 0,
             name: entry?.target.name ?? bucketKey,
             tenant: entry?.target.tenant ?? null,
-            tags: (entry?.tags ?? []).map((tag) => bucketUiTagDisplayLabel(tag, !isStorageOps)),
+            tags: (entry?.tags ?? []).map((tag) => tag.label),
           };
         })
         .sort((a, b) => {
@@ -4780,7 +4827,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           if (tenantCompare !== 0) return tenantCompare;
           return a.name.localeCompare(b.name);
         }),
-    [isStorageOps, orphanedTagBuckets, uiTagOrphanEntries]
+    [orphanedTagBuckets, uiTagOrphanEntries]
   );
   const previewStats = useMemo(() => {
     const errors = bulkPreview.filter((item) => item.error).length;
@@ -5087,7 +5134,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         </span>
       );
     }
-    const tags = bucket.ui_tags ?? [];
+    const tags = (bucket.ui_tags ?? []).map(
+      (tag) => availableUiTags.find((definition) => definition.id === tag.id) ?? tag
+    );
+    const creationDrafts = tagCreationDrafts[bucketTarget.key] ?? [];
     const draft = tagDrafts[bucketTarget.key] ?? "";
     const normalizedDraft = draft.trim().toLowerCase();
     const existingSet = new Set(tags.map((tag) => tag.id));
@@ -5099,29 +5149,32 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     const showSuggestions = tagSuggestionBucket === bucketTarget.key && suggestions.length > 0;
     return (
       <div className="group relative flex flex-wrap items-center gap-2">
-        {tags.map((tag) => {
-          const colors = getTagColorOption(tag.color_key);
-          return (
-            <span
-              key={`${bucketTarget.key}:${tag.id}`}
-              className={`flex items-center gap-0.5 rounded-full border px-1.5 py-0 text-[10px] font-semibold leading-4 ${colors.badgeClassName}`}
-              title={bucketUiTagDisplayLabel(tag, !isStorageOps)}
-            >
-              {tag.label}
-              {!isStorageOps && <span className="ml-0.5 opacity-70">{tag.visibility === "shared" ? "S" : "P"}</span>}
-              <button
-                type="button"
-                onClick={() => removeTagForBucket(bucketTarget, tag)}
-                className="ml-0.5 flex items-center opacity-70 hover:opacity-100"
-                title="Remove tag"
-                aria-label={`Remove tag ${bucketUiTagDisplayLabel(tag, !isStorageOps)}`}
-              >
-                <UiRemoveIcon className="h-2.5 w-2.5" />
-              </button>
-            </span>
-          );
-        })}
-        <div className="flex w-52 shrink-0 items-center gap-1">
+        {tags.map((tag) => (
+          <BucketUiTagSettingsBadge
+            key={`${bucketTarget.key}:${tag.id}`}
+            tag={tag}
+            isStorageOps={isStorageOps}
+            disabled={updatingDefinitionIds.has(tag.id)}
+            onChange={(changes) => updateBucketUiTagDefinition(tag, changes)}
+            onRemove={() => void removeTagForBucket(bucketTarget, tag)}
+          />
+        ))}
+        {creationDrafts.map((draft, index) => (
+          <BucketUiTagSettingsBadge
+            key={draft.draftId}
+            tag={draft}
+            isStorageOps={isStorageOps}
+            initiallyOpen={index === creationDrafts.length - 1}
+            onChange={(changes) =>
+              updateTagCreationDraft(bucketTarget.key, draft.draftId, changes)
+            }
+            onRemove={() =>
+              removeTagCreationDraft(bucketTarget.key, draft.draftId)
+            }
+            onCommit={() => addTagDraftForBucket(bucketTarget, draft)}
+          />
+        ))}
+        <div className="flex w-28 shrink-0 items-center gap-1">
           <input
             type="text"
             value={draft}
@@ -5135,8 +5188,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === ",") {
                 e.preventDefault();
-                void addTagsForBucket(bucketTarget, draft);
-                updateTagDraft(bucketTarget.key, "");
+                stageTagsForBucket(bucketTarget, draft);
               }
             }}
             placeholder="+"
@@ -5144,23 +5196,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               draft ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
             }`}
           />
-          {!isStorageOps && (
-            <select
-              aria-label="New UI tag visibility"
-              value={tagVisibilityDrafts[bucketTarget.key] ?? "private"}
-              onChange={(event) =>
-                setTagVisibilityDrafts((prev) => ({
-                  ...prev,
-                  [bucketTarget.key]: event.target.value as BucketUiTagVisibility,
-                }))
-              }
-              className="w-20 border-0 bg-transparent p-0 text-[10px] font-semibold text-slate-500 focus:ring-0 dark:text-slate-300"
-              title="Visibility for a new UI tag"
-            >
-              <option value="private">Private</option>
-              <option value="shared">Shared</option>
-            </select>
-          )}
         </div>
         {showSuggestions && (
           <div
@@ -5177,12 +5212,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 }}
                 className="flex w-full items-center rounded-md px-2 py-1 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                <span>{tag.label}</span>
-                {!isStorageOps && (
-                  <span className="ml-auto font-normal opacity-70">
-                    {tag.visibility === "shared" ? "Shared" : "Private"}
-                  </span>
-                )}
+                <UiTagBadge
+                  label={tag.label}
+                  colorKey={tag.color_key}
+                  visibility={tag.visibility}
+                />
               </button>
             ))}
           </div>
@@ -6017,34 +6051,27 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                     {tagFilters.map((tagId) => {
                       const tag = availableUiTags.find((item) => item.id === tagId);
                       if (!tag) return null;
-                      const colors = getTagColorOption(tag.color_key);
                       return (
-                        <span
+                        <UiTagBadge
                           key={`filter:${tag.id}`}
-                          className={`flex max-w-full items-center gap-1 rounded-full border px-2 py-1 ui-caption font-semibold ${colors.badgeClassName}`}
-                        >
-                          <span className="min-w-0 truncate">{bucketUiTagDisplayLabel(tag, !isStorageOps)}</span>
-                          <button
-                            type="button"
-                            onClick={() => removeTagFilter(tag.id)}
-                            className="opacity-70 hover:opacity-100"
-                            title="Remove tag filter"
-                            aria-label={`Remove ${bucketUiTagDisplayLabel(tag, !isStorageOps)}`}
-                          >
-                            <UiRemoveIcon className="h-3 w-3" />
-                          </button>
-                        </span>
+                          label={tag.label}
+                          colorKey={tag.color_key}
+                          visibility={tag.visibility}
+                          className="text-xs"
+                          onRemove={() => removeTagFilter(tag.id)}
+                          removeAriaLabel={`Remove UI tag filter ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
+                        />
                       );
                     })}
                     {availableTagFilters.map((tag) => (
-                      <button
-                        type="button"
+                      <UiTagBadge
                         key={`available:${tag.id}`}
+                        label={tag.label}
+                        colorKey={tag.color_key}
+                        visibility={tag.visibility}
                         onClick={() => addTagFilter(tag)}
-                        className="rounded-full border border-slate-200 bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-                      >
-                        {bucketUiTagDisplayLabel(tag, !isStorageOps)}
-                      </button>
+                        ariaLabel={`Add UI tag filter ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
+                      />
                     ))}
                   </div>
                   <select
@@ -7639,6 +7666,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             parsedSelectionTagAddInput={parsedSelectionTagAddInput}
             selectionTagActionLoading={selectionTagActionLoading}
             applyUiTagToSelection={applyUiTagToSelection}
+            updateUiTagDefinition={updateBucketUiTagDefinition}
+            updatingDefinitionIds={updatingDefinitionIds}
             selectionExportLoading={selectionExportLoading}
             exportSelectedBuckets={exportSelectedBuckets}
             selectionActionProgress={selectionActionProgress}

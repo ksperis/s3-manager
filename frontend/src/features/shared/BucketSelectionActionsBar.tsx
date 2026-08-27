@@ -20,7 +20,13 @@ import {
 import ActionProgressCard from "./ActionProgressCard";
 import type { ActionProgressState } from "./actionProgress";
 import { bucketAction, BUCKET_ACTION_GROUP_LABELS } from "./bucketActionCatalog";
-import type { BucketUiTagDefinition, BucketUiTagVisibility } from "../../api/bucketUiTags";
+import type {
+  BucketUiTagDefinition,
+  BucketUiTagDefinitionPatch,
+} from "../../api/bucketUiTags";
+import BucketUiTagSettingsBadge, {
+  type BucketUiTagDraft,
+} from "./BucketUiTagSettingsBadge";
 
 type SelectionTagAction = "add" | "remove";
 type SelectionExportFormat = "text" | "csv" | "json";
@@ -36,10 +42,14 @@ type BucketSelectionActionsBarProps = {
   parsedSelectionTagAddInput: string[];
   selectionTagActionLoading: SelectionTagAction | null;
   applyUiTagToSelection: (
-    tag: BucketUiTagDefinition | string,
-    action: SelectionTagAction,
-    visibility?: BucketUiTagVisibility
+    tag: BucketUiTagDefinition | BucketUiTagDraft[],
+    action: SelectionTagAction
   ) => Promise<void> | void;
+  updateUiTagDefinition: (
+    tag: BucketUiTagDefinition,
+    changes: BucketUiTagDefinitionPatch
+  ) => Promise<void> | void;
+  updatingDefinitionIds: Set<number>;
   selectionExportLoading: SelectionExportFormat | null;
   exportSelectedBuckets: (format: SelectionExportFormat) => Promise<void> | void;
   selectionActionProgress?: ActionProgressState | null;
@@ -69,6 +79,8 @@ export default function BucketSelectionActionsBar({
   parsedSelectionTagAddInput,
   selectionTagActionLoading,
   applyUiTagToSelection,
+  updateUiTagDefinition,
+  updatingDefinitionIds,
   selectionExportLoading,
   exportSelectedBuckets,
   selectionActionProgress,
@@ -83,7 +95,7 @@ export default function BucketSelectionActionsBar({
 }: BucketSelectionActionsBarProps) {
   const [dialog, setDialog] = useState<"tags" | "export" | null>(null);
   const [tagMode, setTagMode] = useState<SelectionTagAction>("add");
-  const [newTagVisibility, setNewTagVisibility] = useState<BucketUiTagVisibility>("private");
+  const [customTagDrafts, setCustomTagDrafts] = useState<BucketUiTagDraft[]>([]);
 
   if (selectedCount <= 0) return null;
 
@@ -195,31 +207,62 @@ export default function BucketSelectionActionsBar({
                 </p>
               ) : (
                 tagOptions.map((tag) => (
-                  <button
+                  <div
                     key={`${tagMode}:${tag.id}`}
-                    type="button"
-                    className={dialogActionClass}
-                    disabled={selectionTagActionLoading !== null}
-                    onClick={() => runAndClose(() => void applyUiTagToSelection(tag, tagMode))}
+                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
-                    <span>
-                      {tag.label}
-                      {!isStorageOps && (
-                        <span className="ml-2 font-normal opacity-70">
-                          {tag.visibility === "shared" ? "Shared" : "Private"}
-                        </span>
-                      )}
-                    </span>
-                    <span aria-hidden="true">{tagMode === "add" ? "+" : "−"}</span>
-                  </button>
+                    <BucketUiTagSettingsBadge
+                      tag={tag}
+                      isStorageOps={isStorageOps}
+                      disabled={updatingDefinitionIds.has(tag.id)}
+                      onChange={(changes) => updateUiTagDefinition(tag, changes)}
+                    />
+                    <button
+                      type="button"
+                      className={cx(dialogActionClass, "w-auto px-2")}
+                      disabled={selectionTagActionLoading !== null}
+                      aria-label={`${tagMode === "add" ? "Add" : "Remove"} UI tag ${tag.label}`}
+                      onClick={() =>
+                        runAndClose(() => void applyUiTagToSelection(tag, tagMode))
+                      }
+                    >
+                      <span aria-hidden="true">{tagMode === "add" ? "+" : "−"}</span>
+                    </button>
+                  </div>
                 ))
               )}
             </div>
             {tagMode === "add" && (
-              <div className="space-y-1">
+              <div className="space-y-3">
                 <label htmlFor="bucket-selection-custom-tag" className={cx("ui-caption font-semibold", uiTitleTextClass)}>
-                  Custom tag
+                  New UI tags
                 </label>
+                {customTagDrafts.length > 0 && (
+                  <div className="flex flex-wrap gap-2 rounded-md border border-[color:var(--ui-border-soft)] p-2">
+                    {customTagDrafts.map((draft, index) => (
+                      <BucketUiTagSettingsBadge
+                        key={draft.draftId}
+                        tag={draft}
+                        isStorageOps={isStorageOps}
+                        initiallyOpen={index === customTagDrafts.length - 1}
+                        onChange={(changes) =>
+                          setCustomTagDrafts((current) =>
+                            current.map((item) =>
+                              item.draftId === draft.draftId
+                                ? { ...item, ...changes }
+                                : item
+                            )
+                          )
+                        }
+                        onRemove={() =>
+                          setCustomTagDrafts((current) =>
+                            current.filter((item) => item.draftId !== draft.draftId)
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <input
                     id="bucket-selection-custom-tag"
@@ -229,30 +272,46 @@ export default function BucketSelectionActionsBar({
                     placeholder="new-tag"
                     className={cx(uiInputClass, "min-w-0 flex-1 px-2 py-1.5 ui-caption")}
                   />
-                  {!isStorageOps && (
-                    <select
-                      aria-label="New UI tag visibility"
-                      value={newTagVisibility}
-                      onChange={(event) => setNewTagVisibility(event.target.value as BucketUiTagVisibility)}
-                      className={cx(uiInputClass, "w-auto px-2 py-1.5 ui-caption")}
-                    >
-                      <option value="private">Private</option>
-                      <option value="shared">Shared</option>
-                    </select>
-                  )}
                   <UiButton
                     type="button"
                     size="sm"
                     disabled={parsedSelectionTagAddInput.length === 0 || selectionTagActionLoading !== null}
                     onClick={() => {
-                      const customTag = selectionTagAddInput;
+                      const stamp = Date.now();
+                      setCustomTagDrafts((current) => [
+                        ...current,
+                        ...parsedSelectionTagAddInput.map((label, index) => ({
+                          draftId: `${stamp}:${index}:${label}`,
+                          label,
+                          color_key: "neutral",
+                          scope: "standard" as const,
+                          visibility: "private" as const,
+                        })),
+                      ]);
                       setSelectionTagAddInput("");
-                      runAndClose(() => void applyUiTagToSelection(customTag, "add", newTagVisibility));
                     }}
                   >
-                    Add
+                    Configure
                   </UiButton>
                 </div>
+                {customTagDrafts.length > 0 && (
+                  <div className="flex justify-end">
+                    <UiButton
+                      type="button"
+                      size="sm"
+                      disabled={selectionTagActionLoading !== null}
+                      loading={selectionTagActionLoading === "add"}
+                      onClick={() =>
+                        runAndClose(() =>
+                          void applyUiTagToSelection(customTagDrafts, "add")
+                        )
+                      }
+                    >
+                      Add {customTagDrafts.length} tag
+                      {customTagDrafts.length > 1 ? "s" : ""}
+                    </UiButton>
+                  </div>
+                )}
               </div>
             )}
           </div>

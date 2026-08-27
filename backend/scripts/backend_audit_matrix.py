@@ -108,6 +108,7 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/storage_ops/buckets.py", "refresh_storage_ops_bucket_listing_cache", "/cache/refresh"): "cache refresh",
     ("POST", "app/routers/storage_ops/buckets.py", "query_storage_ops_buckets", "/query"): "read-only query",
     ("PATCH", "app/routers/storage_ops/bucket_ui_tags.py", "patch_bucket_ui_tags", ""): "user-private UI metadata excluded from the global audit log",
+    ("PATCH", "app/routers/storage_ops/bucket_ui_tags.py", "patch_bucket_ui_tag_definition", "/{tag_id}"): "user-private UI metadata excluded from the global audit log",
     ("DELETE", "app/routers/portal_objects.py", "portal_delete_storage_space_object", "/storage-spaces/{space_id}/objects"): "data-plane operation covered by provider access logs",
     ("POST", "app/routers/portal_objects.py", "portal_restore_storage_space_object", "/storage-spaces/{space_id}/objects/restore"): "data-plane operation covered by provider access logs",
     ("POST", "app/routers/storage_ops/usage_stats.py", "stream_storage_ops_bucket_usage_stats", "/stream"): "read-only stream",
@@ -176,7 +177,10 @@ def collect_rows(backend_root: Path) -> list[RouteAuditRow]:
             ] and ("mutation.update(" in body or "mutation.delete(" in body)
             signals["delegated_ceph_admin_bucket_ui_tags_audit"] = signals[
                 "delegated_ceph_admin_bucket_ui_tags_audit"
-            ] and "workflow.mutate(" in body
+            ] and (
+                "workflow.mutate(" in body
+                or "workflow.update_definition(" in body
+            )
             for method, path in routes:
                 rows.append(
                     RouteAuditRow(

@@ -3,14 +3,16 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { TagDefinitionSummary, TagScope } from "../api/tags";
-import { getTagColorOption, TAG_COLOR_OPTIONS } from "../utils/tagPalette";
+import type { TagDefinitionSummary } from "../api/tags";
 import { DEFAULT_TAG_SCOPE, normalizeUiTags, type UiTagDefinition } from "../utils/uiTags";
-import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
-import UiBadge from "./ui/UiBadge";
-import UiRemoveIcon from "./ui/UiRemoveIcon";
+import {
+  getUiTagScopeOption,
+  UiTagBadge,
+  UiTagColorPalette,
+  UiTagScopeSettings,
+  UiTagSettingsPopover,
+} from "./UiTagSettings";
 import { cx, uiLabelClass } from "./ui/styles";
-import { useDismissibleLayer } from "./ui/useDismissibleLayer";
 
 type UiTagEditorProps = {
   label?: string;
@@ -24,25 +26,8 @@ type UiTagEditorProps = {
   compact?: boolean;
 };
 
-const SCOPE_OPTIONS: Array<{ key: TagScope; label: string; description: string }> = [
-  {
-    key: "standard",
-    label: "Standard",
-    description: "Also visible in selectors.",
-  },
-  {
-    key: "administrative",
-    label: "Administrative",
-    description: "Visible only in management lists and edit surfaces.",
-  },
-];
-
 function getLabelKey(value: string) {
   return value.trim().toLocaleLowerCase();
-}
-
-function getScopeOption(scope: TagScope | undefined) {
-  return SCOPE_OPTIONS.find((option) => option.key === scope) ?? SCOPE_OPTIONS[0];
 }
 
 export default function UiTagEditor({
@@ -83,12 +68,11 @@ export default function UiTagEditor({
     () => normalizedTags.find((entry) => getLabelKey(entry.label) === activeTagKey) ?? null,
     [activeTagKey, normalizedTags]
   );
-  const tagButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const activeTagAnchorRef = useRef<HTMLButtonElement | null>(null);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const tagAnchorRefs = useRef<Record<string, HTMLSpanElement | null>>({});
+  const activeTagAnchorRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    activeTagAnchorRef.current = activeTagKey ? tagButtonRefs.current[activeTagKey] ?? null : null;
+    activeTagAnchorRef.current = activeTagKey ? tagAnchorRefs.current[activeTagKey] ?? null : null;
   }, [activeTagKey, normalizedTags]);
 
   useEffect(() => {
@@ -97,12 +81,6 @@ export default function UiTagEditor({
       setActiveTagKey(null);
     }
   }, [activeTagKey, normalizedTags]);
-
-  useDismissibleLayer({
-    open: Boolean(activeTagKey),
-    insideRefs: [activeTagAnchorRef, popoverRef],
-    onDismiss: () => setActiveTagKey(null),
-  });
 
   const addTag = (tag: UiTagDefinition) => {
     onChange(normalizeUiTags([...normalizedTags, tag]));
@@ -159,9 +137,9 @@ export default function UiTagEditor({
     }
   };
 
-  const openPopoverForTag = (tag: UiTagDefinition, anchor: HTMLButtonElement) => {
+  const openPopoverForTag = (tag: UiTagDefinition) => {
     const tagKey = getLabelKey(tag.label);
-    activeTagAnchorRef.current = anchor;
+    activeTagAnchorRef.current = tagAnchorRefs.current[tagKey] ?? null;
     setActiveTagKey((current) => (current === tagKey ? null : tagKey));
   };
 
@@ -191,41 +169,24 @@ export default function UiTagEditor({
           >
             {normalizedTags.map((tag) => {
               const tagKey = getLabelKey(tag.label);
-              const colorOption = getTagColorOption(tag.color_key);
-              const scopeOption = getScopeOption(tag.scope);
               const isActive = activeTagKey === tagKey;
               return (
                 <span
                   key={`${tag.id ?? tag.label}-${tag.color_key}-${tag.scope}`}
-                  className={cx(
-                    "inline-flex max-w-full items-center overflow-hidden rounded-full border shadow-sm transition",
-                    colorOption.badgeClassName,
-                    isActive && "ring-2 ring-primary/40"
-                  )}
+                  ref={(node) => {
+                    tagAnchorRefs.current[tagKey] = node;
+                  }}
                 >
-                  <button
-                    type="button"
-                    ref={(node) => {
-                      tagButtonRefs.current[tagKey] = node;
-                    }}
-                    onClick={(event) => openPopoverForTag(tag, event.currentTarget)}
-                    aria-label={`Edit tag ${tag.label}`}
-                    title={`${tag.label} • ${scopeOption.label}`}
-                    className="min-w-0 px-2 py-0.5 text-[10px] font-semibold leading-4 focus:outline-none"
-                  >
-                    <span className="truncate">{tag.label}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      removeTag(tag.label);
-                    }}
-                    aria-label={`Remove tag ${tag.label}`}
-                    className="flex items-center border-l border-current/15 px-1.5 py-0.5 opacity-70 transition hover:opacity-100 focus:outline-none"
-                  >
-                    <UiRemoveIcon className="h-2.5 w-2.5" />
-                  </button>
+                  <UiTagBadge
+                    label={tag.label}
+                    colorKey={tag.color_key}
+                    active={isActive}
+                    ariaLabel={`Edit tag ${tag.label}`}
+                    title={`${tag.label} • ${getUiTagScopeOption(tag.scope).label}`}
+                    onClick={() => openPopoverForTag(tag)}
+                    onRemove={() => removeTag(tag.label)}
+                    removeAriaLabel={`Remove tag ${tag.label}`}
+                  />
                 </span>
               );
             })}
@@ -264,14 +225,9 @@ export default function UiTagEditor({
                   onClick={() => addTag(tag)}
                   className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  <UiBadge
-                    disableToneStyles
-                    className={cx("max-w-full truncate px-2 py-0.5 text-[10px]", getTagColorOption(tag.color_key).badgeClassName)}
-                  >
-                    <span className="truncate">{tag.label}</span>
-                  </UiBadge>
+                  <UiTagBadge label={tag.label} colorKey={tag.color_key} />
                   <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    {getScopeOption(tag.scope).label}
+                    {getUiTagScopeOption(tag.scope).label}
                   </span>
                 </button>
               ))}
@@ -281,106 +237,41 @@ export default function UiTagEditor({
         {hint && <p className="ui-caption text-slate-500 dark:text-slate-400">{hint}</p>}
       </div>
 
-      <AnchoredPortalMenu
+      <UiTagSettingsPopover
         open={Boolean(activeTag && activeTagAnchorRef.current)}
         anchorRef={activeTagAnchorRef}
-        placement="bottom-start"
-        offset={6}
-        minWidth={288}
-        className="z-[90]"
+        label={activeTag?.label ?? ""}
+        colorKey={activeTag?.color_key ?? "neutral"}
+        description={
+          activeTag
+            ? typeof activeTag.id === "number"
+              ? sharedModeHelp
+              : "This new tag stays local to the form until you save."
+            : ""
+        }
+        onDismiss={() => setActiveTagKey(null)}
       >
         {activeTag ? (
-          <div
-            ref={popoverRef}
-            role="group"
-            aria-label={`Tag settings for ${activeTag.label}`}
-            className="w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900"
-          >
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <span className={uiLabelClass}>Tag settings</span>
-                <div className="flex items-start justify-between gap-3">
-                  <UiBadge
-                    disableToneStyles
-                    className={cx(
-                      "max-w-full truncate px-2 py-0.5 text-[10px]",
-                      getTagColorOption(activeTag.color_key).badgeClassName
-                    )}
-                  >
-                    <span className="truncate">{activeTag.label}</span>
-                  </UiBadge>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTagKey(null)}
-                    className="ui-caption font-semibold text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
-                    aria-label="Close tag settings"
-                  >
-                    ×
-                  </button>
-                </div>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  {typeof activeTag.id === "number"
-                    ? sharedModeHelp
-                    : "This new tag stays local to the form until you save."}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <span className={uiLabelClass}>Color</span>
-                <div className="grid grid-cols-6 gap-2">
-                  {TAG_COLOR_OPTIONS.map((option) => {
-                    const selected = option.key === activeTag.color_key;
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        aria-label={`Set ${activeTag.label} color to ${option.label}`}
-                        title={option.label}
-                        onClick={() => updateTag(activeTag.label, { color_key: option.key })}
-                        className={cx(
-                          "inline-flex h-7 w-7 items-center justify-center rounded-full border shadow-sm transition hover:scale-105",
-                          selected
-                            ? "border-slate-900 ring-2 ring-primary/50 dark:border-slate-100"
-                            : "border-slate-300 dark:border-slate-600"
-                        )}
-                      >
-                        <span className={cx("h-4 w-4 rounded-full", option.swatchClassName)} />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <span className={uiLabelClass}>Scope</span>
-                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/70">
-                  {SCOPE_OPTIONS.map((option) => {
-                    const selected = (activeTag.scope ?? DEFAULT_TAG_SCOPE) === option.key;
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={() => updateTag(activeTag.label, { scope: option.key })}
-                        className={cx(
-                          "rounded-md px-2.5 py-1 text-[11px] font-semibold transition",
-                          selected
-                            ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                            : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  {getScopeOption(activeTag.scope).description} {scopeHelp}
-                </p>
-              </div>
-            </div>
-          </div>
+          <>
+            <UiTagColorPalette
+              label={activeTag.label}
+              value={activeTag.color_key}
+              onChange={(colorKey) =>
+                updateTag(activeTag.label, { color_key: colorKey })
+              }
+            />
+            <UiTagScopeSettings
+              value={activeTag.scope ?? DEFAULT_TAG_SCOPE}
+              onChange={(scope) => updateTag(activeTag.label, { scope })}
+              help={
+                <>
+                  {getUiTagScopeOption(activeTag.scope).description} {scopeHelp}
+                </>
+              }
+            />
+          </>
         ) : null}
-      </AnchoredPortalMenu>
+      </UiTagSettingsPopover>
     </div>
   );
 }

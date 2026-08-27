@@ -1,4 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -15,6 +17,8 @@ const baseProps = {
   parsedSelectionTagAddInput: [],
   selectionTagActionLoading: null as "add" | "remove" | null,
   applyUiTagToSelection: vi.fn(),
+  updateUiTagDefinition: vi.fn(),
+  updatingDefinitionIds: new Set<number>(),
   selectionExportLoading: null as "text" | "csv" | "json" | null,
   exportSelectedBuckets: vi.fn(),
   selectionActionProgress: null as ActionProgressState | null,
@@ -113,5 +117,69 @@ describe("BucketSelectionActionsBar progress", () => {
     fireEvent.click(screen.getByRole("button", { name: "Actions for 201 selected buckets" }));
     expect(screen.getByRole("menuitem", { name: /Check bucket indexes…/ })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText(/limited to 200 buckets/i)).toBeInTheDocument();
+  });
+
+  it("configures multiple new tags before applying them with private neutral defaults", async () => {
+    const user = userEvent.setup();
+    const applyUiTagToSelection = vi.fn();
+
+    function StatefulActions() {
+      const [value, setValue] = useState("");
+      return (
+        <BucketSelectionActionsBar
+          {...baseProps}
+          selectionTagAddInput={value}
+          setSelectionTagAddInput={setValue}
+          parsedSelectionTagAddInput={value
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)}
+          applyUiTagToSelection={applyUiTagToSelection}
+        />
+      );
+    }
+
+    render(<StatefulActions />);
+    await user.click(
+      screen.getByRole("button", { name: "Actions for 2 selected buckets" })
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Manage UI tags…" }));
+    await user.type(screen.getByRole("textbox", { name: "New UI tags" }), "alpha, beta");
+    await user.click(screen.getByRole("button", { name: "Configure" }));
+
+    expect(
+      screen.getByRole("button", { name: "Configure UI tag alpha, Private" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Configure UI tag beta, Private" })
+    ).toBeInTheDocument();
+    const betaSettings = await screen.findByRole("group", {
+      name: "Tag settings for beta",
+    });
+    await user.click(
+      within(betaSettings).getByRole("button", {
+        name: "Set beta color to Blue",
+      })
+    );
+    await user.click(
+      within(betaSettings).getByRole("button", { name: "Shared" })
+    );
+    await user.click(screen.getByRole("button", { name: "Add 2 tags" }));
+
+    expect(applyUiTagToSelection).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          label: "alpha",
+          color_key: "neutral",
+          visibility: "private",
+        }),
+        expect.objectContaining({
+          label: "beta",
+          color_key: "blue",
+          visibility: "shared",
+        }),
+      ],
+      "add"
+    );
   });
 });

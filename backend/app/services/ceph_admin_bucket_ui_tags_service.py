@@ -5,12 +5,22 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
+from sqlalchemy.exc import IntegrityError
+
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
+    BucketUiTagDefinitionSummary,
+    CephAdminBucketUiTagDefinitionPatch,
     BucketUiTagOrphansResponse,
     CephAdminBucketUiTagPatchRequest,
 )
-from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
+from app.services.bucket_ui_tags_service import (
+    BucketUiTagDefinitionNotFoundError,
+    BucketUiTagDefinitionUpdate,
+    BucketUiTagNameConflictError,
+    BucketUiTagsService,
+    PhysicalBucketTarget,
+)
 from app.services.rgw_admin import RGWAdminError
 from app.utils.tagging import TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN
 
@@ -30,6 +40,10 @@ class CephAdminBucketUiTagConflictError(RuntimeError):
     pass
 
 
+class CephAdminBucketUiTagNotFoundError(LookupError):
+    pass
+
+
 class CephAdminBucketUiTagUpstreamError(RuntimeError):
     pass
 
@@ -46,6 +60,9 @@ class CephAdminBucketUiTagsWorkflow:
         bucket_info: CephAdminBucketInfoReader,
         bucket_inventory: Callable[[], set[PhysicalBucketTarget]],
         record_shared_mutation: Callable[[int], None],
+        record_shared_definition_mutation: Callable[
+            [BucketUiTagDefinitionUpdate], None
+        ],
     ) -> None:
         self.tags = tags
         self.actor_user_id = int(actor_user_id)
@@ -53,6 +70,7 @@ class CephAdminBucketUiTagsWorkflow:
         self.bucket_info = bucket_info
         self.bucket_inventory = bucket_inventory
         self.record_shared_mutation = record_shared_mutation
+        self.record_shared_definition_mutation = record_shared_definition_mutation
 
     def catalog(self) -> BucketUiTagCatalogResponse:
         return self.tags.catalog(
@@ -170,7 +188,41 @@ class CephAdminBucketUiTagsWorkflow:
             self.tags.commit()
             if shared_mutation:
                 self.record_shared_mutation(len(set(targets)))
+        except BucketUiTagNameConflictError as exc:
+            self.tags.rollback()
+            raise CephAdminBucketUiTagConflictError(str(exc)) from exc
+        except IntegrityError as exc:
+            self.tags.rollback()
+            raise CephAdminBucketUiTagConflictError(
+                "A Ceph Admin UI tag already reserves this name."
+            ) from exc
         except ValueError:
             self.tags.rollback()
             raise
         return self.catalog()
+
+    def update_definition(
+        self,
+        tag_id: int,
+        payload: CephAdminBucketUiTagDefinitionPatch,
+    ) -> BucketUiTagDefinitionSummary:
+        try:
+            result = self.tags.update_definition(
+                domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+                actor_user_id=self.actor_user_id,
+                tag_id=tag_id,
+                color_key=payload.color_key,
+                visibility=payload.visibility,
+            )
+            self.tags.commit()
+        except BucketUiTagDefinitionNotFoundError as exc:
+            self.tags.rollback()
+            raise CephAdminBucketUiTagNotFoundError(str(exc)) from exc
+        except IntegrityError as exc:
+            self.tags.rollback()
+            raise CephAdminBucketUiTagConflictError(
+                "A Ceph Admin UI tag already reserves this name."
+            ) from exc
+        if result.changed_fields and result.involves_shared:
+            self.record_shared_definition_mutation(result)
+        return result.definition

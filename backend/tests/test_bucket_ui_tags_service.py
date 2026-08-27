@@ -21,7 +21,12 @@ from app.db import (
 )
 from app.models.bucket import Bucket
 from app.models.bucket_ui_tags import StorageOpsBucketUiTagPatchRequest
-from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
+from app.services.bucket_ui_tags_service import (
+    BucketUiTagDefinitionNotFoundError,
+    BucketUiTagNameConflictError,
+    BucketUiTagsService,
+    PhysicalBucketTarget,
+)
 from app.services.ceph_admin_bucket_listing_service import compute_ceph_admin_bucket_listing
 from app.services.ceph_admin_bucket_listing_cache import invalidate_bucket_listing_cache
 from app.services.s3_execution_context import S3ExecutionContext
@@ -71,7 +76,7 @@ def _endpoint(db_session, name: str) -> StorageEndpoint:
     return endpoint
 
 
-def test_ceph_admin_private_and_shared_same_label_are_distinct_and_visible(db_session):
+def test_ceph_admin_labels_are_globally_unique_and_case_insensitive(db_session):
     owner = _user(8101, "owner@example.test")
     other = _user(8102, "other@example.test")
     endpoint = _endpoint(db_session, "ui-tags-ceph")
@@ -85,51 +90,126 @@ def test_ceph_admin_private_and_shared_same_label_are_distinct_and_visible(db_se
         actor_user_id=owner.id,
         targets=[target],
         add_tag_ids=[],
-        create_tags=[
-            ("Production", "blue", "private"),
-            ("Production", "amber", "shared"),
-        ],
+        create_tags=[("Production", "blue", "private")],
         remove_tag_ids=[],
     )
-    # Repeating the same operation is idempotent.
+    # Repeating the same visible definition is idempotent and does not recolor it.
     service.mutate(
         domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
         actor_user_id=owner.id,
         targets=[target],
         add_tag_ids=[],
-        create_tags=[("Production", "rose", "shared")],
+        create_tags=[("production", "rose", "private")],
         remove_tag_ids=[],
     )
-    db_session.commit()
+    with pytest.raises(BucketUiTagNameConflictError):
+        service.mutate(
+            domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+            actor_user_id=owner.id,
+            targets=[target],
+            add_tag_ids=[],
+            create_tags=[("PRODUCTION", "amber", "shared")],
+            remove_tag_ids=[],
+        )
+    with pytest.raises(BucketUiTagNameConflictError):
+        service.mutate(
+            domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+            actor_user_id=other.id,
+            targets=[target],
+            add_tag_ids=[],
+            create_tags=[("production", "amber", "private")],
+            remove_tag_ids=[],
+        )
 
     owner_catalog = service.catalog(
         domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
         actor_user_id=owner.id,
     )
-    other_catalog = service.catalog(
+    assert [
+        (item.label, item.visibility, item.color_key)
+        for item in owner_catalog.definitions
+    ] == [("Production", "private", "blue")]
+    assert service.catalog(
         domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
         actor_user_id=other.id,
-    )
+    ).definitions == []
 
-    assert [(item.label, item.visibility) for item in owner_catalog.definitions] == [
-        ("Production", "private"),
-        ("Production", "shared"),
-    ]
-    assert [(item.label, item.visibility, item.color_key) for item in other_catalog.definitions] == [
-        ("Production", "shared", "amber")
-    ]
-    owner_tags = service.get_tags_for_targets(
+
+def test_ceph_admin_definition_settings_preserve_id_and_assignments(db_session):
+    owner = _user(8111, "settings-owner@example.test")
+    other = _user(8112, "settings-other@example.test")
+    endpoint = _endpoint(db_session, "ui-tags-settings")
+    db_session.add_all([owner, other])
+    db_session.commit()
+    target = PhysicalBucketTarget.create(endpoint.id, "tenant-a", "bucket-a")
+    service = BucketUiTagsService(db_session)
+    service.mutate(
         domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
         actor_user_id=owner.id,
         targets=[target],
+        add_tag_ids=[],
+        create_tags=[("Production", "blue", "private")],
+        remove_tag_ids=[],
     )
-    other_tags = service.get_tags_for_targets(
+    definition = service.catalog(
+        domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+        actor_user_id=owner.id,
+    ).definitions[0]
+    assignment = db_session.query(BucketUiTagAssignment).one()
+    assignment_state = (
+        assignment.id,
+        assignment.position,
+        assignment.created_at,
+        assignment.updated_at,
+    )
+
+    color_result = service.update_definition(
+        domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+        actor_user_id=owner.id,
+        tag_id=definition.id,
+        color_key="rose",
+    )
+    assert color_result.definition.id == definition.id
+    assert color_result.definition.color_key == "rose"
+    assert color_result.changed_fields == frozenset({"color_key"})
+    assert color_result.involves_shared is False
+
+    shared_result = service.update_definition(
+        domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+        actor_user_id=owner.id,
+        tag_id=definition.id,
+        visibility="shared",
+    )
+    assert shared_result.definition.visibility == "shared"
+    assert shared_result.involves_shared is True
+    assert db_session.query(BucketUiTagAssignment.id).scalar() == assignment.id
+    assert service.catalog(
         domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
         actor_user_id=other.id,
-        targets=[target],
+    ).definitions[0].id == definition.id
+
+    private_result = service.update_definition(
+        domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+        actor_user_id=other.id,
+        tag_id=definition.id,
+        visibility="private",
     )
-    assert len(owner_tags[target]) == 2
-    assert [tag.id for tag in other_tags[target]] == [other_catalog.definitions[0].id]
+    assert private_result.definition.visibility == "private"
+    db_session.expire_all()
+    unchanged_assignment = db_session.query(BucketUiTagAssignment).one()
+    assert (
+        unchanged_assignment.id,
+        unchanged_assignment.position,
+        unchanged_assignment.created_at,
+        unchanged_assignment.updated_at,
+    ) == assignment_state
+    with pytest.raises(BucketUiTagDefinitionNotFoundError):
+        service.update_definition(
+            domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+            actor_user_id=owner.id,
+            tag_id=definition.id,
+            color_key="amber",
+        )
 
 
 def test_storage_ops_tags_are_private_and_physical_identity_isolated(db_session):
@@ -310,6 +390,161 @@ def test_bucket_ui_tag_routes_persist_ceph_visibility_and_reject_forged_storage_
                 ]
             }
         )
+
+
+def test_bucket_ui_tag_definition_routes_update_settings_and_enforce_visibility(
+    client,
+    db_session,
+    monkeypatch,
+):
+    owner = _user(8248, "definition-owner@example.test")
+    other = _user(8249, "definition-other@example.test")
+    endpoint = _endpoint(db_session, "ui-tags-definition-routes")
+    db_session.add_all([owner, other])
+    db_session.commit()
+
+    class FakeRgwAdmin:
+        def get_bucket_info(self, bucket, **_kwargs):
+            return {"bucket": bucket}
+
+    current_actor = {"user": owner}
+
+    def ceph_context():
+        return SimpleNamespace(
+            endpoint=endpoint,
+            actor=current_actor["user"],
+            audit_service=AuditService(db_session),
+            rgw_admin=FakeRgwAdmin(),
+        )
+
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
+    app.dependency_overrides[ceph_dependencies.get_ceph_admin_context] = ceph_context
+    created = client.patch(
+        f"/api/ceph-admin/endpoints/{endpoint.id}/bucket-ui-tags",
+        json={
+            "targets": [{"name": "bucket-a", "tenant": ""}],
+            "create_tags": [{"label": "Review", "color_key": "blue"}],
+        },
+    )
+    assert created.status_code == 200, created.text
+    definition = created.json()["definitions"][0]
+    assert definition["visibility"] == "private"
+    assignment_id = db_session.query(BucketUiTagAssignment.id).scalar()
+
+    private_color = client.patch(
+        (
+            f"/api/ceph-admin/endpoints/{endpoint.id}/bucket-ui-tags/"
+            f"{definition['id']}"
+        ),
+        json={"color_key": "rose"},
+    )
+    assert private_color.status_code == 200, private_color.text
+    assert private_color.json()["color_key"] == "rose"
+    assert (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "bucket_ui_tags.update_definition")
+        .count()
+        == 0
+    )
+
+    definition_url = (
+        f"/api/ceph-admin/endpoints/{endpoint.id}/bucket-ui-tags/"
+        f"{definition['id']}"
+    )
+    for invalid_payload in (
+        {},
+        {"unknown": "value"},
+        {"color_key": "not-a-palette-color"},
+    ):
+        invalid = client.patch(definition_url, json=invalid_payload)
+        assert invalid.status_code == 422, invalid.text
+
+    shared = client.patch(
+        (
+            f"/api/ceph-admin/endpoints/{endpoint.id}/bucket-ui-tags/"
+            f"{definition['id']}"
+        ),
+        json={"visibility": "shared"},
+    )
+    assert shared.status_code == 200, shared.text
+    assert shared.json()["visibility"] == "shared"
+    assert db_session.query(BucketUiTagAssignment.id).scalar() == assignment_id
+    audit = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "bucket_ui_tags.update_definition")
+        .one()
+    )
+    assert json.loads(audit.metadata_json or "{}") == {
+        "changed_fields": ["visibility"],
+        "endpoint_id": endpoint.id,
+        "endpoint_name": endpoint.name,
+        "previous_visibility": "private",
+        "visibility": "shared",
+    }
+
+    current_actor["user"] = other
+    claimed = client.patch(
+        (
+            f"/api/ceph-admin/endpoints/{endpoint.id}/bucket-ui-tags/"
+            f"{definition['id']}"
+        ),
+        json={"color_key": "amber", "visibility": "private"},
+    )
+    assert claimed.status_code == 200, claimed.text
+    assert claimed.json()["color_key"] == "amber"
+    assert claimed.json()["visibility"] == "private"
+    assert db_session.query(BucketUiTagAssignment.id).scalar() == assignment_id
+
+    current_actor["user"] = owner
+    hidden = client.patch(
+        (
+            f"/api/ceph-admin/endpoints/{endpoint.id}/bucket-ui-tags/"
+            f"{definition['id']}"
+        ),
+        json={"color_key": "teal"},
+    )
+    assert hidden.status_code == 404, hidden.text
+    assert "Review" not in hidden.text
+
+    storage_service = BucketUiTagsService(db_session)
+    storage_service.mutate(
+        domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
+        actor_user_id=owner.id,
+        targets=[PhysicalBucketTarget.create(endpoint.id, "", "bucket-storage")],
+        add_tag_ids=[],
+        create_tags=[("Mine", "teal", "private")],
+        remove_tag_ids=[],
+    )
+    db_session.commit()
+    storage_definition = storage_service.catalog(
+        domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
+        actor_user_id=owner.id,
+    ).definitions[0]
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = lambda: owner
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    monkeypatch.setattr(
+        storage_bucket_ui_tags_router,
+        "_collect_context_refs",
+        lambda _user, _db: [],
+    )
+    recolored = client.patch(
+        f"/api/storage-ops/bucket-ui-tags/{storage_definition.id}",
+        json={"color_key": "cyan"},
+    )
+    assert recolored.status_code == 200, recolored.text
+    assert recolored.json()["color_key"] == "cyan"
+    forged_visibility = client.patch(
+        f"/api/storage-ops/bucket-ui-tags/{storage_definition.id}",
+        json={"visibility": "shared"},
+    )
+    assert forged_visibility.status_code == 422, forged_visibility.text
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = lambda: other
+    hidden_storage = client.patch(
+        f"/api/storage-ops/bucket-ui-tags/{storage_definition.id}",
+        json={"color_key": "rose"},
+    )
+    assert hidden_storage.status_code == 404, hidden_storage.text
+    assert "Mine" not in hidden_storage.text
 
 
 def test_ceph_shared_mutation_survives_audit_persistence_rollback(

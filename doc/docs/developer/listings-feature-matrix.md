@@ -94,6 +94,15 @@ This page audits the main UI listing surfaces in the repository and records whic
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `Storage Ops` `/storage-ops/buckets` | Bucket operations workbench | Cross-context buckets | `listStorageOpsBuckets -> GET/POST /storage-ops/buckets[/query]`<br>`streamStorageOpsBuckets -> GET /storage-ops/buckets/stream`<br>`GET/PATCH /storage-ops/bucket-ui-tags`<br>`GET /storage-ops/bucket-ui-tags/orphans`<br>`refreshStorageOpsBucketListingCache -> POST /storage-ops/buckets/cache/refresh` | `Yes (FE+BE)` | `Yes (FE+BE)` | `Yes (BE)` | `Yes (BE Offset)` | `Yes (BE cache, 30 min TTL, manual refresh)` | `Yes` | `Yes (FE)` | `No` | `Partial (BE)` | `Yes (mixed)` | `Partial (BE SSE)` | Filters, pagination, sorting, visible columns, and tag filters persist in browser storage; selected bucket rows do not. The tag catalogue returns private definitions only; listings query exact endpoint+tenant+name identities and replicate tags across authorized contexts. A separate fail-closed inventory check returns only orphan assignments. ID filters run after per-context caches and before pagination. The shared cache key has no user identity. |
 
+### Bucket UI tag definition settings
+
+The Ceph Admin workbench updates a persisted definition through
+`PATCH /ceph-admin/endpoints/{endpoint_id}/bucket-ui-tags/{tag_id}`. Color and
+visibility changes preserve bucket assignments; labels are globally unique in
+that namespace, ignoring case. The Storage Ops workbench uses
+`PATCH /storage-ops/bucket-ui-tags/{tag_id}` for color changes only and keeps
+every definition private to the signed-in user.
+
 ## Shared / Cross-workspace
 
 | Workspace / Route(s) | Listing Surface | Entity | Data Source (FE API + BE endpoint/service) | Search (FE/BE) | Filter (FE/BE) | Sort (FE/BE) | Pagination (FE/BE + mode) | Cache (FE/BE) | Multi-select FE | Selection Persistence (FE session) | Selection Persistence (Browser storage FE) | Multi-select BE (strict batch API) | Bulk Actions | Streaming / Live refresh | Notes / Limitations |

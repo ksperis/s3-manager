@@ -4,8 +4,8 @@
  */
 import UiBadge from "./ui/UiBadge";
 import { cx } from "./ui/styles";
-import { getTagColorOption } from "../utils/tagPalette";
 import type { UiTagItem } from "../utils/uiTags";
+import { UiTagBadge } from "./UiTagSettings";
 
 type UiTagBadgeListProps = {
   items: UiTagItem[];
@@ -38,28 +38,25 @@ export default function UiTagBadgeList({
       : compact
         ? "flex min-w-0 flex-wrap items-center gap-1"
         : "flex min-w-0 flex-wrap items-center gap-1";
-  const badgeClasses = compact
-    ? "max-w-full truncate px-2 py-0.5 text-[10px]"
-    : "max-w-full truncate px-2 py-0.5 text-[10px]";
+  const badgeClasses = "max-w-full truncate text-[10px]";
+  const counterBadgeClasses = "max-w-full truncate px-2 py-0.5 text-[10px]";
 
   return (
     <div className={cx(containerClasses, className)}>
       {visibleItems.map((item, index) => (
-        <UiBadge
+        <UiTagBadge
           key={item.key || `${item.label}-${index}`}
-          disableToneStyles
+          label={item.label}
+          colorKey={item.color_key}
+          visibility={item.visibility}
           title={item.title ?? item.label}
-          className={cx(badgeClasses, getTagColorOption(item.color_key).badgeClassName)}
-        >
-          <span className="truncate">
-            {item.label}
-          </span>
-        </UiBadge>
+          className={badgeClasses}
+        />
       ))}
       {hiddenCount > 0 && (
         <UiBadge
           tone="neutral"
-          className={badgeClasses}
+          className={counterBadgeClasses}
         >
           +{hiddenCount}
         </UiBadge>

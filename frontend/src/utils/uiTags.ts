@@ -20,6 +20,7 @@ export type UiTagItem = {
   label: string;
   color_key: TagColorKey;
   title?: string;
+  visibility?: "private" | "shared";
 };
 
 const DEFAULT_TAG_COLOR_KEY: TagColorKey = "neutral";

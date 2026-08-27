@@ -7,7 +7,9 @@ import {
   fetchStorageOpsBucketUiTagOrphans,
   fetchStorageOpsBucketUiTags,
   patchCephAdminBucketUiTags,
+  patchCephAdminBucketUiTagDefinition,
   patchStorageOpsBucketUiTags,
+  patchStorageOpsBucketUiTagDefinition,
   type BucketUiTagCatalog,
   type BucketUiTagOrphans,
 } from "../../api/bucketUiTags";
@@ -23,15 +25,17 @@ vi.mock("../../api/bucketUiTags", () => ({
   fetchStorageOpsBucketUiTagOrphans: vi.fn(),
   fetchStorageOpsBucketUiTags: vi.fn(),
   patchCephAdminBucketUiTags: vi.fn(),
+  patchCephAdminBucketUiTagDefinition: vi.fn(),
   patchStorageOpsBucketUiTags: vi.fn(),
+  patchStorageOpsBucketUiTagDefinition: vi.fn(),
 }));
 
 const emptyCatalog = (): BucketUiTagCatalog => ({ definitions: [] });
 const emptyOrphans = (): BucketUiTagOrphans => ({ orphans: [] });
-const duplicateLabelCatalog: BucketUiTagCatalog = {
+const cephCatalog: BucketUiTagCatalog = {
   definitions: [
     { id: 11, label: "Production", color_key: "blue", scope: "standard", visibility: "private" },
-    { id: 12, label: "Production", color_key: "amber", scope: "standard", visibility: "shared" },
+    { id: 12, label: "Critical", color_key: "amber", scope: "standard", visibility: "shared" },
   ],
 };
 
@@ -43,25 +47,43 @@ describe("useBucketUiTags", () => {
     vi.mocked(fetchStorageOpsBucketUiTagOrphans).mockResolvedValue(emptyOrphans());
     vi.mocked(fetchStorageOpsBucketUiTags).mockResolvedValue(emptyCatalog());
     vi.mocked(patchCephAdminBucketUiTags).mockResolvedValue(emptyCatalog());
+    vi.mocked(patchCephAdminBucketUiTagDefinition).mockImplementation(
+      async (_endpointId, tagId, changes) => ({
+        id: tagId,
+        label: "Production",
+        color_key: changes.color_key ?? "blue",
+        scope: "standard",
+        visibility: changes.visibility ?? "private",
+      })
+    );
     vi.mocked(patchStorageOpsBucketUiTags).mockResolvedValue(emptyCatalog());
+    vi.mocked(patchStorageOpsBucketUiTagDefinition).mockImplementation(
+      async (tagId, changes) => ({
+        id: tagId,
+        label: "Mine",
+        color_key: changes.color_key ?? "teal",
+        scope: "standard",
+        visibility: "private",
+      })
+    );
   });
 
-  it("loads duplicate labels as distinct backend definitions", async () => {
-    vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(duplicateLabelCatalog);
+  it("loads definitions by identifier with their private or shared visibility", async () => {
+    vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(cephCatalog);
 
     const { result } = renderHook(() => useBucketUiTags("ceph-admin", 7));
 
     await waitFor(() => expect(result.current.definitions).toHaveLength(2));
     expect(result.current.orphanEntries).toEqual({});
     expect(result.current.definitions.map((tag) => [tag.label, tag.visibility])).toEqual([
+      ["Critical", "shared"],
       ["Production", "private"],
-      ["Production", "shared"],
     ]);
   });
 
   it("does not expose a previous Ceph Admin endpoint catalog while the next scope loads", async () => {
     vi.mocked(fetchCephAdminBucketUiTags).mockImplementation((endpointId) => {
-      if (endpointId === 7) return Promise.resolve(duplicateLabelCatalog);
+      if (endpointId === 7) return Promise.resolve(cephCatalog);
       return new Promise<BucketUiTagCatalog>(() => undefined);
     });
     const { result, rerender, unmount } = renderHook(
@@ -80,7 +102,7 @@ describe("useBucketUiTags", () => {
 
   it("keeps definitions ready when orphan inventory validation fails", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(duplicateLabelCatalog);
+    vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(cephCatalog);
     vi.mocked(fetchCephAdminBucketUiTagOrphans).mockRejectedValue(
       new Error("inventory unavailable")
     );
@@ -127,6 +149,65 @@ describe("useBucketUiTags", () => {
       { label: "Ops", color_key: "teal" },
     ]);
     expect(fetchStorageOpsBucketUiTagOrphans).toHaveBeenCalledTimes(2);
+  });
+
+  it("updates a persisted definition immediately without changing assignments", async () => {
+    vi.mocked(fetchCephAdminBucketUiTags).mockResolvedValue(cephCatalog);
+    vi.mocked(fetchCephAdminBucketUiTagOrphans).mockResolvedValue({
+      orphans: [
+        {
+          target: { endpoint_id: 7, tenant: "", name: "missing" },
+          tags: [cephCatalog.definitions[0]],
+        },
+      ],
+    });
+    const onMutated = vi.fn();
+    const { result } = renderHook(() =>
+      useBucketUiTags("ceph-admin", 7, onMutated)
+    );
+    await waitFor(() => expect(result.current.definitions).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.updateDefinition(11, {
+        color_key: "rose",
+        visibility: "shared",
+      });
+    });
+
+    expect(patchCephAdminBucketUiTagDefinition).toHaveBeenCalledWith(7, 11, {
+      color_key: "rose",
+      visibility: "shared",
+    });
+    expect(result.current.definitions.find((tag) => tag.id === 11)).toMatchObject({
+      color_key: "rose",
+      visibility: "shared",
+    });
+    expect(onMutated).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the previous definition when an immediate update fails", async () => {
+    vi.mocked(fetchStorageOpsBucketUiTags).mockResolvedValue({
+      definitions: [
+        { id: 41, label: "Mine", color_key: "teal", scope: "standard", visibility: "private" },
+      ],
+    });
+    vi.mocked(patchStorageOpsBucketUiTagDefinition).mockRejectedValue(
+      new Error("color update failed")
+    );
+    const { result } = renderHook(() => useBucketUiTags("storage-ops", null));
+    await waitFor(() => expect(result.current.definitions).toHaveLength(1));
+
+    await act(async () => {
+      await expect(
+        result.current.updateDefinition(41, { color_key: "rose" })
+      ).rejects.toThrow("color update failed");
+    });
+
+    expect(patchStorageOpsBucketUiTagDefinition).toHaveBeenCalledWith(41, {
+      color_key: "rose",
+    });
+    expect(result.current.definitions[0].color_key).toBe("teal");
+    expect(result.current.error).toBe("color update failed");
   });
 
   it("keeps the successful catalog when a later mutation batch fails", async () => {

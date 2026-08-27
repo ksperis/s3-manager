@@ -4,13 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+from sqlalchemy.exc import IntegrityError
+
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
+    BucketUiTagDefinitionSummary,
     BucketUiTagOrphansResponse,
+    StorageOpsBucketUiTagDefinitionPatch,
     StorageOpsBucketUiTagPatchRequest,
 )
 from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
-from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
+from app.services.bucket_ui_tags_service import (
+    BucketUiTagDefinitionNotFoundError,
+    BucketUiTagsService,
+    PhysicalBucketTarget,
+)
 from app.services.buckets_service import BucketsService
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_ops_bucket_listing_service import (
@@ -29,6 +37,10 @@ class StorageOpsBucketUiTagTargetError(RuntimeError):
 
 
 class StorageOpsBucketUiTagConflictError(RuntimeError):
+    pass
+
+
+class StorageOpsBucketUiTagNotFoundError(LookupError):
     pass
 
 
@@ -228,7 +240,30 @@ class StorageOpsBucketUiTagsWorkflow:
                 remove_all=payload.remove_all,
             )
             self.tags.commit()
+        except IntegrityError as exc:
+            self.tags.rollback()
+            raise StorageOpsBucketUiTagConflictError(
+                "A Storage Ops UI tag already reserves this name."
+            ) from exc
         except ValueError:
             self.tags.rollback()
             raise
         return self.catalog()
+
+    def update_definition(
+        self,
+        tag_id: int,
+        payload: StorageOpsBucketUiTagDefinitionPatch,
+    ) -> BucketUiTagDefinitionSummary:
+        try:
+            result = self.tags.update_definition(
+                domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
+                actor_user_id=self.actor_user_id,
+                tag_id=tag_id,
+                color_key=payload.color_key,
+            )
+            self.tags.commit()
+        except BucketUiTagDefinitionNotFoundError as exc:
+            self.tags.rollback()
+            raise StorageOpsBucketUiTagNotFoundError(str(exc)) from exc
+        return result.definition

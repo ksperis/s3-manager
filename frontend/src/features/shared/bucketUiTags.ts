@@ -10,10 +10,13 @@ import {
   fetchStorageOpsBucketUiTagOrphans,
   fetchStorageOpsBucketUiTags,
   patchCephAdminBucketUiTags,
+  patchCephAdminBucketUiTagDefinition,
   patchStorageOpsBucketUiTags,
+  patchStorageOpsBucketUiTagDefinition,
   type BucketUiTagCatalog,
   type BucketUiTagCreate,
   type BucketUiTagDefinition,
+  type BucketUiTagDefinitionPatch,
   type BucketUiTagOrphans,
   type BucketUiTagVisibility,
 } from "../../api/bucketUiTags";
@@ -108,6 +111,9 @@ export function useBucketUiTags(
   const [loading, setLoading] = useState(true);
   const [loadedScopeKey, setLoadedScopeKey] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
+  const [updatingDefinitionIds, setUpdatingDefinitionIds] = useState<Set<number>>(
+    () => new Set()
+  );
   const [error, setError] = useState<string | null>(null);
   const requestSequenceRef = useRef(0);
 
@@ -281,6 +287,66 @@ export function useBucketUiTags(
     [applyTags, entries]
   );
 
+  const updateDefinition = useCallback(
+    async (tagId: number, changes: BucketUiTagDefinitionPatch) => {
+      setUpdatingDefinitionIds((current) => new Set(current).add(tagId));
+      setError(null);
+      try {
+        const updated =
+          mode === "ceph-admin"
+            ? await patchCephAdminBucketUiTagDefinition(
+                Number(selectedEndpointId),
+                tagId,
+                changes
+              )
+            : await patchStorageOpsBucketUiTagDefinition(tagId, {
+                color_key: changes.color_key,
+              });
+        setCatalog((current) => ({
+          definitions: current.definitions.map((definition) =>
+            definition.id === updated.id ? updated : definition
+          ),
+        }));
+        setOrphans((current) => ({
+          orphans: current.orphans.map((orphan) => ({
+            ...orphan,
+            tags: orphan.tags.map((definition) =>
+              definition.id === updated.id ? updated : definition
+            ),
+          })),
+        }));
+        onMutated?.();
+        return updated;
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to update bucket UI tag settings."
+        );
+        throw err;
+      } finally {
+        setUpdatingDefinitionIds((current) => {
+          const next = new Set(current);
+          next.delete(tagId);
+          return next;
+        });
+      }
+    },
+    [mode, onMutated, selectedEndpointId]
+  );
+
   const ready = loadedScopeKey === catalogScopeKey && !loading && error === null;
-  return { orphanEntries: entries, definitions, loading, ready, mutating, error, reload, applyTags, removeTargets };
+  return {
+    orphanEntries: entries,
+    definitions,
+    loading,
+    ready,
+    mutating,
+    updatingDefinitionIds,
+    error,
+    reload,
+    applyTags,
+    updateDefinition,
+    removeTargets,
+  };
 }

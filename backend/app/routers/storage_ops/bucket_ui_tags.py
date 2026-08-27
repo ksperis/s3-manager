@@ -10,7 +10,9 @@ from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
+    BucketUiTagDefinitionSummary,
     BucketUiTagOrphansResponse,
+    StorageOpsBucketUiTagDefinitionPatch,
     StorageOpsBucketUiTagPatchRequest,
 )
 from app.routers.dependencies import get_current_storage_ops_admin
@@ -20,6 +22,7 @@ from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.storage_ops_bucket_ui_tags_service import (
     StorageOpsBucketUiTagAuthorizationError,
     StorageOpsBucketUiTagConflictError,
+    StorageOpsBucketUiTagNotFoundError,
     StorageOpsBucketUiTagTargetError,
     StorageOpsBucketUiTagUpstreamError,
     StorageOpsBucketUiTagsWorkflow,
@@ -104,5 +107,25 @@ def patch_bucket_ui_tags(
     except (StorageOpsBucketUiTagTargetError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
+
+
+@router.patch("/{tag_id}", response_model=BucketUiTagDefinitionSummary)
+def patch_bucket_ui_tag_definition(
+    tag_id: int,
+    payload: StorageOpsBucketUiTagDefinitionPatch,
+    request: Request,
+    user: User = Depends(get_current_storage_ops_admin),
+    db: Session = Depends(get_db),
+) -> BucketUiTagDefinitionSummary:
+    try:
+        return _workflow(request=request, user=user, db=db).update_definition(
+            tag_id,
+            payload,
+        )
+    except StorageOpsBucketUiTagNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=sanitize_error_detail(str(exc)),
         ) from exc

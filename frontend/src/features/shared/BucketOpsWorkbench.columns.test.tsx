@@ -454,9 +454,17 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     renderStorageOps();
 
     await waitFor(() =>
-      expect(screen.getAllByRole("button", { name: "Remove tag urgent" })).toHaveLength(2),
+      expect(
+        screen.getAllByRole("button", {
+          name: "Remove UI tag urgent, Private",
+        })
+      ).toHaveLength(2),
     );
-    expect(screen.getAllByRole("button", { name: "Remove tag archive" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", {
+        name: "Remove UI tag archive, Private",
+      })
+    ).toHaveLength(1);
     expect(mocks.fetchStorageOpsBucketUiTagOrphans).toHaveBeenCalledTimes(1);
   });
 

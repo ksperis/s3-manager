@@ -9,7 +9,9 @@ from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
+    BucketUiTagDefinitionSummary,
     BucketUiTagOrphansResponse,
+    CephAdminBucketUiTagDefinitionPatch,
     CephAdminBucketUiTagPatchRequest,
 )
 from app.routers.ceph_admin.audit import record_ceph_admin_action
@@ -20,6 +22,7 @@ from app.services.ceph_admin_bucket_listing_service import (
 )
 from app.services.ceph_admin_bucket_ui_tags_service import (
     CephAdminBucketUiTagConflictError,
+    CephAdminBucketUiTagNotFoundError,
     CephAdminBucketUiTagUpstreamError,
     CephAdminBucketUiTagsWorkflow,
 )
@@ -48,6 +51,17 @@ def get_ceph_admin_bucket_ui_tags_workflow(
             entity_type="bucket_ui_tag_batch",
             entity_id=str(ctx.endpoint.id),
             metadata={"target_count": target_count},
+        ),
+        record_shared_definition_mutation=lambda mutation: record_ceph_admin_action(
+            ctx,
+            action="bucket_ui_tags.update_definition",
+            entity_type="bucket_ui_tag_definition",
+            entity_id=str(mutation.definition.id),
+            metadata={
+                "changed_fields": sorted(mutation.changed_fields),
+                "previous_visibility": mutation.previous_visibility,
+                "visibility": mutation.definition.visibility,
+            },
         ),
     )
 
@@ -98,5 +112,27 @@ def patch_bucket_ui_tags(
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
+
+
+@router.patch("/{tag_id}", response_model=BucketUiTagDefinitionSummary)
+def patch_bucket_ui_tag_definition(
+    tag_id: int,
+    payload: CephAdminBucketUiTagDefinitionPatch,
+    workflow: CephAdminBucketUiTagsWorkflow = Depends(
+        get_ceph_admin_bucket_ui_tags_workflow
+    ),
+) -> BucketUiTagDefinitionSummary:
+    try:
+        return workflow.update_definition(tag_id, payload)
+    except CephAdminBucketUiTagNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
+    except CephAdminBucketUiTagConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=sanitize_error_detail(str(exc)),
         ) from exc

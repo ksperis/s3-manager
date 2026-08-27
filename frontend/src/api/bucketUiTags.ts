@@ -37,6 +37,11 @@ export type BucketUiTagCreate = {
   visibility?: BucketUiTagVisibility;
 };
 
+export type BucketUiTagDefinitionPatch = {
+  color_key?: string;
+  visibility?: BucketUiTagVisibility;
+};
+
 type CephAdminBucketUiTagTarget = { name: string; tenant?: string };
 type StorageOpsBucketUiTagTarget =
   | { context_id: string; name: string }
@@ -76,6 +81,18 @@ export async function patchCephAdminBucketUiTags(
   return data;
 }
 
+export async function patchCephAdminBucketUiTagDefinition(
+  endpointId: number,
+  tagId: number,
+  payload: BucketUiTagDefinitionPatch
+): Promise<BucketUiTagDefinition> {
+  const { data } = await client.patch<BucketUiTagDefinition>(
+    `/ceph-admin/endpoints/${endpointId}/bucket-ui-tags/${tagId}`,
+    payload
+  );
+  return data;
+}
+
 export async function fetchStorageOpsBucketUiTags(): Promise<BucketUiTagCatalog> {
   const { data } = await client.get<BucketUiTagCatalog>("/storage-ops/bucket-ui-tags");
   return data;
@@ -90,5 +107,16 @@ export async function patchStorageOpsBucketUiTags(
   payload: BucketUiTagPatch<StorageOpsBucketUiTagTarget>
 ): Promise<BucketUiTagCatalog> {
   const { data } = await client.patch<BucketUiTagCatalog>("/storage-ops/bucket-ui-tags", payload);
+  return data;
+}
+
+export async function patchStorageOpsBucketUiTagDefinition(
+  tagId: number,
+  payload: Pick<BucketUiTagDefinitionPatch, "color_key">
+): Promise<BucketUiTagDefinition> {
+  const { data } = await client.patch<BucketUiTagDefinition>(
+    `/storage-ops/bucket-ui-tags/${tagId}`,
+    payload
+  );
   return data;
 }

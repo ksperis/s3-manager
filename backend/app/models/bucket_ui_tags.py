@@ -105,6 +105,38 @@ class StorageOpsBucketUiTagCreate(_BucketUiTagCreateBase):
     pass
 
 
+class _BucketUiTagDefinitionPatchBase(ApiModel):
+    color_key: str | None = None
+
+    @field_validator("color_key", mode="before")
+    @classmethod
+    def normalize_color(cls, value: object) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("tag color_key is required.")
+        return normalize_tag_color_key(value)
+
+    @model_validator(mode="after")
+    def validate_changes(self):
+        if not self.model_fields_set:
+            raise ValueError("At least one UI tag setting must be provided.")
+        return self
+
+
+class CephAdminBucketUiTagDefinitionPatch(_BucketUiTagDefinitionPatchBase):
+    visibility: BucketUiTagVisibility | None = None
+
+    @field_validator("visibility", mode="before")
+    @classmethod
+    def validate_visibility(cls, value: object) -> object:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValueError("tag visibility is required.")
+        return value
+
+
+class StorageOpsBucketUiTagDefinitionPatch(_BucketUiTagDefinitionPatchBase):
+    pass
+
+
 class _BucketUiTagPatchBase(ApiModel):
     add_tag_ids: list[int] = Field(default_factory=list)
     remove_tag_ids: list[int] = Field(default_factory=list)
