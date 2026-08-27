@@ -347,3 +347,10 @@ def test_quickstart_runtime_material_is_ignored():
     gitignore = (REPOSITORY_ROOT / ".gitignore").read_text(encoding="utf-8")
     assert ".env.*" in gitignore
     assert ".bucketreef-backups/" in gitignore
+
+
+def test_kind_checksum_uses_busybox_compatible_check_flag():
+    gitlab_ci = (REPOSITORY_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+
+    assert "sha256sum -c" in gitlab_ci
+    assert "sha256sum --check" not in gitlab_ci

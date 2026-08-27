@@ -595,7 +595,7 @@ helm-kind-onboarding-smoke:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - curl --fail --silent --show-error --location --output /tmp/kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
     - curl --fail --silent --show-error --location --output /tmp/kind.sha256sum "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64.sha256sum"
-    - echo "$(awk '{print $1}' /tmp/kind.sha256sum)  /tmp/kind" | sha256sum --check
+    - echo "$(awk '{print $1}' /tmp/kind.sha256sum)  /tmp/kind" | sha256sum -c
     - install -m 0755 /tmp/kind /usr/local/bin/kind
   script:
     - bash ops/ci/kind-onboarding-smoke.sh
