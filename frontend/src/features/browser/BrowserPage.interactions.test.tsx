@@ -4572,37 +4572,52 @@ describe("BrowserPage interactions", () => {
     expect(await within(dialog).findByText("ACL updated.")).toBeInTheDocument();
   });
 
-  it("does not request a Browser preview when the object exceeds the shared limit", async () => {
-    const user = userEvent.setup();
-    listBrowserObjectsMock.mockResolvedValueOnce({
-      prefix: "",
-      objects: [
-        {
-          key: "large-video.mp4",
-          size: OBJECT_PREVIEW_MAX_BYTES + 1,
-          last_modified: "2026-03-10T10:15:00Z",
-          storage_class: "STANDARD",
-          etag: '"etag-large"',
-        },
-      ],
-      prefixes: [],
-      is_truncated: false,
-      next_continuation_token: null,
-    });
-    renderPage();
+  it.each([
+    ["dedicated", () => renderPage()],
+    ["embedded", () => renderEmbeddedPage()],
+  ] as const)(
+    "opens an unavailable Preview without requesting object data in the %s Browser",
+    async (_surface, renderBrowser) => {
+      const user = userEvent.setup();
+      listBrowserObjectsMock.mockResolvedValueOnce({
+        prefix: "",
+        objects: [
+          {
+            key: "large-video.mp4",
+            size: OBJECT_PREVIEW_MAX_BYTES + 1,
+            last_modified: "2026-03-10T10:15:00Z",
+            storage_class: "STANDARD",
+            etag: '"etag-large"',
+          },
+        ],
+        prefixes: [],
+        is_truncated: false,
+        next_continuation_token: null,
+      });
+      renderBrowser();
 
-    const row = await findRowByLabel("large-video.mp4");
-    await user.click(within(row).getByRole("button", { name: "Open file large-video.mp4" }));
+      const row = await findRowByLabel("large-video.mp4");
+      await user.click(
+        within(row).getByRole("button", {
+          name: "Open file large-video.mp4",
+        }),
+      );
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Object details · large-video.mp4",
-    });
-    expect(
-      within(dialog).getByRole("tab", { name: "Properties" }),
-    ).toHaveAttribute("aria-selected", "true");
-    expect(presignObjectMock).not.toHaveBeenCalled();
-    expect(proxyDownloadMock).not.toHaveBeenCalled();
-  });
+      const dialog = await screen.findByRole("dialog", {
+        name: "Object details · large-video.mp4",
+      });
+      expect(
+        within(dialog).getByRole("tab", { name: "Preview" }),
+      ).toHaveAttribute("aria-selected", "true");
+      expect(
+        within(dialog).getByText(
+          "Preview is limited to files of 50 MiB or less. Download the file to open it.",
+        ),
+      ).toBeInTheDocument();
+      expect(presignObjectMock).not.toHaveBeenCalled();
+      expect(proxyDownloadMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("clears Details content when Details is active and multi-selection is applied", async () => {
     const user = userEvent.setup();

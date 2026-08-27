@@ -183,7 +183,7 @@ describe("primary item activation", () => {
   it("opens folders, previewable files, generic files, and deleted history deterministically", () => {
     expect(resolveItemPrimaryAction(folderItem, { versioningEnabled: true })).toEqual({ kind: "open-folder" });
     expect(resolveItemPrimaryAction(fileItem, { versioningEnabled: true })).toEqual({ kind: "open-file", initialTab: "preview" });
-    expect(resolveItemPrimaryAction({ ...fileItem, name: "archive.bin" }, { versioningEnabled: true })).toEqual({ kind: "open-file", initialTab: "properties" });
+    expect(resolveItemPrimaryAction({ ...fileItem, name: "archive.bin" }, { versioningEnabled: true })).toEqual({ kind: "open-file", initialTab: "preview" });
     expect(resolveItemPrimaryAction({ ...fileItem, isDeleted: true }, { versioningEnabled: true })).toEqual({ kind: "open-versions" });
   });
 

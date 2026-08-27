@@ -1811,7 +1811,6 @@ export default function BrowserPage({
   const openItemPrimaryAction = (item: BrowserItem) => {
     const primaryAction = resolveItemPrimaryAction(item, {
       versioningEnabled: isVersioningEnabled,
-      previewAvailable: isBrowserItemPreviewAvailable(item),
     });
     if (primaryAction.kind === "open-folder") {
       handleOpenItem(item);

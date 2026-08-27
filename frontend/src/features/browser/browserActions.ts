@@ -368,7 +368,7 @@ export const isBrowserItemPreviewAvailable = (item: BrowserItem): boolean =>
 
 export function resolveItemPrimaryAction(
   item: BrowserItem,
-  options: { versioningEnabled: boolean; previewAvailable?: boolean },
+  options: { versioningEnabled: boolean },
 ): BrowserItemPrimaryAction {
   if (item.type === "folder") {
     return { kind: "open-folder" };
@@ -376,11 +376,9 @@ export function resolveItemPrimaryAction(
   if (item.isDeleted) {
     return options.versioningEnabled ? { kind: "open-versions" } : { kind: "none" };
   }
-  const previewAvailable =
-    options.previewAvailable ?? isBrowserItemPreviewAvailable(item);
   return {
     kind: "open-file",
-    initialTab: previewAvailable ? "preview" : "properties",
+    initialTab: "preview",
   };
 }
 
