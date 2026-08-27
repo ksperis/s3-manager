@@ -10,11 +10,17 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-The backend uses SQLite by default (`app.db`) and auto-seeds a super-admin:
-- email: `admin@example.com`
-- password: `changeme`
+The backend uses SQLite by default (`app.db`). Automatic super-admin seeding is
+disabled by default. After the first backend startup has applied the database
+migrations, create the first administrator interactively from `backend/`:
 
-Important: defaults are for local development only. Replace all default secrets/passwords before exposing the service.
+```bash
+python -m app.scripts.create_first_admin --email exact-admin@example.com --full-name "Platform Admin"
+```
+
+The command requires an empty user database, prompts for a password of at least
+12 characters and an exact typed confirmation, and requires passkey enrollment
+at first login. Replace all default development secrets before exposing the service.
 SQLite is supported for local development and mono-backend deployments only. Use
 PostgreSQL for multiple backend replicas.
 
@@ -92,7 +98,7 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `SEED_SUPERVISION_ACCESS_KEY` / `SEED_SUPERVISION_SECRET_KEY` (optional read-only credentials for usage/metrics)
 - `CORS_ORIGINS` (default: `["http://localhost:5173"]`)
 - `SEED_SUPER_ADMIN_EMAIL` / `SEED_SUPER_ADMIN_PASSWORD` / `SEED_SUPER_ADMIN_FULL_NAME`
-- `SEED_SUPER_ADMIN_MODE` (default: `if_empty`, values: `if_empty|if_missing|disabled`)
+- `SEED_SUPER_ADMIN_MODE` (default: `disabled`, values: `if_empty|if_missing|disabled`)
 - `OIDC_STATE_TTL_SECONDS` (default: `600`, validity of login `state`)
 - `OIDC_PROVIDERS__<key>__*` to configure OpenID Connect providers (see below)
 - `LDAP_PROVIDERS__<key>__*` to configure LDAP providers (see below)
@@ -102,8 +108,12 @@ JWT signing uses the first key in `JWT_KEYS` and validates against the full list
 Security notes:
 - Production environments should set strong non-default values for `JWT_KEYS` and `CREDENTIAL_KEYS` (>=32 chars, high entropy).
 - Production environments should set `REFRESH_TOKEN_COOKIE_SECURE=true` when using non-local origins, and `CORS_ORIGINS` should list explicit trusted origins rather than `*`.
-- Keep `SEED_SUPER_ADMIN_PASSWORD` as a bootstrap credential only and rotate it immediately.
-- Prefer `SEED_SUPER_ADMIN_MODE=if_empty` (default) or `disabled` in production to avoid accidental super-admin reseeding on restart.
+- If automatic seeding is deliberately enabled for development or tests, keep
+  `SEED_SUPER_ADMIN_PASSWORD` as a bootstrap credential only and rotate it
+  immediately.
+- Keep `SEED_SUPER_ADMIN_MODE=disabled` in production and create the first
+  super-admin with `python -m app.scripts.create_first_admin`. Production
+  configuration rejects the automatic seed modes.
 - HTTP 5xx responses redact URLs, authorization headers, tokens, signatures, and access-key material before details are returned to clients or written through the HTTP exception logger.
 
 ### Credential key rotation (manual)
@@ -199,6 +209,8 @@ export LDAP_PROVIDERS__corp__subject_attribute="entryUUID"
 - Admin users (`super_admin`): `GET/POST /api/admin/users`, `PUT /api/admin/users/{id}`, `DELETE /api/admin/users/{id}`
 - Manager space (`account_admin` or `super_admin`): `GET/POST/DELETE /api/manager/buckets`, `GET /api/manager/iam/policies`, `GET /api/manager/stats/buckets`
 
-Default seeded admin for quickstart:
-- email: `admin@example.com`
-- password: `changeme`
+First administrator bootstrap:
+
+- No default administrator account or password is created.
+- Run `python -m app.scripts.create_first_admin` against an empty user database.
+- The first administrator login requires passkey enrollment.
