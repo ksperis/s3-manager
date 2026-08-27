@@ -14,6 +14,10 @@ export {
   useBucketCorsController,
 } from "./useBucketCorsController";
 export {
+  defaultEncryptionExample,
+  useBucketEncryptionController,
+} from "./useBucketEncryptionController";
+export {
   jsonTextSignature,
   normalizeAclDraft,
   normalizeAccessLoggingDraft,

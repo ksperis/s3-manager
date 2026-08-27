@@ -17,7 +17,6 @@ import {
 import {
   Bucket,
   BucketAcl,
-  BucketEncryptionConfiguration,
   BucketLifecycleConfig,
   BucketLoggingConfiguration,
   BucketObjectLockConfiguration,
@@ -25,14 +24,12 @@ import {
   BucketPublicAccessBlock,
   BucketTag,
   BucketWebsiteConfiguration,
-  deleteBucketEncryption,
   deleteBucketLogging,
   deleteBucketNotifications,
   deleteBucketReplication,
   deleteBucketTags,
   deleteBucketWebsite,
   deleteBucketLifecycle,
-  getBucketEncryption,
   getBucketTags,
   getBucketLogging,
   getBucketNotifications,
@@ -44,7 +41,6 @@ import {
   getBucketLifecycle,
   getBucketPublicAccessBlock,
   listBuckets,
-  putBucketEncryption,
   putBucketTags,
   putBucketLogging,
   putBucketNotifications,
@@ -58,7 +54,6 @@ import {
   updateBucketQuota,
 } from "../../api/buckets";
 import {
-  deleteCephAdminBucketEncryption,
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketLogging,
   deleteCephAdminBucketNotifications,
@@ -66,7 +61,6 @@ import {
   deleteCephAdminBucketTags,
   deleteCephAdminBucketWebsite,
   getCephAdminBucketAcl,
-  getCephAdminBucketEncryption,
   getCephAdminBucketLifecycle,
   getCephAdminBucketLogging,
   getCephAdminBucketNotifications,
@@ -78,7 +72,6 @@ import {
   getCephAdminBucketWebsite,
   listCephAdminBucketObjects,
   listCephAdminBuckets,
-  putCephAdminBucketEncryption,
   putCephAdminBucketLifecycle,
   putCephAdminBucketLogging,
   putCephAdminBucketNotifications,
@@ -135,6 +128,7 @@ import {
   BucketFeatureModeToggle,
   buildPolicyExample,
   defaultCorsExample,
+  defaultEncryptionExample,
   jsonTextSignature,
   isLifecycleSimpleDraftEmpty,
   normalizeAclDraft,
@@ -147,6 +141,7 @@ import {
   resolveFeatureVisualState,
   stableBucketJsonSignature,
   useBucketCorsController,
+  useBucketEncryptionController,
   useBucketPolicyController,
 } from "./bucketDetail";
 import {
@@ -337,13 +332,6 @@ const isPublicAccessFullyEnabled = (config?: BucketPublicAccessBlock | null) =>
   Boolean(config) && publicAccessKeys.every((key) => (config as Record<string, boolean | null | undefined>)[key] === true);
 
 const defaultNotificationTemplate = '{\n  "TopicConfigurations": []\n}';
-const defaultEncryptionExample = `[
-  {
-    "ApplyServerSideEncryptionByDefault": {
-      "SSEAlgorithm": "AES256"
-    }
-  }
-]`;
 const defaultLifecycleJsonExample = `[
   {
     "ID": "expire-logs",
@@ -488,13 +476,6 @@ export default function BucketDetailPage({
   const [publicAccessStatus, setPublicAccessStatus] = useState<string | null>(null);
   const [publicAccessLoading, setPublicAccessLoading] = useState(false);
   const [savingPublicAccess, setSavingPublicAccess] = useState(false);
-  const [encryption, setEncryption] = useState<BucketEncryptionConfiguration | null>(null);
-  const [encryptionText, setEncryptionText] = useState("[]");
-  const [encryptionError, setEncryptionError] = useState<string | null>(null);
-  const [encryptionStatus, setEncryptionStatus] = useState<string | null>(null);
-  const [encryptionLoading, setEncryptionLoading] = useState(false);
-  const [savingEncryption, setSavingEncryption] = useState(false);
-  const [deletingEncryption, setDeletingEncryption] = useState(false);
   const [notificationText, setNotificationText] = useState(defaultNotificationTemplate);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [notificationsStatus, setNotificationsStatus] = useState<string | null>(null);
@@ -689,6 +670,27 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.sse === true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
+  const {
+    clearStatus: clearEncryptionStatus,
+    configured: encryptionConfigured,
+    deleting: deletingEncryption,
+    dirty: encryptionDirty,
+    error: encryptionError,
+    load: loadEncryption,
+    loading: encryptionLoading,
+    remove: clearEncryption,
+    save: saveEncryption,
+    saving: savingEncryption,
+    setText: setEncryptionText,
+    status: encryptionStatus,
+    text: encryptionText,
+  } = useBucketEncryptionController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext && sseFeatureEnabled,
+    endpointId,
+  });
   const snsFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.sns === true;
@@ -990,35 +992,6 @@ export default function BucketDetailPage({
       setLifecycleLoading(false);
     }
   }, [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]);
-
-  const loadEncryption = useCallback(async () => {
-    if (!bucketName || !hasContext || !sseFeatureEnabled) {
-      setEncryption(null);
-      setEncryptionText("[]");
-      setEncryptionError(null);
-      setEncryptionStatus(null);
-      return;
-    }
-    setEncryptionLoading(true);
-    setEncryptionError(null);
-    setEncryptionStatus(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketEncryption(endpointId, bucketName)
-          : { rules: [] }
-        : await getBucketEncryption(accountId, bucketName);
-      const rules = data.rules ?? [];
-      setEncryption({ rules });
-      setEncryptionText(rules.length > 0 ? JSON.stringify(rules, null, 2) : "[]");
-    } catch (err) {
-      setEncryption(null);
-      setEncryptionText("[]");
-      setEncryptionError(extractApiError(err, "Unable to load bucket encryption settings."));
-    } finally {
-      setEncryptionLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, sseFeatureEnabled]);
 
   const loadPublicAccessBlock = useCallback(async () => {
     if (!bucketName || !hasContext) {
@@ -1693,7 +1666,6 @@ export default function BucketDetailPage({
   const quotaConfigured = Boolean(
     (bucket?.quota_max_size_bytes ?? 0) > 0 || (bucket?.quota_max_objects ?? 0) > 0
   );
-  const encryptionConfigured = Boolean(encryption?.rules && encryption.rules.length > 0);
   const accessLoggingConfigured = Boolean(
     accessLoggingConfig?.enabled && (accessLoggingConfig.target_bucket ?? "").trim().length > 0
   );
@@ -1713,9 +1685,6 @@ export default function BucketDetailPage({
     Boolean(publicAccessBlockConfig) &&
     !publicAccessBlockEnabled &&
     publicAccessKeys.some((key) => (publicAccessBlockConfig as Record<string, boolean | null | undefined>)[key] === true);
-  const encryptionSnapshotSignature = stableBucketJsonSignature(encryption?.rules ?? []);
-  const encryptionDraftSignature = jsonTextSignature(encryptionText, encryption?.rules ?? []);
-  const encryptionDirty = encryptionDraftSignature.signature !== encryptionSnapshotSignature;
   const normalizedNotificationsSnapshot = normalizeNotificationConfiguration(notificationConfigSnapshot);
   const notificationsSnapshotSignature = stableBucketJsonSignature(normalizedNotificationsSnapshot);
   const notificationsDraftSignature = jsonTextSignature(
@@ -2206,54 +2175,6 @@ export default function BucketDetailPage({
       setPublicAccessError(message);
     } finally {
       setSavingPublicAccess(false);
-    }
-  };
-
-  const saveEncryption = async () => {
-    if (!bucketName || !hasContext || !sseFeatureEnabled) return;
-    setSavingEncryption(true);
-    setEncryptionError(null);
-    setEncryptionStatus(null);
-    try {
-      const parsed = encryptionText.trim() ? JSON.parse(encryptionText) : [];
-      if (!Array.isArray(parsed)) {
-        throw new Error("Encryption configuration must be an array of rules.");
-      }
-      const saved = isCephAdmin
-        ? endpointId
-          ? await putCephAdminBucketEncryption(endpointId, bucketName, parsed as Record<string, unknown>[])
-          : { rules: parsed as Record<string, unknown>[] }
-        : await putBucketEncryption(accountId, bucketName, parsed as Record<string, unknown>[]);
-      const rules = saved.rules ?? parsed;
-      setEncryption({ rules: rules as Record<string, unknown>[] });
-      setEncryptionText(rules.length > 0 ? JSON.stringify(rules, null, 2) : "[]");
-      setEncryptionStatus(rules.length > 0 ? "Bucket encryption updated." : "Bucket encryption disabled.");
-    } catch {
-      setEncryptionError("Invalid or unsaved bucket encryption configuration (JSON array required).");
-    } finally {
-      setSavingEncryption(false);
-    }
-  };
-
-  const clearEncryption = async () => {
-    if (!bucketName || !hasContext || !sseFeatureEnabled) return;
-    setDeletingEncryption(true);
-    setEncryptionError(null);
-    setEncryptionStatus(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await deleteCephAdminBucketEncryption(endpointId, bucketName);
-      } else {
-        await deleteBucketEncryption(accountId, bucketName);
-      }
-      setEncryption({ rules: [] });
-      setEncryptionText("[]");
-      setEncryptionStatus("Bucket encryption disabled.");
-    } catch (err) {
-      setEncryptionError(extractApiError(err, "Unable to disable bucket encryption."));
-    } finally {
-      setDeletingEncryption(false);
     }
   };
 
@@ -3253,7 +3174,7 @@ export default function BucketDetailPage({
                       onChange={(e) => {
                         setEncryptionText(e.target.value);
                         if (encryptionStatus) {
-                          setEncryptionStatus(null);
+                          clearEncryptionStatus();
                         }
                       }}
                       className={cx(bucketFeatureJsonInputClass, "h-40 w-full")}
