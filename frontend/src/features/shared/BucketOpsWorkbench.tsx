@@ -254,7 +254,6 @@ import {
   type BulkCopyFeatureSelection,
   type BulkObjectLockSnapshot,
   type BulkOperation,
-  type BulkPastePlan,
   type BulkPastePlanItem,
   type BulkPreviewItem,
   type BulkPreviewLine,
@@ -267,7 +266,11 @@ import {
   type SelectionExportFormat,
 } from "./bucketBulkOperationsModel";
 import {
-  areStringMapEqual,
+  buildBulkPastePlan,
+  isBulkClipboardSameEndpoint,
+  reconcileBulkPasteMapping,
+} from "./bucketBulkPasteModel";
+import {
   buildBucketUiTagKey,
   csvEscape,
   formatBucketNamesPreview,
@@ -1639,184 +1642,39 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     () => (bulkConfigClipboard ? bulkConfigClipboard.buckets.map((bucket) => bucket.name) : []),
     [bulkConfigClipboard]
   );
-  const bulkClipboardSameEndpoint = Boolean(
-    bulkConfigClipboard && selectedEndpointId && bulkConfigClipboard.sourceEndpointId === selectedEndpointId
-  );
-  const bulkPastePlan = useMemo<BulkPastePlan>(() => {
-    if (!bulkConfigClipboard) {
-      return { mode: null, mappings: [], error: "No copied configuration available." };
-    }
-    if (!selectedEndpointId) {
-      return { mode: null, mappings: [], error: missingScopeHint };
-    }
-    const enabledFeatures = (Object.keys(bulkConfigClipboard.features) as BulkCopyFeatureKey[]).filter(
-      (feature) => bulkConfigClipboard.features[feature]
-    );
-    if (enabledFeatures.length === 0) {
-      return { mode: null, mappings: [], error: "Clipboard does not include any copied configuration." };
-    }
-    const sourceBuckets = bulkConfigClipboard.buckets;
-    if (sourceBuckets.length === 0) {
-      return { mode: null, mappings: [], error: "Copied selection is empty." };
-    }
-    if (selectedBucketList.length === 0) {
-      return { mode: null, mappings: [], error: "Select destination buckets first." };
-    }
-
-    if (sourceBuckets.length === 1) {
-      const source = sourceBuckets[0];
-      if (bulkClipboardSameEndpoint) {
-        const conflictingDestinations = selectedBucketList.filter(
-          (destination) => normalizeBucketName(destination) === normalizeBucketName(source.name)
-        );
-        if (conflictingDestinations.length > 0) {
-          return {
-            mode: "one_to_many",
-            mappings: [],
-            error: `Copy/paste on the same bucket is not allowed: ${formatBucketNamesPreview(conflictingDestinations)}.`,
-          };
-        }
-      }
-      return {
-        mode: "one_to_many",
-        mappings: selectedBucketList.map((destinationBucket) => ({
-          sourceBucket: source.name,
-          destinationBucket,
-          sourceConfig: source,
-        })),
-        error: null,
-      };
-    }
-
-    if (sourceBuckets.length !== selectedBucketList.length) {
-      return {
-        mode: null,
-        mappings: [],
-        error: `Mapping impossible: source has ${sourceBuckets.length} bucket(s), destination has ${selectedBucketList.length}.`,
-      };
-    }
-
-    const destinationByNormalized = new Map<string, string>();
-    selectedBucketList.forEach((destination) => {
-      destinationByNormalized.set(normalizeBucketName(destination), destination);
-    });
-
-    const usedDestinations = new Set<string>();
-    const unresolvedSources: string[] = [];
-    const duplicateDestinations: string[] = [];
-    const invalidDestinations: string[] = [];
-    const sameBucketConflicts: string[] = [];
-    const mappings: BulkPastePlanItem[] = [];
-
-    sourceBuckets.forEach((source) => {
-      const selectedDestination = (bulkPasteMapping[source.name] ?? "").trim();
-      if (!selectedDestination) {
-        unresolvedSources.push(source.name);
-        return;
-      }
-      const normalizedDestination = normalizeBucketName(selectedDestination);
-      const destinationBucket = destinationByNormalized.get(normalizedDestination);
-      if (!destinationBucket) {
-        invalidDestinations.push(selectedDestination);
-        return;
-      }
-      if (bulkClipboardSameEndpoint && normalizedDestination === normalizeBucketName(source.name)) {
-        sameBucketConflicts.push(source.name);
-        return;
-      }
-      if (usedDestinations.has(normalizedDestination)) {
-        duplicateDestinations.push(destinationBucket);
-        return;
-      }
-      usedDestinations.add(normalizedDestination);
-      mappings.push({
-        sourceBucket: source.name,
-        destinationBucket,
-        sourceConfig: source,
-      });
-    });
-
-    if (unresolvedSources.length > 0) {
-      return {
-        mode: "one_to_one",
-        mappings: [],
-        error: `Complete the mapping for all source buckets (${unresolvedSources.length} missing).`,
-      };
-    }
-    if (invalidDestinations.length > 0) {
-      return {
-        mode: "one_to_one",
-        mappings: [],
-        error: `Some mapped destinations are invalid: ${formatBucketNamesPreview(invalidDestinations)}.`,
-      };
-    }
-    if (sameBucketConflicts.length > 0) {
-      return {
-        mode: "one_to_one",
-        mappings: [],
-        error: `Copy/paste on the same bucket is not allowed: ${formatBucketNamesPreview(sameBucketConflicts)}.`,
-      };
-    }
-    if (duplicateDestinations.length > 0) {
-      return {
-        mode: "one_to_one",
-        mappings: [],
-        error: "Each destination bucket can only be used once in 1:1 mapping.",
-      };
-    }
-
-    return { mode: "one_to_one", mappings, error: null };
-  }, [
+  const bulkClipboardSameEndpoint = isBulkClipboardSameEndpoint(
     bulkConfigClipboard,
-    bulkClipboardSameEndpoint,
-    bulkPasteMapping,
-    missingScopeHint,
-    selectedBucketList,
-    selectedEndpointId,
-  ]);
+    selectedEndpointId
+  );
+  const bulkPastePlan = useMemo(
+    () =>
+      buildBulkPastePlan({
+        clipboard: bulkConfigClipboard,
+        destinationBucketNames: selectedBucketList,
+        mapping: bulkPasteMapping,
+        missingScopeHint,
+        selectedEndpointId,
+      }),
+    [
+      bulkConfigClipboard,
+      bulkPasteMapping,
+      missingScopeHint,
+      selectedBucketList,
+      selectedEndpointId,
+    ]
+  );
 
   useEffect(() => {
     if (!showBulkUpdateModal || bulkOperation !== "paste_configs" || !bulkConfigClipboard) return;
     const sourceBuckets = bulkConfigClipboard.buckets.map((bucket) => bucket.name);
-    if (sourceBuckets.length <= 1 || sourceBuckets.length !== selectedBucketList.length) {
-      setBulkPasteMapping((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-      return;
-    }
-    const destinationByNormalized = new Map<string, string>();
-    selectedBucketList.forEach((destination) => {
-      destinationByNormalized.set(normalizeBucketName(destination), destination);
-    });
-
-    setBulkPasteMapping((prev) => {
-      const next: Record<string, string> = {};
-      const usedDestinations = new Set<string>();
-
-      sourceBuckets.forEach((sourceBucket) => {
-        const previousValue = (prev[sourceBucket] ?? "").trim();
-        if (!previousValue) return;
-        const normalizedDestination = normalizeBucketName(previousValue);
-        const destination = destinationByNormalized.get(normalizedDestination);
-        if (!destination) return;
-        if (bulkClipboardSameEndpoint && normalizedDestination === normalizeBucketName(sourceBucket)) return;
-        if (usedDestinations.has(normalizedDestination)) return;
-        next[sourceBucket] = destination;
-        usedDestinations.add(normalizedDestination);
-      });
-
-      if (!bulkClipboardSameEndpoint) {
-        sourceBuckets.forEach((sourceBucket) => {
-          if (next[sourceBucket]) return;
-          const normalizedSource = normalizeBucketName(sourceBucket);
-          const destination = destinationByNormalized.get(normalizedSource);
-          if (!destination) return;
-          if (usedDestinations.has(normalizedSource)) return;
-          next[sourceBucket] = destination;
-          usedDestinations.add(normalizedSource);
-        });
-      }
-
-      return areStringMapEqual(prev, next) ? prev : next;
-    });
+    setBulkPasteMapping((previousMapping) =>
+      reconcileBulkPasteMapping({
+        destinationBucketNames: selectedBucketList,
+        previousMapping,
+        sameEndpoint: bulkClipboardSameEndpoint,
+        sourceBucketNames: sourceBuckets,
+      })
+    );
   }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkOperation, selectedBucketList, showBulkUpdateModal]);
 
   const loadBucketsForCurrentFilteredExport = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
