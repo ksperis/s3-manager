@@ -86,6 +86,7 @@ import { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserPathEditor } from "./useBrowserPathEditor";
 import { useBrowserPathHistory } from "./useBrowserPathHistory";
+import { useBrowserPrefixVersions } from "./useBrowserPrefixVersions";
 import { useBrowserQueuedUpload } from "./useBrowserQueuedUpload";
 import { useBrowserRuntimeData } from "./useBrowserRuntimeData";
 import { useBrowserSearch } from "./useBrowserSearch";
@@ -377,7 +378,6 @@ export default function BrowserPage({
     searchActive: showBucketMenu || showWorkspaceSidebar,
     usePortalWorkspaceLabels,
   });
-  const [showPrefixVersions, setShowPrefixVersions] = useState(false);
   const {
     activeLayoutMode,
     activePanelResize,
@@ -1026,7 +1026,6 @@ export default function BrowserPage({
   useEffect(() => {
     if (isVersioningEnabled) return;
     hideDeletedObjects();
-    setShowPrefixVersions(false);
   }, [bucketName, hideDeletedObjects, isVersioningEnabled]);
 
   const currentBucketAccess = useMemo<BucketAccessEntry>(
@@ -1470,26 +1469,24 @@ export default function BrowserPage({
     );
   }, [setWarningMessage]);
   const {
+    canLoadMore: canLoadMorePrefixVersions,
+    close: closePrefixVersions,
     error: prefixVersionsError,
-    keyMarker: prefixVersionKeyMarker,
-    load: loadPrefixVersions,
+    loadMore: loadMorePrefixVersions,
     loading: prefixVersionsLoading,
+    open: openPrefixVersions,
+    refresh: refreshPrefixVersions,
+    refreshIfVisible: refreshPrefixVersionsIfVisible,
     rows: prefixVersionRows,
-    versionIdMarker: prefixVersionIdMarker,
-  } = useBrowserVersionListing({
+    visible: showPrefixVersions,
+  } = useBrowserPrefixVersions({
     accountId: accountIdForApi,
-    autoLoad: true,
     bucketName,
-    enabled:
-      showPrefixVersions &&
-      hasS3AccountContext &&
-      isVersioningEnabled,
-    errorMessage: "Unable to list versions for this prefix.",
-    hardLimit: VERSIONS_LIST_HARD_LIMIT,
+    contextEnabled: hasS3AccountContext,
     onHardLimit: handleVersionsHardLimit,
-    pageSize: VERSIONS_PAGE_SIZE,
     prefix: normalizedPrefix,
     requestOptions: browserRequestOptions,
+    versioningEnabled: isVersioningEnabled,
   });
   const inspectedObjectKey =
     inspectedItem?.type === "file" ? inspectedItem.key : null;
@@ -2145,9 +2142,7 @@ export default function BrowserPage({
       return;
     }
     loadObjects({ prefixOverride: prefix, forceRefresh: true });
-    if (showPrefixVersions) {
-      void loadPrefixVersions({ force: true });
-    }
+    void refreshPrefixVersionsIfVisible();
   };
 
   const canLoadMoreObjectResults = Boolean(
@@ -2488,9 +2483,7 @@ export default function BrowserPage({
 
   const refreshObjectListing = async (_targetKey: string) => {
     await loadObjects({ prefixOverride: prefix, forceRefresh: true });
-    if (showPrefixVersions) {
-      await loadPrefixVersions({ force: true });
-    }
+    await refreshPrefixVersionsIfVisible();
   };
 
   const refreshVersionsForKey = async (targetKey: string) => {
@@ -2530,7 +2523,7 @@ export default function BrowserPage({
       uploadFolder: () => folderInputRef.current?.click(),
       newFolder: handleNewFolder,
       paste: handlePasteItems,
-      versions: () => setShowPrefixVersions(true),
+      versions: openPrefixVersions,
       restoreToDate: () => openBulkRestoreModal([]),
       cleanOldVersions: openCleanupModal,
       multipartUploads: openMultipartUploadsModal,
@@ -3219,7 +3212,7 @@ export default function BrowserPage({
         onClose={closeContextMenu}
         onNewFolder={handleNewFolder}
         onPasteItems={handlePasteItems}
-        onOpenPrefixVersions={() => setShowPrefixVersions(true)}
+        onOpenPrefixVersions={openPrefixVersions}
         onOpenCleanupVersions={openCleanupModal}
         onOpenMultipartUploads={openMultipartUploadsModal}
         onConfigureBucket={() => openBucketConfigurationModal(bucketName)}
@@ -3340,11 +3333,10 @@ export default function BrowserPage({
           prefixVersionsLoading={prefixVersionsLoading}
           prefixVersionsError={prefixVersionsError}
           prefixVersionRows={prefixVersionRows}
-          prefixVersionKeyMarker={prefixVersionKeyMarker}
-          prefixVersionIdMarker={prefixVersionIdMarker}
-          onClose={() => setShowPrefixVersions(false)}
-          onRefresh={() => loadPrefixVersions({ force: true })}
-          onLoadMore={() => loadPrefixVersions({ append: true })}
+          canLoadMore={canLoadMorePrefixVersions}
+          onClose={closePrefixVersions}
+          onRefresh={refreshPrefixVersions}
+          onLoadMore={loadMorePrefixVersions}
           onRestoreVersion={handleRestoreVersion}
           onDeleteVersion={handleDeleteVersion}
         />

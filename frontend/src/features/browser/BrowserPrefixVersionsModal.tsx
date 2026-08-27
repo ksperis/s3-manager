@@ -16,8 +16,7 @@ type BrowserPrefixVersionsModalProps = {
   prefixVersionsLoading: boolean;
   prefixVersionsError: string | null;
   prefixVersionRows: BrowserObjectVersion[];
-  prefixVersionKeyMarker: string | null;
-  prefixVersionIdMarker: string | null;
+  canLoadMore: boolean;
   onClose: () => void;
   onRefresh: () => void;
   onLoadMore: () => void;
@@ -31,8 +30,7 @@ export default function BrowserPrefixVersionsModal({
   prefixVersionsLoading,
   prefixVersionsError,
   prefixVersionRows,
-  prefixVersionKeyMarker,
-  prefixVersionIdMarker,
+  canLoadMore,
   onClose,
   onRefresh,
   onLoadMore,
@@ -193,7 +191,7 @@ export default function BrowserPrefixVersionsModal({
             ))}
           </div>
         </div>
-        {(prefixVersionKeyMarker || prefixVersionIdMarker) && (
+        {canLoadMore && (
           <div className="text-right">
             <button
               type="button"
