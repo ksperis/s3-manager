@@ -5840,7 +5840,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
     cols.push({
       id: "actions",
-      label: "Actions",
+      label: "Act.",
       field: null,
       align: "right",
       headerClassName: "w-16",

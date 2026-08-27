@@ -18,7 +18,12 @@ describe("BucketOpsRowActionsMenu", () => {
       />
     );
 
-    const openMenu = () => fireEvent.click(screen.getByRole("button", { name: "Actions for bucket bucket-a" }));
+    const trigger = screen.getByRole("button", { name: "Actions for bucket bucket-a" });
+    expect(trigger).toHaveClass("h-6", "w-6");
+    expect(trigger.className).not.toContain("!h-8");
+    expect(trigger.className).not.toContain("!w-8");
+
+    const openMenu = () => fireEvent.click(trigger);
     openMenu();
     expect(screen.getByText("S3 API")).toBeInTheDocument();
     expect(screen.getByText("RGW Admin Ops")).toBeInTheDocument();

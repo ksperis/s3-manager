@@ -89,7 +89,7 @@ export default function BucketOpsRowActionsMenu({
     <UiActionMenu
       ariaLabel={`Actions for bucket ${bucket.name}`}
       trigger={<span aria-hidden="true">⋮</span>}
-      triggerClassName={`${tableCompactIconActionButtonClasses} !h-8 !w-8`}
+      triggerClassName={tableCompactIconActionButtonClasses}
       sections={sections}
       minWidth={240}
       menuClassName="w-60"
