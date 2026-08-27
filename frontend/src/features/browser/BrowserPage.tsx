@@ -26,7 +26,6 @@ import {
   uiCardMutedClass,
   uiMenuClass,
 } from "../../components/ui/styles";
-import { extractApiError } from "../../utils/apiError";
 import {
   CLIENT_STORAGE_KEYS,
   writeClientStorage,
@@ -35,15 +34,11 @@ import { readStoredUser } from "../../utils/workspaces";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
-  type BrowserUsageSummary,
   type BrowserRequestOptions,
   BrowserObject,
-  BrowserSettings,
   PresignPartRequest,
   PresignRequest,
   listBrowserObjects,
-  fetchBrowserUsageSummary,
-  fetchBrowserSettings,
   presignPart,
   presignObject,
 } from "../../api/browser";
@@ -85,6 +80,7 @@ import { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserPathEditor } from "./useBrowserPathEditor";
 import { useBrowserQueuedUpload } from "./useBrowserQueuedUpload";
+import { useBrowserRuntimeData } from "./useBrowserRuntimeData";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 import { useBrowserUploadQueue } from "./useBrowserUploadQueue";
@@ -338,12 +334,17 @@ export default function BrowserPage({
   const isS3UserContext = executionContextKind === "s3_user";
   const isConnectionContext = executionContextKind === "connection";
   const [showBucketMenu, setShowBucketMenu] = useState(false);
-  const [usageSummary, setUsageSummary] =
-    useState<BrowserUsageSummary | null>(null);
-  const [usageSummaryLoading, setUsageSummaryLoading] = useState(false);
-  const [usageSummaryError, setUsageSummaryError] = useState<string | null>(
-    null,
-  );
+  const {
+    settings: browserSettings,
+    usageError: usageSummaryError,
+    usageLoading: usageSummaryLoading,
+    usageSummary,
+  } = useBrowserRuntimeData({
+    accountId: accountIdForApi,
+    enabled: hasS3AccountContext,
+    requestOptions: browserRequestOptions,
+    showUsage: showWorkspaceSidebar,
+  });
   const [searchParams] = useSearchParams();
   const requestedBucket = useMemo(
     () => searchParams.get("bucket")?.trim() ?? "",
@@ -459,9 +460,6 @@ export default function BrowserPage({
     setDensity(value ? "compact" : "comfortable");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
-  const [browserSettings, setBrowserSettings] =
-    useState<BrowserSettings | null>(null);
-  const [useProxyTransfers, setUseProxyTransfers] = useState(false);
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
   const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
@@ -878,6 +876,14 @@ export default function BrowserPage({
     requestOptions: browserRequestOptions,
     setStatusMessage,
   });
+  const proxyAllowed = browserSettings?.allow_proxy_transfers ?? false;
+  const useProxyTransfers = Boolean(
+    bucketName &&
+      hasS3AccountContext &&
+      proxyAllowed &&
+      corsStatus &&
+      !corsStatus.enabled,
+  );
   const transferParallelism = useMemo(
     () =>
       resolveBrowserTransferParallelism(browserSettings, useProxyTransfers),
@@ -886,7 +892,6 @@ export default function BrowserPage({
   const uploadParallelism = transferParallelism.upload;
   const downloadParallelism = transferParallelism.download;
   const otherOperationsParallelism = transferParallelism.otherOperations;
-  const proxyAllowed = browserSettings?.allow_proxy_transfers ?? false;
   const useStsPresigner = shouldUseStsPresigner({ stsAvailable, sseActive });
   const presignObjectRequest = useCallback(
     async (targetBucket: string, payload: PresignRequest) => {
@@ -1082,63 +1087,6 @@ export default function BrowserPage({
     setStatusMessage(`Queued: ${latest.label}.`);
   }, [operations]);
 
-  useEffect(() => {
-    if (!hasS3AccountContext || !accountIdForApi) {
-      setBrowserSettings(null);
-      return;
-    }
-    let isMounted = true;
-    fetchBrowserSettings(accountIdForApi, browserRequestOptions)
-      .then((data) => {
-        if (isMounted) {
-          setBrowserSettings(data);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setBrowserSettings(null);
-        }
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [accountIdForApi, browserRequestOptions, hasS3AccountContext]);
-
-  useEffect(() => {
-    if (!showWorkspaceSidebar || !hasS3AccountContext || !accountIdForApi) {
-      setUsageSummary(null);
-      setUsageSummaryLoading(false);
-      setUsageSummaryError(null);
-      return;
-    }
-    let isMounted = true;
-    setUsageSummaryLoading(true);
-    setUsageSummaryError(null);
-    fetchBrowserUsageSummary(accountIdForApi, browserRequestOptions)
-      .then((data) => {
-        if (!isMounted) return;
-        setUsageSummary(data.available ? data : null);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setUsageSummary(null);
-        setUsageSummaryError(extractApiError(err, "Usage is not available."));
-      })
-      .finally(() => {
-        if (isMounted) {
-          setUsageSummaryLoading(false);
-        }
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    accountIdForApi,
-    browserRequestOptions,
-    hasS3AccountContext,
-    showWorkspaceSidebar,
-  ]);
-
   useLayoutEffect(() => {
     if (!accountSwitchInFlight) return;
     setActiveItem(null);
@@ -1257,22 +1205,6 @@ export default function BrowserPage({
     setShowObjectsIssueTechnicalDetails,
     showObjectsIssueTechnicalDetails,
   ]);
-
-  useEffect(() => {
-    if (!bucketName || !hasS3AccountContext) {
-      setUseProxyTransfers(false);
-      return;
-    }
-    if (!proxyAllowed) {
-      setUseProxyTransfers(false);
-      return;
-    }
-    if (corsStatus) {
-      setUseProxyTransfers(!corsStatus.enabled);
-      return;
-    }
-    setUseProxyTransfers(false);
-  }, [bucketName, corsStatus, hasS3AccountContext, proxyAllowed]);
 
   const displayPrefixForItems = useMemo(() => {
     const query = filter.trim();
