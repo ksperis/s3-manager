@@ -78,6 +78,7 @@ import { useBrowserListingVisibility } from "./useBrowserListingVisibility";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
+import { useBrowserObjectDetailsTarget } from "./useBrowserObjectDetailsTarget";
 import { useBrowserObjectListing } from "./useBrowserObjectListing";
 import { useBrowserObjectSort } from "./useBrowserObjectSort";
 import { useBrowserOperationOverview } from "./useBrowserOperationOverview";
@@ -196,11 +197,6 @@ import type {
 } from "./browserTypes";
 
 const MOBILE_OBJECT_LIST_MEDIA_QUERY = "(max-width: 767px)";
-
-type ObjectDetailsTarget = {
-  item: BrowserItem;
-  initialTab: ObjectDetailsTabId;
-};
 
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
@@ -558,6 +554,14 @@ export default function BrowserPage({
     typeFilter,
     updateBucketAccessEntry,
   });
+  const {
+    close: closeObjectDetails,
+    open: openObjectDetailsTarget,
+    target: objectDetailsTarget,
+  } = useBrowserObjectDetailsTarget({
+    scopeKey: JSON.stringify([accountIdForApi, bucketName, prefix]),
+    versioningEnabled: isVersioningEnabled,
+  });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const {
     cancelCopyDetails,
@@ -642,8 +646,6 @@ export default function BrowserPage({
     },
     [showOperationsBar, startRegisteredOperation],
   );
-  const [objectDetailsTarget, setObjectDetailsTarget] =
-    useState<ObjectDetailsTarget | null>(null);
   const [configBucketName, setConfigBucketName] = useState<string | null>(null);
   const {
     close: closeConfirmDialog,
@@ -1023,9 +1025,6 @@ export default function BrowserPage({
     if (isVersioningEnabled) return;
     hideDeletedObjects();
     setShowPrefixVersions(false);
-    setObjectDetailsTarget((prev) =>
-      prev?.initialTab === "versions" ? null : prev,
-    );
   }, [bucketName, hideDeletedObjects, isVersioningEnabled]);
 
   const currentBucketAccess = useMemo<BucketAccessEntry>(
@@ -1804,7 +1803,7 @@ export default function BrowserPage({
       initialTab = "preview";
     }
     activateItem(item);
-    setObjectDetailsTarget({ item, initialTab });
+    openObjectDetailsTarget(item, initialTab);
   };
 
   const openItemPrimaryAction = (item: BrowserItem) => {
@@ -1929,7 +1928,6 @@ export default function BrowserPage({
   useEffect(() => {
     setStatusMessage(null);
     setWarningMessage(null);
-    setObjectDetailsTarget(null);
   }, [accountIdForApi, bucketName, prefix]);
 
   useEffect(() => {
@@ -3344,7 +3342,7 @@ export default function BrowserPage({
           copyUrlDisabled={sseActive}
           copyUrlDisabledReason={copyUrlDisabledReason}
           presignObjectRequest={presignObjectRequest}
-          onClose={() => setObjectDetailsTarget(null)}
+          onClose={closeObjectDetails}
           onDownload={handleDownloadTarget}
           onCopyUrl={(item) => handleCopyUrl(item)}
           onRefreshBrowserObjects={refreshObjectListing}
