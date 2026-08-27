@@ -28,6 +28,7 @@ export {
   bucketAclOptions,
   useBucketAclController,
 } from "./useBucketAclController";
+export { useBucketObjectLockController } from "./useBucketObjectLockController";
 export { useBucketWebsiteController } from "./useBucketWebsiteController";
 export {
   jsonTextSignature,

@@ -17,7 +17,6 @@ import {
 import {
   Bucket,
   BucketLifecycleConfig,
-  BucketObjectLockConfiguration,
   BucketReplicationConfiguration,
   BucketPublicAccessBlock,
   BucketTag,
@@ -25,7 +24,6 @@ import {
   deleteBucketTags,
   deleteBucketLifecycle,
   getBucketTags,
-  getBucketObjectLock,
   getBucketReplication,
   getBucketVersioning,
   getBucketLifecycle,
@@ -34,7 +32,6 @@ import {
   putBucketReplication,
   putBucketLifecycle,
   setBucketVersioning,
-  updateBucketObjectLock,
   updateBucketQuota,
 } from "../../api/buckets";
 import {
@@ -42,7 +39,6 @@ import {
   deleteCephAdminBucketReplication,
   deleteCephAdminBucketTags,
   getCephAdminBucketLifecycle,
-  getCephAdminBucketObjectLock,
   getCephAdminBucketReplication,
   getCephAdminBucketVersioning,
   getCephAdminBucketTags,
@@ -52,7 +48,6 @@ import {
   putCephAdminBucketReplication,
   putCephAdminBucketTags,
   setCephAdminBucketVersioning,
-  updateCephAdminBucketObjectLock,
   updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
 import {
@@ -115,6 +110,7 @@ import {
   useBucketCorsController,
   useBucketEncryptionController,
   useBucketNotificationsController,
+  useBucketObjectLockController,
   useBucketPolicyController,
   useBucketPublicAccessController,
   useBucketWebsiteController,
@@ -279,6 +275,9 @@ const bucketFeatureJsonInputClass = cx(uiInputClass, "px-3 py-2 font-mono ui-cap
 const bucketFeatureLabelClass =
   "flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200";
 const bucketDetailHintClass = "ui-caption text-slate-500 dark:text-slate-400";
+const bucketDetailTwoColumnGridClass = "grid gap-3 md:grid-cols-2";
+const bucketDetailTableHeaderClass =
+  "px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
 
 const defaultLifecycleJsonExample = `[
   {
@@ -473,16 +472,6 @@ export default function BucketDetailPage({
   const [quotaStatus, setQuotaStatus] = useState<string | null>(null);
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [updatingQuota, setUpdatingQuota] = useState(false);
-  const [objectLockEnabled, setObjectLockEnabled] = useState<boolean | null>(null);
-  const [objectLockMode, setObjectLockMode] = useState("");
-  const [objectLockDays, setObjectLockDays] = useState("");
-  const [objectLockYears, setObjectLockYears] = useState("");
-  const [objectLockStatus, setObjectLockStatus] = useState<string | null>(null);
-  const [objectLockError, setObjectLockError] = useState<string | null>(null);
-  const [objectLockLoadError, setObjectLockLoadError] = useState<string | null>(null);
-  const [objectLockLoading, setObjectLockLoading] = useState(false);
-  const [savingObjectLock, setSavingObjectLock] = useState(false);
-  const [objectLockConfig, setObjectLockConfig] = useState<BucketObjectLockConfiguration | null>(null);
 
   const selectedS3Account = useMemo(() => {
     if (isCephAdmin) return null;
@@ -626,6 +615,42 @@ export default function BucketDetailPage({
     enabled: hasContext,
     endpointId,
   });
+  const {
+    active: objectLockActive,
+    configuration: objectLockConfig,
+    days: objectLockDays,
+    dirty: objectLockDirty,
+    enabled: objectLockEnabled,
+    error: objectLockError,
+    load: loadObjectLock,
+    loadError: objectLockLoadError,
+    loading: objectLockLoading,
+    mode: objectLockMode,
+    persistentlyEnabled: objectLockPersistentlyEnabled,
+    reset: resetObjectLock,
+    save: saveObjectLock,
+    saving: savingObjectLock,
+    status: objectLockStatus,
+    updateDays: updateObjectLockDays,
+    updateEnabled: updateObjectLockEnabled,
+    updateMode: updateObjectLockMode,
+    updateYears: updateObjectLockYears,
+    years: objectLockYears,
+  } = useBucketObjectLockController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+    onVersioningEnabled: () => {
+      setVersioningDraftEnabled(true);
+      setVersioningStatus("Enabled");
+      setVersioningLoadError(null);
+      setVersioningSaveError(null);
+    },
+    versioningEnabled:
+      (versioningStatus ?? "").trim().toLowerCase() === "enabled",
+  });
   const quotaFeatureEnabled = isCephAdmin ? isCephEndpoint : Boolean(isCephEndpoint && managerBucketQuotaEnabled);
   const showQuotaTab = !hideQuotaTab && (isCephAdmin || Boolean(quotaFeatureEnabled && hasAccountContext));
   const showObjectsTab = !hideObjectsTab;
@@ -737,8 +762,6 @@ export default function BucketDetailPage({
     quotaFeatureEnabled &&
     ((isCephAdmin && isAdmin && hasCephContext) || (!isCephAdmin && hasAccountContext));
   const quotaSectionRestricted = quotaFeatureEnabled && !canEditQuota;
-  const objectLockPersistentlyEnabled = (objectLockConfig?.enabled ?? null) === true;
-  const objectLockActive = (objectLockEnabled ?? null) === true || objectLockPersistentlyEnabled;
   const versioningStatusRaw = (versioningStatus ?? "").trim();
   const versioningStatusNormalized = versioningStatusRaw.toLowerCase();
   const versioningIsEnabled = versioningStatusNormalized === "enabled";
@@ -770,22 +793,6 @@ export default function BucketDetailPage({
     const objects = bucket.quota_max_objects;
     setQuotaObjects(objects != null && objects > 0 ? String(objects) : "");
   }, [bucket, quotaFeatureEnabled]);
-
-  const applyObjectLockState = useCallback((config?: BucketObjectLockConfiguration | null) => {
-    if (!config) {
-      setObjectLockEnabled(null);
-      setObjectLockMode("");
-      setObjectLockDays("");
-      setObjectLockYears("");
-      setObjectLockConfig(null);
-      return;
-    }
-    setObjectLockEnabled(config.enabled ?? null);
-    setObjectLockMode(config.mode ?? "");
-    setObjectLockDays(config.days != null ? String(config.days) : "");
-    setObjectLockYears(config.years != null ? String(config.years) : "");
-    setObjectLockConfig(config);
-  }, []);
 
   const emptySimpleLifecycleRule = useCallback(
     (): SimpleLifecycleRule => ({
@@ -872,33 +879,6 @@ export default function BucketDetailPage({
       setVersioningLoading(false);
     }
   }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
-
-  const loadObjectLock = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      applyObjectLockState(null);
-      setObjectLockLoadError(null);
-      setObjectLockError(null);
-      setObjectLockStatus(null);
-      return;
-    }
-    setObjectLockLoading(true);
-    setObjectLockLoadError(null);
-    setObjectLockError(null);
-    setObjectLockStatus(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketObjectLock(endpointId, bucketName)
-          : null
-        : await getBucketObjectLock(accountId, bucketName);
-      applyObjectLockState(data);
-    } catch (err) {
-      applyObjectLockState(null);
-      setObjectLockLoadError(extractApiError(err, "Unable to load Object Lock configuration."));
-    } finally {
-      setObjectLockLoading(false);
-    }
-  }, [accountId, applyObjectLockState, bucketName, endpointId, hasContext, isCephAdmin]);
 
   useEffect(() => {
     loadVersioning();
@@ -1509,19 +1489,6 @@ export default function BucketDetailPage({
   const tagsDraftSignature = stableBucketJsonSignature(normalizeBucketTagsDraft(bucketTags));
   const tagsSnapshotSignature = stableBucketJsonSignature(normalizeBucketTagsDraft(bucketTagsSnapshot));
   const tagsDirty = tagsDraftSignature !== tagsSnapshotSignature;
-  const objectLockDraftSignature = stableBucketJsonSignature({
-    enabled: objectLockEnabled ?? null,
-    mode: objectLockMode.trim(),
-    days: objectLockDays.trim(),
-    years: objectLockYears.trim(),
-  });
-  const objectLockSnapshotSignature = stableBucketJsonSignature({
-    enabled: objectLockConfig?.enabled ?? null,
-    mode: (objectLockConfig?.mode ?? "").trim(),
-    days: objectLockConfig?.days != null ? String(objectLockConfig.days) : "",
-    years: objectLockConfig?.years != null ? String(objectLockConfig.years) : "",
-  });
-  const objectLockDirty = objectLockDraftSignature !== objectLockSnapshotSignature;
   const quotaSnapshotSignature = stableBucketJsonSignature(
     normalizeQuotaDraft(
       (() => {
@@ -2218,75 +2185,6 @@ export default function BucketDetailPage({
     }
   };
 
-  const handleSaveObjectLock = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!bucketName || !hasContext || objectLockLoading || objectLockLoadError) return;
-    setSavingObjectLock(true);
-    setObjectLockStatus(null);
-    setObjectLockError(null);
-    const parsedDays = objectLockDays.trim() === "" ? null : Number(objectLockDays);
-    const parsedYears = objectLockYears.trim() === "" ? null : Number(objectLockYears);
-    if ((parsedDays !== null && Number.isNaN(parsedDays)) || (parsedYears !== null && Number.isNaN(parsedYears))) {
-      setObjectLockError("Invalid default retention values.");
-      setSavingObjectLock(false);
-      return;
-    }
-    if (parsedDays !== null && parsedYears !== null) {
-      setObjectLockError("Choose days or years, not both.");
-      setSavingObjectLock(false);
-      return;
-    }
-    if ((parsedDays !== null || parsedYears !== null) && !objectLockMode) {
-      setObjectLockError("Mode is required to define the default retention.");
-      setSavingObjectLock(false);
-      return;
-    }
-    if (objectLockMode && parsedDays === null && parsedYears === null) {
-      setObjectLockError("Provide a duration (days or years) or clear the mode to remove the rule.");
-      setSavingObjectLock(false);
-      return;
-    }
-    try {
-      const enablingObjectLock = objectLockEnabled === true;
-      if (enablingObjectLock && !versioningIsEnabled) {
-        if (isCephAdmin) {
-          if (!endpointId) {
-            setObjectLockError("Select a Ceph endpoint before saving Object Lock.");
-            return;
-          }
-          await setCephAdminBucketVersioning(endpointId, bucketName, true);
-        } else {
-          await setBucketVersioning(accountId, bucketName, true);
-        }
-        setVersioningDraftEnabled(true);
-        setVersioningStatus("Enabled");
-      }
-
-      const payload = {
-        enabled: objectLockEnabled,
-        mode: objectLockMode || null,
-        days: parsedDays,
-        years: parsedYears,
-      };
-      const updated = isCephAdmin
-        ? endpointId
-          ? await updateCephAdminBucketObjectLock(endpointId, bucketName, payload)
-          : null
-        : await updateBucketObjectLock(accountId, bucketName, payload);
-      if (!updated) {
-        setObjectLockError("Unable to update the Object Lock configuration.");
-        return;
-      }
-      applyObjectLockState(updated);
-      setObjectLockStatus("Object Lock updated");
-      await Promise.all([loadVersioning(), loadObjectLock()]);
-    } catch (err) {
-      setObjectLockError(extractApiError(err, "Unable to update the Object Lock configuration."));
-    } finally {
-      setSavingObjectLock(false);
-    }
-  };
-
   const configurationDeleteLoading =
     pendingConfigurationDelete === "cors"
       ? deletingCors
@@ -2359,7 +2257,7 @@ export default function BucketDetailPage({
                     Owner: <span className="font-semibold text-slate-700 dark:text-slate-200">{bucketOwner ?? (loadingBucket || bucketAclLoading ? "Loading..." : "Unknown")}</span>
                   </p>
                 </header>
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className={bucketDetailTwoColumnGridClass}>
                   <UsageTile
                     label="Storage"
                     used={storageUsage.used}
@@ -2547,7 +2445,7 @@ export default function BucketDetailPage({
             label: "Properties",
             content: (
               <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className={bucketDetailTwoColumnGridClass}>
                   <BucketFeatureCard
                     title="Versioning"
                     description="Enable or disable S3 object versioning."
@@ -2686,7 +2584,7 @@ export default function BucketDetailPage({
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => applyObjectLockState(objectLockConfig)}
+                          onClick={resetObjectLock}
                           className={bucketFeatureSecondaryActionClass}
                           disabled={objectLockLoading || Boolean(objectLockLoadError) || savingObjectLock}
                         >
@@ -2716,7 +2614,14 @@ export default function BucketDetailPage({
                       {objectLockStatus && (
                         <UiInlineMessage tone="success">{objectLockStatus}</UiInlineMessage>
                       )}
-                      <form id={objectLockFormId} className="space-y-2" onSubmit={handleSaveObjectLock}>
+                      <form
+                        id={objectLockFormId}
+                        className="space-y-2"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void saveObjectLock();
+                        }}
+                      >
                         <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
                           <div>
                             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Enable Object Lock</p>
@@ -2730,7 +2635,7 @@ export default function BucketDetailPage({
                             ariaLabel="Enable object lock"
                             onChange={(checked) => {
                               if (objectLockPersistentlyEnabled) return;
-                              setObjectLockEnabled(checked);
+                              updateObjectLockEnabled(checked);
                               if (checked) {
                                 setVersioningDraftEnabled(true);
                               }
@@ -2755,7 +2660,7 @@ export default function BucketDetailPage({
                             Mode
                             <select
                               value={objectLockMode}
-                              onChange={(e) => setObjectLockMode(e.target.value)}
+                              onChange={(e) => updateObjectLockMode(e.target.value)}
                               className={bucketFeatureInputClass}
                               disabled={objectLockNotImplemented}
                             >
@@ -2771,7 +2676,7 @@ export default function BucketDetailPage({
                               min={0}
                               step="1"
                               value={objectLockDays}
-                              onChange={(e) => setObjectLockDays(e.target.value)}
+                              onChange={(e) => updateObjectLockDays(e.target.value)}
                               className={bucketFeatureInputClass}
                               placeholder="e.g. 30"
                               disabled={objectLockNotImplemented}
@@ -2784,7 +2689,7 @@ export default function BucketDetailPage({
                               min={0}
                               step="1"
                               value={objectLockYears}
-                              onChange={(e) => setObjectLockYears(e.target.value)}
+                              onChange={(e) => updateObjectLockYears(e.target.value)}
                               className={bucketFeatureInputClass}
                               placeholder="e.g. 1"
                               disabled={objectLockNotImplemented}
@@ -2850,19 +2755,19 @@ export default function BucketDetailPage({
                             <table className={cx(uiDataTableClass, "min-w-full ui-caption")}>
                               <thead>
                                 <tr>
-                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className={bucketDetailTableHeaderClass}>
                                     ID
                                   </th>
-                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className={bucketDetailTableHeaderClass}>
                                     Status
                                   </th>
-                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className={bucketDetailTableHeaderClass}>
                                     Filter
                                   </th>
-                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className={bucketDetailTableHeaderClass}>
                                     Actions
                                   </th>
-                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className={bucketDetailTableHeaderClass}>
                                     Manage
                                   </th>
                                 </tr>
@@ -3239,7 +3144,7 @@ export default function BucketDetailPage({
                   {publicAccessError && (
                     <UiInlineMessage tone="error">{publicAccessError}</UiInlineMessage>
                   )}
-                  <div className="grid gap-3 md:grid-cols-2">
+                  <div className={bucketDetailTwoColumnGridClass}>
                     {publicAccessOptions.map((option) => (
                       <label
                         key={option.key}
@@ -3285,7 +3190,7 @@ export default function BucketDetailPage({
                   {bucketAclStatus && (
                     <UiInlineMessage tone="success">{bucketAclStatus}</UiInlineMessage>
                   )}
-                  <div className="grid gap-3 md:grid-cols-2">
+                  <div className={bucketDetailTwoColumnGridClass}>
                     <label className={bucketFeatureLabelClass}>
                       Canned ACL
                       <select
@@ -3500,7 +3405,7 @@ export default function BucketDetailPage({
                   {websiteStatus && (
                     <UiInlineMessage tone="success">{websiteStatus}</UiInlineMessage>
                   )}
-                  <div className="grid gap-3 md:grid-cols-2">
+                  <div className={bucketDetailTwoColumnGridClass}>
                     <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
                       <input
                         type="radio"
@@ -3534,7 +3439,7 @@ export default function BucketDetailPage({
                   </div>
                   {websiteMode === "hosting" ? (
                     <div className="space-y-3">
-                      <div className="grid gap-3 md:grid-cols-2">
+                      <div className={bucketDetailTwoColumnGridClass}>
                         <label className={bucketFeatureLabelClass}>
                           Index document
                           <input
@@ -3583,7 +3488,7 @@ export default function BucketDetailPage({
                       </div>
                     </div>
                   ) : (
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className={bucketDetailTwoColumnGridClass}>
                       <label className={bucketFeatureLabelClass}>
                         Redirect hostname
                         <input
@@ -3699,7 +3604,7 @@ export default function BucketDetailPage({
                                   Remove
                                 </button>
                               </div>
-                              <div className="grid gap-3 md:grid-cols-2">
+                              <div className={bucketDetailTwoColumnGridClass}>
                                 <label className={bucketFeatureLabelClass}>
                                   ID
                                   <input
@@ -3866,7 +3771,7 @@ export default function BucketDetailPage({
                     />
                     Enable server access logging
                   </label>
-                  <div className="grid gap-3 md:grid-cols-2">
+                  <div className={bucketDetailTwoColumnGridClass}>
                     <label className={bucketFeatureLabelClass}>
                       Target bucket
                       <input
@@ -3984,7 +3889,7 @@ export default function BucketDetailPage({
                   title="Current usage and quota"
                   description="Live usage, quotas, and traffic sourced from backend metrics."
                 >
-                  <div className="grid gap-3 md:grid-cols-2">
+                  <div className={bucketDetailTwoColumnGridClass}>
                     <UsageTile
                       label="Storage"
                       used={storageUsage.used}
