@@ -22,7 +22,7 @@ from app.services.first_admin_bootstrap_service import (
 
 
 PASSWORD = "correct horse battery staple"
-EXPECTED_ALEMBIC_HEAD = "0119_first_admin_bootstrap"
+EXPECTED_ALEMBIC_HEAD = "0120_bucket_ui_tag_definition_settings"
 
 
 def _postgresql_url() -> str:
