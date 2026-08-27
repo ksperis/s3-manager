@@ -19,10 +19,14 @@ export {
 } from "./useBucketEncryptionController";
 export { useBucketAccessLoggingController } from "./useBucketAccessLoggingController";
 export {
+  buildNotificationExample,
+  defaultNotificationTemplate,
+  useBucketNotificationsController,
+} from "./useBucketNotificationsController";
+export {
   jsonTextSignature,
   normalizeAclDraft,
   normalizeBucketTagsDraft,
-  normalizeNotificationConfiguration,
   normalizePublicAccessDraft,
   normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,

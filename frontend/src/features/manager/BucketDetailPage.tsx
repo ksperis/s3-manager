@@ -23,13 +23,11 @@ import {
   BucketPublicAccessBlock,
   BucketTag,
   BucketWebsiteConfiguration,
-  deleteBucketNotifications,
   deleteBucketReplication,
   deleteBucketTags,
   deleteBucketWebsite,
   deleteBucketLifecycle,
   getBucketTags,
-  getBucketNotifications,
   getBucketObjectLock,
   getBucketReplication,
   getBucketVersioning,
@@ -39,7 +37,6 @@ import {
   getBucketPublicAccessBlock,
   listBuckets,
   putBucketTags,
-  putBucketNotifications,
   putBucketReplication,
   putBucketWebsite,
   putBucketLifecycle,
@@ -51,13 +48,11 @@ import {
 } from "../../api/buckets";
 import {
   deleteCephAdminBucketLifecycle,
-  deleteCephAdminBucketNotifications,
   deleteCephAdminBucketReplication,
   deleteCephAdminBucketTags,
   deleteCephAdminBucketWebsite,
   getCephAdminBucketAcl,
   getCephAdminBucketLifecycle,
-  getCephAdminBucketNotifications,
   getCephAdminBucketObjectLock,
   getCephAdminBucketReplication,
   getCephAdminBucketVersioning,
@@ -67,7 +62,6 @@ import {
   listCephAdminBucketObjects,
   listCephAdminBuckets,
   putCephAdminBucketLifecycle,
-  putCephAdminBucketNotifications,
   putCephAdminBucketReplication,
   putCephAdminBucketTags,
   putCephAdminBucketWebsite,
@@ -119,14 +113,15 @@ import {
   BucketFeatureCard,
   BucketFeatureJsonExample,
   BucketFeatureModeToggle,
+  buildNotificationExample,
   buildPolicyExample,
   defaultCorsExample,
   defaultEncryptionExample,
+  defaultNotificationTemplate,
   jsonTextSignature,
   isLifecycleSimpleDraftEmpty,
   normalizeAclDraft,
   normalizeBucketTagsDraft,
-  normalizeNotificationConfiguration,
   normalizePublicAccessDraft,
   normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,
@@ -135,6 +130,7 @@ import {
   useBucketAccessLoggingController,
   useBucketCorsController,
   useBucketEncryptionController,
+  useBucketNotificationsController,
   useBucketPolicyController,
 } from "./bucketDetail";
 import {
@@ -320,11 +316,11 @@ const bucketFeatureInputClass = cx(uiInputClass, "px-2 py-1 ui-body");
 const bucketFeatureJsonInputClass = cx(uiInputClass, "px-3 py-2 font-mono ui-caption");
 const bucketFeatureLabelClass =
   "flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200";
+const bucketDetailHintClass = "ui-caption text-slate-500 dark:text-slate-400";
 
 const isPublicAccessFullyEnabled = (config?: BucketPublicAccessBlock | null) =>
   Boolean(config) && publicAccessKeys.every((key) => (config as Record<string, boolean | null | undefined>)[key] === true);
 
-const defaultNotificationTemplate = '{\n  "TopicConfigurations": []\n}';
 const defaultLifecycleJsonExample = `[
   {
     "ID": "expire-logs",
@@ -469,12 +465,6 @@ export default function BucketDetailPage({
   const [publicAccessStatus, setPublicAccessStatus] = useState<string | null>(null);
   const [publicAccessLoading, setPublicAccessLoading] = useState(false);
   const [savingPublicAccess, setSavingPublicAccess] = useState(false);
-  const [notificationText, setNotificationText] = useState(defaultNotificationTemplate);
-  const [notificationsError, setNotificationsError] = useState<string | null>(null);
-  const [notificationsStatus, setNotificationsStatus] = useState<string | null>(null);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [savingNotifications, setSavingNotifications] = useState(false);
-  const [clearingNotifications, setClearingNotifications] = useState(false);
   const [showNotificationExample, setShowNotificationExample] = useState(false);
   const [websiteConfig, setWebsiteConfig] = useState<BucketWebsiteConfiguration | null>(null);
   const [websiteMode, setWebsiteMode] = useState<"hosting" | "redirect">("hosting");
@@ -553,7 +543,6 @@ export default function BucketDetailPage({
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
   const [publicAccessSnapshot, setPublicAccessSnapshot] = useState<BucketPublicAccessBlock>(defaultPublicAccessBlock);
-  const [notificationConfigSnapshot, setNotificationConfigSnapshot] = useState<Record<string, unknown>>({});
   const [bucketTagsSnapshot, setBucketTagsSnapshot] = useState<BucketTag[]>([]);
   const [quotaSizeGb, setQuotaSizeGb] = useState<string>("");
   const [quotaSizeUnit, setQuotaSizeUnit] = useState<"MiB" | "GiB" | "TiB">("GiB");
@@ -654,6 +643,26 @@ export default function BucketDetailPage({
     enabled: hasContext,
     endpointId,
   });
+  const {
+    clear: clearNotifications,
+    clearing: clearingNotifications,
+    configured: notificationsConfigured,
+    dirty: notificationsDirty,
+    error: notificationsError,
+    load: loadNotifications,
+    loading: notificationsLoading,
+    save: saveNotifications,
+    saving: savingNotifications,
+    status: notificationsStatus,
+    text: notificationText,
+    updateText: updateNotificationText,
+  } = useBucketNotificationsController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
   const quotaFeatureEnabled = isCephAdmin ? isCephEndpoint : Boolean(isCephEndpoint && managerBucketQuotaEnabled);
   const showQuotaTab = !hideQuotaTab && (isCephAdmin || Boolean(quotaFeatureEnabled && hasAccountContext));
   const showObjectsTab = !hideObjectsTab;
@@ -728,22 +737,7 @@ export default function BucketDetailPage({
       setActiveTab("overview");
     }
   }, [activeTab, canViewBucketMetrics]);
-  const notificationExample = `{
-  "TopicConfigurations": [
-    {
-      "Id": "ObjectCreateAll",
-      "TopicArn": "arn:aws:sns:default:${exampleS3AccountId}:example-topic",
-      "Events": ["s3:ObjectCreated:*"],
-      "Filter": {
-        "Key": {
-          "FilterRules": [
-            { "Name": "prefix", "Value": "uploads/" }
-          ]
-        }
-      }
-    }
-  ]
-}`;
+  const notificationExample = buildNotificationExample(exampleS3AccountId);
   const userRole = getUserRole();
   const isAdmin = isAdminLikeRole(userRole);
   const canEditQuota =
@@ -1025,35 +1019,6 @@ export default function BucketDetailPage({
       setPublicAccessSnapshot({ ...defaultPublicAccessBlock });
     } finally {
       setPublicAccessLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
-
-  const loadNotifications = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setNotificationText(defaultNotificationTemplate);
-      setNotificationConfigSnapshot({});
-      return;
-    }
-    setNotificationsLoading(true);
-    setNotificationsError(null);
-    setNotificationsStatus(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketNotifications(endpointId, bucketName)
-          : { configuration: {} }
-        : await getBucketNotifications(accountId, bucketName);
-      const rawConfig = data.configuration ?? {};
-      const normalizedConfig = normalizeNotificationConfiguration(rawConfig);
-      const hasConfig = Object.keys(normalizedConfig).length > 0;
-      setNotificationText(hasConfig ? JSON.stringify(normalizedConfig, null, 2) : defaultNotificationTemplate);
-      setNotificationConfigSnapshot(normalizedConfig);
-    } catch (err) {
-      setNotificationText(defaultNotificationTemplate);
-      setNotificationConfigSnapshot({});
-      setNotificationsError(extractApiError(err, "Unable to load bucket notifications."));
-    } finally {
-      setNotificationsLoading(false);
     }
   }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
@@ -1651,15 +1616,6 @@ export default function BucketDetailPage({
     Boolean(publicAccessBlockConfig) &&
     !publicAccessBlockEnabled &&
     publicAccessKeys.some((key) => (publicAccessBlockConfig as Record<string, boolean | null | undefined>)[key] === true);
-  const normalizedNotificationsSnapshot = normalizeNotificationConfiguration(notificationConfigSnapshot);
-  const notificationsSnapshotSignature = stableBucketJsonSignature(normalizedNotificationsSnapshot);
-  const notificationsDraftSignature = jsonTextSignature(
-    notificationText,
-    normalizedNotificationsSnapshot,
-    normalizeNotificationConfiguration
-  );
-  const notificationsDirty = notificationsDraftSignature.signature !== notificationsSnapshotSignature;
-  const notificationsConfigured = Object.keys(normalizedNotificationsSnapshot).length > 0;
   const websiteRoutingDraftSignature = jsonTextSignature(
     websiteRoutingRules,
     Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : []
@@ -2226,55 +2182,6 @@ export default function BucketDetailPage({
     }
   };
 
-  const saveNotifications = async () => {
-    if (!bucketName || !hasContext) return;
-    let parsed: Record<string, unknown>;
-    setNotificationsError(null);
-    setNotificationsStatus(null);
-    try {
-      parsed = notificationText.trim() ? JSON.parse(notificationText) : {};
-    } catch {
-      setNotificationsError("Notifications must be valid JSON.");
-      return;
-    }
-    setSavingNotifications(true);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await putCephAdminBucketNotifications(endpointId, bucketName, parsed);
-      } else {
-        await putBucketNotifications(accountId, bucketName, parsed);
-      }
-      setNotificationsStatus("Notifications updated.");
-      await loadNotifications();
-    } catch (err) {
-      setNotificationsError(extractApiError(err, "Unable to update bucket notifications."));
-    } finally {
-      setSavingNotifications(false);
-    }
-  };
-
-  const clearNotifications = async () => {
-    if (!bucketName || !hasContext) return;
-    setClearingNotifications(true);
-    setNotificationsError(null);
-    setNotificationsStatus(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await deleteCephAdminBucketNotifications(endpointId, bucketName);
-      } else {
-        await deleteBucketNotifications(accountId, bucketName);
-      }
-      await loadNotifications();
-      setNotificationsStatus("Notifications cleared.");
-    } catch (err) {
-      setNotificationsError(extractApiError(err, "Unable to delete bucket notifications."));
-    } finally {
-      setClearingNotifications(false);
-    }
-  };
-
   const updateReplicationRule = (uiId: string, patch: Partial<GraphicalReplicationRule>) => {
     setReplicationRules((prev) =>
       prev.map((rule) => (rule.uiId === uiId ? { ...rule, ...patch } : rule))
@@ -2782,7 +2689,7 @@ export default function BucketDetailPage({
                   <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
                     {bucketName ? `Bucket ${bucketName}` : "Bucket overview"}
                   </h3>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  <p className={bucketDetailHintClass}>
                     Owner: <span className="font-semibold text-slate-700 dark:text-slate-200">{bucketOwner ?? (loadingBucket || bucketAclLoading ? "Loading..." : "Unknown")}</span>
                   </p>
                 </header>
@@ -2845,7 +2752,7 @@ export default function BucketDetailPage({
                           onClick={() => setCurrentPrefix(parentPrefix)}
                         >
                           <span>⬆️ Up</span>
-                          <span className="ui-caption text-slate-500 dark:text-slate-400">{parentPrefix || "/"}</span>
+                          <span className={bucketDetailHintClass}>{parentPrefix || "/"}</span>
                         </button>
                       )}
                       {prefixes.map((prefix) => {
@@ -2876,7 +2783,7 @@ export default function BucketDetailPage({
                         <div className="ui-caption text-slate-500 dark:text-slate-300">
                           {bucketName}/{currentPrefix || "(root)"}
                         </div>
-                        <div className="ui-caption text-slate-500 dark:text-slate-400">
+                        <div className={bucketDetailHintClass}>
                           {isCephAdmin
                             ? "Read-only preview using the selected endpoint's Ceph Admin credentials."
                             : "Read-only preview. Use the main Browser page for object operations."}
@@ -3013,7 +2920,7 @@ export default function BucketDetailPage({
                       <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
                         <div>
                           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Enable versioning</p>
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          <p className={bucketDetailHintClass}>
                             Keeps object history for restores and is required for Object Lock.
                           </p>
                         </div>
@@ -3096,7 +3003,7 @@ export default function BucketDetailPage({
                       onUseExample={() => setEncryptionText(defaultEncryptionExample)}
                       disabled={!sseFeatureEnabled || encryptionNotImplemented}
                       helperText={
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">
+                        <span className={bucketDetailHintClass}>
                           Leave <code>Rules</code> empty to disable default encryption.
                         </span>
                       }
@@ -3147,7 +3054,7 @@ export default function BucketDetailPage({
                         <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
                           <div>
                             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Enable Object Lock</p>
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">
+                            <p className={bucketDetailHintClass}>
                               Write-once retention controls for bucket objects.
                             </p>
                           </div>
@@ -3164,11 +3071,11 @@ export default function BucketDetailPage({
                             }}
                           />
                         </div>
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        <p className={bucketDetailHintClass}>
                           Enabling Object Lock automatically enables bucket versioning.
                         </p>
                         {objectLockPersistentlyEnabled && (
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          <p className={bucketDetailHintClass}>
                             Object Lock cannot be disabled once it has been enabled on the bucket. Update only the default retention below.
                           </p>
                         )}
@@ -3240,7 +3147,7 @@ export default function BucketDetailPage({
                       className="order-4 md:order-none md:col-span-2 md:col-start-1 md:row-start-3"
                       actions={
                         <div className="flex items-center gap-2">
-                          <span className="ui-caption text-slate-500 dark:text-slate-400">{(lifecycle.rules ?? []).length} rule(s)</span>
+                          <span className={bucketDetailHintClass}>{(lifecycle.rules ?? []).length} rule(s)</span>
                           <button
                             type="button"
                             onClick={() => setShowLifecycleEditor((prev) => !prev)}
@@ -3517,13 +3424,13 @@ export default function BucketDetailPage({
                                   </div>
                                 </div>
                               </div>
-                              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                              <p className={bucketDetailHintClass}>
                                 Use JSON mode to customize or edit rules.
                               </p>
                             </div>
                           ) : (
                             <div className="mt-3 space-y-2">
-                              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                              <p className={bucketDetailHintClass}>
                                 Paste a JSON array that matches the S3 API (<code>Rules</code>). Existing rules are listed above.
                               </p>
                               <textarea
@@ -3584,7 +3491,7 @@ export default function BucketDetailPage({
                       ) : (
                         <div className="space-y-2">
                           {bucketTags.length === 0 && (
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">No tags configured on this bucket.</p>
+                            <p className={bucketDetailHintClass}>No tags configured on this bucket.</p>
                           )}
                           {bucketTags.map((tag) => (
                             <div
@@ -3626,7 +3533,7 @@ export default function BucketDetailPage({
                             >
                               Add tag
                             </button>
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">
+                            <p className={bucketDetailHintClass}>
                               Tag keys must be unique and cannot be empty.
                             </p>
                           </div>
@@ -3674,7 +3581,7 @@ export default function BucketDetailPage({
                       >
                         <div>
                           <p className="font-semibold text-slate-900 dark:text-slate-50">{option.label}</p>
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">{option.description}</p>
+                          <p className={bucketDetailHintClass}>{option.description}</p>
                         </div>
                         <input
                           type="checkbox"
@@ -3749,14 +3656,14 @@ export default function BucketDetailPage({
                       </label>
                     )}
                   </div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  <p className={bucketDetailHintClass}>
                     Saving a canned ACL replaces the current ACL grants.
                   </p>
                   {bucketAclLoading ? (
                     <UiInlineMessage>Loading ACL...</UiInlineMessage>
                   ) : (
                     <div className="space-y-3">
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      <p className={bucketDetailHintClass}>
                         Owner: <span className="font-semibold text-slate-700 dark:text-slate-200">{bucketAcl?.owner ?? "Unknown"}</span>
                       </p>
                       {(bucketAcl?.grants?.length ?? 0) > 0 ? (
@@ -3949,7 +3856,7 @@ export default function BucketDetailPage({
                       />
                       <div>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">Host a website</p>
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        <p className={bucketDetailHintClass}>
                           Serve index and error documents from this bucket.
                         </p>
                       </div>
@@ -3968,7 +3875,7 @@ export default function BucketDetailPage({
                       />
                       <div>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">Redirect all requests</p>
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        <p className={bucketDetailHintClass}>
                           Point every request to another host or domain.
                         </p>
                       </div>
@@ -4351,7 +4258,7 @@ export default function BucketDetailPage({
                       />
                     </label>
                   </div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  <p className={bucketDetailHintClass}>
                     The target bucket must allow log delivery (e.g., ACL <code className="font-mono ui-caption">log-delivery-write</code>
                     or an equivalent policy).
                   </p>
@@ -4394,12 +4301,7 @@ export default function BucketDetailPage({
                   )}
                   <textarea
                     value={notificationText}
-                    onChange={(e) => {
-                      setNotificationText(e.target.value);
-                      if (notificationsStatus) {
-                        setNotificationsStatus(null);
-                      }
-                    }}
+                    onChange={(e) => updateNotificationText(e.target.value)}
                     className={cx(bucketFeatureJsonInputClass, "h-64 w-full")}
                     placeholder={defaultNotificationTemplate}
                     spellCheck={false}
@@ -4409,18 +4311,15 @@ export default function BucketDetailPage({
                     show={showNotificationExample}
                     onToggle={() => setShowNotificationExample((prev) => !prev)}
                     example={notificationExample}
-                    onUseExample={() => {
-                      setNotificationText(notificationExample);
-                      setNotificationsStatus(null);
-                    }}
+                    onUseExample={() => updateNotificationText(notificationExample)}
                     disabled={notificationsNotImplemented}
                     helperText={
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">
+                      <span className={bucketDetailHintClass}>
                         Need a topic? Create it in the Topics section.
                       </span>
                     }
                   />
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  <p className={bucketDetailHintClass}>
                     Only topic-based notifications are supported. Each entry should include{" "}
                     <code className="font-mono ui-caption">TopicArn</code>, <code className="font-mono ui-caption">Events</code>, and
                     an optional filter.
