@@ -76,6 +76,7 @@ import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
 import { useBrowserObjectListing } from "./useBrowserObjectListing";
+import { useBrowserObjectSort } from "./useBrowserObjectSort";
 import { useBrowserOperationOverview } from "./useBrowserOperationOverview";
 import { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
@@ -178,7 +179,6 @@ import {
   collectAvailableStorageClasses,
   resolveColumnWidthPx,
   type BrowserColumnId,
-  type BrowserSortKey,
 } from "./browserObjectTableModel";
 import { isBrowserInteractiveTarget } from "./browserObjectItemPresentation";
 import {
@@ -445,6 +445,20 @@ export default function BrowserPage({
     isMainBrowserPath,
     layoutMode: activeLayoutMode,
   });
+  const effectiveVisibleColumns = isPortalProfile
+    ? DEFAULT_VISIBLE_COLUMN_IDS
+    : visibleColumns;
+  const visibleColumnSet = useMemo(
+    () => new Set(effectiveVisibleColumns),
+    [effectiveVisibleColumns],
+  );
+  const {
+    backendSortBy,
+    sortDirection,
+    sortId,
+    sortKey,
+    toggleSort: handleSortToggle,
+  } = useBrowserObjectSort({ visibleColumns: visibleColumnSet });
   const isMobileViewport = useMediaQuery(MOBILE_OBJECT_LIST_MEDIA_QUERY);
   const [inspectorTab, setInspectorTab] =
     useState<BrowserInspectorTab>("context");
@@ -534,15 +548,6 @@ export default function BrowserPage({
     [deletedObjectsOptions],
   );
   const [showFolderItems, setShowFolderItems] = useState(true);
-  const [sortId, setSortId] = useState("name-asc");
-  const sortKey = sortId.split("-")[0] as BrowserSortKey;
-  const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
-  const backendSortBy = useMemo<
-    "name" | "size" | "modified" | "storage_class" | "etag"
-  >(() => {
-    if (sortKey === "storageClass") return "storage_class";
-    return sortKey;
-  }, [sortKey]);
   const {
     deletedObjects,
     deletedObjectsIsTruncated,
@@ -1180,13 +1185,6 @@ export default function BrowserPage({
     clearActiveItem();
   }, [accountSwitchInFlight, clearActiveItem]);
 
-  const effectiveVisibleColumns = isPortalProfile
-    ? DEFAULT_VISIBLE_COLUMN_IDS
-    : visibleColumns;
-  const visibleColumnSet = useMemo(
-    () => new Set(effectiveVisibleColumns),
-    [effectiveVisibleColumns],
-  );
   const visibleColumnDefinitions = useMemo(
     () =>
       COLUMN_DEFINITIONS.filter((definition) =>
@@ -1351,24 +1349,6 @@ export default function BrowserPage({
     }
     return undefined;
   }, [handleOpenWorkspaceAccount, workspaceAccountActionTarget]);
-
-  useEffect(() => {
-    if (sortKey === "size" && !visibleColumnSet.has("size")) {
-      setSortId("name-asc");
-      return;
-    }
-    if (sortKey === "modified" && !visibleColumnSet.has("modified")) {
-      setSortId("name-asc");
-      return;
-    }
-    if (sortKey === "storageClass" && !visibleColumnSet.has("storageClass")) {
-      setSortId("name-asc");
-      return;
-    }
-    if (sortKey === "etag" && !visibleColumnSet.has("etag")) {
-      setSortId("name-asc");
-    }
-  }, [sortKey, visibleColumnSet]);
 
   useLayoutEffect(() => {
     if (!useBucketsPanel) {
@@ -2204,15 +2184,6 @@ export default function BrowserPage({
       setSidebarBody(null);
     };
   }, [renderWorkspaceSidebarBody, setSidebarBody, showWorkspaceSidebar]);
-
-  const handleSortToggle = (key: BrowserSortKey) => {
-    setSortId((prev) => {
-      if (!prev.startsWith(key)) {
-        return `${key}-asc`;
-      }
-      return prev.endsWith("asc") ? `${key}-desc` : `${key}-asc`;
-    });
-  };
 
   const handleRefresh = () => {
     if (!hasS3AccountContext) return;
