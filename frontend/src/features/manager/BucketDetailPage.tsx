@@ -18,20 +18,17 @@ import {
   Bucket,
   BucketAcl,
   BucketLifecycleConfig,
-  BucketLoggingConfiguration,
   BucketObjectLockConfiguration,
   BucketReplicationConfiguration,
   BucketPublicAccessBlock,
   BucketTag,
   BucketWebsiteConfiguration,
-  deleteBucketLogging,
   deleteBucketNotifications,
   deleteBucketReplication,
   deleteBucketTags,
   deleteBucketWebsite,
   deleteBucketLifecycle,
   getBucketTags,
-  getBucketLogging,
   getBucketNotifications,
   getBucketObjectLock,
   getBucketReplication,
@@ -42,7 +39,6 @@ import {
   getBucketPublicAccessBlock,
   listBuckets,
   putBucketTags,
-  putBucketLogging,
   putBucketNotifications,
   putBucketReplication,
   putBucketWebsite,
@@ -55,14 +51,12 @@ import {
 } from "../../api/buckets";
 import {
   deleteCephAdminBucketLifecycle,
-  deleteCephAdminBucketLogging,
   deleteCephAdminBucketNotifications,
   deleteCephAdminBucketReplication,
   deleteCephAdminBucketTags,
   deleteCephAdminBucketWebsite,
   getCephAdminBucketAcl,
   getCephAdminBucketLifecycle,
-  getCephAdminBucketLogging,
   getCephAdminBucketNotifications,
   getCephAdminBucketObjectLock,
   getCephAdminBucketReplication,
@@ -73,7 +67,6 @@ import {
   listCephAdminBucketObjects,
   listCephAdminBuckets,
   putCephAdminBucketLifecycle,
-  putCephAdminBucketLogging,
   putCephAdminBucketNotifications,
   putCephAdminBucketReplication,
   putCephAdminBucketTags,
@@ -132,7 +125,6 @@ import {
   jsonTextSignature,
   isLifecycleSimpleDraftEmpty,
   normalizeAclDraft,
-  normalizeAccessLoggingDraft,
   normalizeBucketTagsDraft,
   normalizeNotificationConfiguration,
   normalizePublicAccessDraft,
@@ -140,6 +132,7 @@ import {
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
   stableBucketJsonSignature,
+  useBucketAccessLoggingController,
   useBucketCorsController,
   useBucketEncryptionController,
   useBucketPolicyController,
@@ -483,15 +476,6 @@ export default function BucketDetailPage({
   const [savingNotifications, setSavingNotifications] = useState(false);
   const [clearingNotifications, setClearingNotifications] = useState(false);
   const [showNotificationExample, setShowNotificationExample] = useState(false);
-  const [accessLoggingConfig, setAccessLoggingConfig] = useState<BucketLoggingConfiguration | null>(null);
-  const [accessLoggingEnabled, setAccessLoggingEnabled] = useState(false);
-  const [accessLoggingTargetBucket, setAccessLoggingTargetBucket] = useState("");
-  const [accessLoggingTargetPrefix, setAccessLoggingTargetPrefix] = useState("");
-  const [accessLoggingError, setAccessLoggingError] = useState<string | null>(null);
-  const [accessLoggingStatus, setAccessLoggingStatus] = useState<string | null>(null);
-  const [accessLoggingLoading, setAccessLoggingLoading] = useState(false);
-  const [savingAccessLogging, setSavingAccessLogging] = useState(false);
-  const [clearingAccessLogging, setClearingAccessLogging] = useState(false);
   const [websiteConfig, setWebsiteConfig] = useState<BucketWebsiteConfiguration | null>(null);
   const [websiteMode, setWebsiteMode] = useState<"hosting" | "redirect">("hosting");
   const [websiteIndexDocument, setWebsiteIndexDocument] = useState("");
@@ -646,6 +630,30 @@ export default function BucketDetailPage({
     enabled: hasContext,
     endpointId,
   });
+  const {
+    clear: clearAccessLogging,
+    clearing: clearingAccessLogging,
+    configured: accessLoggingConfigured,
+    dirty: accessLoggingDirty,
+    error: accessLoggingError,
+    load: loadAccessLogging,
+    loading: accessLoggingLoading,
+    loggingEnabled: accessLoggingEnabled,
+    save: saveAccessLogging,
+    saving: savingAccessLogging,
+    status: accessLoggingStatus,
+    targetBucket: accessLoggingTargetBucket,
+    targetPrefix: accessLoggingTargetPrefix,
+    updateEnabled: updateAccessLoggingEnabled,
+    updateTargetBucket: updateAccessLoggingTargetBucket,
+    updateTargetPrefix: updateAccessLoggingTargetPrefix,
+  } = useBucketAccessLoggingController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
   const quotaFeatureEnabled = isCephAdmin ? isCephEndpoint : Boolean(isCephEndpoint && managerBucketQuotaEnabled);
   const showQuotaTab = !hideQuotaTab && (isCephAdmin || Boolean(quotaFeatureEnabled && hasAccountContext));
   const showObjectsTab = !hideObjectsTab;
@@ -790,20 +798,6 @@ export default function BucketDetailPage({
     setObjectLockDays(config.days != null ? String(config.days) : "");
     setObjectLockYears(config.years != null ? String(config.years) : "");
     setObjectLockConfig(config);
-  }, []);
-
-  const applyAccessLoggingState = useCallback((config?: BucketLoggingConfiguration | null) => {
-    if (!config || !config.enabled) {
-      setAccessLoggingConfig(config ?? null);
-      setAccessLoggingEnabled(false);
-      setAccessLoggingTargetBucket("");
-      setAccessLoggingTargetPrefix("");
-      return;
-    }
-    setAccessLoggingConfig(config);
-    setAccessLoggingEnabled(Boolean(config.enabled));
-    setAccessLoggingTargetBucket(config.target_bucket ?? "");
-    setAccessLoggingTargetPrefix(config.target_prefix ?? "");
   }, []);
 
   const applyWebsiteState = useCallback((config?: BucketWebsiteConfiguration | null) => {
@@ -1062,31 +1056,6 @@ export default function BucketDetailPage({
       setNotificationsLoading(false);
     }
   }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
-
-  const loadAccessLogging = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      applyAccessLoggingState(null);
-      setAccessLoggingError(null);
-      setAccessLoggingStatus(null);
-      return;
-    }
-    setAccessLoggingLoading(true);
-    setAccessLoggingError(null);
-    setAccessLoggingStatus(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketLogging(endpointId, bucketName)
-          : { enabled: false }
-        : await getBucketLogging(accountId, bucketName);
-      applyAccessLoggingState(data);
-    } catch (err) {
-      applyAccessLoggingState(null);
-      setAccessLoggingError(extractApiError(err, "Unable to load bucket access logging."));
-    } finally {
-      setAccessLoggingLoading(false);
-    }
-  }, [accountId, applyAccessLoggingState, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadWebsite = useCallback(async () => {
     if (!bucketName || !hasContext || !staticWebsiteEnabled) {
@@ -1666,9 +1635,6 @@ export default function BucketDetailPage({
   const quotaConfigured = Boolean(
     (bucket?.quota_max_size_bytes ?? 0) > 0 || (bucket?.quota_max_objects ?? 0) > 0
   );
-  const accessLoggingConfigured = Boolean(
-    accessLoggingConfig?.enabled && (accessLoggingConfig.target_bucket ?? "").trim().length > 0
-  );
   const websiteRoutingRulesList = Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : [];
   const websiteConfigured = Boolean(
     (websiteConfig?.redirect_all_requests_to?.host_name ?? "").trim() ||
@@ -1716,15 +1682,6 @@ export default function BucketDetailPage({
     routing_rules: stableBucketJsonSignature(Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : []),
   });
   const websiteDirty = websiteDraftSignature !== websiteSnapshotSignature;
-  const accessLoggingDraftSignature = stableBucketJsonSignature(
-    normalizeAccessLoggingDraft({
-      enabled: accessLoggingEnabled,
-      target_bucket: accessLoggingTargetBucket,
-      target_prefix: accessLoggingTargetPrefix,
-    })
-  );
-  const accessLoggingSnapshotSignature = stableBucketJsonSignature(normalizeAccessLoggingDraft(accessLoggingConfig));
-  const accessLoggingDirty = accessLoggingDraftSignature !== accessLoggingSnapshotSignature;
   const replicationGraphicalSnapshot = parseReplicationConfigurationForGraphical(replicationConfiguration);
   const replicationJsonDraftSignature = jsonTextSignature(replicationText, replicationConfiguration);
   const replicationGraphicalDraftSignature = stableBucketJsonSignature(
@@ -2266,56 +2223,6 @@ export default function BucketDetailPage({
       setBucketTagsError(message);
     } finally {
       setDeletingBucketTags(false);
-    }
-  };
-
-  const saveAccessLogging = async () => {
-    if (!bucketName || !hasContext) return;
-    setAccessLoggingError(null);
-    setAccessLoggingStatus(null);
-    if (accessLoggingEnabled && !accessLoggingTargetBucket.trim()) {
-      setAccessLoggingError("Target bucket is required to enable access logging.");
-      return;
-    }
-    setSavingAccessLogging(true);
-    try {
-      const payload: BucketLoggingConfiguration = {
-        enabled: accessLoggingEnabled,
-        target_bucket: accessLoggingTargetBucket.trim() || null,
-        target_prefix: accessLoggingTargetPrefix.trim() || null,
-      };
-      const saved = isCephAdmin
-        ? endpointId
-          ? await putCephAdminBucketLogging(endpointId, bucketName, payload)
-          : payload
-        : await putBucketLogging(accountId, bucketName, payload);
-      applyAccessLoggingState(saved);
-      setAccessLoggingStatus(accessLoggingEnabled ? "Access logging updated." : "Access logging disabled.");
-    } catch (err) {
-      setAccessLoggingError(extractApiError(err, "Unable to update access logging."));
-    } finally {
-      setSavingAccessLogging(false);
-    }
-  };
-
-  const clearAccessLogging = async () => {
-    if (!bucketName || !hasContext) return;
-    setClearingAccessLogging(true);
-    setAccessLoggingError(null);
-    setAccessLoggingStatus(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await deleteCephAdminBucketLogging(endpointId, bucketName);
-      } else {
-        await deleteBucketLogging(accountId, bucketName);
-      }
-      applyAccessLoggingState({ enabled: false });
-      setAccessLoggingStatus("Access logging disabled.");
-    } catch (err) {
-      setAccessLoggingError(extractApiError(err, "Unable to disable access logging."));
-    } finally {
-      setClearingAccessLogging(false);
     }
   };
 
@@ -4414,11 +4321,7 @@ export default function BucketDetailPage({
                     <input
                       type="checkbox"
                       checked={accessLoggingEnabled}
-                      onChange={(e) => {
-                        setAccessLoggingEnabled(e.target.checked);
-                        setAccessLoggingStatus(null);
-                        setAccessLoggingError(null);
-                      }}
+                      onChange={(e) => updateAccessLoggingEnabled(e.target.checked)}
                       disabled={accessLoggingNotImplemented || accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
                       className={uiCheckboxClass}
                     />
@@ -4430,11 +4333,7 @@ export default function BucketDetailPage({
                       <input
                         type="text"
                         value={accessLoggingTargetBucket}
-                        onChange={(e) => {
-                          setAccessLoggingTargetBucket(e.target.value);
-                          setAccessLoggingStatus(null);
-                          setAccessLoggingError(null);
-                        }}
+                        onChange={(e) => updateAccessLoggingTargetBucket(e.target.value)}
                         className={bucketFeatureInputClass}
                         placeholder="logs-bucket"
                         disabled={accessLoggingNotImplemented || accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
@@ -4445,11 +4344,7 @@ export default function BucketDetailPage({
                       <input
                         type="text"
                         value={accessLoggingTargetPrefix}
-                        onChange={(e) => {
-                          setAccessLoggingTargetPrefix(e.target.value);
-                          setAccessLoggingStatus(null);
-                          setAccessLoggingError(null);
-                        }}
+                        onChange={(e) => updateAccessLoggingTargetPrefix(e.target.value)}
                         className={bucketFeatureInputClass}
                         placeholder="access-logs/"
                         disabled={accessLoggingNotImplemented || accessLoggingLoading || savingAccessLogging || clearingAccessLogging}

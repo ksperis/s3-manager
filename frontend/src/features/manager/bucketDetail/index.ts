@@ -17,10 +17,10 @@ export {
   defaultEncryptionExample,
   useBucketEncryptionController,
 } from "./useBucketEncryptionController";
+export { useBucketAccessLoggingController } from "./useBucketAccessLoggingController";
 export {
   jsonTextSignature,
   normalizeAclDraft,
-  normalizeAccessLoggingDraft,
   normalizeBucketTagsDraft,
   normalizeNotificationConfiguration,
   normalizePublicAccessDraft,
