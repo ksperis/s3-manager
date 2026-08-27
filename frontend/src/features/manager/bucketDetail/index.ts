@@ -36,6 +36,7 @@ export {
   type BucketQuotaUnit,
 } from "./useBucketQuotaController";
 export { useBucketTagsController } from "./useBucketTagsController";
+export { useBucketUsageStatsController } from "./useBucketUsageStatsController";
 export { useBucketVersioningController } from "./useBucketVersioningController";
 export { useBucketWebsiteController } from "./useBucketWebsiteController";
 export {

@@ -27,13 +27,6 @@ import {
   listObjects,
   S3Object,
 } from "../../api/objects";
-import {
-  getCephAdminBucketUsageStats,
-  getManagerBucketUsageStats,
-  streamCephAdminBucketUsageStatsForBucket,
-  streamManagerBucketUsageStatsForBucket,
-  type BucketUsageStatsSnapshot,
-} from "../../api/bucketUsageStats";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -74,6 +67,7 @@ import {
   useBucketQuotaController,
   useBucketReplicationController,
   useBucketTagsController,
+  useBucketUsageStatsController,
   useBucketVersioningController,
   useBucketWebsiteController,
 } from "./bucketDetail";
@@ -314,10 +308,6 @@ export default function BucketDetailPage({
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [objectsError, setObjectsError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
-  const [usageStatsSnapshot, setUsageStatsSnapshot] = useState<BucketUsageStatsSnapshot | null>(null);
-  const [usageStatsLoading, setUsageStatsLoading] = useState(false);
-  const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
-  const [usageStatsRecalculating, setUsageStatsRecalculating] = useState(false);
   const [activeTab, setActiveTab] = useState<BucketDetailTabId>("overview");
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
@@ -646,6 +636,20 @@ export default function BucketDetailPage({
     enabled: hasContext,
     endpointId,
   });
+  const {
+    error: usageStatsError,
+    load: loadUsageStats,
+    loading: usageStatsLoading,
+    recalculate: recalculateUsageStats,
+    recalculating: usageStatsRecalculating,
+    snapshot: usageStatsSnapshot,
+  } = useBucketUsageStatsController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
   const snsFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.sns === true;
@@ -822,48 +826,6 @@ export default function BucketDetailPage({
     },
     [accountId, bucketName, endpointId, hasContext, isCephAdmin]
   );
-
-  const loadUsageStats = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setUsageStatsSnapshot(null);
-      setUsageStatsError(null);
-      return;
-    }
-    setUsageStatsLoading(true);
-    setUsageStatsError(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketUsageStats(endpointId, bucketName)
-          : { snapshot: null }
-        : await getManagerBucketUsageStats(accountId, bucketName);
-      setUsageStatsSnapshot(data.snapshot ?? null);
-    } catch (err) {
-      setUsageStatsSnapshot(null);
-      setUsageStatsError(extractApiError(err, "Unable to load bucket usage stats."));
-    } finally {
-      setUsageStatsLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
-
-  const recalculateUsageStats = useCallback(async () => {
-    if (!bucketName || !hasContext || usageStatsRecalculating) return;
-    setUsageStatsRecalculating(true);
-    setUsageStatsError(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await streamCephAdminBucketUsageStatsForBucket(endpointId, bucketName);
-      } else {
-        await streamManagerBucketUsageStatsForBucket(accountId, bucketName);
-      }
-      await loadUsageStats();
-    } catch (err) {
-      setUsageStatsError(extractApiError(err, "Unable to calculate bucket usage stats."));
-    } finally {
-      setUsageStatsRecalculating(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, loadUsageStats, usageStatsRecalculating]);
 
   useEffect(() => {
     if (isCephAdmin) return;
