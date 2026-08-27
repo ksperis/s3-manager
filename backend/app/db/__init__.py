@@ -45,6 +45,7 @@ from .bucket_usage_stats import BucketUsageStatsSnapshot
 from .portal import PortalExternalAccessCredential, PortalPublicLink, PortalStorageSpaceGrant, PortalStorageSpaceMetadata
 from .portal_request import PortalAdminRequest, PortalAdminRequestMessage
 from .backend_coordination import AppSetting, BackendOperationLease
+from .first_admin_bootstrap import FirstAdminBootstrap
 
 __all__ = [
     "Base",
@@ -114,4 +115,5 @@ __all__ = [
     "PortalAdminRequestMessage",
     "AppSetting",
     "BackendOperationLease",
+    "FirstAdminBootstrap",
 ]

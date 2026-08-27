@@ -233,9 +233,6 @@ const LOGIN_SETTINGS = {
     { id: 12, name: "Archive", endpoint_url: "https://s3-archive.docs.example.com", is_default: false },
   ],
   login_logo_url: null,
-  seed_login_prefill: false,
-  seed_login_email: null,
-  seed_login_password: null,
 };
 
 const EXECUTION_CONTEXTS = [
@@ -1669,6 +1666,12 @@ export function buildBaseRules(): MockRule[] {
           iam_identity: isConnection ? "conn-blueharbor" : "helios-admin",
           manager_stats_enabled: true,
           manager_browser_enabled: true,
+          quota_max_size_gb: isConnection ? null : 3,
+          quota_max_objects: isConnection ? null : 4000,
+          max_buckets: isConnection ? null : 4,
+          max_users: isConnection ? null : 5,
+          max_roles: isConnection ? null : 6,
+          max_groups: isConnection ? null : 4,
         };
       },
     },
@@ -1741,9 +1744,9 @@ export function buildBaseRules(): MockRule[] {
       path: /^\/admin\/onboarding$/,
       body: {
         dismissed: true,
-        can_dismiss: true,
-        seed_user_configured: true,
+        complete: true,
         endpoint_configured: true,
+        storage_access_configured: true,
       },
     },
     {
@@ -2374,6 +2377,26 @@ export function buildBaseRules(): MockRule[] {
       id: "ceph-buckets",
       path: /^\/ceph-admin\/endpoints\/\d+\/buckets$/,
       body: CEPH_BUCKETS,
+    },
+    {
+      id: "ceph-bucket-ui-tags",
+      path: /^\/ceph-admin\/endpoints\/\d+\/bucket-ui-tags$/,
+      body: { definitions: [] },
+    },
+    {
+      id: "ceph-bucket-ui-tag-orphans",
+      path: /^\/ceph-admin\/endpoints\/\d+\/bucket-ui-tags\/orphans$/,
+      body: { orphans: [] },
+    },
+    {
+      id: "storage-ops-bucket-ui-tags",
+      path: /^\/storage-ops\/bucket-ui-tags$/,
+      body: { definitions: [] },
+    },
+    {
+      id: "storage-ops-bucket-ui-tag-orphans",
+      path: /^\/storage-ops\/bucket-ui-tags\/orphans$/,
+      body: { orphans: [] },
     },
     {
       id: "browser-settings",

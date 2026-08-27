@@ -79,21 +79,36 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ## Quick Start (Docker Compose)
 
-Use prebuilt images:
+For a local evaluation from a clean machine:
 
 ```bash
-mkdir bucketreef && cd bucketreef
-wget https://raw.githubusercontent.com/ksperis/bucketreef/refs/heads/main/docker-compose.yml
-BUCKETREEF_TAG=0.2 docker compose up -d
+git clone https://github.com/ksperis/bucketreef.git
+cd bucketreef
+./quickstart
 ```
 
-`0.2` follows the latest stable patch release in the `0.2.x` line. The stack
-also starts the scheduler for healthchecks, billing, quota monitoring, and
-usage history.
+The script generates strong local secrets in `.env.quickstart`, builds the
+backend and frontend from the current checkout, waits for both services, then
+prints a 15-minute one-time URL. The first build can take several minutes.
+Open the URL to create the first administrator and enroll a passkey. Re-running
+the script is safe and prints either a fresh setup URL or the sign-in URL.
 
-Default endpoints:
+This quickstart is intentionally limited to loopback, SQLite and local
+evaluation. It includes no MinIO, no simulated or preconfigured storage, and no
+scheduler. Connect an existing S3-compatible or Ceph RGW endpoint later from
+Admin if you want to exercise storage workflows. A complete deployment enables
+the `operations` Compose profile and uses a reverse proxy with TLS.
 
-- Frontend: `http://localhost:8080`
+Useful commands:
+
+```bash
+./quickstart status
+./quickstart stop
+./quickstart reset
+```
+
+See the [Quickstart guide](https://ksperis.github.io/bucketreef/ops/quickstart/)
+for reset backups, restore steps, expired links and deployment boundaries.
 
 ## Full Documentation
 

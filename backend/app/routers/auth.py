@@ -5,7 +5,16 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Optional
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -18,6 +27,10 @@ from app.models.auth import (
     RecoveryCodeRequest,
     WebAuthnAuthenticationRequest,
     WebAuthnCredentialRequest,
+)
+from app.models.first_admin_bootstrap import (
+    FirstAdminBootstrapCreate,
+    FirstAdminBootstrapStatus,
 )
 from app.models.ldap import LDAPLoginRequest, LDAPProviderInfo
 from app.models.oidc import OIDCCallbackRequest, OIDCProviderInfo, OIDCStartRequest, OIDCStartResponse
@@ -35,6 +48,11 @@ from app.services.audit_service import AuditService
 from app.services.auth_rate_limit_service import AuthRateLimitService, LoginRateLimitedError
 from app.services.auth_session_service import AuthSessionService
 from app.services.external_identity_user_service import ExternalIdentityLinkRequiredError, ExternalIdentityUserService
+from app.services.first_admin_bootstrap_service import (
+    FirstAdminBootstrapError,
+    FirstAdminBootstrapService,
+    FirstAdminBootstrapUnavailableError,
+)
 from app.services.ldap_service import (
     LDAPAuthenticationError,
     LDAPAuthService,
@@ -108,6 +126,112 @@ def _finish_user_primary_auth(
         status="authenticated",
         user=users_service.user_to_out(user),
         redirect_path=redirect_path,
+    )
+
+
+@router.get(
+    "/bootstrap/first-admin/status",
+    response_model=FirstAdminBootstrapStatus,
+)
+def first_admin_bootstrap_status(
+    db: Session = Depends(get_db),
+) -> FirstAdminBootstrapStatus:
+    return FirstAdminBootstrapStatus(
+        available=FirstAdminBootstrapService(db).is_available()
+    )
+
+
+@router.post(
+    "/bootstrap/first-admin",
+    response_model=AuthenticationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_first_admin_from_bootstrap(
+    request: Request,
+    response: Response,
+    payload: FirstAdminBootstrapCreate,
+    bootstrap_token: Optional[str] = Header(
+        None,
+        alias="X-BucketReef-Bootstrap-Token",
+    ),
+    users_service: UsersService = Depends(
+        lambda db=Depends(get_db): get_users_service(db)
+    ),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> AuthenticationResponse:
+    require_trusted_origin(request)
+    ip_address, user_agent, request_id = _request_context(request)
+    limiter = AuthRateLimitService(users_service.db, settings=settings)
+    rate_limit_account = "first-admin-bootstrap"
+    try:
+        limiter.check(account=rate_limit_account, ip_address=ip_address)
+    except LoginRateLimitedError as exc:
+        audit_service.record_action(
+            user=None,
+            scope="security",
+            action="first_admin_bootstrap_rate_limited",
+            entity_type="first_admin_bootstrap",
+            status="failure",
+            message="First administrator bootstrap rate limit exceeded",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many bootstrap attempts. Please try again later.",
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
+
+    try:
+        created = FirstAdminBootstrapService(users_service.db).create_with_token(
+            token=bootstrap_token or "",
+            email=str(payload.email),
+            full_name=payload.full_name,
+            password=payload.password,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+        )
+    except FirstAdminBootstrapUnavailableError as exc:
+        limiter.record_failure(
+            account=rate_limit_account,
+            ip_address=ip_address,
+        )
+        audit_service.record_action(
+            user=None,
+            user_email=str(payload.email).lower(),
+            scope="security",
+            action="first_admin_bootstrap_failure",
+            entity_type="first_admin_bootstrap",
+            status="failure",
+            message="First administrator bootstrap unavailable",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="First administrator bootstrap is unavailable.",
+        ) from exc
+    except FirstAdminBootstrapError as exc:
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
+    except ValueError as exc:
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
+
+    limiter.clear_account(account=rate_limit_account, ip_address=ip_address)
+    user = users_service.get_by_id(created.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Created administrator is unavailable",
+        )
+    return _finish_user_primary_auth(
+        request=request,
+        response=response,
+        user=user,
+        users_service=users_service,
+        auth_type="bootstrap",
     )
 
 

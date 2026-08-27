@@ -22,6 +22,19 @@ Use route-level schemas and examples in code as the canonical API contract.
 | `/api/storage-ops` | storage operators | Cross-context operational bucket views and actions. |
 | `/api/internal` | schedulers/automation | Cron-only endpoints protected by `INTERNAL_CRON_TOKEN`. |
 
+## First-administrator bootstrap
+
+- `GET /api/auth/bootstrap/first-admin/status` returns only whether an issued,
+  unexpired token can currently be consumed.
+- `POST /api/auth/bootstrap/first-admin` requires the exact trusted `Origin`
+  and `X-BucketReef-Bootstrap-Token`. Its strict body contains `email`, optional
+  `full_name`, `password`, and `password_confirmation`.
+- Success returns the existing `AuthenticationResponse` with
+  `mfa_enrollment_required` and a five-minute pre-authentication cookie.
+- Missing, expired, invalid and consumed tokens share the same unavailable
+  response. The token must never appear in a query string, request/audit log,
+  response body or browser storage.
+
 ## Error contract
 
 - `400` is returned when cookie and Bearer authentication are combined.

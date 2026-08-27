@@ -68,6 +68,32 @@ Key areas:
   `RGW_ADMIN_TIMEOUT_SECONDS` and `RGW_ADMIN_BUCKET_LIST_STATS_TIMEOUT_SECONDS`
   budgets.
 
+## First-administrator bootstrap
+
+There are no administrator identity or password environment variables. The
+bootstrap is explicitly enabled only by issuing a token after migrations:
+
+```bash
+cd backend
+python -m app.scripts.issue_first_admin_bootstrap
+```
+
+The token is 256 bits, valid for 15 minutes and single-use. Only its SHA-256
+digest, issuance/expiration timestamps and consumption state are persisted. The
+printed URL uses `PUBLIC_ORIGIN` and places the token after `#`, so reverse
+proxies and HTTP access logs do not receive it. The browser removes the fragment
+immediately and does not write it to browser storage.
+
+`POST /api/auth/bootstrap/first-admin` accepts the token only in
+`X-BucketReef-Bootstrap-Token`, requires the exact trusted `Origin`, applies the
+authentication rate limit by client IP and returns a generic unavailable error
+for absent, expired, invalid or consumed tokens. Issuing another token revokes
+the previous one while the database has no users.
+
+Use `python -m app.scripts.create_first_admin` when a direct console workflow is
+required. Use `reset_last_superadmin_mfa` only to recover the sole existing
+super-administrator. Recovery never reactivates initial bootstrap.
+
 OIDC providers can be configured either from Admin **Settings > Authentication**
 or with nested environment variables:
 

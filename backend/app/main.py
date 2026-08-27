@@ -149,7 +149,14 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID", "X-S3-Workspace"],
+    allow_headers=[
+        "Accept",
+        "Content-Type",
+        "X-BucketReef-Bootstrap-Token",
+        "X-CSRF-Token",
+        "X-Request-ID",
+        "X-S3-Workspace",
+    ],
 )
 
 

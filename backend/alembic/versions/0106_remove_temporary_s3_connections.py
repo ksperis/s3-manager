@@ -103,7 +103,7 @@ def downgrade() -> None:
                     "is_temporary",
                     sa.Boolean(),
                     nullable=False,
-                    server_default=sa.text("0"),
+                    server_default=sa.false(),
                 )
             )
         if "temp_user_uid" not in existing:

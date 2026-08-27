@@ -52,9 +52,6 @@ def get_login_settings(db: Session = Depends(get_db)) -> LoginSettings:
         default_endpoint_url=default_endpoint_url,
         endpoints=endpoints,
         login_logo_url=settings.branding.login_logo_url,
-        seed_login_prefill=False,
-        seed_login_email=None,
-        seed_login_password=None,
     )
 
 

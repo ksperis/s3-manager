@@ -168,21 +168,19 @@ function OnboardingPanel({
   dismissBusy: boolean;
   onDismiss: () => void;
 }) {
-  const [reviewOpen, setReviewOpen] = useState(!onboarding.can_dismiss);
+  const [reviewOpen, setReviewOpen] = useState(!onboarding.complete);
 
-  useEffect(() => {
-    if (!onboarding.can_dismiss) {
-      setReviewOpen(true);
-    }
-  }, [onboarding.can_dismiss]);
-
-  if (onboarding.can_dismiss && !reviewOpen) {
+  if (!reviewOpen) {
     return (
       <section className={cx(uiCardClass, "flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between")}>
         <div className="min-w-0">
-          <h2 className="ui-body font-semibold text-[var(--ui-text)]">Initial setup complete</h2>
+          <h2 className="ui-body font-semibold text-[var(--ui-text)]">
+            {onboarding.complete ? "Storage setup complete" : "BucketReef is ready"}
+          </h2>
           <p className={cx("mt-0.5 ui-caption", uiMutedTextClass)}>
-            The default admin is secured and a storage endpoint is configured.
+            {onboarding.complete
+              ? "A storage endpoint and an active storage access context are configured."
+              : "Administrator access is secured. Connect storage when you are ready."}
           </p>
           {error ? <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-300">{error}</p> : null}
         </div>
@@ -211,10 +209,10 @@ function OnboardingPanel({
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div className="min-w-0">
                 <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">
-                  Welcome! Let&apos;s finish your initial setup.
+                  Connect your storage when you&apos;re ready.
                 </h2>
                 <p className={cx("mt-1 ui-body", uiMutedTextClass)}>
-                  Complete the two base steps below to unlock the rest of the console.
+                  BucketReef is ready. These optional steps enable storage administration and browsing.
                 </p>
               </div>
             </div>
@@ -222,17 +220,17 @@ function OnboardingPanel({
             <div className="mt-4 grid min-w-0 gap-3 xl:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px]">
               <SetupStep
                 index={1}
-                title="Secure the default admin"
-                description="Change the seeded admin email and password so credentials are no longer active."
-                done={onboarding.seed_user_configured}
-                action={{ label: "Go to UI users", to: "/admin/users" }}
+                title="Configure a storage endpoint"
+                description="Add the S3 or Ceph endpoint that BucketReef should manage."
+                done={onboarding.endpoint_configured}
+                action={{ label: "Configure endpoints", to: "/admin/storage-endpoints" }}
               />
               <SetupStep
                 index={2}
-                title="Configure a storage endpoint"
-                description="Add at least one S3 or Ceph endpoint so the platform can manage accounts and users."
-                done={onboarding.endpoint_configured}
-                action={{ label: "Configure endpoints", to: "/admin/storage-endpoints" }}
+                title="Configure storage access"
+                description="Create an S3 account or an active connection for storage operations."
+                done={onboarding.storage_access_configured}
+                action={{ label: "Configure connections", to: "/admin/s3-connections" }}
               />
               <div className={cx(uiCardMutedClass, "px-4 py-3 xl:col-span-2 2xl:col-span-1")}>
                 <p className="ui-body font-semibold text-[var(--ui-text)]">Next steps</p>
@@ -253,29 +251,22 @@ function OnboardingPanel({
         </div>
         <div className="shrink-0 self-start lg:self-auto">
           <div className="flex flex-wrap items-center gap-2">
-            {onboarding.can_dismiss ? (
-              <button
-                type="button"
-                onClick={() => setReviewOpen(false)}
-                className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2 py-1")}
-              >
-                Collapse checklist
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => setReviewOpen(false)}
+              className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2 py-1")}
+            >
+              Collapse checklist
+            </button>
             <button
               type="button"
               onClick={onDismiss}
-              disabled={!onboarding.can_dismiss || dismissBusy}
+              disabled={dismissBusy}
               className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "px-2 py-1")}
             >
               {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
             </button>
           </div>
-          {!onboarding.can_dismiss && (
-            <p className={cx("mt-1 max-w-[13rem] ui-caption lg:text-right", uiMutedTextClass)}>
-              Complete pending steps before dismissing.
-            </p>
-          )}
         </div>
       </div>
     </section>
@@ -658,6 +649,13 @@ export default function AdminDashboard() {
   }, [refreshNonce]);
 
   useEffect(() => {
+    if (summaryLoading) return;
+    if (!summary || summary.total_endpoints === 0) {
+      setStorage(null);
+      setStorageError(null);
+      setStorageLoading(false);
+      return;
+    }
     let cancelled = false;
     setStorageLoading(true);
     setStorageError(null);
@@ -678,9 +676,16 @@ export default function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [refreshNonce]);
+  }, [refreshNonce, summary, summaryLoading]);
 
   useEffect(() => {
+    if (summaryLoading) return;
+    if (!summary || summary.total_endpoints === 0) {
+      setTraffic(null);
+      setTrafficError(null);
+      setTrafficLoading(false);
+      return;
+    }
     let cancelled = false;
     setTrafficLoading(true);
     setTrafficError(null);
@@ -701,7 +706,7 @@ export default function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [refreshNonce]);
+  }, [refreshNonce, summary, summaryLoading]);
 
   useEffect(() => {
     let cancelled = false;
@@ -860,7 +865,7 @@ export default function AdminDashboard() {
   }, [generalSettings.endpoint_status_enabled, refreshNonce]);
 
   const handleDismissOnboarding = async () => {
-    if (!onboarding?.can_dismiss) return;
+    if (!onboarding) return;
     setDismissBusy(true);
     try {
       const data = await dismissOnboarding();

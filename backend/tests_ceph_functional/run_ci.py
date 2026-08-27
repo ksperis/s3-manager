@@ -317,9 +317,9 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
     if app_settings_path.exists():
         app_settings_path.unlink()
 
-    super_admin_email = _env_str("SEED_SUPER_ADMIN_EMAIL", "ci-ceph-functional-admin@example.com", source=env)
+    super_admin_email = _env_str("CEPH_TEST_SUPERADMIN_EMAIL", "ci-ceph-functional-admin@example.com", source=env)
     request_origin = _origin_from_url(backend_base_url)
-    super_admin_password = _env_str("SEED_SUPER_ADMIN_PASSWORD", _generate_secret(), source=env)
+    super_admin_password = _env_str("CEPH_TEST_SUPERADMIN_PASSWORD", _generate_secret(), source=env)
     rgw_region = _env_str("CEPH_TEST_RGW_REGION", "us-east-1", source=env) or "us-east-1"
     rgw_verify_tls = _env_bool(
         "CEPH_TEST_RGW_VERIFY_TLS",
@@ -338,16 +338,15 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
         json.dumps([_generate_secret()]),
         source=env,
     ) or json.dumps([_generate_secret()])
-    env["SEED_SUPER_ADMIN_EMAIL"] = super_admin_email or "ci-ceph-functional-admin@example.com"
-    env["SEED_SUPER_ADMIN_PASSWORD"] = super_admin_password or _generate_secret()
-    env["SEED_SUPER_ADMIN_FULL_NAME"] = _env_str(
-        "SEED_SUPER_ADMIN_FULL_NAME",
+    env["CEPH_TEST_SUPERADMIN_EMAIL"] = super_admin_email or "ci-ceph-functional-admin@example.com"
+    env["CEPH_TEST_SUPERADMIN_PASSWORD"] = super_admin_password or _generate_secret()
+    env["CEPH_TEST_SUPERADMIN_FULL_NAME"] = _env_str(
+        "CEPH_TEST_SUPERADMIN_FULL_NAME",
         "Ceph Functional CI Admin",
         source=env,
     ) or (
         "Ceph Functional CI Admin"
     )
-    env["SEED_SUPER_ADMIN_MODE"] = "if_empty"
     env["ACCESS_TOKEN_EXPIRE_MINUTES"] = "15"
     env["ENV_STORAGE_ENDPOINTS"] = endpoint_payload
     app_settings_path.write_text(_build_app_settings_payload(), encoding="utf-8")
@@ -362,8 +361,6 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
     env["BUCKET_MIGRATION_WORKER_ENABLED"] = "true"
 
     env["CEPH_TEST_BACKEND_BASE_URL"] = backend_base_url
-    env["CEPH_TEST_SUPERADMIN_EMAIL"] = env["SEED_SUPER_ADMIN_EMAIL"]
-    env["CEPH_TEST_SUPERADMIN_PASSWORD"] = env["SEED_SUPER_ADMIN_PASSWORD"]
     env["CEPH_TEST_REQUEST_ORIGIN"] = request_origin
     env["CEPH_TEST_VERIFY_TLS"] = "false"
     env["CEPH_TEST_RGW_ADMIN_ENDPOINT"] = _require_env("CEPH_TEST_RGW_ADMIN_ENDPOINT", source=env)

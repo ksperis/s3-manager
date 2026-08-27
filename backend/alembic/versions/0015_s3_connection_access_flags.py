@@ -22,16 +22,19 @@ def upgrade() -> None:
     # Preserve historical behavior:
     # - Browser was available for existing connections
     # - Manager required IAM-compatible credentials
+    connections = sa.table(
+        "s3_connections",
+        sa.column("iam_capable", sa.Boolean()),
+        sa.column("access_browser", sa.Boolean()),
+        sa.column("access_manager", sa.Boolean()),
+    )
     op.execute(
-        sa.text(
-            """
-            UPDATE s3_connections
-            SET access_browser = 1,
-                access_manager = CASE
-                    WHEN iam_capable = 1 THEN 1
-                    ELSE 0
-                END
-            """
+        sa.update(connections).values(
+            access_browser=True,
+            access_manager=sa.case(
+                (connections.c.iam_capable.is_(True), True),
+                else_=False,
+            ),
         )
     )
 

@@ -39,6 +39,9 @@ FastAPI-generated form and multipart schemas are the only exceptions.
   before persistence.
 - Client modules wrap S3, IAM, RGW Admin Ops, or external integrations.
 - Models and migrations define persistence; do not encode new authorization semantics only in the frontend.
+- `FirstAdminBootstrapService` is the single boundary for first-user creation.
+  Its CLI and API callers share email/password validation, the empty-database
+  invariant, atomic singleton consumption and secret-free auditing.
 
 ## Operational routes
 

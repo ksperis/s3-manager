@@ -16,7 +16,6 @@ def _valid_production_settings(**overrides):
         "refresh_token_cookie_secure": True,
         "refresh_token_cookie_samesite": "lax",
         "refresh_token_cookie_domain": None,
-        "seed_super_admin_mode": "disabled",
         "require_registered_s3_login_endpoints": True,
         "allowed_hosts": ["s3.example.test"],
         "cors_origins": ["https://s3.example.test"],
@@ -124,7 +123,6 @@ def test_disabled_external_identity_providers_do_not_apply_production_security_p
         ({"refresh_token_cookie_secure": False}, "Secure authentication cookies"),
         ({"refresh_token_cookie_domain": ".example.test"}, "host-only"),
         ({"refresh_token_cookie_samesite": "strict"}, "SameSite=Lax"),
-        ({"seed_super_admin_mode": "if_empty"}, "SEED_SUPER_ADMIN_MODE"),
         (
             {"require_registered_s3_login_endpoints": False},
             "administratively registered S3 login endpoints",

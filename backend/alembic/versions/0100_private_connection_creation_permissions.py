@@ -81,11 +81,14 @@ def upgrade() -> None:
     eligible_roles = ["ui_admin", "ui_superadmin"]
     if legacy_default_enabled:
         eligible_roles.append("ui_user")
-    role_parameters = {f"role_{index}": role for index, role in enumerate(eligible_roles)}
+    role_parameters = {
+        "enabled": True,
+        **{f"role_{index}": role for index, role in enumerate(eligible_roles)},
+    }
     role_placeholders = ", ".join(f":role_{index}" for index in range(len(eligible_roles)))
     bind.execute(
         sa.text(
-            f"UPDATE users SET {_MANUAL_COLUMN} = 1, {_MANAGED_COLUMN} = 1 "
+            f"UPDATE users SET {_MANUAL_COLUMN} = :enabled, {_MANAGED_COLUMN} = :enabled "
             f"WHERE role IN ({role_placeholders})"
         ),
         role_parameters,

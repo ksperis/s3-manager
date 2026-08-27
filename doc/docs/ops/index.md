@@ -8,7 +8,8 @@ BucketReef.
 | Situation | First page | Why |
 |---|---|---|
 | I am installing or taking over the service | [Sysadmin onboarding](sysadmin-onboarding.md) | A fast path through deployment, secrets, endpoint setup, jobs, backup, and handover evidence. |
-| I need a lab or validation deployment | [Deploy with Docker Compose](deploy-docker-compose.md) | Shortest route to a local or single-host stack. |
+| I want a secured local evaluation quickly | [Local quickstart](quickstart.md) | Starts backend/frontend only, then creates the first administrator through a one-time web link. |
+| I need a lab or validation deployment | [Deploy with Docker Compose](deploy-docker-compose.md) | Manual Compose deployment, scheduler profile and production-like controls. |
 | I need Kubernetes deployment details | [Deploy with Helm](deploy-helm.md) | Chart values, images, CronJobs, and multi-replica notes. |
 | I need to know which knob controls behavior | [Configuration](configuration.md) | Environment variables, app settings, feature locks, and symptom-to-setting lookup. |
 | I need to publish to real users | [Production readiness](production-readiness.md) | One operator checklist for secrets, database, scheduler, access, audit, and support. |
@@ -18,7 +19,7 @@ BucketReef.
 
 | Workflow | Pages |
 |---|---|
-| Deploy | [Docker Compose](deploy-docker-compose.md), [Helm](deploy-helm.md), [Configuration](configuration.md) |
+| Deploy | [Local quickstart](quickstart.md), [Docker Compose](deploy-docker-compose.md), [Helm](deploy-helm.md), [Configuration](configuration.md) |
 | Secure | [Security](operations-security.md), [Production readiness](production-readiness.md), [API tokens](operations-api-tokens.md) |
 | Monitor | [Healthchecks](operations-healthchecks.md), [Observability](operations-observability.md), [Billing](operations-billing.md), [Quota monitoring and history](operations-quota-monitoring.md) |
 | Recover | [Backup and restore](backup-restore.md), [Upgrade and compatibility](operations-upgrade-compatibility.md) |

@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+.bucketreef-backups/
 TODO_local.md
 
 # Databases and caches

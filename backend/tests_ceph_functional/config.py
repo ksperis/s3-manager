@@ -108,8 +108,8 @@ def load_settings() -> CephTestSettings:
     _load_local_env_files()
 
     base_url = _env_str("CEPH_TEST_BACKEND_BASE_URL", default="http://localhost:8000/api").rstrip("/")
-    super_admin_email = _env_str("CEPH_TEST_SUPERADMIN_EMAIL", "SEED_SUPER_ADMIN_EMAIL", default="admin@example.com")
-    super_admin_password = _env_str("CEPH_TEST_SUPERADMIN_PASSWORD", "SEED_SUPER_ADMIN_PASSWORD", default="changeme")
+    super_admin_email = _env_str("CEPH_TEST_SUPERADMIN_EMAIL")
+    super_admin_password = _env_str("CEPH_TEST_SUPERADMIN_PASSWORD")
     if not super_admin_email or not super_admin_password:
         raise RuntimeError(
             "CEPH_TEST_SUPERADMIN_EMAIL and CEPH_TEST_SUPERADMIN_PASSWORD must be set to run the Ceph functional tests."

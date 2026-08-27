@@ -17,7 +17,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("DELETE FROM user_s3_accounts WHERE account_admin = 0")
+    user_accounts = sa.table(
+        "user_s3_accounts",
+        sa.column("account_admin", sa.Boolean()),
+    )
+    op.execute(sa.delete(user_accounts).where(user_accounts.c.account_admin.is_(False)))
 
     with op.batch_alter_table("user_s3_accounts", schema=None) as batch_op:
         batch_op.drop_column("account_role")

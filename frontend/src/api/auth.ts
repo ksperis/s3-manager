@@ -69,6 +69,36 @@ export type AuthenticationResponse = {
   recovery_codes?: string[] | null;
 };
 
+type FirstAdminBootstrapStatus = {
+  available: boolean;
+};
+
+type FirstAdminBootstrapPayload = {
+  email: string;
+  full_name?: string | null;
+  password: string;
+  password_confirmation: string;
+};
+
+export async function fetchFirstAdminBootstrapStatus(): Promise<FirstAdminBootstrapStatus> {
+  const { data } = await client.get<FirstAdminBootstrapStatus>(
+    "/auth/bootstrap/first-admin/status",
+  );
+  return data;
+}
+
+export async function bootstrapFirstAdmin(
+  token: string,
+  payload: FirstAdminBootstrapPayload,
+): Promise<AuthenticationResponse> {
+  const { data } = await client.post<AuthenticationResponse>(
+    "/auth/bootstrap/first-admin",
+    payload,
+    { headers: { "X-BucketReef-Bootstrap-Token": token } },
+  );
+  return data;
+}
+
 export type CurrentSessionResponse = {
   authenticated: true;
   user?: AuthUser | null;

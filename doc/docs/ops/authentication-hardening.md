@@ -31,14 +31,29 @@ python -m app.scripts.reset_last_superadmin_mfa --email exact-admin@example.com
 
 The command requires the exact typed confirmation, removes passkeys and recovery codes, increments `auth_version`, revokes every session and API token, and writes a secret-free audit event. The next login requires enrollment.
 
-Create the first administrator interactively on an empty database:
+Prefer an explicitly issued one-time web bootstrap on an empty database:
+
+```bash
+cd backend
+python -m app.scripts.issue_first_admin_bootstrap
+```
+
+The 256-bit token expires after 15 minutes, is stored only as a SHA-256 digest,
+travels in the URL fragment and then in `X-BucketReef-Bootstrap-Token`, and is
+consumed atomically with creation of the sole first super-administrator. The
+response sets a five-minute pre-authentication cookie and continues directly to
+passkey enrollment.
+
+Use the interactive CLI as an independent fallback:
 
 ```bash
 cd backend
 python -m app.scripts.create_first_admin --email exact-admin@example.com --full-name "Platform Admin"
 ```
 
-Automatic admin seeding is disabled by default and forbidden in production.
+No automatic or default administrator exists in any environment. Initial setup
+closes permanently as soon as any user exists; recovery of an existing
+administrator is a separate operator action.
 
 ## Federation
 

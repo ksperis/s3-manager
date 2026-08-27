@@ -1,5 +1,25 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 first-administrator bootstrap cutover
+
+Migration `0119_first_admin_bootstrap` adds the one-time bootstrap singleton.
+The former `SEED_` + `SUPER_ADMIN_{EMAIL,PASSWORD,FULL_NAME,MODE}` environment
+family and automatic startup creation have been removed without aliases or
+runtime warnings.
+
+Before upgrading a deployment that depended on those variables, use the old
+release to confirm the administrator exists. If the database is empty, deploy
+the migration/backend, then immediately either issue a temporary URL with
+`python -m app.scripts.issue_first_admin_bootstrap` or create the administrator
+with `python -m app.scripts.create_first_admin`; only then remove the former
+variables from Compose, Helm values and secret management. Existing user
+databases do not reopen bootstrap. Existing-administrator recovery remains a
+separate command and never creates a new first user.
+
+Deploy migration, backend and frontend together. The Admin onboarding response
+now exposes `endpoint_configured`, `storage_access_configured` and `complete`;
+clients using the removed seed-account readiness field must update atomically.
+
 ## 2026-08 authentication cutover
 
 Migrations `0107` through `0110` replace legacy browser Bearers and refresh

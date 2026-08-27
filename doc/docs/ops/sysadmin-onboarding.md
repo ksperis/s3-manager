@@ -10,33 +10,43 @@ runbooks.
    Start with [Docker Compose](deploy-docker-compose.md) for a local or
    single-host stack, or [Helm](deploy-helm.md) for Kubernetes.
    Keep the image tag, chart values, Compose `.env`, and release notes.
+   The local quickstart builds its checkout; the Helm defaults deliberately
+   remain on the stable release and require paired backend/frontend overrides
+   to validate unpublished code.
 
 2. **Confirm the runtime contract.**
    Use [Configuration](configuration.md) to locate the database, secrets, CORS,
    TLS, and scheduler token settings. Keep secret locations, `DATABASE_URL`,
    trusted UI origin, and `INTERNAL_CRON_TOKEN`.
 
-3. **Configure the first storage endpoint.**
+3. **Create and secure the first administrator.**
+   Issue a temporary web URL with
+   `python -m app.scripts.issue_first_admin_bootstrap`, or use
+   `create_first_admin` as a direct CLI fallback. Complete passkey enrollment
+   before treating the installation as ready. Keep no bootstrap URL in tickets,
+   logs, shell history exports, or shared notes.
+
+4. **Optionally configure the first storage endpoint.**
    Check the [Backends matrix](backends-compatibility.md) and
    [Ceph RGW](backends-ceph-rgw.md) notes before promising a feature. Keep the
    endpoint URL, provider type, feature flags, and healthcheck mode.
 
-4. **Verify health, scheduler, and day-2 jobs.**
+5. **Verify health, scheduler, and day-2 jobs.**
    Use [Healthchecks](operations-healthchecks.md) and
    [Observability](operations-observability.md) before inviting users. Keep the
    latest healthcheck, CronJob or scheduler status, and backend log location.
 
-5. **Decide which product surfaces are enabled.**
+6. **Decide which product surfaces are enabled.**
    Use [Configuration](configuration.md) and
    [Production readiness](production-readiness.md) to record feature flags,
    role/group mapping, and account links for the first rollout.
 
-6. **Protect the database, credential key, and deployment values.**
+7. **Protect the database, credential key, and deployment values.**
    Use [Backup and restore](backup-restore.md) and
    [Security](operations-security.md). Keep the backup schedule, restore-test
    result, and credential-key owner.
 
-7. **Run a storage handover with the intended admin profile.**
+8. **Run a storage handover with the intended admin profile when storage is in scope.**
    Follow the [Storage admin runbook](../user/admin-runbook-storage-admin.md)
    and keep the first endpoint, account/context, bucket/object validation, and
    audit evidence.
@@ -45,7 +55,8 @@ runbooks.
 
 | I need to... | Start here | Then check |
 |---|---|---|
-| Deploy quickly for a lab or validation environment | [Deploy with Docker Compose](deploy-docker-compose.md) | [Configuration](configuration.md), [Production readiness](production-readiness.md) |
+| Evaluate locally from nothing | [Local quickstart](quickstart.md) | [Authentication security](authentication-hardening.md), [Configuration](configuration.md) |
+| Deploy a manual lab or single-host environment | [Deploy with Docker Compose](deploy-docker-compose.md) | [Configuration](configuration.md), [Production readiness](production-readiness.md) |
 | Deploy on Kubernetes | [Deploy with Helm](deploy-helm.md) | [Backup and restore](backup-restore.md), [Security](operations-security.md) |
 | Make the deployment safe for real users | [Production readiness](production-readiness.md) | [Security](operations-security.md), [Observability](operations-observability.md) |
 | Know which environment variable or setting controls a behavior | [Configuration](configuration.md) | [Feature availability](../user/feature-availability.md) |

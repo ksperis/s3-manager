@@ -1,0 +1,298 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 Laurent Barbe
+# Licensed under the Apache License, Version 2.0
+set -euo pipefail
+
+readonly PROJECT_NAME="bucketreef-quickstart"
+readonly COMPOSE_FILE="docker-compose.build.yml"
+readonly ENV_FILE=".env.quickstart"
+readonly BACKUP_ROOT=".bucketreef-backups"
+readonly RESET_CONFIRMATION="RESET BUCKETREEF QUICKSTART"
+
+die() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "Required command '$1' was not found."
+}
+
+compose() {
+  docker compose \
+    --project-name "$PROJECT_NAME" \
+    --env-file "$ENV_FILE" \
+    --file "$COMPOSE_FILE" \
+    "$@"
+}
+
+read_env_value() {
+  local file="$1"
+  local name="$2"
+  local fallback="$3"
+  local value=""
+  if [[ -f "$file" ]]; then
+    value="$(sed -n "s/^${name}=//p" "$file" | tail -n 1)"
+  fi
+  printf '%s' "${value:-$fallback}"
+}
+
+env_value() {
+  local name="$1"
+  local fallback="$2"
+  read_env_value "$ENV_FILE" "$name" "$fallback"
+}
+
+configuration_value() {
+  local source_file="$1"
+  local name="$2"
+  local fallback="$3"
+  if [[ -n "$source_file" ]]; then
+    read_env_value "$source_file" "$name" "$fallback"
+    return
+  fi
+  printf '%s' "${!name:-$fallback}"
+}
+
+generate_secret() {
+  openssl rand -hex 48
+}
+
+write_environment() {
+  local source_file="${1:-}"
+  local bind_address backend_port frontend_port public_origin webauthn_origin
+  local webauthn_rp_id cors_origins allowed_hosts
+  bind_address="$(configuration_value "$source_file" BUCKETREEF_BIND_ADDRESS 127.0.0.1)"
+  backend_port="$(configuration_value "$source_file" BUCKETREEF_BACKEND_PORT 8000)"
+  frontend_port="$(configuration_value "$source_file" BUCKETREEF_FRONTEND_PORT 8080)"
+  public_origin="$(configuration_value "$source_file" PUBLIC_ORIGIN "http://localhost:${frontend_port}")"
+  webauthn_origin="$(configuration_value "$source_file" WEBAUTHN_ORIGIN "$public_origin")"
+  webauthn_rp_id="$(configuration_value "$source_file" WEBAUTHN_RP_ID localhost)"
+  cors_origins="$(configuration_value "$source_file" CORS_ORIGINS "[\"${public_origin}\"]")"
+  allowed_hosts="$(configuration_value "$source_file" ALLOWED_HOSTS '["localhost", "127.0.0.1", "backend"]')"
+  local temporary
+  umask 077
+  temporary="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
+  {
+    printf 'APP_ENV=development\n'
+    printf 'UI_JWT_KEYS=["%s"]\n' "$(generate_secret)"
+    printf 'API_JWT_KEYS=["%s"]\n' "$(generate_secret)"
+    printf 'CREDENTIAL_KEYS=["%s"]\n' "$(generate_secret)"
+    printf 'INTERNAL_CRON_TOKEN=%s\n' "$(generate_secret)"
+    printf 'BUCKETREEF_BIND_ADDRESS=%s\n' "$bind_address"
+    printf 'BUCKETREEF_BACKEND_PORT=%s\n' "$backend_port"
+    printf 'BUCKETREEF_FRONTEND_PORT=%s\n' "$frontend_port"
+    printf 'PUBLIC_ORIGIN=%s\n' "$public_origin"
+    printf 'WEBAUTHN_ORIGIN=%s\n' "$webauthn_origin"
+    printf 'WEBAUTHN_RP_ID=%s\n' "$webauthn_rp_id"
+    printf 'CORS_ORIGINS=%s\n' "$cors_origins"
+    printf 'ALLOWED_HOSTS=%s\n' "$allowed_hosts"
+  } >"$temporary"
+  chmod 0600 "$temporary"
+  mv "$temporary" "$ENV_FILE"
+}
+
+check_prerequisites() {
+  require_command docker
+  require_command openssl
+  require_command curl
+  require_command sed
+  require_command tar
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required."
+  docker info >/dev/null 2>&1 || die "The Docker daemon is not reachable."
+}
+
+service_is_running() {
+  local service="$1"
+  [[ -n "$(compose ps --status running --quiet "$service" 2>/dev/null)" ]]
+}
+
+port_is_open() {
+  local port="$1"
+  (exec 3<>"/dev/tcp/127.0.0.1/${port}") >/dev/null 2>&1
+}
+
+check_ports() {
+  local backend_port frontend_port
+  backend_port="$(env_value BUCKETREEF_BACKEND_PORT 8000)"
+  frontend_port="$(env_value BUCKETREEF_FRONTEND_PORT 8080)"
+  if port_is_open "$backend_port" && ! service_is_running backend; then
+    die "Port ${backend_port} is already occupied outside the quickstart project."
+  fi
+  if port_is_open "$frontend_port" && ! service_is_running frontend; then
+    die "Port ${frontend_port} is already occupied outside the quickstart project."
+  fi
+}
+
+show_service_logs() {
+  compose logs --tail 80 backend frontend >&2 || true
+}
+
+wait_for_services() {
+  local backend_port frontend_port timeout_seconds deadline
+  backend_port="$(env_value BUCKETREEF_BACKEND_PORT 8000)"
+  frontend_port="$(env_value BUCKETREEF_FRONTEND_PORT 8080)"
+  timeout_seconds="${QUICKSTART_HEALTH_TIMEOUT_SECONDS:-120}"
+  [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] || die "QUICKSTART_HEALTH_TIMEOUT_SECONDS must be a positive integer."
+  deadline=$((SECONDS + timeout_seconds))
+  while true; do
+    if ! service_is_running backend || ! service_is_running frontend; then
+      show_service_logs
+      die "Backend or frontend stopped before becoming ready."
+    fi
+    if curl --fail --silent --show-error "http://127.0.0.1:${backend_port}/health" >/dev/null 2>&1 \
+      && curl --fail --silent --show-error "http://127.0.0.1:${frontend_port}/setup/first-admin" >/dev/null 2>&1; then
+      return
+    fi
+    if (( SECONDS >= deadline )); then
+      show_service_logs
+      die "Backend and frontend did not become ready within ${timeout_seconds} seconds."
+    fi
+    sleep 1
+  done
+}
+
+print_bootstrap_or_login() {
+  local output status_code frontend_port public_origin
+  frontend_port="$(env_value BUCKETREEF_FRONTEND_PORT 8080)"
+  public_origin="$(env_value PUBLIC_ORIGIN "http://localhost:${frontend_port}")"
+  set +e
+  output="$(compose exec --no-TTY backend python -m app.scripts.issue_first_admin_bootstrap 2>&1)"
+  status_code=$?
+  set -e
+  if [[ $status_code -eq 0 ]]; then
+    printf '\n%s\n' "$output"
+    printf 'Open the one-time URL above to create the first administrator and enroll a passkey.\n'
+    return
+  fi
+  if [[ "$output" == *"database already contains users"* ]]; then
+    printf '\nBucketReef is initialized. Sign in at %s/login\n' "${public_origin%/}"
+    return
+  fi
+  printf '%s\n' "$output" >&2
+  die "Unable to issue the first-administrator bootstrap URL."
+}
+
+start_quickstart() {
+  check_prerequisites
+  if [[ ! -f "$ENV_FILE" ]]; then
+    write_environment
+    printf 'Created %s with mode 0600.\n' "$ENV_FILE"
+  fi
+  chmod 0600 "$ENV_FILE"
+  check_ports
+  compose up --detach --build backend frontend
+  wait_for_services
+  print_bootstrap_or_login
+}
+
+show_status() {
+  check_prerequisites
+  if [[ ! -f "$ENV_FILE" ]]; then
+    printf 'Quickstart has not been initialized. Run ./quickstart first.\n'
+    return
+  fi
+  compose ps
+  local backend_port frontend_port
+  backend_port="$(env_value BUCKETREEF_BACKEND_PORT 8000)"
+  frontend_port="$(env_value BUCKETREEF_FRONTEND_PORT 8080)"
+  if curl --fail --silent "http://127.0.0.1:${backend_port}/health" >/dev/null 2>&1; then
+    printf 'Backend health: healthy\n'
+    local bootstrap_status
+    bootstrap_status="$(curl --fail --silent "http://127.0.0.1:${backend_port}/api/auth/bootstrap/first-admin/status" 2>/dev/null || true)"
+    if [[ "$bootstrap_status" == *'"available":true'* ]]; then
+      printf 'First-administrator bootstrap: issued and available\n'
+    else
+      printf 'First-administrator bootstrap: closed, expired, or not issued\n'
+    fi
+  else
+    printf 'Backend health: unavailable\n'
+    printf 'First-administrator bootstrap: unavailable because the backend is unhealthy\n'
+  fi
+  if curl --fail --silent "http://127.0.0.1:${frontend_port}/setup/first-admin" >/dev/null 2>&1; then
+    printf 'Frontend health: healthy\n'
+  else
+    printf 'Frontend health: unavailable\n'
+  fi
+}
+
+stop_quickstart() {
+  check_prerequisites
+  if [[ ! -f "$ENV_FILE" ]]; then
+    printf 'Quickstart is already stopped.\n'
+    return
+  fi
+  compose --profile operations stop
+  printf 'Quickstart stopped. Data and secrets were preserved.\n'
+}
+
+resolve_backend_volume() {
+  docker volume ls \
+    --filter "label=com.docker.compose.project=${PROJECT_NAME}" \
+    --filter "label=com.docker.compose.volume=backend-data" \
+    --format '{{.Name}}'
+}
+
+backup_volume() {
+  local volume_name="$1"
+  local backup_directory="$2"
+  local backup_absolute archive
+  backup_absolute="$(cd "$backup_directory" && pwd -P)"
+  archive="${backup_directory}/backend-data.tar"
+  docker run --rm \
+    --volume "${volume_name}:/source:ro" \
+    --volume "${backup_absolute}:/backup" \
+    alpine:3.20 \
+    sh -c 'tar -C /source -cf /backup/backend-data.tar .'
+  [[ -s "$archive" ]] || die "Backend volume backup is empty."
+  tar -tf "$archive" >"${backup_directory}/backend-data.manifest"
+  [[ -s "${backup_directory}/backend-data.manifest" ]] || die "Backend volume backup could not be verified."
+  chmod 0600 "$archive" "${backup_directory}/backend-data.manifest"
+}
+
+reset_quickstart() {
+  check_prerequisites
+  [[ -f "$ENV_FILE" ]] || die "Quickstart has not been initialized."
+  printf "Type '%s' to continue: " "$RESET_CONFIRMATION"
+  local confirmation
+  IFS= read -r confirmation
+  [[ "$confirmation" == "$RESET_CONFIRMATION" ]] || die "Reset cancelled; confirmation did not match."
+
+  compose --profile operations stop
+
+  local volume_name volume_count timestamp backup_directory
+  volume_name="$(resolve_backend_volume)"
+  volume_count="$(printf '%s\n' "$volume_name" | awk 'NF { count++ } END { print count + 0 }')"
+  [[ "$volume_count" == "1" ]] || die "Expected exactly one quickstart backend volume; found ${volume_count}."
+
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  backup_directory="${BACKUP_ROOT}/${timestamp}"
+  umask 077
+  mkdir -p "$BACKUP_ROOT"
+  [[ ! -e "$backup_directory" ]] || die "Backup directory already exists: ${backup_directory}"
+  mkdir "$backup_directory"
+  chmod 0700 "$BACKUP_ROOT" "$backup_directory"
+  cp "$ENV_FILE" "${backup_directory}/env.quickstart"
+  [[ -s "${backup_directory}/env.quickstart" ]] || die "Quickstart environment backup is empty."
+  chmod 0600 "${backup_directory}/env.quickstart"
+  backup_volume "$volume_name" "$backup_directory"
+
+  compose --profile operations rm --force --stop
+  docker volume rm "$volume_name" >/dev/null
+  write_environment "${backup_directory}/env.quickstart"
+  printf 'Verified backup written to %s before removing volume %s.\n' "$backup_directory" "$volume_name"
+  start_quickstart
+}
+
+usage() {
+  printf 'Usage: ./quickstart [start|status|stop|reset]\n'
+}
+
+case "${1:-start}" in
+  start) start_quickstart ;;
+  status) show_status ;;
+  stop) stop_quickstart ;;
+  reset) reset_quickstart ;;
+  -h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

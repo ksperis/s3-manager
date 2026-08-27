@@ -18,7 +18,7 @@ depends_on = None
 
 def upgrade() -> None:
     with op.batch_alter_table("storage_endpoints", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("force_path_style", sa.Boolean(), nullable=False, server_default=sa.text("0")))
+        batch_op.add_column(sa.Column("force_path_style", sa.Boolean(), nullable=False, server_default=sa.false()))
 
 
 def downgrade() -> None:

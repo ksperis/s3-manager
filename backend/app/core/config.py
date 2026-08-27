@@ -131,7 +131,6 @@ class LDAPProviderSettings(BaseModel):
         return self
 
 
-SuperAdminSeedMode = Literal["if_empty", "if_missing", "disabled"]
 AppEnvironment = Literal["development", "test", "production"]
 
 ENV_FILE_PATH = Path(__file__).resolve().parents[2] / ".env"
@@ -336,27 +335,6 @@ class Settings(BaseSettings):
         description="Seed secret key dedicated to Ceph Admin advanced operations",
     )
 
-    # Default super-admin seed
-    seed_super_admin_email: str = Field(
-        "admin@example.com",
-        description="Seed default super-admin login",
-    )
-    seed_super_admin_password: str = Field(
-        "",
-        description="Seed default super-admin password",
-    )
-    seed_super_admin_full_name: Optional[str] = Field(
-        "Admin",
-        description="Seed default super-admin name",
-    )
-    seed_super_admin_mode: SuperAdminSeedMode = Field(
-        "disabled",
-        description=(
-            "Controls bootstrap super-admin seeding strategy "
-            "(SEED_SUPER_ADMIN_MODE: if_empty|if_missing|disabled)"
-        ),
-    )
-
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     oidc_providers: dict[str, OIDCProviderSettings] = Field(default_factory=dict)
     oidc_state_ttl_seconds: int = Field(600, description="Validity of OIDC login state (seconds)")
@@ -537,13 +515,6 @@ class Settings(BaseSettings):
     def normalize_database_url(cls, value):
         return _normalize_sqlite_database_url(value)
 
-    @field_validator("seed_super_admin_mode", mode="before")
-    @classmethod
-    def normalize_seed_super_admin_mode(cls, value):
-        if value is None:
-            return value
-        return str(value).strip().lower()
-
     @field_validator("bucket_migration_webhook_allowed_hosts", mode="before")
     @classmethod
     def parse_webhook_host_list(cls, value):
@@ -637,8 +608,6 @@ class Settings(BaseSettings):
             raise ValueError("Authentication cookies must remain host-only in production")
         if self.refresh_token_cookie_samesite.lower() != "lax":
             raise ValueError("Authentication cookies must use SameSite=Lax in production")
-        if self.seed_super_admin_mode != "disabled":
-            raise ValueError("SEED_SUPER_ADMIN_MODE must be disabled in production")
         if not self.require_registered_s3_login_endpoints:
             raise ValueError("Production requires administratively registered S3 login endpoints")
 
@@ -740,11 +709,6 @@ def collect_secret_warnings(settings: Settings) -> list[str]:
         warnings.append(
             "Weak/default credential encryption key detected (CREDENTIAL_KEYS). "
             "Use high-entropy values with at least 32 characters."
-        )
-    if (settings.seed_super_admin_password or "").strip().lower() in {"changeme", "change-me", "admin", "password"}:
-        warnings.append(
-            "Default SEED_SUPER_ADMIN_PASSWORD detected. "
-            "Change it immediately before exposing this environment."
         )
     ldap_providers = getattr(settings, "ldap_providers", {}) or {}
     insecure_ldap = [

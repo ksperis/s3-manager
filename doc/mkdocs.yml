@@ -122,6 +122,7 @@ nav:
       - Overview: ops/index.md
       - Deployment:
           - Sysadmin onboarding: ops/sysadmin-onboarding.md
+          - Local quickstart: ops/quickstart.md
           - "Upgrade to BucketReef (v0.2.0)": ops/upgrade-to-bucketreef.md
           - Deploy with Docker Compose: ops/deploy-docker-compose.md
           - Deploy with Helm: ops/deploy-helm.md

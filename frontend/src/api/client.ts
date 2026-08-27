@@ -96,7 +96,8 @@ function handleAuthRedirect() {
 }
 
 function isAuthEndpoint(url: string): boolean {
-  return url.includes("/auth/login") || url.includes("/auth/ldap/") || url.includes("/auth/oidc/") ||
+  return url.includes("/auth/login") || url.includes("/auth/bootstrap/") ||
+    url.includes("/auth/ldap/") || url.includes("/auth/oidc/") ||
     url.includes("/auth/webauthn/") || url.includes("/auth/recovery/") || url.includes("/auth/refresh") ||
     url.includes("/auth/logout");
 }

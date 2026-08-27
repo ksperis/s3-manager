@@ -20,7 +20,6 @@ services:
       TRUSTED_PROXY_CIDRS: '${TRUSTED_PROXY_CIDRS:-[]}'
       REFRESH_TOKEN_COOKIE_SECURE: ${REFRESH_TOKEN_COOKIE_SECURE:-false}
       REQUIRE_REGISTERED_S3_LOGIN_ENDPOINTS: ${REQUIRE_REGISTERED_S3_LOGIN_ENDPOINTS:-false}
-      SEED_SUPER_ADMIN_MODE: disabled
       DATABASE_URL: sqlite:////data/app.db
       INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:?INTERNAL_CRON_TOKEN must be set}
       BILLING_DAILY_RETENTION_DAYS: ${BILLING_DAILY_RETENTION_DAYS:-365}
@@ -30,19 +29,34 @@ services:
     volumes:
       - backend-data:/data
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${BUCKETREEF_BIND_ADDRESS:-127.0.0.1}:${BUCKETREEF_BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
   frontend:
     image: ${BUCKETREEF_FRONTEND_IMAGE:-ghcr.io/ksperis/bucketreef-frontend}:${BUCKETREEF_TAG:-latest}
     ports:
-      - "8080:80"
+      - "${BUCKETREEF_BIND_ADDRESS:-127.0.0.1}:${BUCKETREEF_FRONTEND_PORT:-8080}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
-      CSP_CONNECT_SRC: ${CSP_CONNECT_SRC:-"'self'"}
+      CSP_CONNECT_SRC: "${CSP_CONNECT_SRC:-'self'}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/setup/first-admin || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 5s
   scheduler:
     image: alpine:3.20
+    profiles: ["operations"]
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       BACKEND_API_BASE: ${BACKEND_API_BASE:-http://backend:8000/api}
       INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:?INTERNAL_CRON_TOKEN must be set}

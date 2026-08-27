@@ -6,8 +6,9 @@ export const E2E_S3_ACCESS_KEY = process.env.E2E_S3_ACCESS_KEY ?? "minio";
 export const E2E_S3_SECRET_KEY = process.env.E2E_S3_SECRET_KEY ?? "minio123";
 export const E2E_S3_REGION = process.env.E2E_S3_REGION ?? "us-east-1";
 
-export const E2E_ADMIN_EMAIL = process.env.SEED_SUPER_ADMIN_EMAIL ?? "browser-e2e-admin@example.com";
-export const E2E_ADMIN_PASSWORD = process.env.SEED_SUPER_ADMIN_PASSWORD ?? "browser-e2e-admin-password";
+export const E2E_ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "browser-e2e-admin@example.com";
+export const E2E_ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "browser-e2e-admin-password";
+export const E2E_ADMIN_FULL_NAME = process.env.E2E_ADMIN_FULL_NAME ?? "Browser E2E Admin";
 export const E2E_AUTH_ADMIN_EMAIL = process.env.E2E_AUTH_ADMIN_EMAIL ?? "browser-e2e-auth-admin@example.com";
 export const E2E_AUTH_ADMIN_PASSWORD = process.env.E2E_AUTH_ADMIN_PASSWORD ?? "browser-e2e-auth-admin-password";
 export const E2E_AUTH_ADMIN_FULL_NAME = process.env.E2E_AUTH_ADMIN_FULL_NAME ?? "Browser E2E Auth Admin";
@@ -22,3 +23,6 @@ export const E2E_BUCKET_NAME = process.env.E2E_BUCKET_NAME ?? "browser-e2e";
 
 export const E2E_STORAGE_STATE_PATH = fileURLToPath(new URL("../.auth/browser-user.json", import.meta.url));
 export const E2E_UPLOAD_FIXTURE_PATH = fileURLToPath(new URL("../fixtures/upload-smoke.txt", import.meta.url));
+export const E2E_BOOTSTRAP_URL_PATH = fileURLToPath(
+  new URL("../../../backend/.browser-e2e-runtime/first-admin-bootstrap-url", import.meta.url),
+);

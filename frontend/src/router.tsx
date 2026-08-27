@@ -37,6 +37,7 @@ import {
 export { RequireManagerFeatureRulesTool, RequirePortalAccess } from "./routerGuards";
 
 const LoginPage = lazy(() => import("./features/auth/LoginPage"));
+const FirstAdminSetupPage = lazy(() => import("./features/auth/FirstAdminSetupPage"));
 const OidcCallbackPage = lazy(() => import("./features/auth/OidcCallbackPage"));
 const UnauthorizedPage = lazy(() => import("./features/auth/UnauthorizedPage"));
 const S3AccountsPage = lazy(() => import("./features/admin/AccountsPage"));
@@ -400,6 +401,7 @@ export function createAppRoutes() {
       </Route>
 
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/setup/first-admin" element={<FirstAdminSetupPage />} />
       <Route path="/oidc/:provider/callback" element={<OidcCallbackPage />} />
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -232,6 +232,16 @@ Legend: {
     "attempts": "INTEGER [NN]"
     "updated_at": "DATETIME [NN]"
   }
+  "first_admin_bootstrap": {
+    class: table
+    tooltip: "PK: id\nCheck: ck_first_admin_bootstrap_singleton(id = 1)"
+    "id": "INTEGER [PK, NN]"
+    "token_digest": "VARCHAR"
+    "issued_at": "DATETIME"
+    "expires_at": "DATETIME"
+    "consumed_at": "DATETIME"
+    "created_user_id": "INTEGER [FK]"
+  }
   "oidc_providers": {
     class: table
     tooltip: "PK: id\nUnique: unnamed(provider_id)\nIndexes: ix_oidc_providers_id(id) [index]"
@@ -923,6 +933,7 @@ Legend: {
 "external_identities"."user_id" -> "users"."id": "ondelete=CASCADE"
 "external_identity_link_requests"."decided_by_user_id" -> "users"."id": "ondelete=SET NULL"
 "external_identity_link_requests"."user_id" -> "users"."id": "ondelete=CASCADE"
+"first_admin_bootstrap"."created_user_id" -> "users"."id": "ondelete=SET NULL"
 "recovery_codes"."user_id" -> "users"."id": "ondelete=CASCADE"
 "refresh_tokens"."auth_session_id" -> "auth_sessions"."id": "ondelete=CASCADE"
 "refresh_tokens"."parent_id" -> "refresh_tokens"."id": "ondelete=SET NULL"

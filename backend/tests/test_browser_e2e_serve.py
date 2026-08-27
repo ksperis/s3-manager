@@ -14,3 +14,5 @@ def test_prepare_environment_generates_keyring_settings(monkeypatch, tmp_path):
 
     assert len(json.loads(env["JWT_KEYS"])) == 1
     assert len(json.loads(env["CREDENTIAL_KEYS"])) == 1
+    assert env["E2E_ADMIN_EMAIL"] == "browser-e2e-admin@example.com"
+    assert env["E2E_ADMIN_FULL_NAME"] == "Browser E2E Admin"

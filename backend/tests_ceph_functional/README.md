@@ -13,8 +13,9 @@ lab RGW endpoint via `ENV_STORAGE_ENDPOINTS`.
 3. (Optional) RGW Admin API credentials to double-check the Ceph state directly.
 
 Export the following environment variables before running the suite.
-For local one-shot runs, `backend/.env` is loaded automatically and seed variables
-(`SEED_*`) are used as fallback for missing `CEPH_TEST_*` values.
+For local one-shot runs, `backend/.env` is loaded automatically. Administrator
+identity uses only `CEPH_TEST_SUPERADMIN_*`. Storage endpoint and RGW
+credentials may still use their documented storage-specific fallback values.
 
 | Variable | Required | Description |
 | --- | --- | --- |
@@ -36,8 +37,13 @@ For local one-shot runs, `backend/.env` is loaded automatically and seed variabl
 
 The `ceph-functional-tests` job now starts a local backend inside the GitLab job, using
 SQLite plus `ENV_STORAGE_ENDPOINTS` to register the lab Ceph endpoint as the default
-endpoint. This avoids the current limitation of the seed-based default endpoint flow,
-which always creates the endpoint with `verify_tls=true`.
+endpoint. This keeps the lab endpoint contract explicit, including its TLS
+verification mode.
+
+The CI job creates its ephemeral first administrator through the shared
+bootstrap service, using only `CEPH_TEST_SUPERADMIN_EMAIL`,
+`CEPH_TEST_SUPERADMIN_PASSWORD`, and optional
+`CEPH_TEST_SUPERADMIN_FULL_NAME`.
 
 The GitLab runner must be able to reach:
 

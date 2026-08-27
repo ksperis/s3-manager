@@ -6,9 +6,9 @@ import client from "./client";
 
 export type OnboardingStatus = {
   dismissed: boolean;
-  can_dismiss: boolean;
-  seed_user_configured: boolean;
+  complete: boolean;
   endpoint_configured: boolean;
+  storage_access_configured: boolean;
 };
 
 export async function fetchOnboardingStatus(): Promise<OnboardingStatus> {

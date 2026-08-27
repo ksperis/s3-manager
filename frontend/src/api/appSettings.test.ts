@@ -24,9 +24,6 @@ describe("public settings API", () => {
       default_endpoint_url: "https://s3.example.test",
       endpoints: [],
       login_logo_url: null,
-      seed_login_prefill: false,
-      seed_login_email: null,
-      seed_login_password: null,
     };
     clientMock.get.mockResolvedValue({ data: settings });
 

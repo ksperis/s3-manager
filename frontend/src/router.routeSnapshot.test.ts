@@ -104,6 +104,7 @@ describe("route snapshot", () => {
       "/portal/usage",
       "/portal/settings",
       "/login",
+      "/setup/first-admin",
       "/oidc/:provider/callback",
       "/unauthorized",
       "/*",

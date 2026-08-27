@@ -153,10 +153,10 @@ describe("AdminDashboard feature summary", () => {
       category_breakdown: [],
     });
     mocks.fetchOnboardingStatus.mockResolvedValue({
-      can_dismiss: true,
       dismissed: true,
+      complete: true,
       endpoint_configured: true,
-      seed_user_configured: true,
+      storage_access_configured: true,
     });
     mocks.fetchHealthSummary.mockResolvedValue({
       generated_at: "2026-05-25T00:00:00Z",
@@ -304,20 +304,20 @@ describe("AdminDashboard feature summary", () => {
 
   it("collapses a completed onboarding checklist until the user reviews it", async () => {
     mocks.fetchOnboardingStatus.mockResolvedValue({
-      can_dismiss: true,
       dismissed: false,
+      complete: true,
       endpoint_configured: true,
-      seed_user_configured: true,
+      storage_access_configured: true,
     });
 
     await renderDashboard();
 
-    expect(screen.getByRole("heading", { name: "Initial setup complete" })).toBeInTheDocument();
-    expect(screen.queryByText("Secure the default admin")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Storage setup complete" })).toBeInTheDocument();
+    expect(screen.queryByText("Configure storage access")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    expect(screen.getByText("Secure the default admin")).toBeInTheDocument();
+    expect(screen.getByText("Configure storage access")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Collapse checklist" }));
-    expect(screen.queryByText("Secure the default admin")).not.toBeInTheDocument();
+    expect(screen.queryByText("Configure storage access")).not.toBeInTheDocument();
   });
 
   it("renders exactly two compact feature summary cards with enabled features only", async () => {
@@ -399,6 +399,14 @@ describe("AdminDashboard feature summary", () => {
     ["Manager", "Browser"].forEach((label) => {
       expect(within(coreSummary).getByText(label).closest("a")).toBeNull();
     });
+  });
+
+  it("does not request storage metrics before the first endpoint is configured", async () => {
+    await renderDashboard();
+
+    await waitFor(() => expect(mocks.fetchAdminSummary).toHaveBeenCalledTimes(1));
+    expect(mocks.fetchAdminStorage).not.toHaveBeenCalled();
+    expect(mocks.fetchAdminTraffic).not.toHaveBeenCalled();
   });
 
   it("renders the redesigned dashboard sections with real health, metrics, and activity data", async () => {

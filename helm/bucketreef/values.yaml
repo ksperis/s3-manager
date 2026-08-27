@@ -29,7 +29,6 @@ backend:
     ALLOWED_HOSTS: '["bucketreef.local"]'
     REFRESH_TOKEN_COOKIE_SECURE: "true"
     REQUIRE_REGISTERED_S3_LOGIN_ENDPOINTS: "true"
-    SEED_SUPER_ADMIN_MODE: disabled
     WEBAUTHN_ORIGIN: https://bucketreef.local
     WEBAUTHN_RP_ID: bucketreef.local
     # No implicit storage seed is created in production. Configure endpoints

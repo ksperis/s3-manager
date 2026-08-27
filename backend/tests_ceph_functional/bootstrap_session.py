@@ -3,19 +3,30 @@
 from __future__ import annotations
 
 import json
+import os
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.db import User
 from app.services.auth_session_service import AuthSessionService
+from app.services.first_admin_bootstrap_service import FirstAdminBootstrapService
 
 
 def main() -> None:
     settings = get_settings()
+    email = os.environ["CEPH_TEST_SUPERADMIN_EMAIL"].strip().lower()
+    password = os.environ["CEPH_TEST_SUPERADMIN_PASSWORD"]
+    full_name = os.getenv("CEPH_TEST_SUPERADMIN_FULL_NAME", "Ceph Functional CI Admin")
     with SessionLocal() as db:
-        user = db.query(User).filter(User.email == settings.seed_super_admin_email).first()
+        FirstAdminBootstrapService(db).create_from_cli(
+            email=email,
+            full_name=full_name,
+            password=password,
+            confirmation=f"CREATE FIRST ADMIN {email}",
+        )
+        user = db.query(User).filter(User.email == email).first()
         if user is None:
-            raise RuntimeError("Seeded Ceph functional super-admin was not found")
+            raise RuntimeError("Ceph functional super-admin bootstrap failed")
         credentials = AuthSessionService(db).create_for_user(
             user,
             auth_type="webauthn",

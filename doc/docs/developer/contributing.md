@@ -79,6 +79,7 @@ Playwright browser E2E notes:
 
 - The suite targets `/browser` only and uses a local FastAPI runner plus a Moto S3 service.
 - If local port `5000` is already used, publish Moto on another port and override `E2E_S3_ENDPOINT`, for example `docker run --rm -p 5001:5000 ...` with `E2E_S3_ENDPOINT=http://localhost:5001`.
+- If local port `8000` is already used, set both `E2E_BACKEND_PORT` and `VITE_API_PROXY_TARGET`, for example `E2E_BACKEND_PORT=8001 VITE_API_PROXY_TARGET=http://localhost:8001 npm run test:e2e`.
 - Outside CI, the Playwright config reuses an existing Vite or backend server if one is already listening on the expected ports. Otherwise it starts both automatically.
 - GitLab stores the JUnit report at `gl-test-reports/frontend-browser-e2e-junit.xml` and keeps the HTML report plus Playwright artifacts under `frontend/playwright-report/` and `frontend/test-results/`.
 

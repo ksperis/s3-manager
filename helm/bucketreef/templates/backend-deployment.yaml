@@ -99,12 +99,18 @@ spec:
             httpGet:
               path: /health
               port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ .Values.ingress.host | quote }}
             initialDelaySeconds: 10
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
               port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ .Values.ingress.host | quote }}
             initialDelaySeconds: 5
             periodSeconds: 5
       {{- if .Values.backend.persistence.enabled }}

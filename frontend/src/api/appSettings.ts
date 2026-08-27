@@ -156,9 +156,6 @@ export type LoginSettings = {
   default_endpoint_url?: string | null;
   endpoints: PublicStorageEndpoint[];
   login_logo_url?: string | null;
-  seed_login_prefill?: boolean;
-  seed_login_email?: string | null;
-  seed_login_password?: string | null;
 };
 
 export async function fetchAppSettings(): Promise<AppSettings> {

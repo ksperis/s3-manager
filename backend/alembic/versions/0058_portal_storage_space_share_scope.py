@@ -40,7 +40,7 @@ def upgrade() -> None:
                 created_at,
                 updated_at
             )
-            SELECT DISTINCT candidates.metadata_id, candidates.user_id, 'Owner', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            SELECT DISTINCT candidates.metadata_id, candidates.user_id, 'Owner', CAST(NULL AS INTEGER), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             FROM (
                 SELECT metadata.id AS metadata_id, links.user_id AS user_id
                 FROM portal_storage_space_metadata AS metadata

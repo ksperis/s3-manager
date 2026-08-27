@@ -7,6 +7,11 @@ Use Helm for Kubernetes deployments.
 - Chart: `helm/bucketreef`
 - Values: `helm/bucketreef/values.yaml`
 
+The chart defaults remain pinned to the latest stable application release
+(`0.2.0`). They do not automatically follow an unpublished source checkout.
+To validate checkout changes, override both backend and frontend repositories
+and give both images the exact same immutable `dev-<short-sha>` tag.
+
 ## Minimal install
 
 ```bash
@@ -44,6 +49,21 @@ The referenced existing Secret is mandatory and must provide the keys mapped
 by `backend.secretKeys`: database URL, distinct UI/API JWT rings, credential
 ring, and internal Cron token. Ingress must be enabled with an existing TLS
 secret. Sensitive values in `backend.env` are rejected by chart rendering.
+
+## Create the first administrator
+
+After the backend pod is ready, explicitly issue a one-time setup URL:
+
+```bash
+kubectl exec deploy/bucketreef-backend -- \
+  python -m app.scripts.issue_first_admin_bootstrap
+```
+
+Ensure `PUBLIC_ORIGIN`, ingress TLS, WebAuthn origin/RP ID and trusted hosts are
+already correct before opening the URL. The token expires after 15 minutes and
+can be reissued only while the user database is empty. A console-only fallback
+uses `app.scripts.create_first_admin` in the same pod. Helm does not inject a
+default administrator or administrator password.
 
 ## Multi-backend profile
 
@@ -129,26 +149,34 @@ helm upgrade --install bucketreef helm/bucketreef \
   --set image.frontend.tag=0.1
 ```
 
-Lab/dev example with GitLab Container Registry:
+Pinned checkout/lab example with GitLab Container Registry:
 
 ```bash
 helm upgrade --install bucketreef helm/bucketreef \
   --set image.backend.repository=<gitlab-registry>/<project>/backend \
-  --set image.backend.tag=dev \
+  --set image.backend.tag=dev-<short-sha> \
   --set image.frontend.repository=<gitlab-registry>/<project>/frontend \
-  --set image.frontend.tag=dev
+  --set image.frontend.tag=dev-<short-sha>
 ```
+
+Never mix backend and frontend tags from different commits for bootstrap or
+upgrade validation. CI renders the chart with the commit images and runs a
+blocking Kind smoke test on image-building branches; that smoke covers bundled
+PostgreSQL, pod readiness, CLI token issuance and the HTTP bootstrap contract
+through the frontend proxy. Full passkey enrollment remains covered by the
+browser E2E suite.
 
 ## After deploy checklist
 
 1. Confirm backend, frontend, and scheduler pods are running.
 2. Confirm secrets are injected from Kubernetes Secrets or an external secret manager.
-3. Open the frontend, sign in, and configure the first storage endpoint.
-4. Create or import the first account or connection.
-5. Verify the healthcheck CronJob runs and endpoint status updates.
-6. Verify billing, quota monitoring, and usage-history CronJobs are enabled or intentionally disabled.
-7. Check Browser and Portal feature flags before giving access to users.
-8. Review [Operations: security](operations-security.md) and [Operations: observability](operations-observability.md) before publishing the URL broadly.
+3. Issue the bootstrap URL, create the first administrator, enroll a passkey and verify `/admin`.
+4. Optionally configure the first storage endpoint.
+5. Optionally create or import the first account or connection.
+6. Verify the healthcheck CronJob runs and endpoint status updates when storage is configured.
+7. Verify billing, quota monitoring, and usage-history CronJobs are enabled or intentionally disabled.
+8. Check Browser and Portal feature flags before giving access to users.
+9. Review [Operations: security](operations-security.md) and [Operations: observability](operations-observability.md) before publishing the URL broadly.
 
 ## Related pages
 

@@ -19,7 +19,7 @@ depends_on = None
 def upgrade() -> None:
     with op.batch_alter_table("bucket_migrations", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column("auto_grant_source_read_for_copy", sa.Boolean(), nullable=False, server_default=sa.text("0"))
+            sa.Column("auto_grant_source_read_for_copy", sa.Boolean(), nullable=False, server_default=sa.false())
         )
 
 

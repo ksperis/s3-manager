@@ -10,9 +10,17 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-The backend uses SQLite by default (`app.db`). Automatic super-admin seeding is
-disabled by default. After the first backend startup has applied the database
-migrations, create the first administrator interactively from `backend/`:
+The backend uses SQLite by default (`app.db`). It never creates a default
+administrator. After the first startup has applied migrations, issue a
+15-minute one-time web bootstrap URL from `backend/`:
+
+```bash
+python -m app.scripts.issue_first_admin_bootstrap
+```
+
+The URL uses `PUBLIC_ORIGIN`; its token is in the fragment and only its SHA-256
+digest is stored. As a direct operator fallback, create the account
+interactively:
 
 ```bash
 python -m app.scripts.create_first_admin --email exact-admin@example.com --full-name "Platform Admin"
@@ -23,6 +31,11 @@ The command requires an empty user database, prompts for a password of at least
 at first login. Replace all default development secrets before exposing the service.
 SQLite is supported for local development and mono-backend deployments only. Use
 PostgreSQL for multiple backend replicas.
+
+The repository-level `./quickstart` builds this backend and the frontend from
+the current checkout, checks both services, and issues the web token only after
+the setup page is reachable. Published Compose/Helm images follow their own tag
+policy and may not include unpublished checkout changes.
 
 ## Migrations (Alembic)
 
@@ -97,8 +110,6 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `SEED_RGW_ADMIN_ACCESS_KEY` / `SEED_RGW_ADMIN_SECRET_KEY` (optional override for the default endpoint admin credentials)
 - `SEED_SUPERVISION_ACCESS_KEY` / `SEED_SUPERVISION_SECRET_KEY` (optional read-only credentials for usage/metrics)
 - `CORS_ORIGINS` (default: `["http://localhost:5173"]`)
-- `SEED_SUPER_ADMIN_EMAIL` / `SEED_SUPER_ADMIN_PASSWORD` / `SEED_SUPER_ADMIN_FULL_NAME`
-- `SEED_SUPER_ADMIN_MODE` (default: `disabled`, values: `if_empty|if_missing|disabled`)
 - `OIDC_STATE_TTL_SECONDS` (default: `600`, validity of login `state`)
 - `OIDC_PROVIDERS__<key>__*` to configure OpenID Connect providers (see below)
 - `LDAP_PROVIDERS__<key>__*` to configure LDAP providers (see below)
@@ -108,12 +119,9 @@ JWT signing uses the first key in `JWT_KEYS` and validates against the full list
 Security notes:
 - Production environments should set strong non-default values for `JWT_KEYS` and `CREDENTIAL_KEYS` (>=32 chars, high entropy).
 - Production environments should set `REFRESH_TOKEN_COOKIE_SECURE=true` when using non-local origins, and `CORS_ORIGINS` should list explicit trusted origins rather than `*`.
-- If automatic seeding is deliberately enabled for development or tests, keep
-  `SEED_SUPER_ADMIN_PASSWORD` as a bootstrap credential only and rotate it
-  immediately.
-- Keep `SEED_SUPER_ADMIN_MODE=disabled` in production and create the first
-  super-admin with `python -m app.scripts.create_first_admin`. Production
-  configuration rejects the automatic seed modes.
+- The web bootstrap is unavailable until an operator explicitly issues a token.
+  Tokens expire after 15 minutes, are single-use, and can be rotated while the
+  user database remains empty.
 - HTTP 5xx responses redact URLs, authorization headers, tokens, signatures, and access-key material before details are returned to clients or written through the HTTP exception logger.
 
 ### Credential key rotation (manual)
@@ -212,5 +220,8 @@ export LDAP_PROVIDERS__corp__subject_attribute="entryUUID"
 First administrator bootstrap:
 
 - No default administrator account or password is created.
-- Run `python -m app.scripts.create_first_admin` against an empty user database.
+- Prefer `python -m app.scripts.issue_first_admin_bootstrap` for the temporary
+  web flow, or use `python -m app.scripts.create_first_admin` as a direct CLI
+  fallback. Both require an empty user database.
 - The first administrator login requires passkey enrollment.
+- Recovery commands for an existing administrator do not reopen this bootstrap.

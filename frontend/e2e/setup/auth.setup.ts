@@ -1,11 +1,13 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { expect, test as setup, type APIResponse, type Page } from "@playwright/test";
 
 import {
   E2E_ADMIN_EMAIL,
+  E2E_ADMIN_FULL_NAME,
   E2E_ADMIN_PASSWORD,
+  E2E_BOOTSTRAP_URL_PATH,
   E2E_AUTH_ADMIN_EMAIL,
   E2E_AUTH_ADMIN_FULL_NAME,
   E2E_AUTH_ADMIN_PASSWORD,
@@ -60,6 +62,20 @@ async function assertOk(response: APIResponse, message: string) {
   const ok = response.ok();
   const detail = ok ? "" : ` (${response.status()} ${await response.text()})`;
   expect(ok, `${message}${detail}`).toBeTruthy();
+}
+
+async function waitForBootstrapUrl(timeoutMs = 30_000): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const value = (await readFile(E2E_BOOTSTRAP_URL_PATH, "utf8")).trim();
+      if (value) return value;
+    } catch {
+      // The backend wrapper writes the file immediately after migrations and token issuance.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Timed out waiting for the first-admin bootstrap URL");
 }
 
 async function csrfHeaders(page: Page): Promise<Record<string, string>> {
@@ -191,10 +207,12 @@ setup("bootstrap browser auth with S3 backend", async ({ page }) => {
     },
   });
 
-  await page.goto("/login");
-  await page.locator('input[type="email"]').fill(E2E_ADMIN_EMAIL);
-  await page.locator('input[type="password"]').fill(E2E_ADMIN_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.goto(await waitForBootstrapUrl());
+  await page.getByLabel("Full name").fill(E2E_ADMIN_FULL_NAME);
+  await page.getByLabel("Email").fill(E2E_ADMIN_EMAIL);
+  await page.getByLabel("Password", { exact: true }).fill(E2E_ADMIN_PASSWORD);
+  await page.getByLabel("Confirm password").fill(E2E_ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Create administrator" }).click();
   await expect(page.getByRole("heading", { name: "Create your administrator passkey" })).toBeVisible();
   await page.getByRole("button", { name: "Create passkey" }).click();
   await expect(page.getByText("Save these one-time recovery codes now.")).toBeVisible();

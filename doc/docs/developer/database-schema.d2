@@ -75,6 +75,10 @@ Legend: {
     class: table
     tooltip: "PK: id\nUnique: bucket_key, window_started_at"
   }
+  "first_admin_bootstrap": {
+    class: table
+    tooltip: "PK: id\nCheck: ck_first_admin_bootstrap_singleton(id = 1)"
+  }
   "s3_sessions": {
     class: table
     tooltip: "PK: id\nIndexes: ix_s3_sessions_access_key_hash(access_key_hash) [index]; ix_s3_sessions_id(id) [index]"
@@ -278,6 +282,7 @@ Legend: {
 "endpoint_health_status_segments" -> "storage_endpoints"
 "external_identities" -> "users"
 "external_identity_link_requests" -> "users"
+"first_admin_bootstrap" -> "users"
 "recovery_codes" -> "users"
 "refresh_tokens" -> "auth_sessions"
 "refresh_tokens" -> "refresh_tokens"

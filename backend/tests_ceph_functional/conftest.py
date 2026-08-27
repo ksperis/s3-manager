@@ -124,7 +124,7 @@ def super_admin_session(
     except Exception as exc:  # noqa: BLE001
         pytest.fail(
             "Ceph functional tests require a valid super-admin login. "
-            "Adjust CEPH_TEST_SUPERADMIN_EMAIL/CEPH_TEST_SUPERADMIN_PASSWORD or the seed defaults. "
+            "Adjust CEPH_TEST_SUPERADMIN_EMAIL/CEPH_TEST_SUPERADMIN_PASSWORD. "
             f"Configured login '{ceph_test_settings.super_admin_email}' failed: {exc}"
         )
 

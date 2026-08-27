@@ -25,7 +25,18 @@ def upgrade() -> None:
     # Defensive cleanup for interrupted SQLite batch migrations.
     op.execute(sa.text("DROP TABLE IF EXISTS _alembic_tmp_s3_connections"))
 
-    public_count = _scalar_int(bind, "SELECT COUNT(1) FROM s3_connections WHERE is_public = 1")
+    connections = sa.table(
+        "s3_connections",
+        sa.column("is_public", sa.Boolean()),
+    )
+    public_count = int(
+        bind.scalar(
+            sa.select(sa.func.count()).select_from(connections).where(
+                connections.c.is_public.is_(True)
+            )
+        )
+        or 0
+    )
     if public_count > 0:
         raise RuntimeError(
             "Migration blocked: s3_connections still contains public rows; clean data before applying revision 0032"

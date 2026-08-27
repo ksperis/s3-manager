@@ -6,18 +6,17 @@ from __future__ import annotations
 import argparse
 import getpass
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.core.security import get_password_hash
 from app.db import User
-from app.db.enums import UserRole
-from app.services.audit_service import AuditService
+from app.services.first_admin_bootstrap_service import (
+    FirstAdminBootstrapError,
+    FirstAdminBootstrapService,
+)
 
 
-class FirstAdminError(ValueError):
-    pass
+FirstAdminError = FirstAdminBootstrapError
 
 
 def create_first_admin(
@@ -28,33 +27,15 @@ def create_first_admin(
     password: str,
     confirmation: str,
 ) -> User:
-    normalized_email = email.strip().lower()
-    expected = f"CREATE FIRST ADMIN {normalized_email}"
-    if confirmation != expected:
-        raise FirstAdminError(f"Confirmation must exactly match: {expected}")
-    if len(password) < 12:
-        raise FirstAdminError("Password must contain at least 12 characters")
-    if db.query(func.count(User.id)).scalar():
-        raise FirstAdminError("The database already contains users; create administrators through the UI")
-    user = User(
-        email=normalized_email,
-        full_name=full_name.strip() or None,
-        hashed_password=get_password_hash(password),
-        role=UserRole.UI_SUPERADMIN.value,
-        is_active=True,
-        auth_version=1,
+    created = FirstAdminBootstrapService(db).create_from_cli(
+        email=email,
+        full_name=full_name,
+        password=password,
+        confirmation=confirmation,
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    AuditService(db).record_action(
-        user=user,
-        scope="security",
-        action="operator_create_first_superadmin",
-        entity_type="user",
-        entity_id=str(user.id),
-        metadata={"passkey_enrollment_required": True},
-    )
+    user = db.get(User, created.user_id)
+    if user is None:
+        raise FirstAdminError("Created administrator could not be reloaded")
     return user
 
 
@@ -78,9 +59,13 @@ def main() -> None:
             password=password,
             confirmation=confirmation,
         )
+        created_email = user.email
     finally:
         db.close()
-    print(f"Created {user.email}. Passkey enrollment is mandatory at first login.")
+    print(
+        f"Created {created_email}. "
+        "Passkey enrollment is mandatory at first login."
+    )
 
 
 if __name__ == "__main__":

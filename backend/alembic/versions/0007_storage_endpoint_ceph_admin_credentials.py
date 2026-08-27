@@ -22,6 +22,17 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Alembic creates version_num as VARCHAR(32), while this revision and many
+    # later BucketReef revision identifiers are longer. PostgreSQL enforces the
+    # limit (unlike SQLite), so widen it before Alembic records this revision.
+    if op.get_bind().dialect.name == "postgresql":
+        op.alter_column(
+            "alembic_version",
+            "version_num",
+            existing_type=sa.String(length=32),
+            type_=sa.String(length=255),
+            existing_nullable=False,
+        )
     with op.batch_alter_table("storage_endpoints", schema=None) as batch_op:
         batch_op.add_column(sa.Column("ceph_admin_access_key", sa.String(), nullable=True))
         batch_op.add_column(sa.Column("ceph_admin_secret_key", EncryptedString(), nullable=True))

@@ -21,15 +21,23 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("credential_owner_type", sa.String(), nullable=True))
         batch_op.add_column(sa.Column("credential_owner_identifier", sa.String(), nullable=True))
 
+    connections = sa.table(
+        "s3_connections",
+        sa.column("id", sa.Integer()),
+        sa.column("is_public", sa.Boolean()),
+        sa.column("is_shared", sa.Boolean()),
+    )
+    user_connections = sa.table(
+        "user_s3_connections",
+        sa.column("s3_connection_id", sa.Integer()),
+    )
     op.execute(
-        sa.text(
-            """
-            UPDATE s3_connections
-            SET is_shared = 1
-            WHERE is_public = 0
-              AND id IN (SELECT DISTINCT s3_connection_id FROM user_s3_connections)
-            """
+        sa.update(connections)
+        .where(
+            connections.c.is_public.is_(False),
+            connections.c.id.in_(sa.select(user_connections.c.s3_connection_id).distinct()),
         )
+        .values(is_shared=True)
     )
 
 

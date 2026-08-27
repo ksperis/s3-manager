@@ -170,7 +170,7 @@ def _restore_obsolete_permission(bind: Any, table_name: str) -> None:
                 _OBSOLETE_PERMISSION_COLUMN,
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("0"),
+                server_default=sa.false(),
             )
         )
 

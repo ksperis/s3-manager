@@ -5,7 +5,6 @@ from app.models.base import ApiModel
 
 class OnboardingStatus(ApiModel):
     dismissed: bool
-    can_dismiss: bool
-    seed_user_configured: bool
+    complete: bool
     endpoint_configured: bool
-
+    storage_access_configured: bool

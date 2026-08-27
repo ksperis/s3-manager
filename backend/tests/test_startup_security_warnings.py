@@ -6,7 +6,6 @@ from app import main
 def test_startup_security_warnings_include_weak_defaults(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["change-me"])
     monkeypatch.setattr(main.settings, "credential_keys", ["change-me"])
-    monkeypatch.setattr(main.settings, "seed_super_admin_password", "changeme")
     monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
     monkeypatch.setattr(main.settings, "cors_origins", ["http://localhost:5173"])
 
@@ -14,13 +13,11 @@ def test_startup_security_warnings_include_weak_defaults(monkeypatch):
     joined = " | ".join(warnings)
     assert "JWT key" in joined
     assert "credential encryption key" in joined
-    assert "SEED_SUPER_ADMIN_PASSWORD" in joined
 
 
 def test_startup_security_warnings_include_insecure_cookie_notice_for_non_local_origins(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
-    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
     monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", False)
     monkeypatch.setattr(main.settings, "cors_origins", ["https://app.example.com"])
 
@@ -31,7 +28,6 @@ def test_startup_security_warnings_include_insecure_cookie_notice_for_non_local_
 def test_startup_security_warnings_do_not_include_cookie_notice_for_local_origins(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
-    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
     monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", False)
     monkeypatch.setattr(main.settings, "cors_origins", ["http://localhost:5173", "http://127.0.0.1:4173"])
 
@@ -42,7 +38,6 @@ def test_startup_security_warnings_do_not_include_cookie_notice_for_local_origin
 def test_startup_security_warnings_include_wildcard_cors_notice(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
-    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
     monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
     monkeypatch.setattr(main.settings, "cors_origins", ["*"])
 
@@ -54,7 +49,6 @@ def test_startup_security_warnings_include_wildcard_cors_notice(monkeypatch):
 def test_startup_security_warnings_include_sqlite_bucket_migration_notice(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
-    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
     monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
     monkeypatch.setattr(main.settings, "cors_origins", ["http://localhost:5173"])
     monkeypatch.setattr(main.settings, "database_url", "sqlite:////tmp/test.db")
@@ -68,7 +62,6 @@ def test_startup_security_warnings_include_sqlite_bucket_migration_notice(monkey
 def test_startup_security_warnings_include_sqlite_multi_backend_notice(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
-    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
     monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
     monkeypatch.setattr(main.settings, "cors_origins", ["http://localhost:5173"])
     monkeypatch.setattr(main.settings, "database_url", "sqlite:////tmp/test.db")
@@ -83,7 +76,6 @@ def test_startup_security_warnings_include_sqlite_multi_backend_notice(monkeypat
 def test_startup_security_warnings_include_insecure_ldap_notice(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
-    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
     monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
     monkeypatch.setattr(main.settings, "cors_origins", ["http://localhost:5173"])
     monkeypatch.setattr(main.settings, "database_url", "postgresql://example")
@@ -108,7 +100,6 @@ def test_startup_security_warnings_include_insecure_ldap_notice(monkeypatch):
 def test_startup_security_warnings_include_unverified_ldap_tls_notice(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
-    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
     monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
     monkeypatch.setattr(main.settings, "cors_origins", ["http://localhost:5173"])
     monkeypatch.setattr(main.settings, "database_url", "postgresql://example")
@@ -133,7 +124,6 @@ def test_startup_security_warnings_include_unverified_ldap_tls_notice(monkeypatc
 def test_startup_security_warnings_include_legacy_ldap_tls_notice(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
-    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
     monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
     monkeypatch.setattr(main.settings, "cors_origins", ["http://localhost:5173"])
     monkeypatch.setattr(

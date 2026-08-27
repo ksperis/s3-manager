@@ -36,6 +36,11 @@ npm install
 The backend reads `backend/.env` when present. For a simple local setup, the
 default SQLite configuration is sufficient.
 
+For a Docker-based check of the exact working tree, run `./quickstart` from the
+repository root. It builds `docker-compose.build.yml`, so the first run can be
+slower than the direct development servers but cannot silently test stale
+published images.
+
 ## Equivalent terminal commands
 
 If you prefer not to use VS Code launch profiles, the matching commands are:
@@ -75,14 +80,18 @@ Open `http://127.0.0.1:5173/<route>`, for example
 `http://127.0.0.1:5173/admin/storage-endpoints`. The Vite dev server proxies
 relative `/api` requests to `http://localhost:8000` by default.
 
-If the page redirects to `/login`, use the local bootstrap account when the
-current database has it:
+If a fresh database redirects to `/login`, issue a one-time link from the
+running backend:
 
-- email: `admin@example.com`
-- password: `changeme`
+```bash
+cd backend
+rtk .venv/bin/python -m app.scripts.issue_first_admin_bootstrap
+```
 
-If the local database already contains other users, use the known local account
-instead of reseeding or resetting data unexpectedly.
+Open the printed `/setup/first-admin#token=...` URL and enroll a passkey. The
+Browser E2E harness uses the same web bootstrap with `E2E_ADMIN_*` variables.
+If the database already contains users, sign in with a known local account; do
+not reset or reseed unrelated development data.
 
 When validating an interface change, check the route content and the browser
 console. A successful `npm run dev`, type check, or unit test run does not prove
