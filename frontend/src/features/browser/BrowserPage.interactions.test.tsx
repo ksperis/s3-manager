@@ -5708,7 +5708,7 @@ describe("BrowserPage interactions", () => {
     await waitFor(() => {
       expect(cleanOldVersionsAction).toBeEnabled();
     });
-    await user.click(cleanOldVersionsAction);
+    fireEvent.click(cleanOldVersionsAction);
 
     const modal = await screen.findByRole("dialog", { name: "Clean old versions" });
     await user.type(within(modal).getByPlaceholderText("e.g. 3"), "1");
