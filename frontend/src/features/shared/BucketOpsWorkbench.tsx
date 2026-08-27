@@ -92,6 +92,7 @@ import BucketUiTagSettingsBadge, {
 } from "./BucketUiTagSettingsBadge";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
+import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
 import {
   buildBucketExportColumns,
@@ -115,18 +116,7 @@ import {
   loadBucketListReturnContext,
   saveBucketListReturnContext,
 } from "./bucketListReturnContext";
-import {
-  buildBucketPolicySummaryLines,
-  buildBucketTagSummaryLines,
-  buildCorsRuleSummaryLines,
-  buildEncryptionSummaryLines,
-  buildLifecycleRuleSummaryLines,
-  buildLoggingSummaryLines,
-  buildNotificationSummaryLines,
-  buildObjectLockSummaryLines,
-  buildVersioningSummaryLines,
-  buildWebsiteSummaryLines,
-} from "./bucketFeatureSummaries";
+import { buildBucketTagSummaryLines } from "./bucketFeatureSummaries";
 import {
   buildBucketOpsActiveFilterSummaryItems,
   buildBucketOpsDraftFilterSummaryItems,
@@ -316,11 +306,6 @@ function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
     </svg>
   );
 }
-
-type OwnerTooltipState =
-  | { status: "loading" }
-  | { status: "ready"; ownerName: string | null }
-  | { status: "error"; message: string };
 
 type OrphanedTagBucketDetail = {
   key: string;
@@ -641,17 +626,32 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [tagCreationDrafts, setTagCreationDrafts] = useState<
     Record<string, BucketUiTagDraft[]>
   >({});
-  const [activeOwnerTooltipKey, setActiveOwnerTooltipKey] = useState<string | null>(null);
-  const ownerTooltipAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const [ownerTooltipState, setOwnerTooltipState] = useState<Record<string, OwnerTooltipState>>({});
-  const ownerTooltipInflightRef = useRef<Partial<Record<string, Promise<void>>>>({});
-  const ownerNameCacheRef = useRef<Record<string, string | null>>({});
-  const [activeFeatureTooltipKey, setActiveFeatureTooltipKey] = useState<string | null>(null);
-  const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, BucketFeatureTooltipState>>({});
-  const featureTooltipInflightRef = useRef<Partial<Record<string, Promise<void>>>>({});
+  const {
+    activeFeatureTooltipKey,
+    activeOwnerTooltipKey,
+    featureTooltipCacheKey,
+    featureTooltipState,
+    loadFeatureTooltip,
+    loadOwnerTooltip,
+    ownerTooltipAnchorRefs,
+    ownerTooltipCacheKey,
+    ownerTooltipState,
+    resetBucketTooltipState,
+    setActiveFeatureTooltipKey,
+    setActiveOwnerTooltipKey,
+  } = useBucketOpsTooltips({
+    extractError,
+    getBucketEncryption,
+    getBucketLogging,
+    getBucketNotifications,
+    getBucketPolicy,
+    getBucketProperties,
+    getBucketWebsite,
+    listBuckets,
+    missingScopeError,
+    selectedScopeId: selectedEndpointId,
+  });
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
-  const bucketPropertiesCacheRef = useRef<Record<string, BucketProperties>>({});
-  const bucketPropertiesInflightRef = useRef<Record<string, Promise<BucketProperties>>>({});
   const selectionHeaderRef = useRef<HTMLInputElement | null>(null);
   const bulkCopyRunTokenRef = useRef(0);
   const bulkPreviewRunTokenRef = useRef(0);
@@ -787,16 +787,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setSelectionExportLoading(null);
     setTagSuggestionBucket(null);
     setTagDrafts({});
-    setActiveOwnerTooltipKey(null);
-    setOwnerTooltipState({});
-    ownerTooltipInflightRef.current = {};
-    ownerNameCacheRef.current = {};
-    setActiveFeatureTooltipKey(null);
-    setFeatureTooltipState({});
-    featureTooltipInflightRef.current = {};
     setActiveTagsTooltipKey(null);
-    bucketPropertiesCacheRef.current = {};
-    bucketPropertiesInflightRef.current = {};
     const stored = loadBucketListState(bucketsStateStorageKey, selectedEndpointId);
     if (ownerQueryFilter) {
       const ownerPrefill: AdvancedFilterState = {
@@ -1002,16 +993,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [isStorageOps, items, loading, location.pathname, location.search, selectedEndpointId, surface.mode]);
 
   const clearBucketListingUiCaches = () => {
-    ownerNameCacheRef.current = {};
-    ownerTooltipInflightRef.current = {};
-    setOwnerTooltipState({});
-    setActiveOwnerTooltipKey(null);
-    featureTooltipInflightRef.current = {};
-    setFeatureTooltipState({});
-    setActiveFeatureTooltipKey(null);
+    resetBucketTooltipState();
     setActiveTagsTooltipKey(null);
-    bucketPropertiesCacheRef.current = {};
-    bucketPropertiesInflightRef.current = {};
     setAllFilteredBucketNames(null);
     setAllFilteredBucketNamesKey(null);
     setSelectAllProgress(null);
@@ -4210,179 +4193,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         )}
       </div>
     );
-  };
-
-  const bucketTooltipCacheKey = (bucket: CephAdminBucket) => `${bucket.tenant ?? ""}:${bucket.name}`;
-  const ownerTooltipCacheKey = (bucket: CephAdminBucket) =>
-    `${bucketTooltipCacheKey(bucket)}:${bucket.owner ?? ""}:owner`;
-  const featureTooltipCacheKey = (bucket: CephAdminBucket, featureKey: FeatureKey) =>
-    `${bucketTooltipCacheKey(bucket)}:${featureKey}`;
-
-  const resolveOwnerNameForBucket = async (bucket: CephAdminBucket): Promise<string | null> => {
-    const inlineOwnerName = (bucket.owner_name || "").trim();
-    if (inlineOwnerName) {
-      return inlineOwnerName;
-    }
-    if (!selectedEndpointId) return null;
-    const bucketKey = bucketTooltipCacheKey(bucket);
-    if (Object.prototype.hasOwnProperty.call(ownerNameCacheRef.current, bucketKey)) {
-      return ownerNameCacheRef.current[bucketKey];
-    }
-
-    const rules: Array<Record<string, unknown>> = [{ field: "name", op: "eq", value: bucket.name }];
-    if (bucket.tenant && bucket.tenant.trim()) {
-      rules.push({ field: "tenant", op: "eq", value: bucket.tenant });
-    }
-    if (bucket.owner && bucket.owner.trim()) {
-      rules.push({ field: "owner", op: "eq", value: bucket.owner });
-    }
-    const response = await listBuckets(selectedEndpointId, {
-      page: 1,
-      page_size: 5,
-      advanced_filter: JSON.stringify({ match: "all", rules }),
-      include: ["owner_name"],
-      with_stats: false,
-    });
-    const candidate = (response.items ?? []).find(
-      (item) =>
-        item.name === bucket.name &&
-        (item.tenant ?? "") === (bucket.tenant ?? "") &&
-        (item.owner ?? "") === (bucket.owner ?? "")
-    );
-    const resolvedOwnerName = (candidate?.owner_name || "").trim() || null;
-    ownerNameCacheRef.current[bucketKey] = resolvedOwnerName;
-    return resolvedOwnerName;
-  };
-
-  const loadOwnerTooltip = (bucket: CephAdminBucket) => {
-    if (!selectedEndpointId || !bucket.owner) return;
-    const key = ownerTooltipCacheKey(bucket);
-    const current = ownerTooltipState[key];
-    if (current?.status === "ready" || current?.status === "loading") return;
-    if (ownerTooltipInflightRef.current[key]) return;
-
-    const work = (async () => {
-      setOwnerTooltipState((prev) => ({ ...prev, [key]: { status: "loading" } }));
-      try {
-        const ownerName = await resolveOwnerNameForBucket(bucket);
-        setOwnerTooltipState((prev) => ({ ...prev, [key]: { status: "ready", ownerName } }));
-      } catch (err) {
-        setOwnerTooltipState((prev) => ({
-          ...prev,
-          [key]: { status: "error", message: extractError(err) },
-        }));
-      } finally {
-        delete ownerTooltipInflightRef.current[key];
-      }
-    })();
-    ownerTooltipInflightRef.current[key] = work;
-  };
-
-  const getBucketPropertiesCached = async (bucket: CephAdminBucket): Promise<BucketProperties> => {
-    if (!selectedEndpointId) {
-      throw new Error(missingScopeError);
-    }
-    const bucketKey = bucketTooltipCacheKey(bucket);
-    const cached = bucketPropertiesCacheRef.current[bucketKey];
-    if (cached) return cached;
-    const inflight = bucketPropertiesInflightRef.current[bucketKey];
-    if (inflight) return inflight;
-    const promise = getBucketProperties(selectedEndpointId, bucket.name)
-      .then((props) => {
-        bucketPropertiesCacheRef.current[bucketKey] = props;
-        return props;
-      })
-      .finally(() => {
-        delete bucketPropertiesInflightRef.current[bucketKey];
-      });
-    bucketPropertiesInflightRef.current[bucketKey] = promise;
-    return promise;
-  };
-
-  const buildFeatureTooltipLines = async (bucket: CephAdminBucket, featureKey: FeatureKey): Promise<string[]> => {
-    if (!selectedEndpointId) return [missingScopeError];
-
-    if (featureKey === "versioning") {
-      const props = await getBucketPropertiesCached(bucket);
-      return buildVersioningSummaryLines(props.versioning_status);
-    }
-
-    if (featureKey === "object_lock") {
-      const props = await getBucketPropertiesCached(bucket);
-      return buildObjectLockSummaryLines(props.object_lock_enabled, props.object_lock);
-    }
-
-    if (featureKey === "block_public_access") {
-      const props = await getBucketPropertiesCached(bucket);
-      const cfg = normalizePublicAccessBlockState(props.public_access_block);
-      const lines = [`State: ${formatPublicAccessBlockState(cfg)}`];
-      PUBLIC_ACCESS_BLOCK_OPTIONS.forEach((option) => {
-        lines.push(`${option.label}: ${formatPublicAccessBlockFlag(cfg[option.key])}`);
-      });
-      return lines;
-    }
-
-    if (featureKey === "lifecycle_rules") {
-      const props = await getBucketPropertiesCached(bucket);
-      return buildLifecycleRuleSummaryLines(props.lifecycle_rules as unknown[]);
-    }
-
-    if (featureKey === "cors") {
-      const props = await getBucketPropertiesCached(bucket);
-      const rules = Array.isArray(props.cors_rules) ? props.cors_rules : [];
-      return buildCorsRuleSummaryLines(rules);
-    }
-
-    if (featureKey === "static_website") {
-      const website = await getBucketWebsite(selectedEndpointId, bucket.name);
-      return buildWebsiteSummaryLines(website as Record<string, unknown>);
-    }
-
-    if (featureKey === "bucket_policy") {
-      const payload = await getBucketPolicy(selectedEndpointId, bucket.name);
-      return buildBucketPolicySummaryLines(payload.policy);
-    }
-
-    if (featureKey === "access_logging") {
-      const logging = await getBucketLogging(selectedEndpointId, bucket.name);
-      return buildLoggingSummaryLines(logging as Record<string, unknown>);
-    }
-
-    if (featureKey === "notifications") {
-      const notifications = await getBucketNotifications(selectedEndpointId, bucket.name);
-      return buildNotificationSummaryLines(notifications.configuration);
-    }
-
-    if (featureKey === "server_side_encryption") {
-      const encryption = await getBucketEncryption(selectedEndpointId, bucket.name);
-      return buildEncryptionSummaryLines(encryption.rules);
-    }
-
-    return ["No additional details available."];
-  };
-
-  const loadFeatureTooltip = (bucket: CephAdminBucket, featureKey: FeatureKey) => {
-    if (!selectedEndpointId) return;
-    const key = featureTooltipCacheKey(bucket, featureKey);
-    const current = featureTooltipState[key];
-    if (current?.status === "ready" || current?.status === "loading") return;
-    if (featureTooltipInflightRef.current[key]) return;
-
-    const work = (async () => {
-      setFeatureTooltipState((prev) => ({ ...prev, [key]: { status: "loading" } }));
-      try {
-        const lines = await buildFeatureTooltipLines(bucket, featureKey);
-        setFeatureTooltipState((prev) => ({ ...prev, [key]: { status: "ready", lines } }));
-      } catch (err) {
-        setFeatureTooltipState((prev) => ({
-          ...prev,
-          [key]: { status: "error", message: extractError(err) },
-        }));
-      } finally {
-        delete featureTooltipInflightRef.current[key];
-      }
-    })();
-    featureTooltipInflightRef.current[key] = work;
   };
 
   const renderOwnerCell = (bucket: CephAdminBucket) => {

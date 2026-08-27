@@ -88,7 +88,7 @@ const CEPH_ADMIN_BUCKET_OPS_API = {
   updateBucketQuota: updateCephAdminBucketQuota,
 } as const;
 
-type BucketOpsApi = Omit<typeof CEPH_ADMIN_BUCKET_OPS_API, "updateBucketQuota"> & {
+export type BucketOpsApi = Omit<typeof CEPH_ADMIN_BUCKET_OPS_API, "updateBucketQuota"> & {
   updateBucketQuota?: typeof updateCephAdminBucketQuota;
 };
 
