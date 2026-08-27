@@ -16,11 +16,13 @@ import { cx, uiLabelClass } from "./ui/styles";
 import { useDismissibleLayer } from "./ui/useDismissibleLayer";
 
 type UiTagVisibility = "private" | "shared";
+type UiTagSelectionState = "selected" | "available";
 
 type UiTagBadgeProps = {
   label: string;
   colorKey: string;
   visibility?: UiTagVisibility;
+  selectionState?: UiTagSelectionState;
   active?: boolean;
   disabled?: boolean;
   title?: string;
@@ -38,6 +40,7 @@ export function UiTagBadge({
   label,
   colorKey,
   visibility,
+  selectionState,
   active = false,
   disabled = false,
   title,
@@ -49,6 +52,20 @@ export function UiTagBadge({
 }: UiTagBadgeProps) {
   const visibilityText = visibilityLabel(visibility);
   const accessibleLabel = visibilityText ? `${label}, ${visibilityText}` : label;
+  const selectionSymbol =
+    selectionState === "selected" ? "✓" : selectionState === "available" ? "+" : null;
+  const labelContent = selectionSymbol ? (
+    <>
+      <span aria-hidden="true" className="shrink-0 text-[11px] font-bold leading-none">
+        {selectionSymbol}
+      </span>
+      <span className="truncate">{label}</span>
+    </>
+  ) : onClick ? (
+    <span className="truncate">{label}</span>
+  ) : (
+    label
+  );
   return (
     <span
       className={cx(
@@ -57,11 +74,15 @@ export function UiTagBadge({
         visibility === "private" && "!border-dashed",
         visibility === "shared" && "!border-solid",
         active && "ring-2 ring-primary/40",
+        selectionState === "selected" && "ring-2 ring-primary/50 shadow-md",
+        selectionState === "available" &&
+          "!bg-transparent shadow-none hover:!bg-slate-50 focus-within:!bg-slate-50 focus-within:ring-2 focus-within:ring-primary/40 dark:hover:!bg-slate-800/70 dark:focus-within:!bg-slate-800/70",
         disabled && "opacity-60",
         className
       )}
       title={title ?? accessibleLabel}
       data-tag-visibility={visibility}
+      data-tag-selection-state={selectionState}
     >
       {onClick ? (
         <button
@@ -69,16 +90,16 @@ export function UiTagBadge({
           onClick={onClick}
           disabled={disabled}
           aria-label={ariaLabel ?? `Configure UI tag ${accessibleLabel}`}
-          className="min-w-0 px-2 py-0.5 text-[10px] font-semibold leading-4 focus:outline-none"
+          className="inline-flex min-w-0 items-center gap-1 px-2 py-0.5 text-[10px] font-semibold leading-4 focus:outline-none"
         >
-          <span className="truncate">{label}</span>
+          {labelContent}
         </button>
       ) : (
         <span
           aria-label={ariaLabel ?? accessibleLabel}
-          className="min-w-0 px-2 py-0.5 text-[10px] font-semibold leading-4"
+          className="inline-flex min-w-0 items-center gap-1 px-2 py-0.5 text-[10px] font-semibold leading-4"
         >
-          {label}
+          {labelContent}
         </span>
       )}
       {onRemove && (

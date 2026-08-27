@@ -6057,7 +6057,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           label={tag.label}
                           colorKey={tag.color_key}
                           visibility={tag.visibility}
+                          selectionState="selected"
                           className="text-xs"
+                          ariaLabel={`Selected UI tag filter ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
+                          title={`Selected UI tag filter: ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
                           onRemove={() => removeTagFilter(tag.id)}
                           removeAriaLabel={`Remove UI tag filter ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
                         />
@@ -6069,8 +6072,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                         label={tag.label}
                         colorKey={tag.color_key}
                         visibility={tag.visibility}
+                        selectionState="available"
                         onClick={() => addTagFilter(tag)}
                         ariaLabel={`Add UI tag filter ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
+                        title={`Available UI tag filter: ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}. Click to add.`}
                       />
                     ))}
                   </div>

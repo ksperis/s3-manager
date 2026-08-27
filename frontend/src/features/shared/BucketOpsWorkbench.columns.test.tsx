@@ -468,6 +468,62 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(mocks.fetchStorageOpsBucketUiTagOrphans).toHaveBeenCalledTimes(1);
   });
 
+  it("visually distinguishes selected and available UI tag filters without changing query semantics", async () => {
+    mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({
+      definitions: [
+        { id: 1, label: "urgent", color_key: "red", scope: "standard", visibility: "private" },
+        { id: 2, label: "archive", color_key: "blue", scope: "standard", visibility: "shared" },
+      ],
+    });
+    mocks.listStorageOpsBuckets.mockResolvedValue({ items: [baseBucket], ...baseResponse });
+
+    renderStorageOps();
+
+    const addUrgent = await screen.findByRole("button", {
+      name: "Add UI tag filter urgent, Private",
+    });
+    const availableUrgent = addUrgent.parentElement as HTMLElement;
+    expect(availableUrgent).toHaveAttribute("data-tag-selection-state", "available");
+    expect(availableUrgent).toHaveClass("!bg-transparent", "!border-dashed");
+    expect(within(availableUrgent).getByText("+")).toBeInTheDocument();
+
+    const addArchive = screen.getByRole("button", {
+      name: "Add UI tag filter archive, Shared",
+    });
+    expect(addArchive.parentElement).toHaveClass("!border-solid");
+
+    fireEvent.click(addUrgent);
+
+    const selectedUrgent = await screen.findByLabelText(
+      "Selected UI tag filter urgent, Private"
+    );
+    const selectedBadge = selectedUrgent.parentElement as HTMLElement;
+    expect(selectedBadge).toHaveAttribute("data-tag-selection-state", "selected");
+    expect(selectedBadge).toHaveClass("bg-red-50", "ring-2", "shadow-md", "!border-dashed");
+    expect(within(selectedBadge).getByText("✓")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add UI tag filter urgent, Private" })
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(mocks.listStorageOpsBuckets).toHaveBeenLastCalledWith(
+        1,
+        expect.objectContaining({ ui_tag_ids: [1], ui_tag_match: "any" }),
+        expect.any(Object)
+      )
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Remove UI tag filter urgent, Private",
+      })
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: "Add UI tag filter urgent, Private",
+      })
+    ).toBeInTheDocument();
+  });
+
   it("disables UI tags when a Storage Ops row has no configured endpoint", async () => {
     mocks.listStorageOpsBuckets.mockResolvedValue({
       items: [{ ...baseBucket, endpoint_id: null, bucket_identity: null }],
