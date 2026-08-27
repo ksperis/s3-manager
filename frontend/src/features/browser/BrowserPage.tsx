@@ -83,6 +83,7 @@ import { useBrowserOperationOverview } from "./useBrowserOperationOverview";
 import { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserPathEditor } from "./useBrowserPathEditor";
+import { useBrowserPathHistory } from "./useBrowserPathHistory";
 import { useBrowserQueuedUpload } from "./useBrowserQueuedUpload";
 import { useBrowserRuntimeData } from "./useBrowserRuntimeData";
 import { useBrowserSearch } from "./useBrowserSearch";
@@ -181,10 +182,6 @@ import {
   type BrowserColumnId,
 } from "./browserObjectTableModel";
 import { isBrowserInteractiveTarget } from "./browserObjectItemPresentation";
-import {
-  pushBucketPathHistory,
-  readBucketPathHistory,
-} from "./browserPathSuggestions";
 import {
   resolveBucketAccessEntry,
   splitBucketPanelBuckets,
@@ -665,7 +662,8 @@ export default function BrowserPage({
   const [copyDialog, setCopyDialog] = useState<BrowserCopyDialogState | null>(
     null,
   );
-  const [pathHistory, setPathHistory] = useState<string[]>([]);
+  const { history: pathHistory, record: recordPathHistory } =
+    useBrowserPathHistory({ bucketName });
   const {
     closeContextMenu,
     contextMenu,
@@ -1900,11 +1898,9 @@ export default function BrowserPage({
     (nextPrefix: string) => {
       setPrefix(nextPrefix);
       clearActiveItem();
-      if (bucketName) {
-        setPathHistory(pushBucketPathHistory(bucketName, nextPrefix));
-      }
+      recordPathHistory(nextPrefix);
     },
-    [bucketName, clearActiveItem, setPrefix],
+    [clearActiveItem, recordPathHistory, setPrefix],
   );
   const {
     activeSuggestionIndex: pathSuggestionIndex,
@@ -1950,14 +1946,6 @@ export default function BrowserPage({
   useEffect(() => {
     accountIdForApiRef.current = accountIdForApi;
   }, [accountIdForApi]);
-
-  useEffect(() => {
-    if (!bucketName) {
-      setPathHistory([]);
-      return;
-    }
-    setPathHistory(readBucketPathHistory(bucketName));
-  }, [bucketName]);
 
   useEffect(() => {
     if (
