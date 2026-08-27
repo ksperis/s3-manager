@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,6 +111,29 @@ vi.mock("../S3AccountContext", () => ({
 vi.mock("../../cephAdmin/CephAdminEndpointContext", () => ({
   useCephAdminEndpoint: () => useCephAdminEndpointMock(),
 }));
+
+function managerCephAccountContext(accountId: string) {
+  return {
+    accounts: [
+      {
+        id: accountId,
+        endpoint_provider: "ceph",
+        storage_endpoint_capabilities: {
+          metrics: true,
+          replication: true,
+          sns: true,
+          sse: true,
+          static_website: true,
+        },
+      },
+    ],
+    selectedS3AccountId: accountId,
+    accountIdForApi: accountId,
+    requiresS3AccountSelection: true,
+    accessMode: "admin",
+    managerBucketQuotaEnabled: true,
+  };
+}
 
 describe("BucketDetailPage replication state", () => {
   beforeEach(() => {
@@ -311,6 +334,110 @@ describe("BucketDetailPage replication state", () => {
     expect(
       screen.getByText("Read-only preview using the selected endpoint's Ceph Admin credentials.")
     ).toBeInTheDocument();
+  });
+
+  it("loads the Manager overview contract once and isolates object-tab loading", async () => {
+    const user = userEvent.setup();
+    useS3AccountContextMock.mockReturnValue(
+      managerCephAccountContext("acc-ceph"),
+    );
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getBucketNotificationsMock).toHaveBeenCalledOnce();
+    });
+
+    expect(getBucketStatsMock).toHaveBeenCalledOnce();
+    expect(getBucketVersioningMock).toHaveBeenCalledOnce();
+    expect(getBucketObjectLockMock).toHaveBeenCalledOnce();
+    expect(getBucketLifecycleMock).toHaveBeenCalledOnce();
+    expect(getBucketPolicyMock).toHaveBeenCalledOnce();
+    expect(getBucketAclMock).toHaveBeenCalledOnce();
+    expect(getBucketCorsMock).toHaveBeenCalledOnce();
+    expect(getBucketReplicationMock).toHaveBeenCalledOnce();
+    expect(getBucketEncryptionMock).toHaveBeenCalledOnce();
+    expect(getBucketPublicAccessBlockMock).toHaveBeenCalledOnce();
+    expect(getBucketWebsiteMock).toHaveBeenCalledOnce();
+    expect(getBucketLoggingMock).toHaveBeenCalledOnce();
+
+    vi.clearAllMocks();
+    await user.click(screen.getByRole("button", { name: "Objects / S3 Console" }));
+
+    await waitFor(() => {
+      expect(listObjectsMock).toHaveBeenCalledOnce();
+    });
+    expect(getBucketStatsMock).not.toHaveBeenCalled();
+    expect(getBucketVersioningMock).not.toHaveBeenCalled();
+    expect(getBucketLifecycleMock).not.toHaveBeenCalled();
+    expect(getBucketNotificationsMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the active tab while isolating late responses from an old account", async () => {
+    const user = userEvent.setup();
+    let accountId = "acc-old";
+    const accountContext = () => managerCephAccountContext(accountId);
+    useS3AccountContextMock.mockImplementation(accountContext);
+
+    let resolveOldLogging!: (value: {
+      enabled: boolean;
+      target_bucket: string;
+      target_prefix: string;
+    }) => void;
+    const oldLogging = new Promise<{
+      enabled: boolean;
+      target_bucket: string;
+      target_prefix: string;
+    }>((resolve) => {
+      resolveOldLogging = resolve;
+    });
+    getBucketLoggingMock.mockImplementation((requestedAccountId: string) =>
+      requestedAccountId === "acc-old"
+        ? oldLogging
+        : Promise.resolve({
+            enabled: true,
+            target_bucket: "new-logs",
+            target_prefix: "new/",
+          })
+    );
+
+    const renderPage = () => (
+      <MemoryRouter>
+        <BucketDetailPage bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+    const view = render(renderPage());
+
+    await waitFor(() => {
+      expect(getBucketLoggingMock).toHaveBeenCalledWith("acc-old", "demo-bucket");
+    });
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+
+    accountId = "acc-new";
+    view.rerender(renderPage());
+
+    const accessLoggingCard = await screen.findByTestId("bucket-feature-access-logging");
+    await waitFor(() => {
+      expect(within(accessLoggingCard).getByLabelText("Target bucket")).toHaveValue("new-logs");
+    });
+
+    await act(async () => {
+      resolveOldLogging({
+        enabled: true,
+        target_bucket: "old-logs",
+        target_prefix: "old/",
+      });
+      await oldLogging;
+    });
+
+    expect(within(accessLoggingCard).getByLabelText("Target bucket")).toHaveValue("new-logs");
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveClass(
+      "bg-[var(--ui-selected-bg)]",
+    );
   });
 
   it("uses the shared warning banner when Ceph Admin bucket context is missing", async () => {
@@ -736,7 +863,7 @@ describe("BucketDetailPage replication state", () => {
 
   it("keeps non-versioning Properties cards visible when versioning is unavailable", async () => {
     const user = userEvent.setup();
-    getCephAdminBucketVersioningMock.mockRejectedValueOnce(new Error("versioning unavailable"));
+    getCephAdminBucketVersioningMock.mockRejectedValue(new Error("versioning unavailable"));
 
     render(
       <MemoryRouter>
@@ -754,7 +881,7 @@ describe("BucketDetailPage replication state", () => {
 
   it("keeps non-object-lock Properties cards visible when Object Lock is unavailable", async () => {
     const user = userEvent.setup();
-    getCephAdminBucketObjectLockMock.mockRejectedValueOnce(new Error("object lock unavailable"));
+    getCephAdminBucketObjectLockMock.mockRejectedValue(new Error("object lock unavailable"));
 
     render(
       <MemoryRouter>
@@ -815,7 +942,7 @@ describe("BucketDetailPage replication state", () => {
 
   it("disables server access logging when the endpoint does not implement it", async () => {
     const user = userEvent.setup();
-    getCephAdminBucketLoggingMock.mockRejectedValueOnce(
+    getCephAdminBucketLoggingMock.mockRejectedValue(
       new Error(
         "Unable to fetch bucket logging for 'demo-bucket': An error occurred (XNotImplemented) when calling the GetBucketLogging operation: The request you provided implies functionality that is not implemented."
       )
@@ -845,7 +972,7 @@ describe("BucketDetailPage replication state", () => {
 
   it("disables JSON feature cards when the endpoint returns XNotImplemented", async () => {
     const user = userEvent.setup();
-    getCephAdminBucketNotificationsMock.mockRejectedValueOnce(
+    getCephAdminBucketNotificationsMock.mockRejectedValue(
       new Error("An error occurred (XNotImplemented) when calling the GetBucketNotificationConfiguration operation.")
     );
 
@@ -872,7 +999,7 @@ describe("BucketDetailPage replication state", () => {
 
   it("does not disable feature cards for non-implementation-unrelated errors", async () => {
     const user = userEvent.setup();
-    getCephAdminBucketLoggingMock.mockRejectedValueOnce(new Error("AccessDenied"));
+    getCephAdminBucketLoggingMock.mockRejectedValue(new Error("AccessDenied"));
 
     render(
       <MemoryRouter>

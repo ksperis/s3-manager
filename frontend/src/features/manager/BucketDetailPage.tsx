@@ -258,7 +258,47 @@ type BucketDetailPageProps = {
   onBackToBuckets?: () => void;
 };
 
-export default function BucketDetailPage({
+type BucketDetailPageContentProps = BucketDetailPageProps & {
+  activeTab: BucketDetailTabId;
+  cephAdminEndpoint: ReturnType<typeof useCephAdminEndpoint>;
+  onActiveTabChange: (tab: BucketDetailTabId) => void;
+  routeBucketName?: string;
+  s3AccountContext: ReturnType<typeof useS3AccountContext>;
+};
+
+export default function BucketDetailPage(props: BucketDetailPageProps) {
+  const [activeTab, setActiveTab] = useState<BucketDetailTabId>("overview");
+  const params = useParams<{ bucketName: string }>();
+  const s3AccountContext = useS3AccountContext();
+  const cephAdminEndpoint = useCephAdminEndpoint();
+  const bucketName = props.bucketNameOverride ?? params.bucketName;
+  const contextKey = JSON.stringify([
+    props.mode ?? "manager",
+    bucketName ?? null,
+    props.accountIdOverride ?? null,
+    s3AccountContext.accountIdForApi ?? null,
+    s3AccountContext.selectedS3AccountId ?? null,
+    s3AccountContext.requiresS3AccountSelection
+      ? null
+      : (s3AccountContext.accounts[0]?.id ?? null),
+    s3AccountContext.accessMode,
+    cephAdminEndpoint.selectedEndpointId ?? null,
+  ]);
+
+  return (
+    <BucketDetailPageContent
+      key={contextKey}
+      {...props}
+      activeTab={activeTab}
+      cephAdminEndpoint={cephAdminEndpoint}
+      onActiveTabChange={setActiveTab}
+      routeBucketName={params.bucketName}
+      s3AccountContext={s3AccountContext}
+    />
+  );
+}
+
+function BucketDetailPageContent({
   mode = "manager",
   bucketNameOverride,
   accountIdOverride = null,
@@ -267,19 +307,22 @@ export default function BucketDetailPage({
   hideObjectsTab = false,
   bucketListPathOverride,
   onBackToBuckets,
-}: BucketDetailPageProps) {
-  const params = useParams<{ bucketName: string }>();
-  const bucketName = bucketNameOverride ?? params.bucketName;
+  activeTab,
+  cephAdminEndpoint,
+  onActiveTabChange,
+  routeBucketName,
+  s3AccountContext,
+}: BucketDetailPageContentProps) {
+  const bucketName = bucketNameOverride ?? routeBucketName;
   const isCephAdmin = mode === "ceph-admin";
   const {
     accounts,
     selectedS3AccountId,
     accountIdForApi,
     requiresS3AccountSelection,
-    accessMode,
     managerBucketQuotaEnabled,
-  } = useS3AccountContext();
-  const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
+  } = s3AccountContext;
+  const { selectedEndpointId, selectedEndpoint } = cephAdminEndpoint;
   const [showNotificationExample, setShowNotificationExample] = useState(false);
   const [showWebsiteRulesExample, setShowWebsiteRulesExample] = useState(false);
   const [showEncryptionExample, setShowEncryptionExample] = useState(false);
@@ -287,7 +330,6 @@ export default function BucketDetailPage({
   const [showReplicationExample, setShowReplicationExample] = useState(false);
   const [pendingConfigurationDelete, setPendingConfigurationDelete] = useState<BucketConfigurationDeleteKind | null>(null);
 
-  const [activeTab, setActiveTab] = useState<BucketDetailTabId>("overview");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
   const selectedS3Account = useMemo(() => {
@@ -514,9 +556,9 @@ export default function BucketDetailPage({
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
-      setActiveTab(availableTabs[0] ?? "overview");
+      onActiveTabChange(availableTabs[0] ?? "overview");
     }
-  }, [activeTab, availableTabs]);
+  }, [activeTab, availableTabs, onActiveTabChange]);
   const staticWebsiteEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.static_website === true;
@@ -701,9 +743,9 @@ export default function BucketDetailPage({
 
   useEffect(() => {
     if (activeTab === "metrics" && !canViewBucketMetrics) {
-      setActiveTab("overview");
+      onActiveTabChange("overview");
     }
-  }, [activeTab, canViewBucketMetrics]);
+  }, [activeTab, canViewBucketMetrics, onActiveTabChange]);
   const notificationExample = buildNotificationExample(exampleS3AccountId);
   const userRole = getUserRole();
   const isAdmin = isAdminLikeRole(userRole);
@@ -754,68 +796,6 @@ export default function BucketDetailPage({
     onSaved: refreshBucketMeta,
   });
 
-  useEffect(() => {
-    if (activeTab !== "overview" && activeTab !== "metrics") return;
-    refreshBucketMeta();
-  }, [activeTab, refreshBucketMeta]);
-
-  useEffect(() => {
-    loadVersioning();
-  }, [loadVersioning]);
-
-  useEffect(() => {
-    loadObjectLock();
-  }, [loadObjectLock]);
-
-  useEffect(() => {
-    if (activeTab === "overview" || activeTab === "permissions") {
-      loadPolicy();
-      loadBucketAcl();
-      loadPublicAccessBlock();
-    }
-    if (activeTab === "overview" || activeTab === "advanced") {
-      loadCors();
-      loadReplication();
-    }
-  }, [activeTab, loadBucketAcl, loadCors, loadPolicy, loadPublicAccessBlock, loadReplication]);
-
-  useEffect(() => {
-    if (activeTab === "properties") {
-      loadLifecycle();
-      loadBucketTags();
-    }
-  }, [activeTab, loadBucketTags, loadLifecycle]);
-
-  useEffect(() => {
-    if (activeTab === "usage-stats") {
-      loadUsageStats();
-    }
-  }, [activeTab, loadUsageStats]);
-
-  useEffect(() => {
-    loadLifecycle();
-  }, [loadLifecycle]);
-
-  useEffect(() => {
-    loadEncryption();
-  }, [loadEncryption]);
-
-  useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
-
-  useEffect(() => {
-    loadAccessLogging();
-  }, [loadAccessLogging]);
-
-  useEffect(() => {
-    loadWebsite();
-  }, [loadWebsite]);
-
-  useEffect(() => {
-    loadReplication();
-  }, [loadReplication]);
-
   const refreshActiveTab = useCallback(async () => {
     if (activeTab === "overview") {
       await Promise.all([
@@ -829,6 +809,9 @@ export default function BucketDetailPage({
         loadReplication(),
         loadEncryption(),
         loadPublicAccessBlock(),
+        loadWebsite(),
+        loadAccessLogging(),
+        loadNotifications(),
       ]);
       return;
     }
@@ -882,9 +865,9 @@ export default function BucketDetailPage({
   ]);
 
   useEffect(() => {
-    if (!hasContext || (isCephAdmin && activeTab !== "objects")) return;
-    refreshActiveTab();
-  }, [accessMode, activeTab, hasContext, isCephAdmin, refreshActiveTab]);
+    if (!hasContext) return;
+    void refreshActiveTab();
+  }, [hasContext, refreshActiveTab]);
 
   const activeTabLoading = useMemo(() => {
     if (activeTab === "overview") {
@@ -1362,7 +1345,7 @@ export default function BucketDetailPage({
 
       <PageTabs
         activeTab={activeTab}
-        onChange={(id) => setActiveTab(id as BucketDetailTabId)}
+        onChange={(id) => onActiveTabChange(id as BucketDetailTabId)}
         headerActions={
           <button
             type="button"
