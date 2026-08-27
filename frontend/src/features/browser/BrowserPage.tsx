@@ -74,6 +74,7 @@ import { useBrowserDownloads } from "./useBrowserDownloads";
 import { useBrowserFolderTree } from "./useBrowserFolderTree";
 import { useBrowserLazyColumns } from "./useBrowserLazyColumns";
 import { useBrowserListingRefresh } from "./useBrowserListingRefresh";
+import { useBrowserListingVisibility } from "./useBrowserListingVisibility";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
@@ -510,20 +511,15 @@ export default function BrowserPage({
     isPortalProfile,
     scopeKey: JSON.stringify([bucketName, prefix]),
   });
-  const [internalShowDeletedObjects, setInternalShowDeletedObjects] =
-    useState(false);
-  const showDeletedObjects =
-    deletedObjectsOptions?.visible ?? internalShowDeletedObjects;
-  const setDeletedObjectsVisibility = useCallback(
-    (visible: boolean) => {
-      if (deletedObjectsOptions?.visible === undefined) {
-        setInternalShowDeletedObjects(visible);
-      }
-      deletedObjectsOptions?.onVisibilityChange?.(visible);
-    },
-    [deletedObjectsOptions],
-  );
-  const [showFolderItems, setShowFolderItems] = useState(true);
+  const {
+    hideDeletedObjects,
+    showDeletedObjects,
+    showFolderItems,
+    toggleDeletedObjects,
+    toggleFolderItems,
+  } = useBrowserListingVisibility({
+    deletedObjectsOptions,
+  });
   const {
     deletedObjects,
     deletedObjectsIsTruncated,
@@ -1025,12 +1021,12 @@ export default function BrowserPage({
 
   useEffect(() => {
     if (isVersioningEnabled) return;
-    setInternalShowDeletedObjects(false);
+    hideDeletedObjects();
     setShowPrefixVersions(false);
     setObjectDetailsTarget((prev) =>
       prev?.initialTab === "versions" ? null : prev,
     );
-  }, [bucketName, isVersioningEnabled]);
+  }, [bucketName, hideDeletedObjects, isVersioningEnabled]);
 
   const currentBucketAccess = useMemo<BucketAccessEntry>(
     () =>
@@ -2625,8 +2621,8 @@ export default function BrowserPage({
             normalizedPrefix.split("/").filter(Boolean).at(-1) ??
             normalizedPrefix,
         }),
-      toggleShowFolders: () => setShowFolderItems((prev) => !prev),
-      toggleShowDeleted: () => setDeletedObjectsVisibility(!showDeletedObjects),
+      toggleShowFolders: toggleFolderItems,
+      toggleShowDeleted: toggleDeletedObjects,
     });
   };
 
@@ -3318,10 +3314,8 @@ export default function BrowserPage({
         onDownloadFolder={handleDownloadFolder}
         onDownloadItems={handleDownloadItems}
         onOpenItem={handleOpenItem}
-        onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
-        onToggleShowDeleted={() =>
-          setDeletedObjectsVisibility(!showDeletedObjects)
-        }
+        onToggleShowFolders={toggleFolderItems}
+        onToggleShowDeleted={toggleDeletedObjects}
         isMainBrowserPath={canConfigureRootBrowserView}
         compactMode={compactMode}
         onSetCompactMode={setCompactMode}
