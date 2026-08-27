@@ -9,6 +9,7 @@ from app.services.storage_endpoint_normalization import (
     normalize_env_storage_endpoint_states,
     parse_env_storage_endpoints,
 )
+from tests_ceph_functional.bootstrap_session import _grant_functional_test_access
 from tests_ceph_functional import run_ci
 
 
@@ -46,6 +47,28 @@ def test_ci_app_settings_payload_enables_portal_features():
 
     assert payload["general"]["portal_enabled"] is True
     assert payload["general"]["browser_portal_enabled"] is True
+
+
+def test_functional_bootstrap_grants_all_suite_access():
+    user = SimpleNamespace(
+        can_access_ceph_admin=False,
+        can_access_storage_ops=False,
+        can_access_manager_bucket_compare=False,
+        can_access_manager_bucket_integrity_check=False,
+        can_access_manager_bucket_migration=False,
+        can_access_manager_feature_rules=False,
+        can_access_manager_bucket_purge=False,
+    )
+
+    _grant_functional_test_access(user)
+
+    assert user.can_access_ceph_admin is True
+    assert user.can_access_storage_ops is True
+    assert user.can_access_manager_bucket_compare is True
+    assert user.can_access_manager_bucket_integrity_check is True
+    assert user.can_access_manager_bucket_migration is True
+    assert user.can_access_manager_feature_rules is True
+    assert user.can_access_manager_bucket_purge is True
 
 
 def test_ci_endpoint_payload_can_seed_two_lab_zones(monkeypatch):

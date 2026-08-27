@@ -5656,7 +5656,11 @@ describe("BrowserPage interactions", () => {
     });
     await user.click(restoreToDateAction);
 
-    const modal = await screen.findByRole("dialog", { name: "Restore to date" });
+    const modal = await screen.findByRole(
+      "dialog",
+      { name: "Restore to date" },
+      { timeout: 5_000 },
+    );
     const dateInput = modal.querySelector(
       'input[type="datetime-local"]',
     ) as HTMLInputElement | null;

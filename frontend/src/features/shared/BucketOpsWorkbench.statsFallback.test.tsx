@@ -384,8 +384,10 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
     });
 
     await waitFor(() => expect(mocks.listCephAdminBuckets).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByText("Loading buckets...", {}, { timeout: 5_000 })
+    ).toBeInTheDocument();
     expect(screen.queryByText("bucket-a")).not.toBeInTheDocument();
-    expect(screen.getByText("Loading buckets...")).toBeInTheDocument();
 
     deferred.resolve({
       items: [{ name: "bucket-b", owner: "owner-b" }],

@@ -12,6 +12,16 @@ from app.services.auth_session_service import AuthSessionService
 from app.services.first_admin_bootstrap_service import FirstAdminBootstrapService
 
 
+def _grant_functional_test_access(user: User) -> None:
+    user.can_access_ceph_admin = True
+    user.can_access_storage_ops = True
+    user.can_access_manager_bucket_compare = True
+    user.can_access_manager_bucket_integrity_check = True
+    user.can_access_manager_bucket_migration = True
+    user.can_access_manager_feature_rules = True
+    user.can_access_manager_bucket_purge = True
+
+
 def main() -> None:
     settings = get_settings()
     email = os.environ["CEPH_TEST_SUPERADMIN_EMAIL"].strip().lower()
@@ -27,6 +37,9 @@ def main() -> None:
         user = db.query(User).filter(User.email == email).first()
         if user is None:
             raise RuntimeError("Ceph functional super-admin bootstrap failed")
+        _grant_functional_test_access(user)
+        db.commit()
+        db.refresh(user)
         credentials = AuthSessionService(db).create_for_user(
             user,
             auth_type="webauthn",

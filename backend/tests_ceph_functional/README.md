@@ -43,7 +43,9 @@ verification mode.
 The CI job creates its ephemeral first administrator through the shared
 bootstrap service, using only `CEPH_TEST_SUPERADMIN_EMAIL`,
 `CEPH_TEST_SUPERADMIN_PASSWORD`, and optional
-`CEPH_TEST_SUPERADMIN_FULL_NAME`.
+`CEPH_TEST_SUPERADMIN_FULL_NAME`. The CI bootstrap fixture then grants that
+ephemeral account the Ceph Admin, Storage Ops, and Manager tool access needed
+to exercise the complete functional suite.
 
 The GitLab runner must be able to reach:
 
