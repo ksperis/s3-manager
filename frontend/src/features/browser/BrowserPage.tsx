@@ -77,6 +77,7 @@ import { useBrowserListingRefresh } from "./useBrowserListingRefresh";
 import { useBrowserListingVisibility } from "./useBrowserListingVisibility";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
+import { useBrowserNotices } from "./useBrowserNotices";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
 import { useBrowserObjectDetailsTarget } from "./useBrowserObjectDetailsTarget";
 import { useBrowserObjectListing } from "./useBrowserObjectListing";
@@ -477,8 +478,14 @@ export default function BrowserPage({
       actionsColumnButtonCount * rowActionTargetSizePx +
       (actionsColumnButtonCount - 1) * ROW_ACTION_GAP_PX,
   );
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [warningMessage, setWarningMessage] = useState<string | null>(null);
+  const {
+    setStatusMessage,
+    setWarningMessage,
+    statusMessage,
+    warningMessage,
+  } = useBrowserNotices({
+    scopeKey: JSON.stringify([accountIdForApi, bucketName, prefix]),
+  });
   const {
     activeSearchStatusChips,
     changeSearchScope,
@@ -1019,7 +1026,7 @@ export default function BrowserPage({
     if (primaryOps.length === 0) return;
     const latest = primaryOps[0];
     setStatusMessage(`Queued: ${latest.label}.`);
-  }, [operations]);
+  }, [operations, setStatusMessage]);
 
   useEffect(() => {
     if (isVersioningEnabled) return;
@@ -1466,7 +1473,7 @@ export default function BrowserPage({
     setWarningMessage(
       `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
     );
-  }, []);
+  }, [setWarningMessage]);
   const {
     error: prefixVersionsError,
     keyMarker: prefixVersionKeyMarker,
@@ -1924,11 +1931,6 @@ export default function BrowserPage({
       cancelPathEdit();
     },
   });
-
-  useEffect(() => {
-    setStatusMessage(null);
-    setWarningMessage(null);
-  }, [accountIdForApi, bucketName, prefix]);
 
   useEffect(() => {
     accountIdForApiRef.current = accountIdForApi;
