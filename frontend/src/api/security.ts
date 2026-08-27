@@ -36,7 +36,7 @@ export type ExternalLinkRequest = {
   created_at: string;
   expires_at: string;
 };
-export type RecentWebAuthnVerification = { mfa_verified_at: string };
+type RecentWebAuthnVerification = { mfa_verified_at: string };
 
 export async function listSecurityCredentials(): Promise<SecurityCredential[]> {
   return (await client.get<SecurityCredential[]>("/auth/security/webauthn/credentials")).data;

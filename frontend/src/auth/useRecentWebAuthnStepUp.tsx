@@ -17,7 +17,7 @@ type PendingRetry = {
   reject: (reason?: unknown) => void;
 };
 
-export class RecentWebAuthnVerificationCancelledError extends Error {
+class RecentWebAuthnVerificationCancelledError extends Error {
   constructor() {
     super("Passkey verification cancelled");
     this.name = "RecentWebAuthnVerificationCancelledError";
