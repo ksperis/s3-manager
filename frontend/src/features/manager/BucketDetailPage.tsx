@@ -17,25 +17,18 @@ import {
 import {
   Bucket,
   BucketLifecycleConfig,
-  BucketReplicationConfiguration,
   BucketPublicAccessBlock,
-  deleteBucketReplication,
   deleteBucketLifecycle,
-  getBucketReplication,
   getBucketLifecycle,
   listBuckets,
-  putBucketReplication,
   putBucketLifecycle,
 } from "../../api/buckets";
 import {
   deleteCephAdminBucketLifecycle,
-  deleteCephAdminBucketReplication,
   getCephAdminBucketLifecycle,
-  getCephAdminBucketReplication,
   listCephAdminBucketObjects,
   listCephAdminBuckets,
   putCephAdminBucketLifecycle,
-  putCephAdminBucketReplication,
 } from "../../api/cephAdmin";
 import {
   listObjects,
@@ -65,17 +58,6 @@ import PropertySummaryChip, { PropertySummaryTone } from "../../components/Prope
 import { PortalSettingsSwitch } from "../../components/PortalSettingsLayout";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import {
-  buildReplicationConfigurationFromGraphical,
-  containsUnsupportedReplicationZone,
-  createEmptyGraphicalReplicationRule,
-  GraphicalReplicationRule,
-  isReplicationConfigurationConfigured,
-  normalizeReplicationConfiguration,
-  parseReplicationConfigurationForGraphical,
-  validateGraphicalReplication,
-  validateJsonReplicationConfiguration,
-} from "./bucketReplication";
-import {
   BucketFeatureCard,
   BucketFeatureJsonExample,
   BucketFeatureModeToggle,
@@ -88,7 +70,6 @@ import {
   defaultNotificationTemplate,
   jsonTextSignature,
   isLifecycleSimpleDraftEmpty,
-  normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
   stableBucketJsonSignature,
   useBucketAccessLoggingController,
@@ -100,6 +81,7 @@ import {
   useBucketPolicyController,
   useBucketPublicAccessController,
   useBucketQuotaController,
+  useBucketReplicationController,
   useBucketTagsController,
   useBucketVersioningController,
   useBucketWebsiteController,
@@ -113,10 +95,8 @@ import {
 } from "./bucketDetail/bucketDetailSurface";
 import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
-import { createUiDraftId } from "../../utils/uiDraftId";
 import type { UiRole } from "../../api/users";
 
-type ReplicationRuleDraft = GraphicalReplicationRule & { uiId: string };
 type BucketConfigurationDeleteKind =
   | "cors"
   | "encryption"
@@ -180,12 +160,6 @@ const bucketConfigurationDeleteCopy: Record<
     impacts: ["Existing log objects remain in the target bucket, but no new access logs will be delivered."],
   },
 };
-
-function createReplicationRuleDraft(
-  rule: GraphicalReplicationRule = createEmptyGraphicalReplicationRule()
-): ReplicationRuleDraft {
-  return { ...rule, uiId: createUiDraftId("replication-rule") };
-}
 
 function getUserRole(): UiRole | null {
   return readStoredUser()?.role ?? null;
@@ -434,17 +408,6 @@ export default function BucketDetailPage({
   ]);
   const [simpleLifecycleWarning, setSimpleLifecycleWarning] = useState<string | null>(null);
   const [showLifecycleEditor, setShowLifecycleEditor] = useState(false);
-  const [replicationConfig, setReplicationConfig] = useState<BucketReplicationConfiguration>({ configuration: {} });
-  const [replicationMode, setReplicationMode] = useState<"graphical" | "json">("graphical");
-  const [replicationText, setReplicationText] = useState("{}");
-  const [replicationRole, setReplicationRole] = useState("");
-  const [replicationRules, setReplicationRules] = useState<ReplicationRuleDraft[]>([createReplicationRuleDraft()]);
-  const [replicationWarning, setReplicationWarning] = useState<string | null>(null);
-  const [replicationError, setReplicationError] = useState<string | null>(null);
-  const [replicationStatus, setReplicationStatus] = useState<string | null>(null);
-  const [replicationLoading, setReplicationLoading] = useState(false);
-  const [savingReplication, setSavingReplication] = useState(false);
-  const [clearingReplication, setClearingReplication] = useState(false);
   const [pendingConfigurationDelete, setPendingConfigurationDelete] = useState<BucketConfigurationDeleteKind | null>(null);
 
   const [objects, setObjects] = useState<S3Object[]>([]);
@@ -762,6 +725,37 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.replication === true;
   }, [isCephAdmin, isCephEndpoint, selectedEndpoint, selectedS3Account]);
+  const {
+    addRule: addReplicationRule,
+    busy: replicationBusy,
+    clear: clearReplication,
+    clearing: clearingReplication,
+    configured: replicationConfigured,
+    dirty: replicationDirty,
+    error: replicationError,
+    hasUnsupportedZone: replicationHasUnsupportedZone,
+    load: loadReplication,
+    loading: replicationLoading,
+    mode: replicationMode,
+    removeRule: removeReplicationRule,
+    role: replicationRole,
+    rules: replicationRules,
+    save: saveReplication,
+    saving: savingReplication,
+    status: replicationStatus,
+    text: replicationText,
+    updateMode: updateReplicationMode,
+    updateRole: updateReplicationRole,
+    updateRule: updateReplicationRule,
+    updateText: updateReplicationText,
+    warning: replicationWarning,
+  } = useBucketReplicationController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext && isCephEndpoint && replicationFeatureEnabled,
+    endpointId,
+  });
   const usageFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.metrics ?? true;
@@ -919,54 +913,6 @@ export default function BucketDetailPage({
       setLifecycleLoading(false);
     }
   }, [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]);
-
-  const loadReplication = useCallback(async () => {
-    if (!bucketName || !hasContext || !isCephEndpoint || !replicationFeatureEnabled) {
-      setReplicationConfig({ configuration: {} });
-      setReplicationText("{}");
-      setReplicationRole("");
-      setReplicationRules([createReplicationRuleDraft()]);
-      setReplicationWarning(null);
-      setReplicationError(null);
-      setReplicationStatus(null);
-      return;
-    }
-    setReplicationLoading(true);
-    setReplicationError(null);
-    setReplicationStatus(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketReplication(endpointId, bucketName)
-          : { configuration: {} }
-        : await getBucketReplication(accountId, bucketName);
-      const rawConfiguration = data.configuration;
-      const configuration =
-        rawConfiguration && typeof rawConfiguration === "object" && !Array.isArray(rawConfiguration)
-          ? normalizeReplicationConfiguration(rawConfiguration as Record<string, unknown>)
-          : {};
-      setReplicationConfig({ configuration });
-      setReplicationText(Object.keys(configuration).length > 0 ? JSON.stringify(configuration, null, 2) : "{}");
-      const parsed = parseReplicationConfigurationForGraphical(configuration);
-      setReplicationRole(parsed.role);
-      setReplicationRules(parsed.rules.map((rule) => createReplicationRuleDraft(rule)));
-      setReplicationWarning(
-        parsed.hasAdvancedFields
-          ? "This configuration has fields not covered by graphical mode. Use JSON mode to avoid losing data."
-          : null
-      );
-    } catch (err) {
-      setReplicationConfig({ configuration: {} });
-      setReplicationText("{}");
-      setReplicationRole("");
-      setReplicationRules([createReplicationRuleDraft()]);
-      setReplicationWarning(null);
-      const message = extractApiError(err, "Unable to load bucket replication configuration.");
-      setReplicationError(message);
-    } finally {
-      setReplicationLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, isCephEndpoint, replicationFeatureEnabled]);
 
   const loadObjects = useCallback(
     async (prefix: string) => {
@@ -1409,25 +1355,7 @@ export default function BucketDetailPage({
 
   const lifecycleRuleCount = lifecycle.rules?.length ?? 0;
   const hasLifecycleRules = lifecycleRuleCount > 0;
-  const replicationConfiguration = replicationConfig.configuration ?? {};
-  const replicationConfigured = isReplicationConfigurationConfigured(replicationConfiguration);
-  const replicationBusy = replicationLoading || savingReplication || clearingReplication;
   const replicationBlocked = !replicationFeatureEnabled;
-  const replicationGraphicalSnapshot = parseReplicationConfigurationForGraphical(replicationConfiguration);
-  const replicationJsonDraftSignature = jsonTextSignature(replicationText, replicationConfiguration);
-  const replicationGraphicalDraftSignature = stableBucketJsonSignature(
-    normalizeReplicationGraphicalDraft(replicationRole, replicationRules)
-  );
-  const replicationGraphicalSnapshotSignature = stableBucketJsonSignature(
-    normalizeReplicationGraphicalDraft(
-      replicationGraphicalSnapshot.role,
-      replicationGraphicalSnapshot.rules
-    )
-  );
-  const replicationDirty =
-    replicationMode === "json"
-      ? replicationJsonDraftSignature.signature !== stableBucketJsonSignature(replicationConfiguration)
-      : replicationGraphicalDraftSignature !== replicationGraphicalSnapshotSignature;
   const lifecycleJsonDraftSignature = jsonTextSignature(lifecycleText, lifecycle.rules ?? []);
   const lifecycleJsonDirty = lifecycleJsonDraftSignature.signature !== stableBucketJsonSignature(lifecycle.rules ?? []);
   const lifecycleSimpleDraft = simpleLifecycleRules[0] ?? {
@@ -1758,114 +1686,6 @@ export default function BucketDetailPage({
     const items = buildBucketDetailBreadcrumbs(mode, bucketName);
     return items.map((item, index) => (index === 1 ? { ...item, to: basePath } : item));
   }, [basePath, bucketName, mode]);
-
-  const updateReplicationRule = (uiId: string, patch: Partial<GraphicalReplicationRule>) => {
-    setReplicationRules((prev) =>
-      prev.map((rule) => (rule.uiId === uiId ? { ...rule, ...patch } : rule))
-    );
-    setReplicationStatus(null);
-  };
-
-  const addReplicationRule = () => {
-    setReplicationRules((prev) => [...prev, createReplicationRuleDraft()]);
-    setReplicationStatus(null);
-  };
-
-  const removeReplicationRule = (uiId: string) => {
-    setReplicationRules((prev) => {
-      const next = prev.filter((rule) => rule.uiId !== uiId);
-      return next.length > 0 ? next : [createReplicationRuleDraft()];
-    });
-    setReplicationStatus(null);
-  };
-
-  const saveReplication = async () => {
-    if (!bucketName || !hasContext || !isCephEndpoint || !replicationFeatureEnabled) return;
-    setReplicationError(null);
-    setReplicationStatus(null);
-
-    let configuration: Record<string, unknown>;
-    if (replicationMode === "graphical") {
-      const validationError = validateGraphicalReplication(replicationRole, replicationRules);
-      if (validationError) {
-        setReplicationError(validationError);
-        return;
-      }
-      configuration = buildReplicationConfigurationFromGraphical(replicationRole, replicationRules);
-    } else {
-      let parsed: unknown;
-      try {
-        parsed = replicationText.trim() ? JSON.parse(replicationText) : {};
-      } catch {
-        setReplicationError("Replication configuration JSON is invalid.");
-        return;
-      }
-      const validationError = validateJsonReplicationConfiguration(parsed);
-      if (validationError) {
-        setReplicationError(validationError);
-        return;
-      }
-      configuration = parsed as Record<string, unknown>;
-    }
-
-    setSavingReplication(true);
-    try {
-      const saved = isCephAdmin
-        ? endpointId
-          ? await putCephAdminBucketReplication(endpointId, bucketName, configuration)
-          : { configuration }
-        : await putBucketReplication(accountId, bucketName, configuration);
-      const rawConfiguration = saved.configuration;
-      const normalizedConfiguration =
-        rawConfiguration && typeof rawConfiguration === "object" && !Array.isArray(rawConfiguration)
-          ? normalizeReplicationConfiguration(rawConfiguration as Record<string, unknown>)
-          : {};
-      setReplicationConfig({ configuration: normalizedConfiguration });
-      setReplicationText(
-        Object.keys(normalizedConfiguration).length > 0 ? JSON.stringify(normalizedConfiguration, null, 2) : "{}"
-      );
-      const parsed = parseReplicationConfigurationForGraphical(normalizedConfiguration);
-      setReplicationRole(parsed.role);
-      setReplicationRules(parsed.rules.map((rule) => createReplicationRuleDraft(rule)));
-      setReplicationWarning(
-        parsed.hasAdvancedFields
-          ? "This configuration has fields not covered by graphical mode. Use JSON mode to avoid losing data."
-          : null
-      );
-      setReplicationStatus("Replication configuration updated.");
-    } catch (err) {
-      const message = extractApiError(err, "Unable to update bucket replication configuration.");
-      setReplicationError(message);
-    } finally {
-      setSavingReplication(false);
-    }
-  };
-
-  const clearReplication = async () => {
-    if (!bucketName || !hasContext || !isCephEndpoint || !replicationFeatureEnabled) return;
-    setClearingReplication(true);
-    setReplicationError(null);
-    setReplicationStatus(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await deleteCephAdminBucketReplication(endpointId, bucketName);
-      } else {
-        await deleteBucketReplication(accountId, bucketName);
-      }
-      setReplicationConfig({ configuration: {} });
-      setReplicationText("{}");
-      setReplicationRole("");
-      setReplicationRules([createReplicationRuleDraft()]);
-      setReplicationWarning(null);
-      setReplicationStatus("Replication configuration cleared.");
-    } catch (err) {
-      const message = extractApiError(err, "Unable to clear bucket replication configuration.");
-      setReplicationError(message);
-    } finally {
-      setClearingReplication(false);
-    }
-  };
 
   const confirmPendingConfigurationDelete = async () => {
     if (!pendingConfigurationDelete) return;
@@ -3340,11 +3160,7 @@ export default function BucketDetailPage({
                         { value: "graphical", label: "Graphical mode" },
                         { value: "json", label: "JSON mode" },
                       ]}
-                      onChange={(value) => {
-                        setReplicationMode(value);
-                        setReplicationStatus(null);
-                        setReplicationError(null);
-                      }}
+                      onChange={updateReplicationMode}
                       disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                     />
                     {replicationBlocked && <EndpointFeatureDisabledNotice featureLabel="Bucket replication" />}
@@ -3366,10 +3182,7 @@ export default function BucketDetailPage({
                           <input
                             type="text"
                             value={replicationRole}
-                            onChange={(e) => {
-                              setReplicationRole(e.target.value);
-                              setReplicationStatus(null);
-                            }}
+                            onChange={(e) => updateReplicationRole(e.target.value)}
                             className={bucketFeatureInputClass}
                             placeholder="arn:aws:iam::123456789012:role/replication-role"
                             disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
@@ -3486,16 +3299,13 @@ export default function BucketDetailPage({
                       <div className={bucketDetailCompactStackClass}>
                         <textarea
                           value={replicationText}
-                          onChange={(e) => {
-                            setReplicationText(e.target.value);
-                            setReplicationStatus(null);
-                          }}
+                          onChange={(e) => updateReplicationText(e.target.value)}
                           rows={14}
                           className={cx(bucketFeatureJsonInputClass, "w-full")}
                           spellCheck={false}
                           disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                         />
-                        {containsUnsupportedReplicationZone(replicationConfiguration) && (
+                        {replicationHasUnsupportedZone && (
                           <p className="ui-caption text-rose-700 dark:text-rose-200">
                             Destination.Zone is not supported in V1 and must be removed before saving.
                           </p>
@@ -3504,11 +3314,7 @@ export default function BucketDetailPage({
                           show={showReplicationExample}
                           onToggle={() => setShowReplicationExample((prev) => !prev)}
                           example={defaultReplicationJsonExample}
-                          onUseExample={() => {
-                            setReplicationText(defaultReplicationJsonExample);
-                            setReplicationStatus(null);
-                            setReplicationError(null);
-                          }}
+                          onUseExample={() => updateReplicationText(defaultReplicationJsonExample)}
                           disabled={replicationBlocked || replicationNotImplemented}
                         />
                       </div>

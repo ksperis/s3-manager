@@ -6,7 +6,6 @@ import type {
   BucketLoggingConfiguration,
   BucketPublicAccessBlock,
 } from "../../../api/buckets";
-import type { GraphicalReplicationRule } from "../bucketReplication";
 
 export type BucketFeatureCardMode = "graphical" | "json" | "hybrid";
 export type BucketFeatureVisualState = "neutral" | "configured" | "unsaved" | "disabled";
@@ -167,19 +166,4 @@ export function isLifecycleSimpleDraftEmpty(draft: {
     normalized.delete_expired_markers === false &&
     normalized.status === "Enabled"
   );
-}
-
-export function normalizeReplicationGraphicalDraft(role: string, rules: GraphicalReplicationRule[]): Record<string, unknown> {
-  const normalizedRules = rules.map((rule) => ({
-    id: normalizeString(rule.id),
-    status: rule.status,
-    priority: normalizeString(rule.priority),
-    prefix: normalizeString(rule.prefix),
-    destination_bucket: normalizeString(rule.destinationBucket),
-    delete_marker_status: rule.deleteMarkerStatus,
-  }));
-  return {
-    role: normalizeString(role),
-    rules: normalizedRules,
-  };
 }

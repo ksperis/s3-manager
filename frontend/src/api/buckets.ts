@@ -138,7 +138,7 @@ export type BucketNotificationConfiguration = {
   configuration: Record<string, unknown>;
 };
 
-export type BucketReplicationConfiguration = {
+type BucketReplicationConfiguration = {
   configuration: Record<string, unknown>;
 };
 
