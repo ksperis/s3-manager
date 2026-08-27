@@ -64,6 +64,7 @@ from app.routers import portal_storage_spaces as portal_storage_spaces_router
 from app.routers import portal_usage as portal_usage_router
 from tests.router_test_utils import effective_routes
 from app.services import app_settings_service, s3_bucket_access, s3_bucket_metadata, s3_client, s3_deletion
+from app.services.portal import public_links as portal_public_links
 from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
@@ -4888,6 +4889,7 @@ def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_sess
 
 
 def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session):
+    monkeypatch.setattr(portal_public_links.settings, "public_origin", "https://portal.example.test/")
     account = make_s3_account(db_session, name="portal-public-links", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-public@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
@@ -4938,13 +4940,19 @@ def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session
     )
     links = service.list_storage_space_public_links(owner, access, "research-data")
     revoked = service.revoke_storage_space_public_link(owner, access, "research-data", link.id)
+    persisted_link = db_session.query(PortalPublicLink).filter_by(id=link.id).one()
+    expected_url = (
+        f"https://portal.example.test/api/portal/public-links/{persisted_link.token}/download"
+    )
 
     assert link.object_key == "raw-data/report.csv"
     assert link.object_name == "report.csv"
     assert link.status == "Active"
-    assert link.url.startswith("/api/portal/public-links/")
+    assert link.url == expected_url
     assert [(item.id, item.status) for item in links] == [(link.id, "Active")]
+    assert [item.url for item in links] == [expected_url]
     assert [(item.id, item.status) for item in revoked] == [(link.id, "Revoked")]
+    assert [item.url for item in revoked] == [expected_url]
     assert fake_client.head_calls == [{"Bucket": "research-data", "Key": "raw-data/report.csv"}]
 
     with pytest.raises(RuntimeError, match="expiration must be in the future"):
