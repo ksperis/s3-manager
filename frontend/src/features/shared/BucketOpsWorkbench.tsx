@@ -99,6 +99,7 @@ import {
   serializeBucketSelectionCsv,
 } from "./bucketOpsExportModel";
 import { loadBucketOpsBucketsByNames } from "./bucketOpsNamedBucketLoader";
+import { loadBucketOpsFilteredBuckets } from "./bucketOpsFilteredBucketLoader";
 import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
@@ -1154,13 +1155,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       options?.onProgress?.(allFilteredBucketNames.length, allFilteredBucketNames.length);
       return allFilteredBucketNames;
     }
-    const names = new Set<string>();
-    let nextPage = 1;
-    let expectedTotal: number | null = total > 0 ? total : null;
-    while (true) {
-      const response = await listBuckets(selectedEndpointId, {
-        page: nextPage,
-        page_size: 200,
+    const bucketsByName = await loadBucketOpsFilteredBuckets({
+      initialTotal: total > 0 ? total : null,
+      listBuckets,
+      onProgress: options?.onProgress,
+      params: {
         filter: effectiveQuickSearchValue.trim() || undefined,
         advanced_filter: advancedFilterParam,
         sort_by: sort.field,
@@ -1168,26 +1167,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         with_stats: baseRequiresStats,
         ui_tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
         ui_tag_match: tagFilterMode,
-      });
-      (response.items ?? []).forEach((bucket) => {
-        if (bucket.name) names.add(bucket.name);
-      });
-      if (expectedTotal === null && typeof response.total === "number") {
-        expectedTotal = response.total;
-      }
-      options?.onProgress?.(Math.min(expectedTotal ?? names.size, names.size), expectedTotal ?? names.size);
-      if (!response.has_next) {
-        break;
-      }
-      if (expectedTotal !== null && names.size >= expectedTotal) {
-        break;
-      }
-      nextPage += 1;
-    }
-    const resolved = Array.from(names.values());
+      },
+      scopeId: selectedEndpointId,
+    });
+    const resolved = Array.from(bucketsByName.keys());
     setAllFilteredBucketNames(resolved);
     setAllFilteredBucketNamesKey(selectionQueryKey);
-    options?.onProgress?.(resolved.length, expectedTotal ?? resolved.length);
     return resolved;
   };
 
@@ -1603,17 +1588,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkOperation, selectedBucketList, showBulkUpdateModal]);
 
   const loadBucketsForCurrentFilteredExport = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
-    const bucketsByName = new Map<string, CephAdminBucket>();
     if (!selectedEndpointId || total <= 0) {
-      return bucketsByName;
+      return new Map<string, CephAdminBucket>();
     }
-
-    let nextPage = 1;
-    let expectedTotal = total;
-    while (true) {
-      const response = await listBuckets(selectedEndpointId, {
-        page: nextPage,
-        page_size: 200,
+    return loadBucketOpsFilteredBuckets({
+      initialTotal: total,
+      listBuckets,
+      onProgress: options?.onProgress,
+      params: {
         filter: effectiveQuickSearchValue.trim() || undefined,
         advanced_filter: advancedFilterParam,
         sort_by: sort.field,
@@ -1622,19 +1604,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         with_stats: exportWithStats,
         ui_tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
         ui_tag_match: tagFilterMode,
-      });
-      (response.items ?? []).forEach((bucket) => {
-        bucketsByName.set(bucket.name, bucket);
-      });
-      if (typeof response.total === "number" && response.total > 0) {
-        expectedTotal = response.total;
-      }
-      options?.onProgress?.(Math.min(expectedTotal, bucketsByName.size), expectedTotal);
-      if (!response.has_next) break;
-      nextPage += 1;
-    }
-
-    return bucketsByName;
+      },
+      scopeId: selectedEndpointId,
+    });
   };
 
   const loadSelectedBucketsForExport = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
