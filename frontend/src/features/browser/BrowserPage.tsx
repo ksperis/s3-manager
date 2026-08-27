@@ -59,6 +59,7 @@ import { useBrowserBulkAttributes } from "./useBrowserBulkAttributes";
 import { useBrowserBulkRestore } from "./useBrowserBulkRestore";
 import { useBrowserBucketCatalog } from "./useBrowserBucketCatalog";
 import { useBrowserClipboard } from "./useBrowserClipboard";
+import { useBrowserConfirmDialog } from "./useBrowserConfirmDialog";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
 import { useBrowserContextCounts } from "./useBrowserContextCounts";
 import {
@@ -203,13 +204,6 @@ type ObjectDetailsTarget = {
   initialTab: ObjectDetailsTabId;
 };
 
-type BrowserConfirmDialogState = {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  tone?: "danger" | "primary";
-  onConfirm: () => Promise<void> | void;
-};
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
 
@@ -661,9 +655,13 @@ export default function BrowserPage({
   const [objectDetailsTarget, setObjectDetailsTarget] =
     useState<ObjectDetailsTarget | null>(null);
   const [configBucketName, setConfigBucketName] = useState<string | null>(null);
-  const [confirmDialog, setConfirmDialog] =
-    useState<BrowserConfirmDialogState | null>(null);
-  const [confirmDialogLoading, setConfirmDialogLoading] = useState(false);
+  const {
+    close: closeConfirmDialog,
+    dialog: confirmDialog,
+    loading: confirmDialogLoading,
+    open: openConfirmDialog,
+    submit: submitConfirmDialog,
+  } = useBrowserConfirmDialog();
   const [copyDialog, setCopyDialog] = useState<BrowserCopyDialogState | null>(
     null,
   );
@@ -2287,11 +2285,6 @@ export default function BrowserPage({
     workspaceNoun,
   });
 
-  const openConfirmDialog = (dialog: BrowserConfirmDialogState) => {
-    setConfirmDialog(dialog);
-    setConfirmDialogLoading(false);
-  };
-
   const {
     showModal: showMultipartUploadsModal,
     uploads: multipartUploads,
@@ -2314,22 +2307,6 @@ export default function BrowserPage({
     setStatusMessage,
     setWarningMessage,
   });
-
-  const closeConfirmDialog = () => {
-    if (confirmDialogLoading) return;
-    setConfirmDialog(null);
-  };
-
-  const submitConfirmDialog = async () => {
-    if (!confirmDialog) return;
-    setConfirmDialogLoading(true);
-    try {
-      await confirmDialog.onConfirm();
-      setConfirmDialog(null);
-    } finally {
-      setConfirmDialogLoading(false);
-    }
-  };
 
   const {
     apply: handleBulkAttributesApply,
