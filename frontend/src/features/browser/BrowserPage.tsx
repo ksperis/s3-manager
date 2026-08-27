@@ -510,9 +510,6 @@ export default function BrowserPage({
     isPortalProfile,
     scopeKey: JSON.stringify([bucketName, prefix]),
   });
-  const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
-  const [showToolbarColumnsMenu, setShowToolbarColumnsMenu] = useState(false);
-  const [showUploadQuickMenu, setShowUploadQuickMenu] = useState(false);
   const [internalShowDeletedObjects, setInternalShowDeletedObjects] =
     useState(false);
   const showDeletedObjects =
@@ -1154,10 +1151,6 @@ export default function BrowserPage({
     scopeKey: JSON.stringify([accountIdForApi, bucketName, prefix]),
     setInspectorTab,
   });
-
-  useEffect(() => {
-    setShowToolbarMoreMenu(false);
-  }, [bucketName, prefix, selectedIds]);
 
   useLayoutEffect(() => {
     if (!accountSwitchInFlight) return;
@@ -2895,12 +2888,10 @@ export default function BrowserPage({
             }}
             compactActions={{
               visible: isCompactToolbarMode,
-              uploadMenuOpen: showUploadQuickMenu,
               canUploadFiles: toolbarCanUploadFiles,
               canUploadFolder: toolbarCanUploadFolder,
               canCreateFolder: toolbarCanCreateFolder,
               canRefresh: pathActionStates.refresh.enabled,
-              onUploadMenuOpenChange: setShowUploadQuickMenu,
             }}
             selectionActions={{
               visible: isActionBarVisible,
@@ -2911,9 +2902,12 @@ export default function BrowserPage({
               canDownload: toolbarCanDownload,
               canDelete: toolbarCanDelete,
             }}
+            menuResetKey={JSON.stringify([
+              bucketName,
+              prefix,
+              Array.from(selectedIds),
+            ])}
             moreMenu={{
-              open: showToolbarMoreMenu,
-              onOpenChange: setShowToolbarMoreMenu,
               status: {
                 visible: hasToolbarStatusSection,
                 accessBadge,
@@ -2944,11 +2938,9 @@ export default function BrowserPage({
               },
               columns: hasToolbarColumnsSection
                 ? {
-                    open: showToolbarColumnsMenu,
                     summary: toolbarColumnsSummary,
                     columns: COLUMN_DEFINITIONS,
                     visibleColumnIds: visibleColumnSet,
-                    onOpenChange: setShowToolbarColumnsMenu,
                     onToggleColumn: handleToggleVisibleColumn,
                     onReset: handleResetVisibleColumns,
                   }

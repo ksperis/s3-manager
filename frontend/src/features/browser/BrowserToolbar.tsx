@@ -5,6 +5,7 @@
 import {
   useEffect,
   useRef,
+  useState,
   type ChangeEvent,
   type ComponentProps,
   type RefObject,
@@ -70,9 +71,7 @@ type ToolbarColumns = Pick<
   ComponentProps<typeof BrowserColumnsMenu>,
   "columns" | "visibleColumnIds" | "onToggleColumn" | "onReset"
 > & {
-  open: boolean;
   summary: string;
-  onOpenChange: (open: boolean) => void;
 };
 
 type BrowserToolbarProps = {
@@ -86,12 +85,10 @@ type BrowserToolbarProps = {
   };
   compactActions: {
     visible: boolean;
-    uploadMenuOpen: boolean;
     canUploadFiles: boolean;
     canUploadFolder: boolean;
     canCreateFolder: boolean;
     canRefresh: boolean;
-    onUploadMenuOpenChange: (open: boolean) => void;
   };
   selectionActions: {
     visible: boolean;
@@ -102,9 +99,8 @@ type BrowserToolbarProps = {
     canDownload: boolean;
     canDelete: boolean;
   };
+  menuResetKey: string;
   moreMenu: {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
     status: {
       visible: boolean;
       accessBadge: BrowserTransferAccessBadge | null;
@@ -141,6 +137,7 @@ export default function BrowserToolbar({
   deletedObjects,
   compactActions,
   selectionActions,
+  menuResetKey,
   moreMenu,
   fileInputRef,
   folderInputRef,
@@ -155,6 +152,9 @@ export default function BrowserToolbar({
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const columnsButtonRef = useRef<HTMLButtonElement | null>(null);
   const columnsMenuRef = useRef<HTMLDivElement | null>(null);
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
 
   const hasStatusSection = moreMenu.status.visible;
   const hasLayoutSection = Boolean(
@@ -173,35 +173,30 @@ export default function BrowserToolbar({
     hasLayoutSection ||
     hasColumnsSection ||
     hasSecondaryActionsSection;
-  const moreOpen = moreMenu.open;
-  const onMoreOpenChange = moreMenu.onOpenChange;
-  const columnsOpen = moreMenu.columns?.open ?? false;
-  const onColumnsOpenChange = moreMenu.columns?.onOpenChange;
-
   const closeMoreMenu = () => {
-    moreMenu.columns?.onOpenChange(false);
-    moreMenu.onOpenChange(false);
+    setColumnsMenuOpen(false);
+    setMoreMenuOpen(false);
   };
   const runMoreAction = (action: () => void) => {
     closeMoreMenu();
     action();
   };
   const toggleMoreMenu = () => {
-    compactActions.onUploadMenuOpenChange(false);
-    moreMenu.columns?.onOpenChange(false);
-    moreMenu.onOpenChange(!moreMenu.open);
+    setUploadMenuOpen(false);
+    setColumnsMenuOpen(false);
+    setMoreMenuOpen((current) => !current);
   };
   const toggleUploadMenu = () => {
     closeMoreMenu();
-    compactActions.onUploadMenuOpenChange(!compactActions.uploadMenuOpen);
+    setUploadMenuOpen((current) => !current);
   };
   const runUploadAction = (actionId: "uploadFiles" | "uploadFolder") => {
-    compactActions.onUploadMenuOpenChange(false);
+    setUploadMenuOpen(false);
     onRunPathAction(actionId);
   };
 
   useDismissibleLayer({
-    open: moreMenu.open,
+    open: moreMenuOpen,
     insideRefs: [
       moreButtonRef,
       moreMenuRef,
@@ -212,22 +207,26 @@ export default function BrowserToolbar({
   });
 
   useDismissibleLayer({
-    open: compactActions.uploadMenuOpen,
+    open: uploadMenuOpen,
     insideRefs: [uploadButtonRef, uploadMenuRef],
-    onDismiss: () => compactActions.onUploadMenuOpenChange(false),
+    onDismiss: () => setUploadMenuOpen(false),
   });
 
   useEffect(() => {
-    if (!hasMoreMenu && moreOpen) {
-      onMoreOpenChange(false);
-    }
-  }, [hasMoreMenu, moreOpen, onMoreOpenChange]);
+    setMoreMenuOpen(false);
+  }, [menuResetKey]);
 
   useEffect(() => {
-    if (!moreOpen && columnsOpen) {
-      onColumnsOpenChange?.(false);
+    if (!hasMoreMenu && moreMenuOpen) {
+      setMoreMenuOpen(false);
     }
-  }, [columnsOpen, moreOpen, onColumnsOpenChange]);
+  }, [hasMoreMenu, moreMenuOpen]);
+
+  useEffect(() => {
+    if (!moreMenuOpen && columnsMenuOpen) {
+      setColumnsMenuOpen(false);
+    }
+  }, [columnsMenuOpen, moreMenuOpen]);
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -297,7 +296,7 @@ export default function BrowserToolbar({
                 }
                 aria-expanded={
                   compactActions.canUploadFiles || compactActions.canUploadFolder
-                    ? compactActions.uploadMenuOpen
+                    ? uploadMenuOpen
                     : undefined
                 }
                 aria-label="Upload"
@@ -306,7 +305,7 @@ export default function BrowserToolbar({
                 <UploadIcon className="h-3.5 w-3.5" />
               </button>
               <BrowserUploadQuickMenu
-                open={compactActions.uploadMenuOpen}
+                open={uploadMenuOpen}
                 anchorRef={uploadButtonRef}
                 menuRef={uploadMenuRef}
                 canUploadFiles={compactActions.canUploadFiles}
@@ -341,7 +340,7 @@ export default function BrowserToolbar({
                 onClick={toggleMoreMenu}
                 disabled={!hasMoreMenu}
                 aria-haspopup={hasMoreMenu ? "menu" : undefined}
-                aria-expanded={hasMoreMenu ? moreMenu.open : undefined}
+                aria-expanded={hasMoreMenu ? moreMenuOpen : undefined}
                 aria-label="More"
                 title="More"
               >
@@ -409,7 +408,7 @@ export default function BrowserToolbar({
               onClick={toggleMoreMenu}
               disabled={!hasMoreMenu}
               aria-haspopup={hasMoreMenu ? "menu" : undefined}
-              aria-expanded={hasMoreMenu ? moreMenu.open : undefined}
+              aria-expanded={hasMoreMenu ? moreMenuOpen : undefined}
               aria-label="More"
               title="More"
             >
@@ -422,7 +421,7 @@ export default function BrowserToolbar({
 
       {hasMoreMenu && (
         <AnchoredPortalMenu
-          open={moreMenu.open}
+          open={moreMenuOpen}
           anchorRef={moreButtonRef}
           placement="bottom-end"
           offset={6}
@@ -546,11 +545,9 @@ export default function BrowserToolbar({
                   type="button"
                   role="menuitem"
                   aria-haspopup="menu"
-                  aria-expanded={moreMenu.columns.open}
+                  aria-expanded={columnsMenuOpen}
                   className={contextMenuItemClasses}
-                  onClick={() =>
-                    moreMenu.columns?.onOpenChange(!moreMenu.columns.open)
-                  }
+                  onClick={() => setColumnsMenuOpen((current) => !current)}
                 >
                   <SlidersIcon className="h-3.5 w-3.5" />
                   <span className="min-w-0 flex-1">
@@ -561,12 +558,12 @@ export default function BrowserToolbar({
                   </span>
                   <ChevronDownIcon
                     className={`h-3.5 w-3.5 shrink-0 transition ${
-                      moreMenu.columns.open ? "" : "-rotate-90"
+                      columnsMenuOpen ? "" : "-rotate-90"
                     }`}
                   />
                 </button>
                 <BrowserColumnsMenu
-                  open={moreMenu.columns.open}
+                  open={columnsMenuOpen}
                   anchorRef={columnsButtonRef}
                   menuRef={columnsMenuRef}
                   columns={moreMenu.columns.columns}

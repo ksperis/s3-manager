@@ -3800,6 +3800,21 @@ describe("BrowserPage interactions", () => {
     });
   });
 
+  it("closes the toolbar More menu when the selection changes", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const row = await findRowByLabel("a.txt");
+    const moreMenu = await openContextMoreMenu(user);
+    expect(moreMenu).toBeInTheDocument();
+
+    await user.click(row);
+
+    await waitFor(() => {
+      expect(moreMenu).not.toBeInTheDocument();
+    });
+  });
+
   it("uses the automatic selection bar More menu for secondary actions", async () => {
     const user = userEvent.setup();
     renderPage();

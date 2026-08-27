@@ -86,12 +86,10 @@ function buildProps(overrides: Partial<ToolbarProps> = {}): ToolbarProps {
     },
     compactActions: {
       visible: true,
-      uploadMenuOpen: false,
       canUploadFiles: true,
       canUploadFolder: true,
       canCreateFolder: true,
       canRefresh: true,
-      onUploadMenuOpenChange: vi.fn(),
     },
     selectionActions: {
       visible: false,
@@ -102,9 +100,8 @@ function buildProps(overrides: Partial<ToolbarProps> = {}): ToolbarProps {
       canDownload: false,
       canDelete: false,
     },
+    menuResetKey: "documents:reports/:none",
     moreMenu: {
-      open: false,
-      onOpenChange: vi.fn(),
       status: {
         visible: false,
         accessBadge: null,
@@ -134,11 +131,6 @@ describe("BrowserToolbar", () => {
         showRestore: true,
         restoreEnabled: true,
       },
-      compactActions: {
-        ...buildProps().compactActions,
-        uploadMenuOpen: true,
-        onUploadMenuOpenChange: vi.fn(),
-      },
     });
     render(<BrowserToolbar {...props} />);
 
@@ -150,6 +142,7 @@ describe("BrowserToolbar", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "New folder" }));
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
     fireEvent.click(
       within(screen.getByRole("menu", { name: "Upload" })).getByRole(
         "menuitem",
@@ -165,9 +158,6 @@ describe("BrowserToolbar", () => {
     expect(props.onRunPathAction).toHaveBeenNthCalledWith(3, "newFolder");
     expect(props.onRunPathAction).toHaveBeenNthCalledWith(4, "refresh");
     expect(props.onRunPathAction).toHaveBeenNthCalledWith(5, "uploadFiles");
-    expect(
-      props.compactActions.onUploadMenuOpenChange,
-    ).toHaveBeenCalledWith(false);
   });
 
   it("renders the desktop selection bar and routes its primary actions", () => {
@@ -208,12 +198,9 @@ describe("BrowserToolbar", () => {
   it("presents status, layout, columns, secondary actions, and SSE-C", () => {
     const onOpenOperations = vi.fn();
     const onToggleFolders = vi.fn();
-    const onColumnsOpenChange = vi.fn();
     const onOpenSse = vi.fn();
     const props = buildProps({
       moreMenu: {
-        open: true,
-        onOpenChange: vi.fn(),
         status: {
           visible: true,
           accessBadge: {
@@ -230,14 +217,12 @@ describe("BrowserToolbar", () => {
           folders: { checked: true, onToggle: onToggleFolders },
         },
         columns: {
-          open: true,
           summary: "1/2 visible",
           columns: [
             { id: "size", label: "Size" },
             { id: "modified", label: "Modified" },
           ],
           visibleColumnIds: new Set<BrowserColumnId>(["size"]),
-          onOpenChange: onColumnsOpenChange,
           onToggleColumn: vi.fn(),
           onReset: vi.fn(),
         },
@@ -249,6 +234,7 @@ describe("BrowserToolbar", () => {
     });
     render(<BrowserToolbar {...props} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     const menu = screen.getByRole("menu", { name: "More" });
     expect(within(menu).getByText("STS")).toBeInTheDocument();
     expect(within(menu).getByText("Compact view")).toBeInTheDocument();
@@ -256,24 +242,46 @@ describe("BrowserToolbar", () => {
     expect(
       within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
     ).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: /^Columns/i }),
+    );
     expect(screen.getByRole("menu", { name: "Columns" })).toBeInTheDocument();
 
     fireEvent.click(
       within(menu).getByRole("menuitem", { name: "Operations overview" }),
     );
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     fireEvent.click(
-      within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
+      within(screen.getByRole("menu", { name: "More" })).getByRole(
+        "menuitemcheckbox",
+        { name: "Folders panel" },
+      ),
     );
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Paste" }));
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Copy" }));
-    fireEvent.click(within(menu).getByRole("menuitem", { name: /SSE-C/i }));
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "More" })).getByRole(
+        "menuitem",
+        { name: "Paste" },
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "More" })).getByRole(
+        "menuitem",
+        { name: "Copy" },
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "More" })).getByRole(
+        "menuitem",
+        { name: /SSE-C/i },
+      ),
+    );
 
     expect(onOpenOperations).toHaveBeenCalledOnce();
     expect(onToggleFolders).toHaveBeenCalledOnce();
     expect(props.onRunPathAction).toHaveBeenCalledWith("paste");
     expect(props.onRunSelectionAction).toHaveBeenCalledWith("copy");
     expect(onOpenSse).toHaveBeenCalledOnce();
-    expect(props.moreMenu.onOpenChange).toHaveBeenCalledWith(false);
-    expect(onColumnsOpenChange).toHaveBeenCalledWith(false);
   });
 });
