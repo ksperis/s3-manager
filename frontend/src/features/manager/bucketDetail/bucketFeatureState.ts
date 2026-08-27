@@ -5,7 +5,6 @@
 import type {
   BucketLoggingConfiguration,
   BucketPublicAccessBlock,
-  BucketTag,
 } from "../../../api/buckets";
 import type { GraphicalReplicationRule } from "../bucketReplication";
 
@@ -98,19 +97,6 @@ export function normalizeQuotaDraft(maxSize: string, unit: "MiB" | "GiB" | "TiB"
     max_size_unit: unit,
     max_objects: normalizeString(maxObjects),
   };
-}
-
-export function normalizeBucketTagsDraft(tags: BucketTag[]): BucketTag[] {
-  return tags
-    .map((tag) => ({
-      key: normalizeString(tag.key),
-      value: typeof tag.value === "string" ? tag.value.trim() : "",
-    }))
-    .sort((a, b) => {
-      const byKey = a.key.localeCompare(b.key);
-      if (byKey !== 0) return byKey;
-      return a.value.localeCompare(b.value);
-    });
 }
 
 export function normalizeNotificationConfiguration(configuration: unknown): Record<string, unknown> {

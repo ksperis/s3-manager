@@ -19,16 +19,12 @@ import {
   BucketLifecycleConfig,
   BucketReplicationConfiguration,
   BucketPublicAccessBlock,
-  BucketTag,
   deleteBucketReplication,
-  deleteBucketTags,
   deleteBucketLifecycle,
-  getBucketTags,
   getBucketReplication,
   getBucketVersioning,
   getBucketLifecycle,
   listBuckets,
-  putBucketTags,
   putBucketReplication,
   putBucketLifecycle,
   setBucketVersioning,
@@ -37,16 +33,13 @@ import {
 import {
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketReplication,
-  deleteCephAdminBucketTags,
   getCephAdminBucketLifecycle,
   getCephAdminBucketReplication,
   getCephAdminBucketVersioning,
-  getCephAdminBucketTags,
   listCephAdminBucketObjects,
   listCephAdminBuckets,
   putCephAdminBucketLifecycle,
   putCephAdminBucketReplication,
-  putCephAdminBucketTags,
   setCephAdminBucketVersioning,
   updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
@@ -100,7 +93,6 @@ import {
   defaultNotificationTemplate,
   jsonTextSignature,
   isLifecycleSimpleDraftEmpty,
-  normalizeBucketTagsDraft,
   normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
@@ -113,6 +105,7 @@ import {
   useBucketObjectLockController,
   useBucketPolicyController,
   useBucketPublicAccessController,
+  useBucketTagsController,
   useBucketWebsiteController,
 } from "./bucketDetail";
 import {
@@ -128,8 +121,6 @@ import { createUiDraftId } from "../../utils/uiDraftId";
 import type { UiRole } from "../../api/users";
 
 type ReplicationRuleDraft = GraphicalReplicationRule & { uiId: string };
-type BucketTagDraft = BucketTag & { uiId: string };
-
 type BucketConfigurationDeleteKind =
   | "cors"
   | "encryption"
@@ -198,10 +189,6 @@ function createReplicationRuleDraft(
   rule: GraphicalReplicationRule = createEmptyGraphicalReplicationRule()
 ): ReplicationRuleDraft {
   return { ...rule, uiId: createUiDraftId("replication-rule") };
-}
-
-function createBucketTagDraft(tag: BucketTag = { key: "", value: "" }): BucketTagDraft {
-  return { ...tag, uiId: createUiDraftId("bucket-tag") };
 }
 
 function getUserRole(): UiRole | null {
@@ -278,6 +265,12 @@ const bucketDetailHintClass = "ui-caption text-slate-500 dark:text-slate-400";
 const bucketDetailTwoColumnGridClass = "grid gap-3 md:grid-cols-2";
 const bucketDetailTableHeaderClass =
   "px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
+const bucketDetailWideTableHeaderClass =
+  "px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
+const bucketDetailTableCellClass =
+  "px-4 py-2 text-slate-600 dark:text-slate-300";
+const bucketDetailStackClass = "space-y-3";
+const bucketDetailWrapActionsClass = "flex flex-wrap gap-2";
 
 const defaultLifecycleJsonExample = `[
   {
@@ -445,12 +438,6 @@ export default function BucketDetailPage({
   const [replicationLoading, setReplicationLoading] = useState(false);
   const [savingReplication, setSavingReplication] = useState(false);
   const [clearingReplication, setClearingReplication] = useState(false);
-  const [bucketTags, setBucketTags] = useState<BucketTagDraft[]>([]);
-  const [bucketTagsLoading, setBucketTagsLoading] = useState(false);
-  const [bucketTagsError, setBucketTagsError] = useState<string | null>(null);
-  const [bucketTagsStatus, setBucketTagsStatus] = useState<string | null>(null);
-  const [savingBucketTags, setSavingBucketTags] = useState(false);
-  const [deletingBucketTags, setDeletingBucketTags] = useState(false);
   const [pendingConfigurationDelete, setPendingConfigurationDelete] = useState<BucketConfigurationDeleteKind | null>(null);
 
   const [objects, setObjects] = useState<S3Object[]>([]);
@@ -465,7 +452,6 @@ export default function BucketDetailPage({
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
-  const [bucketTagsSnapshot, setBucketTagsSnapshot] = useState<BucketTag[]>([]);
   const [quotaSizeGb, setQuotaSizeGb] = useState<string>("");
   const [quotaSizeUnit, setQuotaSizeUnit] = useState<"MiB" | "GiB" | "TiB">("GiB");
   const [quotaObjects, setQuotaObjects] = useState<string>("");
@@ -650,6 +636,28 @@ export default function BucketDetailPage({
     },
     versioningEnabled:
       (versioningStatus ?? "").trim().toLowerCase() === "enabled",
+  });
+  const {
+    add: addBucketTag,
+    clear: clearBucketTags,
+    clearing: deletingBucketTags,
+    configured: bucketTagsConfigured,
+    dirty: tagsDirty,
+    error: bucketTagsError,
+    load: loadBucketTags,
+    loading: bucketTagsLoading,
+    remove: removeBucketTag,
+    save: saveBucketTags,
+    saving: savingBucketTags,
+    status: bucketTagsStatus,
+    tags: bucketTags,
+    update: updateBucketTag,
+  } = useBucketTagsController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
   });
   const quotaFeatureEnabled = isCephAdmin ? isCephEndpoint : Boolean(isCephEndpoint && managerBucketQuotaEnabled);
   const showQuotaTab = !hideQuotaTab && (isCephAdmin || Boolean(quotaFeatureEnabled && hasAccountContext));
@@ -972,41 +980,6 @@ export default function BucketDetailPage({
       setReplicationLoading(false);
     }
   }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, isCephEndpoint, replicationFeatureEnabled]);
-
-  const loadBucketTags = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setBucketTags([]);
-      setBucketTagsSnapshot([]);
-      setBucketTagsError(null);
-      setBucketTagsStatus(null);
-      return;
-    }
-    setBucketTagsLoading(true);
-    setBucketTagsError(null);
-    setBucketTagsStatus(null);
-    try {
-      const response = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketTags(endpointId, bucketName)
-          : { tags: [] }
-        : await getBucketTags(accountId, bucketName);
-      const normalized = (response.tags ?? [])
-        .map((tag) => ({
-          key: String(tag.key ?? "").trim(),
-          value: String(tag.value ?? ""),
-        }))
-        .filter((tag) => tag.key.length > 0);
-      setBucketTags(normalized.map((tag) => createBucketTagDraft(tag)));
-      setBucketTagsSnapshot(normalized);
-    } catch (err) {
-      const message = extractApiError(err, "Unable to load bucket tags.");
-      setBucketTagsError(message);
-      setBucketTags([]);
-      setBucketTagsSnapshot([]);
-    } finally {
-      setBucketTagsLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadObjects = useCallback(
     async (prefix: string) => {
@@ -1486,9 +1459,6 @@ export default function BucketDetailPage({
   };
   const lifecycleSimpleDirty = !isLifecycleSimpleDraftEmpty(lifecycleSimpleDraft);
   const lifecycleDirty = lifecycleMode === "json" ? lifecycleJsonDirty : lifecycleSimpleDirty;
-  const tagsDraftSignature = stableBucketJsonSignature(normalizeBucketTagsDraft(bucketTags));
-  const tagsSnapshotSignature = stableBucketJsonSignature(normalizeBucketTagsDraft(bucketTagsSnapshot));
-  const tagsDirty = tagsDraftSignature !== tagsSnapshotSignature;
   const quotaSnapshotSignature = stableBucketJsonSignature(
     normalizeQuotaDraft(
       (() => {
@@ -1540,7 +1510,7 @@ export default function BucketDetailPage({
   });
   const tagsCardState = resolveFeatureVisualState({
     disabled: tagsNotImplemented,
-    configured: bucketTags.length > 0,
+    configured: bucketTagsConfigured,
     unsaved: tagsDirty,
   });
   const publicAccessCardState = resolveFeatureVisualState({
@@ -1839,97 +1809,6 @@ export default function BucketDetailPage({
       setVersioningSaveError(extractApiError(err, "Failed to update versioning."));
     } finally {
       setUpdatingVersioning(false);
-    }
-  };
-
-  const updateBucketTag = (uiId: string, patch: Partial<BucketTag>) => {
-    setBucketTags((prev) => prev.map((tag) => (tag.uiId === uiId ? { ...tag, ...patch } : tag)));
-  };
-
-  const addBucketTag = () => {
-    setBucketTags((prev) => [...prev, createBucketTagDraft()]);
-    setBucketTagsStatus(null);
-    setBucketTagsError(null);
-  };
-
-  const removeBucketTag = (uiId: string) => {
-    setBucketTags((prev) => prev.filter((tag) => tag.uiId !== uiId));
-    setBucketTagsStatus(null);
-    setBucketTagsError(null);
-  };
-
-  const saveBucketTags = async () => {
-    if (!bucketName || !hasContext) return;
-    setSavingBucketTags(true);
-    setBucketTagsError(null);
-    setBucketTagsStatus(null);
-    try {
-      const normalized = bucketTags.map((tag) => ({
-        key: String(tag.key ?? "").trim(),
-        value: String(tag.value ?? "").trim(),
-      }));
-      const hasKeylessValue = normalized.some((tag) => !tag.key && tag.value.length > 0);
-      if (hasKeylessValue) {
-        throw new Error("Tag key is required when a value is provided.");
-      }
-      const filtered = normalized.filter((tag) => tag.key.length > 0);
-      const seen = new Set<string>();
-      for (const tag of filtered) {
-        if (seen.has(tag.key)) {
-          throw new Error(`Duplicate tag key: ${tag.key}`);
-        }
-        seen.add(tag.key);
-      }
-
-      if (filtered.length === 0) {
-        if (isCephAdmin) {
-          if (!endpointId) return;
-          await deleteCephAdminBucketTags(endpointId, bucketName);
-        } else {
-          await deleteBucketTags(accountId, bucketName);
-        }
-        setBucketTags([]);
-        setBucketTagsSnapshot([]);
-        setBucketTagsStatus("Bucket tags cleared.");
-      } else {
-        if (isCephAdmin) {
-          if (!endpointId) return;
-          await putCephAdminBucketTags(endpointId, bucketName, filtered);
-        } else {
-          await putBucketTags(accountId, bucketName, filtered);
-        }
-        setBucketTags(filtered.map((tag) => createBucketTagDraft(tag)));
-        setBucketTagsSnapshot(filtered);
-        setBucketTagsStatus("Bucket tags updated.");
-      }
-    } catch (err) {
-      const message = extractApiError(err, "Unable to update bucket tags.");
-      setBucketTagsError(message);
-    } finally {
-      setSavingBucketTags(false);
-    }
-  };
-
-  const clearBucketTags = async () => {
-    if (!bucketName || !hasContext) return;
-    setDeletingBucketTags(true);
-    setBucketTagsError(null);
-    setBucketTagsStatus(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await deleteCephAdminBucketTags(endpointId, bucketName);
-      } else {
-        await deleteBucketTags(accountId, bucketName);
-      }
-      setBucketTags([]);
-      setBucketTagsSnapshot([]);
-      setBucketTagsStatus("Bucket tags cleared.");
-    } catch (err) {
-      const message = extractApiError(err, "Unable to clear bucket tags.");
-      setBucketTagsError(message);
-    } finally {
-      setDeletingBucketTags(false);
     }
   };
 
@@ -2353,7 +2232,7 @@ export default function BucketDetailPage({
                             : "Read-only preview. Use the main Browser page for object operations."}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className={bucketDetailWrapActionsClass}>
                         <button
                           type="button"
                           onClick={() => loadObjects(currentPrefix)}
@@ -2372,16 +2251,16 @@ export default function BucketDetailPage({
                       <table className={cx(uiDataTableClass, "min-w-full ui-body")}>
                         <thead>
                           <tr>
-                            <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <th className={bucketDetailWideTableHeaderClass}>
                               Name
                             </th>
-                            <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <th className={bucketDetailWideTableHeaderClass}>
                               Size
                             </th>
-                            <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <th className={bucketDetailWideTableHeaderClass}>
                               Last modified
                             </th>
-                            <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <th className={bucketDetailWideTableHeaderClass}>
                               Storage class
                             </th>
                           </tr>
@@ -2413,20 +2292,20 @@ export default function BucketDetailPage({
                                     <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">
                                       📁 {row.name}
                                     </td>
-                                    <td className="px-4 py-2 text-slate-600 dark:text-slate-300">—</td>
-                                    <td className="px-4 py-2 text-slate-600 dark:text-slate-300">—</td>
-                                    <td className="px-4 py-2 text-slate-600 dark:text-slate-300">—</td>
+                                    <td className={bucketDetailTableCellClass}>—</td>
+                                    <td className={bucketDetailTableCellClass}>—</td>
+                                    <td className={bucketDetailTableCellClass}>—</td>
                                   </tr>
                                 );
                               }
                               return (
                                 <tr key={row.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                   <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>
-                                  <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{formatBytes(row.object.size)}</td>
-                                  <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
+                                  <td className={bucketDetailTableCellClass}>{formatBytes(row.object.size)}</td>
+                                  <td className={bucketDetailTableCellClass}>
                                     {row.object.last_modified ? new Date(row.object.last_modified).toLocaleString() : "-"}
                                   </td>
-                                  <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{row.object.storage_class ?? "-"}</td>
+                                  <td className={bucketDetailTableCellClass}>{row.object.storage_class ?? "-"}</td>
                                 </tr>
                               );
                             })}
@@ -2803,7 +2682,7 @@ export default function BucketDetailPage({
                                       <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{filterLabel}</td>
                                       <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{describeLifecycleActions(rule)}</td>
                                       <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">
-                                        <div className="flex flex-wrap gap-2">
+                                        <div className={bucketDetailWrapActionsClass}>
                                           <button
                                             type="button"
                                             onClick={() => deleteRuleAt(idx)}
@@ -2844,7 +2723,7 @@ export default function BucketDetailPage({
                               <p className="ui-caption text-slate-600 dark:text-slate-300">
                                 Quickly add one of the preconfigured rules below (appended to the existing configuration).
                               </p>
-                              <div className="space-y-3">
+                              <div className={bucketDetailStackClass}>
                                 <div className={cx(uiCardMutedClass, "px-3 py-2")}>
                                   <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">
                                     Rule 1: noncurrent 90d + multipart 30d + delete markers (explicit)
@@ -3031,7 +2910,7 @@ export default function BucketDetailPage({
                       testId="bucket-feature-tags"
                       className="space-y-3 order-3 md:order-none md:col-start-1 md:row-start-4"
                       actions={
-                        <div className="flex flex-wrap gap-2">
+                        <div className={bucketDetailWrapActionsClass}>
                           <button
                             type="button"
                             onClick={() => setPendingConfigurationDelete("tags")}
@@ -3126,7 +3005,7 @@ export default function BucketDetailPage({
                   mode="graphical"
                   visualState={publicAccessCardState}
                   testId="bucket-feature-block-public-access"
-                  className="space-y-3"
+                  className={bucketDetailStackClass}
                   actions={
                     <button
                       type="button"
@@ -3172,7 +3051,7 @@ export default function BucketDetailPage({
                   mode="graphical"
                   visualState={aclCardState}
                   testId="bucket-feature-acl"
-                  className="space-y-3"
+                  className={bucketDetailStackClass}
                   actions={
                     <button
                       type="button"
@@ -3226,7 +3105,7 @@ export default function BucketDetailPage({
                   {bucketAclLoading ? (
                     <UiInlineMessage>Loading ACL...</UiInlineMessage>
                   ) : (
-                    <div className="space-y-3">
+                    <div className={bucketDetailStackClass}>
                       <p className={bucketDetailHintClass}>
                         Owner: <span className="font-semibold text-slate-700 dark:text-slate-200">{bucketAcl?.owner ?? "Unknown"}</span>
                       </p>
@@ -3320,7 +3199,7 @@ export default function BucketDetailPage({
                   mode="json"
                   visualState={corsCardState}
                   testId="bucket-feature-cors"
-                  className="space-y-3"
+                  className={bucketDetailStackClass}
                   actions={
                     <div className="flex gap-2">
                       <button
@@ -3369,16 +3248,16 @@ export default function BucketDetailPage({
             id: "advanced",
             label: "Advanced",
             content: (
-              <div className="space-y-3">
+              <div className={bucketDetailStackClass}>
                 <BucketFeatureCard
                   title="Static website"
                   description="Host a static website from this bucket or redirect all requests."
                   mode="hybrid"
                   visualState={websiteCardState}
                   testId="bucket-feature-website"
-                  className="space-y-3"
+                  className={bucketDetailStackClass}
                   actions={
-                    <div className="flex flex-wrap gap-2">
+                    <div className={bucketDetailWrapActionsClass}>
                       <button
                         type="button"
                         onClick={() => setPendingConfigurationDelete("website")}
@@ -3438,7 +3317,7 @@ export default function BucketDetailPage({
                     </label>
                   </div>
                   {websiteMode === "hosting" ? (
-                    <div className="space-y-3">
+                    <div className={bucketDetailStackClass}>
                       <div className={bucketDetailTwoColumnGridClass}>
                         <label className={bucketFeatureLabelClass}>
                           Index document
@@ -3524,9 +3403,9 @@ export default function BucketDetailPage({
                     mode="hybrid"
                     visualState={replicationCardState}
                     testId="bucket-feature-replication"
-                    className="space-y-3"
+                    className={bucketDetailStackClass}
                     actions={
-                      <div className="flex flex-wrap gap-2">
+                      <div className={bucketDetailWrapActionsClass}>
                         <button
                           type="button"
                           onClick={() => setPendingConfigurationDelete("replication")}
@@ -3572,7 +3451,7 @@ export default function BucketDetailPage({
                     {replicationLoading ? (
                       <UiInlineMessage>Loading replication configuration...</UiInlineMessage>
                     ) : replicationMode === "graphical" ? (
-                      <div className="space-y-3">
+                      <div className={bucketDetailStackClass}>
                         <label className={bucketFeatureLabelClass}>
                           Role ARN
                           <input
@@ -3587,7 +3466,7 @@ export default function BucketDetailPage({
                             disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                           />
                         </label>
-                        <div className="space-y-3">
+                        <div className={bucketDetailStackClass}>
                           {replicationRules.map((rule, index) => (
                             <div
                               key={rule.uiId}
@@ -3733,9 +3612,9 @@ export default function BucketDetailPage({
                   mode="graphical"
                   visualState={accessLoggingCardState}
                   testId="bucket-feature-access-logging"
-                  className="space-y-3"
+                  className={bucketDetailStackClass}
                   actions={
-                    <div className="flex flex-wrap gap-2">
+                    <div className={bucketDetailWrapActionsClass}>
                       <button
                         type="button"
                         onClick={() => setPendingConfigurationDelete("access-logging")}
@@ -3808,9 +3687,9 @@ export default function BucketDetailPage({
                   mode="json"
                   visualState={notificationsCardState}
                   testId="bucket-feature-notifications"
-                  className="space-y-3"
+                  className={bucketDetailStackClass}
                   actions={
-                    <div className="flex flex-wrap gap-2">
+                    <div className={bucketDetailWrapActionsClass}>
                       <button
                         type="button"
                         onClick={() => setPendingConfigurationDelete("notifications")}
@@ -3938,7 +3817,7 @@ export default function BucketDetailPage({
                   id: "ceph",
                   label: isCephAdmin ? "Ceph Admin" : "Privileged Ceph",
                   content: (
-                    <div className="space-y-3">
+                    <div className={bucketDetailStackClass}>
                       <BucketFeatureCard
                         title="Quota"
                         description="Allowed bucket size and object count."

@@ -29,10 +29,10 @@ export {
   useBucketAclController,
 } from "./useBucketAclController";
 export { useBucketObjectLockController } from "./useBucketObjectLockController";
+export { useBucketTagsController } from "./useBucketTagsController";
 export { useBucketWebsiteController } from "./useBucketWebsiteController";
 export {
   jsonTextSignature,
-  normalizeBucketTagsDraft,
   normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
