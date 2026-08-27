@@ -30,6 +30,7 @@ export {
 } from "./useBucketAclController";
 export { useBucketObjectLockController } from "./useBucketObjectLockController";
 export { useBucketTagsController } from "./useBucketTagsController";
+export { useBucketVersioningController } from "./useBucketVersioningController";
 export { useBucketWebsiteController } from "./useBucketWebsiteController";
 export {
   jsonTextSignature,

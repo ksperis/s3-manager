@@ -22,12 +22,10 @@ import {
   deleteBucketReplication,
   deleteBucketLifecycle,
   getBucketReplication,
-  getBucketVersioning,
   getBucketLifecycle,
   listBuckets,
   putBucketReplication,
   putBucketLifecycle,
-  setBucketVersioning,
   updateBucketQuota,
 } from "../../api/buckets";
 import {
@@ -35,12 +33,10 @@ import {
   deleteCephAdminBucketReplication,
   getCephAdminBucketLifecycle,
   getCephAdminBucketReplication,
-  getCephAdminBucketVersioning,
   listCephAdminBucketObjects,
   listCephAdminBuckets,
   putCephAdminBucketLifecycle,
   putCephAdminBucketReplication,
-  setCephAdminBucketVersioning,
   updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
 import {
@@ -106,6 +102,7 @@ import {
   useBucketPolicyController,
   useBucketPublicAccessController,
   useBucketTagsController,
+  useBucketVersioningController,
   useBucketWebsiteController,
 } from "./bucketDetail";
 import {
@@ -394,12 +391,6 @@ export default function BucketDetailPage({
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [loadingBucket, setLoadingBucket] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
-  const [versioningStatus, setVersioningStatus] = useState<string | null>(null);
-  const [versioningLoading, setVersioningLoading] = useState(false);
-  const [versioningLoadError, setVersioningLoadError] = useState<string | null>(null);
-  const [versioningSaveError, setVersioningSaveError] = useState<string | null>(null);
-  const [updatingVersioning, setUpdatingVersioning] = useState(false);
-  const [versioningDraftEnabled, setVersioningDraftEnabled] = useState(false);
   const [showNotificationExample, setShowNotificationExample] = useState(false);
   const [showWebsiteRulesExample, setShowWebsiteRulesExample] = useState(false);
   const [showEncryptionExample, setShowEncryptionExample] = useState(false);
@@ -478,6 +469,27 @@ export default function BucketDetailPage({
   const endpointId = selectedEndpointId ?? null;
   const hasCephContext = Boolean(endpointId);
   const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
+  const {
+    dirty: versioningDirty,
+    draftEnabled: versioningDraftEnabled,
+    isEnabled: versioningIsEnabled,
+    isSuspended: versioningIsSuspended,
+    load: loadVersioning,
+    loadError: versioningLoadError,
+    loading: versioningLoading,
+    markEnabled: markVersioningEnabled,
+    save: saveVersioning,
+    saveError: versioningSaveError,
+    saving: updatingVersioning,
+    status: versioningStatus,
+    updateDraft: updateVersioningDraft,
+  } = useBucketVersioningController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
   const {
     configured: policyConfigured,
     deleting: deletingPolicy,
@@ -628,14 +640,8 @@ export default function BucketDetailPage({
     cephAdmin: isCephAdmin,
     enabled: hasContext,
     endpointId,
-    onVersioningEnabled: () => {
-      setVersioningDraftEnabled(true);
-      setVersioningStatus("Enabled");
-      setVersioningLoadError(null);
-      setVersioningSaveError(null);
-    },
-    versioningEnabled:
-      (versioningStatus ?? "").trim().toLowerCase() === "enabled",
+    onVersioningEnabled: markVersioningEnabled,
+    versioningEnabled: versioningIsEnabled,
   });
   const {
     add: addBucketTag,
@@ -770,17 +776,9 @@ export default function BucketDetailPage({
     quotaFeatureEnabled &&
     ((isCephAdmin && isAdmin && hasCephContext) || (!isCephAdmin && hasAccountContext));
   const quotaSectionRestricted = quotaFeatureEnabled && !canEditQuota;
-  const versioningStatusRaw = (versioningStatus ?? "").trim();
-  const versioningStatusNormalized = versioningStatusRaw.toLowerCase();
-  const versioningIsEnabled = versioningStatusNormalized === "enabled";
-  const versioningIsSuspended = versioningStatusNormalized === "suspended";
   const versioningDisableBlocked = objectLockActive && versioningIsEnabled;
   const objectLockFormId = "bucket-object-lock-form";
   const quotaFormId = "bucket-quota-form";
-
-  useEffect(() => {
-    setVersioningDraftEnabled(versioningIsEnabled);
-  }, [versioningIsEnabled]);
 
   useEffect(() => {
     if (!bucket || !quotaFeatureEnabled) {
@@ -862,31 +860,6 @@ export default function BucketDetailPage({
     if (activeTab !== "overview" && activeTab !== "metrics") return;
     refreshBucketMeta();
   }, [activeTab, refreshBucketMeta]);
-
-  const loadVersioning = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setVersioningStatus(null);
-      setVersioningLoadError(null);
-      setVersioningSaveError(null);
-      return;
-    }
-    setVersioningLoading(true);
-    setVersioningLoadError(null);
-    setVersioningSaveError(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketVersioning(endpointId, bucketName)
-          : { status: null, enabled: false }
-        : await getBucketVersioning(accountId, bucketName);
-      setVersioningStatus(data.status ?? null);
-    } catch (err) {
-      setVersioningStatus(null);
-      setVersioningLoadError(extractApiError(err, "Unable to load bucket versioning."));
-    } finally {
-      setVersioningLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   useEffect(() => {
     loadVersioning();
@@ -1474,7 +1447,6 @@ export default function BucketDetailPage({
   );
   const quotaDraftSignature = stableBucketJsonSignature(normalizeQuotaDraft(quotaSizeGb, quotaSizeUnit, quotaObjects));
   const quotaDirty = quotaDraftSignature !== quotaSnapshotSignature;
-  const versioningDirty = versioningDraftEnabled !== versioningIsEnabled;
   const versioningNotImplemented = isApiFeatureNotImplemented(versioningLoadError);
   const objectLockNotImplemented = isApiFeatureNotImplemented(objectLockLoadError);
   const lifecycleNotImplemented = isApiFeatureNotImplemented(lifecycleError);
@@ -1790,27 +1762,6 @@ export default function BucketDetailPage({
     const items = buildBucketDetailBreadcrumbs(mode, bucketName);
     return items.map((item, index) => (index === 1 ? { ...item, to: basePath } : item));
   }, [basePath, bucketName, mode]);
-
-  const saveVersioning = async () => {
-    if (!bucketName || !hasContext || versioningLoading || versioningLoadError) return;
-    if (versioningDisableBlocked && !versioningDraftEnabled) return;
-    if (versioningDraftEnabled === versioningIsEnabled) return;
-    setUpdatingVersioning(true);
-    setVersioningSaveError(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await setCephAdminBucketVersioning(endpointId, bucketName, versioningDraftEnabled);
-      } else {
-        await setBucketVersioning(accountId, bucketName, versioningDraftEnabled);
-      }
-      await loadVersioning();
-    } catch (err) {
-      setVersioningSaveError(extractApiError(err, "Failed to update versioning."));
-    } finally {
-      setUpdatingVersioning(false);
-    }
-  };
 
   const updateReplicationRule = (uiId: string, patch: Partial<GraphicalReplicationRule>) => {
     setReplicationRules((prev) =>
@@ -2335,7 +2286,7 @@ export default function BucketDetailPage({
                     actions={
                       <button
                         type="button"
-                        onClick={saveVersioning}
+                        onClick={() => void saveVersioning(versioningDisableBlocked)}
                         disabled={
                           updatingVersioning ||
                           versioningLoading ||
@@ -2377,10 +2328,7 @@ export default function BucketDetailPage({
                             checked={versioningDraftEnabled}
                             disabled={updatingVersioning || versioningLoading || Boolean(versioningLoadError) || versioningDisableBlocked}
                             ariaLabel="Enable versioning"
-                            onChange={(checked) => {
-                              setVersioningDraftEnabled(checked);
-                              setVersioningSaveError(null);
-                            }}
+                            onChange={updateVersioningDraft}
                           />
                         </div>
                       </div>
@@ -2516,7 +2464,7 @@ export default function BucketDetailPage({
                               if (objectLockPersistentlyEnabled) return;
                               updateObjectLockEnabled(checked);
                               if (checked) {
-                                setVersioningDraftEnabled(true);
+                                updateVersioningDraft(true);
                               }
                             }}
                           />
