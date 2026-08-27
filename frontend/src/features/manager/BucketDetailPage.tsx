@@ -20,13 +20,8 @@ import {
   listBuckets,
 } from "../../api/buckets";
 import {
-  listCephAdminBucketObjects,
   listCephAdminBuckets,
 } from "../../api/cephAdmin";
-import {
-  listObjects,
-  S3Object,
-} from "../../api/objects";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -62,6 +57,7 @@ import {
   useBucketLifecycleController,
   useBucketNotificationsController,
   useBucketObjectLockController,
+  useBucketObjectsController,
   useBucketPolicyController,
   useBucketPublicAccessController,
   useBucketQuotaController,
@@ -157,10 +153,6 @@ const bucketConfigurationDeleteCopy: Record<
 function getUserRole(): UiRole | null {
   return readStoredUser()?.role ?? null;
 }
-
-type Row =
-  | { type: "prefix"; key: string; name: string }
-  | { type: "object"; key: string; name: string; object: S3Object };
 
 type PropertySummary = {
   label: string;
@@ -304,12 +296,7 @@ export default function BucketDetailPage({
   const [showReplicationExample, setShowReplicationExample] = useState(false);
   const [pendingConfigurationDelete, setPendingConfigurationDelete] = useState<BucketConfigurationDeleteKind | null>(null);
 
-  const [objects, setObjects] = useState<S3Object[]>([]);
-  const [prefixes, setPrefixes] = useState<string[]>([]);
-  const [objectsError, setObjectsError] = useState<string | null>(null);
-  const [objectsLoading, setObjectsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<BucketDetailTabId>("overview");
-  const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
   const selectedS3Account = useMemo(() => {
@@ -650,6 +637,22 @@ export default function BucketDetailPage({
     enabled: hasContext,
     endpointId,
   });
+  const {
+    currentPrefix,
+    error: objectsError,
+    loading: objectsLoading,
+    openPrefix: openObjectsPrefix,
+    parentPrefix,
+    prefixes,
+    refresh: refreshObjects,
+    rows: objectRows,
+  } = useBucketObjectsController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
   const snsFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.sns === true;
@@ -800,38 +803,6 @@ export default function BucketDetailPage({
     loadObjectLock();
   }, [loadObjectLock]);
 
-  const loadObjects = useCallback(
-    async (prefix: string) => {
-      if (!bucketName || !hasContext || (isCephAdmin && !endpointId)) return;
-      setObjectsLoading(true);
-      setObjectsError(null);
-      try {
-        const data = isCephAdmin
-          ? await listCephAdminBucketObjects(endpointId!, bucketName, prefix)
-          : await listObjects(accountId, bucketName, prefix);
-        setObjects(
-          data.objects.map((object) => ({
-            ...object,
-            last_modified: object.last_modified ?? undefined,
-          }))
-        );
-        setPrefixes(data.prefixes);
-      } catch (err) {
-        setObjects([]);
-        setPrefixes([]);
-        setObjectsError(extractApiError(err, "Unable to list objects."));
-      } finally {
-        setObjectsLoading(false);
-      }
-    },
-    [accountId, bucketName, endpointId, hasContext, isCephAdmin]
-  );
-
-  useEffect(() => {
-    if (isCephAdmin) return;
-    loadObjects(currentPrefix);
-  }, [currentPrefix, isCephAdmin, loadObjects]);
-
   useEffect(() => {
     if (activeTab === "overview" || activeTab === "permissions") {
       loadPolicy();
@@ -903,7 +874,7 @@ export default function BucketDetailPage({
       return;
     }
     if (activeTab === "objects") {
-      await loadObjects(currentPrefix);
+      await refreshObjects();
       return;
     }
     if (activeTab === "usage-stats") {
@@ -928,7 +899,6 @@ export default function BucketDetailPage({
   }, [
     activeTab,
     canViewBucketMetrics,
-    currentPrefix,
     loadAccessLogging,
     loadBucketAcl,
     loadBucketTags,
@@ -938,12 +908,12 @@ export default function BucketDetailPage({
     loadUsageStats,
     loadNotifications,
     loadObjectLock,
-    loadObjects,
     loadPolicy,
     loadPublicAccessBlock,
     loadReplication,
     loadVersioning,
     loadWebsite,
+    refreshObjects,
     refreshBucketMeta,
   ]);
 
@@ -1019,19 +989,6 @@ export default function BucketDetailPage({
     }
     return hasContext;
   }, [activeTab, canViewBucketMetrics, hasContext]);
-
-  const rowData: Row[] = useMemo(() => {
-    const rows: Row[] = [];
-    const normalizedPrefix = currentPrefix.endsWith("/") || currentPrefix === "" ? currentPrefix : `${currentPrefix}/`;
-    prefixes.forEach((p) => {
-      const name = p.slice(normalizedPrefix.length);
-      rows.push({ type: "prefix", key: p, name: name || p });
-    });
-    objects.forEach((obj) => {
-      rows.push({ type: "object", key: obj.key, name: obj.key.slice(normalizedPrefix.length), object: obj });
-    });
-    return rows;
-  }, [currentPrefix, objects, prefixes]);
 
   const storageUsage = useMemo(
     () => ({
@@ -1389,13 +1346,6 @@ export default function BucketDetailPage({
     }
   };
 
-  const parentPrefix = useMemo(() => {
-    if (!currentPrefix) return "";
-    const parts = currentPrefix.split("/").filter(Boolean);
-    parts.pop();
-    return parts.length > 0 ? parts.join("/") + "/" : "";
-  }, [currentPrefix]);
-
   const handleUpdateQuota = (e: React.FormEvent) => {
     e.preventDefault();
     void saveQuota();
@@ -1522,14 +1472,14 @@ export default function BucketDetailPage({
                             ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
                             : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                         }`}
-                        onClick={() => setCurrentPrefix("")}
+                        onClick={() => openObjectsPrefix("")}
                       >
                         <span>(root)</span>
                       </button>
                       {parentPrefix !== "" && (
                         <button
                           className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left ui-caption text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
-                          onClick={() => setCurrentPrefix(parentPrefix)}
+                          onClick={() => openObjectsPrefix(parentPrefix)}
                         >
                           <span>⬆️ Up</span>
                           <span className={bucketDetailHintClass}>{parentPrefix || "/"}</span>
@@ -1546,7 +1496,7 @@ export default function BucketDetailPage({
                                 ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
                                 : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                             }`}
-                            onClick={() => setCurrentPrefix(prefix)}
+                            onClick={() => openObjectsPrefix(prefix)}
                           >
                             <span>{displayName}</span>
                           </button>
@@ -1572,7 +1522,7 @@ export default function BucketDetailPage({
                       <div className={bucketDetailWrapActionsClass}>
                         <button
                           type="button"
-                          onClick={() => loadObjects(currentPrefix)}
+                          onClick={() => void refreshObjects()}
                           disabled={objectsLoading}
                           className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
@@ -1610,7 +1560,7 @@ export default function BucketDetailPage({
                               </td>
                             </tr>
                           )}
-                          {!objectsLoading && rowData.length === 0 && (
+                          {!objectsLoading && objectRows.length === 0 && (
                             <tr>
                               <td colSpan={4} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
                                 No objects in this prefix.
@@ -1618,13 +1568,13 @@ export default function BucketDetailPage({
                             </tr>
                           )}
                           {!objectsLoading &&
-                            rowData.map((row) => {
+                            objectRows.map((row) => {
                               if (row.type === "prefix") {
                                 return (
                                   <tr
                                     key={row.key}
                                     className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                                    onClick={() => setCurrentPrefix(row.key)}
+                                    onClick={() => openObjectsPrefix(row.key)}
                                   >
                                     <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">
                                       📁 {row.name}
