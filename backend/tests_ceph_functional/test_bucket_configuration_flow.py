@@ -2,14 +2,15 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import io
 import json
 import time
 import uuid
 from typing import Any, Callable
 
+import boto3
 import pytest
 import requests
+from botocore.client import Config
 
 from .ceph_admin_helpers import backend_error_detail, looks_unsupported, run_or_skip
 from .clients import BackendAPIError, BackendAuthenticator, BackendSession
@@ -705,7 +706,6 @@ def test_manager_bucket_replication_roundtrip(
     )
     manager_session: BackendSession = context["manager_session"]
     account_ref = context["account_ref"]
-    source_endpoint_id = int(source_endpoint["id"])
     target_endpoint_id = int(target_endpoint["id"])
 
     bucket_name = _bucket_name(ceph_test_settings.test_prefix, "replication")
@@ -785,16 +785,24 @@ def test_manager_bucket_replication_roundtrip(
 
         object_key = f"replication/{uuid.uuid4().hex}.txt"
         object_body = f"same-zonegroup {uuid.uuid4().hex}\n".encode("utf-8")
-        upload_response = super_admin_session.request(
-            "POST",
-            f"/browser/buckets/{bucket_name}/proxy-upload",
-            params={"account_id": f"ceph-admin-{source_endpoint_id}"},
-            headers={"X-S3-Workspace": ""},
-            data={"key": object_key, "content_type": "text/plain"},
-            files={"file": ("replication.txt", io.BytesIO(object_body), "text/plain")},
-            expected_status=200,
-        ).json()
-        assert upload_response["key"] == object_key
+        source_endpoint_url = str(source_endpoint.get("endpoint_url") or "").strip()
+        assert source_endpoint_url
+        source_client = boto3.client(
+            "s3",
+            endpoint_url=source_endpoint_url,
+            aws_access_key_id=ceph_test_settings.rgw_admin_access_key,
+            aws_secret_access_key=ceph_test_settings.rgw_admin_secret_key,
+            region_name=str(source_endpoint.get("region") or ceph_test_settings.rgw_admin_region or "us-east-1"),
+            verify=ceph_test_settings.rgw_ca_bundle or ceph_test_settings.rgw_verify_tls,
+            config=Config(s3={"addressing_style": "path"}),
+        )
+        upload_response = source_client.put_object(
+            Bucket=bucket_name,
+            Key=object_key,
+            Body=object_body,
+            ContentType="text/plain",
+        )
+        assert upload_response["ResponseMetadata"]["HTTPStatusCode"] == 200
 
         replicated_object = _wait_for_value(
             "replicated object on target zone",
