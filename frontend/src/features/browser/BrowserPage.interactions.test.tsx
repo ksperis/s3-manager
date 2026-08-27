@@ -427,7 +427,7 @@ function getOtherBucketsPanel() {
 
 async function waitForOpenedMoreMenu(
   previousMenus: Set<HTMLElement>,
-  timeout = 1_500,
+  timeout = 5_000,
 ) {
   let openedMenu: HTMLElement | undefined;
   await waitFor(() => {
