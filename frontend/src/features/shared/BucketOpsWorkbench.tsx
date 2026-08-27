@@ -35,11 +35,8 @@ import {
   uiButtonBaseClass,
   uiButtonVariants,
   uiCheckboxClass,
-  uiFeatureStateHighlightFieldClasses,
-  uiFeatureStateHighlightLabelClasses,
   uiMenuClass,
   type UiTone,
-  type UiFeatureStateTone,
 } from "../../components/ui/styles";
 import {
   backupCephAdminBucketConfigs,
@@ -128,12 +125,10 @@ import {
 } from "./bucketFeatureSummaries";
 import {
   buildBucketOpsActiveFilterSummaryItems,
-  buildBucketOpsAdvancedFilterComparison,
   buildBucketOpsDraftFilterSummaryItems,
 } from "./bucketOpsFilterSummary";
 import {
   clearFeatureDetailField,
-  featureDetailSummary,
   type FeatureDetailFilterKey,
   type FeatureDetailFilters,
   type NumericComparisonOpUi,
@@ -148,7 +143,6 @@ import {
   advancedFilterFieldCardClass,
   advancedFilterHeaderClass,
   advancedFilterMatchModeButtonClass,
-  FILTER_COST_LABEL,
   formatAdvancedFilterSyncLabel,
   advancedFilterSyncBadgeClass,
   advancedFilterRootClass,
@@ -163,12 +157,9 @@ import {
 } from "../cephAdmin/filtering/advancedFilterShared";
 import {
   BOOLEAN_FILTER_OPTIONS,
-  BUCKET_STATS_NUMERIC_FILTER_FIELDS,
   FEATURE_LABELS,
   FEATURE_STATE_OPTIONS,
   NUMERIC_FILTER_OPTIONS,
-  OWNER_QUOTA_NUMERIC_FILTER_FIELDS,
-  OWNER_USAGE_NUMERIC_FILTER_FIELDS,
   buildAdvancedFilterPayload,
   buildAdvancedFilterSecondarySectionState,
   defaultAdvancedFilter,
@@ -186,6 +177,10 @@ import {
   type OwnerNameScope,
   type TextMatchMode,
 } from "./bucketOpsAdvancedFilterModel";
+import {
+  buildAdvancedFilterFieldState,
+  buildBucketOpsAdvancedFilterUiProjection,
+} from "./bucketOpsAdvancedFilterUiProjection";
 import {
   BUCKET_CORE_COLUMN_OPTIONS,
   BUCKET_QUOTA_COLUMN_GROUPS,
@@ -4042,33 +4037,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       </section>
     );
   };
-  const fieldTone = (isApplied: boolean, isPending: boolean): UiFeatureStateTone => {
-    if (isPending) return "unsaved";
-    if (isApplied) return "configured";
-    return "neutral";
-  };
-  const fieldHighlight = (isApplied: boolean, isPending: boolean) => {
-    const tone = fieldTone(isApplied, isPending);
-    return {
-      labelClass: uiFeatureStateHighlightLabelClasses[tone],
-      fieldClass: uiFeatureStateHighlightFieldClasses[tone],
-    };
-  };
   const {
-    contextAppliedIds,
-    endpointAppliedNames,
-    tenantAppliedValue,
-    ownerAppliedValue,
-    ownerNameAppliedValue,
-    s3TagsAppliedExpressions,
-    ownerNameAppliedScope,
-    ownerSuspendedApplied,
     contextDraftIds,
     endpointDraftNames,
-    tenantDraftValue,
-    ownerDraftValue,
-    ownerNameDraftValue,
-    s3TagsDraftExpressions,
     tenantDraftEffectiveMatchMode,
     tenantDraftForcesExact,
     ownerDraftEffectiveMatchMode,
@@ -4077,105 +4048,42 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     ownerNameDraftForcesExact,
     s3TagsDraftEffectiveMatchMode,
     s3TagsDraftForcesExact,
-    ownerNameDraftScope,
-    ownerSuspendedDraft,
-    contextPending,
-    endpointPending,
-    tenantPending,
-    ownerPending,
-    ownerNamePending,
-    ownerSuspendedPending,
-    s3TagsPending,
+    contextFieldState,
+    endpointFieldState,
+    tenantFieldState,
+    ownerFieldState,
+    ownerNameFieldState,
+    ownerSuspendedFieldState,
+    s3TagsFieldState,
+    quickFilterFieldState,
+    quickFilterPending,
+    advancedDraftRangeCount,
+    advancedDraftFeatureCount,
+    advancedDraftFeatureDetailCount,
+    advancedDraftActiveCount,
+    advancedDraftGlobalCostLevel,
+    advancedDraftGlobalCostTooltip,
   } = useMemo(
-    () => buildBucketOpsAdvancedFilterComparison(advancedApplied, advancedDraft),
-    [advancedApplied, advancedDraft],
-  );
-  const contextFieldState = fieldHighlight(
-    contextAppliedIds.length > 0,
-    contextPending
-  );
-  const endpointFieldState = fieldHighlight(
-    endpointAppliedNames.length > 0,
-    endpointPending
-  );
-  const tenantFieldState = fieldHighlight(
-    Boolean(tenantAppliedValue),
-    tenantPending
-  );
-  const ownerFieldState = fieldHighlight(
-    Boolean(ownerAppliedValue),
-    ownerPending
-  );
-  const ownerNameFieldState = fieldHighlight(
-    Boolean(ownerNameAppliedValue || ownerNameAppliedScope !== "any"),
-    ownerNamePending
-  );
-  const ownerSuspendedFieldState = fieldHighlight(
-    ownerSuspendedApplied !== "any",
-    ownerSuspendedPending
-  );
-  const s3TagsFieldState = fieldHighlight(
-    s3TagsAppliedExpressions.length > 0,
-    s3TagsPending
-  );
-  const quickDraftValue = filter.trim();
-  const quickAppliedValue = filterValue.trim();
-  const quickFilterPending = quickDraftValue !== quickAppliedValue;
-  const quickFilterFieldState = fieldHighlight(
-    quickAppliedValue.length > 0,
-    quickFilterPending
-  );
-  const ownerNameLookupActive = ownerNameDraftValue.length > 0;
-  const ownerSuspendedLookupActive = ownerSuspendedDraft !== "any";
-  const ownerQuotaLookupActive = OWNER_QUOTA_NUMERIC_FILTER_FIELDS.some((field) => advancedDraft[field].trim().length > 0);
-  const ownerUsageLookupActive = usageFeatureEnabled
-    && OWNER_USAGE_NUMERIC_FILTER_FIELDS.some((field) => advancedDraft[field].trim().length > 0);
-  const s3TagsLookupActive = s3TagsDraftExpressions.length > 0;
-  const featureDetailDraftLabels = useMemo(
-    () => featureDetailSummary(advancedDraft.featureDetails),
-    [advancedDraft.featureDetails]
-  );
-  const featureDetailFiltersActive = featureDetailDraftLabels.length > 0;
-  const ownerPrefilterActive =
-    contextDraftIds.length > 0 ||
-    endpointDraftNames.length > 0 ||
-    tenantDraftValue.length > 0 ||
-    ownerDraftValue.length > 0 ||
-    ownerNameDraftScope !== "any";
-  const advancedDraftIdentityCount =
-    Number(isStorageOps && contextDraftIds.length > 0) +
-    Number(isStorageOps && endpointDraftNames.length > 0) +
-    Number(tenantDraftValue.length > 0) +
-    Number(ownerDraftValue.length > 0) +
-    Number(ownerNameLookupActive) +
-    Number(ownerNameDraftScope !== "any") +
-    Number(ownerSuspendedLookupActive);
-  const advancedDraftRangeCount = useMemo(() => {
-    const alwaysAvailableCount = OWNER_QUOTA_NUMERIC_FILTER_FIELDS
-      .map((field) => advancedDraft[field])
-      .filter((value) => value.trim().length > 0).length;
-    if (!usageFeatureEnabled) return alwaysAvailableCount;
-    return (
-      BUCKET_STATS_NUMERIC_FILTER_FIELDS
-        .map((field) => advancedDraft[field])
-        .filter((value) => value.trim().length > 0).length +
-      OWNER_USAGE_NUMERIC_FILTER_FIELDS
-        .map((field) => advancedDraft[field])
-        .filter((value) => value.trim().length > 0).length +
-      alwaysAvailableCount
-    );
-  }, [advancedDraft, usageFeatureEnabled]);
-  const advancedDraftFeatureCount = useMemo(
     () =>
-      (Object.keys(advancedDraft.features) as FeatureKey[]).filter(
-        (key) => featureSupport[key] !== false && advancedDraft.features[key] !== "any"
-      ).length,
-    [advancedDraft, featureSupport]
+      buildBucketOpsAdvancedFilterUiProjection({
+        advancedApplied,
+        advancedDraft,
+        featureSupport,
+        isStorageOps,
+        quickFilterApplied: filterValue,
+        quickFilterDraft: filter,
+        usageFeatureEnabled,
+      }),
+    [
+      advancedApplied,
+      advancedDraft,
+      featureSupport,
+      filter,
+      filterValue,
+      isStorageOps,
+      usageFeatureEnabled,
+    ]
   );
-  const advancedDraftTagCount = s3TagsDraftExpressions.length;
-  const advancedDraftFeatureDetailCount = featureDetailDraftLabels.length;
-  const advancedDraftActiveCount =
-    advancedDraftIdentityCount + advancedDraftRangeCount + advancedDraftFeatureCount + advancedDraftTagCount + advancedDraftFeatureDetailCount;
   useEffect(() => {
     if (showAdvancedFilter && !advancedFilterWasOpenRef.current) {
       setAdvancedFilterSecondarySections(
@@ -4188,83 +4096,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     advancedFilterWasOpenRef.current = showAdvancedFilter;
   }, [showAdvancedFilter, advancedDraftRangeCount, advancedDraftFeatureCount, advancedDraftFeatureDetailCount]);
-  const multipleFeatureFiltersActive = advancedDraftFeatureCount > 1;
-  const featureCostReducedByPrefilter =
-    advancedDraftFeatureCount === 1 && ownerPrefilterActive && !ownerNameLookupActive && !s3TagsLookupActive;
-  const advancedDraftGlobalCostLevel: FilterCostLevel = useMemo(() => {
-    if (featureDetailFiltersActive) return "high";
-    if (s3TagsLookupActive) return "high";
-    if (advancedDraftFeatureCount > 0) {
-      if (multipleFeatureFiltersActive) return "high";
-      return featureCostReducedByPrefilter ? "medium" : "high";
-    }
-    if (ownerNameLookupActive) return "medium";
-    if (ownerSuspendedLookupActive) return "medium";
-    if (ownerQuotaLookupActive) return "medium";
-    if (ownerUsageLookupActive) return "medium";
-    if (advancedDraftRangeCount > 0) return "medium";
-    if (advancedDraftIdentityCount > 0) return "low";
-    return "none";
-  }, [
-    advancedDraftFeatureCount,
-    advancedDraftRangeCount,
-    advancedDraftIdentityCount,
-    ownerNameLookupActive,
-    ownerSuspendedLookupActive,
-    ownerQuotaLookupActive,
-    ownerUsageLookupActive,
-    s3TagsLookupActive,
-    featureCostReducedByPrefilter,
-    multipleFeatureFiltersActive,
-    featureDetailFiltersActive,
-  ]);
-  const advancedDraftGlobalCostTooltip = useMemo(() => {
-    if (advancedDraftGlobalCostLevel === "high") {
-      if (featureDetailFiltersActive) {
-        return `${FILTER_COST_LABEL.high}: feature detail filters require additional per-bucket configuration reads.`;
-      }
-      if (s3TagsLookupActive) {
-        return `${FILTER_COST_LABEL.high}: S3 tag filters require bucket tag retrieval.`;
-      }
-      if (multipleFeatureFiltersActive) {
-        return `${FILTER_COST_LABEL.high}: ${advancedDraftFeatureCount} feature-state filters are active, which increases per-bucket checks even with prefilters.`;
-      }
-      return `${FILTER_COST_LABEL.high}: feature-state filters are active and may require additional checks.`;
-    }
-    if (advancedDraftGlobalCostLevel === "medium") {
-      if (ownerNameLookupActive) {
-        return `${FILTER_COST_LABEL.medium}: owner-name filters require owner identity lookups.`;
-      }
-      if (ownerSuspendedLookupActive) {
-        return `${FILTER_COST_LABEL.medium}: owner-suspended filters require owner status lookups.`;
-      }
-      if (ownerQuotaLookupActive && !ownerUsageLookupActive) {
-        return `${FILTER_COST_LABEL.medium}: owner quota filters require owner metadata lookups.`;
-      }
-      if (ownerUsageLookupActive) {
-        return `${FILTER_COST_LABEL.medium}: owner usage filters require owner metadata lookups and bucket stats.`;
-      }
-      if (featureCostReducedByPrefilter) {
-        return `${FILTER_COST_LABEL.medium}: feature-state filters are active, but owner/tenant prefilters reduce buckets to inspect.`;
-      }
-      return `${FILTER_COST_LABEL.medium}: usage/quota filters are active and require stats retrieval.`;
-    }
-    if (advancedDraftGlobalCostLevel === "low") {
-      return `${FILTER_COST_LABEL.low}: identity filters use already available bucket fields.`;
-    }
-    return FILTER_COST_LABEL.none;
-  }, [
-    advancedDraftGlobalCostLevel,
-    ownerNameLookupActive,
-    ownerSuspendedLookupActive,
-    ownerQuotaLookupActive,
-    ownerUsageLookupActive,
-    s3TagsLookupActive,
-    featureCostReducedByPrefilter,
-    multipleFeatureFiltersActive,
-    advancedDraftFeatureCount,
-    featureDetailFiltersActive,
-  ]);
   const toggleQuickFilterMode = () => {
     if (quickFilterDraftForcesExact) return;
     setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
@@ -6357,12 +6188,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       const minDraft = advancedDraft[row.minId].trim();
                                       const maxApplied = (advancedApplied?.[row.maxId] ?? "").trim();
                                       const maxDraft = advancedDraft[row.maxId].trim();
-                                      const rowState = fieldHighlight(
+                                      const rowState = buildAdvancedFilterFieldState(
                                         Boolean(minApplied || maxApplied),
                                         minDraft !== minApplied || maxDraft !== maxApplied
                                       );
-                                      const minState = fieldHighlight(Boolean(minApplied), minDraft !== minApplied);
-                                      const maxState = fieldHighlight(Boolean(maxApplied), maxDraft !== maxApplied);
+                                      const minState = buildAdvancedFilterFieldState(Boolean(minApplied), minDraft !== minApplied);
+                                      const maxState = buildAdvancedFilterFieldState(Boolean(maxApplied), maxDraft !== maxApplied);
                                       return (
                                         <div key={`${section.title}:${row.label}`}>
                                           <label className={`ui-caption font-medium text-slate-600 dark:text-slate-300 ${rowState.labelClass}`}>{row.label}</label>
@@ -6419,7 +6250,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                   const draftValue = advancedDraft.features[feature.id];
                                   const state = disabled
                                     ? { labelClass: "", fieldClass: "" }
-                                    : fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
+                                    : buildAdvancedFilterFieldState(appliedValue !== "any", draftValue !== appliedValue);
                                   return (
                                     <div
                                       key={feature.id}
