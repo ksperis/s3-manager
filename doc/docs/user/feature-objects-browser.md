@@ -54,6 +54,9 @@ Select the execution context before choosing a bucket. The same bucket name may 
 - Long-running bulk actions surface in **Operations overview**, where queued, active, completed, and failed work stays visible without leaving Browser.
 - `More` remains available in embedded Manager, Ceph Admin, and Portal Browser
   surfaces, where profile and resolved capability facts decide the visible set.
+- On the main `/browser` page, `More > View` lets every user choose Comfortable
+  or Compact density independently of the Standard, Advanced, or Portal
+  functional profile. The choice is stored for the root Browser only.
 - Object columns available from `More > Columns` include base listing columns such as `Size`, `Modified`, `Storage class`, and `ETag`, plus lazy detail columns such as `Content-Type`, `Tags`, `Metadata`, `Cache-Control`, `Expires`, and `Restore status`.
 - Custom column widths are stored locally in the current browser and stay separate between the main `/browser` page and embedded browser surfaces.
 - `Reset columns` restores both the default visible columns and the default widths.

@@ -35,9 +35,9 @@ import {
 } from "./browserConstants";
 import {
   ChevronDownIcon,
+  CompactIcon,
   CopyIcon,
   DownloadIcon,
-  EyeIcon,
   FolderIcon,
   FolderPlusIcon,
   HistoryIcon,
@@ -101,10 +101,13 @@ type BrowserToolbarProps = {
   };
   menuResetKey: string;
   moreMenu: {
+    view?: {
+      compactMode: boolean;
+      onSetCompactMode: (compact: boolean) => void;
+    };
     status: {
       visible: boolean;
       accessBadge: BrowserTransferAccessBadge | null;
-      viewLabel?: string;
       operationsCount?: number;
       onOpenOperations: () => void;
     };
@@ -156,6 +159,7 @@ export default function BrowserToolbar({
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
 
+  const hasViewSection = Boolean(moreMenu.view);
   const hasStatusSection = moreMenu.status.visible;
   const hasLayoutSection = Boolean(
     moreMenu.layout.folders ||
@@ -169,6 +173,7 @@ export default function BrowserToolbar({
   const hasSecondaryActionsSection =
     hasPathActions || hasSelectionActions || Boolean(sse);
   const hasMoreMenu =
+    hasViewSection ||
     hasStatusSection ||
     hasLayoutSection ||
     hasColumnsSection ||
@@ -434,8 +439,61 @@ export default function BrowserToolbar({
             aria-label="More"
             className="max-h-[min(70vh,28rem)] overflow-y-auto"
           >
+            {moreMenu.view && (
+              <>
+                <p className={overflowSectionTitleClasses}>View</p>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={!moreMenu.view.compactMode}
+                  className={contextMenuItemClasses}
+                  onClick={() =>
+                    runMoreAction(() =>
+                      moreMenu.view?.onSetCompactMode(false),
+                    )
+                  }
+                >
+                  <ListIcon className="h-3.5 w-3.5" />
+                  Comfortable density
+                  {!moreMenu.view.compactMode && (
+                    <span
+                      aria-hidden="true"
+                      className="ml-auto text-primary-600 dark:text-primary-300"
+                    >
+                      ✓
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={moreMenu.view.compactMode}
+                  className={contextMenuItemClasses}
+                  onClick={() =>
+                    runMoreAction(() =>
+                      moreMenu.view?.onSetCompactMode(true),
+                    )
+                  }
+                >
+                  <CompactIcon className="h-3.5 w-3.5" />
+                  Compact density
+                  {moreMenu.view.compactMode && (
+                    <span
+                      aria-hidden="true"
+                      className="ml-auto text-primary-600 dark:text-primary-300"
+                    >
+                      ✓
+                    </span>
+                  )}
+                </button>
+              </>
+            )}
+
             {hasStatusSection && (
               <>
+                {hasViewSection && (
+                  <div className={contextMenuSeparatorClasses} />
+                )}
                 <p className={overflowSectionTitleClasses}>Status</p>
                 {moreMenu.status.accessBadge && (
                   <div
@@ -460,19 +518,6 @@ export default function BrowserToolbar({
                       </div>
                       <p className="text-slate-500 dark:text-slate-400">
                         {moreMenu.status.accessBadge.title}
-                      </p>
-                    </div>
-                  </div>
-                )}
-                {moreMenu.status.viewLabel && (
-                  <div className={overflowStatusRowClasses}>
-                    <EyeIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-slate-700 dark:text-slate-100">
-                        View
-                      </p>
-                      <p className="text-slate-500 dark:text-slate-400">
-                        {moreMenu.status.viewLabel}
                       </p>
                     </div>
                   </div>
@@ -506,7 +551,7 @@ export default function BrowserToolbar({
 
             {hasLayoutSection && (
               <>
-                {hasStatusSection && (
+                {(hasViewSection || hasStatusSection) && (
                   <div className={contextMenuSeparatorClasses} />
                 )}
                 <p className={overflowSectionTitleClasses}>Layout</p>
@@ -536,7 +581,7 @@ export default function BrowserToolbar({
 
             {moreMenu.columns && (
               <>
-                {(hasStatusSection || hasLayoutSection) && (
+                {(hasViewSection || hasStatusSection || hasLayoutSection) && (
                   <div className={contextMenuSeparatorClasses} />
                 )}
                 <p className={overflowSectionTitleClasses}>Columns</p>
@@ -577,6 +622,7 @@ export default function BrowserToolbar({
             {hasSecondaryActionsSection && (
               <>
                 {(hasStatusSection ||
+                  hasViewSection ||
                   hasLayoutSection ||
                   hasColumnsSection) && (
                   <div className={contextMenuSeparatorClasses} />

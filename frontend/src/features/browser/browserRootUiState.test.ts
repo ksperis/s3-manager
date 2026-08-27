@@ -28,6 +28,7 @@ describe("browserRootUiState v2", () => {
 
     expect(readStoredBrowserRootUiState()).toBeNull();
     expect(readBrowserRootUiState().activeLayout).toBe("standard");
+    expect(readBrowserRootUiState().density).toBe("compact");
     expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY)).toBeNull();
   });
 

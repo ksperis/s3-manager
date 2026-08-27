@@ -90,7 +90,8 @@ type BrowserContextMenuProps = {
   onOpenItem: (item: BrowserItem) => void;
   onToggleShowFolders: () => void;
   onToggleShowDeleted: () => void;
-  isMainBrowserPath?: boolean;
+  canConfigureDensity?: boolean;
+  canConfigureColumns?: boolean;
   compactMode?: boolean;
   onSetCompactMode?: (value: boolean) => void;
   columnOptions?: HeaderConfigColumnOption[];
@@ -140,7 +141,8 @@ export default function BrowserContextMenu({
   onOpenItem,
   onToggleShowFolders,
   onToggleShowDeleted,
-  isMainBrowserPath = false,
+  canConfigureDensity = false,
+  canConfigureColumns = false,
   compactMode = true,
   onSetCompactMode,
   columnOptions = [],
@@ -306,74 +308,95 @@ export default function BrowserContextMenu({
       className="fixed z-50 min-w-[220px] max-h-[calc(100vh-16px)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
       style={{ left: contextMenu.x, top: contextMenu.y }}
     >
-      {contextMenu.kind === "headerConfig" && isMainBrowserPath && (
+      {contextMenu.kind === "headerConfig" &&
+        (canConfigureDensity || canConfigureColumns) && (
         <>
-          <p className="px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-400">View</p>
-          <button
-            type="button"
-            className={contextMenuItemClasses}
-            onClick={() => {
-              onSetCompactMode?.(true);
-            }}
-            disabled={!onSetCompactMode}
-          >
-            <CompactIcon className="h-3.5 w-3.5" />
-            Compact view
-            {compactMode && (
-              <span className="ml-auto rounded-full bg-primary-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-700 dark:bg-primary-500/20 dark:text-primary-100">
-                Active
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            className={contextMenuItemClasses}
-            onClick={() => {
-              onSetCompactMode?.(false);
-            }}
-            disabled={!onSetCompactMode}
-          >
-            <ListIcon className="h-3.5 w-3.5" />
-            List view
-            {!compactMode && (
-              <span className="ml-auto rounded-full bg-primary-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-700 dark:bg-primary-500/20 dark:text-primary-100">
-                Active
-              </span>
-            )}
-          </button>
-          <div className={contextMenuSeparatorClasses} />
-          <p className="px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-400">Columns</p>
-          {columnOptions.map((column) => {
-            const checked = visibleColumns?.has(column.id) ?? false;
-            return (
+          {canConfigureDensity && (
+            <>
+              <p className="px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-400">View</p>
               <button
-                key={column.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={!compactMode}
+                className={contextMenuItemClasses}
+                onClick={() => {
+                  onSetCompactMode?.(false);
+                }}
+                disabled={!onSetCompactMode}
+              >
+                <ListIcon className="h-3.5 w-3.5" />
+                Comfortable density
+                {!compactMode && (
+                  <span
+                    aria-hidden="true"
+                    className="ml-auto rounded-full bg-primary-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-700 dark:bg-primary-500/20 dark:text-primary-100"
+                  >
+                    Active
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={compactMode}
+                className={contextMenuItemClasses}
+                onClick={() => {
+                  onSetCompactMode?.(true);
+                }}
+                disabled={!onSetCompactMode}
+              >
+                <CompactIcon className="h-3.5 w-3.5" />
+                Compact density
+                {compactMode && (
+                  <span
+                    aria-hidden="true"
+                    className="ml-auto rounded-full bg-primary-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-700 dark:bg-primary-500/20 dark:text-primary-100"
+                  >
+                    Active
+                  </span>
+                )}
+              </button>
+            </>
+          )}
+          {canConfigureColumns && (
+            <>
+              {canConfigureDensity && (
+                <div className={contextMenuSeparatorClasses} />
+              )}
+              <p className="px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-400">Columns</p>
+              {columnOptions.map((column) => {
+                const checked = visibleColumns?.has(column.id) ?? false;
+                return (
+                  <button
+                    key={column.id}
+                    type="button"
+                    className={contextMenuItemClasses}
+                    onClick={() => {
+                      onToggleVisibleColumn?.(column.id);
+                    }}
+                    disabled={!onToggleVisibleColumn}
+                  >
+                    <span className="inline-flex h-3.5 w-3.5 items-center justify-center text-[11px] font-bold">
+                      {checked ? "✓" : ""}
+                    </span>
+                    {column.label}
+                  </button>
+                );
+              })}
+              <div className={contextMenuSeparatorClasses} />
+              <button
                 type="button"
                 className={contextMenuItemClasses}
                 onClick={() => {
-                  onToggleVisibleColumn?.(column.id);
+                  onResetVisibleColumns?.();
                 }}
-                disabled={!onToggleVisibleColumn}
+                disabled={!onResetVisibleColumns}
               >
-                <span className="inline-flex h-3.5 w-3.5 items-center justify-center text-[11px] font-bold">
-                  {checked ? "✓" : ""}
-                </span>
-                {column.label}
+                <SlidersIcon className="h-3.5 w-3.5" />
+                Reset columns
               </button>
-            );
-          })}
-          <div className={contextMenuSeparatorClasses} />
-          <button
-            type="button"
-            className={contextMenuItemClasses}
-            onClick={() => {
-              onResetVisibleColumns?.();
-            }}
-            disabled={!onResetVisibleColumns}
-          >
-            <SlidersIcon className="h-3.5 w-3.5" />
-            Reset columns
-          </button>
+            </>
+          )}
         </>
       )}
       {contextMenu.kind === "path" && (

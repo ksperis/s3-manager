@@ -115,7 +115,7 @@ const normalizeContextSelections = (value: unknown): Record<string, BrowserRootU
 const createDefaultState = (): BrowserRootUiState =>
   ({
     activeLayout: "standard",
-    density: "comfortable",
+    density: "compact",
     layouts: {
       standard: createModeState(null, { showFolders: false, showInspector: false }),
       workbench: createModeState(null, { showFolders: true, showInspector: true }),
@@ -126,7 +126,7 @@ const createDefaultState = (): BrowserRootUiState =>
 const normalizeV2State = (value: unknown): BrowserRootUiState | null => {
   if (!isRecord(value)) return null;
   const activeLayout: BrowserLayoutMode = value.activeLayout === "workbench" ? "workbench" : "standard";
-  const density: BrowserDensity = value.density === "compact" ? "compact" : "comfortable";
+  const density: BrowserDensity = value.density === "comfortable" ? "comfortable" : "compact";
   const layouts = isRecord(value.layouts) ? value.layouts : {};
   return {
     activeLayout,

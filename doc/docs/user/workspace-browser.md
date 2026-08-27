@@ -58,9 +58,14 @@ Use **Browser** for direct bucket/object operations.
 - `/browser` uses the Standard profile when advanced features are disabled.
   Enabling **Advanced Browser actions and Workbench** adds technical S3 actions
   and allows either the Standard or Workbench layout; it does not force
-  Workbench. Manager and Ceph Admin embeds use Advanced actions in a compact
-  Standard layout, while Portal uses its dedicated compact Portal profile.
-- Layout, density, panels, and column preferences belong only to `/browser`.
+  Workbench or a particular density. On `/browser`, every user can choose
+  **Comfortable density** or **Compact density** from **More > View**. The
+  saved choice is shared across Standard, Advanced, and Portal contexts, and a
+  user without a saved choice starts in Compact density. Manager and Ceph Admin
+  embeds use Advanced actions in a compact Standard layout, while the locked
+  Portal embed uses its dedicated Portal profile with comfortable density.
+- Layout, panels, and column preferences belong only to `/browser`. Its density
+  preference is also root-only and independent of the functional profile.
   Embedded Browser surfaces receive these settings explicitly and never read or
   write the root Browser preferences.
 - On `/browser`, buckets that cannot be listed are dimmed in the left panel and remain selectable so the backend error can be inspected explicitly.

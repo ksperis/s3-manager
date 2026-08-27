@@ -323,7 +323,13 @@ function renderPageElement({
           layoutMode={
             defaultShowInspector || defaultShowFolders ? "workbench" : undefined
           }
-          density={initialEntry === "/browser" ? undefined : "compact"}
+          density={
+            initialEntry === "/browser"
+              ? undefined
+              : functionalProfile === "portal"
+                ? "comfortable"
+                : "compact"
+          }
           capabilityFacts={
             functionalProfile === "portal"
               ? {
@@ -456,7 +462,7 @@ function seedBrowserRootUiState(value: unknown) {
     BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY,
     JSON.stringify({
       activeLayout,
-      density: "compact",
+      density: record.density === "comfortable" ? "comfortable" : "compact",
       layouts: {
         standard: {
           objectColumns: record.objectColumns,
@@ -947,6 +953,11 @@ describe("BrowserPage interactions", () => {
     const browserView = renderPage({ initialEntry: "/browser" });
     await findRowByLabel("a.txt");
     const mainMenu = openHeaderConfigMenu();
+    expect(
+      within(mainMenu).getByRole("menuitemradio", {
+        name: "Compact density",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
     expect(within(mainMenu).getByText("Reset columns")).toBeInTheDocument();
     browserView.unmount();
 
@@ -954,10 +965,11 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
     openHeaderConfigMenu();
     expect(screen.queryByText("Reset columns")).not.toBeInTheDocument();
-    expect(screen.queryByText("Compact view")).not.toBeInTheDocument();
+    expect(screen.queryByText("Compact density")).not.toBeInTheDocument();
   });
 
   it("uses manager-equivalent chrome on /browser when advanced Browser access is disabled", async () => {
+    const user = userEvent.setup();
     setSessionUserCache({
       id: 42,
       role: "ui_user",
@@ -972,7 +984,19 @@ describe("BrowserPage interactions", () => {
 
     const mainMenu = openHeaderConfigMenu();
     expect(within(mainMenu).queryByText("Reset columns")).not.toBeInTheDocument();
-    expect(within(mainMenu).queryByText("Compact view")).not.toBeInTheDocument();
+    expect(
+      within(mainMenu).getByRole("menuitemradio", {
+        name: "Compact density",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    const moreMenu = await openContextMoreMenu(user);
+    await user.click(
+      within(moreMenu).getByRole("menuitemradio", {
+        name: "Comfortable density",
+      }),
+    );
+    expect(await findRowByLabel("a.txt")).toHaveClass("h-16");
     expect(screen.queryByRole("button", { name: "Create bucket" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("tablist", { name: "Inspector tabs" }),
@@ -1014,10 +1038,10 @@ describe("BrowserPage interactions", () => {
     });
 
     const rowA = await findRowByLabel("a.txt");
-    expect(rowA).toHaveClass("h-9");
+    expect(rowA).toHaveClass("h-16");
     expect(
       within(rowA).getByRole("button", { name: "Open file a.txt" }),
-    ).not.toHaveClass("min-h-11");
+    ).toHaveClass("min-h-11");
     for (const actionName of [
       "Download a.txt",
       "Delete a.txt",
@@ -1025,7 +1049,7 @@ describe("BrowserPage interactions", () => {
     ]) {
       expect(
         within(rowA).getByRole("button", { name: actionName }),
-      ).toHaveClass("!h-6", "!w-6");
+      ).not.toHaveClass("!h-6", "!w-6");
     }
     expect(
       screen.getByRole("button", { name: "Selected storage space" }),
@@ -1385,7 +1409,22 @@ describe("BrowserPage interactions", () => {
     ).not.toHaveClass("min-h-11");
     const headerConfigMenu = openHeaderConfigMenu();
     expect(
-      within(headerConfigMenu).queryByText("Compact view"),
+      within(headerConfigMenu).getByRole("menuitemradio", {
+        name: "Compact density",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(within(headerConfigMenu).queryByText("Reset columns")).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    const moreMenu = await openContextMoreMenu(user);
+    expect(
+      within(moreMenu).getByRole("menuitemradio", {
+        name: "Compact density",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      within(moreMenu).queryByRole("menuitemcheckbox", {
+        name: "Workbench layout",
+      }),
     ).not.toBeInTheDocument();
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", { workspaceSurface: "portal" });
@@ -1423,10 +1462,10 @@ describe("BrowserPage interactions", () => {
       const selectA = within(rowA).getByRole("checkbox", {
         name: "Select a.txt",
       });
-      expect(rowA).toHaveClass("h-16");
+      expect(rowA).toHaveClass("h-9");
       expect(
         within(rowA).getByRole("button", { name: "Download a.txt" }),
-      ).not.toHaveClass("!h-6", "!w-6");
+      ).toHaveClass("!h-6", "!w-6");
       expect(selectA).not.toBeChecked();
       expect(
         within(rowA).queryByRole("button", {
@@ -2055,24 +2094,28 @@ describe("BrowserPage interactions", () => {
     renderPage();
 
     let rowA = await findRowByLabel("a.txt");
-    expect(rowA).toHaveClass("h-16");
+    expect(rowA).toHaveClass("h-9");
     expect(
       within(rowA).getByRole("button", { name: "Open file a.txt" }),
-    ).toHaveClass("min-h-11");
-    expect(within(rowA).getByText("Object")).toBeInTheDocument();
-
-    let menu = openHeaderConfigMenu();
-    await user.click(within(menu).getByRole("button", { name: "Compact view" }));
-    rowA = await findRowByLabel("a.txt");
-    expect(rowA).toHaveClass("h-9");
+    ).not.toHaveClass("min-h-11");
     expect(within(rowA).queryByText("Object")).not.toBeInTheDocument();
 
-    menu = openHeaderConfigMenu();
+    let menu = openHeaderConfigMenu();
     await user.click(
-      within(menu).getByRole("button", { name: "List view" }),
+      within(menu).getByRole("menuitemradio", {
+        name: "Comfortable density",
+      }),
     );
     rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-16");
+    expect(within(rowA).getByText("Object")).toBeInTheDocument();
+
+    menu = openHeaderConfigMenu();
+    await user.click(
+      within(menu).getByRole("menuitemradio", { name: "Compact density" }),
+    );
+    rowA = await findRowByLabel("a.txt");
+    expect(rowA).toHaveClass("h-9");
   });
 
   it("uses the compact browser toolbar by default and exposes upload and layout controls", async () => {
@@ -2154,7 +2197,9 @@ describe("BrowserPage interactions", () => {
     expect(
       within(menu).queryByRole("menuitem", { name: "Operations overview" }),
     ).not.toBeInTheDocument();
-    expect(within(menu).getByText("List view")).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitemradio", { name: "Compact density" }),
+    ).toHaveAttribute("aria-checked", "true");
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
     expect(within(menu).getByText("Current path")).toBeInTheDocument();
     expect(
@@ -3893,7 +3938,7 @@ describe("BrowserPage interactions", () => {
     );
     const menu = await screen.findByRole("menu", { name: "More" });
 
-    expect(within(menu).queryByText("Compact view")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Compact density")).not.toBeInTheDocument();
     expect(within(menu).getByText("Current path")).toBeInTheDocument();
     expect(
       within(menu).getByRole("menuitem", { name: "Copy path" }),

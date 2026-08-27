@@ -201,6 +201,10 @@ describe("BrowserToolbar", () => {
     const onOpenSse = vi.fn();
     const props = buildProps({
       moreMenu: {
+        view: {
+          compactMode: true,
+          onSetCompactMode: vi.fn(),
+        },
         status: {
           visible: true,
           accessBadge: {
@@ -209,7 +213,6 @@ describe("BrowserToolbar", () => {
             tone: "success",
             indicatorClassName: "indicator",
           },
-          viewLabel: "Compact view",
           operationsCount: 2,
           onOpenOperations,
         },
@@ -237,7 +240,14 @@ describe("BrowserToolbar", () => {
     fireEvent.click(screen.getByRole("button", { name: "More" }));
     const menu = screen.getByRole("menu", { name: "More" });
     expect(within(menu).getByText("STS")).toBeInTheDocument();
-    expect(within(menu).getByText("Compact view")).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitemradio", { name: "Compact density" }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      within(menu).getByRole("menuitemradio", {
+        name: "Comfortable density",
+      }),
+    ).toHaveAttribute("aria-checked", "false");
     expect(within(menu).getByText("Selection overflow")).toBeInTheDocument();
     expect(
       within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
@@ -283,5 +293,30 @@ describe("BrowserToolbar", () => {
     expect(props.onRunPathAction).toHaveBeenCalledWith("paste");
     expect(props.onRunSelectionAction).toHaveBeenCalledWith("copy");
     expect(onOpenSse).toHaveBeenCalledOnce();
+  });
+
+  it("routes the root Browser density choice from More", () => {
+    const onSetCompactMode = vi.fn();
+    render(
+      <BrowserToolbar
+        {...buildProps({
+          moreMenu: {
+            ...buildProps().moreMenu,
+            view: { compactMode: true, onSetCompactMode },
+          },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "More" })).getByRole(
+        "menuitemradio",
+        { name: "Comfortable density" },
+      ),
+    );
+
+    expect(onSetCompactMode).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("menu", { name: "More" })).not.toBeInTheDocument();
   });
 });

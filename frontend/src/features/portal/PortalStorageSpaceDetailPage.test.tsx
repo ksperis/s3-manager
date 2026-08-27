@@ -462,7 +462,7 @@ describe("PortalStorageSpaceDetailPage", () => {
       workspaceSurface: "portal",
       functionalProfile: "portal",
       layoutMode: "standard",
-      density: "compact",
+      density: "comfortable",
       capabilityFacts: {
         canWriteObjects: true,
         canDeleteObjects: true,

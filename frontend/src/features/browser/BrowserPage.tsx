@@ -300,7 +300,7 @@ export default function BrowserPage({
         : "standard");
   const initialLayoutMode: BrowserLayoutMode =
     layoutModeOverride ??
-    (isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled
+    (isMainBrowserPath && resolvedFunctionalProfile === "advanced"
       ? (initialStoredRootUiState?.activeLayout ?? "standard")
       : "standard");
   const initialRootUiLayout = isMainBrowserPath
@@ -450,15 +450,16 @@ export default function BrowserPage({
   const [inspectorTab, setInspectorTab] =
     useState<BrowserInspectorTab>("context");
   const {
-    canConfigure: canConfigureRootBrowserView,
+    canConfigure: canConfigureRootBrowserDensity,
     compactMode,
     setCompactMode,
   } = useBrowserDensity({
     densityOverride,
-    functionalProfile: resolvedFunctionalProfile,
     initialStoredDensity: initialStoredRootUiState?.density,
     isMainBrowserPath,
   });
+  const canConfigureRootBrowserColumns =
+    isMainBrowserPath && resolvedFunctionalProfile === "advanced";
   const rowActionTargetSizePx = compactMode
     ? COMPACT_ROW_ACTION_TARGET_SIZE_PX
     : COMFORTABLE_ROW_ACTION_TARGET_SIZE_PX;
@@ -722,7 +723,9 @@ export default function BrowserPage({
   );
   const isCephContext = effectiveContextEndpointProvider === "ceph";
   const showLayoutModeToggle =
-    showPanelToggles && isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled;
+    showPanelToggles &&
+    isMainBrowserPath &&
+    resolvedFunctionalProfile === "advanced";
   const bucketManagementEnabled =
     normalizedPath.endsWith("/browser") &&
     !isEmbeddedBrowserPath &&
@@ -2637,7 +2640,6 @@ export default function BrowserPage({
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
   const isActionBarVisible = selectedCount > 0;
   const isCompactToolbarMode = !isActionBarVisible;
-  const browserViewLabel = compactMode ? "Compact view" : "List view";
   const browserChromeShellClasses =
     "relative z-20 shrink-0 pb-2";
   const browserNoticeShellClasses = "shrink-0 pb-2";
@@ -2673,9 +2675,7 @@ export default function BrowserPage({
     canSelectionActions && toolbarSelectionActions.length > 0;
   const hasToolbarOperationsAction = hasOperationsPanelContent;
   const hasToolbarStatusSection =
-    (isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled) ||
-    Boolean(accessBadge) ||
-    hasToolbarOperationsAction;
+    Boolean(accessBadge) || hasToolbarOperationsAction;
   const hasToolbarColumnsSection = !isPortalProfile;
   const toolbarColumnsSummary = `${effectiveVisibleColumns.length}/${COLUMN_DEFINITIONS.length} visible`;
   const handleToolbarDownload = () => {
@@ -2821,10 +2821,15 @@ export default function BrowserPage({
               Array.from(selectedIds),
             ])}
             moreMenu={{
+              view: canConfigureRootBrowserDensity
+                ? {
+                    compactMode,
+                    onSetCompactMode: setCompactMode,
+                  }
+                : undefined,
               status: {
                 visible: hasToolbarStatusSection,
                 accessBadge,
-                viewLabel: isMainBrowserPath ? browserViewLabel : undefined,
                 operationsCount: hasToolbarOperationsAction
                   ? operationsPanelTotalCount
                   : undefined,
@@ -3233,7 +3238,8 @@ export default function BrowserPage({
         onOpenItem={handleOpenItem}
         onToggleShowFolders={toggleFolderItems}
         onToggleShowDeleted={toggleDeletedObjects}
-        isMainBrowserPath={canConfigureRootBrowserView}
+        canConfigureDensity={canConfigureRootBrowserDensity}
+        canConfigureColumns={canConfigureRootBrowserColumns}
         compactMode={compactMode}
         onSetCompactMode={setCompactMode}
         columnOptions={COLUMN_DEFINITIONS.map((column) => ({

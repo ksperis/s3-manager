@@ -1348,7 +1348,7 @@ export default function PortalStorageSpaceDetailPage() {
             workspaceSurface="portal"
             functionalProfile="portal"
             layoutMode="standard"
-            density="compact"
+            density="comfortable"
             capabilityFacts={{
               canWriteObjects: canModifyObjects,
               canDeleteObjects: canModifyObjects,

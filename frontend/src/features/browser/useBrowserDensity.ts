@@ -3,40 +3,27 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useState } from "react";
-import type {
-  BrowserDensity,
-  BrowserFunctionalProfile,
-} from "./browserActions";
+import type { BrowserDensity } from "./browserActions";
 import { writeBrowserRootDensity } from "./browserRootUiState";
 
 type UseBrowserDensityOptions = {
   densityOverride?: BrowserDensity;
-  functionalProfile: BrowserFunctionalProfile;
   initialStoredDensity?: BrowserDensity | null;
   isMainBrowserPath: boolean;
 };
 
 export function useBrowserDensity({
   densityOverride,
-  functionalProfile,
   initialStoredDensity,
   isMainBrowserPath,
 }: UseBrowserDensityOptions) {
-  const enforcedDensity: BrowserDensity | null =
-    isMainBrowserPath && functionalProfile !== "advanced"
-      ? functionalProfile === "portal"
-        ? "compact"
-        : "comfortable"
-      : null;
   const [selectedDensity, setSelectedDensity] = useState<BrowserDensity>(
     () =>
       densityOverride ??
-      enforcedDensity ??
-      (isMainBrowserPath ? (initialStoredDensity ?? "comfortable") : "compact"),
+      (isMainBrowserPath ? (initialStoredDensity ?? "compact") : "compact"),
   );
-  const density = densityOverride ?? enforcedDensity ?? selectedDensity;
-  const canConfigure =
-    isMainBrowserPath && functionalProfile === "advanced";
+  const density = densityOverride ?? selectedDensity;
+  const canConfigure = isMainBrowserPath && densityOverride === undefined;
 
   useEffect(() => {
     if (!canConfigure) return;
