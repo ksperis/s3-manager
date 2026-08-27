@@ -19,14 +19,7 @@ import UiButton from "../../components/ui/UiButton";
 import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
 import { uiLabelClass } from "../../components/ui/styles";
 import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
-
-export type BucketUiTagDraft = {
-  draftId: string;
-  label: string;
-  color_key: string;
-  scope: "standard";
-  visibility: BucketUiTagVisibility;
-};
+import type { BucketUiTagDraft } from "./bucketOpsRowTagModel";
 
 type ConfigurableBucketUiTag = BucketUiTagDefinition | BucketUiTagDraft;
 

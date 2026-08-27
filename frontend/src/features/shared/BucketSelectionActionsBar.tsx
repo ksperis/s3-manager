@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import Modal from "../../components/Modal";
 import UiActionMenu, { type UiActionMenuSection } from "../../components/ui/UiActionMenu";
@@ -24,9 +24,11 @@ import type {
   BucketUiTagDefinition,
   BucketUiTagDefinitionPatch,
 } from "../../api/bucketUiTags";
-import BucketUiTagSettingsBadge, {
+import BucketUiTagSettingsBadge from "./BucketUiTagSettingsBadge";
+import {
+  createBucketUiTagDrafts,
   type BucketUiTagDraft,
-} from "./BucketUiTagSettingsBadge";
+} from "./bucketOpsRowTagModel";
 
 type SelectionTagAction = "add" | "remove";
 type SelectionExportFormat = "text" | "csv" | "json";
@@ -96,6 +98,7 @@ export default function BucketSelectionActionsBar({
   const [dialog, setDialog] = useState<"tags" | "export" | null>(null);
   const [tagMode, setTagMode] = useState<SelectionTagAction>("add");
   const [customTagDrafts, setCustomTagDrafts] = useState<BucketUiTagDraft[]>([]);
+  const customTagDraftSequenceRef = useRef(0);
 
   if (selectedCount <= 0) return null;
 
@@ -277,16 +280,13 @@ export default function BucketSelectionActionsBar({
                     size="sm"
                     disabled={parsedSelectionTagAddInput.length === 0 || selectionTagActionLoading !== null}
                     onClick={() => {
-                      const stamp = Date.now();
+                      customTagDraftSequenceRef.current += 1;
                       setCustomTagDrafts((current) => [
                         ...current,
-                        ...parsedSelectionTagAddInput.map((label, index) => ({
-                          draftId: `${stamp}:${index}:${label}`,
-                          label,
-                          color_key: "neutral",
-                          scope: "standard" as const,
-                          visibility: "private" as const,
-                        })),
+                        ...createBucketUiTagDrafts(
+                          parsedSelectionTagAddInput,
+                          customTagDraftSequenceRef.current,
+                        ),
                       ]);
                       setSelectionTagAddInput("");
                     }}

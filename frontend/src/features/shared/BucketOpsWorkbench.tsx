@@ -52,7 +52,6 @@ import { listExecutionContexts, type ExecutionContext } from "../../api/executio
 import type { BucketIndexCheckTarget } from "../../api/bucketIndexCheck";
 import type {
   BucketUiTagDefinition,
-  BucketUiTagDefinitionPatch,
 } from "../../api/bucketUiTags";
 import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
 import {
@@ -87,11 +86,10 @@ import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
-import BucketUiTagSettingsBadge, {
-  type BucketUiTagDraft,
-} from "./BucketUiTagSettingsBadge";
+import BucketUiTagSettingsBadge from "./BucketUiTagSettingsBadge";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
+import { useBucketOpsRowTags } from "./useBucketOpsRowTags";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
 import {
@@ -102,6 +100,7 @@ import {
 import { loadBucketOpsBucketsByNames } from "./bucketOpsNamedBucketLoader";
 import { loadBucketOpsFilteredBuckets } from "./bucketOpsFilteredBucketLoader";
 import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
+import type { BucketUiTagDraft } from "./bucketOpsRowTagModel";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
@@ -621,11 +620,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [selectionExportLoading, setSelectionExportLoading] = useState<SelectionExportFormat | null>(null);
   const [cacheRefreshLoading, setCacheRefreshLoading] = useState(false);
   const [selectionActionProgress, setSelectionActionProgress] = useState<ActionProgressState | null>(null);
-  const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
-  const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
-  const [tagCreationDrafts, setTagCreationDrafts] = useState<
-    Record<string, BucketUiTagDraft[]>
-  >({});
   const {
     activeFeatureTooltipKey,
     activeOwnerTooltipKey,
@@ -785,8 +779,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setSelectionTagActionLoading(null);
     setSelectionTagAddInput("");
     setSelectionExportLoading(null);
-    setTagSuggestionBucket(null);
-    setTagDrafts({});
     setActiveTagsTooltipKey(null);
     const stored = loadBucketListState(bucketsStateStorageKey, selectedEndpointId);
     if (ownerQueryFilter) {
@@ -967,6 +959,26 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     extractError,
     listBuckets,
     streamBuckets,
+  });
+  const {
+    addExistingTagForBucket,
+    addTagDraftForBucket,
+    getRowTagProjection,
+    removeTagCreationDraft,
+    removeTagForBucket,
+    setTagSuggestionBucket,
+    stageTagsForBucket,
+    updateBucketUiTagDefinition,
+    updateTagCreationDraft,
+    updateTagDraft,
+  } = useBucketOpsRowTags({
+    availableUiTags,
+    extractError,
+    persistUiTagChanges,
+    persistUiTagDefinition,
+    refreshBuckets,
+    scopeKey: `${surface.mode}:${selectedEndpointId ?? ""}`,
+    setError,
   });
 
   useEffect(() => {
@@ -1253,10 +1265,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setShowConfigBackupModal(false);
   };
 
-  const updateTagDraft = (bucketKey: string, value: string) => {
-    setTagDrafts((prev) => ({ ...prev, [bucketKey]: value }));
-  };
-
   const addTagFilter = (tag: BucketUiTagDefinition) => {
     setTagFilters((prev) => (prev.includes(tag.id) ? prev : [...prev, tag.id]));
     setPage(1);
@@ -1265,92 +1273,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const removeTagFilter = (tagId: number) => {
     setTagFilters((prev) => prev.filter((item) => item !== tagId));
     setPage(1);
-  };
-
-  const stageTagsForBucket = (target: BucketTagTarget, raw: string) => {
-    const nextDrafts = parseUiTags(raw).map((label, index) => ({
-      draftId: `${Date.now()}:${index}:${label}`,
-      label,
-      color_key: "neutral",
-      scope: "standard" as const,
-      visibility: "private" as const,
-    }));
-    if (nextDrafts.length === 0) return;
-    setTagCreationDrafts((current) => ({
-      ...current,
-      [target.key]: [...(current[target.key] ?? []), ...nextDrafts],
-    }));
-    updateTagDraft(target.key, "");
-    setTagSuggestionBucket(null);
-  };
-
-  const updateTagCreationDraft = (
-    targetKey: string,
-    draftId: string,
-    changes: BucketUiTagDefinitionPatch
-  ) => {
-    setTagCreationDrafts((current) => ({
-      ...current,
-      [targetKey]: (current[targetKey] ?? []).map((draft) =>
-        draft.draftId === draftId ? { ...draft, ...changes } : draft
-      ),
-    }));
-  };
-
-  const removeTagCreationDraft = (targetKey: string, draftId: string) => {
-    setTagCreationDrafts((current) => ({
-      ...current,
-      [targetKey]: (current[targetKey] ?? []).filter(
-        (draft) => draft.draftId !== draftId
-      ),
-    }));
-  };
-
-  const addTagDraftForBucket = async (
-    target: BucketTagTarget,
-    draft: BucketUiTagDraft
-  ) => {
-    try {
-      await persistUiTagChanges([target], [draft], []);
-      removeTagCreationDraft(target.key, draft.draftId);
-      refreshBuckets();
-    } catch (err) {
-      setError(extractError(err));
-      refreshBuckets();
-    }
-  };
-
-  const updateBucketUiTagDefinition = async (
-    tag: BucketUiTagDefinition,
-    changes: BucketUiTagDefinitionPatch
-  ) => {
-    try {
-      await persistUiTagDefinition(tag.id, changes);
-      refreshBuckets();
-    } catch (err) {
-      setError(extractError(err));
-      refreshBuckets();
-    }
-  };
-
-  const addExistingTagForBucket = async (target: BucketTagTarget, tag: BucketUiTagDefinition) => {
-    try {
-      await persistUiTagChanges([target], [tag], []);
-      refreshBuckets();
-    } catch (err) {
-      setError(extractError(err));
-      refreshBuckets();
-    }
-  };
-
-  const removeTagForBucket = async (bucketTarget: BucketTagTarget, tag: BucketUiTagDefinition) => {
-    try {
-      await persistUiTagChanges([bucketTarget], [], [tag]);
-      refreshBuckets();
-    } catch (err) {
-      setError(extractError(err));
-      refreshBuckets();
-    }
   };
 
   const {
@@ -4104,19 +4026,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         </span>
       );
     }
-    const tags = (bucket.ui_tags ?? []).map(
-      (tag) => availableUiTags.find((definition) => definition.id === tag.id) ?? tag
-    );
-    const creationDrafts = tagCreationDrafts[bucketTarget.key] ?? [];
-    const draft = tagDrafts[bucketTarget.key] ?? "";
-    const normalizedDraft = draft.trim().toLowerCase();
-    const existingSet = new Set(tags.map((tag) => tag.id));
-    const suggestions = normalizedDraft
-      ? availableUiTags.filter(
-          (tag) => tag.label.toLowerCase().includes(normalizedDraft) && !existingSet.has(tag.id)
-        )
-      : availableUiTags.filter((tag) => !existingSet.has(tag.id));
-    const showSuggestions = tagSuggestionBucket === bucketTarget.key && suggestions.length > 0;
+    const {
+      creationDrafts,
+      draft,
+      showSuggestions,
+      suggestions,
+      tags,
+    } = getRowTagProjection(bucketTarget, bucket.ui_tags ?? []);
     return (
       <div className="group relative flex flex-wrap items-center gap-2">
         {tags.map((tag) => (
