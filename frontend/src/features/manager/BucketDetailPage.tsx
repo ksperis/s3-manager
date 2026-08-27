@@ -16,19 +16,12 @@ import {
 } from "../../components/ui/styles";
 import {
   Bucket,
-  BucketLifecycleConfig,
   BucketPublicAccessBlock,
-  deleteBucketLifecycle,
-  getBucketLifecycle,
   listBuckets,
-  putBucketLifecycle,
 } from "../../api/buckets";
 import {
-  deleteCephAdminBucketLifecycle,
-  getCephAdminBucketLifecycle,
   listCephAdminBucketObjects,
   listCephAdminBuckets,
-  putCephAdminBucketLifecycle,
 } from "../../api/cephAdmin";
 import {
   listObjects,
@@ -68,14 +61,12 @@ import {
   defaultCorsExample,
   defaultEncryptionExample,
   defaultNotificationTemplate,
-  jsonTextSignature,
-  isLifecycleSimpleDraftEmpty,
   resolveFeatureVisualState,
-  stableBucketJsonSignature,
   useBucketAccessLoggingController,
   useBucketAclController,
   useBucketCorsController,
   useBucketEncryptionController,
+  useBucketLifecycleController,
   useBucketNotificationsController,
   useBucketObjectLockController,
   useBucketPolicyController,
@@ -86,6 +77,14 @@ import {
   useBucketVersioningController,
   useBucketWebsiteController,
 } from "./bucketDetail";
+import {
+  describeLifecycleActions,
+  lifecycleFilterLabel,
+  lifecycleRuleId,
+  lifecycleRulePrefix,
+  lifecycleRuleStatus,
+  type LifecycleRuleRecord,
+} from "./bucketLifecycle";
 import {
   buildBucketDetailBreadcrumbs,
   resolveBucketDetailSurface,
@@ -173,29 +172,6 @@ type PropertySummary = {
   label: string;
   state: string;
   tone: PropertySummaryTone;
-};
-
-type SimpleLifecycleRule = {
-  id: string;
-  prefix: string;
-  expirationDays: string;
-  noncurrentDays: string;
-  multipartDays: string;
-  tagKey: string;
-  tagValue: string;
-  deleteExpiredMarkers: boolean;
-  status: "Enabled" | "Disabled";
-};
-
-type LifecycleRuleStatus = "Enabled" | "Disabled";
-type LifecycleTagFilter = { Key?: unknown; Value?: unknown };
-type LifecycleAndFilter = { Prefix?: unknown; Tags?: unknown };
-type LifecycleFilter = { Prefix?: unknown; Tag?: LifecycleTagFilter; And?: LifecycleAndFilter };
-type LifecycleRuleRecord = Record<string, unknown> & {
-  ID?: unknown;
-  Prefix?: unknown;
-  Status?: unknown;
-  Filter?: LifecycleFilter;
 };
 
 const publicAccessOptions: { key: keyof BucketPublicAccessBlock; label: string; description: string }[] = [
@@ -291,60 +267,6 @@ const defaultWebsiteRoutingRulesExample = `[
   }
 ]`;
 
-function randomLifecycleId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    try {
-      return `rule-${crypto.randomUUID()}`;
-    } catch {
-      // ignore and fallback
-    }
-  }
-  return `rule-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function lifecycleRuleId(rule: LifecycleRuleRecord): string | null {
-  return typeof rule.ID === "string" && rule.ID.trim() ? rule.ID.trim() : null;
-}
-
-function lifecycleRulePrefix(rule: LifecycleRuleRecord): string | null {
-  return typeof rule.Prefix === "string" && rule.Prefix.trim() ? rule.Prefix.trim() : null;
-}
-
-function lifecycleRuleStatus(rule: LifecycleRuleRecord): LifecycleRuleStatus {
-  return rule.Status === "Disabled" ? "Disabled" : "Enabled";
-}
-
-function lifecycleTagLabel(tag: LifecycleTagFilter): string | null {
-  if (typeof tag.Key !== "string" || !tag.Key.trim()) return null;
-  return `${tag.Key.trim()}=${typeof tag.Value === "string" ? tag.Value.trim() : ""}`;
-}
-
-function lifecycleFilterLabel(filter: LifecycleFilter | undefined): string {
-  if (!filter) return "-";
-  if (typeof filter.Prefix === "string" && filter.Prefix.trim()) {
-    return `Prefix: ${filter.Prefix.trim()}`;
-  }
-  if (filter.Tag) {
-    const tag = lifecycleTagLabel(filter.Tag);
-    if (tag) return `Tag: ${tag}`;
-  }
-  if (filter.And) {
-    const andPrefix =
-      typeof filter.And.Prefix === "string" && filter.And.Prefix.trim()
-        ? `Prefix: ${filter.And.Prefix.trim()}`
-        : "";
-    const tags = Array.isArray(filter.And.Tags)
-      ? filter.And.Tags
-          .filter((tag): tag is LifecycleTagFilter => Boolean(tag) && typeof tag === "object")
-          .map(lifecycleTagLabel)
-          .filter((tag): tag is string => Boolean(tag))
-      : [];
-    const andTags = tags.length > 0 ? `Tags: ${tags.join(", ")}` : "";
-    return [andPrefix, andTags].filter(Boolean).join(" · ") || "Combined filter";
-  }
-  return "-";
-}
-
 type BucketDetailPageProps = {
   mode?: BucketDetailMode;
   bucketNameOverride?: string;
@@ -386,28 +308,6 @@ export default function BucketDetailPage({
   const [showEncryptionExample, setShowEncryptionExample] = useState(false);
   const [showLifecycleJsonExample, setShowLifecycleJsonExample] = useState(false);
   const [showReplicationExample, setShowReplicationExample] = useState(false);
-  const [lifecycle, setLifecycle] = useState<BucketLifecycleConfig>({ rules: [] });
-  const [lifecycleText, setLifecycleText] = useState("[]");
-  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
-  const [lifecycleStatus, setLifecycleStatus] = useState<string | null>(null);
-  const [lifecycleLoading, setLifecycleLoading] = useState(false);
-  const [savingLifecycle, setSavingLifecycle] = useState(false);
-  const [lifecycleMode, setLifecycleMode] = useState<"simple" | "json">("json");
-  const [simpleLifecycleRules, setSimpleLifecycleRules] = useState<SimpleLifecycleRule[]>([
-    {
-      id: "",
-      prefix: "",
-      expirationDays: "",
-      noncurrentDays: "",
-      multipartDays: "",
-      tagKey: "",
-      tagValue: "",
-      deleteExpiredMarkers: false,
-      status: "Enabled",
-    },
-  ]);
-  const [simpleLifecycleWarning, setSimpleLifecycleWarning] = useState<string | null>(null);
-  const [showLifecycleEditor, setShowLifecycleEditor] = useState(false);
   const [pendingConfigurationDelete, setPendingConfigurationDelete] = useState<BucketConfigurationDeleteKind | null>(null);
 
   const [objects, setObjects] = useState<S3Object[]>([]);
@@ -712,6 +612,40 @@ export default function BucketDetailPage({
     enabled: hasContext && sseFeatureEnabled,
     endpointId,
   });
+  const {
+    addCleanupExample: addLifecycleCleanupExample,
+    addExpirationExample: addLifecycleExpirationExample,
+    addTransitionExample: addLifecycleTransitionExample,
+    deleteRule: deleteLifecycleRule,
+    dirty: lifecycleDirty,
+    editorVisible: showLifecycleEditor,
+    error: lifecycleError,
+    expirationDraft: lifecycleExpirationDraft,
+    hasRules: hasLifecycleRules,
+    load: loadLifecycle,
+    loading: lifecycleLoading,
+    mode: lifecycleMode,
+    ruleCount: lifecycleRuleCount,
+    rules: lifecycleRules,
+    save: saveLifecycle,
+    saving: savingLifecycle,
+    status: lifecycleStatus,
+    text: lifecycleText,
+    toggleEditor: toggleLifecycleEditor,
+    toggleRuleStatus: toggleLifecycleRuleStatus,
+    transitionDraft: lifecycleTransitionDraft,
+    updateExpirationDraft: updateLifecycleExpirationDraft,
+    updateMode: updateLifecycleMode,
+    updateText: updateLifecycleText,
+    updateTransitionDraft: updateLifecycleTransitionDraft,
+    warning: simpleLifecycleWarning,
+  } = useBucketLifecycleController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
   const snsFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.sns === true;
@@ -782,21 +716,6 @@ export default function BucketDetailPage({
   const versioningDisableBlocked = objectLockActive && versioningIsEnabled;
   const objectLockFormId = "bucket-object-lock-form";
   const quotaFormId = "bucket-quota-form";
-
-  const emptySimpleLifecycleRule = useCallback(
-    (): SimpleLifecycleRule => ({
-      id: "",
-      prefix: "",
-      expirationDays: "",
-      noncurrentDays: "",
-      multipartDays: "",
-      tagKey: "",
-      tagValue: "",
-      deleteExpiredMarkers: false,
-      status: "Enabled",
-    }),
-    []
-  );
 
   const refreshBucketMeta = useCallback(async () => {
     if (!bucketName || !hasContext) {
@@ -876,43 +795,6 @@ export default function BucketDetailPage({
   useEffect(() => {
     loadObjectLock();
   }, [loadObjectLock]);
-
-  const loadLifecycle = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setLifecycle({ rules: [] });
-      setLifecycleText("[]");
-      setSimpleLifecycleRules([emptySimpleLifecycleRule()]);
-      setSimpleLifecycleWarning(null);
-      return;
-    }
-    setLifecycleLoading(true);
-    setLifecycleError(null);
-    setLifecycleStatus(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketLifecycle(endpointId, bucketName)
-          : { rules: [] }
-        : await getBucketLifecycle(accountId, bucketName);
-      const rules = data.rules ?? [];
-      setLifecycle(data);
-      setLifecycleText(rules.length > 0 ? JSON.stringify(rules, null, 2) : "[]");
-      setSimpleLifecycleRules([emptySimpleLifecycleRule()]);
-      setSimpleLifecycleWarning(
-        rules.length > 0
-          ? "Rules already exist. Use JSON mode to edit them. The form below only adds a new rule."
-          : null
-      );
-    } catch (err) {
-      setLifecycle({ rules: [] });
-      setLifecycleText("");
-      setSimpleLifecycleRules([emptySimpleLifecycleRule()]);
-      setSimpleLifecycleWarning(null);
-      setLifecycleError(extractApiError(err, "Unable to load lifecycle rules."));
-    } finally {
-      setLifecycleLoading(false);
-    }
-  }, [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]);
 
   const loadObjects = useCallback(
     async (prefix: string) => {
@@ -1176,147 +1058,6 @@ export default function BucketDetailPage({
     return hasContext;
   }, [activeTab, canViewBucketMetrics, hasContext]);
 
-  const describeLifecycleActions = (rule: LifecycleRuleRecord): string => {
-    const actions: string[] = [];
-    const expiration = rule.Expiration as Record<string, unknown> | undefined;
-    if (expiration?.Days != null) {
-      actions.push(`Expire current objects after ${expiration.Days}d`);
-    }
-    if (expiration?.ExpiredObjectDeleteMarker) {
-      actions.push("Delete expired delete markers");
-    }
-    const noncurrentExp = rule.NoncurrentVersionExpiration as Record<string, unknown> | undefined;
-    if (noncurrentExp?.NoncurrentDays != null) {
-      actions.push(`Expire noncurrent versions after ${noncurrentExp.NoncurrentDays}d`);
-    }
-    const multipart = rule.AbortIncompleteMultipartUpload as Record<string, unknown> | undefined;
-    if (multipart?.DaysAfterInitiation != null) {
-      actions.push(`Abort incomplete multipart uploads after ${multipart.DaysAfterInitiation}d`);
-    }
-    const transitions = Array.isArray(rule.Transitions) ? rule.Transitions : [];
-    if (transitions.length > 0) {
-      actions.push(`Transitions (${transitions.length})`);
-    }
-    const noncurrentTransitions = Array.isArray(rule.NoncurrentVersionTransitions) ? rule.NoncurrentVersionTransitions : [];
-    if (noncurrentTransitions.length > 0) {
-      actions.push(`Noncurrent transitions (${noncurrentTransitions.length})`);
-    }
-    if (actions.length === 0) return "No actions detected";
-    return actions.join(" · ");
-  };
-
-  const persistLifecycleRules = useCallback(
-    async (rules: Record<string, unknown>[]) => {
-      if (!bucketName || !hasContext) return;
-      setSavingLifecycle(true);
-      setLifecycleError(null);
-      setLifecycleStatus(null);
-      try {
-        if (rules.length === 0) {
-          if (isCephAdmin) {
-            if (!endpointId) return;
-            await deleteCephAdminBucketLifecycle(endpointId, bucketName);
-          } else {
-            await deleteBucketLifecycle(accountId, bucketName);
-          }
-          setLifecycle({ rules: [] });
-          setLifecycleText("[]");
-          setSimpleLifecycleRules([emptySimpleLifecycleRule()]);
-          setSimpleLifecycleWarning(null);
-          setLifecycleStatus("Lifecycle deleted");
-        } else {
-          const saved = isCephAdmin
-            ? endpointId
-              ? await putCephAdminBucketLifecycle(endpointId, bucketName, rules)
-              : { rules }
-            : await putBucketLifecycle(accountId, bucketName, rules);
-          const normalized = saved.rules ?? rules;
-          setLifecycle({ rules: normalized });
-          setLifecycleText(JSON.stringify(normalized, null, 2));
-          setSimpleLifecycleRules([emptySimpleLifecycleRule()]);
-          setSimpleLifecycleWarning(
-            normalized.length > 0
-              ? "Rules already exist. Use JSON mode to edit them. The form below only adds a new rule."
-              : null
-          );
-          setLifecycleStatus("Lifecycle updated");
-        }
-      } catch (err) {
-        const message = extractApiError(err, "Invalid or unsaved lifecycle.");
-        setLifecycleError(message);
-      } finally {
-        setSavingLifecycle(false);
-      }
-    },
-    [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]
-  );
-
-  const updateLifecycleRules = async (updater: (rules: LifecycleRuleRecord[]) => LifecycleRuleRecord[]) => {
-    if (!bucketName || !hasContext) return;
-    const current = (lifecycle.rules ?? []) as LifecycleRuleRecord[];
-    const next = updater(current);
-    await persistLifecycleRules(next);
-    await loadLifecycle();
-  };
-
-  const deleteRuleAt = async (index: number) => {
-    await updateLifecycleRules((rules) => rules.filter((_, idx) => idx !== index));
-  };
-
-  const toggleRuleStatusAt = async (index: number) => {
-    await updateLifecycleRules((rules) =>
-      rules.map((rule, idx) => {
-        if (idx !== index) return rule;
-        const currentStatus = lifecycleRuleStatus(rule);
-        return { ...rule, Status: currentStatus === "Enabled" ? "Disabled" : "Enabled" };
-      })
-    );
-  };
-
-  const handleAddExampleRule = async (rule: LifecycleRuleRecord) => {
-    if (!bucketName || !hasContext) return;
-    try {
-      const current = lifecycle.rules ?? [];
-      const ruleWithId = { ...rule, ID: lifecycleRuleId(rule) ?? randomLifecycleId() };
-      const merged = [...current, ruleWithId];
-      setLifecycleMode("json");
-      setLifecycleText(JSON.stringify(merged, null, 2));
-      await persistLifecycleRules(merged);
-      setShowLifecycleEditor(true);
-    } catch {
-      setLifecycleError("Invalid or unreadable example.");
-    }
-  };
-
-  const addExpirationExampleRule = () => {
-    const currentDaysRaw = expireCurrentDays.trim();
-    const noncurrentDaysRaw = expireNoncurrentDays.trim();
-    if (!currentDaysRaw && !noncurrentDaysRaw) {
-      setLifecycleError("Provide current or noncurrent expiration days.");
-      return;
-    }
-
-    const rule: Record<string, unknown> = {
-      Status: "Enabled",
-      Filter: { Prefix: expirePrefix },
-    };
-    if (currentDaysRaw) {
-      rule.Expiration = { Days: Number(currentDaysRaw) };
-    }
-    if (noncurrentDaysRaw) {
-      rule.NoncurrentVersionExpiration = { NoncurrentDays: Number(noncurrentDaysRaw) };
-    }
-    void handleAddExampleRule(rule);
-  };
-
-  const [transitionCurrentDays, setTransitionCurrentDays] = useState("30");
-  const [transitionNoncurrentDays, setTransitionNoncurrentDays] = useState("60");
-  const [transitionStorageClass, setTransitionStorageClass] = useState("GLACIER");
-  const [transitionPrefix, setTransitionPrefix] = useState("");
-  const [expireCurrentDays, setExpireCurrentDays] = useState("");
-  const [expireNoncurrentDays, setExpireNoncurrentDays] = useState("90");
-  const [expirePrefix, setExpirePrefix] = useState("");
-
   const rowData: Row[] = useMemo(() => {
     const rows: Row[] = [];
     const normalizedPrefix = currentPrefix.endsWith("/") || currentPrefix === "" ? currentPrefix : `${currentPrefix}/`;
@@ -1353,24 +1094,7 @@ export default function BucketDetailPage({
     return null;
   }, [bucket?.owner, bucketAcl?.owner]);
 
-  const lifecycleRuleCount = lifecycle.rules?.length ?? 0;
-  const hasLifecycleRules = lifecycleRuleCount > 0;
   const replicationBlocked = !replicationFeatureEnabled;
-  const lifecycleJsonDraftSignature = jsonTextSignature(lifecycleText, lifecycle.rules ?? []);
-  const lifecycleJsonDirty = lifecycleJsonDraftSignature.signature !== stableBucketJsonSignature(lifecycle.rules ?? []);
-  const lifecycleSimpleDraft = simpleLifecycleRules[0] ?? {
-    id: "",
-    prefix: "",
-    expirationDays: "",
-    noncurrentDays: "",
-    multipartDays: "",
-    tagKey: "",
-    tagValue: "",
-    deleteExpiredMarkers: false,
-    status: "Enabled" as const,
-  };
-  const lifecycleSimpleDirty = !isLifecycleSimpleDraftEmpty(lifecycleSimpleDraft);
-  const lifecycleDirty = lifecycleMode === "json" ? lifecycleJsonDirty : lifecycleSimpleDirty;
   const versioningNotImplemented = isApiFeatureNotImplemented(versioningLoadError);
   const objectLockNotImplemented = isApiFeatureNotImplemented(objectLockLoadError);
   const lifecycleNotImplemented = isApiFeatureNotImplemented(lifecycleError);
@@ -1700,87 +1424,6 @@ export default function BucketDetailPage({
       if (pendingConfigurationDelete === "access-logging") await clearAccessLogging();
     } finally {
       setPendingConfigurationDelete(null);
-    }
-  };
-
-  const saveLifecycle = async () => {
-    if (!bucketName || !hasContext) return;
-    try {
-      let payloadRules: Record<string, unknown>[] = [];
-      if (lifecycleMode === "json") {
-        const parsed = lifecycleText.trim() ? JSON.parse(lifecycleText) : [];
-        if (!Array.isArray(parsed)) {
-          throw new Error("JSON must be an array of rules.");
-        }
-        payloadRules = parsed as Record<string, unknown>[];
-      } else {
-        const rule = simpleLifecycleRules[0];
-        const hasExpiration = rule.expirationDays.trim() !== "";
-        const hasNoncurrent = rule.noncurrentDays.trim() !== "";
-        const hasMultipart = rule.multipartDays.trim() !== "";
-        const hasDeleteMarkers = rule.deleteExpiredMarkers;
-        if (!hasExpiration && !hasNoncurrent && !hasMultipart && !hasDeleteMarkers) {
-          throw new Error("Add at least one action (expiration, noncurrent, multipart, delete marker).");
-        }
-        if (hasDeleteMarkers && (hasExpiration || hasNoncurrent || hasMultipart)) {
-          throw new Error("Deleting markers cannot be combined with other actions in simple mode.");
-        }
-
-        const tagKey = rule.tagKey.trim();
-        const tagValue = rule.tagValue.trim();
-        if ((tagKey && !tagValue) || (!tagKey && tagValue)) {
-          throw new Error("Fill both the tag key and value or leave both empty.");
-        }
-
-        const days = hasExpiration ? Number(rule.expirationDays) : null;
-        const noncurrentDays = hasNoncurrent ? Number(rule.noncurrentDays) : null;
-        const multipartDays = hasMultipart ? Number(rule.multipartDays) : null;
-        if ((days !== null && (Number.isNaN(days) || days <= 0)) || (noncurrentDays !== null && (Number.isNaN(noncurrentDays) || noncurrentDays <= 0))) {
-          throw new Error("Invalid expiration duration: provide a number of days > 0.");
-        }
-        if (multipartDays !== null && (Number.isNaN(multipartDays) || multipartDays <= 0)) {
-          throw new Error("Multipart upload duration must be > 0.");
-        }
-
-        const filterPrefix = rule.prefix ?? "";
-        let filter: Record<string, unknown> | undefined;
-        if (tagKey && tagValue && filterPrefix) {
-          filter = { And: { Prefix: filterPrefix, Tags: [{ Key: tagKey, Value: tagValue }] } };
-        } else if (tagKey && tagValue) {
-          filter = { Tag: { Key: tagKey, Value: tagValue } };
-        } else if (filterPrefix) {
-          filter = { Prefix: filterPrefix };
-        } else {
-          filter = { Prefix: "" };
-        }
-
-        const normalized: Record<string, unknown> = {
-          Status: rule.status,
-          Filter: filter,
-        };
-        if (days !== null) {
-          normalized.Expiration = { Days: days };
-        }
-        if (noncurrentDays !== null) {
-          normalized.NoncurrentVersionExpiration = { NoncurrentDays: noncurrentDays };
-        }
-        if (multipartDays !== null) {
-          normalized.AbortIncompleteMultipartUpload = { DaysAfterInitiation: multipartDays };
-        }
-        if (hasDeleteMarkers) {
-          normalized.Expiration = { ExpiredObjectDeleteMarker: true };
-        }
-        if (rule.id.trim()) {
-          normalized.ID = rule.id.trim();
-        }
-
-        const existing = lifecycle.rules ?? [];
-        payloadRules = [...existing, normalized];
-      }
-      await persistLifecycleRules(payloadRules);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Invalid or unsaved lifecycle.";
-      setLifecycleError(message);
     }
   };
 
@@ -2326,10 +1969,10 @@ export default function BucketDetailPage({
                       className="order-4 md:order-none md:col-span-2 md:col-start-1 md:row-start-3"
                       actions={
                         <div className="flex items-center gap-2">
-                          <span className={bucketDetailHintClass}>{(lifecycle.rules ?? []).length} rule(s)</span>
+                          <span className={bucketDetailHintClass}>{lifecycleRuleCount} rule(s)</span>
                           <button
                             type="button"
-                            onClick={() => setShowLifecycleEditor((prev) => !prev)}
+                            onClick={toggleLifecycleEditor}
                             className={bucketFeatureSecondaryActionClass}
                             disabled={lifecycleNotImplemented}
                           >
@@ -2338,7 +1981,17 @@ export default function BucketDetailPage({
                           <button
                             type="button"
                             onClick={saveLifecycle}
-                            disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
+                            disabled={
+                              lifecycleNotImplemented ||
+                              savingLifecycle ||
+                              lifecycleLoading ||
+                              lifecycleMode !== "json"
+                            }
+                            title={
+                              lifecycleMode === "simple"
+                                ? "Quick add actions save immediately."
+                                : undefined
+                            }
                             className={bucketFeaturePrimaryActionClass}
                           >
                             {savingLifecycle ? "Saving..." : "Save"}
@@ -2356,7 +2009,7 @@ export default function BucketDetailPage({
                         <UiInlineMessage tone="success" className="mt-2">{lifecycleStatus}</UiInlineMessage>
                       )}
                       <div className={cx(uiCardMutedClass, "mt-3 px-3 py-2")}>
-                        {(lifecycle.rules?.length ?? 0) === 0 ? (
+                        {lifecycleRules.length === 0 ? (
                           <p className={bucketDetailMutedBodyClass}>No rules configured on this bucket.</p>
                         ) : (
                           <div className="overflow-x-auto">
@@ -2381,7 +2034,7 @@ export default function BucketDetailPage({
                                 </tr>
                               </thead>
                               <tbody className={bucketDetailDividerClass}>
-                                {lifecycle.rules?.map((rawRule, idx) => {
+                                {lifecycleRules.map((rawRule, idx) => {
                                   const rule = rawRule as LifecycleRuleRecord;
                                   const ruleId = lifecycleRuleId(rule);
                                   const filterLabel = lifecycleFilterLabel(rule.Filter);
@@ -2397,7 +2050,7 @@ export default function BucketDetailPage({
                                       <td className={bucketDetailCompactCellClass}>
                                         <button
                                           type="button"
-                                          onClick={() => toggleRuleStatusAt(idx)}
+                                          onClick={() => toggleLifecycleRuleStatus(idx)}
                                           className={`flex items-center gap-2 rounded-full px-3 py-1 ui-caption font-semibold ${
                                             status === "Disabled"
                                               ? "border border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-200"
@@ -2414,7 +2067,7 @@ export default function BucketDetailPage({
                                         <div className={bucketDetailWrapActionsClass}>
                                           <button
                                             type="button"
-                                            onClick={() => deleteRuleAt(idx)}
+                                            onClick={() => deleteLifecycleRule(idx)}
                                             className="rounded border border-rose-200 px-2 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-300 hover:text-rose-800 dark:border-rose-900/40 dark:text-rose-100"
                                             disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                           >
@@ -2440,7 +2093,7 @@ export default function BucketDetailPage({
                                 { value: "json", label: "JSON mode" },
                                 { value: "simple", label: "Quick add" },
                               ]}
-                              onChange={(value) => setLifecycleMode(value)}
+                              onChange={updateLifecycleMode}
                               disabled={lifecycleNotImplemented}
                             />
                           </div>
@@ -2463,15 +2116,7 @@ export default function BucketDetailPage({
                                   <div className={bucketDetailEndActionClass}>
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        handleAddExampleRule({
-                                          Status: "Enabled",
-                                          Filter: { Prefix: "" },
-                                          NoncurrentVersionExpiration: { NoncurrentDays: 90 },
-                                          AbortIncompleteMultipartUpload: { DaysAfterInitiation: 30 },
-                                          Expiration: { ExpiredObjectDeleteMarker: true },
-                                        })
-                                      }
+                                      onClick={() => void addLifecycleCleanupExample()}
                                       className={bucketDetailTextActionClass}
                                       disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >
@@ -2488,8 +2133,12 @@ export default function BucketDetailPage({
                                       <input
                                         type="number"
                                         min={0}
-                                        value={transitionCurrentDays}
-                                        onChange={(e) => setTransitionCurrentDays(e.target.value)}
+                                        value={lifecycleTransitionDraft.currentDays}
+                                        onChange={(e) =>
+                                          updateLifecycleTransitionDraft({
+                                            currentDays: e.target.value,
+                                          })
+                                        }
                                         className={cx(bucketFeatureInputClass, "w-28")}
                                         disabled={lifecycleNotImplemented}
                                       />
@@ -2499,8 +2148,12 @@ export default function BucketDetailPage({
                                       <input
                                         type="number"
                                         min={0}
-                                        value={transitionNoncurrentDays}
-                                        onChange={(e) => setTransitionNoncurrentDays(e.target.value)}
+                                        value={lifecycleTransitionDraft.noncurrentDays}
+                                        onChange={(e) =>
+                                          updateLifecycleTransitionDraft({
+                                            noncurrentDays: e.target.value,
+                                          })
+                                        }
                                         className={cx(bucketFeatureInputClass, "w-28")}
                                         disabled={lifecycleNotImplemented}
                                       />
@@ -2509,8 +2162,12 @@ export default function BucketDetailPage({
                                       Storage class
                                       <input
                                         type="text"
-                                        value={transitionStorageClass}
-                                        onChange={(e) => setTransitionStorageClass(e.target.value)}
+                                        value={lifecycleTransitionDraft.storageClass}
+                                        onChange={(e) =>
+                                          updateLifecycleTransitionDraft({
+                                            storageClass: e.target.value,
+                                          })
+                                        }
                                         className={cx(bucketFeatureInputClass, "w-32")}
                                         placeholder="GLACIER"
                                         disabled={lifecycleNotImplemented}
@@ -2520,8 +2177,12 @@ export default function BucketDetailPage({
                                       Prefix (optional)
                                       <input
                                         type="text"
-                                        value={transitionPrefix}
-                                        onChange={(e) => setTransitionPrefix(e.target.value)}
+                                        value={lifecycleTransitionDraft.prefix}
+                                        onChange={(e) =>
+                                          updateLifecycleTransitionDraft({
+                                            prefix: e.target.value,
+                                          })
+                                        }
                                         className={cx(bucketFeatureInputClass, "w-32")}
                                         placeholder="logs/"
                                         disabled={lifecycleNotImplemented}
@@ -2531,21 +2192,7 @@ export default function BucketDetailPage({
                                   <div className={bucketDetailEndActionClass}>
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        handleAddExampleRule({
-                                          Status: "Enabled",
-                                          Filter: { Prefix: transitionPrefix },
-                                          Transitions: [
-                                            { Days: Number(transitionCurrentDays) || 0, StorageClass: transitionStorageClass || "GLACIER" },
-                                          ],
-                                          NoncurrentVersionTransitions: [
-                                            {
-                                              NoncurrentDays: Number(transitionNoncurrentDays) || 0,
-                                              StorageClass: transitionStorageClass || "GLACIER",
-                                            },
-                                          ],
-                                        })
-                                      }
+                                      onClick={() => void addLifecycleTransitionExample()}
                                       className={bucketDetailTextActionClass}
                                       disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >
@@ -2562,8 +2209,12 @@ export default function BucketDetailPage({
                                       <input
                                         type="number"
                                         min={0}
-                                        value={expireCurrentDays}
-                                        onChange={(e) => setExpireCurrentDays(e.target.value)}
+                                        value={lifecycleExpirationDraft.currentDays}
+                                        onChange={(e) =>
+                                          updateLifecycleExpirationDraft({
+                                            currentDays: e.target.value,
+                                          })
+                                        }
                                         className={cx(bucketFeatureInputClass, "w-32")}
                                         disabled={lifecycleNotImplemented}
                                       />
@@ -2573,8 +2224,12 @@ export default function BucketDetailPage({
                                       <input
                                         type="number"
                                         min={0}
-                                        value={expireNoncurrentDays}
-                                        onChange={(e) => setExpireNoncurrentDays(e.target.value)}
+                                        value={lifecycleExpirationDraft.noncurrentDays}
+                                        onChange={(e) =>
+                                          updateLifecycleExpirationDraft({
+                                            noncurrentDays: e.target.value,
+                                          })
+                                        }
                                         className={cx(bucketFeatureInputClass, "w-32")}
                                         disabled={lifecycleNotImplemented}
                                       />
@@ -2583,8 +2238,12 @@ export default function BucketDetailPage({
                                       Prefix (optional)
                                       <input
                                         type="text"
-                                        value={expirePrefix}
-                                        onChange={(e) => setExpirePrefix(e.target.value)}
+                                        value={lifecycleExpirationDraft.prefix}
+                                        onChange={(e) =>
+                                          updateLifecycleExpirationDraft({
+                                            prefix: e.target.value,
+                                          })
+                                        }
                                         className={cx(bucketFeatureInputClass, "w-32")}
                                         placeholder="archive/"
                                         disabled={lifecycleNotImplemented}
@@ -2594,7 +2253,7 @@ export default function BucketDetailPage({
                                   <div className={bucketDetailEndActionClass}>
                                     <button
                                       type="button"
-                                      onClick={addExpirationExampleRule}
+                                      onClick={() => void addLifecycleExpirationExample()}
                                       className={bucketDetailTextActionClass}
                                       disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >
@@ -2614,7 +2273,7 @@ export default function BucketDetailPage({
                               </p>
                               <textarea
                                 value={lifecycleText}
-                                onChange={(e) => setLifecycleText(e.target.value)}
+                                onChange={(e) => updateLifecycleText(e.target.value)}
                                 rows={10}
                                 className={cx(bucketFeatureJsonInputClass, "w-full rounded-lg bg-slate-50 dark:bg-slate-900")}
                                 disabled={lifecycleNotImplemented}
@@ -2623,7 +2282,7 @@ export default function BucketDetailPage({
                                 show={showLifecycleJsonExample}
                                 onToggle={() => setShowLifecycleJsonExample((prev) => !prev)}
                                 example={defaultLifecycleJsonExample}
-                                onUseExample={() => setLifecycleText(defaultLifecycleJsonExample)}
+                                onUseExample={() => updateLifecycleText(defaultLifecycleJsonExample)}
                                 disabled={lifecycleNotImplemented}
                               />
                             </div>

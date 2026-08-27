@@ -24,6 +24,7 @@ export {
   useBucketNotificationsController,
 } from "./useBucketNotificationsController";
 export { useBucketPublicAccessController } from "./useBucketPublicAccessController";
+export { useBucketLifecycleController } from "./useBucketLifecycleController";
 export { useBucketReplicationController } from "./useBucketReplicationController";
 export {
   bucketAclOptions,
@@ -38,8 +39,5 @@ export { useBucketTagsController } from "./useBucketTagsController";
 export { useBucketVersioningController } from "./useBucketVersioningController";
 export { useBucketWebsiteController } from "./useBucketWebsiteController";
 export {
-  jsonTextSignature,
   resolveFeatureVisualState,
-  stableBucketJsonSignature,
-  isLifecycleSimpleDraftEmpty,
 } from "./bucketFeatureState";
