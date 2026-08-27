@@ -16,7 +16,6 @@ import {
 } from "../../components/ui/styles";
 import {
   Bucket,
-  BucketAcl,
   BucketLifecycleConfig,
   BucketObjectLockConfiguration,
   BucketReplicationConfiguration,
@@ -29,14 +28,12 @@ import {
   getBucketObjectLock,
   getBucketReplication,
   getBucketVersioning,
-  getBucketAcl,
   getBucketLifecycle,
   listBuckets,
   putBucketTags,
   putBucketReplication,
   putBucketLifecycle,
   setBucketVersioning,
-  updateBucketAcl,
   updateBucketObjectLock,
   updateBucketQuota,
 } from "../../api/buckets";
@@ -44,7 +41,6 @@ import {
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketReplication,
   deleteCephAdminBucketTags,
-  getCephAdminBucketAcl,
   getCephAdminBucketLifecycle,
   getCephAdminBucketObjectLock,
   getCephAdminBucketReplication,
@@ -56,7 +52,6 @@ import {
   putCephAdminBucketReplication,
   putCephAdminBucketTags,
   setCephAdminBucketVersioning,
-  updateCephAdminBucketAcl,
   updateCephAdminBucketObjectLock,
   updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
@@ -102,6 +97,7 @@ import {
   BucketFeatureCard,
   BucketFeatureJsonExample,
   BucketFeatureModeToggle,
+  bucketAclOptions,
   buildNotificationExample,
   buildPolicyExample,
   defaultCorsExample,
@@ -109,13 +105,13 @@ import {
   defaultNotificationTemplate,
   jsonTextSignature,
   isLifecycleSimpleDraftEmpty,
-  normalizeAclDraft,
   normalizeBucketTagsDraft,
   normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,
   resolveFeatureVisualState,
   stableBucketJsonSignature,
   useBucketAccessLoggingController,
+  useBucketAclController,
   useBucketCorsController,
   useBucketEncryptionController,
   useBucketNotificationsController,
@@ -214,22 +210,6 @@ function createBucketTagDraft(tag: BucketTag = { key: "", value: "" }): BucketTa
 
 function getUserRole(): UiRole | null {
   return readStoredUser()?.role ?? null;
-}
-
-function inferBucketAclPreset(acl: BucketAcl | null): string {
-  if (!acl || !acl.grants || acl.grants.length === 0) return "private";
-  const allUsersUri = "http://acs.amazonaws.com/groups/global/AllUsers";
-  const authUsersUri = "http://acs.amazonaws.com/groups/global/AuthenticatedUsers";
-  const allUsersPerms = new Set(
-    acl.grants.filter((grant) => grant.grantee?.uri === allUsersUri).map((grant) => grant.permission)
-  );
-  const authUsersPerms = new Set(
-    acl.grants.filter((grant) => grant.grantee?.uri === authUsersUri).map((grant) => grant.permission)
-  );
-  if (allUsersPerms.has("READ") && allUsersPerms.has("WRITE")) return "public-read-write";
-  if (allUsersPerms.has("READ")) return "public-read";
-  if (authUsersPerms.has("READ")) return "authenticated-read";
-  return "custom";
 }
 
 type Row =
@@ -332,17 +312,6 @@ const defaultWebsiteRoutingRulesExample = `[
   }
 ]`;
 
-const bucketAclOptions = [
-  { value: "private", label: "Private (bucket owner full control)" },
-  { value: "public-read", label: "Public read" },
-  { value: "public-read-write", label: "Public read/write" },
-  { value: "authenticated-read", label: "Authenticated users read" },
-  { value: "bucket-owner-read", label: "Bucket owner read" },
-  { value: "bucket-owner-full-control", label: "Bucket owner full control" },
-  { value: "log-delivery-write", label: "Log delivery write" },
-  { value: "custom", label: "Custom canned ACL" },
-];
-
 function randomLifecycleId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     try {
@@ -444,13 +413,6 @@ export default function BucketDetailPage({
   const [showEncryptionExample, setShowEncryptionExample] = useState(false);
   const [showLifecycleJsonExample, setShowLifecycleJsonExample] = useState(false);
   const [showReplicationExample, setShowReplicationExample] = useState(false);
-  const [bucketAcl, setBucketAcl] = useState<BucketAcl | null>(null);
-  const [bucketAclError, setBucketAclError] = useState<string | null>(null);
-  const [bucketAclLoading, setBucketAclLoading] = useState(false);
-  const [bucketAclStatus, setBucketAclStatus] = useState<string | null>(null);
-  const [bucketAclPreset, setBucketAclPreset] = useState("private");
-  const [bucketAclCustom, setBucketAclCustom] = useState("");
-  const [savingBucketAcl, setSavingBucketAcl] = useState(false);
   const [lifecycle, setLifecycle] = useState<BucketLifecycleConfig>({ rules: [] });
   const [lifecycleText, setLifecycleText] = useState("[]");
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
@@ -637,6 +599,27 @@ export default function BucketDetailPage({
     status: publicAccessStatus,
     update: updatePublicAccessField,
   } = useBucketPublicAccessController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+  });
+  const {
+    acl: bucketAcl,
+    configured: aclConfigured,
+    custom: bucketAclCustom,
+    dirty: aclDirty,
+    error: bucketAclError,
+    load: loadBucketAcl,
+    loading: bucketAclLoading,
+    preset: bucketAclPreset,
+    save: saveBucketAcl,
+    saving: savingBucketAcl,
+    status: bucketAclStatus,
+    updateCustom: updateBucketAclCustom,
+    updatePreset: updateBucketAclPreset,
+  } = useBucketAclController({
     accountId,
     bucketName,
     cephAdmin: isCephAdmin,
@@ -1009,32 +992,6 @@ export default function BucketDetailPage({
       setReplicationLoading(false);
     }
   }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, isCephEndpoint, replicationFeatureEnabled]);
-
-  const loadBucketAcl = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setBucketAcl(null);
-      return;
-    }
-    setBucketAclLoading(true);
-    setBucketAclError(null);
-    setBucketAclStatus(null);
-    try {
-      const data = isCephAdmin
-        ? endpointId
-          ? await getCephAdminBucketAcl(endpointId, bucketName)
-          : null
-        : await getBucketAcl(accountId, bucketName);
-      setBucketAcl(data);
-      const inferred = inferBucketAclPreset(data);
-      setBucketAclPreset(inferred);
-      setBucketAclCustom("");
-    } catch (err) {
-      setBucketAcl(null);
-      setBucketAclError(extractApiError(err, "Unable to load bucket ACL."));
-    } finally {
-      setBucketAclLoading(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadBucketTags = useCallback(async () => {
     if (!bucketName || !hasContext) {
@@ -1549,9 +1506,6 @@ export default function BucketDetailPage({
   };
   const lifecycleSimpleDirty = !isLifecycleSimpleDraftEmpty(lifecycleSimpleDraft);
   const lifecycleDirty = lifecycleMode === "json" ? lifecycleJsonDirty : lifecycleSimpleDirty;
-  const aclDraftSignature = stableBucketJsonSignature(normalizeAclDraft(bucketAclPreset, bucketAclCustom));
-  const aclSnapshotSignature = stableBucketJsonSignature(normalizeAclDraft(inferBucketAclPreset(bucketAcl), ""));
-  const aclDirty = aclDraftSignature !== aclSnapshotSignature;
   const tagsDraftSignature = stableBucketJsonSignature(normalizeBucketTagsDraft(bucketTags));
   const tagsSnapshotSignature = stableBucketJsonSignature(normalizeBucketTagsDraft(bucketTagsSnapshot));
   const tagsDirty = tagsDraftSignature !== tagsSnapshotSignature;
@@ -1629,7 +1583,7 @@ export default function BucketDetailPage({
   });
   const aclCardState = resolveFeatureVisualState({
     disabled: aclNotImplemented,
-    configured: inferBucketAclPreset(bucketAcl) !== "private",
+    configured: aclConfigured,
     unsaved: aclDirty,
   });
   const policyCardState = resolveFeatureVisualState({
@@ -2117,37 +2071,6 @@ export default function BucketDetailPage({
       setReplicationError(message);
     } finally {
       setClearingReplication(false);
-    }
-  };
-
-  const saveBucketAcl = async () => {
-    if (!bucketName || !hasContext) return;
-    const aclValue = bucketAclPreset === "custom" ? bucketAclCustom.trim() : bucketAclPreset;
-    if (!aclValue) {
-      setBucketAclError("ACL value is required.");
-      return;
-    }
-    setSavingBucketAcl(true);
-    setBucketAclError(null);
-    setBucketAclStatus(null);
-    try {
-      const updated = isCephAdmin
-        ? endpointId
-          ? await updateCephAdminBucketAcl(endpointId, bucketName, aclValue)
-          : null
-        : await updateBucketAcl(accountId, bucketName, aclValue);
-      setBucketAcl(updated);
-      setBucketAclStatus("Bucket ACL updated.");
-      const inferred = inferBucketAclPreset(updated);
-      setBucketAclPreset(inferred);
-      if (inferred !== "custom") {
-        setBucketAclCustom("");
-      }
-    } catch (err) {
-      const message = extractApiError(err, "Unable to update bucket ACL.");
-      setBucketAclError(message);
-    } finally {
-      setSavingBucketAcl(false);
     }
   };
 
@@ -3367,11 +3290,7 @@ export default function BucketDetailPage({
                       Canned ACL
                       <select
                         value={bucketAclPreset}
-                        onChange={(e) => {
-                          setBucketAclPreset(e.target.value);
-                          setBucketAclStatus(null);
-                          setBucketAclError(null);
-                        }}
+                        onChange={(e) => updateBucketAclPreset(e.target.value)}
                         className={bucketFeatureInputClass}
                         disabled={aclNotImplemented || bucketAclLoading || savingBucketAcl}
                       >
@@ -3388,10 +3307,7 @@ export default function BucketDetailPage({
                         <input
                           type="text"
                           value={bucketAclCustom}
-                          onChange={(e) => {
-                            setBucketAclCustom(e.target.value);
-                            setBucketAclStatus(null);
-                          }}
+                          onChange={(e) => updateBucketAclCustom(e.target.value)}
                           className={bucketFeatureInputClass}
                           placeholder="e.g. private"
                           disabled={aclNotImplemented || bucketAclLoading || savingBucketAcl}

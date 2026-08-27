@@ -24,10 +24,13 @@ export {
   useBucketNotificationsController,
 } from "./useBucketNotificationsController";
 export { useBucketPublicAccessController } from "./useBucketPublicAccessController";
+export {
+  bucketAclOptions,
+  useBucketAclController,
+} from "./useBucketAclController";
 export { useBucketWebsiteController } from "./useBucketWebsiteController";
 export {
   jsonTextSignature,
-  normalizeAclDraft,
   normalizeBucketTagsDraft,
   normalizeQuotaDraft,
   normalizeReplicationGraphicalDraft,

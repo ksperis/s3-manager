@@ -113,13 +113,6 @@ export function normalizeBucketTagsDraft(tags: BucketTag[]): BucketTag[] {
     });
 }
 
-export function normalizeAclDraft(preset: string, custom: string): Record<string, unknown> {
-  return {
-    preset: normalizeString(preset),
-    custom: normalizeString(custom),
-  };
-}
-
 export function normalizeNotificationConfiguration(configuration: unknown): Record<string, unknown> {
   if (!isPlainObject(configuration)) return {};
   const normalized: Record<string, unknown> = {};
