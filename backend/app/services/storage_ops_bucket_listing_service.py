@@ -13,6 +13,12 @@ from app.models.execution_context import ExecutionContext
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary, StorageOpsContextKind
 from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
 from app.services.bucket_listing_enrichment import (
+    BUCKET_LISTING_INCLUDES,
+    OWNER_DETAIL_FIELDS,
+    OWNER_QUOTA_FIELDS,
+    OWNER_STATUS_FIELDS,
+    OWNER_USAGE_FIELDS,
+    OWNER_USAGE_PERCENT_FIELDS,
     enrich_buckets,
     match_bucket_feature_rule,
     match_bucket_field_rule,
@@ -48,47 +54,6 @@ logger = logging.getLogger(__name__)
 BUCKET_REF_SEPARATOR = "::"
 STORAGE_OPS_CONTEXT_LISTING_MAX_WORKERS = 6
 CONTEXT_IDENTITY_FIELDS = {"context_id", "context_name", "context_kind", "endpoint_name"}
-OWNER_QUOTA_FIELDS = {"owner_quota_max_size_bytes", "owner_quota_max_objects"}
-OWNER_STATUS_FIELDS = {"owner_suspended"}
-OWNER_USAGE_FIELDS = {"owner_used_bytes", "owner_object_count"}
-OWNER_USAGE_PERCENT_FIELDS = {"owner_quota_usage_size_percent", "owner_quota_usage_object_percent"}
-OWNER_ENRICHED_FIELDS = {"owner_name"} | OWNER_STATUS_FIELDS | OWNER_QUOTA_FIELDS | OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS
-STORAGE_OPS_FEATURE_INCLUDES = {
-    "versioning",
-    "object_lock",
-    "block_public_access",
-    "lifecycle_rules",
-    "static_website",
-    "bucket_policy",
-    "cors",
-    "access_logging",
-    "notifications",
-    "server_side_encryption",
-    "object_lock_mode",
-    "object_lock_retention_days",
-    "object_lock_retention_years",
-    "bpa_block_public_acls",
-    "bpa_ignore_public_acls",
-    "bpa_block_public_policy",
-    "bpa_restrict_public_buckets",
-    "cors_allowed_methods",
-    "cors_allowed_origins",
-    "logging_target_bucket",
-    "logging_target_prefix",
-    "website_index_document",
-    "website_error_document",
-    "website_redirect_host",
-    "website_routing_rule_count",
-    "policy_statement_count",
-    "policy_has_conditions",
-    "lifecycle_expiration_days",
-    "lifecycle_noncurrent_expiration_days",
-    "lifecycle_transition_days",
-    "lifecycle_abort_multipart_days",
-    "notification_topic_names",
-    "sse_algorithms",
-    "sse_kms_key_ids",
-}
 
 
 @dataclass(frozen=True)
@@ -258,10 +223,10 @@ def _build_cheap_field_prefilter(
         return None, False
 
     rules = parsed_filter.rules
-    cheap_field_rules = [rule for rule in rules if rule.field and rule.field not in ({"tag"} | OWNER_ENRICHED_FIELDS)]
+    cheap_field_rules = [rule for rule in rules if rule.field and rule.field not in ({"tag"} | OWNER_DETAIL_FIELDS)]
     has_feature_rules = any(rule.feature for rule in rules)
     has_tag_rule = any(rule.field == "tag" for rule in rules)
-    has_owner_enriched_rule = any(rule.field in OWNER_ENRICHED_FIELDS for rule in rules)
+    has_owner_enriched_rule = any(rule.field in OWNER_DETAIL_FIELDS for rule in rules)
     if not cheap_field_rules:
         return None, False
 
@@ -638,7 +603,7 @@ def _prepare_storage_ops_listing_query(
     include_tags = "tags" in include_set or any(
         rule.field == "tag" for rule in rules
     )
-    requested_features = (include_set | required_feature_include) & STORAGE_OPS_FEATURE_INCLUDES
+    requested_features = (include_set | required_feature_include) & BUCKET_LISTING_INCLUDES
     needs_stats = bool(
         with_stats
         or filter_requires_stats(parsed_filter)

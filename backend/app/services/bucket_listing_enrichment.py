@@ -121,12 +121,26 @@ COLUMN_DETAIL_KEYS = (
     | _COLUMN_DETAIL_NOTIFICATION_KEYS
     | _COLUMN_DETAIL_SSE_KEYS
 )
+BUCKET_FEATURE_INCLUDES = {
+    "versioning",
+    "object_lock",
+    "block_public_access",
+    "lifecycle_rules",
+    "static_website",
+    "bucket_policy",
+    "cors",
+    "access_logging",
+    "notifications",
+    "server_side_encryption",
+}
+BUCKET_LISTING_INCLUDES = BUCKET_FEATURE_INCLUDES | COLUMN_DETAIL_KEYS
 OWNER_QUOTA_FIELDS = {"owner_quota_max_size_bytes", "owner_quota_max_objects"}
 OWNER_STATUS_FIELDS = {"owner_suspended"}
 OWNER_USAGE_FIELDS = {"owner_used_bytes", "owner_object_count"}
 OWNER_USAGE_PERCENT_FIELDS = {"owner_quota_usage_size_percent", "owner_quota_usage_object_percent"}
-_OWNER_ENRICHED_FIELDS = OWNER_STATUS_FIELDS | OWNER_QUOTA_FIELDS | OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS
-EXPENSIVE_FIELD_RULES = {"owner_name", "tag"} | _OWNER_ENRICHED_FIELDS
+OWNER_ENRICHED_FIELDS = OWNER_STATUS_FIELDS | OWNER_QUOTA_FIELDS | OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS
+OWNER_DETAIL_FIELDS = {"owner_name"} | OWNER_ENRICHED_FIELDS
+EXPENSIVE_FIELD_RULES = {"tag"} | OWNER_DETAIL_FIELDS
 
 
 def _normalize_owner_kind(raw: object) -> Literal["account", "user"] | None:
@@ -508,7 +522,7 @@ def match_bucket_feature_rule(bucket: CephAdminBucketSummary, rule: CephAdminBuc
 def _filter_requires_owner_metadata(query: CephAdminBucketFilterQuery | None) -> bool:
     if not query:
         return False
-    owner_related_fields = {"owner", "owner_kind", "tenant", "owner_name"} | _OWNER_ENRICHED_FIELDS
+    owner_related_fields = {"owner", "owner_kind", "tenant"} | OWNER_DETAIL_FIELDS
     for rule in query.rules:
         if rule.field in owner_related_fields:
             return True
@@ -521,8 +535,7 @@ def _filter_requires_tenant_metadata(query: CephAdminBucketFilterQuery | None) -
     for rule in query.rules:
         if rule.field == "tenant":
             return True
-    owner_detail_fields = {"owner_name"} | _OWNER_ENRICHED_FIELDS
-    if any(rule.field in owner_detail_fields for rule in query.rules):
+    if any(rule.field in OWNER_DETAIL_FIELDS for rule in query.rules):
         return determine_owner_name_lookup_scope(query) != "account"
     return False
 

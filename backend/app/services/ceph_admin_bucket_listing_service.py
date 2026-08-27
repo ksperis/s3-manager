@@ -15,6 +15,7 @@ from app.models.ceph_admin import (
 )
 from app.services import rgw_bucket_metadata
 from app.services.bucket_listing_enrichment import (
+    BUCKET_FEATURE_INCLUDES,
     COLUMN_DETAIL_KEYS,
     EXPENSIVE_FIELD_RULES,
     OWNER_QUOTA_FIELDS,
@@ -65,23 +66,6 @@ _BUCKET_STATS_UNAVAILABLE_WARNING = (
     "Bucket stats are unavailable via Ceph Admin credentials on this endpoint. "
     "Showing owner metadata without usage or quota values."
 )
-_REQUESTED_BUCKET_FEATURES = frozenset(
-    {
-        "tags",
-        "versioning",
-        "object_lock",
-        "block_public_access",
-        "lifecycle_rules",
-        "static_website",
-        "bucket_policy",
-        "cors",
-        "access_logging",
-        "notifications",
-        "server_side_encryption",
-    }
-)
-
-
 class CephAdminBucketListingContext(Protocol):
     endpoint: StorageEndpoint
     rgw_admin: RGWAdminClient
@@ -160,6 +144,7 @@ class _CephAdminBucketListingRequest:
     needs_tenant_metadata: bool
     requested_features: frozenset[str]
     requested_detail_fields: frozenset[str]
+    include_tags: bool
     ui_tag_ids: tuple[int, ...]
     ui_tag_match: str
 
@@ -220,8 +205,9 @@ class _CephAdminBucketListingRequest:
                 sort_by,
                 simple_filter if not advanced_filter else None,
             ) or with_ui_tags,
-            requested_features=frozenset(include_set & _REQUESTED_BUCKET_FEATURES),
+            requested_features=frozenset(include_set & BUCKET_FEATURE_INCLUDES),
             requested_detail_fields=frozenset(include_set & COLUMN_DETAIL_KEYS),
+            include_tags="tags" in include_set,
             ui_tag_ids=tuple(dict.fromkeys(int(item) for item in (ui_tag_ids or []) if int(item) > 0)),
             ui_tag_match="all" if ui_tag_match == "all" else "any",
         )
@@ -910,11 +896,8 @@ class _CephAdminBucketPageBuilder:
         self,
         page_items: list[CephAdminBucketSummary],
     ) -> list[CephAdminBucketSummary]:
-        requested = (
-            {feature for feature in self.request.requested_features if feature != "tags"}
-            | set(self.request.requested_detail_fields)
-        )
-        if not requested and "tags" not in self.request.requested_features:
+        requested = set(self.request.requested_features) | set(self.request.requested_detail_fields)
+        if not requested and not self.request.include_tags:
             return page_items
         self.progress.emit(
             percent=96,
@@ -927,7 +910,7 @@ class _CephAdminBucketPageBuilder:
         return enrich_buckets(
             page_items,
             requested,
-            include_tags="tags" in self.request.requested_features,
+            include_tags=self.request.include_tags,
             service=BucketConfigurationService(),
             account=_build_s3_context(self.ctx),
             **_progress_options(
