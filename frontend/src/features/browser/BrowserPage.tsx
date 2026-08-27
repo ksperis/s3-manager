@@ -68,6 +68,7 @@ import {
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
 import { useBrowserCreateFolder } from "./useBrowserCreateFolder";
 import { useBrowserDeleteItems } from "./useBrowserDeleteItems";
+import { useBrowserDensity } from "./useBrowserDensity";
 import { useBrowserDownloads } from "./useBrowserDownloads";
 import { useBrowserFolderTree } from "./useBrowserFolderTree";
 import { useBrowserLazyColumns } from "./useBrowserLazyColumns";
@@ -97,7 +98,6 @@ import {
   FULL_BROWSER_CAPABILITY_FACTS,
   type BrowserActionId,
   type BrowserCapabilityFacts,
-  type BrowserDensity,
   type BrowserFunctionalProfile,
   type BrowserLayoutMode,
   getVisibleBrowserActions,
@@ -133,7 +133,6 @@ import {
   DEFAULT_FOLDERS_PANEL_WIDTH_PX,
   DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
   readStoredBrowserRootUiState,
-  writeBrowserRootDensity,
 } from "./browserRootUiState";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
@@ -462,25 +461,16 @@ export default function BrowserPage({
   const isMobileViewport = useMediaQuery(MOBILE_OBJECT_LIST_MEDIA_QUERY);
   const [inspectorTab, setInspectorTab] =
     useState<BrowserInspectorTab>("context");
-  const enforcedRootProfileDensity: BrowserDensity | null =
-    isMainBrowserPath && resolvedFunctionalProfile !== "advanced"
-      ? resolvedFunctionalProfile === "portal"
-        ? "compact"
-        : "comfortable"
-      : null;
-  const [density, setDensity] = useState<BrowserDensity>(
-    () =>
-      densityOverride ??
-      enforcedRootProfileDensity ??
-      (isMainBrowserPath
-        ? (initialStoredRootUiState?.density ?? "comfortable")
-        : "compact"),
-  );
-  const effectiveDensity: BrowserDensity =
-    densityOverride ?? enforcedRootProfileDensity ?? density;
-  const compactMode = effectiveDensity === "compact";
-  const canConfigureRootBrowserView =
-    isMainBrowserPath && resolvedFunctionalProfile === "advanced";
+  const {
+    canConfigure: canConfigureRootBrowserView,
+    compactMode,
+    setCompactMode,
+  } = useBrowserDensity({
+    densityOverride,
+    functionalProfile: resolvedFunctionalProfile,
+    initialStoredDensity: initialStoredRootUiState?.density,
+    isMainBrowserPath,
+  });
   const rowActionTargetSizePx = compactMode
     ? COMPACT_ROW_ACTION_TARGET_SIZE_PX
     : COMFORTABLE_ROW_ACTION_TARGET_SIZE_PX;
@@ -499,8 +489,6 @@ export default function BrowserPage({
       actionsColumnButtonCount * rowActionTargetSizePx +
       (actionsColumnButtonCount - 1) * ROW_ACTION_GAP_PX,
   );
-  const setCompactMode = (value: boolean) =>
-    setDensity(value ? "compact" : "comfortable");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const {
@@ -816,11 +804,6 @@ export default function BrowserPage({
   const showSseControls = Boolean(
     sseFeatureEnabled && hasS3AccountContext && bucketName,
   );
-  useEffect(() => {
-    if (!isMainBrowserPath || resolvedFunctionalProfile !== "advanced") return;
-    writeBrowserRootDensity(density);
-  }, [density, isMainBrowserPath, resolvedFunctionalProfile]);
-
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   const uiOrigin = useMemo(
     () => (typeof window === "undefined" ? undefined : window.location.origin),
@@ -3384,10 +3367,7 @@ export default function BrowserPage({
         }
         isMainBrowserPath={canConfigureRootBrowserView}
         compactMode={compactMode}
-        onSetCompactMode={(value) => {
-          if (!canConfigureRootBrowserView) return;
-          setCompactMode(value);
-        }}
+        onSetCompactMode={setCompactMode}
         columnOptions={COLUMN_DEFINITIONS.map((column) => ({
           id: column.id,
           label: column.label,
