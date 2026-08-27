@@ -31,6 +31,7 @@ export {
   useBucketAclController,
 } from "./useBucketAclController";
 export { useBucketObjectLockController } from "./useBucketObjectLockController";
+export { useBucketMetadataController } from "./useBucketMetadataController";
 export { useBucketObjectsController } from "./useBucketObjectsController";
 export {
   useBucketQuotaController,

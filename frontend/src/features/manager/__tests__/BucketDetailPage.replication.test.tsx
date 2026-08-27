@@ -8,7 +8,7 @@ import { setSessionUserCache } from "../../../utils/workspaces";
 
 const useS3AccountContextMock = vi.fn();
 const useCephAdminEndpointMock = vi.fn();
-const listBucketsMock = vi.fn();
+const getBucketStatsMock = vi.fn();
 const getBucketVersioningMock = vi.fn();
 const getBucketObjectLockMock = vi.fn();
 const getBucketLifecycleMock = vi.fn();
@@ -50,7 +50,7 @@ vi.mock("../../../api/buckets", async () => {
   const actual = await vi.importActual<typeof import("../../../api/buckets")>("../../../api/buckets");
   return {
     ...actual,
-    listBuckets: (...args: unknown[]) => listBucketsMock(...args),
+    getBucketStats: (...args: unknown[]) => getBucketStatsMock(...args),
     getBucketVersioning: (...args: unknown[]) => getBucketVersioningMock(...args),
     getBucketObjectLock: (...args: unknown[]) => getBucketObjectLockMock(...args),
     getBucketLifecycle: (...args: unknown[]) => getBucketLifecycleMock(...args),
@@ -138,7 +138,7 @@ describe("BucketDetailPage replication state", () => {
         },
       },
     });
-    listBucketsMock.mockResolvedValue([{ name: "demo-bucket", used_bytes: null, object_count: null }]);
+    getBucketStatsMock.mockResolvedValue({ name: "demo-bucket", used_bytes: null, object_count: null });
     getBucketVersioningMock.mockResolvedValue({ status: "Disabled", enabled: false });
     getBucketObjectLockMock.mockResolvedValue({ enabled: false, mode: null, days: null, years: null });
     getBucketLifecycleMock.mockResolvedValue({ rules: [] });
@@ -924,7 +924,7 @@ describe("BucketDetailPage replication state", () => {
     );
 
     await waitFor(() => {
-      expect(listBucketsMock).toHaveBeenCalled();
+      expect(getBucketStatsMock).toHaveBeenCalled();
     });
 
     const metricsTab = screen.getByRole("button", { name: "Metrics" });

@@ -14,14 +14,7 @@ import {
   uiInputClass,
   uiTableContainerClass,
 } from "../../components/ui/styles";
-import {
-  Bucket,
-  BucketPublicAccessBlock,
-  listBuckets,
-} from "../../api/buckets";
-import {
-  listCephAdminBuckets,
-} from "../../api/cephAdmin";
+import { BucketPublicAccessBlock } from "../../api/buckets";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -55,6 +48,7 @@ import {
   useBucketCorsController,
   useBucketEncryptionController,
   useBucketLifecycleController,
+  useBucketMetadataController,
   useBucketNotificationsController,
   useBucketObjectLockController,
   useBucketObjectsController,
@@ -82,7 +76,7 @@ import {
   type BucketDetailTabId,
   type BucketDetailMode,
 } from "./bucketDetail/bucketDetailSurface";
-import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
+import { isApiFeatureNotImplemented } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 import type { UiRole } from "../../api/users";
 
@@ -286,9 +280,6 @@ export default function BucketDetailPage({
     managerBucketQuotaEnabled,
   } = useS3AccountContext();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
-  const [bucket, setBucket] = useState<Bucket | null>(null);
-  const [loadingBucket, setLoadingBucket] = useState(false);
-  const [bucketError, setBucketError] = useState<string | null>(null);
   const [showNotificationExample, setShowNotificationExample] = useState(false);
   const [showWebsiteRulesExample, setShowWebsiteRulesExample] = useState(false);
   const [showEncryptionExample, setShowEncryptionExample] = useState(false);
@@ -724,46 +715,19 @@ export default function BucketDetailPage({
   const objectLockFormId = "bucket-object-lock-form";
   const quotaFormId = "bucket-quota-form";
 
-  const refreshBucketMeta = useCallback(async () => {
-    if (!bucketName || !hasContext) {
-      setBucket(null);
-      return;
-    }
-    setLoadingBucket(true);
-    setBucketError(null);
-    try {
-      if (isCephAdmin) {
-        if (!endpointId) {
-          setBucket(null);
-          return;
-        }
-        const response = await listCephAdminBuckets(endpointId, {
-          page: 1,
-          page_size: 50,
-          filter: bucketName,
-          with_stats: usageFeatureEnabled,
-        });
-        const found = response.items.find((b) => b.name === bucketName) ?? null;
-        setBucket(
-          found
-            ? {
-                ...found,
-                used_bytes: found.used_bytes ?? undefined,
-                object_count: found.object_count ?? undefined,
-              }
-            : null,
-        );
-      } else {
-        const data = await listBuckets(accountId, { with_stats: usageFeatureEnabled });
-        const found = data.find((b) => b.name === bucketName) ?? null;
-        setBucket(found);
-      }
-    } catch (err) {
-      setBucketError(extractApiError(err, "Unable to load bucket details."));
-    } finally {
-      setLoadingBucket(false);
-    }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, usageFeatureEnabled]);
+  const {
+    bucket,
+    error: bucketError,
+    loading: loadingBucket,
+    refresh: refreshBucketMeta,
+  } = useBucketMetadataController({
+    accountId,
+    bucketName,
+    cephAdmin: isCephAdmin,
+    enabled: hasContext,
+    endpointId,
+    withStats: usageFeatureEnabled,
+  });
 
   const {
     configured: quotaConfigured,
