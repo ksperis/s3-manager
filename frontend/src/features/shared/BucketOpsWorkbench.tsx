@@ -264,6 +264,11 @@ import {
   type SelectionExportFormat,
 } from "./bucketBulkOperationsModel";
 import {
+  buildBulkPreviewExportPayload,
+  buildBulkPreviewSections,
+  summarizeBulkPreview,
+} from "./bucketBulkPreviewModel";
+import {
   buildBulkPastePlan,
   isBulkClipboardSameEndpoint,
   reconcileBulkPasteMapping,
@@ -3980,12 +3985,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         }),
     [orphanedTagBuckets, uiTagOrphanEntries]
   );
-  const previewStats = useMemo(() => {
-    const errors = bulkPreview.filter((item) => item.error).length;
-    const changed = bulkPreview.filter((item) => !item.error && item.changed).length;
-    const unchanged = bulkPreview.length - changed - errors;
-    return { changed, unchanged, errors };
-  }, [bulkPreview]);
+  const previewStats = useMemo(() => summarizeBulkPreview(bulkPreview), [bulkPreview]);
   const bulkCopyProgressPercent = calculateActionProgressPercent(bulkCopyProgress);
   const bulkPreviewProgressPercent = calculateActionProgressPercent(bulkPreviewProgress);
   const bulkApplyProgressPercent = calculateActionProgressPercent(bulkApplyProgress);
@@ -4040,116 +4040,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     </div>
   );
 
-  type BulkPreviewSection = {
-    key: string;
-    label: string;
-    before: BulkPreviewLine[];
-    after: BulkPreviewLine[];
-    changed: boolean;
-    error?: string;
-  };
-
-  const sectionLabelByOperation = (() => {
-    switch (bulkOperation) {
-      case "set_quota":
-        return "Quota";
-      case "add_public_access_block":
-      case "remove_public_access_block":
-        return "Block Public Access";
-      case "enable_versioning":
-      case "disable_versioning":
-        return "Versioning";
-      case "add_lifecycle":
-      case "delete_lifecycle":
-        return "Lifecycle";
-      case "add_notifications":
-      case "delete_notifications":
-        return "Notifications";
-      case "add_cors":
-      case "delete_cors":
-        return "CORS";
-      case "add_policy":
-      case "delete_policy":
-        return "Bucket Policy";
-      case "paste_configs":
-        return "Overview";
-      default:
-        return "Preview";
-    }
-  })();
-
-  const splitPreviewLinesBySection = (lines: BulkPreviewLine[], fallbackLabel: string) => {
-    const sections: { label: string; lines: BulkPreviewLine[] }[] = [];
-    let currentLabel = fallbackLabel;
-    let currentLines: BulkPreviewLine[] = [];
-    const flush = () => {
-      if (currentLines.length === 0) return;
-      sections.push({ label: currentLabel, lines: currentLines });
-      currentLines = [];
-    };
-    lines.forEach((line) => {
-      const marker = line.text.trim().match(/^\[(.+)\]$/);
-      if (marker) {
-        flush();
-        currentLabel = marker[1].trim() || fallbackLabel;
-        return;
-      }
-      currentLines.push(line);
-    });
-    flush();
-    if (sections.length === 0) {
-      sections.push({ label: fallbackLabel, lines: [{ text: "-" }] });
-    }
-    return sections;
-  };
-
-  const serializePreviewLines = (lines: BulkPreviewLine[]) =>
-    lines.map((line) => `${line.tone ?? "none"}|${line.text}`).join("\n");
-
-  const hasChangedPreviewTone = (lines: BulkPreviewLine[]) =>
-    lines.some((line) => line.tone === "added" || line.tone === "removed");
-
-  const buildPreviewSections = (item: BulkPreviewItem): BulkPreviewSection[] => {
-    if (item.error) {
-      return [
-        {
-          key: "error",
-          label: "Error",
-          before: [{ text: item.error, tone: "removed" }],
-          after: [{ text: item.error, tone: "added" }],
-          changed: true,
-          error: item.error,
-        },
-      ];
-    }
-    const beforeSections = splitPreviewLinesBySection(item.before, sectionLabelByOperation);
-    const afterSections = splitPreviewLinesBySection(item.after, sectionLabelByOperation);
-    const labels: string[] = [];
-    const seen = new Set<string>();
-    [...beforeSections, ...afterSections].forEach((section) => {
-      const key = section.label.trim().toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      labels.push(section.label);
-    });
-    return labels.map((label, index) => {
-      const normalized = label.trim().toLowerCase();
-      const before = beforeSections.find((section) => section.label.trim().toLowerCase() === normalized)?.lines ?? [];
-      const after = afterSections.find((section) => section.label.trim().toLowerCase() === normalized)?.lines ?? [];
-      const changed =
-        hasChangedPreviewTone(before) ||
-        hasChangedPreviewTone(after) ||
-        serializePreviewLines(before) !== serializePreviewLines(after);
-      return {
-        key: `${normalized || "section"}-${index}`,
-        label,
-        before: before.length > 0 ? before : [{ text: "-" }],
-        after: after.length > 0 ? after : [{ text: "-" }],
-        changed,
-      };
-    });
-  };
-
   const bucketPreviewBadgeClasses = (item: BulkPreviewItem) => {
     if (item.error) {
       return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100";
@@ -4175,39 +4065,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     );
     const operationPart = sanitizeExportFilenamePart(bulkOperation || "operation");
 
-    const itemsWithChanges = bulkPreview.filter((item) => item.changed || Boolean(item.error));
-    const payload = {
-      generated_at: exportedAt,
-      [exportScopeKey]: {
+    const payload = buildBulkPreviewExportPayload({
+      generatedAt: exportedAt,
+      items: bulkPreview,
+      operation: bulkOperation,
+      scopeKey: exportScopeKey,
+      scope: {
         id: selectedEndpointId ?? null,
         name: selectedEndpoint?.name ?? null,
       },
-      operation: bulkOperation || null,
-      summary: {
-        total: bulkPreview.length,
-        changed: previewStats.changed,
-        unchanged: previewStats.unchanged,
-        errors: previewStats.errors,
-        exported_items: itemsWithChanges.length,
-      },
-      items: itemsWithChanges.map((item) => {
-        const sections = buildPreviewSections(item);
-        return {
-          bucket: item.bucket,
-          changed: item.changed,
-          error: item.error ?? null,
-          sections: sections
-            .filter((section) => section.changed || Boolean(section.error))
-            .map((section) => ({
-              label: section.label,
-              changed: section.changed,
-              error: section.error ?? null,
-              before: section.before,
-              after: section.after,
-            })),
-        };
-      }),
-    };
+    });
 
     triggerDownload(
       `${exportPrefix}-bulk-preview-${endpointPart}-${operationPart}-${timestamp}.json`,
@@ -7691,7 +7558,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             {bulkPreview.length > 0 && (
               <div className="max-h-[420px] space-y-2 overflow-auto rounded-lg border border-slate-200 p-2 dark:border-slate-800">
                 {bulkPreview.map((item) => {
-                  const sections = buildPreviewSections(item);
+                  const sections = buildBulkPreviewSections(item, bulkOperation);
                   const changedSections = sections.filter((section) => section.changed).length;
                   return (
                     <UiDetails
