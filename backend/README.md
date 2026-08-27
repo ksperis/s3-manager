@@ -40,6 +40,16 @@ policy and may not include unpublished checkout changes.
 ## Migrations (Alembic)
 
 Schema migrations are managed by Alembic and are applied automatically at startup.
+An empty database is created directly from the current SQLAlchemy metadata and
+then stamped at the current Alembic head, so a new installation does not replay
+historical schema and data transformations. A non-empty versioned database still
+runs `upgrade head`, preserving direct upgrades from every supported revision.
+Startup refuses to stamp a non-empty database that has no `alembic_version` table.
+
+The manual command below intentionally replays the complete migration chain on an
+empty database and is kept in CI to validate historical upgrades. New migrations
+may transform existing data, but required initial rows must be created by the
+idempotent application initialization that runs after both schema paths.
 
 Common commands (from `backend/`):
 

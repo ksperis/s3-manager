@@ -9,18 +9,20 @@ from urllib.parse import urlparse
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import text
+from sqlalchemy import Column, MetaData, PrimaryKeyConstraint, String, Table, inspect, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import is_postgresql_url, is_sqlite_url, sqlite_integrity_status
-from app.db import LdapProvider, OidcProvider
+from app.db import Base, LdapProvider, OidcProvider
 from app.services.storage_endpoints_service import StorageEndpointsService
 
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 _POSTGRES_STARTUP_LOCK_ID = 2_026_070_300_001
+_ALEMBIC_VERSION_TABLE = "alembic_version"
+_POSTGRES_ALEMBIC_VERSION_LENGTH = 255
 
 
 def _validate_persisted_auth_providers(db: Session) -> None:
@@ -71,6 +73,45 @@ def _postgres_startup_lock(engine):
             logger.info("Released PostgreSQL startup advisory lock %s", _POSTGRES_STARTUP_LOCK_ID)
 
 
+def _create_postgresql_alembic_version_table(connection) -> None:
+    if connection.dialect.name != "postgresql":
+        return
+    metadata = MetaData()
+    Table(
+        _ALEMBIC_VERSION_TABLE,
+        metadata,
+        Column("version_num", String(length=_POSTGRES_ALEMBIC_VERSION_LENGTH), nullable=False),
+        PrimaryKeyConstraint("version_num", name="alembic_version_pkc"),
+    ).create(connection)
+
+
+def _initialize_or_upgrade_schema(engine) -> None:
+    config = _alembic_config()
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        table_names = set(inspector.get_table_names())
+        view_names = set(inspector.get_view_names())
+
+        if not table_names and not view_names:
+            Base.metadata.create_all(bind=connection)
+            _create_postgresql_alembic_version_table(connection)
+            config.attributes["connection"] = connection
+            command.stamp(config, "head")
+            logger.info(
+                "Bootstrapped empty database from SQLAlchemy metadata and stamped Alembic head"
+            )
+            return
+
+        if _ALEMBIC_VERSION_TABLE not in table_names:
+            raise RuntimeError(
+                "Database is not empty and has no alembic_version table. "
+                "Refusing to create or stamp a potentially unmanaged or partially initialized schema."
+            )
+
+        config.attributes["connection"] = connection
+        command.upgrade(config, "head")
+
+
 def _init_db_locked(engine, session_factory) -> None:
     integrity_ok, integrity_details = sqlite_integrity_status(engine)
     if is_sqlite_url(settings.database_url) and not integrity_ok:
@@ -79,7 +120,7 @@ def _init_db_locked(engine, session_factory) -> None:
             "Stop the backend, back up the database files, run `sqlite3 <db> 'PRAGMA integrity_check;'`, "
             f"then restore or rebuild the database before retrying. Details: {integrity_details}"
         )
-    command.upgrade(_alembic_config(), "head")
+    _initialize_or_upgrade_schema(engine)
     integrity_ok, integrity_details = sqlite_integrity_status(engine)
     if is_sqlite_url(settings.database_url) and not integrity_ok:
         raise RuntimeError(

@@ -46,7 +46,24 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _run_migrations_with_connection(connection) -> None:
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        render_as_batch=connection.dialect.name == "sqlite",
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 def run_migrations_online() -> None:
+    supplied_connection = config.attributes.get("connection")
+    if supplied_connection is not None:
+        _run_migrations_with_connection(supplied_connection)
+        return
+
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = _database_url()
     connect_args = _sqlite_connect_args(configuration["sqlalchemy.url"])
@@ -58,15 +75,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-            render_as_batch=configuration["sqlalchemy.url"].startswith("sqlite"),
-        )
-
-        with context.begin_transaction():
-            context.run_migrations()
+        _run_migrations_with_connection(connection)
 
 
 if context.is_offline_mode():
