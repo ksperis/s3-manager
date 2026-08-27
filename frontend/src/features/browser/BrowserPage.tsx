@@ -71,6 +71,7 @@ import { useBrowserDeleteItems } from "./useBrowserDeleteItems";
 import { useBrowserDownloads } from "./useBrowserDownloads";
 import { useBrowserFolderTree } from "./useBrowserFolderTree";
 import { useBrowserLazyColumns } from "./useBrowserLazyColumns";
+import { useBrowserListingRefresh } from "./useBrowserListingRefresh";
 import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
@@ -648,7 +649,6 @@ export default function BrowserPage({
   const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
   const bucketPanelViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketPanelLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-  const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const accountIdForApiRef = useRef(accountIdForApi);
   const operationIdsRef = useRef(new Set<string>());
   const storageEndpointCaps = useMemo(() => {
@@ -1710,21 +1710,20 @@ export default function BrowserPage({
     return `${bucketName}/${trimmed}`;
   }, [bucketName, prefix]);
 
-  const refreshObjectsNow = useCallback(
-    async (prefixOverride: string) => {
-      await loadObjects({ prefixOverride, silent: true, forceRefresh: true });
-      loadTreeChildren(prefixOverride, { expand: false });
-    },
-    [loadObjects, loadTreeChildren],
-  );
-
-  const reloadObjects = useCallback(
-    async (prefixOverride: string) => {
-      await loadObjects({ prefixOverride });
-      loadTreeChildren(prefixOverride);
-    },
-    [loadObjects, loadTreeChildren],
-  );
+  const {
+    refreshAfterUpload: refreshUploadedListing,
+    refreshNow: refreshObjectsNow,
+    reload: reloadObjects,
+    requestRefresh: requestObjectsRefresh,
+  } = useBrowserListingRefresh({
+    bucketName,
+    contextKey: bucketAccessContextKey,
+    enabled: hasS3AccountContext,
+    loadObjects,
+    loadTreeChildren,
+    prefix,
+    refreshToken,
+  });
 
   const listAllObjectsForPrefix = useCallback(
     async (
@@ -2671,39 +2670,6 @@ export default function BrowserPage({
     openObjectDetails(item, "versions");
   };
 
-  const requestObjectsRefresh = useCallback(
-    (prefixOverride: string) => {
-      if (typeof window === "undefined") return;
-      if (objectsRefreshTimeoutRef.current !== null) return;
-      objectsRefreshTimeoutRef.current = window.setTimeout(() => {
-        objectsRefreshTimeoutRef.current = null;
-        void loadObjects({ prefixOverride, silent: true });
-        loadTreeChildren(prefixOverride, { expand: false });
-      }, 400);
-    },
-    [loadObjects, loadTreeChildren],
-  );
-
-  const previousRefreshTokenRef = useRef(refreshToken);
-  useEffect(() => {
-    if (
-      refreshToken === undefined ||
-      refreshToken === previousRefreshTokenRef.current
-    ) {
-      return;
-    }
-    previousRefreshTokenRef.current = refreshToken;
-    if (bucketName && hasS3AccountContext) {
-      void refreshObjectsNow(prefix);
-    }
-  }, [
-    bucketName,
-    hasS3AccountContext,
-    prefix,
-    refreshObjectsNow,
-    refreshToken,
-  ]);
-
   const startQueuedUpload = useBrowserQueuedUpload({
     clearOperationController,
     completeOperation,
@@ -2719,18 +2685,6 @@ export default function BrowserPage({
     updateOperation,
     useProxyTransfers,
   });
-
-  const refreshUploadedListing = useCallback(
-    (targetPrefix: string) => {
-      void loadObjects({
-        prefixOverride: targetPrefix,
-        silent: true,
-        forceRefresh: true,
-      });
-      loadTreeChildren(targetPrefix, { expand: false });
-    },
-    [loadObjects, loadTreeChildren],
-  );
 
   const {
     cancelUploadGroup,
@@ -2761,15 +2715,6 @@ export default function BrowserPage({
     startUpload: startQueuedUpload,
     workspaceNoun,
   });
-
-  useEffect(() => {
-    return () => {
-      if (objectsRefreshTimeoutRef.current !== null) {
-        window.clearTimeout(objectsRefreshTimeoutRef.current);
-        objectsRefreshTimeoutRef.current = null;
-      }
-    };
-  }, []);
 
   const openConfirmDialog = (dialog: BrowserConfirmDialogState) => {
     setConfirmDialog(dialog);
