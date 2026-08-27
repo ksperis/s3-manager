@@ -99,6 +99,7 @@ import BucketUiTagSettingsBadge, {
 } from "./BucketUiTagSettingsBadge";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
+import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
 import {
@@ -1005,162 +1006,31 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     });
     return groups;
   }, [featureColumnOptions]);
-  const needsOwnerQuotaDetails = useMemo(
+  const {
+    baseRequiresStats,
+    detailLoadingColumnIds,
+    exportWithStats,
+    includeParams,
+    requiresStats,
+  } = useMemo(
     () =>
-      visibleColumns.includes("owner_quota_max_size_bytes") ||
-      visibleColumns.includes("owner_quota_max_objects") ||
-      visibleColumns.includes("owner_quota_usage_size_percent") ||
-      visibleColumns.includes("owner_quota_usage_object_percent"),
-    [visibleColumns]
+      buildBucketOpsListingProjection({
+        advancedApplied,
+        featureColumnIds: featureColumnOptions.map(({ id }) => id),
+        isStorageOps,
+        sortField: sort.field,
+        usageFeatureEnabled,
+        visibleColumns,
+      }),
+    [
+      advancedApplied,
+      featureColumnOptions,
+      isStorageOps,
+      sort.field,
+      usageFeatureEnabled,
+      visibleColumns,
+    ],
   );
-  const needsOwnerUsageDetails = useMemo(
-    () =>
-      visibleColumns.includes("owner_used_bytes") ||
-      visibleColumns.includes("owner_object_count") ||
-      visibleColumns.includes("owner_quota_usage_size_percent") ||
-      visibleColumns.includes("owner_quota_usage_object_percent"),
-    [visibleColumns]
-  );
-  const exportIncludeParams = useMemo(() => {
-    const include = new Set<string>();
-    if (visibleColumns.includes("owner_name")) {
-      include.add("owner_name");
-    }
-    if (visibleColumns.includes("owner_suspended")) {
-      include.add("owner_suspended");
-    }
-    if (visibleColumns.includes("tags")) {
-      include.add("tags");
-    }
-    if (needsOwnerQuotaDetails) {
-      include.add("owner_quota");
-    }
-    if (needsOwnerUsageDetails) {
-      include.add("owner_quota_usage");
-    }
-    featureColumnOptions.forEach((column) => {
-      if (visibleColumns.includes(column.id)) {
-        include.add(column.id);
-      }
-    });
-    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((column) => {
-      if (visibleColumns.includes(column.id)) {
-        include.add(column.include);
-      }
-    });
-    return Array.from(include.values());
-  }, [featureColumnOptions, needsOwnerQuotaDetails, needsOwnerUsageDetails, visibleColumns]);
-
-  const includeParams = useMemo(() => {
-    const include: string[] = [];
-    if (visibleColumns.includes("owner_name")) include.push("owner_name");
-    if (visibleColumns.includes("owner_suspended")) include.push("owner_suspended");
-    if (needsOwnerQuotaDetails) include.push("owner_quota");
-    if (needsOwnerUsageDetails) include.push("owner_quota_usage");
-    if (visibleColumns.includes("tags")) include.push("tags");
-    featureColumnOptions.forEach(({ id }) => {
-      if (visibleColumns.includes(id)) include.push(id);
-    });
-    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((column) => {
-      if (visibleColumns.includes(column.id)) include.push(column.include);
-    });
-    return include;
-  }, [featureColumnOptions, needsOwnerQuotaDetails, needsOwnerUsageDetails, visibleColumns]);
-
-  const advancedStatsRequired = useMemo(() => {
-    if (!usageFeatureEnabled || !advancedApplied) return false;
-    return Boolean(
-      advancedApplied.minUsedBytes ||
-        advancedApplied.maxUsedBytes ||
-        advancedApplied.minObjects ||
-        advancedApplied.maxObjects ||
-      advancedApplied.minQuotaBytes ||
-      advancedApplied.maxQuotaBytes ||
-      advancedApplied.minQuotaObjects ||
-      advancedApplied.maxQuotaObjects ||
-      advancedApplied.minQuotaUsageSizePercent ||
-      advancedApplied.maxQuotaUsageSizePercent ||
-      advancedApplied.minQuotaUsageObjectPercent ||
-      advancedApplied.maxQuotaUsageObjectPercent ||
-      advancedApplied.minOwnerUsedBytes ||
-      advancedApplied.maxOwnerUsedBytes ||
-        advancedApplied.minOwnerObjects ||
-        advancedApplied.maxOwnerObjects ||
-        advancedApplied.minOwnerQuotaUsageSizePercent ||
-        advancedApplied.maxOwnerQuotaUsageSizePercent ||
-        advancedApplied.minOwnerQuotaUsageObjectPercent ||
-        advancedApplied.maxOwnerQuotaUsageObjectPercent
-    );
-  }, [advancedApplied, usageFeatureEnabled]);
-
-  const requiresStats = useMemo(() => {
-    if (!usageFeatureEnabled) return false;
-    if (advancedStatsRequired) return true;
-    return (
-      visibleColumns.includes("used_bytes") ||
-      visibleColumns.includes("object_count") ||
-      visibleColumns.includes("quota_max_size_bytes") ||
-      visibleColumns.includes("quota_max_objects") ||
-      visibleColumns.includes("quota_usage_size_percent") ||
-      visibleColumns.includes("quota_usage_object_percent") ||
-      visibleColumns.includes("owner_used_bytes") ||
-      visibleColumns.includes("owner_object_count") ||
-      visibleColumns.includes("owner_quota_usage_size_percent") ||
-      visibleColumns.includes("owner_quota_usage_object_percent") ||
-      visibleColumns.includes("quota_status")
-    );
-  }, [advancedStatsRequired, usageFeatureEnabled, visibleColumns]);
-  const exportRequiresStats = useMemo(() => {
-    if (!usageFeatureEnabled) return false;
-    return (
-      visibleColumns.includes("used_bytes") ||
-      visibleColumns.includes("object_count") ||
-      visibleColumns.includes("quota_max_size_bytes") ||
-      visibleColumns.includes("quota_max_objects") ||
-      visibleColumns.includes("quota_usage_size_percent") ||
-      visibleColumns.includes("quota_usage_object_percent") ||
-      visibleColumns.includes("owner_used_bytes") ||
-      visibleColumns.includes("owner_object_count") ||
-      visibleColumns.includes("owner_quota_usage_size_percent") ||
-      visibleColumns.includes("owner_quota_usage_object_percent") ||
-      visibleColumns.includes("quota_status")
-    );
-  }, [usageFeatureEnabled, visibleColumns]);
-  const sortRequiresStats = useMemo(() => sort.field === "used_bytes" || sort.field === "object_count", [sort.field]);
-  const baseRequiresStats = useMemo(
-    () => (isStorageOps ? usageFeatureEnabled && (advancedStatsRequired || sortRequiresStats) : usageFeatureEnabled),
-    [advancedStatsRequired, isStorageOps, sortRequiresStats, usageFeatureEnabled]
-  );
-  const exportWithStats = useMemo(
-    () => usageFeatureEnabled && (baseRequiresStats || exportRequiresStats),
-    [usageFeatureEnabled, baseRequiresStats, exportRequiresStats]
-  );
-  const detailLoadingColumnIds = useMemo(() => {
-    const ids = new Set<string>(includeParams);
-    if (requiresStats && !baseRequiresStats) {
-      [
-        "used_bytes",
-        "object_count",
-        "quota_max_size_bytes",
-        "quota_max_objects",
-        "quota_usage_size_percent",
-        "quota_usage_object_percent",
-        "owner_used_bytes",
-        "owner_object_count",
-        "owner_quota_usage_size_percent",
-        "owner_quota_usage_object_percent",
-        "quota_status",
-      ].forEach((id) => ids.add(id));
-    }
-    if (visibleColumns.includes("owner_quota_max_size_bytes")) ids.add("owner_quota_max_size_bytes");
-    if (visibleColumns.includes("owner_suspended")) ids.add("owner_suspended");
-    if (visibleColumns.includes("owner_quota_max_objects")) ids.add("owner_quota_max_objects");
-    if (visibleColumns.includes("owner_used_bytes")) ids.add("owner_used_bytes");
-    if (visibleColumns.includes("owner_object_count")) ids.add("owner_object_count");
-    if (visibleColumns.includes("owner_quota_usage_size_percent")) ids.add("owner_quota_usage_size_percent");
-    if (visibleColumns.includes("owner_quota_usage_object_percent")) ids.add("owner_quota_usage_object_percent");
-    return ids;
-  }, [includeParams, requiresStats, baseRequiresStats, visibleColumns]);
 
   const quickFilterDraftParsed = useMemo(() => parseExactListInput(filter), [filter]);
   const quickFilterAppliedParsed = useMemo(() => parseExactListInput(filterValue), [filterValue]);
@@ -2074,7 +1944,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         advanced_filter: advancedFilterParam,
         sort_by: sort.field,
         sort_dir: sort.direction,
-        include: exportIncludeParams.length > 0 ? exportIncludeParams : undefined,
+        include: includeParams.length > 0 ? includeParams : undefined,
         with_stats: exportWithStats,
         ui_tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
         ui_tag_match: tagFilterMode,
@@ -2123,7 +1993,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           page: nextPage,
           page_size: 200,
           advanced_filter: advancedFilter,
-          include: exportIncludeParams.length > 0 ? exportIncludeParams : undefined,
+          include: includeParams.length > 0 ? includeParams : undefined,
           with_stats: exportWithStats,
         });
         (response.items ?? []).forEach((bucket) => {
