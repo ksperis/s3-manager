@@ -70,6 +70,7 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/auth_sessions.py", "refresh_access_token", "/refresh"): "short-lived authentication operation excluded by audit policy",
     ("POST", "app/routers/auth.py", "webauthn_registration_options", "/webauthn/registration/options"): "short-lived authentication challenge",
     ("POST", "app/routers/auth.py", "webauthn_authentication_options", "/webauthn/authentication/options"): "short-lived authentication challenge",
+    ("POST", "app/routers/auth_sessions.py", "profile_webauthn_authentication_options", "/security/webauthn/authentication/options"): "short-lived authentication challenge",
     ("POST", "app/routers/auth_sessions.py", "profile_webauthn_registration_options", "/security/webauthn/registration/options"): "short-lived authentication challenge",
     ("POST", "app/routers/browser_objects.py", "copy_object", "/buckets/{bucket_name}/copy"): "data-plane operation covered by provider access logs",
     ("POST", "app/routers/browser_objects.py", "delete_objects", "/buckets/{bucket_name}/delete"): "data-plane operation covered by provider access logs",
