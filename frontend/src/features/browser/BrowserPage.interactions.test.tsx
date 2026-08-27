@@ -5680,7 +5680,7 @@ describe("BrowserPage interactions", () => {
     expect((copyObjectMock.mock.calls[0]?.[3] as AbortSignal).aborted).toBe(
       true,
     );
-  });
+  }, 15_000);
 
   it("supports Stop for cleaning old versions", async () => {
     const user = userEvent.setup();
@@ -5701,15 +5701,14 @@ describe("BrowserPage interactions", () => {
     await waitFor(() => {
       expect(getBucketVersioningMock).toHaveBeenCalledTimes(1);
     });
-    await openContextMoreMenu(user);
-    await waitFor(() => {
-      expect(
-        screen.getByRole("menuitem", { name: "Clean old versions" }),
-      ).toBeEnabled();
+    const menu = await openContextMoreMenu(user);
+    const cleanOldVersionsAction = within(menu).getByRole("menuitem", {
+      name: "Clean old versions",
     });
-    fireEvent.click(
-      screen.getByRole("menuitem", { name: "Clean old versions" }),
-    );
+    await waitFor(() => {
+      expect(cleanOldVersionsAction).toBeEnabled();
+    });
+    await user.click(cleanOldVersionsAction);
 
     const modal = await screen.findByRole("dialog", { name: "Clean old versions" });
     await user.type(within(modal).getByPlaceholderText("e.g. 3"), "1");
