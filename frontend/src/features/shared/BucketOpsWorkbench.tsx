@@ -100,6 +100,7 @@ import BucketUiTagSettingsBadge, {
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
+import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
 import {
@@ -113,7 +114,6 @@ import {
   loadBucketListReturnContext,
   saveBucketListReturnContext,
 } from "./bucketListReturnContext";
-import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../../utils/uiTags";
 import {
   buildBucketPolicySummaryLines,
   buildBucketTagSummaryLines,
@@ -172,11 +172,9 @@ import {
   buildAdvancedFilterPayload,
   buildAdvancedFilterSecondarySectionState,
   defaultAdvancedFilter,
-  formatStorageOpsContextKindLabel,
   hasAdvancedFilters,
   normalizeAdvancedSelectionValues,
   stripUnsupportedAdvancedFeatureFilters,
-  toStorageOpsContextKind,
   type ActiveFilterRemoveAction,
   type AdvancedFilterSecondarySectionId,
   type AdvancedFilterSecondarySectionState,
@@ -658,141 +656,34 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(
     () => initialStoredBucketListState?.sort ?? DEFAULT_SORT
   );
-  const storageOpsContextItems = useMemo(
+  const {
+    contextItems: storageOpsContextItems,
+    contextLabelById: storageOpsContextLabelById,
+    filteredContextItems: filteredStorageOpsContextItems,
+    contextSelectionSet: storageOpsContextSelectionSet,
+    allFilteredContextsSelected: allFilteredStorageOpsContextsSelected,
+    hasFilteredContextSelection: hasFilteredStorageOpsContextSelection,
+    endpointItems: storageOpsEndpointItems,
+    filteredEndpointItems: filteredStorageOpsEndpointItems,
+    endpointSelectionSet: storageOpsEndpointSelectionSet,
+    allFilteredEndpointsSelected: allFilteredStorageOpsEndpointsSelected,
+    hasFilteredEndpointSelection: hasFilteredStorageOpsEndpointSelection,
+  } = useMemo(
     () =>
-      storageOpsContexts
-        .filter((context) => context.kind === "account" || context.kind === "connection" || context.kind === "s3_user")
-        .map((context) => {
-          const kind = toStorageOpsContextKind(context.kind);
-          const typeLabel = formatStorageOpsContextKindLabel(kind);
-          const entityTags = filterSelectorVisibleUiTags(context.tags);
-          const endpointTags = filterSelectorVisibleUiTags(context.endpoint_tags);
-          const tagItems = buildUiTagItems(entityTags, endpointTags);
-          const haystack = [
-            context.id,
-            context.display_name,
-            context.endpoint_name,
-            typeLabel,
-            context.kind,
-            kind,
-            ...extractUiTagLabels(entityTags),
-            ...extractUiTagLabels(endpointTags),
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          return {
-            id: context.id,
-            name: context.display_name,
-            kind,
-            typeLabel,
-            endpointName: context.endpoint_name ?? null,
-            tagItems,
-            haystack,
-          };
-        })
-        .sort((a, b) => {
-          const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-          if (byName !== 0) return byName;
-          return a.id.localeCompare(b.id, undefined, { sensitivity: "base" });
-        }),
-    [storageOpsContexts]
-  );
-  const storageOpsContextLabelById = useMemo(() => {
-    const labels = new Map<string, string>();
-    storageOpsContextItems.forEach((context) => {
-      labels.set(context.id, context.name);
-    });
-    return labels;
-  }, [storageOpsContextItems]);
-  const filteredStorageOpsContextItems = useMemo(() => {
-    const query = storageOpsContextFilter.trim().toLowerCase();
-    if (!query) return storageOpsContextItems;
-    return storageOpsContextItems.filter((context) => context.haystack.includes(query));
-  }, [storageOpsContextFilter, storageOpsContextItems]);
-  const storageOpsContextSelectionSet = useMemo(
-    () => new Set(normalizeAdvancedSelectionValues(advancedDraft.contextIds)),
-    [advancedDraft.contextIds]
-  );
-  const allFilteredStorageOpsContextsSelected =
-    filteredStorageOpsContextItems.length > 0 &&
-    filteredStorageOpsContextItems.every((context) => storageOpsContextSelectionSet.has(context.id));
-  const hasFilteredStorageOpsContextSelection = filteredStorageOpsContextItems.some((context) =>
-    storageOpsContextSelectionSet.has(context.id)
-  );
-  const storageOpsEndpointItems = useMemo(() => {
-    const byName = new Map<
-      string,
-      {
-        name: string;
-        contextNames: string[];
-        tagItems: ReturnType<typeof buildUiTagItems>;
-        haystack: string;
-      }
-    >();
-    storageOpsContexts.forEach((context) => {
-      const endpointName = (context.endpoint_name ?? "").trim();
-      if (!endpointName) return;
-      const existing = byName.get(endpointName);
-      const entityTags = filterSelectorVisibleUiTags(context.tags);
-      const endpointTags = filterSelectorVisibleUiTags(context.endpoint_tags);
-      const tagItems = buildUiTagItems(entityTags, endpointTags);
-      if (existing) {
-        if (!existing.contextNames.includes(context.display_name)) {
-          existing.contextNames.push(context.display_name);
-        }
-        const knownTagKeys = new Set(existing.tagItems.map((tag) => tag.key));
-        tagItems.forEach((tag) => {
-          if (!knownTagKeys.has(tag.key)) {
-            existing.tagItems.push(tag);
-          }
-        });
-        existing.haystack = [
-          existing.haystack,
-          context.display_name,
-          formatStorageOpsContextKindLabel(context.kind),
-          context.kind,
-          ...extractUiTagLabels(entityTags),
-          ...extractUiTagLabels(endpointTags),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return;
-      }
-      byName.set(endpointName, {
-        name: endpointName,
-        contextNames: [context.display_name],
-        tagItems,
-        haystack: [
-          endpointName,
-          context.display_name,
-          formatStorageOpsContextKindLabel(context.kind),
-          context.kind,
-          ...extractUiTagLabels(entityTags),
-          ...extractUiTagLabels(endpointTags),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase(),
-      });
-    });
-    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-  }, [storageOpsContexts]);
-  const filteredStorageOpsEndpointItems = useMemo(() => {
-    const query = storageOpsEndpointFilter.trim().toLowerCase();
-    if (!query) return storageOpsEndpointItems;
-    return storageOpsEndpointItems.filter((endpoint) => endpoint.haystack.includes(query));
-  }, [storageOpsEndpointFilter, storageOpsEndpointItems]);
-  const storageOpsEndpointSelectionSet = useMemo(
-    () => new Set(normalizeAdvancedSelectionValues(advancedDraft.endpointNames)),
-    [advancedDraft.endpointNames]
-  );
-  const allFilteredStorageOpsEndpointsSelected =
-    filteredStorageOpsEndpointItems.length > 0 &&
-    filteredStorageOpsEndpointItems.every((endpoint) => storageOpsEndpointSelectionSet.has(endpoint.name));
-  const hasFilteredStorageOpsEndpointSelection = filteredStorageOpsEndpointItems.some((endpoint) =>
-    storageOpsEndpointSelectionSet.has(endpoint.name)
+      buildBucketOpsStorageScopeProjection({
+        contexts: storageOpsContexts,
+        contextFilter: storageOpsContextFilter,
+        endpointFilter: storageOpsEndpointFilter,
+        selectedContextIds: advancedDraft.contextIds,
+        selectedEndpointNames: advancedDraft.endpointNames,
+      }),
+    [
+      advancedDraft.contextIds,
+      advancedDraft.endpointNames,
+      storageOpsContextFilter,
+      storageOpsContexts,
+      storageOpsEndpointFilter,
+    ]
   );
 
   useEffect(() => {
