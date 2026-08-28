@@ -79,13 +79,12 @@ import { useBucketOpsListing } from "./useBucketOpsListing";
 import { useBucketOpsRowTags } from "./useBucketOpsRowTags";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
-import { applyBucketOpsConfigPaste } from "./bucketOpsConfigPaste";
 import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
-import { applyBucketOpsBulkUpdate } from "./bucketOpsBulkApply";
 import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
+import { useBucketOpsBulkApply } from "./useBucketOpsBulkApply";
 import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
 import { useBucketOpsBulkPreview } from "./useBucketOpsBulkPreview";
 import { useBucketOpsConfigCopy } from "./useBucketOpsConfigCopy";
@@ -96,7 +95,7 @@ import {
   useBucketUiTags,
   type BucketUiTagTarget as BucketTagTarget,
 } from "./bucketUiTags";
-import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
+import { calculateActionProgressPercent } from "./actionProgress";
 import {
   buildBucketDetailLocationState,
   loadBucketListReturnContext,
@@ -531,10 +530,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setBulkQuotaSizeValue,
     setBulkQuotaSkipConfigured,
   } = useBucketOpsBulkForm();
-  const [bulkApplyLoading, setBulkApplyLoading] = useState(false);
-  const [bulkApplyError, setBulkApplyError] = useState<string | null>(null);
-  const [bulkApplySummary, setBulkApplySummary] = useState<string | null>(null);
-  const [bulkApplyProgress, setBulkApplyProgress] = useState<ActionProgressState | null>(null);
   const [cacheRefreshLoading, setCacheRefreshLoading] = useState(false);
   const {
     activeFeatureTooltipKey,
@@ -1068,8 +1063,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     resetBulkForm();
     resetBulkCopy();
     resetBulkPreview();
-    setBulkApplyError(null);
-    setBulkApplySummary(null);
+    resetBulkApply();
     resetSelectionActions();
     setShowConfigBackupModal(false);
   };
@@ -1225,11 +1219,51 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       bulkQuotaSizeValue,
     ],
   );
-  const resetBulkApplyFeedback = useCallback(() => {
-    setBulkApplyError(null);
-    setBulkApplySummary(null);
-    setBulkApplyProgress(null);
-  }, []);
+  const {
+    applyBulkUpdate,
+    bulkApplyError,
+    bulkApplyLoading,
+    bulkApplyProgress,
+    bulkApplySummary,
+    resetBulkApply,
+  } = useBucketOpsBulkApply({
+    bucketNames: selectedBucketList,
+    clipboard: bulkConfigClipboard,
+    corsUpdateOnlyExisting: bulkCorsUpdateOnlyExisting,
+    deleteBucketCors,
+    deleteBucketLifecycle,
+    deleteBucketLogging,
+    deleteBucketNotifications,
+    deleteBucketPolicy,
+    endpointId: selectedEndpointId,
+    extractError,
+    fetchBucketQuota,
+    getBucketCors,
+    getBucketLifecycle,
+    getBucketLogging,
+    getBucketNotifications,
+    getBucketPolicy,
+    getBucketProperties,
+    getBucketPublicAccessBlock,
+    isStorageOps,
+    lifecycleUpdateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
+    operation: bulkOperation,
+    pastePlan: bulkPastePlan,
+    policyUpdateOnlyExisting: bulkPolicyUpdateOnlyExisting,
+    prepared: preparedBulkInput,
+    putBucketCors,
+    putBucketLifecycle,
+    putBucketLogging,
+    putBucketNotifications,
+    putBucketPolicy,
+    quotaDisabledReason: quotaOperationDisabledReason,
+    quotaSkipConfigured: bulkQuotaSkipConfigured,
+    refreshBuckets,
+    setBucketVersioning,
+    updateBucketObjectLock,
+    updateBucketPublicAccessBlock,
+    updateBucketQuota,
+  });
   const {
     bulkPreview,
     bulkPreviewError,
@@ -1254,7 +1288,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     getBucketPublicAccessBlock,
     isStorageOps,
     lifecycleUpdateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
-    onPreviewStart: resetBulkApplyFeedback,
+    onPreviewStart: resetBulkApply,
     operation: bulkOperation,
     pastePlan: bulkPastePlan,
     policyUpdateOnlyExisting: bulkPolicyUpdateOnlyExisting,
@@ -1305,9 +1339,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     if (!showBulkUpdateModal) return;
     resetBulkPreview();
     cancelBulkCopy();
-    setBulkApplyError(null);
-    setBulkApplySummary(null);
-    setBulkApplyProgress(null);
+    resetBulkApply();
   }, [
     bulkOperation,
     bulkQuotaSizeValue,
@@ -1336,6 +1368,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     bulkPasteMapping,
     bulkConfigClipboard,
     cancelBulkCopy,
+    resetBulkApply,
     resetBulkPreview,
     selectedBuckets,
     showBulkUpdateModal,
@@ -1361,137 +1394,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     resetBulkForm();
     resetBulkCopy();
     resetBulkPreview();
-    setBulkApplyError(null);
-    setBulkApplySummary(null);
-    setBulkApplyProgress(null);
+    resetBulkApply();
   };
 
   const closeBulkUpdateModal = () => {
     setShowBulkUpdateModal(false);
     resetBulkPreview();
     resetBulkCopy();
-    setBulkApplyError(null);
-    setBulkApplySummary(null);
-    setBulkApplyProgress(null);
-  };
-
-  const applyBulkUpdate = async () => {
-    if (!selectedEndpointId || selectedBucketList.length === 0) return;
-    if (!bulkOperation) {
-      setBulkApplyError("Select an operation first.");
-      return;
-    }
-    if (bulkOperation === "copy_configs") {
-      setBulkApplyError("Use 'Copy selected configs' for this operation.");
-      return;
-    }
-    if (bulkOperation === "set_quota" && quotaOperationDisabledReason) {
-      setBulkApplyError(`Set bucket quota is unavailable: ${quotaOperationDisabledReason}.`);
-      return;
-    }
-    if (bulkOperation === "paste_configs") {
-      if (bulkPastePlan.error) {
-        setBulkApplyError(bulkPastePlan.error);
-        return;
-      }
-      setBulkApplyLoading(true);
-      setBulkApplyError(null);
-      setBulkApplySummary(null);
-      setBulkApplyProgress({
-        label: "Applying changes",
-        completed: 0,
-        total: bulkPastePlan.mappings.length,
-        failed: 0,
-      });
-
-      const result = await applyBucketOpsConfigPaste({
-        clipboard: bulkConfigClipboard,
-        deleteBucketCors,
-        deleteBucketLifecycle,
-        deleteBucketLogging,
-        deleteBucketPolicy,
-        fetchBucketQuota,
-        getBucketCors,
-        getBucketLifecycle,
-        getBucketLogging,
-        getBucketPolicy,
-        getBucketProperties,
-        getBucketPublicAccessBlock,
-        isStorageOps,
-        mappings: bulkPastePlan.mappings,
-        onProgress: (progress) => {
-          setBulkApplyProgress({ label: "Applying changes", ...progress });
-        },
-        putBucketCors,
-        putBucketLifecycle,
-        putBucketLogging,
-        putBucketPolicy,
-        setBucketVersioning,
-        targetEndpointId: selectedEndpointId,
-        updateBucketObjectLock,
-        updateBucketPublicAccessBlock,
-        updateBucketQuota,
-      });
-      if (result.error) {
-        setBulkApplyError(result.error);
-      }
-      setBulkApplySummary(result.summary);
-      setBulkApplyLoading(false);
-      refreshBuckets();
-      return;
-    }
-    const prepared = preparedBulkInput;
-    if (prepared.kind === "error") {
-      setBulkApplyError(prepared.error);
-      return;
-    }
-    setBulkApplyLoading(true);
-    setBulkApplyError(null);
-    setBulkApplySummary(null);
-    setBulkApplyProgress({
-      label: "Applying changes",
-      completed: 0,
-      total: selectedBucketList.length,
-      failed: 0,
-    });
-
-    const result = await applyBucketOpsBulkUpdate({
-      bucketNames: selectedBucketList,
-      corsUpdateOnlyExisting: bulkCorsUpdateOnlyExisting,
-      deleteBucketCors,
-      deleteBucketLifecycle,
-      deleteBucketNotifications,
-      deleteBucketPolicy,
-      endpointId: selectedEndpointId,
-      fetchBucketQuota,
-      getBucketCors,
-      getBucketLifecycle,
-      getBucketNotifications,
-      getBucketPolicy,
-      getBucketProperties,
-      getBucketPublicAccessBlock,
-      lifecycleUpdateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
-      onProgress: (progress) => {
-        setBulkApplyProgress({ label: "Applying changes", ...progress });
-      },
-      operation: bulkOperation,
-      policyUpdateOnlyExisting: bulkPolicyUpdateOnlyExisting,
-      prepared: prepared.value,
-      putBucketCors,
-      putBucketLifecycle,
-      putBucketNotifications,
-      putBucketPolicy,
-      quotaSkipConfigured: bulkQuotaSkipConfigured,
-      setBucketVersioning,
-      updateBucketPublicAccessBlock,
-      updateBucketQuota,
-    });
-    if (result.error) {
-      setBulkApplyError(result.error);
-    }
-    setBulkApplySummary(result.summary);
-    setBulkApplyLoading(false);
-    refreshBuckets();
+    resetBulkApply();
   };
 
   const updateAdvancedField = (field: AdvancedTextOrNumericField, value: string) => {
