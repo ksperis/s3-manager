@@ -282,6 +282,7 @@ describe("BucketOpsWorkbench selection actions", () => {
     mocks.noopAsync.mockClear();
     mocks.navigate.mockReset();
     window.localStorage.clear();
+    window.sessionStorage.clear();
     Object.defineProperty(window.URL, "createObjectURL", {
       value: vi.fn(() => "blob:test"),
       writable: true,
@@ -578,6 +579,41 @@ describe("BucketOpsWorkbench selection actions", () => {
     expect(within(dialog).getByText(/Clipboard currently contains config from/)).toHaveTextContent(
       "Clipboard currently contains config from 1 bucket on Archive",
     );
+  });
+
+  it("applies a copied configuration through the shared paste service", async () => {
+    const allBuckets = buildBuckets(1);
+    mocks.listCephAdminBuckets.mockImplementation(createBucketListMock(allBuckets));
+    window.sessionStorage.setItem(
+      "ceph-admin.bucket_list.bulk_config_clipboard.v2",
+      JSON.stringify({
+        version: 1,
+        copiedAt: "2026-08-28T14:00:00.000Z",
+        sourceEndpointId: 7,
+        sourceEndpointName: "Archive",
+        features: { versioning: true },
+        buckets: [{ name: "source-bucket", versioningEnabled: true }],
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
+    const dialog = await screen.findByRole("dialog", { name: "Bulk update" });
+    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "paste_configs" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Preview" }));
+
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Apply changes" })).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply changes" }));
+
+    expect(await within(dialog).findByText("Updated 1 bucket.")).toBeInTheDocument();
+    expect(mocks.noopAsync).toHaveBeenCalledWith(7, "bucket-001", true);
   });
 
   it("does not expose Storage Ops bulk quota updates", async () => {

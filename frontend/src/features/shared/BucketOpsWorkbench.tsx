@@ -93,6 +93,7 @@ import { useBucketOpsRowTags } from "./useBucketOpsRowTags";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
 import { copyBucketOpsConfigs } from "./bucketOpsConfigCopy";
+import { applyBucketOpsConfigPaste } from "./bucketOpsConfigPaste";
 import {
   buildBucketExportColumns,
   buildBucketSelectionJsonPayload,
@@ -2766,173 +2767,38 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         failed: 0,
       });
 
-      const results = await runWithConcurrencySettled(
-        bulkPastePlan.mappings,
-        BULK_CONCURRENCY_LIMIT,
-        async (mapping) => {
-          const features = bulkConfigClipboard?.features;
-          if (!features) {
-            throw new Error("Copied configuration is no longer available.");
-          }
-          const source = mapping.sourceConfig;
-          let changed = false;
-
-          let props: BucketProperties | null = null;
-          if (features.versioning || features.object_lock) {
-            props = await getBucketProperties(selectedEndpointId, mapping.destinationBucket);
-          }
-
-          if (!isStorageOps && features.quota && source.quota && updateBucketQuota) {
-            const currentQuota = await fetchBucketQuota(mapping.destinationBucket);
-            const quotaChanged =
-              currentQuota.maxSizeBytes !== source.quota.maxSizeBytes || currentQuota.maxObjects !== source.quota.maxObjects;
-            if (quotaChanged) {
-              const payloadSizeGb = source.quota.maxSizeBytes != null ? bytesToGiB(source.quota.maxSizeBytes) : null;
-              await updateBucketQuota(selectedEndpointId, mapping.destinationBucket, {
-                max_size_gb: payloadSizeGb,
-                max_size_unit: payloadSizeGb != null ? "GiB" : null,
-                max_objects: source.quota.maxObjects,
-              });
-              changed = true;
-            }
-          }
-
-          if (features.versioning && source.versioningEnabled !== null) {
-            const currentEnabled = normalizeVersioningStatus(props?.versioning_status);
-            const versioningChanged = currentEnabled === null ? true : currentEnabled !== source.versioningEnabled;
-            if (versioningChanged) {
-              await setBucketVersioning(selectedEndpointId, mapping.destinationBucket, source.versioningEnabled);
-              changed = true;
-            }
-          }
-
-          if (features.object_lock && source.objectLock) {
-            const rawCurrentObjectLock =
-              props?.object_lock && typeof props.object_lock === "object"
-                ? (props.object_lock as Record<string, unknown>)
-                : {};
-            const currentObjectLock = normalizeObjectLockSnapshot({
-              ...rawCurrentObjectLock,
-              enabled: Boolean(props?.object_lock_enabled ?? rawCurrentObjectLock.enabled),
-            });
-            if (!isObjectLockSnapshotEqual(currentObjectLock, source.objectLock)) {
-              await updateBucketObjectLock(selectedEndpointId, mapping.destinationBucket, source.objectLock);
-              changed = true;
-            }
-          }
-
-          if (features.public_access_block && source.publicAccessBlock) {
-            const currentPublicAccessBlock = normalizePublicAccessBlockState(
-              await getBucketPublicAccessBlock(selectedEndpointId, mapping.destinationBucket)
-            );
-            if (!isPublicAccessBlockEquivalent(currentPublicAccessBlock, source.publicAccessBlock)) {
-              await updateBucketPublicAccessBlock(selectedEndpointId, mapping.destinationBucket, source.publicAccessBlock);
-              changed = true;
-            }
-          }
-
-          if (features.lifecycle && source.lifecycleRules) {
-            const currentLifecycle = (
-              (await getBucketLifecycle(selectedEndpointId, mapping.destinationBucket)).rules ?? []
-            ) as Record<string, unknown>[];
-            if (stableStringify(currentLifecycle) !== stableStringify(source.lifecycleRules)) {
-              if (source.lifecycleRules.length === 0) {
-                if (currentLifecycle.length > 0) {
-                  await deleteBucketLifecycle(selectedEndpointId, mapping.destinationBucket);
-                  changed = true;
-                }
-              } else {
-                await putBucketLifecycle(selectedEndpointId, mapping.destinationBucket, source.lifecycleRules);
-                changed = true;
-              }
-            }
-          }
-
-          if (features.cors && source.corsRules) {
-            const currentCors = (
-              (await getBucketCors(selectedEndpointId, mapping.destinationBucket)).rules ?? []
-            ) as Record<string, unknown>[];
-            if (stableStringify(currentCors) !== stableStringify(source.corsRules)) {
-              if (source.corsRules.length === 0) {
-                if (currentCors.length > 0) {
-                  await deleteBucketCors(selectedEndpointId, mapping.destinationBucket);
-                  changed = true;
-                }
-              } else {
-                await putBucketCors(selectedEndpointId, mapping.destinationBucket, source.corsRules);
-                changed = true;
-              }
-            }
-          }
-
-          if (features.policy) {
-            const currentPolicy = (
-              (await getBucketPolicy(selectedEndpointId, mapping.destinationBucket)).policy ?? null
-            ) as Record<string, unknown> | null;
-            if (stableStringify(currentPolicy) !== stableStringify(source.policy)) {
-              if (!source.policy) {
-                if (currentPolicy) {
-                  await deleteBucketPolicy(selectedEndpointId, mapping.destinationBucket);
-                  changed = true;
-                }
-              } else {
-                await putBucketPolicy(selectedEndpointId, mapping.destinationBucket, source.policy);
-                changed = true;
-              }
-            }
-          }
-
-          if (features.access_logging && source.accessLogging) {
-            const currentAccessLogging = normalizeAccessLoggingSnapshot(
-              (await getBucketLogging(selectedEndpointId, mapping.destinationBucket)) as unknown as Record<string, unknown>
-            );
-            if (!isAccessLoggingSnapshotEqual(currentAccessLogging, source.accessLogging)) {
-              const hasTargetBucket = Boolean(source.accessLogging.target_bucket);
-              if (!source.accessLogging.enabled || !hasTargetBucket) {
-                if (currentAccessLogging.enabled || currentAccessLogging.target_bucket) {
-                  await deleteBucketLogging(selectedEndpointId, mapping.destinationBucket);
-                  changed = true;
-                }
-              } else {
-                await putBucketLogging(selectedEndpointId, mapping.destinationBucket, {
-                  enabled: source.accessLogging.enabled,
-                  target_bucket: source.accessLogging.target_bucket,
-                  target_prefix: source.accessLogging.target_prefix ?? "",
-                });
-                changed = true;
-              }
-            }
-          }
-
-          return { changed };
+      const result = await applyBucketOpsConfigPaste({
+        clipboard: bulkConfigClipboard,
+        deleteBucketCors,
+        deleteBucketLifecycle,
+        deleteBucketLogging,
+        deleteBucketPolicy,
+        fetchBucketQuota,
+        getBucketCors,
+        getBucketLifecycle,
+        getBucketLogging,
+        getBucketPolicy,
+        getBucketProperties,
+        getBucketPublicAccessBlock,
+        isStorageOps,
+        mappings: bulkPastePlan.mappings,
+        onProgress: (progress) => {
+          setBulkApplyProgress({ label: "Applying changes", ...progress });
         },
-        (result) => {
-          setBulkApplyProgress((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              completed: Math.min(prev.total, prev.completed + 1),
-              failed: prev.failed + (result.status === "rejected" ? 1 : 0),
-            };
-          });
-        }
-      );
-
-      const failed = results.filter((result) => result.status === "rejected");
-      const changedCount = results.filter(
-        (result): result is PromiseFulfilledResult<{ changed: boolean }> =>
-          result.status === "fulfilled" && result.value.changed
-      ).length;
-      const unchangedCount = results.filter(
-        (result): result is PromiseFulfilledResult<{ changed: boolean }> =>
-          result.status === "fulfilled" && !result.value.changed
-      ).length;
-      if (failed.length > 0) {
-        setBulkApplyError(`${failed.length} bucket(s) failed to update.`);
+        putBucketCors,
+        putBucketLifecycle,
+        putBucketLogging,
+        putBucketPolicy,
+        setBucketVersioning,
+        targetEndpointId: selectedEndpointId,
+        updateBucketObjectLock,
+        updateBucketPublicAccessBlock,
+        updateBucketQuota,
+      });
+      if (result.error) {
+        setBulkApplyError(result.error);
       }
-      setBulkApplySummary(
-        `Updated ${changedCount} bucket${changedCount !== 1 ? "s" : ""}${unchangedCount > 0 ? ` (${unchangedCount} unchanged)` : ""}.`
-      );
+      setBulkApplySummary(result.summary);
       setBulkApplyLoading(false);
       refreshBuckets();
       return;
