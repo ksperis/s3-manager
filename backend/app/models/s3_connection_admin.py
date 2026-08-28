@@ -12,7 +12,10 @@ from pydantic import Field, field_validator
 
 from app.models.base import ApiModel
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
-from app.models.s3_connection import CredentialOwnerType
+from app.models.s3_connection import (
+    CredentialOwnerType,
+    S3ConnectionCredentialsUpdate,
+)
 from app.models.ui_group import UiGroupAvatar
 from app.models.user import UserAssociationDetail, UserAvatar
 
@@ -92,6 +95,7 @@ class S3ConnectionAdminUpdate(ApiModel):
     force_path_style: Optional[bool] = None
     verify_tls: Optional[bool] = None
     tags: Optional[list[TagDefinitionInput]] = None
+    credentials: Optional[S3ConnectionCredentialsUpdate] = None
 
     @field_validator("tags", mode="before")
     @classmethod

@@ -87,11 +87,10 @@ export type UpdateAdminS3ConnectionPayload = {
   force_path_style?: boolean | null;
   verify_tls?: boolean | null;
   tags?: TagDefinitionInput[] | null;
-};
-
-export type RotateAdminS3ConnectionCredentialsPayload = {
-  access_key_id: string;
-  secret_access_key: string;
+  credentials?: {
+    access_key_id: string;
+    secret_access_key: string;
+  } | null;
 };
 
 type S3ConnectionUserLink = {
@@ -130,14 +129,6 @@ export async function remediateAdminS3Connection(connectionId: number): Promise<
   const { data } = await client.post<S3ConnectionAdminItem>(`/admin/s3-connections/${connectionId}/remediation`, {
     action: "activate_manager",
   });
-  return data;
-}
-
-export async function rotateAdminS3ConnectionCredentials(
-  connectionId: number,
-  payload: RotateAdminS3ConnectionCredentialsPayload
-): Promise<S3ConnectionAdminItem> {
-  const { data } = await client.put<S3ConnectionAdminItem>(`/admin/s3-connections/${connectionId}/credentials`, payload);
   return data;
 }
 

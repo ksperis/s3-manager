@@ -7,7 +7,6 @@ const listAdminS3ConnectionsMock = vi.fn();
 const createAdminS3ConnectionMock = vi.fn();
 const updateAdminS3ConnectionMock = vi.fn();
 const remediateAdminS3ConnectionMock = vi.fn();
-const rotateAdminS3ConnectionCredentialsMock = vi.fn();
 const deleteAdminS3ConnectionMock = vi.fn();
 const validateAdminS3ConnectionCredentialsMock = vi.fn();
 const listS3ConnectionUsersMock = vi.fn();
@@ -43,7 +42,6 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
   createAdminS3Connection: (payload: unknown) => createAdminS3ConnectionMock(payload),
   updateAdminS3Connection: (id: number, payload: unknown) => updateAdminS3ConnectionMock(id, payload),
   remediateAdminS3Connection: (id: number) => remediateAdminS3ConnectionMock(id),
-  rotateAdminS3ConnectionCredentials: (id: number, payload: unknown) => rotateAdminS3ConnectionCredentialsMock(id, payload),
   deleteAdminS3Connection: (id: number) => deleteAdminS3ConnectionMock(id),
   validateAdminS3ConnectionCredentials: (payload: unknown) => validateAdminS3ConnectionCredentialsMock(payload),
   listS3ConnectionUsers: (connectionId: number) => listS3ConnectionUsersMock(connectionId),
@@ -113,7 +111,6 @@ describe("S3ConnectionsPage modal tabs", () => {
     createAdminS3ConnectionMock.mockResolvedValue(makeConnection(2));
     updateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
     remediateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
-    rotateAdminS3ConnectionCredentialsMock.mockResolvedValue(makeConnection(1));
     deleteAdminS3ConnectionMock.mockResolvedValue(undefined);
     validateAdminS3ConnectionCredentialsMock.mockResolvedValue({
       ok: true,
@@ -222,6 +219,39 @@ describe("S3ConnectionsPage modal tabs", () => {
     );
     expect(upsertS3ConnectionUserMock).toHaveBeenCalledWith(1, { user_id: 13 });
     expect(removeS3ConnectionUserMock).toHaveBeenCalledWith(1, 12);
+  });
+
+  it("updates metadata and credentials through one Admin request", async () => {
+    render(<S3ConnectionsPage />);
+
+    await screen.findByText("connection-1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    const dialog = getWorkflowPage("Edit connection · connection-1");
+    fireEvent.change(within(dialog).getByLabelText("Name *"), {
+      target: { value: "connection-updated" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Access key ID"), {
+      target: { value: " UPDATED-ACCESS " },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Secret access key"), {
+      target: { value: " UPDATED-SECRET " },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateAdminS3ConnectionMock).toHaveBeenCalledTimes(1);
+    });
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        name: "connection-updated",
+        credentials: {
+          access_key_id: "UPDATED-ACCESS",
+          secret_access_key: "UPDATED-SECRET",
+        },
+      }),
+    );
   });
 
   it("keeps linked UI group selections across tabs and submits group_ids", async () => {

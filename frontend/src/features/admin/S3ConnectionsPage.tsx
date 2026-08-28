@@ -37,7 +37,6 @@ import {
   listS3ConnectionUsers,
   removeS3ConnectionUser,
   remediateAdminS3Connection,
-  rotateAdminS3ConnectionCredentials,
   upsertS3ConnectionUser,
   updateAdminS3Connection,
   validateAdminS3ConnectionCredentials,
@@ -718,13 +717,7 @@ export default function S3ConnectionsPage() {
     setEditError(null);
     try {
       const connectionId = editing.id;
-      if (prepared.credentialsPayload) {
-        await rotateAdminS3ConnectionCredentials(
-          connectionId,
-          prepared.credentialsPayload,
-        );
-      }
-      await updateAdminS3Connection(connectionId, prepared.updatePayload);
+      await updateAdminS3Connection(connectionId, prepared.payload);
       const targetIds = normalizeS3ConnectionLinkedIds(editLinkedUserIds);
       try {
         const currentLinks = await listS3ConnectionUsers(connectionId);

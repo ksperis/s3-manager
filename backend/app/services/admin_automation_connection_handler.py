@@ -10,6 +10,7 @@ from app.models.admin_automation import (
     S3ConnectionApply,
     S3ConnectionSpec,
 )
+from app.models.s3_connection import S3ConnectionCredentialsUpdate
 from app.models.s3_connection_admin import (
     S3ConnectionAdminCreate,
     S3ConnectionAdminUpdate,
@@ -90,23 +91,31 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
                 raise RuntimeError("S3 connection update diff requires a specification")
             update_payload = self._build_update(spec)
             credential_fields = self._changed_credential_fields(conn, item)
+            if credential_fields:
+                update_payload = update_payload.model_copy(
+                    update={
+                        "credentials": S3ConnectionCredentialsUpdate(
+                            access_key_id=(
+                                spec.access_key_id
+                                if spec.access_key_id is not None
+                                else conn.access_key_id
+                            ),
+                            secret_access_key=(
+                                spec.secret_access_key
+                                if spec.secret_access_key is not None
+                                else conn.secret_access_key
+                            ),
+                        )
+                    }
+                )
             conn = self.s3_connections.update_admin_shared(
                 conn.id,
                 update_payload,
                 activate_manager=spec.remediation_action == "activate_manager",
-                access_key_id=(
-                    spec.access_key_id
-                    if "access_key_id" in credential_fields
-                    else None
-                ),
-                secret_access_key=(
-                    spec.secret_access_key
-                    if "secret_access_key" in credential_fields
-                    else None
-                ),
             )
             metadata = update_payload.model_dump(
                 exclude_unset=True,
+                exclude={"credentials"},
             )
             if spec.remediation_action == "activate_manager":
                 metadata["remediation_action"] = "activate_manager"

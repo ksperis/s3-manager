@@ -20,7 +20,6 @@ from app.db import (
     UserS3Connection,
 )
 from app.models.s3_connection import (
-    S3ConnectionCredentialsUpdate,
     S3ConnectionCredentialsValidationRequest,
     S3ConnectionCredentialsValidationResult,
 )
@@ -407,17 +406,29 @@ def update_s3_connection(
         error = sanitize_error_detail(str(exc))
         status_code = (
             status.HTTP_409_CONFLICT
-            if error == ACTIVE_MANAGED_SOURCE_UPDATE_ERROR
+            if error in {
+                ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR,
+                ACTIVE_MANAGED_SOURCE_UPDATE_ERROR,
+            }
             else status.HTTP_400_BAD_REQUEST
         )
         raise HTTPException(status_code=status_code, detail=error) from exc
+    audit_metadata = payload.model_dump(
+        exclude_none=True,
+        exclude={"credentials"},
+    )
+    if payload.credentials is not None:
+        audit_metadata["access_key_id"] = mask_access_key_id(
+            payload.credentials.access_key_id
+        )
+        audit_metadata["credentials_updated"] = True
     audit.record_action(
         user=current_user,
         scope="admin",
         action="connection.update",
         entity_type="s3_connection",
         entity_id=str(conn.id),
-        metadata=payload.model_dump(exclude_none=True),
+        metadata=audit_metadata,
     )
     created_by_user = db.query(User).filter(User.id == conn.created_by_user_id).first()
     created_by_email = created_by_user.email if created_by_user else None
@@ -471,59 +482,6 @@ def remediate_s3_connection(
         user_details=user_details,
         group_details=group_details,
         tags_service=service.tags,
-    )
-
-
-@router.put("/{connection_id}/credentials", response_model=S3ConnectionAdminItem)
-def rotate_s3_connection_credentials(
-    connection_id: int,
-    payload: S3ConnectionCredentialsUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_service),
-) -> S3ConnectionAdminItem:
-    service = S3ConnectionsService(db)
-    tags_service = service.tags
-    _get_admin_shared_connection(db, connection_id)
-    try:
-        conn = service.update_admin_shared(
-            connection_id,
-            S3ConnectionAdminUpdate(),
-            access_key_id=payload.access_key_id,
-            secret_access_key=payload.secret_access_key,
-        )
-    except ValueError as exc:
-        error = sanitize_error_detail(str(exc))
-        status_code = (
-            status.HTTP_409_CONFLICT
-            if error == ACTIVE_MANAGED_SOURCE_CREDENTIALS_ERROR
-            else status.HTTP_400_BAD_REQUEST
-        )
-        raise HTTPException(
-            status_code=status_code,
-            detail=error,
-        ) from exc
-    audit.record_action(
-        user=current_user,
-        scope="admin",
-        action="connection.rotate_credentials",
-        entity_type="s3_connection",
-        entity_id=str(conn.id),
-        metadata={"access_key_id": mask_access_key_id(payload.access_key_id)},
-    )
-    created_by_user = db.query(User).filter(User.id == conn.created_by_user_id).first()
-    created_by_email = created_by_user.email if created_by_user else None
-    user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
-    user_details = _linked_user_details(db, conn.id)
-    group_details = _linked_group_details(db, conn.id)
-    return _to_admin_item(
-        conn,
-        created_by_email=created_by_email,
-        created_by_user=created_by_user,
-        user_count=int(user_count),
-        user_details=user_details,
-        group_details=group_details,
-        tags_service=tags_service,
     )
 
 

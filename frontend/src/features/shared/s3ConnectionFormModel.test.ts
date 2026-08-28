@@ -328,11 +328,7 @@ describe("s3ConnectionFormModel", () => {
 
     expect(prepared).toEqual({
       error: null,
-      credentialsPayload: {
-        access_key_id: "replacement-access",
-        secret_access_key: "replacement-secret",
-      },
-      updatePayload: {
+      payload: {
         name: "Shared archive",
         group_ids: [3, 8],
         tags: [
@@ -341,6 +337,10 @@ describe("s3ConnectionFormModel", () => {
         ],
         credential_owner_type: "iam_user",
         credential_owner_identifier: "owner-1",
+        credentials: {
+          access_key_id: "replacement-access",
+          secret_access_key: "replacement-secret",
+        },
         storage_endpoint_id: null,
         provider_hint: "aws",
         endpoint_url: "https://updated.example.test",
@@ -372,8 +372,7 @@ describe("s3ConnectionFormModel", () => {
       }),
     ).toEqual({
       error: "Provide both access key ID and secret access key to update credentials.",
-      credentialsPayload: null,
-      updatePayload: null,
+      payload: null,
     });
     expect(normalizeS3ConnectionLinkedIds([4, Number.NaN, 2, 4, 0])).toEqual([2, 4]);
     expect(parseS3ConnectionCredentialOwnerType("invalid")).toBe("");

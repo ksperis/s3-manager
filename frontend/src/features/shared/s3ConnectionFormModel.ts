@@ -11,7 +11,6 @@ import type {
 } from "../../api/connections";
 import type {
   CreateAdminS3ConnectionPayload,
-  RotateAdminS3ConnectionCredentialsPayload,
   UpdateAdminS3ConnectionPayload,
 } from "../../api/s3ConnectionsAdmin";
 import type { S3CredentialsValidationPayload } from "../../api/s3CredentialsValidation";
@@ -131,18 +130,6 @@ type BuildAdminS3ConnectionEditSignatureOptions = {
   linkedGroupIds: readonly number[];
   linkedUserIds: readonly number[];
 };
-
-type PreparedAdminS3ConnectionUpdate =
-  | {
-      error: null;
-      credentialsPayload: RotateAdminS3ConnectionCredentialsPayload | null;
-      updatePayload: UpdateAdminS3ConnectionPayload;
-    }
-  | {
-      error: string;
-      credentialsPayload: null;
-      updatePayload: null;
-    };
 
 type PrivateConnectionsProjection = {
   allFilteredConnectionsSelected: boolean;
@@ -443,38 +430,24 @@ export function prepareUpdateAdminS3ConnectionPayload({
   endpointMode,
   form,
   linkedGroupIds,
-}: PrepareAdminS3ConnectionUpdateOptions): PreparedAdminS3ConnectionUpdate {
+}: PrepareAdminS3ConnectionUpdateOptions): PreparedConnectionPayload<UpdateAdminS3ConnectionPayload> {
   if (!form.name.trim()) {
-    return {
-      error: "Connection name is required.",
-      credentialsPayload: null,
-      updatePayload: null,
-    };
+    return invalidConnectionPayload("Connection name is required.");
   }
   const parsedEndpointId =
     endpointMode === "preset" ? parseS3ConnectionEndpointId(endpointId) : null;
   if (endpointMode === "preset" && parsedEndpointId === null) {
-    return {
-      error: "Select a configured endpoint.",
-      credentialsPayload: null,
-      updatePayload: null,
-    };
+    return invalidConnectionPayload("Select a configured endpoint.");
   }
   if (endpointMode === "custom" && !form.endpoint_url.trim()) {
-    return {
-      error: "Endpoint URL is required.",
-      credentialsPayload: null,
-      updatePayload: null,
-    };
+    return invalidConnectionPayload("Endpoint URL is required.");
   }
   const accessKeyId = credentialDraft.access_key_id.trim();
   const secretAccessKey = credentialDraft.secret_access_key.trim();
   if ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey)) {
-    return {
-      error: "Provide both access key ID and secret access key to update credentials.",
-      credentialsPayload: null,
-      updatePayload: null,
-    };
+    return invalidConnectionPayload(
+      "Provide both access key ID and secret access key to update credentials.",
+    );
   }
 
   const endpointPayload =
@@ -490,20 +463,20 @@ export function prepareUpdateAdminS3ConnectionPayload({
         };
   return {
     error: null,
-    credentialsPayload:
-      accessKeyId && secretAccessKey
-        ? {
-            access_key_id: accessKeyId,
-            secret_access_key: secretAccessKey,
-          }
-        : null,
-    updatePayload: {
+    payload: {
       name: form.name.trim(),
       group_ids: normalizeS3ConnectionLinkedIds(linkedGroupIds),
       tags: normalizeUiTags(form.tags),
       credential_owner_type: form.credential_owner_type || null,
       credential_owner_identifier:
         form.credential_owner_identifier.trim() || null,
+      credentials:
+        accessKeyId && secretAccessKey
+          ? {
+              access_key_id: accessKeyId,
+              secret_access_key: secretAccessKey,
+            }
+          : null,
       ...endpointPayload,
     },
   };

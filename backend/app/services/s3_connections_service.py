@@ -162,11 +162,9 @@ class S3ConnectionsService:
         payload: S3ConnectionAdminUpdate,
         *,
         activate_manager: bool = False,
-        access_key_id: Optional[str] = None,
-        secret_access_key: Optional[str] = None,
     ) -> DBS3Connection:
         row = self.get_admin_shared(connection_id)
-        update_credentials = access_key_id is not None or secret_access_key is not None
+        update_credentials = payload.credentials is not None
         endpoint_plan, group_ids = self._prepare_admin_shared_update(
             row,
             payload,
@@ -193,10 +191,9 @@ class S3ConnectionsService:
             self.tags.replace_connection_tags(row, payload.tags)
         if group_ids is not None:
             self._sync_admin_shared_group_links(row.id, group_ids)
-        if access_key_id is not None:
-            row.access_key_id = access_key_id
-        if secret_access_key is not None:
-            row.secret_access_key = secret_access_key
+        if payload.credentials is not None:
+            row.access_key_id = payload.credentials.access_key_id
+            row.secret_access_key = payload.credentials.secret_access_key
         probe_fields = {
             "storage_endpoint_id",
             "endpoint_url",

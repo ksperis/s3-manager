@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.db import (
     AccountRole,
+    AuditLog,
     ManagedPrivateAccess,
     S3Account,
     S3Connection,
@@ -176,6 +177,76 @@ def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_c
     )
     assert update_response.status_code == 200
     assert update_response.json()["is_active"] is False
+
+
+def test_admin_connections_api_updates_metadata_and_credentials_atomically(
+    monkeypatch,
+    contract_client,
+):
+    client, db_session, _ = contract_client
+    monkeypatch.setattr(
+        "app.services.s3_connection_capabilities_service.probe_connection_can_manage_iam",
+        lambda connection: True,
+    )
+
+    create_response = client.post(
+        "/api/admin/s3-connections",
+        json={
+            "name": "contract-admin-atomic-update",
+            "endpoint_url": "https://contract-admin-atomic.example.test",
+            "access_key_id": "AKIAADMINATOMICOLD",
+            "secret_access_key": "SECRETADMINATOMICOLD",
+        },
+    )
+    assert create_response.status_code == 201
+    connection_id = create_response.json()["id"]
+
+    update_response = client.put(
+        f"/api/admin/s3-connections/{connection_id}",
+        json={
+            "name": "contract-admin-atomic-updated",
+            "credentials": {
+                "access_key_id": "AKIAADMINATOMICNEW",
+                "secret_access_key": "SECRETADMINATOMICNEW",
+            },
+        },
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["name"] == "contract-admin-atomic-updated"
+    assert "credentials" not in update_response.json()
+    db_session.expire_all()
+    stored = db_session.query(S3Connection).filter(S3Connection.id == connection_id).one()
+    assert stored.access_key_id == "AKIAADMINATOMICNEW"
+    assert stored.secret_access_key == "SECRETADMINATOMICNEW"
+    audit_log = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action == "connection.update",
+            AuditLog.entity_id == str(connection_id),
+        )
+        .order_by(AuditLog.id.desc())
+        .one()
+    )
+    audit_metadata = json.loads(audit_log.metadata_json or "{}")
+    assert audit_metadata["credentials_updated"] is True
+    assert audit_metadata["access_key_id"] == "AKIA***CNEW"
+    assert "SECRETADMINATOMICNEW" not in (audit_log.metadata_json or "")
+
+    incomplete_credentials = client.put(
+        f"/api/admin/s3-connections/{connection_id}",
+        json={"credentials": {"access_key_id": "AKIAADMININCOMPLETE"}},
+    )
+    assert incomplete_credentials.status_code == 422
+
+    removed_credentials_route = client.put(
+        f"/api/admin/s3-connections/{connection_id}/credentials",
+        json={
+            "access_key_id": "AKIAADMINREMOVED",
+            "secret_access_key": "SECRETADMINREMOVED",
+        },
+    )
+    assert removed_credentials_route.status_code == 404
 
 
 def test_admin_connections_api_requires_explicit_managed_endpoint_detachment(
@@ -412,8 +483,13 @@ def test_admin_cannot_mutate_or_delete_a_connection_used_as_managed_access_sourc
         json={"is_active": False},
     )
     credential_update = client.put(
-        f"/api/admin/s3-connections/{source.id}/credentials",
-        json={"access_key_id": "OTHER-AK", "secret_access_key": "OTHER-SK"},
+        f"/api/admin/s3-connections/{source.id}",
+        json={
+            "credentials": {
+                "access_key_id": "OTHER-AK",
+                "secret_access_key": "OTHER-SK",
+            }
+        },
     )
     deletion = client.delete(f"/api/admin/s3-connections/{source.id}")
 
