@@ -6,7 +6,6 @@ import { setSessionUserCache } from "../../utils/workspaces";
 const listAdminS3ConnectionsMock = vi.fn();
 const createAdminS3ConnectionMock = vi.fn();
 const updateAdminS3ConnectionMock = vi.fn();
-const remediateAdminS3ConnectionMock = vi.fn();
 const deleteAdminS3ConnectionMock = vi.fn();
 const validateAdminS3ConnectionCredentialsMock = vi.fn();
 
@@ -38,7 +37,6 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
   listAdminS3Connections: (params?: unknown) => listAdminS3ConnectionsMock(params),
   createAdminS3Connection: (payload: unknown) => createAdminS3ConnectionMock(payload),
   updateAdminS3Connection: (id: number, payload: unknown) => updateAdminS3ConnectionMock(id, payload),
-  remediateAdminS3Connection: (id: number) => remediateAdminS3ConnectionMock(id),
   deleteAdminS3Connection: (id: number) => deleteAdminS3ConnectionMock(id),
   validateAdminS3ConnectionCredentials: (payload: unknown) => validateAdminS3ConnectionCredentialsMock(payload),
 }));
@@ -104,7 +102,6 @@ describe("S3ConnectionsPage modal tabs", () => {
 
     createAdminS3ConnectionMock.mockResolvedValue(makeConnection(2));
     updateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
-    remediateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
     deleteAdminS3ConnectionMock.mockResolvedValue(undefined);
     validateAdminS3ConnectionCredentialsMock.mockResolvedValue({
       ok: true,
@@ -150,6 +147,31 @@ describe("S3ConnectionsPage modal tabs", () => {
     expect(associations.querySelector(".rounded-lg")).toBeInTheDocument();
     expect(associations.closest("td")).toHaveAttribute("data-label", "UI Users / Groups");
     expect(within(table).getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
+  });
+
+  it("remediates a connection through the canonical update request", async () => {
+    listAdminS3ConnectionsMock.mockResolvedValue({
+      items: [
+        makeConnection(1, {
+          execution_status: "remediation_required",
+          remediation_reason: "Manager access requires explicit activation",
+          is_active: false,
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+    render(<S3ConnectionsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Activate in Manager" }));
+
+    await waitFor(() => {
+      expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(1, {
+        remediation_action: "activate_manager",
+      });
+    });
   });
 
   it("keeps linked UI user selections across tabs and submits user_ids", async () => {

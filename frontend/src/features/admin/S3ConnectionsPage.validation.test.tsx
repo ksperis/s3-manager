@@ -6,7 +6,6 @@ import { setSessionUserCache } from "../../utils/workspaces";
 const listAdminS3ConnectionsMock = vi.fn();
 const createAdminS3ConnectionMock = vi.fn();
 const updateAdminS3ConnectionMock = vi.fn();
-const remediateAdminS3ConnectionMock = vi.fn();
 const deleteAdminS3ConnectionMock = vi.fn();
 const validateAdminS3ConnectionCredentialsMock = vi.fn();
 const listMinimalUsersMock = vi.fn();
@@ -17,7 +16,6 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
   listAdminS3Connections: (params?: unknown) => listAdminS3ConnectionsMock(params),
   createAdminS3Connection: (payload: unknown) => createAdminS3ConnectionMock(payload),
   updateAdminS3Connection: (id: number, payload: unknown) => updateAdminS3ConnectionMock(id, payload),
-  remediateAdminS3Connection: (id: number) => remediateAdminS3ConnectionMock(id),
   deleteAdminS3Connection: (id: number) => deleteAdminS3ConnectionMock(id),
   validateAdminS3ConnectionCredentials: (payload: unknown) => validateAdminS3ConnectionCredentialsMock(payload),
 }));
@@ -66,7 +64,6 @@ describe("S3ConnectionsPage live validation", () => {
       message: "Invalid S3 credentials.",
     });
     updateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
-    remediateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
     deleteAdminS3ConnectionMock.mockResolvedValue(undefined);
     setSessionUserCache({ id: 1 });
   });

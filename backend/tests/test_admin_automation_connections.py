@@ -329,6 +329,46 @@ def test_connection_credential_dry_run_respects_managed_source_lock(
     assert "credentials are locked" in (result.results[0].error or "")
 
 
+def test_connection_remediation_uses_canonical_update_contract(db_session):
+    user = _user(db_session)
+    connection = _connection(
+        db_session,
+        user,
+        name="automation-remediation",
+        shared=True,
+    )
+    connection.is_active = False
+    connection.access_manager = False
+    connection.remediation_required = True
+    connection.remediation_reason = "Manager access requires explicit activation"
+    db_session.commit()
+    audit = _Audit()
+
+    result = AdminAutomationService(db_session).apply(
+        AdminAutomationApplyRequest(
+            s3_connections=[
+                S3ConnectionApply(
+                    match=S3ConnectionMatch(id=connection.id),
+                    spec=S3ConnectionSpec(
+                        remediation_action="activate_manager",
+                    ),
+                )
+            ]
+        ),
+        current_user=user,
+        audit_service=audit,
+    )
+
+    db_session.refresh(connection)
+    assert result.success is True
+    assert connection.is_active is True
+    assert connection.access_manager is True
+    assert connection.remediation_required is False
+    assert audit.actions[0]["metadata"] == {
+        "remediation_action": "activate_manager"
+    }
+
+
 @pytest.mark.parametrize("legacy_field", ["is_shared", "access_manager", "access_browser"])
 def test_automation_connection_spec_rejects_visibility_and_access_flags(legacy_field):
     with pytest.raises(ValidationError):

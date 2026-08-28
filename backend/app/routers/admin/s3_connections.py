@@ -30,7 +30,6 @@ from app.models.s3_connection_admin import (
     S3ConnectionAdminUpdate,
     S3ConnectionGroupDetail,
     S3ConnectionSummary,
-    S3ConnectionRemediationAction,
 )
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
@@ -419,7 +418,11 @@ def update_s3_connection(
     audit.record_action(
         user=current_user,
         scope="admin",
-        action="connection.update",
+        action=(
+            "connection.remediate"
+            if payload.remediation_action == "activate_manager"
+            else "connection.update"
+        ),
         entity_type="s3_connection",
         entity_id=str(conn.id),
         metadata=audit_metadata,
@@ -437,45 +440,6 @@ def update_s3_connection(
         user_details=user_details,
         group_details=group_details,
         tags_service=tags_service,
-    )
-
-
-@router.post("/{connection_id}/remediation", response_model=S3ConnectionAdminItem)
-def remediate_s3_connection(
-    connection_id: int,
-    payload: S3ConnectionRemediationAction,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_service),
-) -> S3ConnectionAdminItem:
-    service = S3ConnectionsService(db)
-    _get_admin_shared_connection(db, connection_id)
-    if payload.action != "activate_manager":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported remediation action")
-    conn = service.update_admin_shared(
-        connection_id,
-        S3ConnectionAdminUpdate(),
-        activate_manager=True,
-    )
-    audit.record_action(
-        user=current_user,
-        scope="admin",
-        action="connection.remediate",
-        entity_type="s3_connection",
-        entity_id=str(conn.id),
-        metadata={"action": payload.action},
-    )
-    created_by_user = db.query(User).filter(User.id == conn.created_by_user_id).first()
-    user_details = _linked_user_details(db, conn.id)
-    group_details = _linked_group_details(db, conn.id)
-    return _to_admin_item(
-        conn,
-        created_by_email=created_by_user.email if created_by_user else None,
-        created_by_user=created_by_user,
-        user_count=len(user_details),
-        user_details=user_details,
-        group_details=group_details,
-        tags_service=service.tags,
     )
 
 
@@ -506,4 +470,3 @@ def delete_s3_connection(
         metadata=meta,
     )
     return None
-

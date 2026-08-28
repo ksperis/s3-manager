@@ -86,6 +86,7 @@ class S3ConnectionAdminUpdate(ApiModel):
     name: Optional[str] = None
     group_ids: Optional[list[int]] = None
     user_ids: Optional[list[int]] = None
+    remediation_action: Optional[Literal["activate_manager"]] = None
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     is_active: Optional[bool] = None
@@ -110,7 +111,3 @@ class PaginatedS3ConnectionsResponse(ApiModel):
     page: int
     page_size: int
     has_next: bool
-
-
-class S3ConnectionRemediationAction(ApiModel):
-    action: Literal["activate_manager"]

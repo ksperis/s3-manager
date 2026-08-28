@@ -475,6 +475,61 @@ def test_admin_connection_update_replaces_user_links_atomically(contract_client)
     assert client.delete(f"{users_path}/{targets[1].id}").status_code == 404
 
 
+def test_admin_connection_update_applies_remediation_action(contract_client):
+    client, db_session, user = contract_client
+    connection = S3Connection(
+        created_by_user_id=user.id,
+        name="contract-shared-remediation",
+        is_shared=True,
+        is_active=False,
+        access_manager=False,
+        access_browser=False,
+        remediation_required=True,
+        remediation_reason="Manager access requires explicit activation",
+        access_key_id="AKIASHAREDREMEDIATION",
+        secret_access_key="SECRETSHAREDREMEDIATION",
+        custom_endpoint_config=(
+            '{"endpoint_url":"https://remediation.example.test",'
+            '"force_path_style":false,"provider":null,"region":null,'
+            '"verify_tls":true}'
+        ),
+    )
+    db_session.add(connection)
+    db_session.commit()
+    db_session.refresh(connection)
+    connection_path = f"/api/admin/s3-connections/{connection.id}"
+
+    response = client.put(
+        connection_path,
+        json={"remediation_action": "activate_manager"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["execution_status"] == "ready"
+    assert response.json()["is_active"] is True
+    db_session.expire_all()
+    persisted = db_session.get(S3Connection, connection.id)
+    assert persisted is not None
+    assert persisted.access_manager is True
+    assert persisted.remediation_required is False
+    assert persisted.remediation_reason is None
+    audit_log = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action == "connection.remediate",
+            AuditLog.entity_id == str(connection.id),
+        )
+        .one()
+    )
+    assert json.loads(audit_log.metadata_json or "{}") == {
+        "remediation_action": "activate_manager"
+    }
+    assert client.post(
+        f"{connection_path}/remediation",
+        json={"action": "activate_manager"},
+    ).status_code == 404
+
+
 def test_admin_cannot_mutate_or_delete_a_connection_used_as_managed_access_source(contract_client):
     client, db_session, user = contract_client
     source = S3Connection(

@@ -34,7 +34,6 @@ import {
   createAdminS3Connection,
   deleteAdminS3Connection,
   listAdminS3Connections,
-  remediateAdminS3Connection,
   updateAdminS3Connection,
   validateAdminS3ConnectionCredentials,
 } from "../../api/s3ConnectionsAdmin";
@@ -748,7 +747,9 @@ export default function S3ConnectionsPage() {
       setStatusBusyId(conn.id);
       setError(null);
       try {
-        await remediateAdminS3Connection(conn.id);
+        await updateAdminS3Connection(conn.id, {
+          remediation_action: "activate_manager",
+        });
         setActionMessage("Connection remediated and activated for Manager.");
         await fetchItems();
       } catch (err) {
@@ -806,7 +807,9 @@ export default function S3ConnectionsPage() {
       selectedIds.map((connectionId) => {
         const connection = items.find((item) => item.id === connectionId);
         return connection?.execution_status === "remediation_required"
-          ? remediateAdminS3Connection(connectionId)
+          ? updateAdminS3Connection(connectionId, {
+              remediation_action: "activate_manager",
+            })
           : updateAdminS3Connection(connectionId, { is_active: true });
       })
     );

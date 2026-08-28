@@ -111,14 +111,11 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
             conn = self.s3_connections.update_admin_shared(
                 conn.id,
                 update_payload,
-                activate_manager=spec.remediation_action == "activate_manager",
             )
             metadata = update_payload.model_dump(
                 exclude_unset=True,
                 exclude={"credentials"},
             )
-            if spec.remediation_action == "activate_manager":
-                metadata["remediation_action"] = "activate_manager"
             if credential_fields:
                 metadata["credential_fields_updated"] = sorted(credential_fields)
             audit_service.record_action(
@@ -199,7 +196,7 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
     @staticmethod
     def _build_update(spec: S3ConnectionSpec) -> S3ConnectionAdminUpdate:
         payload = spec.model_dump(exclude_unset=True)
-        for field in ("access_key_id", "secret_access_key", "remediation_action"):
+        for field in ("access_key_id", "secret_access_key"):
             payload.pop(field, None)
         return S3ConnectionAdminUpdate(**payload)
 

@@ -78,6 +78,7 @@ export type UpdateAdminS3ConnectionPayload = {
   name?: string | null;
   group_ids?: number[] | null;
   user_ids?: number[] | null;
+  remediation_action?: "activate_manager" | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
   is_active?: boolean | null;
@@ -111,13 +112,6 @@ export async function createAdminS3Connection(payload: CreateAdminS3ConnectionPa
 
 export async function updateAdminS3Connection(connectionId: number, payload: UpdateAdminS3ConnectionPayload): Promise<S3ConnectionAdminItem> {
   const { data } = await client.put<S3ConnectionAdminItem>(`/admin/s3-connections/${connectionId}`, payload);
-  return data;
-}
-
-export async function remediateAdminS3Connection(connectionId: number): Promise<S3ConnectionAdminItem> {
-  const { data } = await client.post<S3ConnectionAdminItem>(`/admin/s3-connections/${connectionId}/remediation`, {
-    action: "activate_manager",
-  });
   return data;
 }
 

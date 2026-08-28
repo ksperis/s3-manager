@@ -161,8 +161,6 @@ class S3ConnectionsService:
         self,
         connection_id: int,
         payload: S3ConnectionAdminUpdate,
-        *,
-        activate_manager: bool = False,
     ) -> DBS3Connection:
         row = self.get_admin_shared(connection_id)
         update_credentials = payload.credentials is not None
@@ -179,7 +177,7 @@ class S3ConnectionsService:
         if endpoint_plan is not None:
             row.storage_endpoint_id, row.custom_endpoint_config = endpoint_plan
         row.access_browser = False
-        if activate_manager:
+        if payload.remediation_action == "activate_manager":
             row.access_manager = True
             row.remediation_required = False
             row.remediation_reason = None
