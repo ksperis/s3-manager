@@ -5,18 +5,16 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
 from app.models.portal_requests import PortalAdminRequestCreate, PortalAdminRequestOut, PortalAdminRequestStatus
 from app.routers.dependencies import get_portal_account_access, require_portal_manager
-from app.core.sensitive_data import sanitize_error_detail
+from app.routers.portal_common import get_portal_requests_service_dependency
 from app.services.portal_requests_service import (
     PortalRequestNotFound,
     PortalRequestsService,
-    get_portal_requests_service,
 )
 
 router = APIRouter(prefix="/portal/requests", tags=["portal-requests"])
@@ -33,7 +31,7 @@ def _portal_actor(access: AccountAccess) -> User:
 def list_portal_requests(
     status_filter: Optional[PortalAdminRequestStatus] = Query(None, alias="status"),
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalRequestsService = Depends(lambda db=Depends(get_db): get_portal_requests_service(db)),
+    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
 ) -> list[PortalAdminRequestOut]:
     return service.list_for_portal_user(_portal_actor(access), access, status=status_filter)
 
@@ -42,7 +40,7 @@ def list_portal_requests(
 def create_portal_request(
     payload: PortalAdminRequestCreate,
     access: AccountAccess = Depends(require_portal_manager),
-    service: PortalRequestsService = Depends(lambda db=Depends(get_db): get_portal_requests_service(db)),
+    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
 ) -> PortalAdminRequestOut:
     try:
         return service.create_request(_portal_actor(access), access, payload)
@@ -54,7 +52,7 @@ def create_portal_request(
 def get_portal_request(
     request_id: int,
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalRequestsService = Depends(lambda db=Depends(get_db): get_portal_requests_service(db)),
+    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
 ) -> PortalAdminRequestOut:
     try:
         return service.get_for_portal_user(_portal_actor(access), access, request_id)

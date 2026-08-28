@@ -5,9 +5,8 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.portal_requests import (
     PortalAdminRequestDecision,
@@ -17,13 +16,12 @@ from app.models.portal_requests import (
     PortalAdminRequestType,
 )
 from app.routers.dependencies import get_current_super_admin
-from app.core.sensitive_data import sanitize_error_detail
+from app.routers.portal_common import get_portal_requests_service_dependency
 from app.services.portal_requests_service import (
     PortalRequestConflict,
     PortalRequestExecutionError,
     PortalRequestNotFound,
     PortalRequestsService,
-    get_portal_requests_service,
 )
 
 router = APIRouter(prefix="/admin/portal-requests", tags=["admin-portal-requests"])
@@ -48,7 +46,7 @@ def list_admin_portal_requests(
     search: Optional[str] = Query(None),
     limit: int = Query(200, ge=1, le=500),
     _: User = Depends(get_current_super_admin),
-    service: PortalRequestsService = Depends(lambda db=Depends(get_db): get_portal_requests_service(db)),
+    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
 ) -> list[PortalAdminRequestOut]:
     return service.list_for_admin(
         status=status_filter,
@@ -63,7 +61,7 @@ def list_admin_portal_requests(
 def get_admin_portal_request(
     request_id: int,
     _: User = Depends(get_current_super_admin),
-    service: PortalRequestsService = Depends(lambda db=Depends(get_db): get_portal_requests_service(db)),
+    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
 ) -> PortalAdminRequestOut:
     try:
         return service.get_for_admin(request_id)
@@ -76,7 +74,7 @@ def approve_admin_portal_request(
     request_id: int,
     payload: PortalAdminRequestDecision,
     current_user: User = Depends(get_current_super_admin),
-    service: PortalRequestsService = Depends(lambda db=Depends(get_db): get_portal_requests_service(db)),
+    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
 ) -> PortalAdminRequestOut:
     try:
         return service.approve_request(request_id, current_user, message=payload.message)
@@ -89,7 +87,7 @@ def reject_admin_portal_request(
     request_id: int,
     payload: PortalAdminRequestDecision,
     current_user: User = Depends(get_current_super_admin),
-    service: PortalRequestsService = Depends(lambda db=Depends(get_db): get_portal_requests_service(db)),
+    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
 ) -> PortalAdminRequestOut:
     try:
         return service.reject_request(request_id, current_user, message=payload.message)
@@ -102,7 +100,7 @@ def add_admin_portal_request_message(
     request_id: int,
     payload: PortalAdminRequestMessageCreate,
     current_user: User = Depends(get_current_super_admin),
-    service: PortalRequestsService = Depends(lambda db=Depends(get_db): get_portal_requests_service(db)),
+    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
 ) -> PortalAdminRequestOut:
     try:
         return service.add_admin_message(request_id, current_user, payload.message)

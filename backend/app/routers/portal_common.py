@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
+from app.services.portal_requests_service import (
+    PortalRequestsService,
+    get_portal_requests_service,
+)
 from app.services.portal_service import PortalService, get_portal_service
 from app.utils.http_errors import raise_bad_gateway_from_runtime
 
@@ -16,6 +20,12 @@ def get_portal_service_dependency(
     db: Session = Depends(get_db),
 ) -> PortalService:
     return get_portal_service(db)
+
+
+def get_portal_requests_service_dependency(
+    db: Session = Depends(get_db),
+) -> PortalRequestsService:
+    return get_portal_requests_service(db)
 
 
 def raise_portal_storage_runtime(exc: RuntimeError) -> None:
