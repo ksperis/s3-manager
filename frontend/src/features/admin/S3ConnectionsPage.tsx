@@ -42,16 +42,13 @@ import {
   updateAdminS3Connection,
   validateAdminS3ConnectionCredentials,
 } from "../../api/s3ConnectionsAdmin";
-import type { S3CredentialsValidationPayload } from "../../api/s3CredentialsValidation";
-import type { CredentialOwnerType } from "../../api/connections";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { listMinimalUsers, type UserSummary } from "../../api/users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import { extractApiError } from "../../utils/apiError";
-import { stableSignature } from "../../utils/stableSignature";
 import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
-import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
+import { buildUiTagItems, extractUiTagLabels, normalizeUiTags } from "../../utils/uiTags";
 import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
@@ -73,7 +70,15 @@ import S3ConnectionCredentialFields from "../shared/S3ConnectionCredentialFields
 import S3CredentialsValidationMessage from "../shared/S3CredentialsValidationMessage";
 import { useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 import {
+  buildCreateAdminS3ConnectionSignature,
+  buildEditAdminS3ConnectionSignature,
   buildS3CredentialsValidationPayload,
+  createDefaultAdminS3ConnectionForm,
+  normalizeS3ConnectionLinkedIds,
+  parseS3ConnectionCredentialOwnerType,
+  prepareCreateAdminS3ConnectionPayload,
+  prepareUpdateAdminS3ConnectionPayload,
+  type EditAdminS3ConnectionForm,
   type S3ConnectionEndpointMode,
 } from "../shared/s3ConnectionFormModel";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -98,17 +103,6 @@ function getConnectionSearchCandidates(connection: S3ConnectionAdminItem): Array
 }
 
 const selectionCheckboxClass = "h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary";
-const createEmptyConnectionForm = () => ({
-  name: "",
-  tags: [] as UiTagDefinition[],
-  provider_hint: "",
-  endpoint_url: "",
-  region: "",
-  access_key_id: "",
-  secret_access_key: "",
-  force_path_style: false,
-  verify_tls: true,
-});
 
 export default function S3ConnectionsPage() {
   const [items, setItems] = useState<S3ConnectionAdminItem[]>([]);
@@ -131,7 +125,7 @@ export default function S3ConnectionsPage() {
   const [createEndpointMode, setCreateEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [createEndpointPresetId, setCreateEndpointPresetId] = useState("");
   const [createPresetTouched, setCreatePresetTouched] = useState(false);
-  const [createForm, setCreateForm] = useState(createEmptyConnectionForm);
+  const [createForm, setCreateForm] = useState(createDefaultAdminS3ConnectionForm);
   const [createInitialSignature, setCreateInitialSignature] = useState("");
 
   const [editing, setEditing] = useState<S3ConnectionAdminItem | null>(null);
@@ -139,9 +133,9 @@ export default function S3ConnectionsPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editEndpointMode, setEditEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [editEndpointPresetId, setEditEndpointPresetId] = useState("");
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<EditAdminS3ConnectionForm>({
     name: "",
-    tags: [] as UiTagDefinition[],
+    tags: [],
     provider_hint: "",
     credential_owner_type: "",
     credential_owner_identifier: "",
@@ -194,11 +188,6 @@ export default function S3ConnectionsPage() {
   );
 
   const extractError = (err: unknown) => extractApiError(err, "Unexpected error");
-  const normalizeLinkedUserIds = useCallback((ids: number[] | undefined): number[] => {
-    return Array.from(new Set((ids ?? []).map((id) => Number(id))))
-      .filter((id) => Number.isFinite(id) && id > 0)
-      .sort((a, b) => a - b);
-  }, []);
   const resetEditUsersState = useCallback(() => {
     setEditTab("general");
     setEditLinkedUserIds([]);
@@ -219,17 +208,19 @@ export default function S3ConnectionsPage() {
   }, [resetEditUsersState]);
 
   const resetCreateForm = () => {
-    const nextForm = createEmptyConnectionForm();
+    const nextForm = createDefaultAdminS3ConnectionForm();
     setCreateEndpointMode("custom");
     setCreateEndpointPresetId("");
     setCreatePresetTouched(false);
     setCreateError(null);
     setCreateForm(nextForm);
-    setCreateInitialSignature(stableSignature({ endpointMode: "custom", endpointPresetId: "", form: nextForm }));
+    setCreateInitialSignature(
+      buildCreateAdminS3ConnectionSignature(nextForm, "custom", ""),
+    );
   };
 
   const openCreateModal = () => {
-    const nextForm = createEmptyConnectionForm();
+    const nextForm = createDefaultAdminS3ConnectionForm();
     let nextEndpointMode: S3ConnectionEndpointMode = "custom";
     let nextEndpointPresetId = "";
     if (defaultEndpoint) {
@@ -248,7 +239,11 @@ export default function S3ConnectionsPage() {
     setCreateError(null);
     setCreateForm(nextForm);
     setCreateInitialSignature(
-      stableSignature({ endpointMode: nextEndpointMode, endpointPresetId: nextEndpointPresetId, form: nextForm })
+      buildCreateAdminS3ConnectionSignature(
+        nextForm,
+        nextEndpointMode,
+        nextEndpointPresetId,
+      ),
     );
     setShowCreateModal(true);
   };
@@ -350,9 +345,6 @@ export default function S3ConnectionsPage() {
     loadGroups();
   }, []);
 
-  const createHasPreset = createEndpointMode === "preset";
-  const editHasPreset = editEndpointMode === "preset";
-
   const createValidationPayload = useMemo(
     () =>
       buildS3CredentialsValidationPayload(
@@ -363,16 +355,10 @@ export default function S3ConnectionsPage() {
     [createEndpointMode, createEndpointPresetId, createForm],
   );
 
-  const validateCreateCredentials = useCallback(
-    (payload: S3CredentialsValidationPayload) => validateAdminS3ConnectionCredentials(payload),
-    []
-  );
-
   const createCredentialsValidation = useLiveS3CredentialsValidation({
     enabled: showCreateModal,
     payload: createValidationPayload,
-    validate: validateCreateCredentials,
-    debounceMs: 450,
+    validate: validateAdminS3ConnectionCredentials,
   });
 
   const defaultEndpoint = storageEndpoints.find((ep) => ep.is_default);
@@ -444,11 +430,11 @@ export default function S3ConnectionsPage() {
   const visibleAvailableEditGroups = useMemo(() => availableEditGroups.slice(0, maxLinkOptions), [availableEditGroups, maxLinkOptions]);
   const createCurrentSignature = useMemo(
     () =>
-      stableSignature({
-        endpointMode: createEndpointMode,
-        endpointPresetId: createEndpointPresetId,
-        form: { ...createForm, tags: normalizeUiTags(createForm.tags) },
-      }),
+      buildCreateAdminS3ConnectionSignature(
+        createForm,
+        createEndpointMode,
+        createEndpointPresetId,
+      ),
     [createEndpointMode, createEndpointPresetId, createForm]
   );
   const createCloseGuard = useUnsavedChangesGuard({
@@ -458,15 +444,15 @@ export default function S3ConnectionsPage() {
   });
   const editCurrentSignature = useMemo(
     () =>
-      stableSignature({
+      buildEditAdminS3ConnectionSignature({
+        credentialDraft: editCredentials,
+        endpointId: editEndpointPresetId,
         endpointMode: editEndpointMode,
-        endpointPresetId: editEndpointPresetId,
-        form: { ...editForm, tags: normalizeUiTags(editForm.tags) },
-        credentials: editCredentials,
-        linkedUserIds: normalizeLinkedUserIds(editLinkedUserIds),
-        linkedGroupIds: normalizeLinkedUserIds(editLinkedGroupIds),
+        form: editForm,
+        linkedGroupIds: editLinkedGroupIds,
+        linkedUserIds: editLinkedUserIds,
       }),
-    [editCredentials, editEndpointMode, editEndpointPresetId, editForm, editLinkedGroupIds, editLinkedUserIds, normalizeLinkedUserIds]
+    [editCredentials, editEndpointMode, editEndpointPresetId, editForm, editLinkedGroupIds, editLinkedUserIds]
   );
   const editCloseGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: Boolean(editing && editInitialSignature && editCurrentSignature !== editInitialSignature),
@@ -629,7 +615,7 @@ export default function S3ConnectionsPage() {
       conn.storage_endpoint_id != null ? "preset" : presetMatch ? "preset" : "custom";
     const nextEndpointPresetId =
       conn.storage_endpoint_id != null ? String(conn.storage_endpoint_id) : presetMatch ? String(presetMatch.id) : "";
-    const nextForm = {
+    const nextForm: EditAdminS3ConnectionForm = {
       name: conn.name,
       tags: normalizeUiTags(conn.tags),
       provider_hint: conn.provider_hint || "",
@@ -640,8 +626,8 @@ export default function S3ConnectionsPage() {
       force_path_style: Boolean(conn.force_path_style),
       verify_tls: conn.verify_tls !== false,
     };
-    const nextLinkedUserIds = normalizeLinkedUserIds(conn.user_details?.map((user) => user.id));
-    const nextLinkedGroupIds = normalizeLinkedUserIds(conn.group_details?.map((group) => group.id));
+    const nextLinkedUserIds = normalizeS3ConnectionLinkedIds(conn.user_details?.map((user) => user.id));
+    const nextLinkedGroupIds = normalizeS3ConnectionLinkedIds(conn.group_details?.map((group) => group.id));
     setEditing(conn);
     setEditEndpointMode(nextEndpointMode);
     setEditEndpointPresetId(nextEndpointPresetId);
@@ -655,16 +641,17 @@ export default function S3ConnectionsPage() {
     setShowEditGroupPanel(false);
     setEditUserSelections([]);
     setEditGroupSelections([]);
-    setEditCredentials({ access_key_id: "", secret_access_key: "" });
+    const nextCredentialDraft = { access_key_id: "", secret_access_key: "" };
+    setEditCredentials(nextCredentialDraft);
     setEditInitialSignature(
-      stableSignature({
+      buildEditAdminS3ConnectionSignature({
+        credentialDraft: nextCredentialDraft,
+        endpointId: nextEndpointPresetId,
         endpointMode: nextEndpointMode,
-        endpointPresetId: nextEndpointPresetId,
-        form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) },
-        credentials: { access_key_id: "", secret_access_key: "" },
-        linkedUserIds: nextLinkedUserIds,
+        form: nextForm,
         linkedGroupIds: nextLinkedGroupIds,
-      })
+        linkedUserIds: nextLinkedUserIds,
+      }),
     );
     setEditError(null);
   };
@@ -689,36 +676,19 @@ export default function S3ConnectionsPage() {
 
   const submitCreate = async (e: FormEvent) => {
     e.preventDefault();
-    if (createHasPreset && !createEndpointPresetId) {
-      setCreateError("Select a configured endpoint.");
-      return;
-    }
-    if (!createHasPreset && !createForm.endpoint_url.trim()) {
-      setCreateError("Endpoint URL is required.");
+    const prepared = prepareCreateAdminS3ConnectionPayload(
+      createForm,
+      createEndpointMode,
+      createEndpointPresetId,
+    );
+    if (prepared.error !== null) {
+      setCreateError(prepared.error);
       return;
     }
     setCreating(true);
     setCreateError(null);
     try {
-      const endpointPayload = createHasPreset
-        ? {
-            storage_endpoint_id: Number(createEndpointPresetId),
-          }
-        : {
-            storage_endpoint_id: null,
-            endpoint_url: createForm.endpoint_url,
-            region: createForm.region || null,
-            force_path_style: createForm.force_path_style,
-            verify_tls: createForm.verify_tls,
-            provider_hint: createForm.provider_hint || null,
-          };
-      await createAdminS3Connection({
-        name: createForm.name,
-        tags: normalizeUiTags(createForm.tags),
-        access_key_id: createForm.access_key_id,
-        secret_access_key: createForm.secret_access_key,
-        ...endpointPayload,
-      });
+      await createAdminS3Connection(prepared.payload);
       setShowCreateModal(false);
       resetCreateForm();
       setActionMessage("Connection created.");
@@ -733,56 +703,32 @@ export default function S3ConnectionsPage() {
   const submitEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editing) return;
-    if (editHasPreset && !editEndpointPresetId) {
-      setEditError("Select a configured endpoint.");
-      return;
-    }
-    if (!editHasPreset && !editForm.endpoint_url.trim()) {
-      setEditError("Endpoint URL is required.");
-      return;
-    }
-    const accessKeyId = editCredentials.access_key_id.trim();
-    const secretAccessKey = editCredentials.secret_access_key.trim();
-    if ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey)) {
-      setEditError("Provide both access key ID and secret access key to update credentials.");
+    const prepared = prepareUpdateAdminS3ConnectionPayload({
+      credentialDraft: editCredentials,
+      endpointId: editEndpointPresetId,
+      endpointMode: editEndpointMode,
+      form: editForm,
+      linkedGroupIds: editLinkedGroupIds,
+    });
+    if (prepared.error !== null) {
+      setEditError(prepared.error);
       return;
     }
     setEditBusy(true);
     setEditError(null);
     try {
       const connectionId = editing.id;
-      const targetGroupIds = normalizeLinkedUserIds(editLinkedGroupIds);
-      if (accessKeyId && secretAccessKey) {
-        await rotateAdminS3ConnectionCredentials(connectionId, {
-          access_key_id: accessKeyId,
-          secret_access_key: secretAccessKey,
-        });
+      if (prepared.credentialsPayload) {
+        await rotateAdminS3ConnectionCredentials(
+          connectionId,
+          prepared.credentialsPayload,
+        );
       }
-      const endpointPayload = editHasPreset
-        ? {
-            storage_endpoint_id: Number(editEndpointPresetId),
-          }
-        : {
-            storage_endpoint_id: null,
-            endpoint_url: editForm.endpoint_url || undefined,
-            region: editForm.region || null,
-            force_path_style: editForm.force_path_style,
-            verify_tls: editForm.verify_tls,
-            provider_hint: editForm.provider_hint || null,
-          };
-      await updateAdminS3Connection(connectionId, {
-        name: editForm.name || undefined,
-        group_ids: targetGroupIds,
-        tags: normalizeUiTags(editForm.tags),
-        credential_owner_type:
-          (editForm.credential_owner_type as CredentialOwnerType) || null,
-        credential_owner_identifier: editForm.credential_owner_identifier || null,
-        ...endpointPayload,
-      });
-      const targetIds = normalizeLinkedUserIds(editLinkedUserIds);
+      await updateAdminS3Connection(connectionId, prepared.updatePayload);
+      const targetIds = normalizeS3ConnectionLinkedIds(editLinkedUserIds);
       try {
         const currentLinks = await listS3ConnectionUsers(connectionId);
-        const currentIds = normalizeLinkedUserIds(currentLinks.map((link) => link.user_id));
+        const currentIds = normalizeS3ConnectionLinkedIds(currentLinks.map((link) => link.user_id));
         const currentIdSet = new Set(currentIds);
         const targetIdSet = new Set(targetIds);
         const addIds = targetIds.filter((id) => !currentIdSet.has(id));
@@ -1402,9 +1348,15 @@ export default function S3ConnectionsPage() {
                     <UiSelect
                       label="Owner type"
                       value={editForm.credential_owner_type}
-                      onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_type: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((previous) => ({
+                          ...previous,
+                          credential_owner_type:
+                            parseS3ConnectionCredentialOwnerType(e.target.value),
+                        }))
+                      }
                     >
-                    {credentialOwnerTypeOptions.map((option) => (
+                      {credentialOwnerTypeOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
@@ -1486,7 +1438,9 @@ export default function S3ConnectionsPage() {
                     }}
                     onAdd={() => {
                       if (editUserSelections.length === 0) return;
-                      setEditLinkedUserIds((prev) => normalizeLinkedUserIds([...prev, ...editUserSelections]));
+                      setEditLinkedUserIds((prev) =>
+                        normalizeS3ConnectionLinkedIds([...prev, ...editUserSelections]),
+                      );
                       setEditUserSelections([]);
                       setEditUserSearch("");
                       setShowEditUserPanel(false);
@@ -1582,7 +1536,9 @@ export default function S3ConnectionsPage() {
                     }}
                     onAdd={() => {
                       if (editGroupSelections.length === 0) return;
-                      setEditLinkedGroupIds((prev) => normalizeLinkedUserIds([...prev, ...editGroupSelections]));
+                      setEditLinkedGroupIds((prev) =>
+                        normalizeS3ConnectionLinkedIds([...prev, ...editGroupSelections]),
+                      );
                       setEditGroupSelections([]);
                       setEditGroupSearch("");
                       setShowEditGroupPanel(false);

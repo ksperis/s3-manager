@@ -5,17 +5,24 @@
 import { describe, expect, it } from "vitest";
 import type { S3Connection } from "../../api/connections";
 import {
+  buildCreateAdminS3ConnectionSignature,
   buildCreatePrivateConnectionSignature,
+  buildEditAdminS3ConnectionSignature,
   buildEditPrivateConnectionSignature,
   buildPrivateConnectionDraft,
   buildPrivateConnectionEditorState,
   buildPrivateConnectionsProjection,
   buildPrivateStorageEndpointLabelById,
   buildS3CredentialsValidationPayload,
+  createDefaultAdminS3ConnectionForm,
   createDefaultPrivateConnectionForm,
   createEmptyConnectionCredentialDraft,
+  normalizeS3ConnectionLinkedIds,
+  parseS3ConnectionCredentialOwnerType,
   parsePrivateConnectionSortDate,
+  prepareCreateAdminS3ConnectionPayload,
   prepareCreatePrivateConnectionPayload,
+  prepareUpdateAdminS3ConnectionPayload,
   prepareUpdatePrivateConnectionPayload,
 } from "./s3ConnectionFormModel";
 
@@ -46,6 +53,24 @@ describe("s3ConnectionFormModel", () => {
     expect(first).toMatchObject({
       access_manager: false,
       access_browser: true,
+      force_path_style: false,
+      verify_tls: true,
+    });
+    expect(first.tags).not.toBe(second.tags);
+  });
+
+  it("creates isolated Admin connection defaults from the shared fields", () => {
+    const first = createDefaultAdminS3ConnectionForm();
+    const second = createDefaultAdminS3ConnectionForm();
+
+    expect(first).toEqual({
+      name: "",
+      tags: [],
+      provider_hint: "",
+      endpoint_url: "",
+      region: "",
+      access_key_id: "",
+      secret_access_key: "",
       force_path_style: false,
       verify_tls: true,
     });
@@ -106,6 +131,50 @@ describe("s3ConnectionFormModel", () => {
         "preset",
         "3",
       ),
+    );
+
+    const adminForm = {
+      ...createDefaultAdminS3ConnectionForm(),
+      tags: connection.tags ?? [],
+    };
+    expect(
+      buildCreateAdminS3ConnectionSignature(adminForm, "custom", ""),
+    ).toBe(
+      buildCreateAdminS3ConnectionSignature(
+        { ...adminForm, tags: [...adminForm.tags].reverse() },
+        "custom",
+        "",
+      ),
+    );
+    const editAdminForm = {
+      name: "Archive",
+      tags: adminForm.tags,
+      provider_hint: "",
+      credential_owner_type: "" as const,
+      credential_owner_identifier: "",
+      endpoint_url: "https://s3.example.test",
+      region: "",
+      force_path_style: false,
+      verify_tls: true,
+    };
+    expect(
+      buildEditAdminS3ConnectionSignature({
+        credentialDraft: createEmptyConnectionCredentialDraft(),
+        endpointId: "",
+        endpointMode: "custom",
+        form: editAdminForm,
+        linkedGroupIds: [8, 3],
+        linkedUserIds: [5, 2],
+      }),
+    ).toBe(
+      buildEditAdminS3ConnectionSignature({
+        credentialDraft: createEmptyConnectionCredentialDraft(),
+        endpointId: "",
+        endpointMode: "custom",
+        form: { ...editAdminForm, tags: [...editAdminForm.tags].reverse() },
+        linkedGroupIds: [3, 8],
+        linkedUserIds: [2, 5],
+      }),
     );
   });
 
@@ -190,6 +259,124 @@ describe("s3ConnectionFormModel", () => {
       error: "Select a configured endpoint.",
       payload: null,
     });
+  });
+
+  it("prepares canonical Admin connection create payloads", () => {
+    const form = {
+      ...createDefaultAdminS3ConnectionForm(),
+      name: " Shared archive ",
+      provider_hint: " aws ",
+      endpoint_url: " https://s3.example.test ",
+      region: " eu-west-1 ",
+      access_key_id: " access ",
+      secret_access_key: " secret with spaces ",
+      force_path_style: true,
+    };
+
+    expect(prepareCreateAdminS3ConnectionPayload(form, "custom", "")).toEqual({
+      error: null,
+      payload: {
+        name: "Shared archive",
+        tags: [],
+        storage_endpoint_id: null,
+        provider_hint: "aws",
+        endpoint_url: "https://s3.example.test",
+        region: "eu-west-1",
+        access_key_id: "access",
+        secret_access_key: " secret with spaces ",
+        force_path_style: true,
+        verify_tls: true,
+      },
+    });
+    expect(prepareCreateAdminS3ConnectionPayload(form, "preset", "3")).toEqual({
+      error: null,
+      payload: {
+        name: "Shared archive",
+        tags: [],
+        storage_endpoint_id: 3,
+        access_key_id: "access",
+        secret_access_key: " secret with spaces ",
+      },
+    });
+    expect(prepareCreateAdminS3ConnectionPayload(form, "preset", "invalid")).toEqual({
+      error: "Select a configured endpoint.",
+      payload: null,
+    });
+  });
+
+  it("prepares canonical Admin connection updates and credential rotation", () => {
+    const prepared = prepareUpdateAdminS3ConnectionPayload({
+      credentialDraft: {
+        access_key_id: " replacement-access ",
+        secret_access_key: " replacement-secret ",
+      },
+      endpointId: "",
+      endpointMode: "custom",
+      form: {
+        name: " Shared archive ",
+        tags: connection.tags ?? [],
+        provider_hint: " aws ",
+        credential_owner_type: "iam_user",
+        credential_owner_identifier: " owner-1 ",
+        endpoint_url: " https://updated.example.test ",
+        region: " eu-west-3 ",
+        force_path_style: true,
+        verify_tls: false,
+      },
+      linkedGroupIds: [8, 3, 8, -1],
+    });
+
+    expect(prepared).toEqual({
+      error: null,
+      credentialsPayload: {
+        access_key_id: "replacement-access",
+        secret_access_key: "replacement-secret",
+      },
+      updatePayload: {
+        name: "Shared archive",
+        group_ids: [3, 8],
+        tags: [
+          expect.objectContaining({ label: "Beta" }),
+          expect.objectContaining({ label: "Alpha" }),
+        ],
+        credential_owner_type: "iam_user",
+        credential_owner_identifier: "owner-1",
+        storage_endpoint_id: null,
+        provider_hint: "aws",
+        endpoint_url: "https://updated.example.test",
+        region: "eu-west-3",
+        force_path_style: true,
+        verify_tls: false,
+      },
+    });
+    expect(
+      prepareUpdateAdminS3ConnectionPayload({
+        credentialDraft: {
+          access_key_id: "replacement-access",
+          secret_access_key: "",
+        },
+        endpointId: "3",
+        endpointMode: "preset",
+        form: {
+          name: "Shared archive",
+          tags: [],
+          provider_hint: "",
+          credential_owner_type: "",
+          credential_owner_identifier: "",
+          endpoint_url: "",
+          region: "",
+          force_path_style: false,
+          verify_tls: true,
+        },
+        linkedGroupIds: [],
+      }),
+    ).toEqual({
+      error: "Provide both access key ID and secret access key to update credentials.",
+      credentialsPayload: null,
+      updatePayload: null,
+    });
+    expect(normalizeS3ConnectionLinkedIds([4, Number.NaN, 2, 4, 0])).toEqual([2, 4]);
+    expect(parseS3ConnectionCredentialOwnerType("invalid")).toBe("");
   });
 
   it("prepares editable and server-managed private connection updates", () => {

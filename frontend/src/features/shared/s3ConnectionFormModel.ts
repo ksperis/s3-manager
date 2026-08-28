@@ -4,10 +4,16 @@
  */
 import type {
   CreateConnectionPayload,
+  CredentialOwnerType,
   PrivateConnectionStorageEndpoint,
   S3Connection,
   UpdateConnectionPayload,
 } from "../../api/connections";
+import type {
+  CreateAdminS3ConnectionPayload,
+  RotateAdminS3ConnectionCredentialsPayload,
+  UpdateAdminS3ConnectionPayload,
+} from "../../api/s3ConnectionsAdmin";
 import type { S3CredentialsValidationPayload } from "../../api/s3CredentialsValidation";
 import { stableSignature } from "../../utils/stableSignature";
 import {
@@ -28,6 +34,30 @@ export type CreatePrivateConnectionForm = {
   secret_access_key: string;
   access_manager: boolean;
   access_browser: boolean;
+  force_path_style: boolean;
+  verify_tls: boolean;
+};
+
+type CreateAdminS3ConnectionForm = {
+  name: string;
+  tags: UiTagDefinition[];
+  provider_hint: string;
+  endpoint_url: string;
+  region: string;
+  access_key_id: string;
+  secret_access_key: string;
+  force_path_style: boolean;
+  verify_tls: boolean;
+};
+
+export type EditAdminS3ConnectionForm = {
+  name: string;
+  tags: UiTagDefinition[];
+  provider_hint: string;
+  credential_owner_type: CredentialOwnerType | "";
+  credential_owner_identifier: string;
+  endpoint_url: string;
+  region: string;
   force_path_style: boolean;
   verify_tls: boolean;
 };
@@ -85,6 +115,35 @@ type PreparePrivateConnectionUpdateOptions = {
   serverManaged: boolean;
 };
 
+type PrepareAdminS3ConnectionUpdateOptions = {
+  credentialDraft: ConnectionCredentialDraft;
+  endpointId: string;
+  endpointMode: S3ConnectionEndpointMode;
+  form: EditAdminS3ConnectionForm;
+  linkedGroupIds: readonly number[];
+};
+
+type BuildAdminS3ConnectionEditSignatureOptions = {
+  credentialDraft: ConnectionCredentialDraft;
+  endpointId: string;
+  endpointMode: S3ConnectionEndpointMode;
+  form: EditAdminS3ConnectionForm;
+  linkedGroupIds: readonly number[];
+  linkedUserIds: readonly number[];
+};
+
+type PreparedAdminS3ConnectionUpdate =
+  | {
+      error: null;
+      credentialsPayload: RotateAdminS3ConnectionCredentialsPayload | null;
+      updatePayload: UpdateAdminS3ConnectionPayload;
+    }
+  | {
+      error: string;
+      credentialsPayload: null;
+      updatePayload: null;
+    };
+
 type PrivateConnectionsProjection = {
   allFilteredConnectionsSelected: boolean;
   filteredConnectionIdSet: Set<number>;
@@ -98,7 +157,7 @@ type PrivateConnectionsProjection = {
   selectedPagedConnectionIds: number[];
 };
 
-export function createDefaultPrivateConnectionForm(): CreatePrivateConnectionForm {
+function createDefaultS3ConnectionFormFields(): CreateAdminS3ConnectionForm {
   return {
     name: "",
     tags: [],
@@ -107,10 +166,20 @@ export function createDefaultPrivateConnectionForm(): CreatePrivateConnectionFor
     region: "",
     access_key_id: "",
     secret_access_key: "",
-    access_manager: false,
-    access_browser: true,
     force_path_style: false,
     verify_tls: true,
+  };
+}
+
+export function createDefaultAdminS3ConnectionForm(): CreateAdminS3ConnectionForm {
+  return createDefaultS3ConnectionFormFields();
+}
+
+export function createDefaultPrivateConnectionForm(): CreatePrivateConnectionForm {
+  return {
+    ...createDefaultS3ConnectionFormFields(),
+    access_manager: false,
+    access_browser: true,
   };
 }
 
@@ -152,6 +221,22 @@ export function buildCreatePrivateConnectionSignature(
   endpointMode: S3ConnectionEndpointMode,
   endpointId: string,
 ): string {
+  return buildS3ConnectionFormSignature(form, endpointMode, endpointId);
+}
+
+export function buildCreateAdminS3ConnectionSignature(
+  form: CreateAdminS3ConnectionForm,
+  endpointMode: S3ConnectionEndpointMode,
+  endpointId: string,
+): string {
+  return buildS3ConnectionFormSignature(form, endpointMode, endpointId);
+}
+
+function buildS3ConnectionFormSignature<T extends { tags: UiTagDefinition[] }>(
+  form: T,
+  endpointMode: S3ConnectionEndpointMode,
+  endpointId: string,
+): string {
   return stableSignature({
     endpointMode,
     endpointId,
@@ -159,6 +244,27 @@ export function buildCreatePrivateConnectionSignature(
       ...form,
       tags: normalizeUiTags(form.tags),
     },
+  });
+}
+
+export function buildEditAdminS3ConnectionSignature({
+  credentialDraft,
+  endpointId,
+  endpointMode,
+  form,
+  linkedGroupIds,
+  linkedUserIds,
+}: BuildAdminS3ConnectionEditSignatureOptions): string {
+  return stableSignature({
+    endpointMode,
+    endpointId,
+    form: {
+      ...form,
+      tags: normalizeUiTags(form.tags),
+    },
+    credentialDraft,
+    linkedGroupIds: normalizeS3ConnectionLinkedIds(linkedGroupIds),
+    linkedUserIds: normalizeS3ConnectionLinkedIds(linkedUserIds),
   });
 }
 
@@ -262,6 +368,142 @@ export function prepareCreatePrivateConnectionPayload(
       secret_access_key: form.secret_access_key,
       access_manager: form.access_manager,
       access_browser: form.access_browser,
+      ...endpointPayload,
+    },
+  };
+}
+
+export function prepareCreateAdminS3ConnectionPayload(
+  form: CreateAdminS3ConnectionForm,
+  endpointMode: S3ConnectionEndpointMode,
+  endpointId: string,
+): PreparedConnectionPayload<CreateAdminS3ConnectionPayload> {
+  if (!form.name.trim()) {
+    return invalidConnectionPayload("Connection name is required.");
+  }
+  const parsedEndpointId =
+    endpointMode === "preset" ? parseS3ConnectionEndpointId(endpointId) : null;
+  if (endpointMode === "preset" && parsedEndpointId === null) {
+    return invalidConnectionPayload("Select a configured endpoint.");
+  }
+  if (endpointMode === "custom" && !form.endpoint_url.trim()) {
+    return invalidConnectionPayload("Endpoint URL is required.");
+  }
+  if (!form.access_key_id.trim() || !form.secret_access_key) {
+    return invalidConnectionPayload("S3 credentials are required.");
+  }
+
+  const endpointPayload =
+    endpointMode === "preset"
+      ? { storage_endpoint_id: parsedEndpointId }
+      : {
+          storage_endpoint_id: null,
+          provider_hint: form.provider_hint.trim() || null,
+          endpoint_url: form.endpoint_url.trim(),
+          region: form.region.trim() || null,
+          force_path_style: form.force_path_style,
+          verify_tls: form.verify_tls,
+        };
+  return {
+    error: null,
+    payload: {
+      name: form.name.trim(),
+      tags: normalizeUiTags(form.tags),
+      access_key_id: form.access_key_id.trim(),
+      secret_access_key: form.secret_access_key,
+      ...endpointPayload,
+    },
+  };
+}
+
+export function normalizeS3ConnectionLinkedIds(
+  ids: readonly number[] | undefined,
+): number[] {
+  return Array.from(new Set((ids ?? []).map((id) => Number(id))))
+    .filter((id) => Number.isFinite(id) && id > 0)
+    .sort((left, right) => left - right);
+}
+
+export function parseS3ConnectionCredentialOwnerType(
+  value: string,
+): CredentialOwnerType | "" {
+  switch (value) {
+    case "iam_user":
+    case "account_user":
+    case "s3_user":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function prepareUpdateAdminS3ConnectionPayload({
+  credentialDraft,
+  endpointId,
+  endpointMode,
+  form,
+  linkedGroupIds,
+}: PrepareAdminS3ConnectionUpdateOptions): PreparedAdminS3ConnectionUpdate {
+  if (!form.name.trim()) {
+    return {
+      error: "Connection name is required.",
+      credentialsPayload: null,
+      updatePayload: null,
+    };
+  }
+  const parsedEndpointId =
+    endpointMode === "preset" ? parseS3ConnectionEndpointId(endpointId) : null;
+  if (endpointMode === "preset" && parsedEndpointId === null) {
+    return {
+      error: "Select a configured endpoint.",
+      credentialsPayload: null,
+      updatePayload: null,
+    };
+  }
+  if (endpointMode === "custom" && !form.endpoint_url.trim()) {
+    return {
+      error: "Endpoint URL is required.",
+      credentialsPayload: null,
+      updatePayload: null,
+    };
+  }
+  const accessKeyId = credentialDraft.access_key_id.trim();
+  const secretAccessKey = credentialDraft.secret_access_key.trim();
+  if ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey)) {
+    return {
+      error: "Provide both access key ID and secret access key to update credentials.",
+      credentialsPayload: null,
+      updatePayload: null,
+    };
+  }
+
+  const endpointPayload =
+    endpointMode === "preset"
+      ? { storage_endpoint_id: parsedEndpointId }
+      : {
+          storage_endpoint_id: null,
+          provider_hint: form.provider_hint.trim() || null,
+          endpoint_url: form.endpoint_url.trim(),
+          region: form.region.trim() || null,
+          force_path_style: form.force_path_style,
+          verify_tls: form.verify_tls,
+        };
+  return {
+    error: null,
+    credentialsPayload:
+      accessKeyId && secretAccessKey
+        ? {
+            access_key_id: accessKeyId,
+            secret_access_key: secretAccessKey,
+          }
+        : null,
+    updatePayload: {
+      name: form.name.trim(),
+      group_ids: normalizeS3ConnectionLinkedIds(linkedGroupIds),
+      tags: normalizeUiTags(form.tags),
+      credential_owner_type: form.credential_owner_type || null,
+      credential_owner_identifier:
+        form.credential_owner_identifier.trim() || null,
       ...endpointPayload,
     },
   };

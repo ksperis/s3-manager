@@ -59,7 +59,7 @@ type ListS3ConnectionsParams = {
   sort_dir?: "asc" | "desc";
 };
 
-type CreateS3ConnectionPayload = {
+export type CreateAdminS3ConnectionPayload = {
   name: string;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
@@ -74,7 +74,7 @@ type CreateS3ConnectionPayload = {
   tags?: TagDefinitionInput[] | null;
 };
 
-type UpdateS3ConnectionPayload = {
+export type UpdateAdminS3ConnectionPayload = {
   name?: string | null;
   group_ids?: number[] | null;
   provider_hint?: string | null;
@@ -89,7 +89,7 @@ type UpdateS3ConnectionPayload = {
   tags?: TagDefinitionInput[] | null;
 };
 
-type RotateS3ConnectionCredentialsPayload = {
+export type RotateAdminS3ConnectionCredentialsPayload = {
   access_key_id: string;
   secret_access_key: string;
 };
@@ -116,12 +116,12 @@ export async function listMinimalS3Connections(): Promise<S3ConnectionSummary[]>
   return data;
 }
 
-export async function createAdminS3Connection(payload: CreateS3ConnectionPayload): Promise<S3ConnectionAdminItem> {
+export async function createAdminS3Connection(payload: CreateAdminS3ConnectionPayload): Promise<S3ConnectionAdminItem> {
   const { data } = await client.post<S3ConnectionAdminItem>("/admin/s3-connections", payload);
   return data;
 }
 
-export async function updateAdminS3Connection(connectionId: number, payload: UpdateS3ConnectionPayload): Promise<S3ConnectionAdminItem> {
+export async function updateAdminS3Connection(connectionId: number, payload: UpdateAdminS3ConnectionPayload): Promise<S3ConnectionAdminItem> {
   const { data } = await client.put<S3ConnectionAdminItem>(`/admin/s3-connections/${connectionId}`, payload);
   return data;
 }
@@ -135,7 +135,7 @@ export async function remediateAdminS3Connection(connectionId: number): Promise<
 
 export async function rotateAdminS3ConnectionCredentials(
   connectionId: number,
-  payload: RotateS3ConnectionCredentialsPayload
+  payload: RotateAdminS3ConnectionCredentialsPayload
 ): Promise<S3ConnectionAdminItem> {
   const { data } = await client.put<S3ConnectionAdminItem>(`/admin/s3-connections/${connectionId}/credentials`, payload);
   return data;
