@@ -9,6 +9,7 @@ type ActionProgressCardProps = {
   progress: ActionProgressState;
   busy?: boolean;
   className?: string;
+  unitLabel?: string;
 };
 
 function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
@@ -25,7 +26,12 @@ function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   );
 }
 
-export default function ActionProgressCard({ progress, busy = false, className = "" }: ActionProgressCardProps) {
+export default function ActionProgressCard({
+  progress,
+  busy = false,
+  className = "",
+  unitLabel,
+}: ActionProgressCardProps) {
   const percent = calculateActionProgressPercent(progress);
 
   return (
@@ -37,6 +43,7 @@ export default function ActionProgressCard({ progress, busy = false, className =
           {busy && <SpinnerIcon />}
           <span>
             {progress.label} · {progress.completed} / {progress.total}
+            {unitLabel ? ` ${unitLabel}` : ""}
           </span>
         </span>
         <span>{percent}%</span>

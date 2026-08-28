@@ -23,7 +23,6 @@ import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import { UiTagBadge } from "../../components/UiTagSettings";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
-import UiDetails from "../../components/ui/UiDetails";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   cx,
@@ -61,6 +60,7 @@ import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureS
 import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
 import BucketOpsAdvancedFilterDrawer from "./BucketOpsAdvancedFilterDrawer";
+import BucketOpsBulkExecutionPanel from "./BucketOpsBulkExecutionPanel";
 import BucketOpsColumnControls from "./BucketOpsColumnControls";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -89,7 +89,6 @@ import {
   useBucketUiTags,
   type BucketUiTagTarget as BucketTagTarget,
 } from "./bucketUiTags";
-import { calculateActionProgressPercent } from "./actionProgress";
 import {
   buildBucketDetailLocationState,
   loadBucketListReturnContext,
@@ -129,15 +128,10 @@ import {
   PUBLIC_ACCESS_BLOCK_OPTIONS,
   type BulkCopyFeatureKey,
   type BulkOperation,
-  type BulkPreviewItem,
-  type BulkPreviewLine,
-  type BulkPreviewTone,
   type QuotaSizeUnit,
 } from "./bucketBulkOperationsModel";
 import {
   buildBulkPreviewExportPayload,
-  buildBulkPreviewSections,
-  summarizeBulkPreview,
 } from "./bucketBulkPreviewModel";
 import {
   buildBulkPastePlan,
@@ -1225,10 +1219,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         }),
     [orphanedTagBuckets, uiTagOrphanEntries]
   );
-  const previewStats = useMemo(() => summarizeBulkPreview(bulkPreview), [bulkPreview]);
-  const bulkCopyProgressPercent = calculateActionProgressPercent(bulkCopyProgress);
-  const bulkPreviewProgressPercent = calculateActionProgressPercent(bulkPreviewProgress);
-  const bulkApplyProgressPercent = calculateActionProgressPercent(bulkApplyProgress);
   const hasDeleteCriteria =
     bulkLifecycleDeleteIds.trim().length > 0 || Object.values(bulkLifecycleDeleteTypes).some(Boolean);
   const hasNotificationDeleteCriteria =
@@ -1238,6 +1228,26 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const hasPolicyDeleteCriteria =
     bulkPolicyDeleteIds.trim().length > 0 || Object.values(bulkPolicyDeleteTypes).some(Boolean);
   const hasPublicAccessBlockTargetCriteria = Object.values(bulkPublicAccessBlockTargets).some(Boolean);
+  const bulkPreviewDisabled =
+    bulkPreviewLoading ||
+    bulkApplyLoading ||
+    !bulkOperation ||
+    ((bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
+      !hasPublicAccessBlockTargetCriteria) ||
+    (bulkOperation === "add_lifecycle" && !bulkLifecycleRuleText.trim()) ||
+    (bulkOperation === "delete_lifecycle" && !hasDeleteCriteria) ||
+    (bulkOperation === "add_notifications" && !bulkNotificationText.trim()) ||
+    (bulkOperation === "delete_notifications" && !hasNotificationDeleteCriteria) ||
+    (bulkOperation === "add_cors" && !bulkCorsRuleText.trim()) ||
+    (bulkOperation === "delete_cors" && !hasCorsDeleteCriteria) ||
+    (bulkOperation === "add_policy" && !bulkPolicyText.trim()) ||
+    (bulkOperation === "delete_policy" && !hasPolicyDeleteCriteria) ||
+    (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason)) ||
+    (bulkOperation === "paste_configs" && Boolean(bulkPastePlan.error));
+  const bulkApplyDisabled =
+    !bulkPreviewReady ||
+    bulkApplyLoading ||
+    (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason));
   const hasSelectedCopyFeatures = useMemo(
     () => (Object.keys(bulkCopyFeatures) as BulkCopyFeatureKey[]).some((feature) => bulkCopyFeatures[feature]),
     [bulkCopyFeatures]
@@ -1254,46 +1264,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       .filter((feature) => bulkConfigClipboard.features[feature])
       .map((feature) => BULK_COPY_FEATURE_LABELS[feature]);
   }, [bulkConfigClipboard]);
-
-  const diffToneClasses = (tone?: BulkPreviewTone) => {
-    if (tone === "added") {
-      return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100";
-    }
-    if (tone === "removed") {
-      return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100";
-    }
-    return "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200";
-  };
-
-  const renderPreviewLines = (lines: BulkPreviewLine[]) => (
-    <div className="space-y-2">
-      {lines.map((line, idx) => (
-        <pre
-          key={`${line.text}-${idx}`}
-          className={`whitespace-pre-wrap break-words rounded-md border px-2 py-1 font-mono text-[11px] leading-relaxed ${diffToneClasses(
-            line.tone
-          )}`}
-        >
-          {line.text}
-        </pre>
-      ))}
-    </div>
-  );
-
-  const bucketPreviewBadgeClasses = (item: BulkPreviewItem) => {
-    if (item.error) {
-      return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100";
-    }
-    if (item.changed) {
-      return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100";
-    }
-    return "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200";
-  };
-
-  const sectionPreviewBadgeClasses = (changed: boolean) =>
-    changed
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
-      : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200";
 
   const exportBulkPreviewChanges = () => {
     if (bulkPreview.length === 0) return;
@@ -2998,215 +2968,31 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 </div>
               </div>
             )}
-            {bulkOperation === "paste_configs" && bulkPastePlan.error && (
-              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkPastePlan.error}</p>
-            )}
-            {bulkCopyError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkCopyError}</p>}
-            {bulkCopySummary && <p className="ui-caption font-semibold text-emerald-600 dark:text-emerald-200">{bulkCopySummary}</p>}
-            {bulkPreviewError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkPreviewError}</p>}
-            {bulkApplyError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkApplyError}</p>}
-            {bulkApplySummary && <p className="ui-caption font-semibold text-emerald-600 dark:text-emerald-200">{bulkApplySummary}</p>}
-            {bulkCopyLoading && bulkCopyProgress && (
-              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
-                <div className="flex flex-wrap items-center justify-between gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                  <span>
-                    {bulkCopyProgress.label} · {bulkCopyProgress.completed} / {bulkCopyProgress.total} buckets
-                  </span>
-                  <span>{bulkCopyProgressPercent}%</span>
-                </div>
-                <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                  <div className="h-full bg-primary-500 transition-[width] duration-200" style={{ width: `${bulkCopyProgressPercent}%` }} />
-                </div>
-                {bulkCopyProgress.failed > 0 && (
-                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                    Failures so far: {bulkCopyProgress.failed}
-                  </p>
-                )}
-              </div>
-            )}
-            {bulkPreviewLoading && bulkPreviewProgress && (
-              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
-                <div className="flex flex-wrap items-center justify-between gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                  <span>
-                    {bulkPreviewProgress.label} · {bulkPreviewProgress.completed} / {bulkPreviewProgress.total} buckets
-                  </span>
-                  <span>{bulkPreviewProgressPercent}%</span>
-                </div>
-                <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                  <div
-                    className="h-full bg-primary-500 transition-[width] duration-200"
-                    style={{ width: `${bulkPreviewProgressPercent}%` }}
-                  />
-                </div>
-                {bulkPreviewProgress.failed > 0 && (
-                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                    Failures so far: {bulkPreviewProgress.failed}
-                  </p>
-                )}
-              </div>
-            )}
-            {bulkApplyLoading && bulkApplyProgress && (
-              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
-                <div className="flex flex-wrap items-center justify-between gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                  <span>
-                    {bulkApplyProgress.label} · {bulkApplyProgress.completed} / {bulkApplyProgress.total} buckets
-                  </span>
-                  <span>{bulkApplyProgressPercent}%</span>
-                </div>
-                <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                  <div className="h-full bg-primary-500 transition-[width] duration-200" style={{ width: `${bulkApplyProgressPercent}%` }} />
-                </div>
-                {bulkApplyProgress.failed > 0 && (
-                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                    Failures so far: {bulkApplyProgress.failed}
-                  </p>
-                )}
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-3">
-              {bulkOperation === "copy_configs" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void copyBulkConfigs();
-                  }}
-                  disabled={bulkCopyLoading || !hasSelectedCopyFeatures}
-                  className="rounded-md bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {bulkCopyLoading ? "Copying..." : "Copy selected configs"}
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={runBulkPreview}
-                    disabled={
-                      bulkPreviewLoading ||
-                      bulkApplyLoading ||
-                      !bulkOperation ||
-                      ((bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
-                        !hasPublicAccessBlockTargetCriteria) ||
-                      (bulkOperation === "add_lifecycle" && !bulkLifecycleRuleText.trim()) ||
-                      (bulkOperation === "delete_lifecycle" && !hasDeleteCriteria) ||
-                      (bulkOperation === "add_notifications" && !bulkNotificationText.trim()) ||
-                      (bulkOperation === "delete_notifications" && !hasNotificationDeleteCriteria) ||
-                      (bulkOperation === "add_cors" && !bulkCorsRuleText.trim()) ||
-                      (bulkOperation === "delete_cors" && !hasCorsDeleteCriteria) ||
-                      (bulkOperation === "add_policy" && !bulkPolicyText.trim()) ||
-                      (bulkOperation === "delete_policy" && !hasPolicyDeleteCriteria) ||
-                      (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason)) ||
-                      (bulkOperation === "paste_configs" && Boolean(bulkPastePlan.error))
-                    }
-                    className="rounded-md bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {bulkPreviewLoading ? "Previewing..." : "Preview"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={exportBulkPreviewChanges}
-                    disabled={bulkPreviewLoading || bulkPreview.length === 0}
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-                  >
-                    Export changes
-                  </button>
-                  {bulkPreviewReady && (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Changes: {previewStats.changed} / Unchanged: {previewStats.unchanged} / Errors: {previewStats.errors}
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-            {bulkPreview.length > 0 && (
-              <div className="max-h-[420px] space-y-2 overflow-auto rounded-lg border border-slate-200 p-2 dark:border-slate-800">
-                {bulkPreview.map((item) => {
-                  const sections = buildBulkPreviewSections(item, bulkOperation);
-                  const changedSections = sections.filter((section) => section.changed).length;
-                  return (
-                    <UiDetails
-                      key={item.bucket}
-                      defaultOpen={Boolean(item.error || item.changed)}
-                      className="rounded-lg border border-slate-200 dark:border-slate-800"
-                    >
-                      <summary className="cursor-pointer list-none px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-slate-900 dark:text-slate-100">{item.bucket}</span>
-                          <span
-                            className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${bucketPreviewBadgeClasses(item)}`}
-                          >
-                            {item.error ? "Error" : item.changed ? "Change" : "No change"}
-                          </span>
-                          <span className="ui-caption text-slate-500 dark:text-slate-400">
-                            Changed sections {changedSections}/{sections.length}
-                          </span>
-                        </div>
-                      </summary>
-                      <div className="space-y-2 border-t border-slate-200 px-3 py-3 dark:border-slate-800">
-                        {sections.map((section) => (
-                          <UiDetails
-                            key={`${item.bucket}:${section.key}`}
-                            defaultOpen={Boolean(section.error || section.changed)}
-                            className="rounded-md border border-slate-200 dark:border-slate-800"
-                          >
-                            <summary className="cursor-pointer list-none px-2.5 py-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
-                                <span
-                                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sectionPreviewBadgeClasses(
-                                    section.changed
-                                  )}`}
-                                >
-                                  {section.changed ? "Changed" : "Unchanged"}
-                                </span>
-                              </div>
-                            </summary>
-                            <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
-                              {section.error ? (
-                                <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{section.error}</p>
-                              ) : (
-                                <div className="grid gap-2 lg:grid-cols-2">
-                                  <div className="space-y-1">
-                                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                      Before
-                                    </p>
-                                    {renderPreviewLines(section.before)}
-                                  </div>
-                                  <div className="space-y-1">
-                                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                      After
-                                    </p>
-                                    {renderPreviewLines(section.after)}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </UiDetails>
-                        ))}
-                      </div>
-                    </UiDetails>
-                  );
-                })}
-              </div>
-            )}
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-full border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-                onClick={closeBulkUpdateModal}
-              >
-                Cancel
-              </button>
-              {bulkOperation !== "copy_configs" && (
-                <button
-                  type="button"
-                  className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={applyBulkUpdate}
-                  disabled={!bulkPreviewReady || bulkApplyLoading || (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason))}
-                >
-                  {bulkApplyLoading ? "Applying..." : "Apply changes"}
-                </button>
-              )}
-            </div>
+            <BucketOpsBulkExecutionPanel
+              applyDisabled={bulkApplyDisabled}
+              applyError={bulkApplyError}
+              applyLoading={bulkApplyLoading}
+              applyProgress={bulkApplyProgress}
+              applySummary={bulkApplySummary}
+              copyDisabled={bulkCopyLoading || !hasSelectedCopyFeatures}
+              copyError={bulkCopyError}
+              copyLoading={bulkCopyLoading}
+              copyProgress={bulkCopyProgress}
+              copySummary={bulkCopySummary}
+              onApply={applyBulkUpdate}
+              onClose={closeBulkUpdateModal}
+              onCopy={copyBulkConfigs}
+              onExport={exportBulkPreviewChanges}
+              onPreview={runBulkPreview}
+              operation={bulkOperation}
+              pasteError={bulkPastePlan.error}
+              previewDisabled={bulkPreviewDisabled}
+              previewError={bulkPreviewError}
+              previewItems={bulkPreview}
+              previewLoading={bulkPreviewLoading}
+              previewProgress={bulkPreviewProgress}
+              previewReady={bulkPreviewReady}
+            />
         </div>
       </BucketOpsBulkUpdatePage>
     </div>
