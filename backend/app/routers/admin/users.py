@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.sensitive_data import sanitize_error_detail
 from app.db import User as DbUser
 from app.db import UserRole, is_superadmin_ui_role
 from app.models.user import (
@@ -26,9 +27,14 @@ from app.services.user_associations_service import (
     get_user_associations_service,
 )
 from app.services.users_service import UsersService
-from app.core.sensitive_data import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
+
+
+def get_user_associations_service_dependency(
+    db: Session = Depends(get_db),
+) -> UserAssociationsService:
+    return get_user_associations_service(db)
 
 
 def _require_superadmin_for_privileged_change(
@@ -97,9 +103,7 @@ def list_users_minimal(
 def create_user(
     payload: UserCreate,
     users_service: UsersService = Depends(get_users_service_dependency),
-    associations_service: UserAssociationsService = Depends(
-        lambda db=Depends(get_db): get_user_associations_service(db)
-    ),
+    associations_service: UserAssociationsService = Depends(get_user_associations_service_dependency),
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
@@ -137,9 +141,7 @@ def update_user(
     user_id: int,
     payload: UserUpdate,
     users_service: UsersService = Depends(get_users_service_dependency),
-    associations_service: UserAssociationsService = Depends(
-        lambda db=Depends(get_db): get_user_associations_service(db)
-    ),
+    associations_service: UserAssociationsService = Depends(get_user_associations_service_dependency),
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
