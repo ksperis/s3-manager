@@ -87,6 +87,7 @@ import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface"
 import { useBucketOpsBulkApply } from "./useBucketOpsBulkApply";
 import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
 import { useBucketOpsBulkPreview } from "./useBucketOpsBulkPreview";
+import { useBucketOpsCacheRefresh } from "./useBucketOpsCacheRefresh";
 import { useBucketOpsConfigCopy } from "./useBucketOpsConfigCopy";
 import { useBucketOpsSelection } from "./useBucketOpsSelection";
 import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
@@ -530,7 +531,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setBulkQuotaSizeValue,
     setBulkQuotaSkipConfigured,
   } = useBucketOpsBulkForm();
-  const [cacheRefreshLoading, setCacheRefreshLoading] = useState(false);
   const {
     activeFeatureTooltipKey,
     activeOwnerTooltipKey,
@@ -557,6 +557,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     selectedScopeId: selectedEndpointId,
   });
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
+  const clearTagsTooltip = useCallback(() => setActiveTagsTooltipKey(null), []);
   const restoreFilterRef = useRef<string | null>(null);
   const restoredReturnContextRef = useRef<number | null>(null);
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(
@@ -890,6 +891,21 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     withStats: baseRequiresStats,
   });
   const {
+    cacheRefreshLoading,
+    clearBucketListingUiCaches,
+    refreshBucketListing,
+  } = useBucketOpsCacheRefresh({
+    clearTagTooltip: clearTagsTooltip,
+    extractError,
+    invalidateSelectionCache,
+    refreshBucketListingCache,
+    refreshBuckets,
+    reloadUiTags,
+    resetBucketTooltipState,
+    scopeId: selectedEndpointId,
+    setError,
+  });
+  const {
     bulkConfigClipboard,
     bulkCopyError,
     bulkCopyLoading,
@@ -969,29 +985,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     });
     return () => window.cancelAnimationFrame(frame);
   }, [isStorageOps, items, loading, location.pathname, location.search, selectedEndpointId, surface.mode]);
-
-  const clearBucketListingUiCaches = () => {
-    resetBucketTooltipState();
-    setActiveTagsTooltipKey(null);
-    invalidateSelectionCache();
-  };
-
-  const refreshBucketListing = async () => {
-    if (!selectedEndpointId || cacheRefreshLoading) return;
-    setCacheRefreshLoading(true);
-    setError(null);
-    try {
-      await refreshBucketListingCache(selectedEndpointId);
-      await reloadUiTags();
-      clearBucketListingUiCaches();
-      refreshBuckets();
-    } catch (err) {
-      console.error(err);
-      setError(extractError(err));
-    } finally {
-      setCacheRefreshLoading(false);
-    }
-  };
 
   const usageUnavailableBadge = statsWarning ? "Bucket stats unavailable" : "Storage metrics unavailable";
   const usageUnavailableDescription = statsWarning
