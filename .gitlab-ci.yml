@@ -72,8 +72,8 @@ helm-contract:
     - helm lint helm/bucketreef
     - helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth > /tmp/bucketreef-rendered.yaml
     - test -s /tmp/bucketreef-rendered.yaml
-    - grep -q 'ghcr.io/ksperis/bucketreef-backend:0.2.0' /tmp/bucketreef-rendered.yaml
-    - grep -q 'ghcr.io/ksperis/bucketreef-frontend:0.2.0' /tmp/bucketreef-rendered.yaml
+    - grep -q 'ghcr.io/ksperis/bucketreef-backend:0.2.1' /tmp/bucketreef-rendered.yaml
+    - grep -q 'ghcr.io/ksperis/bucketreef-frontend:0.2.1' /tmp/bucketreef-rendered.yaml
     - helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth --set backend.replicas=2 --set backend.persistence.enabled=false > /tmp/bucketreef-multi-backend.yaml
     - test -s /tmp/bucketreef-multi-backend.yaml
     - helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth --set-string image.backend.repository="$CI_REGISTRY_IMAGE/backend" --set-string image.backend.tag="$CI_COMMIT_SHA" --set-string image.frontend.repository="$CI_REGISTRY_IMAGE/frontend" --set-string image.frontend.tag="$CI_COMMIT_SHA" > /tmp/bucketreef-commit-images.yaml

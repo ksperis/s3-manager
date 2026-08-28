@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.2.1 - 2026-08-28
+
+### Added
+
+- Added a secure first-administrator bootstrap flow with a short-lived setup URL, passkey enrollment, and a console-only fallback.
+- Added persistent, scalable bucket UI tags with shared settings, accessible colors, visibility controls, bulk workflows, and listing integration across Ceph Admin and Storage Ops.
+- Added in-session WebAuthn step-up and a Portal external-links tab for Storage Spaces.
+
+### Changed
+
+- Unified BucketReef branding, responsive density, bucket workbench filters, bulk actions, selection, navigation, and configuration workflows across the frontend.
+- Canonicalized Storage Endpoint features, providers, URLs, and admin overrides through migrations `0115` to `0118`.
+- Made Admin S3 connection credentials, user links, and remediation updates atomic through the canonical update contract.
+- Consolidated backend routers, services, execution contexts, listings, Portal orchestration, migrations, and audit boundaries to remove duplicated runtime paths.
+
+### Fixed/Security
+
+- Ensured object previews always open, public links include their domain, and WebAuthn profile challenges are classified consistently.
+- Improved fresh-database bootstrap and bucket UI tag performance while preserving scoped cleanup and assignment isolation.
+- Hardened first-admin creation, private connection deletion, IAM removals, bucket configuration removal, and destructive migration confirmations.
+
+### Breaking changes
+
+- Removed automatic `SEED_SUPER_ADMIN_*` startup seeding. New deployments must issue a one-time bootstrap URL or use the first-admin CLI.
+- Storage Endpoint inputs must use canonical `features` and `healthcheck_url` fields; `admin_endpoint` is removed, and migration `0118` rejects empty or canonically colliding URLs.
+- Removed dedicated Admin S3 connection credentials, user-link, and remediation routes. Clients must send `credentials`, `user_ids`, and `remediation_action` through the canonical update endpoint.
+- Bucket UI tag definition names are globally unique case-insensitively; catalogue responses no longer embed assignments, and orphan-inventory routes are removed.
+- Execution-context catalogues no longer expose the unused quota and entity-limit fields.
+
+### Tests
+
+- Expanded backend, frontend, migration, OpenAPI, audit, accessibility, browser E2E, quickstart, Helm, Kind, Compose, and strict documentation validation.
+- Stabilized asynchronous frontend actions and CI startup for PostgreSQL, Ceph, and Docker-in-Docker Kind validation.
+
 ## 0.2.0 - 2026-08-19
 
 ### Added
