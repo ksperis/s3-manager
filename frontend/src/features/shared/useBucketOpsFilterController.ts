@@ -369,6 +369,19 @@ export function useBucketOpsFilterController({
     setPage(1);
   }, [quickFilterDraftForcesExact, setPage, setQuickFilterMode]);
 
+  const updateQuickFilterDraft = useCallback(
+    (value: string) => setFilter(value),
+    [setFilter],
+  );
+
+  const updateTagFilterMode = useCallback(
+    (value: BucketListState["tagFilterMode"]) => {
+      setTagFilterMode(value);
+      setPage(1);
+    },
+    [setPage, setTagFilterMode],
+  );
+
   const resetAllFilters = useCallback(() => {
     setFilter("");
     setFilterValue("");
@@ -469,6 +482,8 @@ export function useBucketOpsFilterController({
     showAdvancedFilter,
     toggleAdvancedFilterSecondarySection,
     toggleQuickFilterMode,
+    updateQuickFilterDraft,
+    updateTagFilterMode,
     updateAdvancedField,
     updateAdvancedMatchMode,
     updateAdvancedOwnerNameScope,

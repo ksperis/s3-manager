@@ -13,8 +13,6 @@ import PageHeader from "../../components/PageHeader";
 import { workflowPageHostClass } from "../../components/WorkflowPage";
 import {
   toolbarCompactButtonClasses,
-  toolbarCompactInputClasses,
-  toolbarCompactSelectClasses,
 } from "../../components/toolbarControlClasses";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
@@ -60,6 +58,10 @@ import BucketOpsColumnControls from "./BucketOpsColumnControls";
 import BucketOpsOrphanedTagsBanner, {
   type OrphanedTagBucketDetail,
 } from "./BucketOpsOrphanedTagsBanner";
+import {
+  BucketOpsQuickFilter,
+  BucketOpsTagAndAdvancedFilters,
+} from "./BucketOpsListFilters";
 import BucketOpsTable, { type BucketOpsTableColumn } from "./BucketOpsTable";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -105,7 +107,6 @@ import {
   FEATURE_LABELS,
   FEATURE_STATE_OPTIONS,
   type FeatureKey,
-  type TextMatchMode,
 } from "./bucketOpsAdvancedFilterModel";
 import {
   FEATURE_DETAIL_COLUMN_OPTIONS,
@@ -346,22 +347,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     usageFeatureEnabled,
   });
   const {
-    addTagFilter,
     advancedFilterParam,
     advancedFiltersApplied,
     effectiveQuickFilterMode,
     effectiveQuickSearchValue,
-    openAdvancedFilterDrawer,
     quickFilterAppliedParsed,
-    quickFilterDraftForcesExact,
-    quickFilterFieldState,
-    quickFilterModeForDisplay,
-    quickFilterPending,
     removeActiveFilterItem,
-    removeTagFilter,
     resetAllFilters,
     showAdvancedFilter,
-    toggleQuickFilterMode,
   } = filterController;
   const storageScopeFilterController = useBucketOpsStorageScopeFilters({
     advancedDraft,
@@ -1066,25 +1059,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   };
 
   const quickFilterActive = filterValue.trim().length > 0;
-  const availableTagFilters = useMemo(() => {
-    const selected = new Set(tagFilters);
-    return availableUiTags.filter((tag) => !selected.has(tag.id));
-  }, [availableUiTags, tagFilters]);
-  const showTagFilterBar = availableUiTags.length > 0 || tagFilters.length > 0;
-  const modeToggleBaseClass =
-    "absolute right-1 top-1 rounded border px-1 py-0 ui-caption font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-0";
-  const modeToggleClass = (mode: TextMatchMode, isPending: boolean, locked: boolean = false) => {
-    if (locked) {
-      return `${modeToggleBaseClass} cursor-not-allowed border-primary-400 bg-primary-100 text-primary-700 opacity-80 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
-    }
-    if (isPending) {
-      return `${modeToggleBaseClass} border-amber-400 bg-amber-100 text-amber-700 focus:ring-amber-300 dark:border-amber-400/60 dark:bg-amber-500/20 dark:text-amber-200`;
-    }
-    if (mode === "exact") {
-      return `${modeToggleBaseClass} border-primary-400 bg-primary-100 text-primary-700 focus:ring-primary/35 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
-    }
-    return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
-  };
   const activeFilterSummaryItems = useMemo(
     () =>
       buildBucketOpsActiveFilterSummaryItems({
@@ -1896,98 +1870,15 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           description={shell.pageDescription}
           countLabel={`${total} result(s)`}
           search={
-            <div className="relative w-full min-w-[16rem] sm:w-72">
-              <textarea
-                aria-label="Quick filter"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                onKeyDown={(event) => event.stopPropagation()}
-                placeholder="Bucket name(s)"
-                rows={1}
-                className={cx(
-                  toolbarCompactInputClasses,
-                  "min-h-[2rem] w-full resize-y pr-9",
-                  quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
-                )}
-              />
-              <button
-                type="button"
-                onClick={toggleQuickFilterMode}
-                disabled={quickFilterDraftForcesExact}
-                className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
-                title={
-                  quickFilterDraftForcesExact
-                    ? "Quick filter mode: exact (locked by list input)"
-                    : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
-                }
-                aria-label="Toggle quick filter match mode"
-              >
-                {quickFilterModeForDisplay === "contains" ? "~" : "="}
-              </button>
-            </div>
+            <BucketOpsQuickFilter controller={filterController} value={filter} />
           }
           filters={
-            <>
-              {showTagFilterBar ? (
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                    {tagFilters.map((tagId) => {
-                      const tag = availableUiTags.find((item) => item.id === tagId);
-                      if (!tag) return null;
-                      return (
-                        <UiTagBadge
-                          key={`filter:${tag.id}`}
-                          label={tag.label}
-                          colorKey={tag.color_key}
-                          visibility={tag.visibility}
-                          selectionState="selected"
-                          className="text-xs"
-                          ariaLabel={`Selected UI tag filter ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
-                          title={`Selected UI tag filter: ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
-                          onRemove={() => removeTagFilter(tag.id)}
-                          removeAriaLabel={`Remove UI tag filter ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
-                        />
-                      );
-                    })}
-                    {availableTagFilters.map((tag) => (
-                      <UiTagBadge
-                        key={`available:${tag.id}`}
-                        label={tag.label}
-                        colorKey={tag.color_key}
-                        visibility={tag.visibility}
-                        selectionState="available"
-                        onClick={() => addTagFilter(tag.id)}
-                        ariaLabel={`Add UI tag filter ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
-                        title={`Available UI tag filter: ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}. Click to add.`}
-                      />
-                    ))}
-                  </div>
-                  <select
-                    value={tagFilterMode}
-                    onChange={(e) => {
-                      setTagFilterMode(e.target.value as "any" | "all");
-                      setPage(1);
-                    }}
-                    className={cx(toolbarCompactSelectClasses, "w-auto px-2 py-1")}
-                  >
-                    <option value="any">OR</option>
-                    <option value="all">AND</option>
-                  </select>
-                </div>
-              ) : null}
-              <button
-                type="button"
-                onClick={openAdvancedFilterDrawer}
-                className={cx(
-                  toolbarCompactButtonClasses,
-                  showAdvancedFilter || advancedFiltersApplied
-                    ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
-                    : ""
-                )}
-              >
-                Advanced filter{advancedFiltersApplied ? " · Active" : ""}
-              </button>
-            </>
+            <BucketOpsTagAndAdvancedFilters
+              availableUiTags={availableUiTags}
+              controller={filterController}
+              tagFilterMode={tagFilterMode}
+              tagFilters={tagFilters}
+            />
           }
           columns={
             <BucketOpsColumnControls

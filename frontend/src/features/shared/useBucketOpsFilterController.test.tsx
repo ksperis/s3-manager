@@ -130,6 +130,17 @@ describe("useBucketOpsFilterController", () => {
     expect(result.current.showAdvancedFilter).toBe(false);
   });
 
+  it("owns quick-filter draft and tag match mode updates", () => {
+    const { result } = renderHook(() => useFilterHarness({ page: 4 }));
+
+    act(() => result.current.updateQuickFilterDraft("archive"));
+    act(() => result.current.updateTagFilterMode("all"));
+
+    expect(result.current.filter).toBe("archive");
+    expect(result.current.tagFilterMode).toBe("all");
+    expect(result.current.page).toBe(1);
+  });
+
   it("routes Escape through the unsaved-changes guard", () => {
     const { result } = renderHook(() =>
       useFilterHarness({
