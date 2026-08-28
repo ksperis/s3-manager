@@ -21,7 +21,6 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
-import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import { UiTagBadge } from "../../components/UiTagSettings";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiDetails from "../../components/ui/UiDetails";
@@ -32,7 +31,6 @@ import {
   uiButtonBaseClass,
   uiButtonVariants,
   uiCheckboxClass,
-  uiMenuClass,
   type UiTone,
 } from "../../components/ui/styles";
 import {
@@ -65,6 +63,7 @@ import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal"
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
 import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
+import BucketOpsColumnControls from "./BucketOpsColumnControls";
 import BucketOpsFeatureDetailFilterFields from "./BucketOpsFeatureDetailFilterFields";
 import BucketOpsFeatureStateFilterFields from "./BucketOpsFeatureStateFilterFields";
 import BucketOpsIdentityFilterFields from "./BucketOpsIdentityFilterFields";
@@ -134,11 +133,8 @@ import {
   type TextMatchMode,
 } from "./bucketOpsAdvancedFilterModel";
 import {
-  BUCKET_CORE_COLUMN_OPTIONS,
-  BUCKET_QUOTA_COLUMN_GROUPS,
   FEATURE_DETAIL_COLUMN_OPTIONS,
   type ColumnId,
-  type FeatureDetailColumnOption,
   type SortField,
 } from "./bucketOpsListState";
 import { extractApiError } from "../../utils/apiError";
@@ -436,8 +432,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     updateFeatureDetailFilter,
     updateFeatureFilter,
   } = filterController;
-  const [showColumnPicker, setShowColumnPicker] = useState(false);
-  const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const storageScopeFilterController = useBucketOpsStorageScopeFilters({
     advancedDraft,
     extractError,
@@ -579,34 +573,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     clearTagsTooltip();
   }, [bucketsStateStorageKey, clearTagsTooltip, ownerQueryFilter, selectedEndpointId]);
 
-  useEffect(() => {
-    if (!showColumnPicker) return;
-    const handler = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (!columnPickerRef.current) return;
-      if (!columnPickerRef.current.contains(target)) {
-        setShowColumnPicker(false);
-      }
-    };
-    window.addEventListener("mousedown", handler);
-    return () => window.removeEventListener("mousedown", handler);
-  }, [showColumnPicker]);
-
   const featureColumnOptions = useMemo(
     () => featureStateOptions.filter((option) => option.supported).map((option) => ({ ...option, key: option.id })),
     [featureStateOptions]
   );
-  const featureDetailColumnsByFeature = useMemo(() => {
-    const supported = new Set(featureColumnOptions.map((option) => option.id));
-    const groups: Partial<Record<FeatureKey, FeatureDetailColumnOption[]>> = {};
-    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((option) => {
-      if (!supported.has(option.feature)) return;
-      const current = groups[option.feature] ?? [];
-      groups[option.feature] = [...current, option];
-    });
-    return groups;
-  }, [featureColumnOptions]);
   const {
     baseRequiresStats,
     detailLoadingColumnIds,
@@ -1191,11 +1161,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   };
 
   const quickFilterActive = filterValue.trim().length > 0;
-  const columnsCustomized = useMemo(() => {
-    if (visibleColumns.length !== defaultVisibleColumns.length) return true;
-    const current = new Set(visibleColumns);
-    return defaultVisibleColumns.some((column) => !current.has(column));
-  }, [defaultVisibleColumns, visibleColumns]);
   const availableTagFilters = useMemo(() => {
     const selected = new Set(tagFilters);
     return availableUiTags.filter((tag) => !selected.has(tag.id));
@@ -2283,76 +2248,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             </>
           }
           columns={
-            <>
-              <div className="relative" ref={columnPickerRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowColumnPicker((prev) => !prev)}
-                  className={toolbarCompactButtonClasses}
-                >
-                  Columns
-                </button>
-                {showColumnPicker && (
-                  <div className={cx(uiMenuClass, "absolute right-0 z-30 mt-2 w-96 max-w-[calc(100vw-2rem)] p-3")}>
-                    <ColumnVisibilityPicker
-                      selectedCount={visibleColumns.length}
-                      onReset={resetColumns}
-                      coreGroups={[
-                        {
-                          id: "core",
-                          label: "Core",
-                          options: BUCKET_CORE_COLUMN_OPTIONS.filter((option) =>
-                            isStorageOps
-                              ? true
-                              : option.id !== "context_name" && option.id !== "context_kind" && option.id !== "endpoint_name"
-                          ).map((option) => ({
-                            id: option.id,
-                            label: option.label,
-                            checked: visibleColumns.includes(option.id),
-                            onToggle: () => toggleColumn(option.id),
-                          })),
-                        },
-                      ]}
-                      detailGroups={BUCKET_QUOTA_COLUMN_GROUPS.map((group) => ({
-                        id: group.id,
-                        label: group.label,
-                        details: group.options.map((option) => ({
-                          id: option.id,
-                          label: option.label,
-                          checked: visibleColumns.includes(option.id),
-                          onToggle: () => toggleColumn(option.id),
-                        })),
-                      }))}
-                      featureGroups={featureColumnOptions.map((option) => ({
-                        id: option.id,
-                        label: option.label,
-                        checked: visibleColumns.includes(option.id),
-                        onToggle: () => toggleColumn(option.id),
-                        details: (featureDetailColumnsByFeature[option.id] ?? []).map((detail) => ({
-                          id: detail.id,
-                          label: detail.label,
-                          checked: visibleColumns.includes(detail.id),
-                          onToggle: () => toggleColumn(detail.id),
-                        })),
-                      }))}
-                      footerNote="Feature checks and detail values are loaded only for enabled columns."
-                    />
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={resetColumns}
-                disabled={!columnsCustomized}
-                className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                  columnsCustomized
-                    ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                    : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                }`}
-              >
-                Reset Columns
-              </button>
-            </>
+            <BucketOpsColumnControls
+              defaultVisibleColumns={defaultVisibleColumns}
+              featureColumnOptions={featureColumnOptions}
+              isStorageOps={isStorageOps}
+              onReset={resetColumns}
+              onToggle={toggleColumn}
+              visibleColumns={visibleColumns}
+            />
           }
           actions={
             <button
