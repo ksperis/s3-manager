@@ -36,11 +36,7 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   type BrowserRequestOptions,
   BrowserObject,
-  PresignPartRequest,
-  PresignRequest,
   listBrowserObjects,
-  presignPart,
-  presignObject,
 } from "../../api/browser";
 import { useBrowserContext } from "./BrowserContext";
 import {
@@ -86,6 +82,7 @@ import { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 import { useBrowserPanelLayout } from "./useBrowserPanelLayout";
 import { useBrowserPathEditor } from "./useBrowserPathEditor";
 import { useBrowserPathHistory } from "./useBrowserPathHistory";
+import { useBrowserPresignRequests } from "./useBrowserPresignRequests";
 import { useBrowserPrefixVersions } from "./useBrowserPrefixVersions";
 import { useBrowserQueuedUpload } from "./useBrowserQueuedUpload";
 import { useBrowserRuntimeData } from "./useBrowserRuntimeData";
@@ -139,7 +136,6 @@ import {
   DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
   readStoredBrowserRootUiState,
 } from "./browserRootUiState";
-import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
 import { InfoIcon } from "./browserIcons";
 import { resolveBrowserContextQuotas } from "./browserQuota";
@@ -844,99 +840,14 @@ export default function BrowserPage({
   const downloadParallelism = transferParallelism.download;
   const otherOperationsParallelism = transferParallelism.otherOperations;
   const useStsPresigner = shouldUseStsPresigner({ stsAvailable, sseActive });
-  const presignObjectRequest = useCallback(
-    async (targetBucket: string, payload: PresignRequest) => {
-      if (useStsPresigner) {
-        const credentials = await ensureStsCredentials();
-        if (credentials) {
-          try {
-            return await presignObjectWithSts(
-              credentials,
-              targetBucket,
-              payload,
-            );
-          } catch {
-            const refreshed = await ensureStsCredentials(true);
-            if (refreshed) {
-              try {
-                return await presignObjectWithSts(
-                  refreshed,
-                  targetBucket,
-                  payload,
-                );
-              } catch {
-                // ignore and fall back to backend presign
-              }
-            }
-          }
-        }
-      }
-      return presignObject(
-        accountIdForApi,
-        targetBucket,
-        payload,
-        sseCustomerKeyBase64,
-        browserRequestOptions,
-      );
-    },
-    [
-      accountIdForApi,
-      browserRequestOptions,
+  const { presignObjectRequest, presignPartRequest } =
+    useBrowserPresignRequests({
+      accountId: accountIdForApi,
       ensureStsCredentials,
+      requestOptions: browserRequestOptions,
       sseCustomerKeyBase64,
       useStsPresigner,
-    ],
-  );
-  const presignPartRequest = useCallback(
-    async (
-      targetBucket: string,
-      uploadId: string,
-      payload: PresignPartRequest,
-    ) => {
-      if (useStsPresigner) {
-        const credentials = await ensureStsCredentials();
-        if (credentials) {
-          try {
-            return await presignPartWithSts(
-              credentials,
-              targetBucket,
-              uploadId,
-              payload,
-            );
-          } catch {
-            const refreshed = await ensureStsCredentials(true);
-            if (refreshed) {
-              try {
-                return await presignPartWithSts(
-                  refreshed,
-                  targetBucket,
-                  uploadId,
-                  payload,
-                );
-              } catch {
-                // ignore and fall back to backend presign
-              }
-            }
-          }
-        }
-      }
-      return presignPart(
-        accountIdForApi,
-        targetBucket,
-        uploadId,
-        payload,
-        sseCustomerKeyBase64,
-        browserRequestOptions,
-      );
-    },
-    [
-      accountIdForApi,
-      browserRequestOptions,
-      ensureStsCredentials,
-      sseCustomerKeyBase64,
-      useStsPresigner,
-    ],
-  );
+    });
   const { copyPath: handleCopyPath, copyUrl: handleCopyUrl } =
     useBrowserCopyActions({
       bucketName,
