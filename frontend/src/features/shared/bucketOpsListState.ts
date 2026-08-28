@@ -354,7 +354,7 @@ export const persistVisibleColumns = (storageKey: string, value: ColumnId[]) => 
   writeClientJsonToKey(storageKey, value);
 };
 
-export const normalizeUiTagValues = (values: string[]) => {
+const normalizeUiTagValues = (values: string[]) => {
   const seen = new Set<string>();
   const normalized: string[] = [];
   values.forEach((value) => {
@@ -399,8 +399,8 @@ export const loadBucketListState = (storageKey: string, endpointId?: number | nu
     filter: typeof data.filter === "string" ? data.filter : "",
     quickFilterMode: data.quickFilterMode === "exact" ? "exact" : "contains",
     advancedApplied: data.advancedApplied ? sanitizeAdvancedFilter(data.advancedApplied) : null,
-    // Legacy label-based filters are intentionally ignored. Persisted filters
-    // now contain stable definition identifiers so equal labels remain distinct.
+    // The persisted contract contains stable definition identifiers so equal
+    // labels remain distinct. Other values are discarded as invalid state.
     tagFilters: Array.isArray(data.tagFilters)
       ? Array.from(
           new Set(

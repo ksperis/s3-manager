@@ -91,7 +91,11 @@ describe("bucket operations filter summaries", () => {
       ...summaryContext,
       quickFilterValue: "bucket-a, bucket-b",
       quickFilterMode: "contains",
-      tagFilters: ["Blue", "blue", "Gold"],
+      tagFilters: [5, 5, 9],
+      tagLabelById: new Map([
+        [5, "Blue"],
+        [9, "Gold"],
+      ]),
       tagFilterMode: "all",
       advanced,
     });

@@ -2335,7 +2335,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       return;
     }
     if (action.type === "tag") {
-      if (typeof action.tag === "number") removeTagFilter(action.tag);
+      removeTagFilter(action.tag);
       return;
     }
     if (action.type === "advanced_owner_scope") {

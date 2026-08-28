@@ -24,7 +24,6 @@ import {
   type FeatureKey,
   type TextMatchMode,
 } from "./bucketOpsAdvancedFilterModel";
-import { normalizeUiTagValues } from "./bucketOpsListState";
 import { formatBucketNamesPreview } from "./bucketOpsPresentation";
 
 type AdvancedFilterSummaryContext = {
@@ -37,7 +36,7 @@ type AdvancedFilterSummaryContext = {
 type ActiveFilterSummaryOptions = AdvancedFilterSummaryContext & {
   quickFilterValue: string;
   quickFilterMode: TextMatchMode;
-  tagFilters: Array<string | number>;
+  tagFilters: readonly number[];
   tagLabelById?: ReadonlyMap<number, string>;
   tagFilterMode: "any" | "all";
   advanced: AdvancedFilterState | null;
@@ -428,9 +427,7 @@ export const buildBucketOpsActiveFilterSummaryItems = ({
     }
   }
 
-  const normalizedTags = tagFilters.every((tag): tag is number => typeof tag === "number")
-    ? Array.from(new Set(tagFilters))
-    : normalizeUiTagValues(tagFilters.filter((tag): tag is string => typeof tag === "string"));
+  const normalizedTags = Array.from(new Set(tagFilters));
   if (normalizedTags.length > 1) {
     items.push({
       id: "tag-mode",
@@ -439,9 +436,9 @@ export const buildBucketOpsActiveFilterSummaryItems = ({
     });
   }
   normalizedTags.forEach((tag) => {
-    const label = typeof tag === "number" ? context.tagLabelById?.get(tag) ?? `#${tag}` : tag;
+    const label = context.tagLabelById?.get(tag) ?? `#${tag}`;
     items.push({
-      id: `tag-${typeof tag === "number" ? tag : tag.toLowerCase()}`,
+      id: `tag-${tag}`,
       label: `UI tag: ${label}`,
       remove: { type: "tag", tag },
     });
