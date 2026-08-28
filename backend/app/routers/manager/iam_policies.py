@@ -2,8 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.core.sensitive_data import sanitize_error_detail
 from app.models.access_context import ManagerActor
-from app.services.s3_execution_context import S3ExecutionContext
 from app.models.policy import Policy, PolicyCreate
 from app.routers.dependencies import (
     get_account_context,
@@ -12,12 +12,15 @@ from app.routers.dependencies import (
 )
 from app.services.audit_service import AuditService
 from app.services.policies_service import PoliciesService, get_policies_service
-from app.core.sensitive_data import sanitize_error_detail
+from app.services.s3_execution_context import S3ExecutionContext
 
 router = APIRouter(prefix="/manager/iam/policies", tags=["manager-iam-policies"])
+PoliciesContext = tuple[S3ExecutionContext, PoliciesService]
 
 
-def get_account_and_service(account: S3ExecutionContext) -> tuple[S3ExecutionContext, PoliciesService]:
+def get_policies_context(
+    account: S3ExecutionContext = Depends(get_account_context),
+) -> PoliciesContext:
     try:
         service = get_policies_service(account)
     except ValueError as exc:
@@ -27,10 +30,10 @@ def get_account_and_service(account: S3ExecutionContext) -> tuple[S3ExecutionCon
 
 @router.get("", response_model=list[Policy])
 def list_policies(
-    service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
+    policies_context: PoliciesContext = Depends(get_policies_context),
     _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> list[Policy]:
-    _, service = service_and_acc
+    _, service = policies_context
     try:
         return service.list_policies()
     except RuntimeError as exc:
@@ -40,10 +43,10 @@ def list_policies(
 @router.get("/{policy_arn}", response_model=Policy)
 def get_policy(
     policy_arn: str,
-    service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
+    policies_context: PoliciesContext = Depends(get_policies_context),
     _: ManagerActor = Depends(require_iam_capable_manager),
 ) -> Policy:
-    _, service = service_and_acc
+    _, service = policies_context
     policy = service.get_policy(policy_arn, include_document=True)
     if not policy:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
@@ -53,11 +56,11 @@ def get_policy(
 @router.post("", response_model=Policy, status_code=status.HTTP_201_CREATED)
 def create_policy(
     payload: PolicyCreate,
-    service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
+    policies_context: PoliciesContext = Depends(get_policies_context),
     current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> Policy:
-    account, service = service_and_acc
+    account, service = policies_context
     try:
         result = service.create_policy(payload.name, payload.document)
         audit_service.record_action(
@@ -79,11 +82,11 @@ def create_policy(
 @router.delete("/{policy_arn}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_policy(
     policy_arn: str,
-    service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
+    policies_context: PoliciesContext = Depends(get_policies_context),
     current_user: ManagerActor = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    account, service = service_and_acc
+    account, service = policies_context
     try:
         service.delete_policy(policy_arn)
         audit_service.record_action(
