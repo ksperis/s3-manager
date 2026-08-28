@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.sensitive_data import sanitize_error_detail
 from app.db import User, is_superadmin_ui_role
 from app.models.ui_group import (
     PaginatedUiGroupsResponse,
@@ -16,12 +17,17 @@ from app.models.ui_group import (
 )
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
-from app.services.ui_groups_service import UiGroupsService, get_ui_groups_service
 from app.services.avatar_image_service import MAX_AVATAR_BYTES
 from app.services.ui_group_avatar_service import UiGroupAvatarService
-from app.core.sensitive_data import sanitize_error_detail
+from app.services.ui_groups_service import UiGroupsService, get_ui_groups_service
 
 router = APIRouter(prefix="/admin/groups", tags=["admin-groups"])
+
+
+def get_groups_service_dependency(
+    db: Session = Depends(get_db),
+) -> UiGroupsService:
+    return get_ui_groups_service(db)
 
 
 def _require_superadmin_for_privileged_grant(
@@ -44,7 +50,7 @@ def list_groups(
     search: Optional[str] = Query(None),
     sort_by: str = Query("name"),
     sort_dir: str = Query("asc"),
-    groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
+    groups_service: UiGroupsService = Depends(get_groups_service_dependency),
     _: User = Depends(get_current_super_admin),
 ) -> PaginatedUiGroupsResponse:
     items, total = groups_service.paginate_groups(
@@ -60,7 +66,7 @@ def list_groups(
 
 @router.get("/minimal", response_model=list[UiGroupSummary])
 def list_groups_minimal(
-    groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
+    groups_service: UiGroupsService = Depends(get_groups_service_dependency),
     _: User = Depends(get_current_super_admin),
 ) -> list[UiGroupSummary]:
     return groups_service.list_groups_minimal()
@@ -69,7 +75,7 @@ def list_groups_minimal(
 @router.post("", response_model=UiGroupOut, status_code=status.HTTP_201_CREATED)
 def create_group(
     payload: UiGroupCreate,
-    groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
+    groups_service: UiGroupsService = Depends(get_groups_service_dependency),
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UiGroupOut:
@@ -104,7 +110,7 @@ def create_group(
 def update_group(
     group_id: int,
     payload: UiGroupUpdate,
-    groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
+    groups_service: UiGroupsService = Depends(get_groups_service_dependency),
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UiGroupOut:
@@ -133,7 +139,7 @@ def update_group(
 async def upload_group_avatar(
     group_id: int,
     file: UploadFile = File(...),
-    groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
+    groups_service: UiGroupsService = Depends(get_groups_service_dependency),
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
@@ -160,7 +166,7 @@ async def upload_group_avatar(
 @router.delete("/{group_id}/avatar", response_model=UiGroupOut)
 def delete_group_avatar(
     group_id: int,
-    groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
+    groups_service: UiGroupsService = Depends(get_groups_service_dependency),
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
@@ -203,7 +209,7 @@ def read_group_avatar(
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_group(
     group_id: int,
-    groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
+    groups_service: UiGroupsService = Depends(get_groups_service_dependency),
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
