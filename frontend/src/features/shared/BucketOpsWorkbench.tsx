@@ -2,9 +2,9 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
@@ -71,11 +71,6 @@ import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
 import { buildBucketOpsTableColumns } from "./bucketOpsTableColumns";
 import {
-  buildBucketOpsListOrigin,
-  buildBucketOpsNavigationTarget,
-  type BucketOpsNavigationAction,
-} from "./bucketOpsTableNavigation";
-import {
   buildBucketOpsBulkInput,
   prepareBucketOpsBulkInput,
   resolveBucketOpsBulkActionAvailability,
@@ -91,6 +86,7 @@ import { useBucketOpsCacheRefresh } from "./useBucketOpsCacheRefresh";
 import { useBucketOpsConfigCopy } from "./useBucketOpsConfigCopy";
 import { useBucketOpsFilterController } from "./useBucketOpsFilterController";
 import { useBucketOpsListState } from "./useBucketOpsListState";
+import { useBucketOpsNavigation } from "./useBucketOpsNavigation";
 import { useBucketOpsSelection } from "./useBucketOpsSelection";
 import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
 import { useBucketOpsStorageScopeFilters } from "./useBucketOpsStorageScopeFilters";
@@ -99,11 +95,6 @@ import {
   useBucketUiTags,
   type BucketUiTagTarget as BucketTagTarget,
 } from "./bucketUiTags";
-import {
-  buildBucketDetailLocationState,
-  loadBucketListReturnContext,
-  saveBucketListReturnContext,
-} from "./bucketListReturnContext";
 import {
   buildBucketOpsActiveFilterSummaryItems,
   buildBucketOpsDraftFilterSummaryItems,
@@ -166,7 +157,6 @@ type BucketOpsWorkbenchProps = {
 
 export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const { generalSettings } = useGeneralSettings();
   const {
     selectedEndpointId: cephSelectedEndpointId,
@@ -422,7 +412,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   });
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
   const clearTagsTooltip = useCallback(() => setActiveTagsTooltipKey(null), []);
-  const restoredReturnContextRef = useRef<number | null>(null);
   useEffect(() => {
     clearTagsTooltip();
   }, [bucketsStateStorageKey, clearTagsTooltip, ownerQueryFilter, selectedEndpointId]);
@@ -579,28 +568,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setError,
   });
 
-  useEffect(() => {
-    if (loading || items.length === 0 || !selectedEndpointId) return;
-    const scopeKey = isStorageOps ? "storage-ops" : String(selectedEndpointId);
-    const returnContext = loadBucketListReturnContext(surface.mode, scopeKey);
-    if (!returnContext || returnContext.listUrl !== `${location.pathname}${location.search}`) return;
-    if (restoredReturnContextRef.current === returnContext.savedAt) return;
-    restoredReturnContextRef.current = returnContext.savedAt;
-
-    const frame = window.requestAnimationFrame(() => {
-      window.scrollTo({ top: returnContext.scrollY, behavior: "auto" });
-      const rowButton = Array.from(document.querySelectorAll<HTMLElement>("[data-bucket-row-key]")).find(
-        (element) => element.dataset.bucketRowKey === returnContext.rowKey
-      );
-      if (!rowButton) return;
-      rowButton.focus({ preventScroll: true });
-      const bounds = rowButton.getBoundingClientRect();
-      if (bounds.top < 0 || bounds.bottom > window.innerHeight) {
-        rowButton.scrollIntoView({ block: "center", behavior: "auto" });
-      }
+  const { navigateToBucketAction, openBucketConfiguration } =
+    useBucketOpsNavigation({
+      items,
+      loading,
+      mode: surface.mode,
+      persistCurrentListState,
+      selectedEndpointId,
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [isStorageOps, items, loading, location.pathname, location.search, selectedEndpointId, surface.mode]);
 
   const usageUnavailableBadge = statsWarning ? "Bucket stats unavailable" : "Storage metrics unavailable";
   const usageUnavailableDescription = statsWarning
@@ -1028,39 +1003,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         onClose={() => setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev))}
       />
     );
-  };
-
-  const navigateToBucketAction = (
-    action: BucketOpsNavigationAction,
-    bucket: CephAdminBucket,
-  ) => {
-    const target = buildBucketOpsNavigationTarget({
-      action,
-      bucket,
-      mode: surface.mode,
-      selectedEndpointId,
-    });
-    if (target) navigate(target);
-  };
-
-  const openBucketConfiguration = (bucket: CephAdminBucket) => {
-    const listUrl = `${location.pathname}${location.search}`;
-    const origin = buildBucketOpsListOrigin({
-      listUrl,
-      mode: surface.mode,
-      selectedEndpointId,
-    });
-    if (!origin) return;
-    persistCurrentListState();
-    saveBucketListReturnContext(origin, bucket.name, window.scrollY);
-    const target = buildBucketOpsNavigationTarget({
-      action: "configure",
-      bucket,
-      mode: surface.mode,
-      selectedEndpointId,
-    });
-    if (!target) return;
-    navigate(target, { state: buildBucketDetailLocationState(origin) });
   };
 
   const bucketTableColumns = buildBucketOpsTableColumns({
