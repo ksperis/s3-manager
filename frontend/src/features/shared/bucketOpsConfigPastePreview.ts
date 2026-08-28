@@ -2,12 +2,9 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { runWithConcurrencySettled } from "../../utils/concurrency";
-import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { stableStringify } from "../cephAdmin/bucketJsonParsers";
 import {
-  BULK_CONCURRENCY_LIMIT,
   formatObjectLockSnapshot,
   isAccessLoggingSnapshotEqual,
   isObjectLockSnapshotEqual,
@@ -26,6 +23,7 @@ import {
   formatLifecycleRule,
 } from "./bucketConfigMerge";
 import type { BucketOpsApi } from "./bucketOpsApi";
+import { runBucketPreviewBatch } from "./bucketOpsBulkPreviewExecution";
 import {
   formatVersioningStatus,
   normalizeVersioningStatus,
@@ -359,13 +357,10 @@ export async function previewBucketOpsConfigPaste({
   onProgress,
   targetEndpointId,
 }: BucketOpsConfigPastePreviewInput): Promise<BulkPreviewItem[]> {
-  let completed = 0;
-  let failed = 0;
-  const total = mappings.length;
-  const results = await runWithConcurrencySettled(
-    [...mappings],
-    BULK_CONCURRENCY_LIMIT,
-    async (mapping) =>
+  return runBucketPreviewBatch({
+    items: mappings,
+    onProgress,
+    preview: async (mapping) =>
       buildBucketConfigPastePreview({
         clipboard,
         fetchBucketQuota,
@@ -379,18 +374,7 @@ export async function previewBucketOpsConfigPaste({
         mapping,
         targetEndpointId,
       }),
-    (result) => {
-      completed += 1;
-      if (result.status === "rejected") failed += 1;
-      onProgress?.({ completed: Math.min(total, completed), total, failed });
-    },
-  );
-
-  return results.map((result, index) => {
-    const mapping = mappings[index];
-    if (result.status === "fulfilled") return result.value;
-    const error = extractApiError(result.reason, "Unexpected error");
-    return {
+    buildFailure: (mapping, error) => ({
       bucket: mapping.destinationBucket,
       before: [
         { text: `Source bucket: ${mapping.sourceBucket}` },
@@ -402,6 +386,6 @@ export async function previewBucketOpsConfigPaste({
       ],
       changed: false,
       error,
-    };
+    }),
   });
 }

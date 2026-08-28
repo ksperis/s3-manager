@@ -13,7 +13,6 @@ import PageHeader from "../../components/PageHeader";
 import { workflowPageHostClass } from "../../components/WorkflowPage";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
-import { runWithConcurrencySettled } from "../../utils/concurrency";
 import {
   toolbarCompactButtonClasses,
   toolbarCompactInputClasses,
@@ -54,8 +53,6 @@ import type {
 } from "../../api/bucketUiTags";
 import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
 import {
-  deleteNotificationConfigurations,
-  mergeNotificationConfigurations,
   NOTIFICATION_CONFIGURATION_ARRAY_KEYS,
   NOTIFICATION_EVENTBRIDGE_KEY,
   type NotificationConfigurationTypeKey,
@@ -89,6 +86,7 @@ import { applyBucketOpsConfigPaste } from "./bucketOpsConfigPaste";
 import { previewBucketOpsConfigPaste } from "./bucketOpsConfigPastePreview";
 import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
 import { applyBucketOpsBulkUpdate } from "./bucketOpsBulkApply";
+import { previewBucketOpsBulkUpdate } from "./bucketOpsBulkPreview";
 import {
   buildBucketExportColumns,
   buildBucketSelectionJsonPayload,
@@ -194,35 +192,16 @@ import {
   LIFECYCLE_TYPE_OPTIONS,
   NOTIFICATION_TYPE_OPTIONS,
   POLICY_TYPE_OPTIONS,
-  formatCorsRule,
-  formatLifecycleRule,
-  formatNotificationConfiguration,
-  formatPolicyRule,
-  getCorsRuleTypes,
-  getLifecycleRuleId,
-  getLifecycleRuleTypes,
-  getPolicyStatementSid,
-  getPolicyStatementTypes,
-  mergeCorsRules,
-  mergeLifecycleRules,
-  mergePolicyStatements,
   type CorsRuleTypeKey,
   type LifecycleRuleTypeKey,
   type PolicyRuleTypeKey,
 } from "./bucketConfigMerge";
 import {
-  BULK_CONCURRENCY_LIMIT,
   BULK_COPY_FEATURE_LABELS,
   BUCKET_CONFIG_BACKUP_FEATURE_LABELS,
   DEFAULT_BULK_COPY_FEATURE_SELECTION,
   PUBLIC_ACCESS_BLOCK_OPTIONS,
-  applyPublicAccessBlockTargets,
-  formatPublicAccessBlockFlag,
-  formatPublicAccessBlockState,
-  hasConfiguredQuota,
-  isPublicAccessBlockEquivalent,
   loadBulkConfigClipboard,
-  normalizePublicAccessBlockState,
   normalizeQuotaLimit,
   persistBulkConfigClipboard,
   type BulkConfigClipboard,
@@ -232,7 +211,6 @@ import {
   type BulkPreviewItem,
   type BulkPreviewLine,
   type BulkPreviewTone,
-  type ParsedQuotaInput,
   type PublicAccessBlockOptionKey,
   type QuotaSizeUnit,
   type SelectionExportFormat,
@@ -257,7 +235,6 @@ import {
   formatQuotaBytes,
   formatQuotaObjects,
   formatQuotaUsageValue,
-  formatVersioningStatus,
   getBucketDisplayName,
   getStorageOpsBucketName,
   getStorageOpsContextId,
@@ -265,7 +242,6 @@ import {
   isBucketQuotaConfigured,
   isStatsSortField,
   normalizeBucketName,
-  normalizeVersioningStatus,
   ownerFilterFromSearch,
   sanitizeExportFilenamePart,
 } from "./bucketOpsPresentation";
@@ -1770,60 +1746,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setBulkApplyProgress(null);
   };
 
-  const buildVersioningPreview = async (bucketName: string, desiredEnabled: boolean): Promise<BulkPreviewItem> => {
-    const props = await getBucketProperties(selectedEndpointId!, bucketName);
-    const currentStatus = formatVersioningStatus(props.versioning_status);
-    const currentEnabled = normalizeVersioningStatus(props.versioning_status);
-    const changed = currentEnabled === null ? true : currentEnabled !== desiredEnabled;
-    const afterStatus = changed ? (desiredEnabled ? "Enabled" : "Suspended") : currentStatus;
-    return {
-      bucket: bucketName,
-      changed,
-      before: [
-        {
-          text: currentStatus,
-          tone: changed && currentEnabled !== null ? "removed" : undefined,
-        },
-      ],
-      after: [
-        {
-          text: afterStatus,
-          tone: changed ? "added" : undefined,
-        },
-      ],
-    };
-  };
-
-  const buildPublicAccessBlockPreview = async (
-    bucketName: string,
-    desiredEnabled: boolean,
-    targets: PublicAccessBlockOptionKey[]
-  ): Promise<BulkPreviewItem> => {
-    const current = normalizePublicAccessBlockState(await getBucketPublicAccessBlock(selectedEndpointId!, bucketName));
-    const target = applyPublicAccessBlockTargets(current, desiredEnabled, targets);
-    const changed = !isPublicAccessBlockEquivalent(current, target);
-    const beforeState = formatPublicAccessBlockState(current);
-    const afterState = formatPublicAccessBlockState(target);
-    return {
-      bucket: bucketName,
-      changed,
-      before: [
-        { text: `State: ${beforeState}`, tone: changed ? "removed" : undefined },
-        ...PUBLIC_ACCESS_BLOCK_OPTIONS.map((option): BulkPreviewLine => ({
-          text: `${option.label}: ${formatPublicAccessBlockFlag(current[option.key])}`,
-          tone: current[option.key] !== target[option.key] ? "removed" : undefined,
-        })),
-      ],
-      after: [
-        { text: `State: ${afterState}`, tone: changed ? "added" : undefined },
-        ...PUBLIC_ACCESS_BLOCK_OPTIONS.map((option): BulkPreviewLine => ({
-          text: `${option.label}: ${formatPublicAccessBlockFlag(target[option.key])}`,
-          tone: current[option.key] !== target[option.key] ? "added" : undefined,
-        })),
-      ],
-    };
-  };
-
   const fetchBucketQuota = async (bucketName: string) => {
     const advancedFilter = JSON.stringify({
       match: "all",
@@ -1842,371 +1764,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     return {
       maxSizeBytes: normalizeQuotaLimit(match?.quota_max_size_bytes),
       maxObjects: normalizeQuotaLimit(match?.quota_max_objects),
-    };
-  };
-
-  const buildQuotaPreview = async (
-    bucketName: string,
-    payload: ParsedQuotaInput,
-    skipConfigured: boolean
-  ): Promise<BulkPreviewItem> => {
-    const currentQuota = await fetchBucketQuota(bucketName);
-    if (skipConfigured && hasConfiguredQuota(currentQuota)) {
-      return {
-        bucket: bucketName,
-        changed: false,
-        before: [
-          { text: `Size: ${currentQuota.maxSizeBytes != null ? formatBytes(currentQuota.maxSizeBytes) : "Not set"}` },
-          { text: `Objects: ${currentQuota.maxObjects != null ? formatNumber(currentQuota.maxObjects) : "Not set"}` },
-        ],
-        after: [
-          { text: `Size: ${currentQuota.maxSizeBytes != null ? formatBytes(currentQuota.maxSizeBytes) : "Not set"}` },
-          { text: `Objects: ${currentQuota.maxObjects != null ? formatNumber(currentQuota.maxObjects) : "Not set"}` },
-          { text: "(existing quota preserved)" },
-        ],
-      };
-    }
-    const beforeSize = currentQuota.maxSizeBytes;
-    const beforeObjects = currentQuota.maxObjects;
-    const afterSize = payload.applySize ? payload.maxSizeBytes : currentQuota.maxSizeBytes;
-    const afterObjects = payload.applyObjects ? payload.maxObjects : currentQuota.maxObjects;
-    const sizeChanged = beforeSize !== afterSize;
-    const objectsChanged = beforeObjects !== afterObjects;
-    const changed = sizeChanged || objectsChanged;
-
-    return {
-      bucket: bucketName,
-      changed,
-      before: [
-        {
-          text: `Size: ${beforeSize != null ? formatBytes(beforeSize) : "Not set"}`,
-          tone: sizeChanged ? "removed" : undefined,
-        },
-        {
-          text: `Objects: ${beforeObjects != null ? formatNumber(beforeObjects) : "Not set"}`,
-          tone: objectsChanged ? "removed" : undefined,
-        },
-      ],
-      after: [
-        {
-          text: `Size: ${afterSize != null ? formatBytes(afterSize) : "Not set"}`,
-          tone: sizeChanged ? "added" : undefined,
-        },
-        {
-          text: `Objects: ${afterObjects != null ? formatNumber(afterObjects) : "Not set"}`,
-          tone: objectsChanged ? "added" : undefined,
-        },
-      ],
-    };
-  };
-
-  const buildLifecyclePreview = async (
-    bucketName: string,
-    rules: Record<string, unknown>[]
-  ): Promise<BulkPreviewItem> => {
-    const lifecycle = await getBucketLifecycle(selectedEndpointId!, bucketName);
-    const existingRules = lifecycle.rules ?? [];
-    const { nextRules, changes } = mergeLifecycleRules(
-      existingRules as Record<string, unknown>[],
-      rules,
-      { onlyUpdateExisting: bulkLifecycleUpdateOnlyExisting }
-    );
-    const changed = changes.length > 0;
-    const beforeLines: BulkPreviewLine[] =
-      existingRules.length === 0
-        ? [{ text: "(no rules)" }]
-        : existingRules.map((existing, idx) => {
-            const isReplaced = changes.some((change) => change.action === "replace" && change.index === idx);
-            return {
-              text: formatLifecycleRule(existing as Record<string, unknown>),
-              tone: isReplaced ? "removed" : undefined,
-            };
-          });
-    const afterLines: BulkPreviewLine[] =
-      nextRules.length === 0
-        ? [{ text: "(no rules)" }]
-        : nextRules.map((existing, idx) => {
-            const isAdded = changes.some(
-              (change) => (change.action === "replace" || change.action === "add") && change.index === idx
-            );
-            return {
-              text: formatLifecycleRule(existing as Record<string, unknown>),
-              tone: isAdded ? "added" : undefined,
-            };
-          });
-    return {
-      bucket: bucketName,
-      changed,
-      before: beforeLines,
-      after: afterLines,
-    };
-  };
-
-  const buildLifecycleDeletePreview = async (
-    bucketName: string,
-    deleteIds: Set<string>,
-    deleteTypes: Set<LifecycleRuleTypeKey>
-  ): Promise<BulkPreviewItem> => {
-    const lifecycle = await getBucketLifecycle(selectedEndpointId!, bucketName);
-    const existingRules = lifecycle.rules ?? [];
-    const shouldDeleteRule = (rule: Record<string, unknown>) => {
-      const ruleId = getLifecycleRuleId(rule);
-      if (ruleId && deleteIds.has(ruleId)) return true;
-      if (deleteTypes.size === 0) return false;
-      const ruleTypes = getLifecycleRuleTypes(rule);
-      return ruleTypes.some((type) => deleteTypes.has(type));
-    };
-    const removedIndices = new Set<number>();
-    existingRules.forEach((rule, idx) => {
-      if (shouldDeleteRule(rule as Record<string, unknown>)) {
-        removedIndices.add(idx);
-      }
-    });
-    const nextRules = existingRules.filter((_, idx) => !removedIndices.has(idx));
-    const beforeLines: BulkPreviewLine[] =
-      existingRules.length === 0
-        ? [{ text: "(no rules)" }]
-        : existingRules.map((existing, idx) => ({
-            text: formatLifecycleRule(existing as Record<string, unknown>),
-            tone: removedIndices.has(idx) ? "removed" : undefined,
-          }));
-    const afterLines: BulkPreviewLine[] =
-      nextRules.length === 0
-        ? [{ text: "(no rules)" }]
-        : nextRules.map((existing) => ({ text: formatLifecycleRule(existing as Record<string, unknown>) }));
-    return {
-      bucket: bucketName,
-      changed: removedIndices.size > 0,
-      before: beforeLines,
-      after: afterLines,
-    };
-  };
-
-  const buildNotificationsPreview = async (
-    bucketName: string,
-    configuration: Record<string, unknown>
-  ): Promise<BulkPreviewItem> => {
-    const notifications = await getBucketNotifications(selectedEndpointId!, bucketName);
-    const currentConfiguration = notifications.configuration ?? {};
-    const { configuration: nextConfiguration, changes } = mergeNotificationConfigurations(
-      currentConfiguration,
-      configuration
-    );
-    const changed = changes.length > 0;
-    return {
-      bucket: bucketName,
-      changed,
-      before: [
-        {
-          text: formatNotificationConfiguration(currentConfiguration),
-          tone: changed ? "removed" : undefined,
-        },
-      ],
-      after: [
-        {
-          text: formatNotificationConfiguration(nextConfiguration),
-          tone: changed ? "added" : undefined,
-        },
-      ],
-    };
-  };
-
-  const buildNotificationsDeletePreview = async (
-    bucketName: string,
-    deleteIds: Set<string>,
-    deleteTypes: Set<NotificationConfigurationTypeKey>
-  ): Promise<BulkPreviewItem> => {
-    const notifications = await getBucketNotifications(selectedEndpointId!, bucketName);
-    const currentConfiguration = notifications.configuration ?? {};
-    const { configuration: nextConfiguration, changes } = deleteNotificationConfigurations(
-      currentConfiguration,
-      deleteIds,
-      deleteTypes
-    );
-    const changed = changes.length > 0;
-    return {
-      bucket: bucketName,
-      changed,
-      before: [
-        {
-          text: formatNotificationConfiguration(currentConfiguration),
-          tone: changed ? "removed" : undefined,
-        },
-      ],
-      after: [
-        {
-          text: formatNotificationConfiguration(nextConfiguration),
-          tone: changed ? "added" : undefined,
-        },
-      ],
-    };
-  };
-
-  const buildCorsPreview = async (
-    bucketName: string,
-    rules: Record<string, unknown>[]
-  ): Promise<BulkPreviewItem> => {
-    const cors = await getBucketCors(selectedEndpointId!, bucketName);
-    const existingRules = cors.rules ?? [];
-    const { nextRules, changes } = mergeCorsRules(
-      existingRules as Record<string, unknown>[],
-      rules,
-      { onlyUpdateExisting: bulkCorsUpdateOnlyExisting }
-    );
-    const beforeLines: BulkPreviewLine[] =
-      existingRules.length === 0
-        ? [{ text: "(no rules)" }]
-        : existingRules.map((existing, idx) => {
-            const isReplaced = changes.some((change) => change.action === "replace" && change.index === idx);
-            return {
-              text: formatCorsRule(existing as Record<string, unknown>),
-              tone: isReplaced ? "removed" : undefined,
-            };
-          });
-    const afterLines: BulkPreviewLine[] =
-      nextRules.length === 0
-        ? [{ text: "(no rules)" }]
-        : nextRules.map((existing, idx) => {
-            const isAdded = changes.some(
-              (change) => (change.action === "replace" || change.action === "add") && change.index === idx
-            );
-            return {
-              text: formatCorsRule(existing as Record<string, unknown>),
-              tone: isAdded ? "added" : undefined,
-            };
-          });
-    return {
-      bucket: bucketName,
-      changed: changes.length > 0,
-      before: beforeLines,
-      after: afterLines,
-    };
-  };
-
-  const buildCorsDeletePreview = async (
-    bucketName: string,
-    deleteIds: Set<string>,
-    deleteTypes: Set<CorsRuleTypeKey>
-  ): Promise<BulkPreviewItem> => {
-    const cors = await getBucketCors(selectedEndpointId!, bucketName);
-    const existingRules = cors.rules ?? [];
-    const shouldDeleteRule = (rule: Record<string, unknown>) => {
-      const ruleId = getLifecycleRuleId(rule);
-      if (ruleId && deleteIds.has(ruleId)) return true;
-      if (deleteTypes.size === 0) return false;
-      const ruleTypes = getCorsRuleTypes(rule);
-      return ruleTypes.some((type) => deleteTypes.has(type));
-    };
-    const removedIndices = new Set<number>();
-    existingRules.forEach((rule, idx) => {
-      if (shouldDeleteRule(rule as Record<string, unknown>)) {
-        removedIndices.add(idx);
-      }
-    });
-    const nextRules = existingRules.filter((_, idx) => !removedIndices.has(idx));
-    const beforeLines: BulkPreviewLine[] =
-      existingRules.length === 0
-        ? [{ text: "(no rules)" }]
-        : existingRules.map((existing, idx) => ({
-            text: formatCorsRule(existing as Record<string, unknown>),
-            tone: removedIndices.has(idx) ? "removed" : undefined,
-          }));
-    const afterLines: BulkPreviewLine[] =
-      nextRules.length === 0
-        ? [{ text: "(no rules)" }]
-        : nextRules.map((existing) => ({ text: formatCorsRule(existing as Record<string, unknown>) }));
-    return {
-      bucket: bucketName,
-      changed: removedIndices.size > 0,
-      before: beforeLines,
-      after: afterLines,
-    };
-  };
-
-  const buildPolicyPreview = async (
-    bucketName: string,
-    statements: Record<string, unknown>[]
-  ): Promise<BulkPreviewItem> => {
-    const policy = await getBucketPolicy(selectedEndpointId!, bucketName);
-    const existingPolicy = policy.policy ?? {};
-    const existingStatements = Array.isArray((existingPolicy as Record<string, unknown>).Statement)
-      ? ((existingPolicy as Record<string, unknown>).Statement as Record<string, unknown>[])
-      : [];
-    const { nextStatements, changes } = mergePolicyStatements(
-      existingStatements,
-      statements,
-      { onlyUpdateExisting: bulkPolicyUpdateOnlyExisting }
-    );
-    const beforeLines: BulkPreviewLine[] =
-      existingStatements.length === 0
-        ? [{ text: "(no statements)" }]
-        : existingStatements.map((statement, idx) => {
-            const isReplaced = changes.some((change) => change.action === "replace" && change.index === idx);
-            return {
-              text: formatPolicyRule(statement as Record<string, unknown>),
-              tone: isReplaced ? "removed" : undefined,
-            };
-          });
-    const afterLines: BulkPreviewLine[] =
-      nextStatements.length === 0
-        ? [{ text: "(no statements)" }]
-        : nextStatements.map((statement, idx) => {
-            const isAdded = changes.some(
-              (change) => (change.action === "replace" || change.action === "add") && change.index === idx
-            );
-            return {
-              text: formatPolicyRule(statement as Record<string, unknown>),
-              tone: isAdded ? "added" : undefined,
-            };
-          });
-    return {
-      bucket: bucketName,
-      changed: changes.length > 0,
-      before: beforeLines,
-      after: afterLines,
-    };
-  };
-
-  const buildPolicyDeletePreview = async (
-    bucketName: string,
-    deleteIds: Set<string>,
-    deleteTypes: Set<PolicyRuleTypeKey>
-  ): Promise<BulkPreviewItem> => {
-    const policy = await getBucketPolicy(selectedEndpointId!, bucketName);
-    const existingPolicy = policy.policy ?? {};
-    const existingStatements = Array.isArray((existingPolicy as Record<string, unknown>).Statement)
-      ? ((existingPolicy as Record<string, unknown>).Statement as Record<string, unknown>[])
-      : [];
-    const shouldDeleteStatement = (statement: Record<string, unknown>) => {
-      const sid = getPolicyStatementSid(statement);
-      if (sid && deleteIds.has(sid)) return true;
-      if (deleteTypes.size === 0) return false;
-      const types = getPolicyStatementTypes(statement);
-      return types.some((type) => deleteTypes.has(type));
-    };
-    const removedIndices = new Set<number>();
-    existingStatements.forEach((statement, idx) => {
-      if (shouldDeleteStatement(statement as Record<string, unknown>)) {
-        removedIndices.add(idx);
-      }
-    });
-    const nextStatements = existingStatements.filter((_, idx) => !removedIndices.has(idx));
-    const beforeLines: BulkPreviewLine[] =
-      existingStatements.length === 0
-        ? [{ text: "(no statements)" }]
-        : existingStatements.map((statement, idx) => ({
-            text: formatPolicyRule(statement as Record<string, unknown>),
-            tone: removedIndices.has(idx) ? "removed" : undefined,
-          }));
-    const afterLines: BulkPreviewLine[] =
-      nextStatements.length === 0
-        ? [{ text: "(no statements)" }]
-        : nextStatements.map((statement) => ({ text: formatPolicyRule(statement as Record<string, unknown>) }));
-    return {
-      bucket: bucketName,
-      changed: removedIndices.size > 0,
-      before: beforeLines,
-      after: afterLines,
     };
   };
 
@@ -2364,23 +1921,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setBulkPreviewError(prepared.error);
       return;
     }
-    const {
-      parsedQuota,
-      parsedRules,
-      parsedNotificationConfiguration,
-      parsedCorsRules,
-      parsedPolicyStatements,
-      deleteIds,
-      deleteTypes,
-      deleteNotificationIds,
-      deleteNotificationTypes,
-      deleteCorsIds,
-      deleteCorsTypes,
-      deletePolicyIds,
-      deletePolicyTypes,
-      publicAccessBlockTargets,
-    } = prepared.value;
-
     const runToken = bulkPreviewRunTokenRef.current + 1;
     bulkPreviewRunTokenRef.current = runToken;
     setBulkPreviewLoading(true);
@@ -2396,79 +1936,28 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setBulkApplyError(null);
     setBulkApplySummary(null);
     try {
-      const desiredEnabled = bulkOperation === "enable_versioning";
-      const desiredPublicAccessBlockEnabled = bulkOperation === "add_public_access_block";
-      const previewResults = await runWithConcurrencySettled(
-        selectedBucketList,
-        BULK_CONCURRENCY_LIMIT,
-        async (bucketName) => {
-          if (bulkOperation === "set_quota" && parsedQuota) {
-            return await buildQuotaPreview(bucketName, parsedQuota, bulkQuotaSkipConfigured);
-          }
-          if (
-            (bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
-            publicAccessBlockTargets
-          ) {
-            return await buildPublicAccessBlockPreview(bucketName, desiredPublicAccessBlockEnabled, publicAccessBlockTargets);
-          }
-          if (bulkOperation === "enable_versioning" || bulkOperation === "disable_versioning") {
-            return await buildVersioningPreview(bucketName, desiredEnabled);
-          }
-          if (bulkOperation === "add_lifecycle" && parsedRules) {
-            return await buildLifecyclePreview(bucketName, parsedRules);
-          }
-          if (bulkOperation === "delete_lifecycle" && deleteIds && deleteTypes) {
-            return await buildLifecycleDeletePreview(bucketName, deleteIds, deleteTypes);
-          }
-          if (bulkOperation === "add_notifications" && parsedNotificationConfiguration) {
-            return await buildNotificationsPreview(bucketName, parsedNotificationConfiguration);
-          }
-          if (bulkOperation === "delete_notifications" && deleteNotificationIds && deleteNotificationTypes) {
-            return await buildNotificationsDeletePreview(bucketName, deleteNotificationIds, deleteNotificationTypes);
-          }
-          if (bulkOperation === "add_cors" && parsedCorsRules) {
-            return await buildCorsPreview(bucketName, parsedCorsRules);
-          }
-          if (bulkOperation === "delete_cors" && deleteCorsIds && deleteCorsTypes) {
-            return await buildCorsDeletePreview(bucketName, deleteCorsIds, deleteCorsTypes);
-          }
-          if (bulkOperation === "add_policy" && parsedPolicyStatements) {
-            return await buildPolicyPreview(bucketName, parsedPolicyStatements);
-          }
-          if (bulkOperation === "delete_policy" && deletePolicyIds && deletePolicyTypes) {
-            return await buildPolicyDeletePreview(bucketName, deletePolicyIds, deletePolicyTypes);
-          }
-          return {
-            bucket: bucketName,
-            before: [{ text: "-" }],
-            after: [{ text: "-" }],
-            changed: false,
-          };
-        },
-        (result) => {
+      const previewItems = await previewBucketOpsBulkUpdate({
+        bucketNames: selectedBucketList,
+        corsUpdateOnlyExisting: bulkCorsUpdateOnlyExisting,
+        endpointId: selectedEndpointId,
+        fetchBucketQuota,
+        getBucketCors,
+        getBucketLifecycle,
+        getBucketNotifications,
+        getBucketPolicy,
+        getBucketProperties,
+        getBucketPublicAccessBlock,
+        lifecycleUpdateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
+        onProgress: (progress) => {
           if (bulkPreviewRunTokenRef.current !== runToken) return;
-          setBulkPreviewProgress((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              completed: Math.min(prev.total, prev.completed + 1),
-              failed: prev.failed + (result.status === "rejected" ? 1 : 0),
-            };
-          });
-        }
-      );
-      if (bulkPreviewRunTokenRef.current !== runToken) return;
-      const previewItems = previewResults.map((result, index) => {
-        const bucketName = selectedBucketList[index];
-        if (result.status === "fulfilled") return result.value;
-        return {
-          bucket: bucketName,
-          before: [{ text: "Preview failed." }],
-          after: [{ text: "Preview failed." }],
-          changed: false,
-          error: extractError(result.reason),
-        };
+          setBulkPreviewProgress({ label: "Previewing changes", ...progress });
+        },
+        operation: bulkOperation,
+        policyUpdateOnlyExisting: bulkPolicyUpdateOnlyExisting,
+        prepared: prepared.value,
+        quotaSkipConfigured: bulkQuotaSkipConfigured,
       });
+      if (bulkPreviewRunTokenRef.current !== runToken) return;
       setBulkPreview(previewItems);
       setBulkPreviewReady(true);
     } finally {
