@@ -22,7 +22,6 @@ import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
-import UiTagBadgeList from "../../components/UiTagBadgeList";
 import { UiTagBadge } from "../../components/UiTagSettings";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiDetails from "../../components/ui/UiDetails";
@@ -68,6 +67,7 @@ import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
+import BucketOpsStorageScopeFilterFields from "./BucketOpsStorageScopeFilterFields";
 import BucketUiTagSettingsBadge from "./BucketUiTagSettingsBadge";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
@@ -185,7 +185,6 @@ import {
 import {
   buildBucketUiTagKey,
   formatBucketColumnDetail,
-  formatBucketNamesPreview,
   formatOptionalBytes,
   formatOptionalCount,
   formatOwnerSuspended,
@@ -463,36 +462,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   });
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
-  const {
-    allFilteredStorageOpsContextsSelected,
-    allFilteredStorageOpsEndpointsSelected,
-    deselectFilteredStorageOpsContexts,
-    deselectFilteredStorageOpsEndpoints,
-    filteredStorageOpsContextItems,
-    filteredStorageOpsEndpointItems,
-    hasFilteredStorageOpsContextSelection,
-    hasFilteredStorageOpsEndpointSelection,
-    selectFilteredStorageOpsContexts,
-    selectFilteredStorageOpsEndpoints,
-    setStorageOpsContextFilter,
-    setStorageOpsEndpointFilter,
-    storageOpsContextFilter,
-    storageOpsContextItems,
-    storageOpsContextLabelById,
-    storageOpsContextSelectionSet,
-    storageOpsContextsError,
-    storageOpsContextsLoading,
-    storageOpsEndpointFilter,
-    storageOpsEndpointItems,
-    storageOpsEndpointSelectionSet,
-    toggleAdvancedContextId,
-    toggleAdvancedEndpointName,
-  } = useBucketOpsStorageScopeFilters({
+  const storageScopeFilterController = useBucketOpsStorageScopeFilters({
     advancedDraft,
     extractError,
     isStorageOps,
     setAdvancedDraft,
   });
+  const { storageOpsContextLabelById } = storageScopeFilterController;
   const {
     orphanEntries: uiTagOrphanEntries,
     definitions: availableUiTags,
@@ -2467,195 +2443,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           </div>
                           <div className="grid gap-3 md:grid-cols-2">
                             {isStorageOps && (
-                              <div className={advancedFilterFieldCardClass("md:col-span-2")}>
-                                <div className="flex items-center justify-between gap-2">
-                                  <label
-                                    className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${contextFieldState.labelClass}`}
-                                  >
-                                    <span className="inline-flex items-center gap-1">
-                                      <span>Context</span>
-                                      {renderFilterCostIndicator("low", "Low cost: context filter runs on direct listing metadata.")}
-                                    </span>
-                                  </label>
-                                  <span className="ui-caption text-slate-500 dark:text-slate-400">
-                                    {contextDraftIds.length}/{storageOpsContextItems.length}
-                                  </span>
-                                </div>
-                                <div className="mt-2 flex items-center gap-1.5">
-                                  <input
-                                    value={storageOpsContextFilter}
-                                    onChange={(event) => setStorageOpsContextFilter(event.target.value)}
-                                    onKeyDown={(event) => event.stopPropagation()}
-                                    aria-label="Filter contexts"
-                                    placeholder="Filter contexts"
-                                    className={advancedFilterControlClass(`min-w-0 flex-1 px-2 py-1 font-normal ${contextFieldState.fieldClass}`)}
-                                  />
-                                  <UiButton
-                                    type="button"
-                                    onClick={selectFilteredStorageOpsContexts}
-                                    disabled={filteredStorageOpsContextItems.length === 0 || allFilteredStorageOpsContextsSelected}
-                                    variant="secondary"
-                                    size="xs"
-                                  >
-                                    Select filtered
-                                  </UiButton>
-                                  <UiButton
-                                    type="button"
-                                    onClick={deselectFilteredStorageOpsContexts}
-                                    disabled={!hasFilteredStorageOpsContextSelection}
-                                    variant="secondary"
-                                    size="xs"
-                                  >
-                                    Deselect filtered
-                                  </UiButton>
-                                </div>
-                                <div className="mt-2 max-h-36 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700">
-                                  {storageOpsContextsLoading ? (
-                                    <p className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">Loading contexts...</p>
-                                  ) : storageOpsContextsError ? (
-                                    <p className="px-2 py-2 ui-caption text-rose-600 dark:text-rose-300">{storageOpsContextsError}</p>
-                                  ) : filteredStorageOpsContextItems.length === 0 ? (
-                                    <p className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">No matching context.</p>
-                                  ) : (
-                                    filteredStorageOpsContextItems.map((context) => {
-                                      const selected = storageOpsContextSelectionSet.has(context.id);
-                                      return (
-                                        <label
-                                          key={context.id}
-                                          className={`flex cursor-pointer items-center gap-2 border-b border-slate-100 px-2 py-1 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/70 ${
-                                            selected ? "bg-primary/5 dark:bg-primary-500/10" : ""
-                                          }`}
-                                        >
-                                          <input
-                                            type="checkbox"
-                                            checked={selected}
-                                            onChange={() => toggleAdvancedContextId(context.id)}
-                                            className={uiCheckboxClass}
-                                          />
-                                          <div className="min-w-0 flex-1">
-                                            <span className="flex min-w-0 items-center gap-1.5">
-                                              <span className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                                                {context.name}
-                                              </span>
-                                              <span className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1 py-0 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                                                {context.typeLabel}
-                                              </span>
-                                            </span>
-                                            <div className="mt-0.5 flex min-w-0 items-center gap-1">
-                                              <span className="truncate text-[10px] text-slate-500 dark:text-slate-400">
-                                                {context.endpointName ?? context.id}
-                                              </span>
-                                              <UiTagBadgeList
-                                                items={context.tagItems}
-                                                maxVisible={2}
-                                                variant="listing-compact"
-                                                layout="inline-compact"
-                                                className="max-w-[9rem]"
-                                              />
-                                            </div>
-                                          </div>
-                                        </label>
-                                      );
-                                    })
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {isStorageOps && (
-                              <div className={advancedFilterFieldCardClass("md:col-span-2")}>
-                                <div className="flex items-center justify-between gap-2">
-                                  <label
-                                    className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${endpointFieldState.labelClass}`}
-                                  >
-                                    <span className="inline-flex items-center gap-1">
-                                      <span>Endpoint</span>
-                                      {renderFilterCostIndicator("low", "Low cost: endpoint filter runs on direct listing metadata.")}
-                                    </span>
-                                  </label>
-                                  <span className="ui-caption text-slate-500 dark:text-slate-400">
-                                    {endpointDraftNames.length}/{storageOpsEndpointItems.length}
-                                  </span>
-                                </div>
-                                <div className="mt-2 flex items-center gap-1.5">
-                                  <input
-                                    value={storageOpsEndpointFilter}
-                                    onChange={(event) => setStorageOpsEndpointFilter(event.target.value)}
-                                    onKeyDown={(event) => event.stopPropagation()}
-                                    aria-label="Filter endpoints"
-                                    placeholder="Filter endpoints"
-                                    className={advancedFilterControlClass(`min-w-0 flex-1 px-2 py-1 font-normal ${endpointFieldState.fieldClass}`)}
-                                  />
-                                  <UiButton
-                                    type="button"
-                                    onClick={selectFilteredStorageOpsEndpoints}
-                                    disabled={filteredStorageOpsEndpointItems.length === 0 || allFilteredStorageOpsEndpointsSelected}
-                                    variant="secondary"
-                                    size="xs"
-                                  >
-                                    Select filtered
-                                  </UiButton>
-                                  <UiButton
-                                    type="button"
-                                    onClick={deselectFilteredStorageOpsEndpoints}
-                                    disabled={!hasFilteredStorageOpsEndpointSelection}
-                                    variant="secondary"
-                                    size="xs"
-                                  >
-                                    Deselect filtered
-                                  </UiButton>
-                                </div>
-                                <div className="mt-2 max-h-36 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700">
-                                  {storageOpsContextsLoading ? (
-                                    <p className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">Loading endpoints...</p>
-                                  ) : storageOpsContextsError ? (
-                                    <p className="px-2 py-2 ui-caption text-rose-600 dark:text-rose-300">{storageOpsContextsError}</p>
-                                  ) : filteredStorageOpsEndpointItems.length === 0 ? (
-                                    <p className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">No matching endpoint.</p>
-                                  ) : (
-                                    filteredStorageOpsEndpointItems.map((endpoint) => {
-                                      const selected = storageOpsEndpointSelectionSet.has(endpoint.name);
-                                      return (
-                                        <label
-                                          key={endpoint.name}
-                                          className={`flex cursor-pointer items-center gap-2 border-b border-slate-100 px-2 py-1 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/70 ${
-                                            selected ? "bg-primary/5 dark:bg-primary-500/10" : ""
-                                          }`}
-                                        >
-                                          <input
-                                            type="checkbox"
-                                            checked={selected}
-                                            onChange={() => toggleAdvancedEndpointName(endpoint.name)}
-                                            className={uiCheckboxClass}
-                                          />
-                                          <div className="min-w-0 flex-1">
-                                            <span className="flex min-w-0 items-center gap-1.5">
-                                              <span className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                                                {endpoint.name}
-                                              </span>
-                                              <span className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1 py-0 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                                                {endpoint.contextNames.length}
-                                              </span>
-                                            </span>
-                                            <div className="mt-0.5 flex min-w-0 items-center gap-1">
-                                              <span className="truncate text-[10px] text-slate-500 dark:text-slate-400">
-                                                {formatBucketNamesPreview(endpoint.contextNames, 2)}
-                                              </span>
-                                              <UiTagBadgeList
-                                                items={endpoint.tagItems}
-                                                maxVisible={2}
-                                                variant="listing-compact"
-                                                layout="inline-compact"
-                                                className="max-w-[9rem]"
-                                              />
-                                            </div>
-                                          </div>
-                                        </label>
-                                      );
-                                    })
-                                  )}
-                                </div>
-                              </div>
+                              <BucketOpsStorageScopeFilterFields
+                                contextDraftIds={contextDraftIds}
+                                contextFieldState={contextFieldState}
+                                controller={storageScopeFilterController}
+                                endpointDraftNames={endpointDraftNames}
+                                endpointFieldState={endpointFieldState}
+                              />
                             )}
 
                             <div className={advancedFilterFieldCardClass()}>
