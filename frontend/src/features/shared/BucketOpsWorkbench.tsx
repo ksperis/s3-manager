@@ -84,6 +84,7 @@ import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
 import { useBucketOpsBulkApply } from "./useBucketOpsBulkApply";
+import { useBucketOpsBulkDialog } from "./useBucketOpsBulkDialog";
 import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
 import { useBucketOpsBulkPreview } from "./useBucketOpsBulkPreview";
 import { useBucketOpsCacheRefresh } from "./useBucketOpsCacheRefresh";
@@ -126,7 +127,6 @@ import {
 import {
   buildBulkPastePlan,
   isBulkClipboardSameEndpoint,
-  reconcileBulkPasteMapping,
 } from "./bucketBulkPasteModel";
 import {
   buildBucketUiTagKey,
@@ -377,7 +377,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     });
   }, [availableUiTags, setTagFilters, uiTagsReady]);
   const [adminOpsAction, setAdminOpsAction] = useState<Extract<CephAdminAdminOpsAction, { bucket: CephAdminBucket }> | null>(null);
-  const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showIntegrityModal, setShowIntegrityModal] = useState(false);
   const [showPurgeModal, setShowPurgeModal] = useState(false);
@@ -836,26 +835,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     quotaSkipConfigured: bulkQuotaSkipConfigured,
   });
 
-  useEffect(() => {
-    if (!showBulkUpdateModal || bulkOperation !== "paste_configs" || !bulkConfigClipboard) return;
-    const sourceBuckets = bulkConfigClipboard.buckets.map((bucket) => bucket.name);
-    setBulkPasteMapping((previousMapping) =>
-      reconcileBulkPasteMapping({
-        destinationBucketNames: selectedBucketList,
-        previousMapping,
-        sameEndpoint: bulkClipboardSameEndpoint,
-        sourceBucketNames: sourceBuckets,
-      })
-    );
-  }, [
-    bulkConfigClipboard,
-    bulkClipboardSameEndpoint,
-    bulkOperation,
-    selectedBucketList,
-    setBulkPasteMapping,
-    showBulkUpdateModal,
-  ]);
-
   const createConfigBackup = async (features: CephAdminBucketConfigBackupFeature[]) => {
     if (isStorageOps || !selectedEndpointId || selectedBucketList.length === 0) return;
     const generatedAt = new Date().toISOString();
@@ -873,50 +852,28 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     );
   };
 
-  useEffect(() => {
-    if (!showBulkUpdateModal) return;
-    resetBulkPreview();
-    cancelBulkCopy();
-    resetBulkApply();
-  }, [
-    bulkConfigClipboard,
-    bulkFormState,
-    cancelBulkCopy,
-    resetBulkApply,
-    resetBulkPreview,
-    selectedBuckets,
-    showBulkUpdateModal,
-  ]);
-
-  useEffect(() => {
-    if ((quotaOperationDisabledReason || !usageFeatureEnabled) && bulkOperation === "set_quota") {
-      setBulkOperation("");
-    }
-    if (!snsFeatureEnabled && (bulkOperation === "add_notifications" || bulkOperation === "delete_notifications")) {
-      setBulkOperation("");
-    }
-  }, [
-    bulkOperation,
-    quotaOperationDisabledReason,
-    setBulkOperation,
-    snsFeatureEnabled,
-    usageFeatureEnabled,
-  ]);
-
-  const openBulkUpdateModal = () => {
-    setShowBulkUpdateModal(true);
-    resetBulkForm();
-    resetBulkCopy();
-    resetBulkPreview();
-    resetBulkApply();
-  };
-
-  const closeBulkUpdateModal = () => {
-    setShowBulkUpdateModal(false);
-    resetBulkPreview();
-    resetBulkCopy();
-    resetBulkApply();
-  };
+  const {
+    closeDialog: closeBulkUpdateModal,
+    open: showBulkUpdateModal,
+    openDialog: openBulkUpdateModal,
+  } = useBucketOpsBulkDialog({
+    cancelCopy: cancelBulkCopy,
+    clipboard: bulkConfigClipboard,
+    clipboardSameEndpoint: bulkClipboardSameEndpoint,
+    destinationBucketNames: selectedBucketList,
+    formState: bulkFormState,
+    notificationsEnabled: snsFeatureEnabled,
+    operation: bulkOperation,
+    quotaDisabledReason: quotaOperationDisabledReason,
+    resetApply: resetBulkApply,
+    resetCopy: resetBulkCopy,
+    resetForm: resetBulkForm,
+    resetPreview: resetBulkPreview,
+    selection: selectedBuckets,
+    setOperation: setBulkOperation,
+    setPasteMapping: setBulkPasteMapping,
+    usageEnabled: usageFeatureEnabled,
+  });
 
   const quickFilterActive = filterValue.trim().length > 0;
   const activeFilterSummaryItems = useMemo(
