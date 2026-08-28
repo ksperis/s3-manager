@@ -53,7 +53,7 @@ type BucketOpsSelectionExportInput = {
   visibleColumns: readonly ColumnId[];
 };
 
-type BucketOpsSelectionExportArtifact = {
+export type BucketOpsSelectionExportArtifact = {
   content: string;
   filename: string;
   mimeType: string;

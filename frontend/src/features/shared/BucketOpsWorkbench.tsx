@@ -47,7 +47,6 @@ import {
   type StorageOpsBucket,
 } from "../../api/storageOps";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
-import type { BucketIndexCheckTarget } from "../../api/bucketIndexCheck";
 import type {
   BucketUiTagDefinition,
 } from "../../api/bucketUiTags";
@@ -88,13 +87,12 @@ import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
 import { applyBucketOpsBulkUpdate } from "./bucketOpsBulkApply";
 import { previewBucketOpsBulkUpdate } from "./bucketOpsBulkPreview";
 import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
-import { loadBucketOpsBucketsByNames } from "./bucketOpsNamedBucketLoader";
 import { loadBucketOpsFilteredBuckets } from "./bucketOpsFilteredBucketLoader";
 import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
-import type { BucketUiTagDraft } from "./bucketOpsRowTagModel";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
+import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
 import {
   createBucketUiTagTarget,
   useBucketUiTags,
@@ -173,7 +171,6 @@ import {
   FEATURE_DETAIL_COLUMN_OPTIONS,
   loadBucketListState,
   loadVisibleColumns,
-  parseUiTags,
   persistBucketListState,
   persistVisibleColumns,
   type ColumnId,
@@ -209,7 +206,6 @@ import {
   type BulkPreviewTone,
   type PublicAccessBlockOptionKey,
   type QuotaSizeUnit,
-  type SelectionExportFormat,
 } from "./bucketBulkOperationsModel";
 import {
   buildBulkPreviewExportPayload,
@@ -500,7 +496,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [showUsageStatsModal, setShowUsageStatsModal] = useState(false);
   const [showConfigBackupModal, setShowConfigBackupModal] = useState(false);
-  const [indexCheckTargets, setIndexCheckTargets] = useState<BucketIndexCheckTarget[] | null>(null);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
   const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(() =>
     loadBulkConfigClipboard(bulkClipboardStorageKey)
@@ -571,11 +566,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [bulkApplyError, setBulkApplyError] = useState<string | null>(null);
   const [bulkApplySummary, setBulkApplySummary] = useState<string | null>(null);
   const [bulkApplyProgress, setBulkApplyProgress] = useState<ActionProgressState | null>(null);
-  const [selectionTagActionLoading, setSelectionTagActionLoading] = useState<"add" | "remove" | null>(null);
-  const [selectionTagAddInput, setSelectionTagAddInput] = useState("");
-  const [selectionExportLoading, setSelectionExportLoading] = useState<SelectionExportFormat | null>(null);
   const [cacheRefreshLoading, setCacheRefreshLoading] = useState(false);
-  const [selectionActionProgress, setSelectionActionProgress] = useState<ActionProgressState | null>(null);
   const {
     activeFeatureTooltipKey,
     activeOwnerTooltipKey,
@@ -605,7 +596,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const selectionHeaderRef = useRef<HTMLInputElement | null>(null);
   const bulkCopyRunTokenRef = useRef(0);
   const bulkPreviewRunTokenRef = useRef(0);
-  const selectionActionRunTokenRef = useRef(0);
   const restoreFilterRef = useRef<string | null>(null);
   const restoredReturnContextRef = useRef<number | null>(null);
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(
@@ -732,9 +722,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [showAdvancedFilter]);
 
   useEffect(() => {
-    setSelectionTagActionLoading(null);
-    setSelectionTagAddInput("");
-    setSelectionExportLoading(null);
     setActiveTagsTooltipKey(null);
     const stored = loadBucketListState(bucketsStateStorageKey, selectedEndpointId);
     if (ownerQueryFilter) {
@@ -1215,9 +1202,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setBulkPreviewReady(false);
     setBulkApplyError(null);
     setBulkApplySummary(null);
-    setSelectionTagActionLoading(null);
-    setSelectionTagAddInput("");
-    setSelectionExportLoading(null);
+    resetSelectionActions();
     setShowConfigBackupModal(false);
   };
 
@@ -1267,147 +1252,60 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     selectionHeaderRef.current.indeterminate = headerIndeterminate;
   }, [headerIndeterminate]);
 
-  const resolveBucketTargetsByNames = async (
-    bucketNames: string[],
-    options?: {
-      onProgress?: (event: { completed: number; total: number; failed: number }) => void;
-    }
-  ) => {
-    if (!selectedEndpointId || bucketNames.length === 0) {
-      return { targets: [] as BucketTagTarget[], missingNames: bucketNames };
-    }
-    const bucketsByName = await loadBucketOpsBucketsByNames({
-      bucketNames,
-      concurrency: 4,
-      listBuckets,
-      onProgress: options?.onProgress,
-      scopeId: selectedEndpointId,
-      withStats: false,
-    });
-    const targetByKey = new Map<string, BucketTagTarget>();
-    const existingNames = new Set<string>();
-    bucketsByName.forEach((bucket) => {
-      const target = resolveBucketTagTarget(bucket);
-      if (target) {
-        targetByKey.set(target.key, target);
-        existingNames.add(target.name);
-      }
-    });
-    const missingNames = bucketNames.filter((name) => !existingNames.has(name));
-    const targets = Array.from(targetByKey.values()).sort((a, b) => {
-      if (a.name !== b.name) return a.name.localeCompare(b.name);
-      return (a.tenant ?? "").localeCompare(b.tenant ?? "");
-    });
-    return { targets, missingNames };
-  };
-
-  const openSelectedBucketIndexChecks = async () => {
-    if (isStorageOps || !selectedEndpointId || selectedBucketList.length === 0 || selectedBucketList.length > 200) return;
-    setSelectionActionProgress({
-      label: "Resolving RGW bucket identities",
-      completed: 0,
-      total: selectedBucketList.length,
-      failed: 0,
-    });
-    try {
-      const { targets, missingNames } = await resolveBucketTargetsByNames(selectedBucketList, {
-        onProgress: (progress) => {
-          setSelectionActionProgress({
-            label: "Resolving RGW bucket identities",
-            completed: progress.completed,
-            total: progress.total,
-            failed: progress.failed,
-          });
+  const {
+    applyUiTagToSelection,
+    closeSelectedBucketIndexChecks,
+    exportSelectedBuckets,
+    indexCheckTargets,
+    openSelectedBucketIndexChecks,
+    parsedSelectionTagAddInput,
+    resetSelectionActions,
+    selectionActionProgress,
+    selectionExportLoading,
+    selectionTagActionLoading,
+    selectionTagAddInput,
+    setSelectionTagAddInput,
+  } = useBucketOpsSelectionActions({
+    bucketNames: selectedBucketList,
+    extractError,
+    isStorageOps,
+    listBuckets,
+    persistUiTagChanges,
+    prepareExport: (format, onProgress) =>
+      prepareBucketOpsSelectionExport({
+        bucketNames: selectedBucketList,
+        exportPrefix,
+        exportScopeKey,
+        exportWithStats,
+        featureColumns: featureColumnOptions,
+        filteredQuery: {
+          filter: effectiveQuickSearchValue.trim() || undefined,
+          advanced_filter: advancedFilterParam,
+          sort_by: sort.field,
+          sort_dir: sort.direction,
+          ui_tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
+          ui_tag_match: tagFilterMode,
         },
-      });
-      if (missingNames.length > 0) {
-        setError(`Some selected buckets no longer exist: ${formatBucketNamesPreview(missingNames)}.`);
-      }
-      if (targets.length === 0) {
-        setError("Unable to resolve selected buckets for the RGW index check.");
-        return;
-      }
-      if (targets.length > 200) {
-        setError("Bucket index checks are limited to 200 resolved buckets. Narrow the selection to continue.");
-        return;
-      }
-      setIndexCheckTargets(targets.map((target) => ({ name: target.name, tenant: target.tenant })));
-    } catch (resolveError) {
-      setError(extractError(resolveError));
-    } finally {
-      setSelectionActionProgress(null);
-    }
-  };
-
-  const parsedSelectionTagAddInput = useMemo(() => parseUiTags(selectionTagAddInput), [selectionTagAddInput]);
-
-  const applyUiTagToSelection = async (
-    tag: BucketUiTagDefinition | BucketUiTagDraft[],
-    action: "add" | "remove"
-  ) => {
-    if (!selectedEndpointId || selectedBucketList.length === 0 || selectionTagActionLoading) return;
-    const parsedTagValues = Array.isArray(tag) ? tag : [tag];
-    if (
-      parsedTagValues.length === 0 ||
-      (action === "remove" && Array.isArray(tag))
-    ) {
-      return;
-    }
-    const runToken = selectionActionRunTokenRef.current + 1;
-    selectionActionRunTokenRef.current = runToken;
-    const progressLabel = action === "add" ? "Applying UI tags" : "Removing UI tags";
-    setSelectionActionProgress({
-      label: progressLabel,
-      completed: 0,
-      total: selectedBucketList.length,
-      failed: 0,
-    });
-    setSelectionTagActionLoading(action);
-    try {
-      const { targets, missingNames } = await resolveBucketTargetsByNames(selectedBucketList, {
-        onProgress: (progress) => {
-          if (selectionActionRunTokenRef.current !== runToken) return;
-          setSelectionActionProgress((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  completed: progress.completed,
-                  total: progress.total,
-                  failed: progress.failed,
-                }
-              : prev
-          );
-        },
-      });
-      if (targets.length === 0) {
-        setError("Unable to resolve selected buckets for UI tag update.");
-        return;
-      }
-      if (missingNames.length > 0) {
-        setError(`Some selected buckets no longer exist: ${formatBucketNamesPreview(missingNames)}.`);
-      }
-      if (action === "add") {
-        await persistUiTagChanges(targets, parsedTagValues, [], {
-          onProgress: ({ completed, total }) =>
-            setSelectionActionProgress({ label: progressLabel, completed, total, failed: 0 }),
-        });
-      } else {
-        await persistUiTagChanges(targets, [], parsedTagValues as BucketUiTagDefinition[], {
-          onProgress: ({ completed, total }) =>
-            setSelectionActionProgress({ label: progressLabel, completed, total, failed: 0 }),
-        });
-      }
-      refreshBuckets();
-    } catch (err) {
-      setError(extractError(err));
-      refreshBuckets();
-    } finally {
-      setSelectionTagActionLoading(null);
-      if (selectionActionRunTokenRef.current === runToken) {
-        setSelectionActionProgress(null);
-      }
-    }
-  };
+        format,
+        fullyResolvedFilteredSelection,
+        include: includeParams,
+        isStorageOps,
+        listBuckets,
+        onProgress,
+        scopeDisplayName,
+        scopeId: selectedEndpointId,
+        scopeName: selectedEndpoint?.name ?? null,
+        total,
+        useExplicitBucketName,
+        visibleBuckets: items,
+        visibleColumns,
+      }),
+    refreshBuckets,
+    resolveTarget: resolveBucketTagTarget,
+    scopeId: selectedEndpointId,
+    scopeKey: `${surface.mode}:${selectedEndpointId ?? ""}`,
+    setError,
+  });
 
   const bulkClipboardSourceBuckets = useMemo(
     () => (bulkConfigClipboard ? bulkConfigClipboard.buckets.map((bucket) => bucket.name) : []),
@@ -1447,71 +1345,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       })
     );
   }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkOperation, selectedBucketList, showBulkUpdateModal]);
-
-  const exportSelectedBuckets = async (format: SelectionExportFormat) => {
-    if (selectedBucketList.length === 0 || selectionExportLoading) return;
-    const withProgress = format === "csv" || format === "json";
-    const runToken = withProgress ? selectionActionRunTokenRef.current + 1 : null;
-    if (withProgress) {
-      selectionActionRunTokenRef.current = runToken ?? selectionActionRunTokenRef.current;
-      setSelectionActionProgress({
-        label: format === "csv" ? "Preparing CSV export" : "Preparing JSON export",
-        completed: 0,
-        total: selectedBucketList.length,
-        failed: 0,
-      });
-    }
-    setSelectionExportLoading(format);
-    try {
-      const artifact = await prepareBucketOpsSelectionExport({
-        bucketNames: selectedBucketList,
-        exportPrefix,
-        exportScopeKey,
-        exportWithStats,
-        featureColumns: featureColumnOptions,
-        filteredQuery: {
-          filter: effectiveQuickSearchValue.trim() || undefined,
-          advanced_filter: advancedFilterParam,
-          sort_by: sort.field,
-          sort_dir: sort.direction,
-          ui_tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
-          ui_tag_match: tagFilterMode,
-        },
-        format,
-        fullyResolvedFilteredSelection,
-        include: includeParams,
-        isStorageOps,
-        listBuckets,
-        onProgress: (completed, total) => {
-          if (!withProgress || runToken === null || selectionActionRunTokenRef.current !== runToken) return;
-          setSelectionActionProgress((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  completed,
-                  total,
-                }
-              : prev
-          );
-        },
-        scopeDisplayName,
-        scopeId: selectedEndpointId,
-        scopeName: selectedEndpoint?.name ?? null,
-        total,
-        useExplicitBucketName,
-        visibleBuckets: items,
-        visibleColumns,
-      });
-      triggerDownload(artifact.filename, artifact.content, artifact.mimeType);
-    } catch (err) {
-      setError(extractError(err));
-    } finally {
-      setSelectionExportLoading(null);
-      if (withProgress && runToken !== null && selectionActionRunTokenRef.current === runToken) {
-        setSelectionActionProgress(null);
-      }
-    }
-  };
 
   const createConfigBackup = async (features: CephAdminBucketConfigBackupFeature[]) => {
     if (isStorageOps || !selectedEndpointId || selectedBucketList.length === 0) return;
@@ -5106,7 +4939,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           endpointId={selectedEndpointId}
           endpointName={selectedEndpoint?.name}
           targets={indexCheckTargets}
-          onClose={() => setIndexCheckTargets(null)}
+          onClose={closeSelectedBucketIndexChecks}
         />
       )}
       {!isStorageOps && showIntegrityModal && selectedEndpointId && selectedOperationTargets.length > 0 && (
