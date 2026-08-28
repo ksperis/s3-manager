@@ -22,8 +22,10 @@ import {
   type PolicyRuleTypeKey,
 } from "./bucketConfigMerge";
 import {
+  DEFAULT_BULK_COPY_FEATURE_SELECTION,
   PUBLIC_ACCESS_BLOCK_OPTIONS,
   parseQuotaInput,
+  type BulkCopyFeatureSelection,
   type BulkOperation,
   type ParsedQuotaInput,
   type PublicAccessBlockOptionKey,
@@ -31,6 +33,82 @@ import {
 } from "./bucketBulkOperationsModel";
 
 type OptionSelection<Key extends string> = Partial<Record<Key, boolean>>;
+
+export type BucketOpsBulkFormState = {
+  bulkOperation: BulkOperation;
+  bulkCopyFeatures: BulkCopyFeatureSelection;
+  bulkPasteMapping: Record<string, string>;
+  bulkQuotaSizeValue: string;
+  bulkQuotaSizeUnit: QuotaSizeUnit;
+  bulkQuotaObjects: string;
+  bulkQuotaApplySize: boolean;
+  bulkQuotaApplyObjects: boolean;
+  bulkQuotaSkipConfigured: boolean;
+  bulkPublicAccessBlockTargets: Record<PublicAccessBlockOptionKey, boolean>;
+  bulkLifecycleRuleText: string;
+  bulkLifecycleUpdateOnlyExisting: boolean;
+  bulkLifecycleDeleteIds: string;
+  bulkLifecycleDeleteTypes: Record<LifecycleRuleTypeKey, boolean>;
+  bulkNotificationText: string;
+  bulkNotificationDeleteIds: string;
+  bulkNotificationDeleteTypes: Record<
+    NotificationConfigurationTypeKey,
+    boolean
+  >;
+  bulkCorsRuleText: string;
+  bulkCorsUpdateOnlyExisting: boolean;
+  bulkCorsDeleteIds: string;
+  bulkCorsDeleteTypes: Record<CorsRuleTypeKey, boolean>;
+  bulkPolicyText: string;
+  bulkPolicyUpdateOnlyExisting: boolean;
+  bulkPolicyDeleteIds: string;
+  bulkPolicyDeleteTypes: Record<PolicyRuleTypeKey, boolean>;
+};
+
+const createBooleanSelection = <Key extends string>(
+  options: readonly { key: Key }[],
+): Record<Key, boolean> =>
+  Object.fromEntries(options.map((option) => [option.key, false])) as Record<
+    Key,
+    boolean
+  >;
+
+export function createBucketOpsBulkFormState(): BucketOpsBulkFormState {
+  return {
+    bulkOperation: "",
+    bulkCopyFeatures: { ...DEFAULT_BULK_COPY_FEATURE_SELECTION },
+    bulkPasteMapping: {},
+    bulkQuotaSizeValue: "",
+    bulkQuotaSizeUnit: "GiB",
+    bulkQuotaObjects: "",
+    bulkQuotaApplySize: true,
+    bulkQuotaApplyObjects: true,
+    bulkQuotaSkipConfigured: false,
+    bulkPublicAccessBlockTargets: {
+      block_public_acls: true,
+      ignore_public_acls: true,
+      block_public_policy: true,
+      restrict_public_buckets: true,
+    },
+    bulkLifecycleRuleText: "",
+    bulkLifecycleUpdateOnlyExisting: false,
+    bulkLifecycleDeleteIds: "",
+    bulkLifecycleDeleteTypes: createBooleanSelection(LIFECYCLE_TYPE_OPTIONS),
+    bulkNotificationText: "",
+    bulkNotificationDeleteIds: "",
+    bulkNotificationDeleteTypes: createBooleanSelection(
+      NOTIFICATION_TYPE_OPTIONS,
+    ),
+    bulkCorsRuleText: "",
+    bulkCorsUpdateOnlyExisting: false,
+    bulkCorsDeleteIds: "",
+    bulkCorsDeleteTypes: createBooleanSelection(CORS_TYPE_OPTIONS),
+    bulkPolicyText: "",
+    bulkPolicyUpdateOnlyExisting: false,
+    bulkPolicyDeleteIds: "",
+    bulkPolicyDeleteTypes: createBooleanSelection(POLICY_TYPE_OPTIONS),
+  };
+}
 
 export type BucketOpsBulkInput = {
   operation: BulkOperation;
@@ -112,6 +190,108 @@ function selectedOptionKeys<Key extends string>(
   selection: OptionSelection<Key>,
 ): Key[] {
   return options.filter((option) => selection[option.key]).map((option) => option.key);
+}
+
+export function buildBucketOpsBulkInput(
+  formState: BucketOpsBulkFormState,
+): BucketOpsBulkInput {
+  return {
+    operation: formState.bulkOperation,
+    quota: {
+      applyObjects: formState.bulkQuotaApplyObjects,
+      applySize: formState.bulkQuotaApplySize,
+      objects: formState.bulkQuotaObjects,
+      sizeUnit: formState.bulkQuotaSizeUnit,
+      sizeValue: formState.bulkQuotaSizeValue,
+    },
+    lifecycle: {
+      deleteIds: formState.bulkLifecycleDeleteIds,
+      deleteTypes: formState.bulkLifecycleDeleteTypes,
+      ruleText: formState.bulkLifecycleRuleText,
+      updateOnlyExisting: formState.bulkLifecycleUpdateOnlyExisting,
+    },
+    notifications: {
+      configurationText: formState.bulkNotificationText,
+      deleteIds: formState.bulkNotificationDeleteIds,
+      deleteTypes: formState.bulkNotificationDeleteTypes,
+    },
+    cors: {
+      deleteIds: formState.bulkCorsDeleteIds,
+      deleteTypes: formState.bulkCorsDeleteTypes,
+      ruleText: formState.bulkCorsRuleText,
+      updateOnlyExisting: formState.bulkCorsUpdateOnlyExisting,
+    },
+    policy: {
+      deleteIds: formState.bulkPolicyDeleteIds,
+      deleteTypes: formState.bulkPolicyDeleteTypes,
+      policyText: formState.bulkPolicyText,
+      updateOnlyExisting: formState.bulkPolicyUpdateOnlyExisting,
+    },
+    publicAccessBlockTargets: formState.bulkPublicAccessBlockTargets,
+  };
+}
+
+export function resolveBucketOpsBulkActionAvailability({
+  applyLoading,
+  formState,
+  pasteError,
+  previewLoading,
+  previewReady,
+  quotaDisabledReason,
+}: {
+  applyLoading: boolean;
+  formState: BucketOpsBulkFormState;
+  pasteError: string | null;
+  previewLoading: boolean;
+  previewReady: boolean;
+  quotaDisabledReason: string | null;
+}) {
+  const hasDeleteCriteria =
+    formState.bulkLifecycleDeleteIds.trim().length > 0 ||
+    Object.values(formState.bulkLifecycleDeleteTypes).some(Boolean);
+  const hasNotificationDeleteCriteria =
+    formState.bulkNotificationDeleteIds.trim().length > 0 ||
+    Object.values(formState.bulkNotificationDeleteTypes).some(Boolean);
+  const hasCorsDeleteCriteria =
+    formState.bulkCorsDeleteIds.trim().length > 0 ||
+    Object.values(formState.bulkCorsDeleteTypes).some(Boolean);
+  const hasPolicyDeleteCriteria =
+    formState.bulkPolicyDeleteIds.trim().length > 0 ||
+    Object.values(formState.bulkPolicyDeleteTypes).some(Boolean);
+  const hasPublicAccessBlockTargetCriteria = Object.values(
+    formState.bulkPublicAccessBlockTargets,
+  ).some(Boolean);
+  const operation = formState.bulkOperation;
+
+  return {
+    previewDisabled:
+      previewLoading ||
+      applyLoading ||
+      !operation ||
+      ((operation === "add_public_access_block" ||
+        operation === "remove_public_access_block") &&
+        !hasPublicAccessBlockTargetCriteria) ||
+      (operation === "add_lifecycle" &&
+        !formState.bulkLifecycleRuleText.trim()) ||
+      (operation === "delete_lifecycle" && !hasDeleteCriteria) ||
+      (operation === "add_notifications" &&
+        !formState.bulkNotificationText.trim()) ||
+      (operation === "delete_notifications" &&
+        !hasNotificationDeleteCriteria) ||
+      (operation === "add_cors" && !formState.bulkCorsRuleText.trim()) ||
+      (operation === "delete_cors" && !hasCorsDeleteCriteria) ||
+      (operation === "add_policy" && !formState.bulkPolicyText.trim()) ||
+      (operation === "delete_policy" && !hasPolicyDeleteCriteria) ||
+      (operation === "set_quota" && Boolean(quotaDisabledReason)) ||
+      (operation === "paste_configs" && Boolean(pasteError)),
+    applyDisabled:
+      !previewReady ||
+      applyLoading ||
+      (operation === "set_quota" && Boolean(quotaDisabledReason)),
+    hasSelectedCopyFeatures: Object.values(
+      formState.bulkCopyFeatures,
+    ).some(Boolean),
+  };
 }
 
 export function prepareBucketOpsBulkInput(

@@ -4,10 +4,8 @@
  */
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-  createBucketOpsBulkFormState,
-  useBucketOpsBulkForm,
-} from "./useBucketOpsBulkForm";
+import { createBucketOpsBulkFormState } from "./bucketOpsBulkInput";
+import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
 
 describe("useBucketOpsBulkForm", () => {
   it("creates isolated canonical defaults for every bulk configuration family", () => {
@@ -72,6 +70,7 @@ describe("useBucketOpsBulkForm", () => {
     });
 
     expect(result.current.bulkOperation).toBe("set_quota");
+    expect(result.current.formState.bulkOperation).toBe("set_quota");
     expect(result.current.bulkQuotaSizeValue).toBe("25");
     expect(result.current.bulkPasteMapping).toEqual({ source: "destination" });
     expect(result.current.bulkPublicAccessBlockTargets.block_public_policy).toBe(

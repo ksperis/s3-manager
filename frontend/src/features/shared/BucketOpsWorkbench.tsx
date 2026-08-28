@@ -78,7 +78,11 @@ import {
   buildBucketOpsNavigationTarget,
   type BucketOpsNavigationAction,
 } from "./bucketOpsTableNavigation";
-import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
+import {
+  buildBucketOpsBulkInput,
+  prepareBucketOpsBulkInput,
+  resolveBucketOpsBulkActionAvailability,
+} from "./bucketOpsBulkInput";
 import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
@@ -115,7 +119,6 @@ import { extractApiError } from "../../utils/apiError";
 import { triggerDownload } from "../../utils/download";
 import {
   BUCKET_CONFIG_BACKUP_FEATURE_LABELS,
-  type BulkCopyFeatureKey,
 } from "./bucketBulkOperationsModel";
 import {
   buildBulkPreviewExportPayload,
@@ -385,30 +388,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const bulkFormController = useBucketOpsBulkForm();
   const {
     bulkCopyFeatures,
-    bulkCorsDeleteIds,
-    bulkCorsDeleteTypes,
-    bulkCorsRuleText,
     bulkCorsUpdateOnlyExisting,
-    bulkLifecycleDeleteIds,
-    bulkLifecycleDeleteTypes,
-    bulkLifecycleRuleText,
     bulkLifecycleUpdateOnlyExisting,
-    bulkNotificationDeleteIds,
-    bulkNotificationDeleteTypes,
-    bulkNotificationText,
     bulkOperation,
     bulkPasteMapping,
-    bulkPolicyDeleteIds,
-    bulkPolicyDeleteTypes,
-    bulkPolicyText,
     bulkPolicyUpdateOnlyExisting,
-    bulkPublicAccessBlockTargets,
-    bulkQuotaApplyObjects,
-    bulkQuotaApplySize,
-    bulkQuotaObjects,
-    bulkQuotaSizeUnit,
-    bulkQuotaSizeValue,
     bulkQuotaSkipConfigured,
+    formState: bulkFormState,
     resetBulkForm,
     setBulkOperation,
     setBulkPasteMapping,
@@ -771,65 +757,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     ]
   );
   const preparedBulkInput = useMemo(
-    () =>
-      prepareBucketOpsBulkInput({
-        operation: bulkOperation,
-        quota: {
-          applyObjects: bulkQuotaApplyObjects,
-          applySize: bulkQuotaApplySize,
-          objects: bulkQuotaObjects,
-          sizeUnit: bulkQuotaSizeUnit,
-          sizeValue: bulkQuotaSizeValue,
-        },
-        lifecycle: {
-          deleteIds: bulkLifecycleDeleteIds,
-          deleteTypes: bulkLifecycleDeleteTypes,
-          ruleText: bulkLifecycleRuleText,
-          updateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
-        },
-        notifications: {
-          configurationText: bulkNotificationText,
-          deleteIds: bulkNotificationDeleteIds,
-          deleteTypes: bulkNotificationDeleteTypes,
-        },
-        cors: {
-          deleteIds: bulkCorsDeleteIds,
-          deleteTypes: bulkCorsDeleteTypes,
-          ruleText: bulkCorsRuleText,
-          updateOnlyExisting: bulkCorsUpdateOnlyExisting,
-        },
-        policy: {
-          deleteIds: bulkPolicyDeleteIds,
-          deleteTypes: bulkPolicyDeleteTypes,
-          policyText: bulkPolicyText,
-          updateOnlyExisting: bulkPolicyUpdateOnlyExisting,
-        },
-        publicAccessBlockTargets: bulkPublicAccessBlockTargets,
-      }),
-    [
-      bulkCorsDeleteIds,
-      bulkCorsDeleteTypes,
-      bulkCorsRuleText,
-      bulkCorsUpdateOnlyExisting,
-      bulkLifecycleDeleteIds,
-      bulkLifecycleDeleteTypes,
-      bulkLifecycleRuleText,
-      bulkLifecycleUpdateOnlyExisting,
-      bulkNotificationDeleteIds,
-      bulkNotificationDeleteTypes,
-      bulkNotificationText,
-      bulkOperation,
-      bulkPolicyDeleteIds,
-      bulkPolicyDeleteTypes,
-      bulkPolicyText,
-      bulkPolicyUpdateOnlyExisting,
-      bulkPublicAccessBlockTargets,
-      bulkQuotaApplyObjects,
-      bulkQuotaApplySize,
-      bulkQuotaObjects,
-      bulkQuotaSizeUnit,
-      bulkQuotaSizeValue,
-    ],
+    () => prepareBucketOpsBulkInput(buildBucketOpsBulkInput(bulkFormState)),
+    [bulkFormState],
   );
   const {
     applyBulkUpdate,
@@ -953,32 +882,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     cancelBulkCopy();
     resetBulkApply();
   }, [
-    bulkOperation,
-    bulkQuotaSizeValue,
-    bulkQuotaSizeUnit,
-    bulkQuotaObjects,
-    bulkQuotaApplySize,
-    bulkQuotaApplyObjects,
-    bulkQuotaSkipConfigured,
-    bulkPublicAccessBlockTargets,
-    bulkLifecycleRuleText,
-    bulkLifecycleUpdateOnlyExisting,
-    bulkLifecycleDeleteIds,
-    bulkLifecycleDeleteTypes,
-    bulkNotificationText,
-    bulkNotificationDeleteIds,
-    bulkNotificationDeleteTypes,
-    bulkCorsRuleText,
-    bulkCorsUpdateOnlyExisting,
-    bulkCorsDeleteIds,
-    bulkCorsDeleteTypes,
-    bulkPolicyText,
-    bulkPolicyUpdateOnlyExisting,
-    bulkPolicyDeleteIds,
-    bulkPolicyDeleteTypes,
-    bulkCopyFeatures,
-    bulkPasteMapping,
     bulkConfigClipboard,
+    bulkFormState,
     cancelBulkCopy,
     resetBulkApply,
     resetBulkPreview,
@@ -1105,39 +1010,18 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         }),
     [orphanedTagBuckets, uiTagOrphanEntries]
   );
-  const hasDeleteCriteria =
-    bulkLifecycleDeleteIds.trim().length > 0 || Object.values(bulkLifecycleDeleteTypes).some(Boolean);
-  const hasNotificationDeleteCriteria =
-    bulkNotificationDeleteIds.trim().length > 0 || Object.values(bulkNotificationDeleteTypes).some(Boolean);
-  const hasCorsDeleteCriteria =
-    bulkCorsDeleteIds.trim().length > 0 || Object.values(bulkCorsDeleteTypes).some(Boolean);
-  const hasPolicyDeleteCriteria =
-    bulkPolicyDeleteIds.trim().length > 0 || Object.values(bulkPolicyDeleteTypes).some(Boolean);
-  const hasPublicAccessBlockTargetCriteria = Object.values(bulkPublicAccessBlockTargets).some(Boolean);
-  const bulkPreviewDisabled =
-    bulkPreviewLoading ||
-    bulkApplyLoading ||
-    !bulkOperation ||
-    ((bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
-      !hasPublicAccessBlockTargetCriteria) ||
-    (bulkOperation === "add_lifecycle" && !bulkLifecycleRuleText.trim()) ||
-    (bulkOperation === "delete_lifecycle" && !hasDeleteCriteria) ||
-    (bulkOperation === "add_notifications" && !bulkNotificationText.trim()) ||
-    (bulkOperation === "delete_notifications" && !hasNotificationDeleteCriteria) ||
-    (bulkOperation === "add_cors" && !bulkCorsRuleText.trim()) ||
-    (bulkOperation === "delete_cors" && !hasCorsDeleteCriteria) ||
-    (bulkOperation === "add_policy" && !bulkPolicyText.trim()) ||
-    (bulkOperation === "delete_policy" && !hasPolicyDeleteCriteria) ||
-    (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason)) ||
-    (bulkOperation === "paste_configs" && Boolean(bulkPastePlan.error));
-  const bulkApplyDisabled =
-    !bulkPreviewReady ||
-    bulkApplyLoading ||
-    (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason));
-  const hasSelectedCopyFeatures = useMemo(
-    () => (Object.keys(bulkCopyFeatures) as BulkCopyFeatureKey[]).some((feature) => bulkCopyFeatures[feature]),
-    [bulkCopyFeatures]
-  );
+  const {
+    applyDisabled: bulkApplyDisabled,
+    hasSelectedCopyFeatures,
+    previewDisabled: bulkPreviewDisabled,
+  } = resolveBucketOpsBulkActionAvailability({
+    applyLoading: bulkApplyLoading,
+    formState: bulkFormState,
+    pasteError: bulkPastePlan.error,
+    previewLoading: bulkPreviewLoading,
+    previewReady: bulkPreviewReady,
+    quotaDisabledReason: quotaOperationDisabledReason,
+  });
   const exportBulkPreviewChanges = () => {
     if (bulkPreview.length === 0) return;
     const exportedAt = new Date().toISOString();

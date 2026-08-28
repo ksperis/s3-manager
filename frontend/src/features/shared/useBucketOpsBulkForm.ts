@@ -4,99 +4,10 @@
  */
 import { useCallback, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { NotificationConfigurationTypeKey } from "../cephAdmin/bucketJsonParsers";
 import {
-  CORS_TYPE_OPTIONS,
-  LIFECYCLE_TYPE_OPTIONS,
-  NOTIFICATION_TYPE_OPTIONS,
-  POLICY_TYPE_OPTIONS,
-  type CorsRuleTypeKey,
-  type LifecycleRuleTypeKey,
-  type PolicyRuleTypeKey,
-} from "./bucketConfigMerge";
-import {
-  DEFAULT_BULK_COPY_FEATURE_SELECTION,
-  type BulkCopyFeatureSelection,
-  type BulkOperation,
-  type PublicAccessBlockOptionKey,
-  type QuotaSizeUnit,
-} from "./bucketBulkOperationsModel";
-
-type BucketOpsBulkFormState = {
-  bulkOperation: BulkOperation;
-  bulkCopyFeatures: BulkCopyFeatureSelection;
-  bulkPasteMapping: Record<string, string>;
-  bulkQuotaSizeValue: string;
-  bulkQuotaSizeUnit: QuotaSizeUnit;
-  bulkQuotaObjects: string;
-  bulkQuotaApplySize: boolean;
-  bulkQuotaApplyObjects: boolean;
-  bulkQuotaSkipConfigured: boolean;
-  bulkPublicAccessBlockTargets: Record<PublicAccessBlockOptionKey, boolean>;
-  bulkLifecycleRuleText: string;
-  bulkLifecycleUpdateOnlyExisting: boolean;
-  bulkLifecycleDeleteIds: string;
-  bulkLifecycleDeleteTypes: Record<LifecycleRuleTypeKey, boolean>;
-  bulkNotificationText: string;
-  bulkNotificationDeleteIds: string;
-  bulkNotificationDeleteTypes: Record<
-    NotificationConfigurationTypeKey,
-    boolean
-  >;
-  bulkCorsRuleText: string;
-  bulkCorsUpdateOnlyExisting: boolean;
-  bulkCorsDeleteIds: string;
-  bulkCorsDeleteTypes: Record<CorsRuleTypeKey, boolean>;
-  bulkPolicyText: string;
-  bulkPolicyUpdateOnlyExisting: boolean;
-  bulkPolicyDeleteIds: string;
-  bulkPolicyDeleteTypes: Record<PolicyRuleTypeKey, boolean>;
-};
-
-const createBooleanSelection = <Key extends string>(
-  options: readonly { key: Key }[],
-): Record<Key, boolean> =>
-  Object.fromEntries(options.map((option) => [option.key, false])) as Record<
-    Key,
-    boolean
-  >;
-
-export function createBucketOpsBulkFormState(): BucketOpsBulkFormState {
-  return {
-    bulkOperation: "",
-    bulkCopyFeatures: { ...DEFAULT_BULK_COPY_FEATURE_SELECTION },
-    bulkPasteMapping: {},
-    bulkQuotaSizeValue: "",
-    bulkQuotaSizeUnit: "GiB",
-    bulkQuotaObjects: "",
-    bulkQuotaApplySize: true,
-    bulkQuotaApplyObjects: true,
-    bulkQuotaSkipConfigured: false,
-    bulkPublicAccessBlockTargets: {
-      block_public_acls: true,
-      ignore_public_acls: true,
-      block_public_policy: true,
-      restrict_public_buckets: true,
-    },
-    bulkLifecycleRuleText: "",
-    bulkLifecycleUpdateOnlyExisting: false,
-    bulkLifecycleDeleteIds: "",
-    bulkLifecycleDeleteTypes: createBooleanSelection(LIFECYCLE_TYPE_OPTIONS),
-    bulkNotificationText: "",
-    bulkNotificationDeleteIds: "",
-    bulkNotificationDeleteTypes: createBooleanSelection(
-      NOTIFICATION_TYPE_OPTIONS,
-    ),
-    bulkCorsRuleText: "",
-    bulkCorsUpdateOnlyExisting: false,
-    bulkCorsDeleteIds: "",
-    bulkCorsDeleteTypes: createBooleanSelection(CORS_TYPE_OPTIONS),
-    bulkPolicyText: "",
-    bulkPolicyUpdateOnlyExisting: false,
-    bulkPolicyDeleteIds: "",
-    bulkPolicyDeleteTypes: createBooleanSelection(POLICY_TYPE_OPTIONS),
-  };
-}
+  createBucketOpsBulkFormState,
+  type BucketOpsBulkFormState,
+} from "./bucketOpsBulkInput";
 
 type BulkFormSetters = {
   [Key in keyof BucketOpsBulkFormState as `set${Capitalize<Key>}`]: Dispatch<
@@ -105,7 +16,10 @@ type BulkFormSetters = {
 };
 
 export function useBucketOpsBulkForm(): BucketOpsBulkFormState &
-  BulkFormSetters & { resetBulkForm: () => void } {
+  BulkFormSetters & {
+    formState: BucketOpsBulkFormState;
+    resetBulkForm: () => void;
+  } {
   const [state, setState] = useState(createBucketOpsBulkFormState);
 
   const setField = useCallback(
@@ -181,5 +95,5 @@ export function useBucketOpsBulkForm(): BucketOpsBulkFormState &
     setState(createBucketOpsBulkFormState());
   }, []);
 
-  return { ...state, ...setters, resetBulkForm };
+  return { ...state, ...setters, formState: state, resetBulkForm };
 }

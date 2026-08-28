@@ -5,7 +5,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildBucketOpsBulkInput,
+  createBucketOpsBulkFormState,
   prepareBucketOpsBulkInput,
+  resolveBucketOpsBulkActionAvailability,
   type BucketOpsBulkInput,
 } from "./bucketOpsBulkInput";
 
@@ -267,5 +270,110 @@ describe("prepareBucketOpsBulkInput", () => {
         ],
       },
     });
+  });
+});
+
+describe("bucket bulk form derivation", () => {
+  it("maps the canonical form state to the parser contract", () => {
+    const formState = {
+      ...createBucketOpsBulkFormState(),
+      bulkOperation: "add_policy" as const,
+      bulkPolicyText: '{"Statement":[]}',
+      bulkPolicyUpdateOnlyExisting: true,
+      bulkQuotaSizeValue: "25",
+      bulkNotificationDeleteIds: "topic-old",
+    };
+
+    expect(buildBucketOpsBulkInput(formState)).toMatchObject({
+      operation: "add_policy",
+      quota: { sizeValue: "25" },
+      notifications: { deleteIds: "topic-old" },
+      policy: {
+        policyText: '{"Statement":[]}',
+        updateOnlyExisting: true,
+      },
+      publicAccessBlockTargets: formState.bulkPublicAccessBlockTargets,
+    });
+  });
+
+  it("derives preview, apply, and copy availability from one state", () => {
+    const defaults = createBucketOpsBulkFormState();
+    expect(
+      resolveBucketOpsBulkActionAvailability({
+        applyLoading: false,
+        formState: defaults,
+        pasteError: null,
+        previewLoading: false,
+        previewReady: false,
+        quotaDisabledReason: null,
+      }),
+    ).toEqual({
+      previewDisabled: true,
+      applyDisabled: true,
+      hasSelectedCopyFeatures: false,
+    });
+
+    const lifecycle = {
+      ...defaults,
+      bulkOperation: "add_lifecycle" as const,
+      bulkLifecycleRuleText: '[{"ID":"archive"}]',
+      bulkCopyFeatures: { ...defaults.bulkCopyFeatures, lifecycle: true },
+    };
+    expect(
+      resolveBucketOpsBulkActionAvailability({
+        applyLoading: false,
+        formState: lifecycle,
+        pasteError: null,
+        previewLoading: false,
+        previewReady: true,
+        quotaDisabledReason: null,
+      }),
+    ).toEqual({
+      previewDisabled: false,
+      applyDisabled: false,
+      hasSelectedCopyFeatures: true,
+    });
+  });
+
+  it("enforces operation-specific blockers", () => {
+    const defaults = createBucketOpsBulkFormState();
+    const resolve = (
+      formState: ReturnType<typeof createBucketOpsBulkFormState>,
+      overrides: Partial<{
+        pasteError: string | null;
+        quotaDisabledReason: string | null;
+      }> = {},
+    ) =>
+      resolveBucketOpsBulkActionAvailability({
+        applyLoading: false,
+        formState,
+        pasteError: overrides.pasteError ?? null,
+        previewLoading: false,
+        previewReady: true,
+        quotaDisabledReason: overrides.quotaDisabledReason ?? null,
+      });
+
+    expect(
+      resolve({ ...defaults, bulkOperation: "delete_policy" }),
+    ).toMatchObject({ previewDisabled: true });
+    expect(
+      resolve({
+        ...defaults,
+        bulkOperation: "delete_policy",
+        bulkPolicyDeleteIds: "statement-old",
+      }),
+    ).toMatchObject({ previewDisabled: false });
+    expect(
+      resolve(
+        { ...defaults, bulkOperation: "paste_configs" },
+        { pasteError: "Mapping required." },
+      ),
+    ).toMatchObject({ previewDisabled: true });
+    expect(
+      resolve(
+        { ...defaults, bulkOperation: "set_quota" },
+        { quotaDisabledReason: "Stats unavailable." },
+      ),
+    ).toMatchObject({ previewDisabled: true, applyDisabled: true });
   });
 });
