@@ -86,12 +86,11 @@ import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
 import { applyBucketOpsBulkUpdate } from "./bucketOpsBulkApply";
 import { previewBucketOpsBulkUpdate } from "./bucketOpsBulkPreview";
 import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
-import { loadBucketOpsFilteredBuckets } from "./bucketOpsFilteredBucketLoader";
-import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
 import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
+import { useBucketOpsSelection } from "./useBucketOpsSelection";
 import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
 import {
   createBucketUiTagTarget,
@@ -477,13 +476,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       return next.length === current.length ? current : next;
     });
   }, [availableUiTags, uiTagsReady]);
-  const [selectedBuckets, setSelectedBuckets] = useState<Set<string>>(
-    () => new Set()
-  );
   const [adminOpsAction, setAdminOpsAction] = useState<Extract<CephAdminAdminOpsAction, { bucket: CephAdminBucket }> | null>(null);
-  const [allFilteredBucketNames, setAllFilteredBucketNames] = useState<string[] | null>(null);
-  const [allFilteredBucketNamesKey, setAllFilteredBucketNamesKey] = useState<string | null>(null);
-  const [selectAllProgress, setSelectAllProgress] = useState<ActionProgressState | null>(null);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showIntegrityModal, setShowIntegrityModal] = useState(false);
@@ -586,7 +579,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     selectedScopeId: selectedEndpointId,
   });
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
-  const selectionHeaderRef = useRef<HTMLInputElement | null>(null);
   const bulkCopyRunTokenRef = useRef(0);
   const bulkPreviewRunTokenRef = useRef(0);
   const restoreFilterRef = useRef<string | null>(null);
@@ -731,7 +723,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setAdvancedDraft(ownerPrefill);
       setTagFilters([]);
       setTagFilterMode("any");
-      setSelectedBuckets(new Set());
       setPage(1);
       setPageSize(stored?.pageSize ?? DEFAULT_PAGE_SIZE);
       setSort(stored?.sort ?? DEFAULT_SORT);
@@ -744,7 +735,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setAdvancedDraft(stored.advancedApplied ? stored.advancedApplied : defaultAdvancedFilter);
       setTagFilters(stored.tagFilters);
       setTagFilterMode(stored.tagFilterMode);
-      setSelectedBuckets(new Set());
       setPage(stored.page);
       setPageSize(stored.pageSize);
       setSort(stored.sort);
@@ -757,7 +747,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setAdvancedDraft(defaultAdvancedFilter);
       setTagFilters([]);
       setTagFilterMode("any");
-      setSelectedBuckets(new Set());
       setPage(1);
       setPageSize(DEFAULT_PAGE_SIZE);
       setSort(DEFAULT_SORT);
@@ -897,6 +886,48 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     streamBuckets,
   });
   const {
+    fullyResolvedFilteredSelection,
+    headerChecked,
+    hiddenSelectedCount,
+    invalidateSelectionCache,
+    resetSelectedBuckets,
+    selectAllLoading,
+    selectAllProgress,
+    selectedBucketList,
+    selectedBuckets,
+    selectedCount,
+    selectedOperationTargets,
+    selectedUiTagSuggestions,
+    selectionHeaderRef,
+    setSelectionForFilteredResults,
+    toggleSelection,
+  } = useBucketOpsSelection({
+    advancedFilterParam,
+    extractError,
+    filterValue: effectiveQuickSearchValue,
+    isStorageOps,
+    items,
+    listBuckets,
+    quickFilterMode: effectiveQuickFilterMode,
+    scopeId: selectedEndpointId,
+    setError,
+    sort,
+    tagFilters,
+    tagFilterMode,
+    total,
+    withStats: baseRequiresStats,
+  });
+
+  useEffect(() => {
+    resetSelectedBuckets();
+  }, [
+    bucketsStateStorageKey,
+    ownerQueryFilter,
+    resetSelectedBuckets,
+    selectedEndpointId,
+  ]);
+
+  const {
     addExistingTagForBucket,
     addTagDraftForBucket,
     getRowTagProjection,
@@ -943,9 +974,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const clearBucketListingUiCaches = () => {
     resetBucketTooltipState();
     setActiveTagsTooltipKey(null);
-    setAllFilteredBucketNames(null);
-    setAllFilteredBucketNamesKey(null);
-    setSelectAllProgress(null);
+    invalidateSelectionCache();
   };
 
   const refreshBucketListing = async () => {
@@ -1005,42 +1034,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setCephBucketStatsEndpointId(selectedEndpointId ?? null);
   }, [isStorageOps, selectedEndpointId, statsAvailable]);
 
-  const selectionQueryKey = useMemo(
-    () =>
-      JSON.stringify({
-        endpoint: selectedEndpointId ?? null,
-        filter: effectiveQuickSearchValue.trim() || null,
-        quickFilterMode: effectiveQuickFilterMode,
-        advanced: advancedFilterParam || null,
-        uiTagIds: tagFilters,
-        uiTagMatch: tagFilterMode,
-        withStats: baseRequiresStats,
-      }),
-    [
-      selectedEndpointId,
-      effectiveQuickSearchValue,
-      effectiveQuickFilterMode,
-      advancedFilterParam,
-      tagFilters,
-      tagFilterMode,
-      baseRequiresStats,
-    ]
-  );
-
-  useEffect(() => {
-    setAllFilteredBucketNames(null);
-    setAllFilteredBucketNamesKey(null);
-    setSelectAllProgress(null);
-  }, [selectionQueryKey]);
-
-  useEffect(() => {
-    if (allFilteredBucketNamesKey !== selectionQueryKey || !allFilteredBucketNames) return;
-    if (total !== allFilteredBucketNames.length) {
-      setAllFilteredBucketNames(null);
-      setAllFilteredBucketNamesKey(null);
-    }
-  }, [allFilteredBucketNamesKey, allFilteredBucketNames, selectionQueryKey, total]);
-
   const toggleSort = (field: SortField) => {
     if (!usageFeatureEnabled && isStatsSortField(field)) return;
     setSort((prev) => {
@@ -1066,90 +1059,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setVisibleColumns(defaultVisibleColumns);
   };
 
-  const toggleSelection = (name: string) => {
-    setSelectedBuckets((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
-      return next;
-    });
-  };
-
-  const selectAllLoading = selectAllProgress !== null;
-
-  const loadAllFilteredBucketNames = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
-    if (!selectedEndpointId) return [];
-    if (allFilteredBucketNamesKey === selectionQueryKey && allFilteredBucketNames) {
-      options?.onProgress?.(allFilteredBucketNames.length, allFilteredBucketNames.length);
-      return allFilteredBucketNames;
-    }
-    const bucketsByName = await loadBucketOpsFilteredBuckets({
-      initialTotal: total > 0 ? total : null,
-      listBuckets,
-      onProgress: options?.onProgress,
-      params: {
-        filter: effectiveQuickSearchValue.trim() || undefined,
-        advanced_filter: advancedFilterParam,
-        sort_by: sort.field,
-        sort_dir: sort.direction,
-        with_stats: baseRequiresStats,
-        ui_tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
-        ui_tag_match: tagFilterMode,
-      },
-      scopeId: selectedEndpointId,
-    });
-    const resolved = Array.from(bucketsByName.keys());
-    setAllFilteredBucketNames(resolved);
-    setAllFilteredBucketNamesKey(selectionQueryKey);
-    return resolved;
-  };
-
-  const setSelectionForFilteredResults = async (checked: boolean) => {
-    if (!selectedEndpointId) return;
-    setSelectAllProgress({
-      label: checked ? "Selecting filtered buckets" : "Clearing filtered selection",
-      completed: 0,
-      total: Math.max(total, 0),
-      failed: 0,
-    });
-    try {
-      const names = await loadAllFilteredBucketNames({
-        onProgress: (completed, progressTotal) => {
-          setSelectAllProgress((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  completed,
-                  total: progressTotal,
-                }
-              : prev
-          );
-        },
-      });
-      setSelectedBuckets((prev) => {
-        const next = new Set(prev);
-        names.forEach((name) => {
-          if (checked) {
-            next.add(name);
-          } else {
-            next.delete(name);
-          }
-        });
-        return next;
-      });
-    } catch (err) {
-      console.error(err);
-      setError(extractError(err));
-    } finally {
-      setSelectAllProgress(null);
-    }
-  };
-
   const clearSelection = () => {
-    setSelectedBuckets(new Set());
+    resetSelectedBuckets();
     resetBulkForm();
     setBulkCopyError(null);
     setBulkCopySummary(null);
@@ -1171,42 +1082,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setTagFilters((prev) => prev.filter((item) => item !== tagId));
     setPage(1);
   };
-
-  const {
-    fullyResolvedFilteredSelection,
-    headerChecked,
-    headerIndeterminate,
-    hiddenSelectedCount,
-    selectedBucketList,
-    selectedCount,
-    selectedOperationTargets,
-    selectedUiTagSuggestions,
-  } = useMemo(
-    () =>
-      buildBucketOpsSelectionProjection({
-        allFilteredBucketNames,
-        allFilteredBucketNamesKey,
-        isStorageOps,
-        items,
-        selectedBuckets,
-        selectionQueryKey,
-        total,
-      }),
-    [
-      allFilteredBucketNames,
-      allFilteredBucketNamesKey,
-      isStorageOps,
-      items,
-      selectedBuckets,
-      selectionQueryKey,
-      total,
-    ],
-  );
-
-  useEffect(() => {
-    if (!selectionHeaderRef.current) return;
-    selectionHeaderRef.current.indeterminate = headerIndeterminate;
-  }, [headerIndeterminate]);
 
   const {
     applyUiTagToSelection,
