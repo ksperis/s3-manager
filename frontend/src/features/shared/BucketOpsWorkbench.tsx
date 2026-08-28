@@ -11,14 +11,12 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import { workflowPageHostClass } from "../../components/WorkflowPage";
-import TableEmptyState from "../../components/TableEmptyState";
 import {
   toolbarCompactButtonClasses,
   toolbarCompactInputClasses,
   toolbarCompactSelectClasses,
 } from "../../components/toolbarControlClasses";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import { UiTagBadge } from "../../components/UiTagSettings";
@@ -59,6 +57,7 @@ import BucketOpsBulkConfigurationFields from "./BucketOpsBulkConfigurationFields
 import BucketOpsBulkExecutionPanel from "./BucketOpsBulkExecutionPanel";
 import BucketOpsBulkTransferFields from "./BucketOpsBulkTransferFields";
 import BucketOpsColumnControls from "./BucketOpsColumnControls";
+import BucketOpsTable, { type BucketOpsTableColumn } from "./BucketOpsTable";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import BucketUiTagSettingsBadge from "./BucketUiTagSettingsBadge";
@@ -1240,21 +1239,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     );
   };
 
-  type ColumnDef = {
-    id: string;
-    label: string;
-    field?: SortField | null;
-    align?: "left" | "right";
-    expensive?: boolean;
-    header?: ReactNode;
-    headerClassName?: string;
-    cellClassName?: string;
-    render: (bucket: CephAdminBucket) => ReactNode;
-  };
-
-  const expensiveColumnClass = "bg-amber-50/60 dark:bg-amber-900/20";
-  const defaultColumnMinWidthClass = "min-w-[9rem]";
-
   const renderTagList = (tags: CephAdminBucket["tags"] | undefined, bucket: CephAdminBucket) => {
     const safeTags = Array.isArray(tags) ? tags.filter((t) => (t.key ?? "").trim()) : [];
     if (safeTags.length === 0) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
@@ -1511,8 +1495,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }, { state: buildBucketDetailLocationState(origin) });
   };
 
-  const bucketTableColumns: ColumnDef[] = (() => {
-    const cols: ColumnDef[] = [
+  const bucketTableColumns: BucketOpsTableColumn[] = (() => {
+    const cols: BucketOpsTableColumn[] = [
       {
         id: "select",
         label: "",
@@ -2162,101 +2146,17 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
         {renderAdvancedSearchProgress(advancedProgress)}
 
-        <div className={showAdvancedFilter ? "overflow-x-hidden" : "overflow-x-auto"}>
-          <table className="manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                {bucketTableColumns.map((col) => {
-                  const detailLoadingClass = loadingDetails && detailLoadingColumnIds.has(col.id) ? "animate-pulse" : "";
-                  const minWidthClass =
-                    col.id !== "select" && !col.headerClassName ? defaultColumnMinWidthClass : "";
-                  const stickyHeaderClass =
-                    col.id === "select"
-                      ? "sticky left-0 z-40 bg-slate-100 dark:bg-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),10px_0_14px_-12px_rgba(15,23,42,0.4)] dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),10px_0_14px_-12px_rgba(2,6,23,0.85)]"
-                      : col.id === "name"
-                        ? "sticky left-10 z-30 bg-slate-100 dark:bg-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
-                        : "";
-                  const headerClass = `${minWidthClass} ${col.headerClassName ?? ""} ${col.expensive ? expensiveColumnClass : ""} ${detailLoadingClass} ${stickyHeaderClass}`;
-                  if (col.header || !col.field) {
-                    return (
-                    <th
-                      key={col.id}
-                      className={`py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
-                        col.align === "right" ? "text-right" : "text-left"
-                      } ${col.id === "select" ? "w-10 px-3" : "px-6"} ${headerClass}`}
-                    >
-                      <div className="flex items-start">{col.header ?? col.label}</div>
-                    </th>
-                    );
-                  }
-                  return (
-                    <SortableHeader
-                      key={col.id}
-                      label={col.label}
-                      field={col.field}
-                      activeField={sort.field}
-                      direction={sort.direction}
-                      align={col.align ?? (col.label === "Actions" ? "right" : "left")}
-                      className={headerClass}
-                      onSort={
-                        col.field && (usageFeatureEnabled || !isStatsSortField(col.field as SortField))
-                          ? (field) => toggleSort(field as SortField)
-                          : undefined
-                      }
-                    />
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={bucketTableColumns.length} message="Loading buckets..." />}
-              {tableStatus === "error" && (
-                <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." tone="error" />
-              )}
-              {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets." />}
-              {items.map((bucket) => (
-                  <tr key={`${bucket.tenant ?? ""}:${bucket.name}`} className="group hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    {bucketTableColumns.map((col) => {
-                      const align = col.align ?? (col.id === "actions" ? "right" : "left");
-                      const cellBase =
-                        align === "right"
-                          ? "px-6 py-4 text-right"
-                          : col.id === "select"
-                            ? "w-10 px-3 py-4"
-                            : "px-6 py-4";
-                      const isSelect = col.id === "select";
-                      const textClass =
-                        isSelect
-                          ? ""
-                          : col.id === "name"
-                          ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
-                          : "ui-body text-slate-600 dark:text-slate-300";
-                      const isDetailLoadingColumn = loadingDetails && detailLoadingColumnIds.has(col.id);
-                      const detailLoadingCellClass = isDetailLoadingColumn
-                        ? col.expensive
-                          ? "animate-pulse bg-amber-100/70 dark:bg-amber-900/30"
-                          : "animate-pulse bg-slate-100/70 dark:bg-slate-800/60"
-                        : "";
-                      const stickyCellClass =
-                        col.id === "select"
-                          ? "sticky left-0 z-20 bg-white dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),10px_0_14px_-12px_rgba(15,23,42,0.4)] dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),10px_0_14px_-12px_rgba(2,6,23,0.85)]"
-                          : col.id === "name"
-                            ? "sticky left-10 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
-                            : "";
-                      return (
-                        <td
-                          key={`${bucket.name}:${col.id}`}
-                          className={`${cellBase} ${textClass} ${col.cellClassName ?? ""} ${col.expensive ? expensiveColumnClass : ""} ${detailLoadingCellClass} ${stickyCellClass}`}
-                        >
-                          {col.render(bucket)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
+        <BucketOpsTable
+          columns={bucketTableColumns}
+          detailLoadingColumnIds={detailLoadingColumnIds}
+          items={items}
+          loadingDetails={loadingDetails}
+          onSort={toggleSort}
+          showAdvancedFilter={showAdvancedFilter}
+          sort={sort}
+          status={tableStatus}
+          usageFeatureEnabled={usageFeatureEnabled}
+        />
 
         <PaginationControls
           page={page}
