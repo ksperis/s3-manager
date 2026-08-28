@@ -2,9 +2,11 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import type { ReactNode } from "react";
 import {
   type FeatureDetailFilterKey,
   type FeatureDetailFilters,
+  type FeatureTriState,
   type NumericComparisonOpUi,
 } from "../cephAdmin/filtering/bucketAdvancedFilter";
 import {
@@ -20,766 +22,665 @@ import {
   NOTIFICATION_TYPE_OPTIONS,
 } from "./bucketConfigMerge";
 
+type FieldChangeHandler = (
+  field: FeatureDetailFilterKey,
+  value: FeatureDetailFilters[FeatureDetailFilterKey],
+) => void;
+
 type BucketOpsFeatureDetailFilterFieldsProps = {
   filters: FeatureDetailFilters;
-  onFieldChange: (
-    field: FeatureDetailFilterKey,
-    value: FeatureDetailFilters[FeatureDetailFilterKey],
-  ) => void;
+  onFieldChange: FieldChangeHandler;
   sseFeatureEnabled: boolean;
 };
+
+type FilterControlProps = {
+  filters: FeatureDetailFilters;
+  onFieldChange: FieldChangeHandler;
+};
+
+type SelectOption = {
+  label: string;
+  value: string;
+};
+
+type NumericComparisonFieldKey = {
+  [Key in FeatureDetailFilterKey]: FeatureDetailFilters[Key] extends NumericComparisonOpUi
+    ? Key
+    : never;
+}[FeatureDetailFilterKey];
+
+type BooleanFilterFieldKey = {
+  [Key in FeatureDetailFilterKey]: FeatureDetailFilters[Key] extends FeatureTriState
+    ? Key
+    : never;
+}[FeatureDetailFilterKey];
+
+type NumericFilterDefinition = {
+  label: string;
+  opField: NumericComparisonFieldKey;
+  placeholder: string;
+  valueField: FeatureDetailFilterKey;
+};
+
+type PresenceTextFilterDefinition = {
+  label: string;
+  modeField: FeatureDetailFilterKey;
+  placeholder: string;
+  valueField: FeatureDetailFilterKey;
+};
+
+type BooleanFilterDefinition = {
+  field: BooleanFilterFieldKey;
+  label: string;
+};
+
+const FIELD_LABEL_CLASS =
+  "ui-caption font-medium text-slate-700 dark:text-slate-200";
+const FULL_CONTROL_CLASS = "mt-1 w-full px-2 py-1.5";
+const PAIR_MODE_CONTROL_CLASS = "col-span-2 px-2 py-1.5";
+const PAIR_VALUE_CONTROL_CLASS = "col-span-3 px-2 py-1.5";
+
+const PRESENCE_FILTER_OPTIONS: SelectOption[] = [
+  { value: "any", label: "Any" },
+  { value: "has", label: "Has" },
+  { value: "has_not", label: "Has not" },
+];
+const LIFECYCLE_RULE_NAME_MODE_OPTIONS: SelectOption[] = [
+  { value: "any", label: "Any" },
+  { value: "has_named", label: "Has named rule" },
+  { value: "has_not_named", label: "Has no named rule" },
+];
+const LIFECYCLE_RULE_TYPE_MODE_OPTIONS: SelectOption[] = [
+  { value: "any", label: "Any" },
+  { value: "has", label: "Has rule type" },
+  { value: "has_not", label: "Has no rule type" },
+];
+const LIFECYCLE_RULE_STATUS_OPTIONS: SelectOption[] = [
+  { value: "", label: "Any" },
+  { value: "Enabled", label: "Enabled" },
+  { value: "Disabled", label: "Disabled" },
+];
+const LIFECYCLE_RULE_TYPE_VALUE_OPTIONS: SelectOption[] = [
+  { value: "", label: "Select type" },
+  ...LIFECYCLE_TYPE_OPTIONS.map((option) => ({
+    value: option.key,
+    label: option.label,
+  })),
+];
+const NOTIFICATION_RULE_TYPE_VALUE_OPTIONS: SelectOption[] = [
+  { value: "", label: "Select type" },
+  ...NOTIFICATION_TYPE_OPTIONS.filter(
+    (option) => option.key !== "eventbridge",
+  ).map((option) => ({
+    value: option.key,
+    label: option.label,
+  })),
+];
+const OBJECT_LOCK_MODE_OPTIONS: SelectOption[] = [
+  { value: "", label: "Any" },
+  { value: "GOVERNANCE", label: "GOVERNANCE" },
+  { value: "COMPLIANCE", label: "COMPLIANCE" },
+];
+
+const LIFECYCLE_NUMERIC_FILTERS: NumericFilterDefinition[] = [
+  {
+    label: "Expiration days",
+    opField: "lifecycleExpirationDaysOp",
+    valueField: "lifecycleExpirationDays",
+    placeholder: "days",
+  },
+  {
+    label: "Noncurrent expiration days",
+    opField: "lifecycleNoncurrentExpirationDaysOp",
+    valueField: "lifecycleNoncurrentExpirationDays",
+    placeholder: "days",
+  },
+  {
+    label: "Transition days",
+    opField: "lifecycleTransitionDaysOp",
+    valueField: "lifecycleTransitionDays",
+    placeholder: "days",
+  },
+  {
+    label: "Abort days",
+    opField: "lifecycleAbortDaysOp",
+    valueField: "lifecycleAbortDays",
+    placeholder: "days",
+  },
+];
+const NOTIFICATION_PRESENCE_FILTERS: PresenceTextFilterDefinition[] = [
+  {
+    label: "Event",
+    modeField: "notificationEventMode",
+    valueField: "notificationEventValue",
+    placeholder: "s3:ObjectCreated:*",
+  },
+  {
+    label: "Filter prefix",
+    modeField: "notificationFilterPrefixMode",
+    valueField: "notificationFilterPrefixValue",
+    placeholder: "incoming/",
+  },
+  {
+    label: "Filter suffix",
+    modeField: "notificationFilterSuffixMode",
+    valueField: "notificationFilterSuffixValue",
+    placeholder: ".csv",
+  },
+];
+const OBJECT_LOCK_NUMERIC_FILTERS: NumericFilterDefinition[] = [
+  {
+    label: "Object Lock retention days",
+    opField: "objectLockRetentionOp",
+    valueField: "objectLockRetentionDays",
+    placeholder: "days",
+  },
+  {
+    label: "Object Lock retention years",
+    opField: "objectLockRetentionYearsOp",
+    valueField: "objectLockRetentionYears",
+    placeholder: "years",
+  },
+];
+const BPA_BOOLEAN_FILTERS: BooleanFilterDefinition[] = [
+  { field: "bpaBlockPublicAcls", label: "Block public ACLs" },
+  { field: "bpaIgnorePublicAcls", label: "Ignore public ACLs" },
+  { field: "bpaBlockPublicPolicy", label: "Block public policy" },
+  { field: "bpaRestrictPublicBuckets", label: "Restrict public buckets" },
+];
+const CORS_PRESENCE_FILTERS: PresenceTextFilterDefinition[] = [
+  {
+    label: "CORS method",
+    modeField: "corsMethodMode",
+    valueField: "corsMethodValue",
+    placeholder: "GET",
+  },
+  {
+    label: "CORS origin",
+    modeField: "corsOriginMode",
+    valueField: "corsOriginValue",
+    placeholder: "https://example.test",
+  },
+];
+const WEBSITE_BOOLEAN_FILTERS: BooleanFilterDefinition[] = [
+  { field: "websiteIndexPresent", label: "Website index present" },
+  {
+    field: "websiteRedirectHostPresent",
+    label: "Website redirect host present",
+  },
+];
+const WEBSITE_NUMERIC_FILTERS: NumericFilterDefinition[] = [
+  {
+    label: "Website routing rules",
+    opField: "websiteRoutingRuleCountOp",
+    valueField: "websiteRoutingRuleCount",
+    placeholder: "count",
+  },
+  {
+    label: "Policy statements",
+    opField: "policyStatementOp",
+    valueField: "policyStatementCount",
+    placeholder: "count",
+  },
+];
+
+const fieldId = (field: FeatureDetailFilterKey) =>
+  "bucket-ops-feature-detail-" + field;
+
+function FeatureDetailCard({
+  children,
+  description,
+  disabled = false,
+  title,
+}: {
+  children: ReactNode;
+  description?: string;
+  disabled?: boolean;
+  title: string;
+}) {
+  return (
+    <div className={advancedFilterFieldCardClass(disabled ? "opacity-60" : "")}>
+      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {title}
+      </p>
+      {description && (
+        <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+          {description}
+        </p>
+      )}
+      <div className="mt-2 space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function TextFilterField({
+  className = FULL_CONTROL_CLASS,
+  disabled = false,
+  field,
+  filters,
+  label,
+  onFieldChange,
+  placeholder,
+}: FilterControlProps & {
+  className?: string;
+  disabled?: boolean;
+  field: FeatureDetailFilterKey;
+  label: string;
+  placeholder: string;
+}) {
+  const id = fieldId(field);
+  return (
+    <div>
+      <label htmlFor={id} className={FIELD_LABEL_CLASS}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type="text"
+        value={filters[field]}
+        onChange={(event) => onFieldChange(field, event.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        className={advancedFilterControlClass(className, disabled)}
+      />
+    </div>
+  );
+}
+
+function SelectFilterField({
+  className = FULL_CONTROL_CLASS,
+  disabled = false,
+  field,
+  filters,
+  label,
+  onFieldChange,
+  options,
+}: FilterControlProps & {
+  className?: string;
+  disabled?: boolean;
+  field: FeatureDetailFilterKey;
+  label: string;
+  options: SelectOption[];
+}) {
+  const id = fieldId(field);
+  return (
+    <div>
+      <label htmlFor={id} className={FIELD_LABEL_CLASS}>
+        {label}
+      </label>
+      <select
+        id={id}
+        value={filters[field]}
+        onChange={(event) => onFieldChange(field, event.target.value)}
+        disabled={disabled}
+        className={advancedFilterControlClass(className, disabled)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function PresenceTextFilterField({
+  filters,
+  label,
+  modeField,
+  modeOptions = PRESENCE_FILTER_OPTIONS,
+  onFieldChange,
+  placeholder,
+  valueField,
+}: FilterControlProps & PresenceTextFilterDefinition & {
+  modeOptions?: SelectOption[];
+}) {
+  return (
+    <div>
+      <p className={FIELD_LABEL_CLASS}>{label}</p>
+      <div className="mt-1 grid grid-cols-5 gap-2">
+        <select
+          id={fieldId(modeField)}
+          aria-label={label + " mode"}
+          value={filters[modeField]}
+          onChange={(event) => onFieldChange(modeField, event.target.value)}
+          className={advancedFilterControlClass(PAIR_MODE_CONTROL_CLASS)}
+        >
+          {modeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <input
+          id={fieldId(valueField)}
+          aria-label={label + " value"}
+          type="text"
+          value={filters[valueField]}
+          onChange={(event) => onFieldChange(valueField, event.target.value)}
+          placeholder={placeholder}
+          className={advancedFilterControlClass(PAIR_VALUE_CONTROL_CLASS)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PresenceSelectFilterField({
+  filters,
+  label,
+  modeField,
+  modeOptions,
+  onFieldChange,
+  valueField,
+  valueOptions,
+}: FilterControlProps & {
+  label: string;
+  modeField: FeatureDetailFilterKey;
+  modeOptions: SelectOption[];
+  valueField: FeatureDetailFilterKey;
+  valueOptions: SelectOption[];
+}) {
+  const valueDisabled = filters[modeField] === "any";
+  return (
+    <div>
+      <p className={FIELD_LABEL_CLASS}>{label}</p>
+      <div className="mt-1 grid grid-cols-5 gap-2">
+        <select
+          id={fieldId(modeField)}
+          aria-label={label + " mode"}
+          value={filters[modeField]}
+          onChange={(event) => onFieldChange(modeField, event.target.value)}
+          className={advancedFilterControlClass(PAIR_MODE_CONTROL_CLASS)}
+        >
+          {modeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          id={fieldId(valueField)}
+          aria-label={label + " value"}
+          value={filters[valueField]}
+          onChange={(event) => onFieldChange(valueField, event.target.value)}
+          disabled={valueDisabled}
+          className={advancedFilterControlClass(
+            PAIR_VALUE_CONTROL_CLASS,
+            valueDisabled,
+          )}
+        >
+          {valueOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function NumericComparisonField({
+  filters,
+  label,
+  onFieldChange,
+  opField,
+  placeholder,
+  valueField,
+}: FilterControlProps & NumericFilterDefinition) {
+  return (
+    <div>
+      <p className={FIELD_LABEL_CLASS}>{label}</p>
+      <div className="mt-1 grid grid-cols-5 gap-2">
+        <select
+          id={fieldId(opField)}
+          aria-label={label + " operator"}
+          value={filters[opField]}
+          onChange={(event) => onFieldChange(opField, event.target.value)}
+          className={advancedFilterControlClass(PAIR_MODE_CONTROL_CLASS)}
+        >
+          {NUMERIC_FILTER_OPTIONS.map((operator) => (
+            <option key={operator} value={operator}>
+              {operator}
+            </option>
+          ))}
+        </select>
+        <input
+          id={fieldId(valueField)}
+          aria-label={label + " value"}
+          type="number"
+          min="0"
+          value={filters[valueField]}
+          onChange={(event) => onFieldChange(valueField, event.target.value)}
+          placeholder={placeholder}
+          className={advancedFilterControlClass(PAIR_VALUE_CONTROL_CLASS)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function BooleanFilterField({
+  field,
+  filters,
+  label,
+  onFieldChange,
+}: FilterControlProps & BooleanFilterDefinition) {
+  return (
+    <SelectFilterField
+      field={field}
+      filters={filters}
+      label={label}
+      onFieldChange={onFieldChange}
+      options={BOOLEAN_FILTER_OPTIONS}
+    />
+  );
+}
 
 export default function BucketOpsFeatureDetailFilterFields({
   filters,
   onFieldChange,
   sseFeatureEnabled,
 }: BucketOpsFeatureDetailFilterFieldsProps) {
+  const controls = { filters, onFieldChange };
+
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-    <div className={advancedFilterFieldCardClass()}>
-      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        Lifecycle
-      </p>
-      <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-        Rule name, status, type and lifecycle day conditions are evaluated on the same lifecycle rule.
-      </p>
-      <div className="mt-2 space-y-2">
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule name</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.lifecycleRuleNameMode}
-              onChange={(e) =>
-                onFieldChange(
-                  "lifecycleRuleNameMode",
-                  e.target.value as FeatureDetailFilters["lifecycleRuleNameMode"]
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="any">Any</option>
-              <option value="has_named">Has named rule</option>
-              <option value="has_not_named">Has no named rule</option>
-            </select>
-            <input
-              type="text"
-              value={filters.lifecycleRuleName}
-              onChange={(e) => onFieldChange("lifecycleRuleName", e.target.value)}
-              placeholder="rule-id"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule status</label>
-          <select
-            value={filters.lifecycleRuleStatus}
-            onChange={(e) =>
-              onFieldChange(
-                "lifecycleRuleStatus",
-                e.target.value as FeatureDetailFilters["lifecycleRuleStatus"]
-              )
-            }
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          >
-            <option value="">Any</option>
-            <option value="Enabled">Enabled</option>
-            <option value="Disabled">Disabled</option>
-          </select>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule type</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.lifecycleRuleTypeMode}
-              onChange={(e) =>
-                onFieldChange(
-                  "lifecycleRuleTypeMode",
-                  e.target.value as FeatureDetailFilters["lifecycleRuleTypeMode"]
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="any">Any</option>
-              <option value="has">Has rule type</option>
-              <option value="has_not">Has no rule type</option>
-            </select>
-            <select
-              value={filters.lifecycleRuleTypeValue}
-              onChange={(e) =>
-                onFieldChange(
-                  "lifecycleRuleTypeValue",
-                  e.target.value as FeatureDetailFilters["lifecycleRuleTypeValue"]
-                )
-              }
-              disabled={filters.lifecycleRuleTypeMode === "any"}
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="">Select type</option>
-              {LIFECYCLE_TYPE_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Expiration days</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.lifecycleExpirationDaysOp}
-              onChange={(e) =>
-                onFieldChange(
-                  "lifecycleExpirationDaysOp",
-                  e.target.value as NumericComparisonOpUi
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {NUMERIC_FILTER_OPTIONS.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={filters.lifecycleExpirationDays}
-              onChange={(e) => onFieldChange("lifecycleExpirationDays", e.target.value)}
-              placeholder="days"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Noncurrent expiration days</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.lifecycleNoncurrentExpirationDaysOp}
-              onChange={(e) =>
-                onFieldChange(
-                  "lifecycleNoncurrentExpirationDaysOp",
-                  e.target.value as NumericComparisonOpUi
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {NUMERIC_FILTER_OPTIONS.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={filters.lifecycleNoncurrentExpirationDays}
-              onChange={(e) =>
-                onFieldChange("lifecycleNoncurrentExpirationDays", e.target.value)
-              }
-              placeholder="days"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Transition days</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.lifecycleTransitionDaysOp}
-              onChange={(e) =>
-                onFieldChange(
-                  "lifecycleTransitionDaysOp",
-                  e.target.value as NumericComparisonOpUi
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {NUMERIC_FILTER_OPTIONS.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={filters.lifecycleTransitionDays}
-              onChange={(e) => onFieldChange("lifecycleTransitionDays", e.target.value)}
-              placeholder="days"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Abort days</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.lifecycleAbortDaysOp}
-              onChange={(e) =>
-                onFieldChange(
-                  "lifecycleAbortDaysOp",
-                  e.target.value as NumericComparisonOpUi
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {NUMERIC_FILTER_OPTIONS.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={filters.lifecycleAbortDays}
-              onChange={(e) => onFieldChange("lifecycleAbortDays", e.target.value)}
-              placeholder="days"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div className={advancedFilterFieldCardClass()}>
-      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        Notifications
-      </p>
-      <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-        Rule ID, type, topic, events and key filters are evaluated on the same notification rule.
-      </p>
-      <div className="mt-2 space-y-2">
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule ID</label>
-          <input
-            type="text"
-            value={filters.notificationRuleId}
-            onChange={(e) => onFieldChange("notificationRuleId", e.target.value)}
-            placeholder="rule-id"
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+      <FeatureDetailCard
+        title="Lifecycle"
+        description="Rule name, status, type and lifecycle day conditions are evaluated on the same lifecycle rule."
+      >
+        <PresenceTextFilterField
+          {...controls}
+          label="Rule name"
+          modeField="lifecycleRuleNameMode"
+          modeOptions={LIFECYCLE_RULE_NAME_MODE_OPTIONS}
+          valueField="lifecycleRuleName"
+          placeholder="rule-id"
+        />
+        <SelectFilterField
+          {...controls}
+          field="lifecycleRuleStatus"
+          label="Rule status"
+          options={LIFECYCLE_RULE_STATUS_OPTIONS}
+        />
+        <PresenceSelectFilterField
+          {...controls}
+          label="Rule type"
+          modeField="lifecycleRuleTypeMode"
+          modeOptions={LIFECYCLE_RULE_TYPE_MODE_OPTIONS}
+          valueField="lifecycleRuleTypeValue"
+          valueOptions={LIFECYCLE_RULE_TYPE_VALUE_OPTIONS}
+        />
+        {LIFECYCLE_NUMERIC_FILTERS.map((definition) => (
+          <NumericComparisonField
+            key={definition.valueField}
+            {...controls}
+            {...definition}
           />
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule type</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.notificationRuleTypeMode}
-              onChange={(e) =>
-                onFieldChange(
-                  "notificationRuleTypeMode",
-                  e.target.value as FeatureDetailFilters["notificationRuleTypeMode"]
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="any">Any</option>
-              <option value="has">Has</option>
-              <option value="has_not">Has not</option>
-            </select>
-            <select
-              value={filters.notificationRuleTypeValue}
-              onChange={(e) =>
-                onFieldChange(
-                  "notificationRuleTypeValue",
-                  e.target.value as FeatureDetailFilters["notificationRuleTypeValue"]
-                )
-              }
-              disabled={filters.notificationRuleTypeMode === "any"}
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="">Select type</option>
-              {NOTIFICATION_TYPE_OPTIONS.filter((option) => option.key !== "eventbridge").map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Topic name or ARN</label>
-          <input
-            type="text"
-            value={filters.notificationTopicName}
-            onChange={(e) => onFieldChange("notificationTopicName", e.target.value)}
-            placeholder="bucket-events"
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
-        </div>
-        {[
-          {
-            modeKey: "notificationEventMode" as const,
-            valueKey: "notificationEventValue" as const,
-            label: "Event",
-            placeholder: "s3:ObjectCreated:*",
-          },
-          {
-            modeKey: "notificationFilterPrefixMode" as const,
-            valueKey: "notificationFilterPrefixValue" as const,
-            label: "Filter prefix",
-            placeholder: "incoming/",
-          },
-          {
-            modeKey: "notificationFilterSuffixMode" as const,
-            valueKey: "notificationFilterSuffixValue" as const,
-            label: "Filter suffix",
-            placeholder: ".csv",
-          },
-        ].map((entry) => (
-          <div key={entry.valueKey}>
-            <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">{entry.label}</label>
-            <div className="mt-1 grid grid-cols-5 gap-2">
-              <select
-                value={filters[entry.modeKey]}
-                onChange={(e) =>
-                  onFieldChange(
-                    entry.modeKey,
-                    e.target.value as FeatureDetailFilters[typeof entry.modeKey]
-                  )
-                }
-                className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                <option value="any">Any</option>
-                <option value="has">Has</option>
-                <option value="has_not">Has not</option>
-              </select>
-              <input
-                type="text"
-                value={filters[entry.valueKey]}
-                onChange={(e) => onFieldChange(entry.valueKey, e.target.value)}
-                placeholder={entry.placeholder}
-                className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </div>
-          </div>
         ))}
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">EventBridge present</label>
-          <select
-            value={filters.notificationEventBridgePresent}
-            onChange={(e) =>
-              onFieldChange(
-                "notificationEventBridgePresent",
-                e.target.value as FeatureDetailFilters["notificationEventBridgePresent"]
-              )
-            }
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          >
-            {BOOLEAN_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-    </div>
+      </FeatureDetailCard>
 
-    <div className={advancedFilterFieldCardClass()}>
-      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        Object Lock and BPA
-      </p>
-      <div className="mt-2 space-y-2">
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Object Lock mode</label>
-          <select
-            value={filters.objectLockMode}
-            onChange={(e) =>
-              onFieldChange(
-                "objectLockMode",
-                e.target.value as FeatureDetailFilters["objectLockMode"]
-              )
-            }
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          >
-            <option value="">Any</option>
-            <option value="GOVERNANCE">GOVERNANCE</option>
-            <option value="COMPLIANCE">COMPLIANCE</option>
-          </select>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Object Lock retention days</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.objectLockRetentionOp}
-              onChange={(e) =>
-                onFieldChange(
-                  "objectLockRetentionOp",
-                  e.target.value as NumericComparisonOpUi
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {NUMERIC_FILTER_OPTIONS.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={filters.objectLockRetentionDays}
-              onChange={(e) => onFieldChange("objectLockRetentionDays", e.target.value)}
-              placeholder="days"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Object Lock retention years</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.objectLockRetentionYearsOp}
-              onChange={(e) =>
-                onFieldChange(
-                  "objectLockRetentionYearsOp",
-                  e.target.value as NumericComparisonOpUi
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {NUMERIC_FILTER_OPTIONS.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={filters.objectLockRetentionYears}
-              onChange={(e) => onFieldChange("objectLockRetentionYears", e.target.value)}
-              placeholder="years"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
+      <FeatureDetailCard
+        title="Notifications"
+        description="Rule ID, type, topic, events and key filters are evaluated on the same notification rule."
+      >
+        <TextFilterField
+          {...controls}
+          field="notificationRuleId"
+          label="Rule ID"
+          placeholder="rule-id"
+        />
+        <PresenceSelectFilterField
+          {...controls}
+          label="Rule type"
+          modeField="notificationRuleTypeMode"
+          modeOptions={PRESENCE_FILTER_OPTIONS}
+          valueField="notificationRuleTypeValue"
+          valueOptions={NOTIFICATION_RULE_TYPE_VALUE_OPTIONS}
+        />
+        <TextFilterField
+          {...controls}
+          field="notificationTopicName"
+          label="Topic name or ARN"
+          placeholder="bucket-events"
+        />
+        {NOTIFICATION_PRESENCE_FILTERS.map((definition) => (
+          <PresenceTextFilterField
+            key={definition.valueField}
+            {...controls}
+            {...definition}
+          />
+        ))}
+        <BooleanFilterField
+          {...controls}
+          field="notificationEventBridgePresent"
+          label="EventBridge present"
+        />
+      </FeatureDetailCard>
+
+      <FeatureDetailCard title="Object Lock and BPA">
+        <SelectFilterField
+          {...controls}
+          field="objectLockMode"
+          label="Object Lock mode"
+          options={OBJECT_LOCK_MODE_OPTIONS}
+        />
+        {OBJECT_LOCK_NUMERIC_FILTERS.map((definition) => (
+          <NumericComparisonField
+            key={definition.valueField}
+            {...controls}
+            {...definition}
+          />
+        ))}
         <div className="grid grid-cols-2 gap-2">
-          {[
-            { key: "bpaBlockPublicAcls" as const, label: "Block public ACLs" },
-            { key: "bpaIgnorePublicAcls" as const, label: "Ignore public ACLs" },
-            { key: "bpaBlockPublicPolicy" as const, label: "Block public policy" },
-            { key: "bpaRestrictPublicBuckets" as const, label: "Restrict public buckets" },
-          ].map((entry) => (
-            <div key={entry.key}>
-              <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">{entry.label}</label>
-              <select
-                value={filters[entry.key]}
-                onChange={(e) =>
-                  onFieldChange(
-                    entry.key,
-                    e.target.value as FeatureDetailFilters[typeof entry.key]
-                  )
-                }
-                className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                {BOOLEAN_FILTER_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {BPA_BOOLEAN_FILTERS.map((definition) => (
+            <BooleanFilterField
+              key={definition.field}
+              {...controls}
+              {...definition}
+            />
           ))}
         </div>
-      </div>
-    </div>
+      </FeatureDetailCard>
 
-    <div className={advancedFilterFieldCardClass()}>
-      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        CORS and Logging
-      </p>
-      <div className="mt-2 space-y-2">
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">CORS method</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.corsMethodMode}
-              onChange={(e) =>
-                onFieldChange(
-                  "corsMethodMode",
-                  e.target.value as FeatureDetailFilters["corsMethodMode"]
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="any">Any</option>
-              <option value="has">Has</option>
-              <option value="has_not">Has not</option>
-            </select>
-            <input
-              type="text"
-              value={filters.corsMethodValue}
-              onChange={(e) => onFieldChange("corsMethodValue", e.target.value)}
-              placeholder="GET"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">CORS origin</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.corsOriginMode}
-              onChange={(e) =>
-                onFieldChange(
-                  "corsOriginMode",
-                  e.target.value as FeatureDetailFilters["corsOriginMode"]
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="any">Any</option>
-              <option value="has">Has</option>
-              <option value="has_not">Has not</option>
-            </select>
-            <input
-              type="text"
-              value={filters.corsOriginValue}
-              onChange={(e) => onFieldChange("corsOriginValue", e.target.value)}
-              placeholder="https://example.test"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Logging enabled</label>
-          <select
-            value={filters.loggingEnabled}
-            onChange={(e) =>
-              onFieldChange(
-                "loggingEnabled",
-                e.target.value as FeatureDetailFilters["loggingEnabled"]
-              )
-            }
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          >
-            {BOOLEAN_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Logging target bucket</label>
-          <input
-            type="text"
-            value={filters.loggingTargetBucket}
-            onChange={(e) => onFieldChange("loggingTargetBucket", e.target.value)}
-            placeholder="audit-bucket"
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+      <FeatureDetailCard title="CORS and Logging">
+        {CORS_PRESENCE_FILTERS.map((definition) => (
+          <PresenceTextFilterField
+            key={definition.valueField}
+            {...controls}
+            {...definition}
           />
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Logging target prefix</label>
-          <input
-            type="text"
-            value={filters.loggingTargetPrefix}
-            onChange={(e) => onFieldChange("loggingTargetPrefix", e.target.value)}
-            placeholder="logs/"
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
-        </div>
-      </div>
-    </div>
+        ))}
+        <BooleanFilterField
+          {...controls}
+          field="loggingEnabled"
+          label="Logging enabled"
+        />
+        <TextFilterField
+          {...controls}
+          field="loggingTargetBucket"
+          label="Logging target bucket"
+          placeholder="audit-bucket"
+        />
+        <TextFilterField
+          {...controls}
+          field="loggingTargetPrefix"
+          label="Logging target prefix"
+          placeholder="logs/"
+        />
+      </FeatureDetailCard>
 
-    <div className={advancedFilterFieldCardClass()}>
-      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        Website and Policy
-      </p>
-      <div className="mt-2 space-y-2">
+      <FeatureDetailCard title="Website and Policy">
         <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website index present</label>
-            <select
-              value={filters.websiteIndexPresent}
-              onChange={(e) =>
-                onFieldChange(
-                  "websiteIndexPresent",
-                  e.target.value as FeatureDetailFilters["websiteIndexPresent"]
-                )
-              }
-              className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {BOOLEAN_FILTER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website redirect host present</label>
-            <select
-              value={filters.websiteRedirectHostPresent}
-              onChange={(e) =>
-                onFieldChange(
-                  "websiteRedirectHostPresent",
-                  e.target.value as FeatureDetailFilters["websiteRedirectHostPresent"]
-                )
-              }
-              className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {BOOLEAN_FILTER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {WEBSITE_BOOLEAN_FILTERS.map((definition) => (
+            <BooleanFilterField
+              key={definition.field}
+              {...controls}
+              {...definition}
+            />
+          ))}
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website index document</label>
-            <input
-              type="text"
-              value={filters.websiteIndexDocument}
-              onChange={(e) => onFieldChange("websiteIndexDocument", e.target.value)}
-              placeholder="index.html"
-              className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-          <div>
-            <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website error document</label>
-            <input
-              type="text"
-              value={filters.websiteErrorDocument}
-              onChange={(e) => onFieldChange("websiteErrorDocument", e.target.value)}
-              placeholder="error.html"
-              className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website redirect host</label>
-          <input
-            type="text"
-            value={filters.websiteRedirectHost}
-            onChange={(e) => onFieldChange("websiteRedirectHost", e.target.value)}
-            placeholder="www.example.test"
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          <TextFilterField
+            {...controls}
+            field="websiteIndexDocument"
+            label="Website index document"
+            placeholder="index.html"
+          />
+          <TextFilterField
+            {...controls}
+            field="websiteErrorDocument"
+            label="Website error document"
+            placeholder="error.html"
           />
         </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website routing rules</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.websiteRoutingRuleCountOp}
-              onChange={(e) =>
-                onFieldChange(
-                  "websiteRoutingRuleCountOp",
-                  e.target.value as NumericComparisonOpUi
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {NUMERIC_FILTER_OPTIONS.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={filters.websiteRoutingRuleCount}
-              onChange={(e) => onFieldChange("websiteRoutingRuleCount", e.target.value)}
-              placeholder="count"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Policy statements</label>
-          <div className="mt-1 grid grid-cols-5 gap-2">
-            <select
-              value={filters.policyStatementOp}
-              onChange={(e) =>
-                onFieldChange(
-                  "policyStatementOp",
-                  e.target.value as NumericComparisonOpUi
-                )
-              }
-              className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              {NUMERIC_FILTER_OPTIONS.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={filters.policyStatementCount}
-              onChange={(e) => onFieldChange("policyStatementCount", e.target.value)}
-              placeholder="count"
-              className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Policy has conditions</label>
-          <select
-            value={filters.policyHasConditions}
-            onChange={(e) =>
-              onFieldChange(
-                "policyHasConditions",
-                e.target.value as FeatureDetailFilters["policyHasConditions"]
-              )
-            }
-            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          >
-            {BOOLEAN_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-    </div>
+        <TextFilterField
+          {...controls}
+          field="websiteRedirectHost"
+          label="Website redirect host"
+          placeholder="www.example.test"
+        />
+        {WEBSITE_NUMERIC_FILTERS.map((definition) => (
+          <NumericComparisonField
+            key={definition.valueField}
+            {...controls}
+            {...definition}
+          />
+        ))}
+        <BooleanFilterField
+          {...controls}
+          field="policyHasConditions"
+          label="Policy has conditions"
+        />
+      </FeatureDetailCard>
 
-    <div className={advancedFilterFieldCardClass(sseFeatureEnabled ? "" : "opacity-60")}>
-      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        Server-side encryption
-      </p>
-      {!sseFeatureEnabled && (
-        <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-          Server-side encryption is disabled on this endpoint.
-        </p>
-      )}
-      <div className="mt-2 space-y-2">
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">SSE algorithm</label>
-          <input
-            type="text"
-            value={filters.sseAlgorithm}
-            onChange={(e) => onFieldChange("sseAlgorithm", e.target.value)}
-            placeholder="AES256"
-            disabled={!sseFeatureEnabled}
-            className={advancedFilterControlClass("mt-1 w-full px-2 py-1.5", !sseFeatureEnabled)}
-          />
-        </div>
-        <div>
-          <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">SSE KMS key ID</label>
-          <input
-            type="text"
-            value={filters.sseKmsKeyId}
-            onChange={(e) => onFieldChange("sseKmsKeyId", e.target.value)}
-            placeholder="key-id or ARN"
-            disabled={!sseFeatureEnabled}
-            className={advancedFilterControlClass("mt-1 w-full px-2 py-1.5", !sseFeatureEnabled)}
-          />
-        </div>
-      </div>
-    </div>
+      <FeatureDetailCard
+        title="Server-side encryption"
+        disabled={!sseFeatureEnabled}
+      >
+        {!sseFeatureEnabled && (
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
+            Server-side encryption is disabled on this endpoint.
+          </p>
+        )}
+        <TextFilterField
+          {...controls}
+          field="sseAlgorithm"
+          label="SSE algorithm"
+          placeholder="AES256"
+          disabled={!sseFeatureEnabled}
+        />
+        <TextFilterField
+          {...controls}
+          field="sseKmsKeyId"
+          label="SSE KMS key ID"
+          placeholder="key-id or ARN"
+          disabled={!sseFeatureEnabled}
+        />
+      </FeatureDetailCard>
     </div>
   );
 }

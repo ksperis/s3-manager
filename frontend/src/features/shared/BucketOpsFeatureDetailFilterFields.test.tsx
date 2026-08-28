@@ -26,6 +26,11 @@ describe("BucketOpsFeatureDetailFilterFields", () => {
       "Website and Policy",
       "Server-side encryption",
     ].forEach((title) => expect(screen.getByText(title)).toBeInTheDocument());
+    Object.keys(defaultFeatureDetailFilters).forEach((field) => {
+      expect(
+        document.getElementById("bucket-ops-feature-detail-" + field),
+      ).toBeInTheDocument();
+    });
 
     fireEvent.change(screen.getByPlaceholderText("incoming/"), {
       target: { value: "archive/" },
@@ -66,5 +71,51 @@ describe("BucketOpsFeatureDetailFilterFields", () => {
     expect(screen.getByPlaceholderText("AES256")).toBeDisabled();
     expect(screen.getByPlaceholderText("key-id or ARN")).toBeDisabled();
     expect(screen.getByPlaceholderText("GET")).toBeEnabled();
+  });
+
+  it("preserves typed mode, option, and comparison controls", () => {
+    const onFieldChange = vi.fn();
+    render(
+      <BucketOpsFeatureDetailFilterFields
+        filters={{
+          ...defaultFeatureDetailFilters,
+          lifecycleRuleTypeMode: "has",
+          notificationRuleTypeMode: "has",
+        }}
+        onFieldChange={onFieldChange}
+        sseFeatureEnabled
+      />,
+    );
+
+    const ruleTypeValues = screen.getAllByLabelText("Rule type value");
+    expect(
+      within(ruleTypeValues[0]).getByRole("option", {
+        name: "Expiration (current versions)",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(ruleTypeValues[1]).getByRole("option", {
+        name: "Topic configurations",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(ruleTypeValues[1]).queryByRole("option", { name: "EventBridge" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Rule name mode"), {
+      target: { value: "has_not_named" },
+    });
+    fireEvent.change(screen.getByLabelText("Website routing rules operator"), {
+      target: { value: ">=" },
+    });
+
+    expect(onFieldChange).toHaveBeenCalledWith(
+      "lifecycleRuleNameMode",
+      "has_not_named",
+    );
+    expect(onFieldChange).toHaveBeenCalledWith(
+      "websiteRoutingRuleCountOp",
+      ">=",
+    );
   });
 });
