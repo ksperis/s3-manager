@@ -57,6 +57,9 @@ import BucketOpsBulkConfigurationFields from "./BucketOpsBulkConfigurationFields
 import BucketOpsBulkExecutionPanel from "./BucketOpsBulkExecutionPanel";
 import BucketOpsBulkTransferFields from "./BucketOpsBulkTransferFields";
 import BucketOpsColumnControls from "./BucketOpsColumnControls";
+import BucketOpsOrphanedTagsBanner, {
+  type OrphanedTagBucketDetail,
+} from "./BucketOpsOrphanedTagsBanner";
 import BucketOpsTable, { type BucketOpsTableColumn } from "./BucketOpsTable";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -162,14 +165,6 @@ function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
     </svg>
   );
 }
-
-type OrphanedTagBucketDetail = {
-  key: string;
-  endpointId: number;
-  name: string;
-  tenant: string | null;
-  tags: string[];
-};
 
 type BucketOpsWorkbenchProps = {
   mode: BucketOpsMode;
@@ -1889,66 +1884,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {uiTagsError && <PageBanner tone="error">Bucket UI tags: {uiTagsError}</PageBanner>}
       {statsWarning && <PageBanner tone="warning">{statsWarning}</PageBanner>}
-      {orphanedTagDetails.length > 0 && (
-        <PageBanner tone="warning">
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                UI tags exist for {orphanedTagDetails.length} bucket{orphanedTagDetails.length > 1 ? "s" : ""} no longer
-                present on {orphanedTagDetails.length > 1 ? "their recorded endpoints" : "its recorded endpoint"}.
-              </span>
-              <button
-                type="button"
-                onClick={clearOrphanedTags}
-                className="rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 ui-caption font-semibold text-amber-800 hover:border-amber-400 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-100"
-              >
-                Remove tags
-              </button>
-            </div>
-            <details className="rounded-md border border-amber-300/70 bg-amber-50/70 px-2 py-1.5 dark:border-amber-700/50 dark:bg-amber-950/20">
-              <summary className="list-none cursor-pointer ui-caption font-semibold text-amber-900 dark:text-amber-100 [&::-webkit-details-marker]:hidden">
-                Show affected bucket/tag details
-              </summary>
-              <div className="mt-2 max-h-40 space-y-2 overflow-auto pr-1">
-                {orphanedTagDetails.map((item) => (
-                  <div
-                    key={item.key}
-                    className="rounded-md border border-amber-200/80 bg-white/80 px-2 py-1.5 dark:border-amber-700/40 dark:bg-slate-900/50"
-                  >
-                    <p className="ui-caption font-semibold text-amber-900 dark:text-amber-100">
-                      {item.name}
-                      {item.tenant ? (
-                        <span className="ml-1 font-normal text-amber-800/90 dark:text-amber-200/90">(tenant: {item.tenant})</span>
-                      ) : null}
-                      <span className="ml-1 font-normal text-amber-800/90 dark:text-amber-200/90">
-                        (endpoint: {item.endpointId})
-                      </span>
-                    </p>
-                    {item.tags.length > 0 ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {item.tags.map((tag) => {
-                          const colors = getTagColors(tag);
-                          return (
-                            <span
-                              key={`${item.key}:${tag}`}
-                              className="rounded-full border px-2 py-0.5 ui-caption font-semibold"
-                              style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
-                            >
-                              {tag}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="mt-1 ui-caption text-amber-800/90 dark:text-amber-200/90">No tag values found.</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </details>
-          </div>
-        </PageBanner>
-      )}
+      <BucketOpsOrphanedTagsBanner
+        details={orphanedTagDetails}
+        onClear={clearOrphanedTags}
+      />
 
       {!selectedEndpointId && shell.emptyState ? <PageEmptyState {...shell.emptyState} /> : null}
       <ListPageSection
