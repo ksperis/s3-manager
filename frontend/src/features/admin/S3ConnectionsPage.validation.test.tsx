@@ -9,9 +9,6 @@ const updateAdminS3ConnectionMock = vi.fn();
 const remediateAdminS3ConnectionMock = vi.fn();
 const deleteAdminS3ConnectionMock = vi.fn();
 const validateAdminS3ConnectionCredentialsMock = vi.fn();
-const listS3ConnectionUsersMock = vi.fn();
-const upsertS3ConnectionUserMock = vi.fn();
-const removeS3ConnectionUserMock = vi.fn();
 const listMinimalUsersMock = vi.fn();
 const listMinimalGroupsMock = vi.fn();
 const listStorageEndpointsMock = vi.fn();
@@ -23,9 +20,6 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
   remediateAdminS3Connection: (id: number) => remediateAdminS3ConnectionMock(id),
   deleteAdminS3Connection: (id: number) => deleteAdminS3ConnectionMock(id),
   validateAdminS3ConnectionCredentials: (payload: unknown) => validateAdminS3ConnectionCredentialsMock(payload),
-  listS3ConnectionUsers: (connectionId: number) => listS3ConnectionUsersMock(connectionId),
-  upsertS3ConnectionUser: (connectionId: number, payload: unknown) => upsertS3ConnectionUserMock(connectionId, payload),
-  removeS3ConnectionUser: (connectionId: number, userId: number) => removeS3ConnectionUserMock(connectionId, userId),
 }));
 
 vi.mock("../../api/users", () => ({
@@ -71,9 +65,6 @@ describe("S3ConnectionsPage live validation", () => {
       code: "InvalidAccessKeyId",
       message: "Invalid S3 credentials.",
     });
-    listS3ConnectionUsersMock.mockResolvedValue([]);
-    upsertS3ConnectionUserMock.mockResolvedValue(undefined);
-    removeS3ConnectionUserMock.mockResolvedValue(undefined);
     updateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
     remediateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
     deleteAdminS3ConnectionMock.mockResolvedValue(undefined);

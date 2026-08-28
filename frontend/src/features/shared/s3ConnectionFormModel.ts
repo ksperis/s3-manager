@@ -120,6 +120,7 @@ type PrepareAdminS3ConnectionUpdateOptions = {
   endpointMode: S3ConnectionEndpointMode;
   form: EditAdminS3ConnectionForm;
   linkedGroupIds: readonly number[];
+  linkedUserIds: readonly number[];
 };
 
 type BuildAdminS3ConnectionEditSignatureOptions = {
@@ -430,6 +431,7 @@ export function prepareUpdateAdminS3ConnectionPayload({
   endpointMode,
   form,
   linkedGroupIds,
+  linkedUserIds,
 }: PrepareAdminS3ConnectionUpdateOptions): PreparedConnectionPayload<UpdateAdminS3ConnectionPayload> {
   if (!form.name.trim()) {
     return invalidConnectionPayload("Connection name is required.");
@@ -466,6 +468,7 @@ export function prepareUpdateAdminS3ConnectionPayload({
     payload: {
       name: form.name.trim(),
       group_ids: normalizeS3ConnectionLinkedIds(linkedGroupIds),
+      user_ids: normalizeS3ConnectionLinkedIds(linkedUserIds),
       tags: normalizeUiTags(form.tags),
       credential_owner_type: form.credential_owner_type || null,
       credential_owner_identifier:

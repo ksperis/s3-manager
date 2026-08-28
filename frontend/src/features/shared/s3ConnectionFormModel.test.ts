@@ -324,6 +324,7 @@ describe("s3ConnectionFormModel", () => {
         verify_tls: false,
       },
       linkedGroupIds: [8, 3, 8, -1],
+      linkedUserIds: [11, 7, 11, 0],
     });
 
     expect(prepared).toEqual({
@@ -331,6 +332,7 @@ describe("s3ConnectionFormModel", () => {
       payload: {
         name: "Shared archive",
         group_ids: [3, 8],
+        user_ids: [7, 11],
         tags: [
           expect.objectContaining({ label: "Beta" }),
           expect.objectContaining({ label: "Alpha" }),
@@ -369,6 +371,7 @@ describe("s3ConnectionFormModel", () => {
           verify_tls: true,
         },
         linkedGroupIds: [],
+        linkedUserIds: [],
       }),
     ).toEqual({
       error: "Provide both access key ID and secret access key to update credentials.",

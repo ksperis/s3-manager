@@ -34,10 +34,7 @@ import {
   createAdminS3Connection,
   deleteAdminS3Connection,
   listAdminS3Connections,
-  listS3ConnectionUsers,
-  removeS3ConnectionUser,
   remediateAdminS3Connection,
-  upsertS3ConnectionUser,
   updateAdminS3Connection,
   validateAdminS3ConnectionCredentials,
 } from "../../api/s3ConnectionsAdmin";
@@ -708,6 +705,7 @@ export default function S3ConnectionsPage() {
       endpointMode: editEndpointMode,
       form: editForm,
       linkedGroupIds: editLinkedGroupIds,
+      linkedUserIds: editLinkedUserIds,
     });
     if (prepared.error !== null) {
       setEditError(prepared.error);
@@ -716,26 +714,7 @@ export default function S3ConnectionsPage() {
     setEditBusy(true);
     setEditError(null);
     try {
-      const connectionId = editing.id;
-      await updateAdminS3Connection(connectionId, prepared.payload);
-      const targetIds = normalizeS3ConnectionLinkedIds(editLinkedUserIds);
-      try {
-        const currentLinks = await listS3ConnectionUsers(connectionId);
-        const currentIds = normalizeS3ConnectionLinkedIds(currentLinks.map((link) => link.user_id));
-        const currentIdSet = new Set(currentIds);
-        const targetIdSet = new Set(targetIds);
-        const addIds = targetIds.filter((id) => !currentIdSet.has(id));
-        const removeIds = currentIds.filter((id) => !targetIdSet.has(id));
-        if (addIds.length > 0) {
-          await Promise.all(addIds.map((userId) => upsertS3ConnectionUser(connectionId, { user_id: userId })));
-        }
-        if (removeIds.length > 0) {
-          await Promise.all(removeIds.map((userId) => removeS3ConnectionUser(connectionId, userId)));
-        }
-      } catch (err) {
-        setEditError(`Connection updated, but linked UI users could not be synced: ${extractError(err)}`);
-        return;
-      }
+      await updateAdminS3Connection(editing.id, prepared.payload);
       setEditCredentials({ access_key_id: "", secret_access_key: "" });
       setActionMessage("Connection updated.");
       await fetchItems();

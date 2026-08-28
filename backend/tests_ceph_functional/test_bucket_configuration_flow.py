@@ -247,10 +247,10 @@ def _create_replication_connection_context(
         )
         connection_id = int(created_connection["id"])
         context["connection_id"] = connection_id
-        super_admin_session.post(
-            f"/admin/s3-connections/{connection_id}/users",
-            json={"user_id": user_id},
-            expected_status=201,
+        super_admin_session.put(
+            f"/admin/s3-connections/{connection_id}",
+            json={"user_ids": [user_id]},
+            expected_status=200,
         )
 
         context["manager_session"] = backend_authenticator.login(manager_email, manager_password)

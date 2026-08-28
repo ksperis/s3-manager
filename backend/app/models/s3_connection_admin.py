@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 
-"""Admin models for S3 connections and user access links."""
+"""Admin models for S3 connections."""
 
 from __future__ import annotations
 
@@ -85,6 +85,7 @@ class S3ConnectionAdminCreate(ApiModel):
 class S3ConnectionAdminUpdate(ApiModel):
     name: Optional[str] = None
     group_ids: Optional[list[int]] = None
+    user_ids: Optional[list[int]] = None
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     is_active: Optional[bool] = None
@@ -109,18 +110,6 @@ class PaginatedS3ConnectionsResponse(ApiModel):
     page: int
     page_size: int
     has_next: bool
-
-
-class S3ConnectionUserLink(ApiModel):
-    user_id: int
-    email: Optional[str] = None
-    full_name: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-
-class S3ConnectionUserLinkUpsert(ApiModel):
-    user_id: int
 
 
 class S3ConnectionRemediationAction(ApiModel):

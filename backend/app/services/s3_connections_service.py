@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.s3_connection import ManagedPrivateAccess, S3Connection as DBS3Connection, UserS3Connection
 from app.db.ui_group import UiGroup, UiGroupS3Connection
+from app.db.user import User
 from app.models.s3_connection import (
     S3_CONNECTION_ENDPOINT_FIELDS,
     S3Connection,
@@ -165,7 +166,7 @@ class S3ConnectionsService:
     ) -> DBS3Connection:
         row = self.get_admin_shared(connection_id)
         update_credentials = payload.credentials is not None
-        endpoint_plan, group_ids = self._prepare_admin_shared_update(
+        endpoint_plan, group_ids, user_ids = self._prepare_admin_shared_update(
             row,
             payload,
             update_credentials=update_credentials,
@@ -191,6 +192,8 @@ class S3ConnectionsService:
             self.tags.replace_connection_tags(row, payload.tags)
         if group_ids is not None:
             self._sync_admin_shared_group_links(row.id, group_ids)
+        if user_ids is not None:
+            self._sync_admin_shared_user_links(row.id, user_ids)
         if payload.credentials is not None:
             row.access_key_id = payload.credentials.access_key_id
             row.secret_access_key = payload.credentials.secret_access_key
@@ -396,7 +399,11 @@ class S3ConnectionsService:
         payload: S3ConnectionAdminUpdate,
         *,
         update_credentials: bool,
-    ) -> tuple[Optional[tuple[Optional[int], Optional[str]]], Optional[list[int]]]:
+    ) -> tuple[
+        Optional[tuple[Optional[int], Optional[str]]],
+        Optional[list[int]],
+        Optional[list[int]],
+    ]:
         fields_set = payload.model_fields_set
         if (
             self.is_active_managed_source(row.id)
@@ -413,7 +420,8 @@ class S3ConnectionsService:
                 enforce_manual_endpoint_policy=False,
             )
         group_ids = self._validated_admin_shared_group_ids(payload.group_ids)
-        return endpoint_plan, group_ids
+        user_ids = self._validated_admin_shared_user_ids(payload.user_ids)
+        return endpoint_plan, group_ids, user_ids
 
     def _validated_admin_shared_group_ids(
         self,
@@ -461,6 +469,56 @@ class S3ConnectionsService:
             self.db.add(
                 UiGroupS3Connection(
                     group_id=group_id,
+                    s3_connection_id=connection_id,
+                )
+            )
+
+    def _validated_admin_shared_user_ids(
+        self,
+        user_ids: Optional[list[int]],
+    ) -> Optional[list[int]]:
+        if user_ids is None:
+            return None
+        cleaned_ids = sorted({int(user_id) for user_id in user_ids})
+        if not cleaned_ids:
+            return []
+        found = {
+            row[0]
+            for row in self.db.query(User.id)
+            .filter(User.id.in_(cleaned_ids))
+            .all()
+        }
+        missing = set(cleaned_ids) - found
+        if missing:
+            missing_str = ", ".join(str(user_id) for user_id in sorted(missing))
+            raise ValueError(f"UI users not found: {missing_str}")
+        return cleaned_ids
+
+    def _sync_admin_shared_user_links(
+        self,
+        connection_id: int,
+        user_ids: list[int],
+    ) -> None:
+        existing = (
+            self.db.query(UserS3Connection)
+            .filter(UserS3Connection.s3_connection_id == connection_id)
+            .all()
+        )
+        existing_ids = {link.user_id for link in existing}
+        desired_ids = set(user_ids)
+        if existing_ids - desired_ids:
+            (
+                self.db.query(UserS3Connection)
+                .filter(
+                    UserS3Connection.s3_connection_id == connection_id,
+                    UserS3Connection.user_id.in_(existing_ids - desired_ids),
+                )
+                .delete(synchronize_session=False)
+            )
+        for user_id in sorted(desired_ids - existing_ids):
+            self.db.add(
+                UserS3Connection(
+                    user_id=user_id,
                     s3_connection_id=connection_id,
                 )
             )

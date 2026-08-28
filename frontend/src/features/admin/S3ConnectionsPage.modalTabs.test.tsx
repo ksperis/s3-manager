@@ -9,9 +9,6 @@ const updateAdminS3ConnectionMock = vi.fn();
 const remediateAdminS3ConnectionMock = vi.fn();
 const deleteAdminS3ConnectionMock = vi.fn();
 const validateAdminS3ConnectionCredentialsMock = vi.fn();
-const listS3ConnectionUsersMock = vi.fn();
-const upsertS3ConnectionUserMock = vi.fn();
-const removeS3ConnectionUserMock = vi.fn();
 
 const listMinimalUsersMock = vi.fn();
 const listMinimalGroupsMock = vi.fn();
@@ -44,9 +41,6 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
   remediateAdminS3Connection: (id: number) => remediateAdminS3ConnectionMock(id),
   deleteAdminS3Connection: (id: number) => deleteAdminS3ConnectionMock(id),
   validateAdminS3ConnectionCredentials: (payload: unknown) => validateAdminS3ConnectionCredentialsMock(payload),
-  listS3ConnectionUsers: (connectionId: number) => listS3ConnectionUsersMock(connectionId),
-  upsertS3ConnectionUser: (connectionId: number, payload: unknown) => upsertS3ConnectionUserMock(connectionId, payload),
-  removeS3ConnectionUser: (connectionId: number, userId: number) => removeS3ConnectionUserMock(connectionId, userId),
 }));
 
 vi.mock("../../api/users", () => ({
@@ -118,12 +112,6 @@ describe("S3ConnectionsPage modal tabs", () => {
       message: "Credentials valid",
     });
 
-    listS3ConnectionUsersMock.mockResolvedValue([
-      { user_id: 11, email: "u11@example.com" },
-      { user_id: 12, email: "u12@example.com" },
-    ]);
-    upsertS3ConnectionUserMock.mockResolvedValue({ user_id: 13, email: "u13@example.com" });
-    removeS3ConnectionUserMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -164,7 +152,7 @@ describe("S3ConnectionsPage modal tabs", () => {
     expect(within(table).getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });
 
-  it("keeps linked UI user selections across tabs and syncs add/remove on save", async () => {
+  it("keeps linked UI user selections across tabs and submits user_ids", async () => {
     render(<S3ConnectionsPage />);
 
     await screen.findByText("connection-1");
@@ -210,15 +198,13 @@ describe("S3ConnectionsPage modal tabs", () => {
       expect(updateAdminS3ConnectionMock).toHaveBeenCalled();
     });
 
-    expect(listS3ConnectionUsersMock).toHaveBeenCalledWith(1);
     expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(
       1,
       expect.objectContaining({
         tags: [expect.objectContaining({ label: "shared", color_key: "sky" })],
+        user_ids: [11, 13],
       })
     );
-    expect(upsertS3ConnectionUserMock).toHaveBeenCalledWith(1, { user_id: 13 });
-    expect(removeS3ConnectionUserMock).toHaveBeenCalledWith(1, 12);
   });
 
   it("updates metadata and credentials through one Admin request", async () => {
@@ -286,7 +272,6 @@ describe("S3ConnectionsPage modal tabs", () => {
   });
 
   it("keeps users tab actions enabled for shared-only admin connections", async () => {
-    listS3ConnectionUsersMock.mockResolvedValue([{ user_id: 11, email: "u11@example.com" }]);
     render(<S3ConnectionsPage />);
 
     await screen.findByText("connection-1");
@@ -306,9 +291,10 @@ describe("S3ConnectionsPage modal tabs", () => {
       expect(updateAdminS3ConnectionMock).toHaveBeenCalled();
     });
 
-    expect(listS3ConnectionUsersMock).toHaveBeenCalledWith(1);
-    expect(upsertS3ConnectionUserMock).not.toHaveBeenCalled();
-    expect(removeS3ConnectionUserMock).not.toHaveBeenCalled();
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ user_ids: [11] }),
+    );
   });
 
   it("resets edit tab and add-user panel when closing then reopening", async () => {

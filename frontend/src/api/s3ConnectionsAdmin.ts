@@ -77,6 +77,7 @@ export type CreateAdminS3ConnectionPayload = {
 export type UpdateAdminS3ConnectionPayload = {
   name?: string | null;
   group_ids?: number[] | null;
+  user_ids?: number[] | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
   is_active?: boolean | null;
@@ -91,18 +92,6 @@ export type UpdateAdminS3ConnectionPayload = {
     access_key_id: string;
     secret_access_key: string;
   } | null;
-};
-
-type S3ConnectionUserLink = {
-  user_id: number;
-  email?: string | null;
-  full_name?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
-type UpsertS3ConnectionUserLinkPayload = {
-  user_id: number;
 };
 
 export async function listAdminS3Connections(params?: ListS3ConnectionsParams): Promise<PaginatedS3ConnectionsResponse> {
@@ -134,23 +123,6 @@ export async function remediateAdminS3Connection(connectionId: number): Promise<
 
 export async function deleteAdminS3Connection(connectionId: number): Promise<void> {
   await client.delete(`/admin/s3-connections/${connectionId}`);
-}
-
-export async function listS3ConnectionUsers(connectionId: number): Promise<S3ConnectionUserLink[]> {
-  const { data } = await client.get<S3ConnectionUserLink[]>(`/admin/s3-connections/${connectionId}/users`);
-  return data;
-}
-
-export async function upsertS3ConnectionUser(
-  connectionId: number,
-  payload: UpsertS3ConnectionUserLinkPayload
-): Promise<S3ConnectionUserLink> {
-  const { data } = await client.post<S3ConnectionUserLink>(`/admin/s3-connections/${connectionId}/users`, payload);
-  return data;
-}
-
-export async function removeS3ConnectionUser(connectionId: number, userId: number): Promise<void> {
-  await client.delete(`/admin/s3-connections/${connectionId}/users/${userId}`);
 }
 
 export async function validateAdminS3ConnectionCredentials(

@@ -18,6 +18,7 @@ from app.db import (
     User,
     UserRole,
     UserS3Account,
+    UserS3Connection,
 )
 from app.main import app
 from app.routers import dependencies
@@ -381,22 +382,27 @@ def test_admin_connections_api_returns_404_for_non_shared_targets(contract_clien
         json={"is_active": False},
     )
     public_delete = client.delete(f"/api/admin/s3-connections/{another_private_conn.id}")
-    private_users = client.get(f"/api/admin/s3-connections/{private_conn.id}/users")
+    removed_users_route = client.get(
+        f"/api/admin/s3-connections/{private_conn.id}/users"
+    )
 
     assert private_update.status_code == 404
     assert public_delete.status_code == 404
-    assert private_users.status_code == 404
+    assert removed_users_route.status_code == 404
 
 
-def test_admin_connection_user_links_keep_supported_contract(contract_client):
+def test_admin_connection_update_replaces_user_links_atomically(contract_client):
     client, db_session, user = contract_client
-    target = User(
-        email="contract-linked-user@example.com",
-        full_name="Contract Linked User",
-        hashed_password="x",
-        is_active=True,
-        role=UserRole.UI_USER.value,
-    )
+    targets = [
+        User(
+            email=f"contract-linked-user-{index}@example.com",
+            full_name=f"Contract Linked User {index}",
+            hashed_password="x",
+            is_active=True,
+            role=UserRole.UI_USER.value,
+        )
+        for index in (1, 2)
+    ]
     shared_connection = S3Connection(
         created_by_user_id=user.id,
         name="contract-shared-user-links",
@@ -405,45 +411,68 @@ def test_admin_connection_user_links_keep_supported_contract(contract_client):
         access_browser=False,
         access_key_id="AKIASHAREDUSERLINKS",
         secret_access_key="SECRETSHAREDUSERLINKS",
+        custom_endpoint_config=(
+            '{"endpoint_url":"https://user-links.example.test",'
+            '"force_path_style":false,"provider":null,"region":null,'
+            '"verify_tls":true}'
+        ),
     )
-    db_session.add_all([target, shared_connection])
+    db_session.add_all([*targets, shared_connection])
     db_session.commit()
-    db_session.refresh(target)
+    for target in targets:
+        db_session.refresh(target)
     db_session.refresh(shared_connection)
-    path = f"/api/admin/s3-connections/{shared_connection.id}/users"
+    connection_path = f"/api/admin/s3-connections/{shared_connection.id}"
+    users_path = f"{connection_path}/users"
 
-    created = client.post(path, json={"user_id": target.id})
-    upserted = client.post(path, json={"user_id": target.id})
-    removed_update = client.put(
-        f"{path}/{target.id}",
-        json={"user_id": target.id},
+    first_update = client.put(
+        connection_path,
+        json={
+            "name": "contract-shared-user-links-updated",
+            "user_ids": [targets[1].id, targets[0].id, targets[1].id],
+        },
     )
-    listed = client.get(path)
+    assert first_update.status_code == 200
+    assert first_update.json()["name"] == "contract-shared-user-links-updated"
+    assert [detail["id"] for detail in first_update.json()["user_details"]] == [
+        target.id for target in targets
+    ]
+    assert first_update.json()["user_count"] == 2
 
-    assert created.status_code == 201
-    assert upserted.status_code == 201
-    assert removed_update.status_code == 405
-    assert listed.status_code == 200
-    assert listed.json() == [
-        {
-            "user_id": target.id,
-            "email": target.email,
-            "full_name": target.full_name,
-            "created_at": created.json()["created_at"],
-            "updated_at": upserted.json()["updated_at"],
-        }
+    replacement = client.put(
+        connection_path,
+        json={"user_ids": [targets[1].id]},
+    )
+    assert replacement.status_code == 200
+    assert [detail["id"] for detail in replacement.json()["user_details"]] == [
+        targets[1].id
     ]
 
-    removed = client.delete(f"{path}/{target.id}")
-    missing_delete = client.delete(f"{path}/{target.id}")
-    missing_user = client.post(path, json={"user_id": 999_999})
+    rejected = client.put(
+        connection_path,
+        json={
+            "name": "must-not-be-committed",
+            "user_ids": [targets[0].id, 999_999],
+        },
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"] == "UI users not found: 999999"
 
-    assert removed.status_code == 204
-    assert client.get(path).json() == []
-    assert missing_delete.status_code == 404
-    assert missing_delete.json()["detail"] == "Link not found"
-    assert missing_user.status_code == 404
-    assert missing_user.json()["detail"] == "User not found"
+    db_session.expire_all()
+    persisted_connection = db_session.get(S3Connection, shared_connection.id)
+    persisted_user_ids = {
+        link.user_id
+        for link in db_session.query(UserS3Connection)
+        .filter(UserS3Connection.s3_connection_id == shared_connection.id)
+        .all()
+    }
+    assert persisted_connection is not None
+    assert persisted_connection.name == "contract-shared-user-links-updated"
+    assert persisted_user_ids == {targets[1].id}
+
+    assert client.get(users_path).status_code == 404
+    assert client.post(users_path, json={"user_id": targets[0].id}).status_code == 404
+    assert client.delete(f"{users_path}/{targets[1].id}").status_code == 404
 
 
 def test_admin_cannot_mutate_or_delete_a_connection_used_as_managed_access_source(contract_client):

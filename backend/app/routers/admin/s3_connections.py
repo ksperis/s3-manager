@@ -29,8 +29,6 @@ from app.models.s3_connection_admin import (
     S3ConnectionAdminItem,
     S3ConnectionAdminUpdate,
     S3ConnectionGroupDetail,
-    S3ConnectionUserLink,
-    S3ConnectionUserLinkUpsert,
     S3ConnectionSummary,
     S3ConnectionRemediationAction,
 )
@@ -44,10 +42,6 @@ from app.services.s3_connections_service import (
     S3ConnectionsService,
 )
 from app.services.s3_connection_endpoint_planner import StorageEndpointNotFoundError
-from app.services.s3_connection_user_links_service import (
-    S3ConnectionUserLinksError,
-    S3ConnectionUserLinksService,
-)
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.services.ui_group_avatar_service import UiGroupAvatarService
@@ -513,101 +507,3 @@ def delete_s3_connection(
     )
     return None
 
-
-@router.get("/{connection_id}/users", response_model=list[S3ConnectionUserLink])
-def list_connection_users(
-    connection_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin),
-) -> list[S3ConnectionUserLink]:
-    try:
-        links = S3ConnectionUserLinksService(db).list_for_admin_shared(connection_id)
-    except KeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="S3Connection not found",
-        ) from exc
-    return [
-        S3ConnectionUserLink(
-            user_id=user.id,
-            email=user.email,
-            full_name=user.full_name,
-            created_at=link.created_at,
-            updated_at=link.updated_at,
-        )
-        for link, user in links
-    ]
-
-
-@router.post("/{connection_id}/users", response_model=S3ConnectionUserLink, status_code=status.HTTP_201_CREATED)
-def add_connection_user(
-    connection_id: int,
-    payload: S3ConnectionUserLinkUpsert,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_service),
-) -> S3ConnectionUserLink:
-    service = S3ConnectionUserLinksService(db)
-    try:
-        link, user, created = service.upsert_for_admin_shared(
-            connection_id,
-            payload.user_id,
-        )
-    except S3ConnectionUserLinksError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=sanitize_error_detail(str(exc)),
-        ) from exc
-    except KeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="S3Connection not found",
-        ) from exc
-    action = "connection.user.add" if created else "connection.user.update"
-    audit.record_action(
-        user=current_user,
-        scope="admin",
-        action=action,
-        entity_type="s3_connection",
-        entity_id=str(connection_id),
-        metadata={"user_id": payload.user_id},
-    )
-    return S3ConnectionUserLink(
-        user_id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        created_at=link.created_at,
-        updated_at=link.updated_at,
-    )
-
-
-@router.delete("/{connection_id}/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_connection_user(
-    connection_id: int,
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_service),
-):
-    service = S3ConnectionUserLinksService(db)
-    try:
-        service.remove_for_admin_shared(connection_id, user_id)
-    except S3ConnectionUserLinksError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=sanitize_error_detail(str(exc)),
-        ) from exc
-    except KeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="S3Connection not found",
-        ) from exc
-    audit.record_action(
-        user=current_user,
-        scope="admin",
-        action="connection.user.remove",
-        entity_type="s3_connection",
-        entity_id=str(connection_id),
-        metadata={"user_id": user_id},
-    )
-    return None
