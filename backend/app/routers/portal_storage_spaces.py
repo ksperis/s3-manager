@@ -7,7 +7,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 
-from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
@@ -28,11 +27,14 @@ from app.routers.dependencies import (
     get_portal_account_access,
     require_portal_manager,
 )
-from app.routers.portal_common import raise_portal_storage_runtime
+from app.routers.portal_common import (
+    get_portal_service_dependency,
+    raise_portal_storage_runtime,
+)
 from app.services.audit_service import AuditService
 from app.services.avatar_image_service import MAX_AVATAR_BYTES
 from app.services.portal.exceptions import PortalStorageSpaceNotEmpty
-from app.services.portal_service import PortalService, get_portal_service
+from app.services.portal_service import PortalService
 from app.utils.http_errors import raise_bad_gateway_from_runtime
 
 router = APIRouter()
@@ -46,7 +48,7 @@ def portal_storage_spaces(
     sort: str = Query("name", description="Sort by name, created_at, used_bytes, object_count, role, or status"),
     include_archived: bool = Query(False, description="Include archived Storage Spaces"),
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalStorageSpaceSummary]:
     actor = access.actor
     if not isinstance(actor, User):
@@ -70,7 +72,7 @@ def create_portal_storage_space(
     payload: PortalStorageSpaceCreate,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpace:
     actor = access.actor
     if not isinstance(actor, User):
@@ -115,7 +117,7 @@ def import_portal_storage_space(
     payload: PortalStorageSpaceImport,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpace:
     actor = access.actor
     if not isinstance(actor, User):
@@ -160,7 +162,7 @@ def update_portal_storage_space(
     payload: PortalStorageSpaceUpdate,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpace:
     actor = access.actor
     if not isinstance(actor, User):
@@ -212,7 +214,7 @@ def take_portal_storage_space_ownership(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpace:
     actor = access.actor
     if not isinstance(actor, User):
@@ -244,7 +246,7 @@ def update_portal_storage_space_icon(
     payload: PortalStorageSpaceIconChoice,
     access: AccountAccess = Depends(require_portal_manager),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceIcon:
     actor = access.actor
     if not isinstance(actor, User):
@@ -283,7 +285,7 @@ async def upload_portal_storage_space_icon(
     file: UploadFile = File(...),
     access: AccountAccess = Depends(require_portal_manager),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceIcon:
     actor = access.actor
     if not isinstance(actor, User):
@@ -322,7 +324,7 @@ def delete_portal_storage_space_icon(
     space_id: str,
     access: AccountAccess = Depends(require_portal_manager),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceIcon:
     actor = access.actor
     if not isinstance(actor, User):
@@ -347,7 +349,7 @@ def delete_portal_storage_space_icon(
 def read_portal_storage_space_icon(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> Response:
     actor = access.actor
     if not isinstance(actor, User):
@@ -372,7 +374,7 @@ def delete_portal_storage_space(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> Response:
     actor = access.actor
     if not isinstance(actor, User):
@@ -402,7 +404,7 @@ def delete_portal_storage_space(
 def portal_storage_space_access_summary(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceAccessSummary:
     actor = access.actor
     if not isinstance(actor, User):
@@ -417,7 +419,7 @@ def portal_storage_space_access_summary(
 def get_portal_storage_space_settings(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceSettings:
     actor = access.actor
     if not isinstance(actor, User):
@@ -434,7 +436,7 @@ def update_portal_storage_space_settings(
     payload: PortalStorageSpaceSettingsUpdate,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceSettings:
     actor = access.actor
     if not isinstance(actor, User):
@@ -465,7 +467,7 @@ def update_portal_storage_space_settings(
 def portal_storage_space_detail(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpace:
     actor = access.actor
     if not isinstance(actor, User):

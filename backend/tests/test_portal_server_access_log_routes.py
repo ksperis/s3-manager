@@ -10,7 +10,7 @@ from app.main import app
 from app.models.portal import PortalServerAccessLogPage
 from app.routers import dependencies
 from app.routers import portal as portal_router
-from app.routers import portal_access_logs as portal_access_logs_router
+from app.routers.portal_common import get_portal_service_dependency
 from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
 from tests.s3_account_factory import make_s3_account
@@ -43,7 +43,6 @@ def test_portal_server_access_log_routes_require_manager(
     url: str,
     client: TestClient,
     db_session,
-    monkeypatch,
 ):
     account = make_s3_account(db_session, name="portal-log-routes", rgw_account_id="rgw-log-routes")
     user = User(
@@ -70,7 +69,7 @@ def test_portal_server_access_log_routes_require_manager(
         def get_portal_server_access_logs_raw(self, *_args, **_kwargs):
             return ""
 
-    monkeypatch.setattr(portal_access_logs_router, "get_portal_service", lambda _db: _Service())
+    app.dependency_overrides[get_portal_service_dependency] = _Service
     app.dependency_overrides[dependencies.require_portal_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_portal_account_access] = lambda: _portal_access(
         account,

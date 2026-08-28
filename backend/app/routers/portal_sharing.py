@@ -21,9 +21,12 @@ from app.models.portal import (
     PortalStorageSpaceShareUpdate,
 )
 from app.routers.dependencies import get_audit_service, get_portal_account_access
-from app.routers.portal_common import raise_portal_storage_runtime
+from app.routers.portal_common import (
+    get_portal_service_dependency,
+    raise_portal_storage_runtime,
+)
 from app.services.audit_service import AuditService
-from app.services.portal_service import PortalService, get_portal_service
+from app.services.portal_service import PortalService
 from app.services.users_service import UsersService, get_users_service
 from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.utils.http_headers import build_attachment_content_disposition
@@ -37,7 +40,7 @@ def portal_storage_space_public_links(
     object_key: Optional[str] = Query(None),
     include_revoked: bool = Query(False),
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalPublicLink]:
     actor = access.actor
     if not isinstance(actor, User):
@@ -60,7 +63,7 @@ def create_portal_storage_space_public_link(
     payload: PortalPublicLinkCreate,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalPublicLink:
     actor = access.actor
     if not isinstance(actor, User):
@@ -98,7 +101,7 @@ def revoke_portal_storage_space_public_link(
     link_id: int,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalPublicLink]:
     actor = access.actor
     if not isinstance(actor, User):
@@ -122,7 +125,7 @@ def revoke_portal_storage_space_public_link(
 @router.get("/public-links/{token}/download")
 def download_portal_public_link(
     token: str,
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> StreamingResponse:
     try:
         stream, content_type, filename = service.download_public_link(token)
@@ -142,7 +145,7 @@ def download_portal_public_link(
 def portal_storage_space_shares(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalStorageSpaceShare]:
     actor = access.actor
     if not isinstance(actor, User):
@@ -156,7 +159,7 @@ def portal_storage_space_shares(
 @router.get("/share-candidates", response_model=list[PortalStorageSpaceShareCandidate])
 def portal_share_candidates(
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalStorageSpaceShareCandidate]:
     actor = access.actor
     if not isinstance(actor, User):
@@ -173,7 +176,7 @@ def portal_share_candidates(
 def portal_storage_space_share_candidates(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalStorageSpaceShareCandidate]:
     actor = access.actor
     if not isinstance(actor, User):
@@ -202,7 +205,7 @@ def grant_portal_storage_space_share(
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceShare:
     actor = access.actor
     if not isinstance(actor, User):
@@ -232,7 +235,7 @@ def update_portal_storage_space_share(
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceShare:
     actor = access.actor
     if not isinstance(actor, User):
@@ -263,7 +266,7 @@ def revoke_portal_storage_space_share(
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalStorageSpaceShare]:
     actor = access.actor
     if not isinstance(actor, User):

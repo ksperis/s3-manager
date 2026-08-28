@@ -18,13 +18,16 @@ from app.models.portal import (
 )
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 from app.routers.dependencies import get_portal_account_access
-from app.routers.portal_common import raise_portal_storage_runtime
+from app.routers.portal_common import (
+    get_portal_service_dependency,
+    raise_portal_storage_runtime,
+)
 from app.services.app_settings_service import load_app_settings
 from app.services.bucket_usage_stats_service import (
     BucketUsageStatsAggregateTarget,
     BucketUsageStatsService,
 )
-from app.services.portal_service import PortalService, get_portal_service
+from app.services.portal_service import PortalService
 from app.services.usage_history_service import UsageHistoryService
 from app.services.usage_trends_service import account_usage_trend_filters, build_account_usage_trends
 from app.utils.storage_endpoint_features import resolve_feature_flags
@@ -61,7 +64,7 @@ def _ensure_portal_bucket_usage_stats_enabled() -> None:
 @router.get("/usage", response_model=PortalUsage)
 def portal_usage(
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalUsage:
     actor = access.actor
     if not isinstance(actor, User):
@@ -94,7 +97,7 @@ def portal_usage_trends(
 @router.get("/usage-stats/latest", response_model=BucketUsageStatsAggregateResponse)
 def portal_usage_stats_latest(
     access: AccountAccess = Depends(get_portal_account_access),
-    portal_service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    portal_service: PortalService = Depends(get_portal_service_dependency),
     db: Session = Depends(get_db),
 ) -> BucketUsageStatsAggregateResponse:
     actor = access.actor
@@ -152,7 +155,7 @@ def portal_usage_history_trends(
 def portal_storage_space_usage_stats(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    portal_service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    portal_service: PortalService = Depends(get_portal_service_dependency),
     db: Session = Depends(get_db),
 ) -> PortalStorageSpaceUsageStatsResponse:
     actor = access.actor

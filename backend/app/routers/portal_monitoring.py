@@ -13,10 +13,13 @@ from app.models.access_context import AccountAccess
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.models.portal import PortalAlert
 from app.routers.dependencies import get_portal_account_access
-from app.routers.portal_common import raise_portal_storage_runtime
+from app.routers.portal_common import (
+    get_portal_service_dependency,
+    raise_portal_storage_runtime,
+)
 from app.services.app_settings_service import load_app_settings
 from app.services.healthcheck_query_service import HealthCheckQueryService
-from app.services.portal_service import PortalService, get_portal_service
+from app.services.portal_service import PortalService
 from app.utils.time import utcnow
 
 router = APIRouter()
@@ -79,7 +82,7 @@ def portal_alerts(
     limit: int = Query(50, ge=1, le=100),
     access: AccountAccess = Depends(get_portal_account_access),
     db: Session = Depends(get_db),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalAlert]:
     actor = access.actor
     if not isinstance(actor, User):

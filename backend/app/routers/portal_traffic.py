@@ -7,11 +7,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.database import get_db
 from app.db import User
 from app.models.access_context import AccountAccess
 from app.routers.dependencies import get_portal_account_access
-from app.services.portal_service import PortalService, get_portal_service
+from app.routers.portal_common import get_portal_service_dependency
+from app.services.portal_service import PortalService
 from app.services.rgw_admin import RGWAdminError
 from app.services.traffic_service import TrafficService, TrafficWindow
 from app.utils.http_errors import raise_bad_gateway_from_runtime, raise_http_exception_from_exception
@@ -25,7 +25,7 @@ def portal_traffic(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
     bucket: Optional[str] = Query(None),
     access: AccountAccess = Depends(get_portal_account_access),
-    portal_service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    portal_service: PortalService = Depends(get_portal_service_dependency),
 ) -> dict:
     actor = access.actor
     if not isinstance(actor, User):

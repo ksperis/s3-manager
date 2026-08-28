@@ -7,7 +7,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
@@ -18,13 +17,14 @@ from app.models.portal import (
     PortalAccessKeyStatusChange,
 )
 from app.routers.dependencies import get_audit_service, get_portal_account_access
+from app.routers.portal_common import get_portal_service_dependency
 from app.services.audit_service import AuditService
 from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
     PortalAccessKeyProtected,
 )
-from app.services.portal_service import PortalService, get_portal_service
+from app.services.portal_service import PortalService
 from app.utils.http_errors import raise_bad_gateway_from_runtime
 
 router = APIRouter()
@@ -56,7 +56,7 @@ def _raise_portal_access_key_runtime(exc: RuntimeError) -> None:
 @router.get("/access-keys", response_model=PortalAccessKeysState)
 def portal_access_keys(
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalAccessKeysState:
     actor = access.actor
     if not isinstance(actor, User):
@@ -72,7 +72,7 @@ def create_portal_access_key(
     payload: Optional[PortalAccessKeyCreate] = None,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalAccessKey:
     actor = access.actor
     if not isinstance(actor, User):
@@ -109,7 +109,7 @@ def update_portal_access_key_status(
     payload: PortalAccessKeyStatusChange,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalAccessKey:
     actor = access.actor
     if not isinstance(actor, User):
@@ -145,7 +145,7 @@ def delete_portal_access_key(
     access_key_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> Response:
     actor = access.actor
     if not isinstance(actor, User):

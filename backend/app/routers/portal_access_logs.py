@@ -7,7 +7,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
-from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
@@ -18,8 +17,11 @@ from app.models.portal import (
 )
 from app.routers.ceph_admin.listing_common import parse_filter_query
 from app.routers.dependencies import require_portal_manager
-from app.routers.portal_common import raise_portal_storage_runtime
-from app.services.portal_service import PortalService, get_portal_service
+from app.routers.portal_common import (
+    get_portal_service_dependency,
+    raise_portal_storage_runtime,
+)
+from app.services.portal_service import PortalService
 from app.utils.http_headers import build_attachment_content_disposition
 
 router = APIRouter()
@@ -38,7 +40,7 @@ def portal_server_access_logs(
     timezone_offset_minutes: int = Query(0, ge=-840, le=840),
     advanced_filter: Optional[str] = Query(None),
     access: AccountAccess = Depends(require_portal_manager),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalServerAccessLogEntry]:
     actor = access.actor
     if not isinstance(actor, User):
@@ -70,7 +72,7 @@ def portal_server_access_logs_page(
     timezone_offset_minutes: int = Query(0, ge=-840, le=840),
     advanced_filter: Optional[str] = Query(None),
     access: AccountAccess = Depends(require_portal_manager),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalServerAccessLogPage:
     actor = access.actor
     if not isinstance(actor, User):
@@ -100,7 +102,7 @@ def portal_server_access_logs_raw(
     space_id: Optional[str] = Query(None),
     timezone_offset_minutes: int = Query(0, ge=-840, le=840),
     access: AccountAccess = Depends(require_portal_manager),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> Response:
     actor = access.actor
     if not isinstance(actor, User):

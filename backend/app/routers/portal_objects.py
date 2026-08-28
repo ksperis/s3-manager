@@ -8,7 +8,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
-from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
@@ -23,13 +22,16 @@ from app.models.portal import (
     PortalTrashResponse,
 )
 from app.routers.dependencies import get_audit_service, get_portal_account_access
-from app.routers.portal_common import raise_portal_storage_runtime
+from app.routers.portal_common import (
+    get_portal_service_dependency,
+    raise_portal_storage_runtime,
+)
 from app.routers.portal_streams import (
     stream_portal_deleted_prefix_restore,
     stream_portal_storage_space_version_cleanup,
 )
 from app.services.audit_service import AuditService
-from app.services.portal_service import PortalService, get_portal_service
+from app.services.portal_service import PortalService
 from app.utils.http_headers import build_attachment_content_disposition
 
 router = APIRouter()
@@ -42,7 +44,7 @@ def portal_storage_space_version_cleanup_stream(
     payload: PortalStorageSpaceVersionCleanupRequest,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> StreamingResponse:
     actor = access.actor
     if not isinstance(actor, User):
@@ -73,7 +75,7 @@ def portal_storage_space_object_detail(
     space_id: str,
     key: str = Query(..., min_length=1),
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageObjectDetail:
     actor = access.actor
     if not isinstance(actor, User):
@@ -95,7 +97,7 @@ def portal_storage_space_object_versions(
     version_id_marker: Optional[str] = None,
     max_keys: int = Query(default=1000, ge=1, le=1000),
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageObjectVersionsResponse:
     actor = access.actor
     if not isinstance(actor, User):
@@ -121,7 +123,7 @@ def portal_storage_space_trash(
     version_id_marker: Optional[str] = None,
     max_keys: int = Query(default=1000, ge=1, le=1000),
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalTrashResponse:
     actor = access.actor
     if not isinstance(actor, User):
@@ -147,7 +149,7 @@ def portal_restore_storage_space_object(
     space_id: str,
     payload: PortalStorageObjectRestoreRequest,
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageObjectRestoreResponse:
     actor = access.actor
     if not isinstance(actor, User):
@@ -171,7 +173,7 @@ def portal_restore_deleted_prefix_stream(
     payload: PortalDeletedPrefixRestoreRequest,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> StreamingResponse:
     actor = access.actor
     if not isinstance(actor, User):
@@ -208,7 +210,7 @@ def portal_delete_storage_space_object(
     space_id: str,
     key: str = Query(..., min_length=1),
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageObjectDeleteResponse:
     actor = access.actor
     if not isinstance(actor, User):
@@ -225,7 +227,7 @@ def portal_download_storage_space_object(
     space_id: str,
     key: str = Query(..., min_length=1),
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> StreamingResponse:
     actor = access.actor
     if not isinstance(actor, User):

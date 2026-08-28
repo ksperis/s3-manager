@@ -20,9 +20,10 @@ from app.routers.dependencies import (
     get_current_account_user,
     get_portal_account_access,
 )
+from app.routers.portal_common import get_portal_service_dependency
 from app.services.audit_service import AuditService
 from app.services.effective_access_service import EffectiveAccessService
-from app.services.portal_service import PortalService, get_portal_service
+from app.services.portal_service import PortalService
 from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.utils.storage_endpoint_features import (
     features_to_capabilities,
@@ -71,7 +72,7 @@ def list_portal_accounts(
 @router.get("/state", response_model=PortalState)
 def portal_state(
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalState:
     actor = access.actor
     if not isinstance(actor, User):
@@ -88,7 +89,7 @@ def portal_state(
 @router.get("/settings", response_model=PortalProjectSettings, response_model_exclude_unset=True)
 def get_portal_project_settings(
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalProjectSettings:
     actor = access.actor
     if not isinstance(actor, User):
@@ -105,7 +106,7 @@ def update_portal_project_settings(
     payload: PortalSettingsOverride,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalProjectSettings:
     actor = access.actor
     if not isinstance(actor, User):

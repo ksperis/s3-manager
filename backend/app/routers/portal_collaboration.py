@@ -7,7 +7,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.database import get_db
 from app.db import User
 from app.models.access_context import AccountAccess
 from app.models.portal import (
@@ -16,8 +15,11 @@ from app.models.portal import (
     PortalCollaboratorsResponse,
 )
 from app.routers.dependencies import get_portal_account_access
-from app.routers.portal_common import raise_portal_storage_runtime
-from app.services.portal_service import PortalService, get_portal_service
+from app.routers.portal_common import (
+    get_portal_service_dependency,
+    raise_portal_storage_runtime,
+)
+from app.services.portal_service import PortalService
 
 router = APIRouter()
 
@@ -27,7 +29,7 @@ def portal_activity(
     space_id: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=200),
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalActivityItem]:
     actor = access.actor
     if not isinstance(actor, User):
@@ -39,7 +41,7 @@ def portal_activity(
 @router.get("/collaborators", response_model=PortalCollaboratorsResponse)
 def portal_collaborators(
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalCollaboratorsResponse:
     actor = access.actor
     if not isinstance(actor, User):
@@ -54,7 +56,7 @@ def portal_collaborators(
 def portal_collaborator_access_review(
     user_id: int,
     access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalCollaboratorAccessReview:
     actor = access.actor
     if not isinstance(actor, User):
