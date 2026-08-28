@@ -6,10 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   listObjectVersions,
-  type BrowserObject,
   type BrowserRequestOptions,
 } from "../../api/browser";
 import { VERSIONS_PAGE_SIZE } from "./browserConstants";
+import type { ListAllBrowserObjectsForPrefix } from "./useBrowserRecursiveObjectListing";
 
 type BrowserContextCounts = {
   objects: number;
@@ -17,15 +17,11 @@ type BrowserContextCounts = {
   deleteMarkers: number;
 };
 
-type ListAllObjectsForPrefix = (
-  prefix: string,
-) => Promise<BrowserObject[]>;
-
 type UseBrowserContextCountsOptions = {
   accountId: S3AccountSelector;
   bucketName: string;
   enabled: boolean;
-  listAllObjectsForPrefix: ListAllObjectsForPrefix;
+  listAllObjectsForPrefix: ListAllBrowserObjectsForPrefix;
   prefix: string;
   requestOptions?: BrowserRequestOptions;
   versioningEnabled: boolean;

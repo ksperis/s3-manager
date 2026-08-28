@@ -5,7 +5,6 @@
 import { useCallback } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
 import type {
-  BrowserObject,
   BrowserRequestOptions,
   PresignRequest,
   PresignedUrl,
@@ -31,15 +30,9 @@ import type {
 } from "./browserTypes";
 import { isAbortError, makeId, normalizePrefix } from "./browserUtils";
 import type { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
+import type { ListAllBrowserObjectsForPrefix } from "./useBrowserRecursiveObjectListing";
 
 type OperationRegistry = ReturnType<typeof useBrowserOperationRegistry>;
-
-type ListAllObjectsForPrefix = (
-  prefix: string,
-  bucket?: string,
-  selector?: S3AccountSelector,
-  signal?: AbortSignal,
-) => Promise<BrowserObject[]>;
 
 type UseBrowserDownloadsOptions = {
   accountId: S3AccountSelector;
@@ -50,7 +43,7 @@ type UseBrowserDownloadsOptions = {
   createOperationController: OperationRegistry["createOperationController"];
   currentPath: string;
   enabled: boolean;
-  listAllObjectsForPrefix: ListAllObjectsForPrefix;
+  listAllObjectsForPrefix: ListAllBrowserObjectsForPrefix;
   onStatus: (message: string) => void;
   onWarning: (message: string | null) => void;
   parallelism: number;

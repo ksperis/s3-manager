@@ -32,12 +32,7 @@ import {
 } from "../../utils/clientStorage";
 import { readStoredUser } from "../../utils/workspaces";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import type { S3AccountSelector } from "../../api/accountParams";
-import {
-  type BrowserRequestOptions,
-  BrowserObject,
-  listBrowserObjects,
-} from "../../api/browser";
+import type { BrowserRequestOptions } from "../../api/browser";
 import { useBrowserContext } from "./BrowserContext";
 import {
   useBrowserSidebarSlot,
@@ -86,6 +81,7 @@ import { useBrowserPresignRequests } from "./useBrowserPresignRequests";
 import { useBrowserPrefixVersions } from "./useBrowserPrefixVersions";
 import { useBrowserQueuedUpload } from "./useBrowserQueuedUpload";
 import { useBrowserRuntimeData } from "./useBrowserRuntimeData";
+import { useBrowserRecursiveObjectListing } from "./useBrowserRecursiveObjectListing";
 import { useBrowserSearch } from "./useBrowserSearch";
 import { useBrowserSelection } from "./useBrowserSelection";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
@@ -1469,40 +1465,12 @@ export default function BrowserPage({
     refreshToken,
   });
 
-  const listAllObjectsForPrefix = useCallback(
-    async (
-      targetPrefix: string,
-      targetBucket?: string,
-      targetSelector?: S3AccountSelector,
-      signal?: AbortSignal,
-    ) => {
-      const bucket = targetBucket ?? bucketName;
-      if (!bucket || !hasS3AccountContext) return [];
-      const collected: BrowserObject[] = [];
-      let continuation: string | null = null;
-      let hasMore = true;
-      while (hasMore) {
-        const data = await listBrowserObjects(
-          targetSelector ?? accountIdForApi,
-          bucket,
-          {
-            prefix: targetPrefix,
-            continuationToken: continuation,
-            maxKeys: 1000,
-            type: "file",
-            recursive: true,
-            signal,
-            ...browserRequestOptions,
-          },
-        );
-        collected.push(...data.objects);
-        continuation = data.next_continuation_token ?? null;
-        hasMore = Boolean(data.is_truncated && continuation);
-      }
-      return collected;
-    },
-    [accountIdForApi, browserRequestOptions, bucketName, hasS3AccountContext],
-  );
+  const listAllObjectsForPrefix = useBrowserRecursiveObjectListing({
+    accountId: accountIdForApi,
+    bucketName,
+    enabled: hasS3AccountContext,
+    requestOptions: browserRequestOptions,
+  });
 
   const {
     count: handleContextCount,

@@ -7,7 +7,6 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   copyObject,
   listObjectVersions,
-  type BrowserObject,
   type BrowserObjectVersion,
   type BrowserRequestOptions,
 } from "../../api/browser";
@@ -16,6 +15,7 @@ import { buildBulkRestorePlan } from "./browserBulkRestorePlan";
 import type { BrowserItem } from "./browserTypes";
 import { formatLocalDateTime, makeId } from "./browserUtils";
 import type { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
+import type { ListAllBrowserObjectsForPrefix } from "./useBrowserRecursiveObjectListing";
 
 type OperationRegistry = ReturnType<typeof useBrowserOperationRegistry>;
 
@@ -52,7 +52,7 @@ type UseBrowserBulkRestoreOptions = {
   deleteObjectsInBatches: DeleteObjectsInBatches;
   enabled: boolean;
   isOperationAborted: OperationRegistry["isOperationAborted"];
-  listAllObjectsForPrefix: (prefix: string) => Promise<BrowserObject[]>;
+  listAllObjectsForPrefix: ListAllBrowserObjectsForPrefix;
   normalizedPrefix: string;
   onRefresh: (prefix: string) => void;
   onRefreshNow: (prefix: string) => Promise<void>;

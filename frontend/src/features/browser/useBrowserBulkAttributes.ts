@@ -10,11 +10,11 @@ import {
   updateObjectMetadata,
   updateObjectRetention,
   updateObjectTags,
-  type BrowserObject,
   type BrowserRequestOptions,
 } from "../../api/browser";
 import { runWithConcurrency } from "../../utils/concurrency";
 import type { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
+import type { ListAllBrowserObjectsForPrefix } from "./useBrowserRecursiveObjectListing";
 import type { BrowserItem, BulkMetadataDraft } from "./browserTypes";
 import {
   normalizePrefix,
@@ -51,7 +51,7 @@ type UseBrowserBulkAttributesOptions = {
   createOperationController: OperationRegistry["createOperationController"];
   currentPath: string;
   enabled: boolean;
-  listAllObjectsForPrefix: (prefix: string) => Promise<BrowserObject[]>;
+  listAllObjectsForPrefix: ListAllBrowserObjectsForPrefix;
   onRefresh: (prefix: string) => void;
   onRefreshNow: (prefix: string) => Promise<void>;
   onStatus: (message: string) => void;

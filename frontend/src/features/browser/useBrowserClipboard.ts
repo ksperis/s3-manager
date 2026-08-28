@@ -17,7 +17,6 @@ import {
   getBucketCorsStatus,
   initiateMultipartUpload,
   presignPart,
-  type BrowserObject,
   type BrowserRequestOptions,
 } from "../../api/browser";
 import { runWithConcurrency } from "../../utils/concurrency";
@@ -48,18 +47,12 @@ import {
   shortName,
 } from "./browserUtils";
 import type { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
+import type { ListAllBrowserObjectsForPrefix } from "./useBrowserRecursiveObjectListing";
 
 type OperationRegistry = ReturnType<typeof useBrowserOperationRegistry>;
 type ClipboardTransferParameters = Parameters<
   typeof transferClipboardObjectBetweenContexts
 >[0];
-
-type ListAllObjectsForPrefix = (
-  prefix: string,
-  bucket?: string,
-  selector?: S3AccountSelector,
-  signal?: AbortSignal,
-) => Promise<BrowserObject[]>;
 
 type UseBrowserClipboardOptions = {
   accountId: S3AccountSelector;
@@ -74,7 +67,7 @@ type UseBrowserClipboardOptions = {
     selector: S3AccountSelector,
     bucket: string,
   ) => string | null;
-  listAllObjectsForPrefix: ListAllObjectsForPrefix;
+  listAllObjectsForPrefix: ListAllBrowserObjectsForPrefix;
   normalizedPrefix: string;
   onRefreshNow: (prefix: string) => Promise<void>;
   onStatus: (message: string) => void;

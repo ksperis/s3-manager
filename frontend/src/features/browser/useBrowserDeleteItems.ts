@@ -6,7 +6,6 @@ import { useCallback } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   deleteObjects,
-  type BrowserObject,
   type BrowserRequestOptions,
 } from "../../api/browser";
 import { runWithConcurrency } from "../../utils/concurrency";
@@ -24,15 +23,9 @@ import {
   normalizePrefix,
 } from "./browserUtils";
 import type { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
+import type { ListAllBrowserObjectsForPrefix } from "./useBrowserRecursiveObjectListing";
 
 type OperationRegistry = ReturnType<typeof useBrowserOperationRegistry>;
-
-type ListAllObjectsForPrefix = (
-  prefix: string,
-  bucket?: string,
-  selector?: S3AccountSelector,
-  signal?: AbortSignal,
-) => Promise<BrowserObject[]>;
 
 type DeleteConfirmation = {
   title: string;
@@ -52,7 +45,7 @@ type UseBrowserDeleteItemsOptions = {
   currentPath: string;
   enabled: boolean;
   isOperationAborted: OperationRegistry["isOperationAborted"];
-  listAllObjectsForPrefix: ListAllObjectsForPrefix;
+  listAllObjectsForPrefix: ListAllBrowserObjectsForPrefix;
   onConfirm: (confirmation: DeleteConfirmation) => void;
   onProcessed: (items: BrowserItem[]) => void;
   onRefresh: (prefix: string) => Promise<void>;
