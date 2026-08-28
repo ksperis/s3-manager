@@ -16,7 +16,6 @@ import {
 } from "../../components/toolbarControlClasses";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
-import PropertySummaryChip from "../../components/PropertySummaryChip";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   cx,
@@ -68,6 +67,7 @@ import { useBucketOpsListing } from "./useBucketOpsListing";
 import { useBucketOpsRowTags } from "./useBucketOpsRowTags";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
+import { buildBucketOpsDataColumns } from "./bucketOpsTableColumns";
 import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
 import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
@@ -105,14 +105,9 @@ import {
   FEATURE_STATE_OPTIONS,
   type FeatureKey,
 } from "./bucketOpsAdvancedFilterModel";
-import {
-  FEATURE_DETAIL_COLUMN_OPTIONS,
-  type ColumnId,
-  type SortField,
-} from "./bucketOpsListState";
+import { type ColumnId, type SortField } from "./bucketOpsListState";
 import { extractApiError } from "../../utils/apiError";
 import { triggerDownload } from "../../utils/download";
-import { formatBytes, formatNumber } from "../../utils/format";
 import {
   BUCKET_CONFIG_BACKUP_FEATURE_LABELS,
   type BulkCopyFeatureKey,
@@ -127,18 +122,10 @@ import {
 } from "./bucketBulkPasteModel";
 import {
   buildBucketUiTagKey,
-  formatBucketColumnDetail,
-  formatOptionalBytes,
-  formatOptionalCount,
-  formatOwnerSuspended,
-  formatQuotaBytes,
-  formatQuotaObjects,
-  formatQuotaUsageValue,
   getBucketDisplayName,
   getStorageOpsBucketName,
   getStorageOpsContextId,
   getTagColors,
-  isBucketQuotaConfigured,
   isStatsSortField,
   ownerFilterFromSearch,
   sanitizeExportFilenamePart,
@@ -1423,272 +1410,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       },
     ];
 
-    const visible = new Set(visibleColumns);
-    if (visible.has("context_name")) {
-      cols.push({
-        id: "context_name",
-        label: "Context",
-        field: null,
-        headerClassName: "min-w-[10rem] max-w-[16rem]",
-        cellClassName: "min-w-[10rem] max-w-[16rem]",
-        render: (bucket) => ((bucket as { context_name?: string | null }).context_name ?? "-"),
-      });
-    }
-    if (visible.has("context_kind")) {
-      cols.push({
-        id: "context_kind",
-        label: "Kind",
-        field: null,
-        headerClassName: "w-28",
-        render: (bucket) => {
-          const kind = (bucket as { context_kind?: string | null }).context_kind;
-          if (kind === "account") return "Account";
-          if (kind === "connection") return "Connection";
-          if (kind === "s3_user") return "S3 user";
-          return "-";
-        },
-      });
-    }
-    if (visible.has("endpoint_name")) {
-      cols.push({
-        id: "endpoint_name",
-        label: "Endpoint",
-        field: null,
-        headerClassName: "min-w-[10rem] max-w-[16rem]",
-        cellClassName: "min-w-[10rem] max-w-[16rem]",
-        render: (bucket) => ((bucket as { endpoint_name?: string | null }).endpoint_name ?? "-"),
-      });
-    }
-    if (visible.has("ui_tags")) {
-      cols.push({
-        id: "ui_tags",
-        label: "UI tags",
-        field: null,
-        header: <span>UI tags</span>,
-        headerClassName: "min-w-[12rem] max-w-[24rem]",
-        cellClassName: "min-w-[12rem] max-w-[24rem]",
-        render: (bucket) => renderUiTags(bucket),
-      });
-    }
-    if (visible.has("tenant")) {
-      cols.push({
-        id: "tenant",
-        label: "Tenant",
-        field: "tenant",
-        headerClassName: "min-w-[8rem] max-w-[12rem]",
-        cellClassName: "min-w-[8rem] max-w-[12rem]",
-        render: (bucket) => bucket.tenant ?? "-",
-      });
-    }
-    if (visible.has("owner")) {
-      cols.push({
-        id: "owner",
-        label: "Owner",
-        field: "owner",
-        headerClassName: "min-w-[14rem]",
-        cellClassName: "min-w-[12rem] max-w-[24rem]",
-        render: (bucket) => renderOwnerCell(bucket),
-      });
-    }
-    if (visible.has("owner_name")) {
-      cols.push({
-        id: "owner_name",
-        label: "Owner name",
-        field: null,
-        expensive: true,
-        headerClassName: "min-w-[12rem] max-w-[24rem]",
-        cellClassName: "min-w-[12rem] max-w-[24rem]",
-        render: (bucket) => bucket.owner_name ?? "-",
-      });
-    }
-    if (visible.has("owner_suspended")) {
-      cols.push({
-        id: "owner_suspended",
-        label: "Owner suspended",
-        field: null,
-        expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatOwnerSuspended(bucket.owner_suspended),
-      });
-    }
-    if (visible.has("owner_used_bytes")) {
-      cols.push({
-        id: "owner_used_bytes",
-        label: "Owner used",
-        field: null,
-        expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatOptionalBytes(bucket.owner_used_bytes),
-      });
-    }
-    if (visible.has("owner_quota_max_size_bytes")) {
-      cols.push({
-        id: "owner_quota_max_size_bytes",
-        label: "Owner quota",
-        field: null,
-        expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatQuotaBytes(bucket.owner_quota_max_size_bytes),
-      });
-    }
-    if (visible.has("owner_quota_usage_size_percent")) {
-      cols.push({
-        id: "owner_quota_usage_size_percent",
-        label: "Owner quota %",
-        field: null,
-        expensive: true,
-        headerClassName: "w-32",
-        render: (bucket) => formatQuotaUsageValue(bucket.owner_used_bytes, bucket.owner_quota_max_size_bytes),
-      });
-    }
-    if (visible.has("used_bytes")) {
-      cols.push({
-        id: "used_bytes",
-        label: "Used",
-        field: "used_bytes",
-        headerClassName: "w-28",
-        render: (bucket) => formatBytes(bucket.used_bytes),
-      });
-    }
-    if (visible.has("quota_max_size_bytes")) {
-      cols.push({
-        id: "quota_max_size_bytes",
-        label: "Quota",
-        field: null,
-        headerClassName: "w-36",
-        render: (bucket) => {
-          return formatQuotaBytes(bucket.quota_max_size_bytes);
-        },
-      });
-    }
-    if (visible.has("quota_usage_size_percent")) {
-      cols.push({
-        id: "quota_usage_size_percent",
-        label: "Quota %",
-        field: null,
-        headerClassName: "w-28",
-        render: (bucket) => formatQuotaUsageValue(bucket.used_bytes, bucket.quota_max_size_bytes),
-      });
-    }
-    if (visible.has("object_count")) {
-      cols.push({
-        id: "object_count",
-        label: "Objects",
-        field: "object_count",
-        headerClassName: "w-24",
-        render: (bucket) => formatNumber(bucket.object_count),
-      });
-    }
-    if (visible.has("quota_max_objects")) {
-      cols.push({
-        id: "quota_max_objects",
-        label: "Object quota",
-        field: null,
-        headerClassName: "w-36",
-        render: (bucket) => {
-          return formatQuotaObjects(bucket.quota_max_objects);
-        },
-      });
-    }
-    if (visible.has("quota_usage_object_percent")) {
-      cols.push({
-        id: "quota_usage_object_percent",
-        label: "Object quota %",
-        field: null,
-        headerClassName: "w-36",
-        render: (bucket) => formatQuotaUsageValue(bucket.object_count, bucket.quota_max_objects),
-      });
-    }
-    if (visible.has("owner_object_count")) {
-      cols.push({
-        id: "owner_object_count",
-        label: "Owner objects",
-        field: null,
-        expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatOptionalCount(bucket.owner_object_count),
-      });
-    }
-    if (visible.has("owner_quota_max_objects")) {
-      cols.push({
-        id: "owner_quota_max_objects",
-        label: "Owner object quota",
-        field: null,
-        expensive: true,
-        headerClassName: "w-40",
-        render: (bucket) => formatQuotaObjects(bucket.owner_quota_max_objects),
-      });
-    }
-    if (visible.has("owner_quota_usage_object_percent")) {
-      cols.push({
-        id: "owner_quota_usage_object_percent",
-        label: "Owner object quota %",
-        field: null,
-        expensive: true,
-        headerClassName: "w-40",
-        render: (bucket) => formatQuotaUsageValue(bucket.owner_object_count, bucket.owner_quota_max_objects),
-      });
-    }
-    if (visible.has("tags")) {
-      cols.push({
-        id: "tags",
-        label: "Tags",
-        field: null,
-        expensive: true,
-        headerClassName: "min-w-[12rem] max-w-[24rem]",
-        cellClassName: "min-w-[12rem] max-w-[24rem]",
-        render: (bucket) => renderTagList(bucket.tags, bucket),
-      });
-    }
-
-    featureColumnOptions.forEach((c) => {
-      if (!visible.has(c.id)) return;
-      cols.push({
-        id: c.id,
-        label: c.label,
-        field: null,
-        expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => renderFeatureChip(c.key, bucket),
-      });
-    });
-
-    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((detail) => {
-      if (!visible.has(detail.id)) return;
-      cols.push({
-        id: detail.id,
-        label: detail.label,
-        field: null,
-        expensive: true,
-        headerClassName: "min-w-[10rem] max-w-[18rem]",
-        cellClassName: "min-w-[10rem] max-w-[20rem]",
-        render: (bucket) => {
-          const value = formatBucketColumnDetail(bucket, detail.id);
-          return (
-            <span className="block truncate" title={value}>
-              {value}
-            </span>
-          );
-        },
-      });
-    });
-
-    if (visible.has("quota_status")) {
-      cols.push({
-        id: "quota_status",
-        label: "Quota status",
-        field: null,
-        headerClassName: "w-32",
-        render: (bucket) => (
-          <PropertySummaryChip
-            compact
-            state={isBucketQuotaConfigured(bucket) ? "Configured" : "Not set"}
-            tone={isBucketQuotaConfigured(bucket) ? "active" : "inactive"}
-            title={`Quota: ${isBucketQuotaConfigured(bucket) ? "Configured" : "Not set"}`}
-          />
-        ),
-      });
-    }
+    cols.push(
+      ...buildBucketOpsDataColumns({
+        featureColumns: featureColumnOptions,
+        renderFeatureChip,
+        renderOwnerCell,
+        renderS3Tags: renderTagList,
+        renderUiTags,
+        visibleColumns,
+      }),
+    );
 
     cols.push({
       id: "actions",
