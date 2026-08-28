@@ -84,6 +84,18 @@ router.include_router(auth_api_tokens.router)
 settings = get_settings()
 
 
+def get_ldap_auth_service_dependency(
+    db: Session = Depends(get_db),
+) -> LDAPAuthService:
+    return get_ldap_auth_service(db)
+
+
+def get_oidc_service_dependency(
+    db: Session = Depends(get_db),
+) -> OidcService:
+    return get_oidc_service(db)
+
+
 def _pre_auth_user(db: Session, token: Optional[str], *, purposes: set[str]) -> tuple[User, dict[str, Any]]:
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Pre-authentication required")
@@ -329,7 +341,7 @@ def login(
 
 @router.get("/ldap/providers", response_model=list[LDAPProviderInfo])
 def list_ldap_providers(
-    ldap_service: LDAPAuthService = Depends(lambda db=Depends(get_db): get_ldap_auth_service(db)),
+    ldap_service: LDAPAuthService = Depends(get_ldap_auth_service_dependency),
 ) -> list[dict[str, str]]:
     return ldap_service.list_providers()
 
@@ -341,7 +353,7 @@ def login_with_ldap(
     provider_id: str,
     payload: LDAPLoginRequest,
     users_service: UsersService = Depends(get_users_service_dependency),
-    ldap_service: LDAPAuthService = Depends(lambda db=Depends(get_db): get_ldap_auth_service(db)),
+    ldap_service: LDAPAuthService = Depends(get_ldap_auth_service_dependency),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuthenticationResponse:
     require_trusted_origin(request)
@@ -570,7 +582,7 @@ def login_with_s3_keys(
 
 @router.get("/oidc/providers", response_model=list[OIDCProviderInfo])
 def list_oidc_providers(
-    oidc_service: OidcService = Depends(lambda db=Depends(get_db): get_oidc_service(db)),
+    oidc_service: OidcService = Depends(get_oidc_service_dependency),
 ) -> list[OIDCProviderInfo]:
     return oidc_service.list_providers()
 
@@ -580,7 +592,7 @@ def start_oidc_login(
     request: Request,
     provider_id: str,
     payload: Optional[OIDCStartRequest] = None,
-    oidc_service: OidcService = Depends(lambda db=Depends(get_db): get_oidc_service(db)),
+    oidc_service: OidcService = Depends(get_oidc_service_dependency),
 ) -> dict[str, str]:
     require_trusted_origin(request)
     ip_address, _, _ = _request_context(request)
@@ -612,7 +624,7 @@ def complete_oidc_login(
     response: Response,
     provider_id: str,
     payload: OIDCCallbackRequest,
-    oidc_service: OidcService = Depends(lambda db=Depends(get_db): get_oidc_service(db)),
+    oidc_service: OidcService = Depends(get_oidc_service_dependency),
     users_service: UsersService = Depends(get_users_service_dependency),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuthenticationResponse:
