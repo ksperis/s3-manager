@@ -28,7 +28,7 @@ type BucketExportColumn = {
   getValue: (bucket: CephAdminBucket) => string;
 };
 
-type BucketExportFeatureColumn = {
+export type BucketExportFeatureColumn = {
   id: FeatureKey;
   key: FeatureKey;
   label: string;

@@ -87,11 +87,7 @@ import { previewBucketOpsConfigPaste } from "./bucketOpsConfigPastePreview";
 import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
 import { applyBucketOpsBulkUpdate } from "./bucketOpsBulkApply";
 import { previewBucketOpsBulkUpdate } from "./bucketOpsBulkPreview";
-import {
-  buildBucketExportColumns,
-  buildBucketSelectionJsonPayload,
-  serializeBucketSelectionCsv,
-} from "./bucketOpsExportModel";
+import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
 import { loadBucketOpsBucketsByNames } from "./bucketOpsNamedBucketLoader";
 import { loadBucketOpsFilteredBuckets } from "./bucketOpsFilteredBucketLoader";
 import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
@@ -1452,58 +1448,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     );
   }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkOperation, selectedBucketList, showBulkUpdateModal]);
 
-  const loadBucketsForCurrentFilteredExport = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
-    if (!selectedEndpointId || total <= 0) {
-      return new Map<string, CephAdminBucket>();
-    }
-    return loadBucketOpsFilteredBuckets({
-      initialTotal: total,
-      listBuckets,
-      onProgress: options?.onProgress,
-      params: {
-        filter: effectiveQuickSearchValue.trim() || undefined,
-        advanced_filter: advancedFilterParam,
-        sort_by: sort.field,
-        sort_dir: sort.direction,
-        include: includeParams.length > 0 ? includeParams : undefined,
-        with_stats: exportWithStats,
-        ui_tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
-        ui_tag_match: tagFilterMode,
-      },
-      scopeId: selectedEndpointId,
-    });
-  };
-
-  const loadSelectedBucketsForExport = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
-    if (fullyResolvedFilteredSelection) {
-      return loadBucketsForCurrentFilteredExport(options);
-    }
-
-    const bucketsByName = new Map<string, CephAdminBucket>();
-    items.forEach((bucket) => {
-      if (selectedBuckets.has(bucket.name)) {
-        bucketsByName.set(bucket.name, bucket);
-      }
-    });
-    if (!selectedEndpointId || selectedBucketList.length === 0) {
-      return bucketsByName;
-    }
-
-    const loadedBuckets = await loadBucketOpsBucketsByNames({
-      bucketNames: selectedBucketList,
-      include: includeParams,
-      listBuckets,
-      onProgress: ({ completed, total }) => options?.onProgress?.(completed, total),
-      scopeId: selectedEndpointId,
-      withStats: exportWithStats,
-    });
-    loadedBuckets.forEach((bucket) => {
-      if (selectedBuckets.has(bucket.name)) bucketsByName.set(bucket.name, bucket);
-    });
-
-    return bucketsByName;
-  };
-
   const exportSelectedBuckets = async (format: SelectionExportFormat) => {
     if (selectedBucketList.length === 0 || selectionExportLoading) return;
     const withProgress = format === "csv" || format === "json";
@@ -1519,23 +1463,25 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     setSelectionExportLoading(format);
     try {
-      const exportedAt = new Date().toISOString();
-      const timestamp = exportedAt.replace(/[:.]/g, "-");
-      const endpointPart = sanitizeExportFilenamePart(
-        selectedEndpoint?.name ??
-          (selectedEndpointId ? `${scopeDisplayName.toLowerCase()}-${selectedEndpointId}` : scopeDisplayName.toLowerCase())
-      );
-
-      if (format === "text") {
-        triggerDownload(
-          `${exportPrefix}-buckets-${endpointPart}-${timestamp}.txt`,
-          selectedBucketList.join("\n"),
-          "text/plain;charset=utf-8"
-        );
-        return;
-      }
-
-      const bucketsByName = await loadSelectedBucketsForExport({
+      const artifact = await prepareBucketOpsSelectionExport({
+        bucketNames: selectedBucketList,
+        exportPrefix,
+        exportScopeKey,
+        exportWithStats,
+        featureColumns: featureColumnOptions,
+        filteredQuery: {
+          filter: effectiveQuickSearchValue.trim() || undefined,
+          advanced_filter: advancedFilterParam,
+          sort_by: sort.field,
+          sort_dir: sort.direction,
+          ui_tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
+          ui_tag_match: tagFilterMode,
+        },
+        format,
+        fullyResolvedFilteredSelection,
+        include: includeParams,
+        isStorageOps,
+        listBuckets,
         onProgress: (completed, total) => {
           if (!withProgress || runToken === null || selectionActionRunTokenRef.current !== runToken) return;
           setSelectionActionProgress((prev) =>
@@ -1548,42 +1494,15 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               : prev
           );
         },
-      });
-      const exportColumns = buildBucketExportColumns({
-        columnIds: visibleColumns,
-        featureColumns: featureColumnOptions,
-        isStorageOps,
+        scopeDisplayName,
+        scopeId: selectedEndpointId,
+        scopeName: selectedEndpoint?.name ?? null,
+        total,
         useExplicitBucketName,
+        visibleBuckets: items,
+        visibleColumns,
       });
-      if (format === "csv") {
-        triggerDownload(
-          `${exportPrefix}-buckets-${endpointPart}-${timestamp}.csv`,
-          serializeBucketSelectionCsv({
-            bucketNames: selectedBucketList,
-            bucketsByName,
-            columns: exportColumns,
-          }),
-          "text/csv;charset=utf-8"
-        );
-        return;
-      }
-
-      const jsonPayload = buildBucketSelectionJsonPayload({
-        bucketNames: selectedBucketList,
-        bucketsByName,
-        columns: exportColumns,
-        generatedAt: exportedAt,
-        scopeKey: exportScopeKey,
-        scope: {
-          id: selectedEndpointId ?? null,
-          name: selectedEndpoint?.name ?? null,
-        },
-      });
-      triggerDownload(
-        `${exportPrefix}-buckets-${endpointPart}-${timestamp}.json`,
-        JSON.stringify(jsonPayload, null, 2),
-        "application/json"
-      );
+      triggerDownload(artifact.filename, artifact.content, artifact.mimeType);
     } catch (err) {
       setError(extractError(err));
     } finally {
