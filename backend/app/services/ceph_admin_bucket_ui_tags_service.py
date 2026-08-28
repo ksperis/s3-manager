@@ -151,34 +151,29 @@ class CephAdminBucketUiTagsWorkflow:
         self._validate_targets(payload, targets)
         shared_mutation = self._has_shared_mutation(payload, targets)
         try:
-            self.tags.mutate(
-                domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
-                actor_user_id=self.actor_user_id,
-                targets=targets,
-                add_tag_ids=payload.add_tag_ids,
-                create_tags=[
-                    (item.label, item.color_key, item.visibility)
-                    for item in payload.create_tags
-                ],
-                remove_tag_ids=payload.remove_tag_ids,
-                remove_all=payload.remove_all,
-            )
+            with self.tags.transaction():
+                self.tags.mutate(
+                    domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+                    actor_user_id=self.actor_user_id,
+                    targets=targets,
+                    add_tag_ids=payload.add_tag_ids,
+                    create_tags=[
+                        (item.label, item.color_key, item.visibility)
+                        for item in payload.create_tags
+                    ],
+                    remove_tag_ids=payload.remove_tag_ids,
+                    remove_all=payload.remove_all,
+                )
             # Persist before the best-effort audit callback, which can roll back
             # its request session if audit persistence itself fails.
-            self.tags.commit()
             if shared_mutation:
                 self.record_shared_mutation(len(set(targets)))
         except BucketUiTagNameConflictError as exc:
-            self.tags.rollback()
             raise CephAdminBucketUiTagConflictError(str(exc)) from exc
         except IntegrityError as exc:
-            self.tags.rollback()
             raise CephAdminBucketUiTagConflictError(
                 "A Ceph Admin UI tag already reserves this name."
             ) from exc
-        except ValueError:
-            self.tags.rollback()
-            raise
         return self.catalog()
 
     def update_definition(
@@ -187,19 +182,17 @@ class CephAdminBucketUiTagsWorkflow:
         payload: CephAdminBucketUiTagDefinitionPatch,
     ) -> BucketUiTagDefinitionSummary:
         try:
-            result = self.tags.update_definition(
-                domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
-                actor_user_id=self.actor_user_id,
-                tag_id=tag_id,
-                color_key=payload.color_key,
-                visibility=payload.visibility,
-            )
-            self.tags.commit()
+            with self.tags.transaction():
+                result = self.tags.update_definition(
+                    domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
+                    actor_user_id=self.actor_user_id,
+                    tag_id=tag_id,
+                    color_key=payload.color_key,
+                    visibility=payload.visibility,
+                )
         except BucketUiTagDefinitionNotFoundError as exc:
-            self.tags.rollback()
             raise CephAdminBucketUiTagNotFoundError(str(exc)) from exc
         except IntegrityError as exc:
-            self.tags.rollback()
             raise CephAdminBucketUiTagConflictError(
                 "A Ceph Admin UI tag already reserves this name."
             ) from exc

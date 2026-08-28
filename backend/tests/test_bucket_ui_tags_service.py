@@ -74,6 +74,25 @@ def _endpoint(db_session, name: str) -> StorageEndpoint:
     return endpoint
 
 
+def test_bucket_ui_tag_transaction_commits_success_and_rolls_back_failure(db_session):
+    service = BucketUiTagsService(db_session)
+    committed = _user(8100, "transaction-committed@example.test")
+
+    with service.transaction():
+        db_session.add(committed)
+
+    assert db_session.get(User, committed.id) is committed
+
+    rolled_back = _user(8103, "transaction-rolled-back@example.test")
+    with pytest.raises(RuntimeError, match="mutation failed"):
+        with service.transaction():
+            db_session.add(rolled_back)
+            db_session.flush()
+            raise RuntimeError("mutation failed")
+
+    assert db_session.get(User, rolled_back.id) is None
+
+
 def test_ceph_admin_labels_are_globally_unique_and_case_insensitive(db_session):
     owner = _user(8101, "owner@example.test")
     other = _user(8102, "other@example.test")

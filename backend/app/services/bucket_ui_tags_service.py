@@ -2,8 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterable, Literal, Sequence
+from typing import Iterable, Iterator, Literal, Sequence
 
 from sqlalchemy import or_, tuple_
 from sqlalchemy.orm import Session
@@ -79,24 +80,24 @@ class BucketUiTagsService:
         self.db = db
         self.tags = TagsService(db)
 
-    def commit(self) -> None:
-        """Commit UI-tag persistence at the service boundary."""
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Commit UI-tag persistence on success and roll it back on failure."""
 
-        self.db.commit()
-
-    def rollback(self) -> None:
-        """Roll back a failed UI-tag mutation at the service boundary."""
-
-        self.db.rollback()
+        try:
+            yield
+            self.db.commit()
+        except BaseException:
+            self.db.rollback()
+            raise
 
     @staticmethod
     def _validate_domain(domain_kind: str) -> _BucketUiTagDomain:
-        if domain_kind not in {
-            TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
-            TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
-        }:
-            raise ValueError("Unsupported bucket UI tag domain.")
-        return domain_kind  # type: ignore[return-value]
+        if domain_kind == TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN:
+            return "bucket_ui_ceph_admin"
+        if domain_kind == TAG_DOMAIN_BUCKET_UI_STORAGE_OPS:
+            return "bucket_ui_storage_ops"
+        raise ValueError("Unsupported bucket UI tag domain.")
 
     @staticmethod
     def _to_definition(definition: TagDefinition) -> BucketUiTagDefinitionSummary:
