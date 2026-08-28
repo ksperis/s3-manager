@@ -64,7 +64,7 @@ import {
   readSelectorTagsPreference,
   writeSelectorTagsPreference,
 } from "../../utils/selectorTagsPreference";
-import { buildUiTagItems, normalizeUiTags } from "../../utils/uiTags";
+import { buildUiTagItems } from "../../utils/uiTags";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import S3ConnectionAccessFields from "./S3ConnectionAccessFields";
 import S3ConnectionCredentialFields from "./S3ConnectionCredentialFields";
@@ -84,6 +84,8 @@ import {
   type CreatePrivateConnectionForm,
   type PrivateConnectionDraft,
   type S3ConnectionEndpointMode,
+  prepareCreatePrivateConnectionPayload,
+  prepareUpdatePrivateConnectionPayload,
 } from "./s3ConnectionFormModel";
 
 type PendingPrivateConnectionDelete = {
@@ -852,47 +854,18 @@ export default function ProfilePage({
     if (!canCreateManualConnections) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
-    if (!createConnectionForm.name.trim()) {
-      setConnectionsError("Connection name is required.");
+    const prepared = prepareCreatePrivateConnectionPayload(
+      createConnectionForm,
+      createConnectionEndpointMode,
+      createConnectionEndpointId,
+    );
+    if (prepared.payload === null) {
+      setConnectionsError(prepared.error);
       return;
     }
-    if (createConnectionEndpointMode === "preset" && !createConnectionEndpointId) {
-      setConnectionsError("Select a configured endpoint.");
-      return;
-    }
-    if (createConnectionEndpointMode === "custom" && !createConnectionForm.endpoint_url.trim()) {
-      setConnectionsError("Endpoint URL is required.");
-      return;
-    }
-    if (!createConnectionForm.access_key_id.trim() || !createConnectionForm.secret_access_key.trim()) {
-      setConnectionsError("S3 credentials are required.");
-      return;
-    }
-    if (!createConnectionForm.access_manager && !createConnectionForm.access_browser) {
-      setConnectionsError("Enable access to manager and/or browser.");
-      return;
-    }
-    const storageEndpointId =
-      createConnectionEndpointMode === "preset" && createConnectionEndpointId
-        ? Number(createConnectionEndpointId)
-        : null;
     setCreatingConnection(true);
     try {
-      await createConnection({
-        name: createConnectionForm.name.trim(),
-        tags: normalizeUiTags(createConnectionForm.tags),
-        provider_hint:
-          createConnectionEndpointMode === "custom" ? createConnectionForm.provider_hint.trim() || undefined : undefined,
-        storage_endpoint_id: storageEndpointId,
-        endpoint_url: storageEndpointId ? undefined : createConnectionForm.endpoint_url.trim(),
-        region: storageEndpointId ? undefined : createConnectionForm.region.trim() || undefined,
-        access_key_id: createConnectionForm.access_key_id.trim(),
-        secret_access_key: createConnectionForm.secret_access_key,
-        access_manager: createConnectionForm.access_manager,
-        access_browser: createConnectionForm.access_browser,
-        force_path_style: storageEndpointId ? undefined : createConnectionForm.force_path_style,
-        verify_tls: storageEndpointId ? undefined : createConnectionForm.verify_tls,
-      });
+      await createConnection(prepared.payload);
       setCreateConnectionForm(createDefaultPrivateConnectionForm());
       setCreateConnectionEndpointMode(availableStorageEndpoints.length > 0 ? "preset" : "custom");
       setCreateConnectionEndpointId("");
@@ -944,62 +917,25 @@ export default function ProfilePage({
     const credentialDraft =
       connectionCredentialDrafts[connectionId] ??
       createEmptyConnectionCredentialDraft();
-    const accessKeyId = credentialDraft.access_key_id.trim();
-    const secretAccessKey = credentialDraft.secret_access_key.trim();
-    const usePresetEndpoint = editConnectionEndpointMode === "preset";
     const connection = connections.find((item) => item.id === connectionId);
     const serverManaged = Boolean(connection?.server_managed);
     setConnectionsError(null);
     setConnectionsMessage(null);
-    if (!draft.name.trim()) {
-      setConnectionsError("Connection name is required.");
-      return false;
-    }
-    if (canCreateManualConnections && !serverManaged && usePresetEndpoint && !editConnectionEndpointId) {
-      setConnectionsError("Select a configured endpoint.");
-      return false;
-    }
-    if (canCreateManualConnections && !serverManaged && !usePresetEndpoint && !draft.endpoint_url.trim()) {
-      setConnectionsError("Endpoint URL is required.");
-      return false;
-    }
-    if (!draft.access_manager && !draft.access_browser) {
-      setConnectionsError("Enable access to manager and/or browser.");
-      return false;
-    }
-    if (canCreateManualConnections && !serverManaged && ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey))) {
-      setConnectionsError("Provide both access key ID and secret access key to update credentials.");
+    const prepared = prepareUpdatePrivateConnectionPayload({
+      canManageCredentials: canCreateManualConnections,
+      credentialDraft,
+      draft,
+      endpointId: editConnectionEndpointId,
+      endpointMode: editConnectionEndpointMode,
+      serverManaged,
+    });
+    if (prepared.payload === null) {
+      setConnectionsError(prepared.error);
       return false;
     }
     setSavingConnectionBusyId(connectionId);
     try {
-      const endpointPayload = serverManaged || !canCreateManualConnections
-        ? {}
-        : usePresetEndpoint
-        ? {
-            storage_endpoint_id: Number(editConnectionEndpointId),
-          }
-        : {
-            storage_endpoint_id: null,
-            provider_hint: draft.provider_hint.trim() || undefined,
-            endpoint_url: draft.endpoint_url.trim(),
-            region: draft.region.trim() || undefined,
-            force_path_style: draft.force_path_style,
-            verify_tls: draft.verify_tls,
-          };
-      await updateConnection(connectionId, {
-        name: draft.name.trim(),
-        tags: normalizeUiTags(draft.tags),
-        access_manager: draft.access_manager,
-        access_browser: draft.access_browser,
-        ...endpointPayload,
-        ...(canCreateManualConnections && !serverManaged && accessKeyId && secretAccessKey
-          ? {
-              access_key_id: accessKeyId,
-              secret_access_key: secretAccessKey,
-            }
-          : {}),
-      });
+      await updateConnection(connectionId, prepared.payload);
       setConnectionCredentialDrafts((prev) => ({
         ...prev,
         [connectionId]: createEmptyConnectionCredentialDraft(),

@@ -15,6 +15,8 @@ import {
   createDefaultPrivateConnectionForm,
   createEmptyConnectionCredentialDraft,
   parsePrivateConnectionSortDate,
+  prepareCreatePrivateConnectionPayload,
+  prepareUpdatePrivateConnectionPayload,
 } from "./s3ConnectionFormModel";
 
 const connection: S3Connection = {
@@ -138,6 +140,119 @@ describe("s3ConnectionFormModel", () => {
         "",
       ),
     ).toBeNull();
+    expect(buildS3CredentialsValidationPayload(form, "preset", "invalid")).toBeNull();
+  });
+
+  it("prepares canonical private connection create payloads", () => {
+    const form = {
+      ...createDefaultPrivateConnectionForm(),
+      name: " Archive ",
+      endpoint_url: " https://s3.example.test ",
+      region: " eu-west-1 ",
+      access_key_id: " access ",
+      secret_access_key: " secret with spaces ",
+      access_manager: true,
+      force_path_style: true,
+    };
+
+    expect(prepareCreatePrivateConnectionPayload(form, "custom", "")).toEqual({
+      error: null,
+      payload: {
+        name: "Archive",
+        tags: [],
+        storage_endpoint_id: null,
+        endpoint_url: "https://s3.example.test",
+        region: "eu-west-1",
+        provider_hint: undefined,
+        access_key_id: "access",
+        secret_access_key: " secret with spaces ",
+        access_manager: true,
+        access_browser: true,
+        force_path_style: true,
+        verify_tls: true,
+      },
+    });
+    expect(prepareCreatePrivateConnectionPayload(form, "preset", "3")).toEqual({
+      error: null,
+      payload: expect.objectContaining({
+        name: "Archive",
+        storage_endpoint_id: 3,
+      }),
+    });
+    expect(
+      prepareCreatePrivateConnectionPayload(
+        { ...form, name: "" },
+        "custom",
+        "",
+      ),
+    ).toEqual({ error: "Connection name is required.", payload: null });
+    expect(prepareCreatePrivateConnectionPayload(form, "preset", "invalid")).toEqual({
+      error: "Select a configured endpoint.",
+      payload: null,
+    });
+  });
+
+  it("prepares editable and server-managed private connection updates", () => {
+    const draft = buildPrivateConnectionDraft(connection);
+    const editable = prepareUpdatePrivateConnectionPayload({
+      canManageCredentials: true,
+      credentialDraft: {
+        access_key_id: " new-access ",
+        secret_access_key: " new-secret ",
+      },
+      draft: { ...draft, endpoint_url: " https://updated.example.test " },
+      endpointId: "",
+      endpointMode: "custom",
+      serverManaged: false,
+    });
+    expect(editable).toEqual({
+      error: null,
+      payload: expect.objectContaining({
+        name: "Archive",
+        storage_endpoint_id: null,
+        endpoint_url: "https://updated.example.test",
+        access_key_id: "new-access",
+        secret_access_key: "new-secret",
+      }),
+    });
+
+    const managed = prepareUpdatePrivateConnectionPayload({
+      canManageCredentials: true,
+      credentialDraft: {
+        access_key_id: "ignored",
+        secret_access_key: "ignored",
+      },
+      draft: { ...draft, endpoint_url: "" },
+      endpointId: "",
+      endpointMode: "custom",
+      serverManaged: true,
+    });
+    expect(managed).toEqual({
+      error: null,
+      payload: {
+        name: "Archive",
+        tags: draft.tags,
+        access_manager: true,
+        access_browser: false,
+      },
+    });
+
+    expect(
+      prepareUpdatePrivateConnectionPayload({
+        canManageCredentials: true,
+        credentialDraft: {
+          access_key_id: "access-only",
+          secret_access_key: "",
+        },
+        draft,
+        endpointId: "3",
+        endpointMode: "preset",
+        serverManaged: false,
+      }),
+    ).toEqual({
+      error: "Provide both access key ID and secret access key to update credentials.",
+      payload: null,
+    });
   });
 
   it("uses the updated timestamp before the creation timestamp", () => {

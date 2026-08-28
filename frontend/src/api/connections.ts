@@ -40,7 +40,7 @@ export type PrivateConnectionStorageEndpoint = {
   is_default: boolean;
 };
 
-type CreateConnectionPayload = {
+export type CreateConnectionPayload = {
   name: string;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
@@ -58,7 +58,7 @@ type CreateConnectionPayload = {
   tags?: TagDefinitionInput[] | null;
 };
 
-type UpdateConnectionPayload = {
+export type UpdateConnectionPayload = {
   name?: string | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
