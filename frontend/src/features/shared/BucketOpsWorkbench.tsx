@@ -65,6 +65,7 @@ import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal"
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
 import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
+import BucketOpsIdentityFilterFields from "./BucketOpsIdentityFilterFields";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import BucketOpsStorageScopeFilterFields from "./BucketOpsStorageScopeFilterFields";
@@ -117,7 +118,6 @@ import {
   advancedFilterFooterClass,
   advancedFilterFieldCardClass,
   advancedFilterHeaderClass,
-  advancedFilterMatchModeButtonClass,
   formatAdvancedFilterSyncLabel,
   advancedFilterSyncBadgeClass,
   advancedFilterRootClass,
@@ -135,10 +135,8 @@ import {
   FEATURE_STATE_OPTIONS,
   NUMERIC_FILTER_OPTIONS,
   type AdvancedFilterSecondarySectionId,
-  type BooleanFilterState,
   type FeatureFilterState,
   type FeatureKey,
-  type OwnerNameScope,
   type TextMatchMode,
 } from "./bucketOpsAdvancedFilterModel";
 import {
@@ -391,6 +389,24 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     sseFeatureEnabled,
     staticWebsiteFeatureEnabled,
   });
+  const filterController = useBucketOpsFilterController({
+    advancedApplied,
+    advancedDraft,
+    featureSupport,
+    filter,
+    filterValue,
+    isStorageOps,
+    quickFilterMode,
+    setAdvancedApplied,
+    setAdvancedDraft,
+    setFilter,
+    setFilterValue,
+    setPage,
+    setQuickFilterMode,
+    setTagFilterMode,
+    setTagFilters,
+    usageFeatureEnabled,
+  });
   const {
     addTagFilter,
     advancedDraftActiveCount,
@@ -413,13 +429,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     hasAnyAdvancedToClear,
     hasPendingAdvancedChanges,
     openAdvancedFilterDrawer,
-    ownerDraftEffectiveMatchMode,
-    ownerDraftForcesExact,
-    ownerFieldState,
-    ownerNameDraftEffectiveMatchMode,
-    ownerNameDraftForcesExact,
-    ownerNameFieldState,
-    ownerSuspendedFieldState,
     quickFilterAppliedParsed,
     quickFilterDraftForcesExact,
     quickFilterFieldState,
@@ -429,37 +438,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     removeTagFilter,
     resetAdvancedFilter,
     resetAllFilters,
-    s3TagsDraftEffectiveMatchMode,
-    s3TagsDraftForcesExact,
-    s3TagsFieldState,
     showAdvancedFilter,
-    tenantDraftEffectiveMatchMode,
-    tenantDraftForcesExact,
-    tenantFieldState,
     toggleAdvancedFilterSecondarySection,
     toggleQuickFilterMode,
     updateAdvancedField,
-    updateAdvancedMatchMode,
     updateFeatureDetailFilter,
     updateFeatureFilter,
-  } = useBucketOpsFilterController({
-    advancedApplied,
-    advancedDraft,
-    featureSupport,
-    filter,
-    filterValue,
-    isStorageOps,
-    quickFilterMode,
-    setAdvancedApplied,
-    setAdvancedDraft,
-    setFilter,
-    setFilterValue,
-    setPage,
-    setQuickFilterMode,
-    setTagFilterMode,
-    setTagFilters,
-    usageFeatureEnabled,
-  });
+  } = filterController;
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const storageScopeFilterController = useBucketOpsStorageScopeFilters({
@@ -2452,203 +2437,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               />
                             )}
 
-                            <div className={advancedFilterFieldCardClass()}>
-                              <div className="flex items-center justify-between gap-2">
-                                <label
-                                  className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${tenantFieldState.labelClass}`}
-                                >
-                                  <span className="inline-flex items-center gap-1">
-                                    <span>Tenant</span>
-                                    {renderFilterCostIndicator("low", "Low cost: tenant filter runs on direct bucket metadata.")}
-                                  </span>
-                                </label>
-                                <div className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={tenantDraftForcesExact}
-                                    onClick={() => updateAdvancedMatchMode("tenantMatchMode", "contains")}
-                                    className={advancedFilterMatchModeButtonClass(tenantDraftEffectiveMatchMode === "contains", tenantDraftForcesExact)}
-                                  >
-                                    Contains
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={tenantDraftForcesExact}
-                                    onClick={() => updateAdvancedMatchMode("tenantMatchMode", "exact")}
-                                    className={advancedFilterMatchModeButtonClass(tenantDraftEffectiveMatchMode === "exact", tenantDraftForcesExact)}
-                                  >
-                                    Exact
-                                  </button>
-                                </div>
-                              </div>
-                              <textarea
-                                value={advancedDraft.tenant}
-                                onChange={(e) => updateAdvancedField("tenant", e.target.value)}
-                                onKeyDown={(event) => event.stopPropagation()}
-                                placeholder="tenant-a, tenant-b"
-                                rows={2}
-                                className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${tenantFieldState.fieldClass}`)}
-                              />
-                            </div>
+                            <BucketOpsIdentityFilterFields
+                              advancedDraft={advancedDraft}
+                              controller={filterController}
+                            />
 
-                            <div className={advancedFilterFieldCardClass()}>
-                              <div className="flex items-center justify-between gap-2">
-                                <label
-                                  className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerFieldState.labelClass}`}
-                                >
-                                  <span className="inline-flex items-center gap-1">
-                                    <span>Owner</span>
-                                    {renderFilterCostIndicator("low", "Low cost: owner filter runs on direct bucket metadata.")}
-                                  </span>
-                                </label>
-                                <div className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={ownerDraftForcesExact}
-                                    onClick={() => updateAdvancedMatchMode("ownerMatchMode", "contains")}
-                                    className={advancedFilterMatchModeButtonClass(ownerDraftEffectiveMatchMode === "contains", ownerDraftForcesExact)}
-                                  >
-                                    Contains
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={ownerDraftForcesExact}
-                                    onClick={() => updateAdvancedMatchMode("ownerMatchMode", "exact")}
-                                    className={advancedFilterMatchModeButtonClass(ownerDraftEffectiveMatchMode === "exact", ownerDraftForcesExact)}
-                                  >
-                                    Exact
-                                  </button>
-                                </div>
-                              </div>
-                              <textarea
-                                value={advancedDraft.owner}
-                                onChange={(e) => updateAdvancedField("owner", e.target.value)}
-                                onKeyDown={(event) => event.stopPropagation()}
-                                placeholder="owner uid(s)"
-                                rows={2}
-                                className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${ownerFieldState.fieldClass}`)}
-                              />
-                            </div>
-
-                            <div className={advancedFilterFieldCardClass("md:col-span-2")}>
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <label
-                                  className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerNameFieldState.labelClass}`}
-                                >
-                                  <span className="inline-flex items-center gap-1">
-                                    <span>Owner name</span>
-                                    {renderFilterCostIndicator("medium", "Medium cost: owner-name filters require owner identity lookups.")}
-                                  </span>
-                                </label>
-                                <div className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={ownerNameDraftForcesExact}
-                                    onClick={() => updateAdvancedMatchMode("ownerNameMatchMode", "contains")}
-                                    className={advancedFilterMatchModeButtonClass(ownerNameDraftEffectiveMatchMode === "contains", ownerNameDraftForcesExact)}
-                                  >
-                                    Contains
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={ownerNameDraftForcesExact}
-                                    onClick={() => updateAdvancedMatchMode("ownerNameMatchMode", "exact")}
-                                    className={advancedFilterMatchModeButtonClass(ownerNameDraftEffectiveMatchMode === "exact", ownerNameDraftForcesExact)}
-                                  >
-                                    Exact
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
-                                <textarea
-                                  value={advancedDraft.ownerName}
-                                  onChange={(e) => updateAdvancedField("ownerName", e.target.value)}
-                                  onKeyDown={(event) => event.stopPropagation()}
-                                  placeholder="display name(s)"
-                                  rows={2}
-                                  className={advancedFilterControlClass(`w-full resize-y px-2 py-1.5 font-normal ${ownerNameFieldState.fieldClass}`)}
-                                />
-                                <select
-                                  value={advancedDraft.ownerNameScope}
-                                  onChange={(e) => setAdvancedDraft((prev) => ({ ...prev, ownerNameScope: e.target.value as OwnerNameScope }))}
-                                  className={advancedFilterControlClass(`px-2 py-1.5 font-normal ${ownerNameFieldState.fieldClass}`)}
-                                  title="Owner entity scope"
-                                >
-                                  <option value="any">Accounts + Users</option>
-                                  <option value="account">Accounts only</option>
-                                  <option value="user">Users only</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            <div className={advancedFilterFieldCardClass()}>
-                              <label
-                                className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerSuspendedFieldState.labelClass}`}
-                              >
-                                <span className="inline-flex items-center gap-1">
-                                  <span>Owner suspended</span>
-                                  {renderFilterCostIndicator("medium", "Medium cost: owner-suspended filters require owner status lookups.")}
-                                </span>
-                              </label>
-                              <select
-                                value={advancedDraft.ownerSuspended}
-                                onChange={(e) =>
-                                  setAdvancedDraft((prev) => ({
-                                    ...prev,
-                                    ownerSuspended: e.target.value as BooleanFilterState,
-                                  }))
-                                }
-                                className={advancedFilterControlClass(`mt-2 w-full px-2 py-1.5 font-normal ${ownerSuspendedFieldState.fieldClass}`)}
-                              >
-                                {BOOLEAN_FILTER_OPTIONS.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div className={advancedFilterFieldCardClass("md:col-span-2")}>
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <label
-                                  className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${s3TagsFieldState.labelClass}`}
-                                >
-                                  <span className="inline-flex items-center gap-1">
-                                    <span>S3 tags</span>
-                                    {renderFilterCostIndicator("high", "High cost: S3 tag filters require bucket tag retrieval.")}
-                                  </span>
-                                </label>
-                                <div className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={s3TagsDraftForcesExact}
-                                    onClick={() => updateAdvancedMatchMode("s3TagsMatchMode", "contains")}
-                                    className={advancedFilterMatchModeButtonClass(s3TagsDraftEffectiveMatchMode === "contains", s3TagsDraftForcesExact)}
-                                  >
-                                    Contains
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={s3TagsDraftForcesExact}
-                                    onClick={() => updateAdvancedMatchMode("s3TagsMatchMode", "exact")}
-                                    className={advancedFilterMatchModeButtonClass(s3TagsDraftEffectiveMatchMode === "exact", s3TagsDraftForcesExact)}
-                                  >
-                                    Exact
-                                  </button>
-                                </div>
-                              </div>
-                              <textarea
-                                value={advancedDraft.s3Tags}
-                                onChange={(e) => updateAdvancedField("s3Tags", e.target.value)}
-                                onKeyDown={(event) => event.stopPropagation()}
-                                placeholder="env=prod, team=storage"
-                                rows={2}
-                                className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${s3TagsFieldState.fieldClass}`)}
-                              />
-                              <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                Comma or newline separated expressions. Format examples: <code>key=value</code>, <code>env</code>.
-                              </p>
-                            </div>
                           </div>
                         </section>
 

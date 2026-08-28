@@ -28,8 +28,10 @@ import {
   type AdvancedFilterSecondarySectionState,
   type AdvancedFilterState,
   type AdvancedTextOrNumericField,
+  type BooleanFilterState,
   type FeatureFilterState,
   type FeatureKey,
+  type OwnerNameScope,
   type TextMatchMode,
 } from "./bucketOpsAdvancedFilterModel";
 import { buildBucketOpsAdvancedFilterUiProjection } from "./bucketOpsAdvancedFilterUiProjection";
@@ -291,6 +293,26 @@ export function useBucketOpsFilterController({
     [setAdvancedDraft],
   );
 
+  const updateAdvancedOwnerNameScope = useCallback(
+    (value: OwnerNameScope) => {
+      setAdvancedDraft((previous) => ({
+        ...previous,
+        ownerNameScope: value,
+      }));
+    },
+    [setAdvancedDraft],
+  );
+
+  const updateAdvancedOwnerSuspended = useCallback(
+    (value: BooleanFilterState) => {
+      setAdvancedDraft((previous) => ({
+        ...previous,
+        ownerSuspended: value,
+      }));
+    },
+    [setAdvancedDraft],
+  );
+
   const updateFeatureFilter = useCallback(
     (feature: FeatureKey, value: FeatureFilterState) => {
       setAdvancedDraft((previous) => ({
@@ -449,6 +471,8 @@ export function useBucketOpsFilterController({
     toggleQuickFilterMode,
     updateAdvancedField,
     updateAdvancedMatchMode,
+    updateAdvancedOwnerNameScope,
+    updateAdvancedOwnerSuspended,
     updateFeatureDetailFilter,
     updateFeatureFilter,
   };
