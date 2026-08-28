@@ -387,9 +387,9 @@ def update_s3_connection(
 ) -> S3ConnectionAdminItem:
     service = S3ConnectionsService(db)
     tags_service = service.tags
-    _get_admin_shared_connection(db, connection_id)
+    conn = _get_admin_shared_connection(db, connection_id)
     try:
-        conn = service.update_admin_shared(connection_id, payload)
+        conn = service.update_admin_shared(conn, payload)
     except StorageEndpointNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -429,14 +429,13 @@ def update_s3_connection(
     )
     created_by_user = db.query(User).filter(User.id == conn.created_by_user_id).first()
     created_by_email = created_by_user.email if created_by_user else None
-    user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
     user_details = _linked_user_details(db, conn.id)
     group_details = _linked_group_details(db, conn.id)
     return _to_admin_item(
         conn,
         created_by_email=created_by_email,
         created_by_user=created_by_user,
-        user_count=int(user_count),
+        user_count=len(user_details),
         user_details=user_details,
         group_details=group_details,
         tags_service=tags_service,
@@ -455,7 +454,7 @@ def delete_s3_connection(
     details = resolve_connection_details(conn)
     meta = {"name": conn.name, "endpoint_url": details.endpoint_url, "provider_hint": details.provider}
     try:
-        service.delete_admin_shared(conn.id)
+        service.delete_admin_shared(conn)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

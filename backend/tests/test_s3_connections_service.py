@@ -510,7 +510,7 @@ def test_delete_admin_shared_cleans_links_and_orphan_tags(db_session):
     service.tags.replace_connection_tags(row, ["orphan-after-shared-delete"])
     db_session.commit()
 
-    service.delete_admin_shared(row.id)
+    service.delete_admin_shared(row)
 
     assert db_session.query(S3Connection).filter(S3Connection.id == row.id).first() is None
     assert (
@@ -552,6 +552,6 @@ def test_delete_admin_shared_rejects_active_managed_source(
     )
 
     with pytest.raises(ValueError, match="managed private accesses"):
-        service.delete_admin_shared(row.id)
+        service.delete_admin_shared(row)
 
     assert db_session.query(S3Connection).filter(S3Connection.id == row.id).one()

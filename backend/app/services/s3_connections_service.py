@@ -159,10 +159,9 @@ class S3ConnectionsService:
 
     def update_admin_shared(
         self,
-        connection_id: int,
+        row: DBS3Connection,
         payload: S3ConnectionAdminUpdate,
     ) -> DBS3Connection:
-        row = self.get_admin_shared(connection_id)
         update_credentials = payload.credentials is not None
         endpoint_plan, group_ids, user_ids = self._prepare_admin_shared_update(
             row,
@@ -385,8 +384,7 @@ class S3ConnectionsService:
             raise ValueError(ACTIVE_MANAGED_SOURCE_DELETE_ERROR)
         self._delete_entry(row)
 
-    def delete_admin_shared(self, connection_id: int) -> None:
-        row = self.get_admin_shared(connection_id)
+    def delete_admin_shared(self, row: DBS3Connection) -> None:
         if self.is_active_managed_source(row.id):
             raise ValueError(ACTIVE_MANAGED_SOURCE_DELETE_ERROR)
         self._delete_entry(row)

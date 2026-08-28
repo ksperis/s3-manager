@@ -41,7 +41,7 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
                     return self._skipped("s3_connection", key, dry_run=dry_run)
                 if dry_run:
                     return self._deleted("s3_connection", key, conn.id, dry_run=dry_run)
-                self.s3_connections.delete_admin_shared(conn.id)
+                self.s3_connections.delete_admin_shared(conn)
                 audit_service.record_action(
                     user=current_user,
                     scope="admin",
@@ -109,7 +109,7 @@ class AdminAutomationConnectionHandler(AdminAutomationResultFactory):
                     }
                 )
             conn = self.s3_connections.update_admin_shared(
-                conn.id,
+                conn,
                 update_payload,
             )
             metadata = update_payload.model_dump(
