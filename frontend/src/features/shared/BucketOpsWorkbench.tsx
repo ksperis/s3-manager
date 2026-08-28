@@ -79,7 +79,6 @@ import { useBucketOpsListing } from "./useBucketOpsListing";
 import { useBucketOpsRowTags } from "./useBucketOpsRowTags";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
-import { copyBucketOpsConfigs } from "./bucketOpsConfigCopy";
 import { applyBucketOpsConfigPaste } from "./bucketOpsConfigPaste";
 import { previewBucketOpsConfigPaste } from "./bucketOpsConfigPastePreview";
 import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
@@ -90,6 +89,7 @@ import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopePro
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
 import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
+import { useBucketOpsConfigCopy } from "./useBucketOpsConfigCopy";
 import { useBucketOpsSelection } from "./useBucketOpsSelection";
 import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
 import {
@@ -189,10 +189,6 @@ import {
   BULK_COPY_FEATURE_LABELS,
   BUCKET_CONFIG_BACKUP_FEATURE_LABELS,
   PUBLIC_ACCESS_BLOCK_OPTIONS,
-  loadBulkConfigClipboard,
-  normalizeQuotaLimit,
-  persistBulkConfigClipboard,
-  type BulkConfigClipboard,
   type BulkCopyFeatureKey,
   type BulkOperation,
   type BulkPreviewItem,
@@ -536,13 +532,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setBulkQuotaSizeValue,
     setBulkQuotaSkipConfigured,
   } = useBucketOpsBulkForm();
-  const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(() =>
-    loadBulkConfigClipboard(bulkClipboardStorageKey)
-  );
-  const [bulkCopyLoading, setBulkCopyLoading] = useState(false);
-  const [bulkCopyProgress, setBulkCopyProgress] = useState<ActionProgressState | null>(null);
-  const [bulkCopyError, setBulkCopyError] = useState<string | null>(null);
-  const [bulkCopySummary, setBulkCopySummary] = useState<string | null>(null);
   const [bulkPreview, setBulkPreview] = useState<BulkPreviewItem[]>([]);
   const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
   const [bulkPreviewProgress, setBulkPreviewProgress] = useState<ActionProgressState | null>(null);
@@ -579,7 +568,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     selectedScopeId: selectedEndpointId,
   });
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
-  const bulkCopyRunTokenRef = useRef(0);
   const bulkPreviewRunTokenRef = useRef(0);
   const restoreFilterRef = useRef<string | null>(null);
   const restoredReturnContextRef = useRef<number | null>(null);
@@ -754,10 +742,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [bucketsStateStorageKey, ownerQueryFilter, selectedEndpointId]);
 
   useEffect(() => {
-    persistBulkConfigClipboard(bulkClipboardStorageKey, bulkConfigClipboard);
-  }, [bulkClipboardStorageKey, bulkConfigClipboard]);
-
-  useEffect(() => {
     if (!selectedEndpointId) return;
     persistBucketListState(bucketsStateStorageKey, selectedEndpointId, {
       filter,
@@ -917,6 +901,33 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     total,
     withStats: baseRequiresStats,
   });
+  const {
+    bulkConfigClipboard,
+    bulkCopyError,
+    bulkCopyLoading,
+    bulkCopyProgress,
+    bulkCopySummary,
+    cancelBulkCopy,
+    copyBulkConfigs,
+    fetchBucketQuota,
+    resetBulkCopy,
+  } = useBucketOpsConfigCopy({
+    bucketNames: selectedBucketList,
+    extractError,
+    features: bulkCopyFeatures,
+    getBucketCors,
+    getBucketLifecycle,
+    getBucketLogging,
+    getBucketPolicy,
+    getBucketProperties,
+    getBucketPublicAccessBlock,
+    isStorageOps,
+    listBuckets,
+    sourceEndpointId: selectedEndpointId,
+    sourceEndpointName: selectedEndpoint?.name ?? null,
+    storageKey: bulkClipboardStorageKey,
+    usageFeatureEnabled,
+  });
 
   useEffect(() => {
     resetSelectedBuckets();
@@ -1062,8 +1073,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const clearSelection = () => {
     resetSelectedBuckets();
     resetBulkForm();
-    setBulkCopyError(null);
-    setBulkCopySummary(null);
+    resetBulkCopy();
     setBulkPreview([]);
     setBulkPreviewError(null);
     setBulkPreviewReady(false);
@@ -1214,9 +1224,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   useEffect(() => {
     if (!showBulkUpdateModal) return;
     resetBulkPreview();
-    bulkCopyRunTokenRef.current += 1;
-    setBulkCopyLoading(false);
-    setBulkCopyProgress(null);
+    cancelBulkCopy();
     setBulkApplyError(null);
     setBulkApplySummary(null);
     setBulkApplyProgress(null);
@@ -1247,6 +1255,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     bulkCopyFeatures,
     bulkPasteMapping,
     bulkConfigClipboard,
+    cancelBulkCopy,
     selectedBuckets,
     showBulkUpdateModal,
   ]);
@@ -1267,13 +1276,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   ]);
 
   const openBulkUpdateModal = () => {
-    bulkCopyRunTokenRef.current += 1;
     setShowBulkUpdateModal(true);
     resetBulkForm();
-    setBulkCopyError(null);
-    setBulkCopySummary(null);
-    setBulkCopyLoading(false);
-    setBulkCopyProgress(null);
+    resetBulkCopy();
     resetBulkPreview();
     setBulkApplyError(null);
     setBulkApplySummary(null);
@@ -1281,88 +1286,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   };
 
   const closeBulkUpdateModal = () => {
-    bulkCopyRunTokenRef.current += 1;
     setShowBulkUpdateModal(false);
     resetBulkPreview();
-    setBulkCopyError(null);
-    setBulkCopySummary(null);
-    setBulkCopyLoading(false);
-    setBulkCopyProgress(null);
+    resetBulkCopy();
     setBulkApplyError(null);
     setBulkApplySummary(null);
     setBulkApplyProgress(null);
-  };
-
-  const fetchBucketQuota = async (bucketName: string) => {
-    const advancedFilter = JSON.stringify({
-      match: "all",
-      rules: [{ field: "name", op: "in", value: [bucketName] }],
-    });
-    const response = await listBuckets(selectedEndpointId!, {
-      page: 1,
-      page_size: 5,
-      advanced_filter: advancedFilter,
-      with_stats: usageFeatureEnabled,
-    });
-    const match =
-      response.items.find((item) => normalizeBucketName(item.name) === normalizeBucketName(bucketName)) ??
-      response.items[0] ??
-      null;
-    return {
-      maxSizeBytes: normalizeQuotaLimit(match?.quota_max_size_bytes),
-      maxObjects: normalizeQuotaLimit(match?.quota_max_objects),
-    };
-  };
-
-  const copyBulkConfigs = async () => {
-    if (!selectedEndpointId || selectedBucketList.length === 0) return;
-    const runToken = bulkCopyRunTokenRef.current + 1;
-    bulkCopyRunTokenRef.current = runToken;
-    setBulkCopyLoading(true);
-    setBulkCopyError(null);
-    setBulkCopySummary(null);
-    setBulkCopyProgress({
-      label: "Copying selected configs",
-      completed: 0,
-      total: selectedBucketList.length,
-      failed: 0,
-    });
-    try {
-      const result = await copyBucketOpsConfigs({
-        bucketNames: selectedBucketList,
-        copiedAt: new Date().toISOString(),
-        features: bulkCopyFeatures,
-        fetchBucketQuota,
-        getBucketCors,
-        getBucketLifecycle,
-        getBucketLogging,
-        getBucketPolicy,
-        getBucketProperties,
-        getBucketPublicAccessBlock,
-        isStorageOps,
-        onProgress: (progress) => {
-          if (bulkCopyRunTokenRef.current !== runToken) return;
-          setBulkCopyProgress({ label: "Copying selected configs", ...progress });
-        },
-        sourceEndpointId: selectedEndpointId,
-        sourceEndpointName: selectedEndpoint?.name ?? null,
-      });
-      if (bulkCopyRunTokenRef.current !== runToken) return;
-      if (result.kind === "error") {
-        setBulkCopyError(result.error);
-        return;
-      }
-      setBulkConfigClipboard(result.clipboard);
-      setBulkCopySummary(result.summary);
-    } catch (err) {
-      if (bulkCopyRunTokenRef.current !== runToken) return;
-      setBulkCopyError(extractError(err));
-    } finally {
-      if (bulkCopyRunTokenRef.current === runToken) {
-        setBulkCopyLoading(false);
-        setBulkCopyProgress(null);
-      }
-    }
   };
 
   const prepareCurrentBulkInput = () =>
