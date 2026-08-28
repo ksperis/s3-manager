@@ -67,10 +67,14 @@ import {
   adminAssociationTableHeaderRightClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
-import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
+import S3ConnectionEndpointFields from "../shared/S3ConnectionEndpointFields";
 import S3ConnectionCredentialFields from "../shared/S3ConnectionCredentialFields";
 import S3CredentialsValidationMessage from "../shared/S3CredentialsValidationMessage";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
+import {
+  buildS3CredentialsValidationPayload,
+  type S3ConnectionEndpointMode,
+} from "../shared/s3ConnectionFormModel";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 
 const credentialOwnerTypeOptions = [
@@ -348,38 +352,15 @@ export default function S3ConnectionsPage() {
   const createHasPreset = createEndpointMode === "preset";
   const editHasPreset = editEndpointMode === "preset";
 
-  const createValidationPayload = useMemo(() => {
-    const accessKeyId = createForm.access_key_id.trim();
-    const secretAccessKey = createForm.secret_access_key.trim();
-    if (!accessKeyId || !secretAccessKey) return null;
-    if (createHasPreset) {
-      if (!createEndpointPresetId) return null;
-      return {
-        storage_endpoint_id: Number(createEndpointPresetId),
-        access_key_id: accessKeyId,
-        secret_access_key: secretAccessKey,
-      };
-    }
-    const endpointUrl = createForm.endpoint_url.trim();
-    if (!endpointUrl) return null;
-    return {
-      endpoint_url: endpointUrl,
-      region: createForm.region.trim() || null,
-      access_key_id: accessKeyId,
-      secret_access_key: secretAccessKey,
-      force_path_style: createForm.force_path_style,
-      verify_tls: createForm.verify_tls,
-    };
-  }, [
-    createEndpointPresetId,
-    createForm.access_key_id,
-    createForm.endpoint_url,
-    createForm.force_path_style,
-    createForm.region,
-    createForm.secret_access_key,
-    createForm.verify_tls,
-    createHasPreset,
-  ]);
+  const createValidationPayload = useMemo(
+    () =>
+      buildS3CredentialsValidationPayload(
+        createForm,
+        createEndpointMode,
+        createEndpointPresetId,
+      ),
+    [createEndpointMode, createEndpointPresetId, createForm],
+  );
 
   const validateCreateCredentials = useCallback(
     (payload: S3CredentialsValidationPayload) => validateAdminS3ConnectionCredentials(payload),

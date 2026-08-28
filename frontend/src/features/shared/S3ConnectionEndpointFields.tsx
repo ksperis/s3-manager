@@ -13,8 +13,7 @@ import {
   uiMutedTextClass,
   uiPanelMutedClass,
 } from "../../components/ui/styles";
-
-export type S3ConnectionEndpointMode = "preset" | "custom";
+import type { S3ConnectionEndpointMode } from "./s3ConnectionFormModel";
 
 const S3_CONNECTION_PROVIDER_HINT_OPTIONS = [
   { value: "", label: "(auto)" },

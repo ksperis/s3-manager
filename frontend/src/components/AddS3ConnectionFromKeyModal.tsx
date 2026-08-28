@@ -13,7 +13,8 @@ import { notifyExecutionContextsRefresh } from "../utils/executionContextRefresh
 import { extractApiError } from "../utils/apiError";
 import { stableSignature } from "../utils/stableSignature";
 import S3ConnectionAccessFields from "../features/shared/S3ConnectionAccessFields";
-import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../features/shared/S3ConnectionEndpointFields";
+import S3ConnectionEndpointFields from "../features/shared/S3ConnectionEndpointFields";
+import type { S3ConnectionEndpointMode } from "../features/shared/s3ConnectionFormModel";
 import Modal from "./Modal";
 import UiButton from "./ui/UiButton";
 import UiInlineMessage from "./ui/UiInlineMessage";

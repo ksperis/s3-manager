@@ -64,46 +64,26 @@ import {
   readSelectorTagsPreference,
   writeSelectorTagsPreference,
 } from "../../utils/selectorTagsPreference";
-import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
+import { buildUiTagItems, extractUiTagLabels, normalizeUiTags } from "../../utils/uiTags";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import S3ConnectionAccessFields from "./S3ConnectionAccessFields";
 import S3ConnectionCredentialFields from "./S3ConnectionCredentialFields";
-import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "./S3ConnectionEndpointFields";
+import S3ConnectionEndpointFields from "./S3ConnectionEndpointFields";
 import S3CredentialsValidationMessage from "./S3CredentialsValidationMessage";
-
-const defaultCreateConnectionForm = {
-  name: "",
-  tags: [] as UiTagDefinition[],
-  provider_hint: "",
-  endpoint_url: "",
-  region: "",
-  access_key_id: "",
-  secret_access_key: "",
-  access_manager: false,
-  access_browser: true,
-  force_path_style: false,
-  verify_tls: true,
-};
-
-type CreateConnectionForm = typeof defaultCreateConnectionForm;
-
-type ConnectionDraft = {
-  name: string;
-  tags: UiTagDefinition[];
-  provider_hint: string;
-  endpoint_url: string;
-  region: string;
-  access_manager: boolean;
-  access_browser: boolean;
-  force_path_style: boolean;
-  verify_tls: boolean;
-  storage_endpoint_id?: number | null;
-};
-
-type ConnectionCredentialDraft = {
-  access_key_id: string;
-  secret_access_key: string;
-};
+import {
+  buildCreatePrivateConnectionSignature,
+  buildEditPrivateConnectionSignature,
+  buildPrivateConnectionDraft,
+  buildPrivateConnectionEditorState,
+  buildS3CredentialsValidationPayload,
+  createDefaultPrivateConnectionForm,
+  createEmptyConnectionCredentialDraft,
+  parsePrivateConnectionSortDate,
+  type ConnectionCredentialDraft,
+  type CreatePrivateConnectionForm,
+  type PrivateConnectionDraft,
+  type S3ConnectionEndpointMode,
+} from "./s3ConnectionFormModel";
 
 type PendingPrivateConnectionDelete = {
   scope: "single" | "bulk";
@@ -141,65 +121,11 @@ function avatarSourceLabel(avatar?: UserAvatarDescriptor | null): string {
   return "Initials";
 }
 
-function buildConnectionDraft(connection: S3Connection): ConnectionDraft {
-  return {
-    name: connection.name ?? "",
-    tags: normalizeUiTags(connection.tags),
-    provider_hint: connection.provider_hint ?? "",
-    endpoint_url: connection.endpoint_url ?? "",
-    region: connection.region ?? "",
-    access_manager: connection.access_manager === true,
-    access_browser: connection.access_browser !== false,
-    force_path_style: Boolean(connection.force_path_style),
-    verify_tls: connection.verify_tls !== false,
-    storage_endpoint_id: connection.storage_endpoint_id ?? null,
-  };
-}
-
-function buildCreateConnectionSignature(
-  form: CreateConnectionForm,
-  endpointMode: S3ConnectionEndpointMode,
-  endpointId: string
-): string {
-  return stableSignature({
-    endpointMode,
-    endpointId,
-    form: {
-      ...form,
-      tags: normalizeUiTags(form.tags),
-    },
-  });
-}
-
-function buildEditConnectionSignature(
-  draft: ConnectionDraft,
-  credentialDraft: ConnectionCredentialDraft,
-  endpointMode: S3ConnectionEndpointMode,
-  endpointId: string
-): string {
-  return stableSignature({
-    endpointMode,
-    endpointId,
-    draft: {
-      ...draft,
-      tags: normalizeUiTags(draft.tags),
-    },
-    credentialDraft,
-  });
-}
-
 function formatDateTime(value?: string | null): string {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
-}
-
-function parseConnectionSortDate(connection: S3Connection): number {
-  const raw = connection.updated_at ?? connection.created_at;
-  if (!raw) return 0;
-  const parsed = Date.parse(raw);
-  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 type ProfilePageProps = {
@@ -266,21 +192,26 @@ export default function ProfilePage({
   const [bulkDeletingConnections, setBulkDeletingConnections] = useState(false);
   const [pendingConnectionDelete, setPendingConnectionDelete] = useState<PendingPrivateConnectionDelete | null>(null);
   const [editingConnectionId, setEditingConnectionId] = useState<number | null>(null);
-  const [createConnectionForm, setCreateConnectionForm] = useState(defaultCreateConnectionForm);
+  const [createConnectionForm, setCreateConnectionForm] = useState(createDefaultPrivateConnectionForm);
   const [createConnectionEndpointMode, setCreateConnectionEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [createConnectionEndpointId, setCreateConnectionEndpointId] = useState("");
   const [editConnectionEndpointMode, setEditConnectionEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [editConnectionEndpointId, setEditConnectionEndpointId] = useState("");
   const [createConnectionInitialSignature, setCreateConnectionInitialSignature] = useState(() =>
-    buildCreateConnectionSignature(defaultCreateConnectionForm, "custom", "")
+    buildCreatePrivateConnectionSignature(createDefaultPrivateConnectionForm(), "custom", "")
   );
   const [editConnectionInitialSignature, setEditConnectionInitialSignature] = useState(() =>
-    buildEditConnectionSignature(buildConnectionDraft({ id: 0 } as S3Connection), { access_key_id: "", secret_access_key: "" }, "custom", "")
+    buildEditPrivateConnectionSignature(
+      buildPrivateConnectionDraft({ id: 0 } as S3Connection),
+      createEmptyConnectionCredentialDraft(),
+      "custom",
+      "",
+    )
   );
   const [availableStorageEndpoints, setAvailableStorageEndpoints] = useState<PrivateConnectionStorageEndpoint[]>([]);
   const [loadingStorageEndpoints, setLoadingStorageEndpoints] = useState(false);
   const [storageEndpointsError, setStorageEndpointsError] = useState<string | null>(null);
-  const [connectionDrafts, setConnectionDrafts] = useState<Record<number, ConnectionDraft>>({});
+  const [connectionDrafts, setConnectionDrafts] = useState<Record<number, PrivateConnectionDraft>>({});
   const [connectionCredentialDrafts, setConnectionCredentialDrafts] = useState<Record<number, ConnectionCredentialDraft>>(
     {}
   );
@@ -350,38 +281,15 @@ export default function ProfilePage({
     setPreferencesInitialSignature(preferencesCurrentSignature);
   }, [preferencesCurrentSignature, preferencesTouched, showSettingsCards]);
 
-  const createConnectionValidationPayload = useMemo(() => {
-    const accessKeyId = createConnectionForm.access_key_id.trim();
-    const secretAccessKey = createConnectionForm.secret_access_key.trim();
-    if (!accessKeyId || !secretAccessKey) return null;
-    if (createConnectionEndpointMode === "preset") {
-      if (!createConnectionEndpointId) return null;
-      return {
-        storage_endpoint_id: Number(createConnectionEndpointId),
-        access_key_id: accessKeyId,
-        secret_access_key: secretAccessKey,
-      };
-    }
-    const endpointUrl = createConnectionForm.endpoint_url.trim();
-    if (!endpointUrl) return null;
-    return {
-      endpoint_url: endpointUrl,
-      region: createConnectionForm.region.trim() || null,
-      access_key_id: accessKeyId,
-      secret_access_key: secretAccessKey,
-      force_path_style: createConnectionForm.force_path_style,
-      verify_tls: createConnectionForm.verify_tls,
-    };
-  }, [
-    createConnectionEndpointId,
-    createConnectionEndpointMode,
-    createConnectionForm.access_key_id,
-    createConnectionForm.endpoint_url,
-    createConnectionForm.force_path_style,
-    createConnectionForm.region,
-    createConnectionForm.secret_access_key,
-    createConnectionForm.verify_tls,
-  ]);
+  const createConnectionValidationPayload = useMemo(
+    () =>
+      buildS3CredentialsValidationPayload(
+        createConnectionForm,
+        createConnectionEndpointMode,
+        createConnectionEndpointId,
+      ),
+    [createConnectionEndpointId, createConnectionEndpointMode, createConnectionForm],
+  );
 
   const validatePrivateCreateCredentials = useCallback(
     (payload: S3CredentialsValidationPayload) => validateConnectionCredentials(payload),
@@ -398,7 +306,7 @@ export default function ProfilePage({
   const sortedConnections = useMemo(
     () =>
       [...connections].sort((a, b) => {
-        const dateDiff = parseConnectionSortDate(b) - parseConnectionSortDate(a);
+        const dateDiff = parsePrivateConnectionSortDate(b) - parsePrivateConnectionSortDate(a);
         if (dateDiff !== 0) return dateDiff;
         return b.id - a.id;
       }),
@@ -460,7 +368,7 @@ export default function ProfilePage({
 
   const createConnectionCurrentSignature = useMemo(
     () =>
-      buildCreateConnectionSignature(
+      buildCreatePrivateConnectionSignature(
         createConnectionForm,
         createConnectionEndpointMode,
         createConnectionEndpointId
@@ -471,7 +379,7 @@ export default function ProfilePage({
   const closeCreateConnectionModal = useCallback(() => {
     if (creatingConnection) return;
     setShowCreateConnectionModal(false);
-    setCreateConnectionForm(defaultCreateConnectionForm);
+    setCreateConnectionForm(createDefaultPrivateConnectionForm());
     setCreateConnectionEndpointMode("custom");
     setCreateConnectionEndpointId("");
   }, [creatingConnection]);
@@ -481,11 +389,11 @@ export default function ProfilePage({
     if (editingConnection) {
       setConnectionDrafts((prev) => ({
         ...prev,
-        [editingConnection.id]: buildConnectionDraft(editingConnection),
+        [editingConnection.id]: buildPrivateConnectionDraft(editingConnection),
       }));
       setConnectionCredentialDrafts((prev) => ({
         ...prev,
-        [editingConnection.id]: { access_key_id: "", secret_access_key: "" },
+        [editingConnection.id]: createEmptyConnectionCredentialDraft(),
       }));
     }
     setEditingConnectionId(null);
@@ -493,12 +401,10 @@ export default function ProfilePage({
 
   const editConnectionCurrentSignature = useMemo(() => {
     if (!editingConnection) return editConnectionInitialSignature;
-    const draft = connectionDrafts[editingConnection.id] ?? buildConnectionDraft(editingConnection);
-    const credentialDraft = connectionCredentialDrafts[editingConnection.id] ?? {
-      access_key_id: "",
-      secret_access_key: "",
-    };
-    return buildEditConnectionSignature(
+    const draft = connectionDrafts[editingConnection.id] ?? buildPrivateConnectionDraft(editingConnection);
+    const credentialDraft =
+      connectionCredentialDrafts[editingConnection.id] ?? createEmptyConnectionCredentialDraft();
+    return buildEditPrivateConnectionSignature(
       draft,
       credentialDraft,
       editConnectionEndpointMode,
@@ -605,19 +511,10 @@ export default function ProfilePage({
     listConnections()
       .then((items) => {
         if (cancelled) return;
+        const editorState = buildPrivateConnectionEditorState(items);
         setConnections(items);
-        setConnectionDrafts(
-          items.reduce<Record<number, ConnectionDraft>>((acc, item) => {
-            acc[item.id] = buildConnectionDraft(item);
-            return acc;
-          }, {})
-        );
-        setConnectionCredentialDrafts(
-          items.reduce<Record<number, ConnectionCredentialDraft>>((acc, item) => {
-            acc[item.id] = { access_key_id: "", secret_access_key: "" };
-            return acc;
-          }, {})
-        );
+        setConnectionDrafts(editorState.drafts);
+        setConnectionCredentialDrafts(editorState.credentialDrafts);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -749,19 +646,10 @@ export default function ProfilePage({
     setConnectionsError(null);
     try {
       const items = await listConnections();
+      const editorState = buildPrivateConnectionEditorState(items);
       setConnections(items);
-      setConnectionDrafts(
-        items.reduce<Record<number, ConnectionDraft>>((acc, item) => {
-          acc[item.id] = buildConnectionDraft(item);
-          return acc;
-        }, {})
-      );
-      setConnectionCredentialDrafts(
-        items.reduce<Record<number, ConnectionCredentialDraft>>((acc, item) => {
-          acc[item.id] = { access_key_id: "", secret_access_key: "" };
-          return acc;
-        }, {})
-      );
+      setConnectionDrafts(editorState.drafts);
+      setConnectionCredentialDrafts(editorState.credentialDrafts);
     } catch (error) {
       console.error(error);
       setConnectionsError(getErrorMessage(error, "Unable to refresh private S3 connections."));
@@ -774,7 +662,8 @@ export default function ProfilePage({
     if (!canCreateManualConnections) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
-    const nextForm: CreateConnectionForm = { ...defaultCreateConnectionForm, tags: [] };
+    const nextForm: CreatePrivateConnectionForm =
+      createDefaultPrivateConnectionForm();
     let nextEndpointMode: S3ConnectionEndpointMode = "custom";
     let nextEndpointId = "";
     if (availableStorageEndpoints.length > 0) {
@@ -785,15 +674,21 @@ export default function ProfilePage({
     setCreateConnectionForm(nextForm);
     setCreateConnectionEndpointMode(nextEndpointMode);
     setCreateConnectionEndpointId(nextEndpointId);
-    setCreateConnectionInitialSignature(buildCreateConnectionSignature(nextForm, nextEndpointMode, nextEndpointId));
+    setCreateConnectionInitialSignature(
+      buildCreatePrivateConnectionSignature(
+        nextForm,
+        nextEndpointMode,
+        nextEndpointId,
+      ),
+    );
     setShowCreateConnectionModal(true);
   };
 
   const openEditConnectionModal = (connection: S3Connection) => {
     setConnectionsError(null);
     setConnectionsMessage(null);
-    const nextDraft = buildConnectionDraft(connection);
-    const nextCredentialDraft = { access_key_id: "", secret_access_key: "" };
+    const nextDraft = buildPrivateConnectionDraft(connection);
+    const nextCredentialDraft = createEmptyConnectionCredentialDraft();
     setConnectionDrafts((prev) => ({
       ...prev,
       [connection.id]: nextDraft,
@@ -811,7 +706,12 @@ export default function ProfilePage({
       [connection.id]: nextCredentialDraft,
     }));
     setEditConnectionInitialSignature(
-      buildEditConnectionSignature(nextDraft, nextCredentialDraft, nextEndpointMode, nextEndpointId)
+      buildEditPrivateConnectionSignature(
+        nextDraft,
+        nextCredentialDraft,
+        nextEndpointMode,
+        nextEndpointId,
+      ),
     );
     setEditingConnectionId(connection.id);
   };
@@ -1018,7 +918,7 @@ export default function ProfilePage({
         force_path_style: storageEndpointId ? undefined : createConnectionForm.force_path_style,
         verify_tls: storageEndpointId ? undefined : createConnectionForm.verify_tls,
       });
-      setCreateConnectionForm(defaultCreateConnectionForm);
+      setCreateConnectionForm(createDefaultPrivateConnectionForm());
       setCreateConnectionEndpointMode(availableStorageEndpoints.length > 0 ? "preset" : "custom");
       setCreateConnectionEndpointId("");
       setShowCreateConnectionModal(false);
@@ -1036,8 +936,8 @@ export default function ProfilePage({
 
   const handleUpdateConnectionDraft = (
     connectionId: number,
-    field: keyof ConnectionDraft,
-    value: ConnectionDraft[keyof ConnectionDraft]
+    field: keyof PrivateConnectionDraft,
+    value: PrivateConnectionDraft[keyof PrivateConnectionDraft]
   ) => {
     setConnectionDrafts((prev) => ({
       ...prev,
@@ -1066,7 +966,9 @@ export default function ProfilePage({
     if (!canAccessConnectionsSection) return false;
     const draft = connectionDrafts[connectionId];
     if (!draft) return false;
-    const credentialDraft = connectionCredentialDrafts[connectionId] ?? { access_key_id: "", secret_access_key: "" };
+    const credentialDraft =
+      connectionCredentialDrafts[connectionId] ??
+      createEmptyConnectionCredentialDraft();
     const accessKeyId = credentialDraft.access_key_id.trim();
     const secretAccessKey = credentialDraft.secret_access_key.trim();
     const usePresetEndpoint = editConnectionEndpointMode === "preset";
@@ -1125,7 +1027,7 @@ export default function ProfilePage({
       });
       setConnectionCredentialDrafts((prev) => ({
         ...prev,
-        [connectionId]: { access_key_id: "", secret_access_key: "" },
+        [connectionId]: createEmptyConnectionCredentialDraft(),
       }));
       setConnectionsMessage("Private S3 connection updated.");
       await refreshConnections();
@@ -1142,29 +1044,17 @@ export default function ProfilePage({
 
   const editConnectionValidationPayload = useMemo(() => {
     if (!editingConnection || editingConnection.server_managed) return null;
-    const draft = connectionDrafts[editingConnection.id] ?? buildConnectionDraft(editingConnection);
-    const credentialDraft = connectionCredentialDrafts[editingConnection.id] ?? { access_key_id: "", secret_access_key: "" };
-    const accessKeyId = credentialDraft.access_key_id.trim();
-    const secretAccessKey = credentialDraft.secret_access_key.trim();
-    if (!accessKeyId || !secretAccessKey) return null;
-    if (editConnectionEndpointMode === "preset") {
-      if (!editConnectionEndpointId) return null;
-      return {
-        storage_endpoint_id: Number(editConnectionEndpointId),
-        access_key_id: accessKeyId,
-        secret_access_key: secretAccessKey,
-      };
-    }
-    const endpointUrl = draft.endpoint_url.trim();
-    if (!endpointUrl) return null;
-    return {
-      endpoint_url: endpointUrl,
-      region: draft.region.trim() || null,
-      access_key_id: accessKeyId,
-      secret_access_key: secretAccessKey,
-      force_path_style: draft.force_path_style,
-      verify_tls: draft.verify_tls,
-    };
+    const draft =
+      connectionDrafts[editingConnection.id] ??
+      buildPrivateConnectionDraft(editingConnection);
+    const credentialDraft =
+      connectionCredentialDrafts[editingConnection.id] ??
+      createEmptyConnectionCredentialDraft();
+    return buildS3CredentialsValidationPayload(
+      { ...draft, ...credentialDraft },
+      editConnectionEndpointMode,
+      editConnectionEndpointId,
+    );
   }, [
     connectionCredentialDrafts,
     connectionDrafts,
@@ -2078,11 +1968,12 @@ export default function ProfilePage({
             }}
           >
             {(() => {
-              const draft = connectionDrafts[editingConnection.id] ?? buildConnectionDraft(editingConnection);
-              const credentialDraft = connectionCredentialDrafts[editingConnection.id] ?? {
-                access_key_id: "",
-                secret_access_key: "",
-              };
+              const draft =
+                connectionDrafts[editingConnection.id] ??
+                buildPrivateConnectionDraft(editingConnection);
+              const credentialDraft =
+                connectionCredentialDrafts[editingConnection.id] ??
+                createEmptyConnectionCredentialDraft();
               return (
                 <>
                       <div className="grid gap-3 sm:grid-cols-2">
