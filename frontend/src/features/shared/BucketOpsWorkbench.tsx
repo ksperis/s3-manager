@@ -59,11 +59,6 @@ import {
   mergeNotificationConfigurations,
   NOTIFICATION_CONFIGURATION_ARRAY_KEYS,
   NOTIFICATION_EVENTBRIDGE_KEY,
-  parseCorsRules,
-  parseLifecycleRules,
-  parseNotificationConfiguration,
-  parsePolicyStatements,
-  parseRuleIds,
   type NotificationConfigurationTypeKey,
 } from "../cephAdmin/bucketJsonParsers";
 import CephAdminAdminOpsModal, {
@@ -93,6 +88,7 @@ import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
 import { copyBucketOpsConfigs } from "./bucketOpsConfigCopy";
 import { applyBucketOpsConfigPaste } from "./bucketOpsConfigPaste";
 import { previewBucketOpsConfigPaste } from "./bucketOpsConfigPastePreview";
+import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
 import {
   buildBucketExportColumns,
   buildBucketSelectionJsonPayload,
@@ -202,7 +198,6 @@ import {
   formatLifecycleRule,
   formatNotificationConfiguration,
   formatPolicyRule,
-  getCorsRuleKey,
   getCorsRuleTypes,
   getLifecycleRuleId,
   getLifecycleRuleTypes,
@@ -230,7 +225,6 @@ import {
   loadBulkConfigClipboard,
   normalizePublicAccessBlockState,
   normalizeQuotaLimit,
-  parseQuotaInput,
   persistBulkConfigClipboard,
   type BulkConfigClipboard,
   type BulkCopyFeatureKey,
@@ -2268,6 +2262,42 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
   };
 
+  const prepareCurrentBulkInput = () =>
+    prepareBucketOpsBulkInput({
+      operation: bulkOperation,
+      quota: {
+        applyObjects: bulkQuotaApplyObjects,
+        applySize: bulkQuotaApplySize,
+        objects: bulkQuotaObjects,
+        sizeUnit: bulkQuotaSizeUnit,
+        sizeValue: bulkQuotaSizeValue,
+      },
+      lifecycle: {
+        deleteIds: bulkLifecycleDeleteIds,
+        deleteTypes: bulkLifecycleDeleteTypes,
+        ruleText: bulkLifecycleRuleText,
+        updateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
+      },
+      notifications: {
+        configurationText: bulkNotificationText,
+        deleteIds: bulkNotificationDeleteIds,
+        deleteTypes: bulkNotificationDeleteTypes,
+      },
+      cors: {
+        deleteIds: bulkCorsDeleteIds,
+        deleteTypes: bulkCorsDeleteTypes,
+        ruleText: bulkCorsRuleText,
+        updateOnlyExisting: bulkCorsUpdateOnlyExisting,
+      },
+      policy: {
+        deleteIds: bulkPolicyDeleteIds,
+        deleteTypes: bulkPolicyDeleteTypes,
+        policyText: bulkPolicyText,
+        updateOnlyExisting: bulkPolicyUpdateOnlyExisting,
+      },
+      publicAccessBlockTargets: bulkPublicAccessBlockTargets,
+    });
+
   const runBulkPreview = async () => {
     if (!selectedEndpointId || selectedBucketList.length === 0) return;
     if (!bulkOperation) {
@@ -2330,135 +2360,27 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       }
       return;
     }
-    let parsedQuota: ParsedQuotaInput | null = null;
-    let parsedRules: Record<string, unknown>[] | null = null;
-    let parsedNotificationConfiguration: Record<string, unknown> | null = null;
-    let parsedCorsRules: Record<string, unknown>[] | null = null;
-    let parsedPolicyStatements: Record<string, unknown>[] | null = null;
-    let deleteIds: Set<string> | null = null;
-    let deleteTypes: Set<LifecycleRuleTypeKey> | null = null;
-    let deleteNotificationIds: Set<string> | null = null;
-    let deleteNotificationTypes: Set<NotificationConfigurationTypeKey> | null = null;
-    let deleteCorsIds: Set<string> | null = null;
-    let deleteCorsTypes: Set<CorsRuleTypeKey> | null = null;
-    let deletePolicyIds: Set<string> | null = null;
-    let deletePolicyTypes: Set<PolicyRuleTypeKey> | null = null;
-    let publicAccessBlockTargets: PublicAccessBlockOptionKey[] | null = null;
-    if (bulkOperation === "set_quota") {
-      const parsed = parseQuotaInput(
-        bulkQuotaSizeValue,
-        bulkQuotaSizeUnit,
-        bulkQuotaObjects,
-        bulkQuotaApplySize,
-        bulkQuotaApplyObjects
-      );
-      if ("error" in parsed) {
-        setBulkPreviewError(parsed.error);
-        return;
-      }
-      parsedQuota = parsed;
+    const prepared = prepareCurrentBulkInput();
+    if (prepared.kind === "error") {
+      setBulkPreviewError(prepared.error);
+      return;
     }
-    if (bulkOperation === "add_lifecycle") {
-      const parsed = parseLifecycleRules(bulkLifecycleRuleText);
-      if ("error" in parsed) {
-        setBulkPreviewError(parsed.error);
-        return;
-      }
-      if (bulkLifecycleUpdateOnlyExisting && parsed.rules.every((rule) => !getLifecycleRuleId(rule))) {
-        setBulkPreviewError("Provide rule IDs when 'only update existing' is enabled.");
-        return;
-      }
-      parsedRules = parsed.rules;
-    }
-    if (bulkOperation === "add_notifications") {
-      const parsed = parseNotificationConfiguration(bulkNotificationText);
-      if ("error" in parsed) {
-        setBulkPreviewError(parsed.error);
-        return;
-      }
-      parsedNotificationConfiguration = parsed.configuration;
-    }
-    if (bulkOperation === "delete_notifications") {
-      const parsedIds = parseRuleIds(bulkNotificationDeleteIds);
-      const parsedTypes = NOTIFICATION_TYPE_OPTIONS.filter((option) => bulkNotificationDeleteTypes[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedIds.length === 0 && parsedTypes.length === 0) {
-        setBulkPreviewError("Provide at least one notification ID or notification type.");
-        return;
-      }
-      deleteNotificationIds = new Set(parsedIds);
-      deleteNotificationTypes = new Set(parsedTypes);
-    }
-    if (bulkOperation === "add_cors") {
-      const parsed = parseCorsRules(bulkCorsRuleText);
-      if ("error" in parsed) {
-        setBulkPreviewError(parsed.error);
-        return;
-      }
-      if (
-        bulkCorsUpdateOnlyExisting &&
-        parsed.rules.every((rule) => !getLifecycleRuleId(rule) && !getCorsRuleKey(rule))
-      ) {
-        setBulkPreviewError("Provide rule IDs or matching origins/methods when 'only update existing' is enabled.");
-        return;
-      }
-      parsedCorsRules = parsed.rules;
-    }
-    if (bulkOperation === "add_policy") {
-      const parsed = parsePolicyStatements(bulkPolicyText);
-      if ("error" in parsed) {
-        setBulkPreviewError(parsed.error);
-        return;
-      }
-      parsedPolicyStatements = parsed.statements;
-    }
-    if (bulkOperation === "delete_lifecycle") {
-      const parsedIds = parseRuleIds(bulkLifecycleDeleteIds);
-      const parsedTypes = LIFECYCLE_TYPE_OPTIONS.filter((option) => bulkLifecycleDeleteTypes[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedIds.length === 0 && parsedTypes.length === 0) {
-        setBulkPreviewError("Provide at least one rule ID or rule type.");
-        return;
-      }
-      deleteIds = new Set(parsedIds);
-      deleteTypes = new Set(parsedTypes);
-    }
-    if (bulkOperation === "delete_cors") {
-      const parsedIds = parseRuleIds(bulkCorsDeleteIds);
-      const parsedTypes = CORS_TYPE_OPTIONS.filter((option) => bulkCorsDeleteTypes[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedIds.length === 0 && parsedTypes.length === 0) {
-        setBulkPreviewError("Provide at least one rule ID or rule type.");
-        return;
-      }
-      deleteCorsIds = new Set(parsedIds);
-      deleteCorsTypes = new Set(parsedTypes);
-    }
-    if (bulkOperation === "delete_policy") {
-      const parsedIds = parseRuleIds(bulkPolicyDeleteIds);
-      const parsedTypes = POLICY_TYPE_OPTIONS.filter((option) => bulkPolicyDeleteTypes[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedIds.length === 0 && parsedTypes.length === 0) {
-        setBulkPreviewError("Provide at least one statement ID or statement type.");
-        return;
-      }
-      deletePolicyIds = new Set(parsedIds);
-      deletePolicyTypes = new Set(parsedTypes);
-    }
-    if (bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") {
-      const parsedTargets = PUBLIC_ACCESS_BLOCK_OPTIONS.filter((option) => bulkPublicAccessBlockTargets[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedTargets.length === 0) {
-        setBulkPreviewError("Select at least one block public access option.");
-        return;
-      }
-      publicAccessBlockTargets = parsedTargets;
-    }
+    const {
+      parsedQuota,
+      parsedRules,
+      parsedNotificationConfiguration,
+      parsedCorsRules,
+      parsedPolicyStatements,
+      deleteIds,
+      deleteTypes,
+      deleteNotificationIds,
+      deleteNotificationTypes,
+      deleteCorsIds,
+      deleteCorsTypes,
+      deletePolicyIds,
+      deletePolicyTypes,
+      publicAccessBlockTargets,
+    } = prepared.value;
 
     const runToken = bulkPreviewRunTokenRef.current + 1;
     bulkPreviewRunTokenRef.current = runToken;
@@ -2623,137 +2545,28 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       refreshBuckets();
       return;
     }
-    let parsedQuota: ParsedQuotaInput | null = null;
-    let parsedRules: Record<string, unknown>[] | null = null;
-    let parsedNotificationConfiguration: Record<string, unknown> | null = null;
-    let parsedCorsRules: Record<string, unknown>[] | null = null;
-    let parsedPolicyStatements: Record<string, unknown>[] | null = null;
-    let parsedPolicy: Record<string, unknown> | null = null;
-    let deleteIds: Set<string> | null = null;
-    let deleteTypes: Set<LifecycleRuleTypeKey> | null = null;
-    let deleteNotificationIds: Set<string> | null = null;
-    let deleteNotificationTypes: Set<NotificationConfigurationTypeKey> | null = null;
-    let deleteCorsIds: Set<string> | null = null;
-    let deleteCorsTypes: Set<CorsRuleTypeKey> | null = null;
-    let deletePolicyIds: Set<string> | null = null;
-    let deletePolicyTypes: Set<PolicyRuleTypeKey> | null = null;
-    let publicAccessBlockTargets: PublicAccessBlockOptionKey[] | null = null;
-    if (bulkOperation === "set_quota") {
-      const parsed = parseQuotaInput(
-        bulkQuotaSizeValue,
-        bulkQuotaSizeUnit,
-        bulkQuotaObjects,
-        bulkQuotaApplySize,
-        bulkQuotaApplyObjects
-      );
-      if ("error" in parsed) {
-        setBulkApplyError(parsed.error);
-        return;
-      }
-      parsedQuota = parsed;
+    const prepared = prepareCurrentBulkInput();
+    if (prepared.kind === "error") {
+      setBulkApplyError(prepared.error);
+      return;
     }
-    if (bulkOperation === "add_lifecycle") {
-      const parsed = parseLifecycleRules(bulkLifecycleRuleText);
-      if ("error" in parsed) {
-        setBulkApplyError(parsed.error);
-        return;
-      }
-      if (bulkLifecycleUpdateOnlyExisting && parsed.rules.every((rule) => !getLifecycleRuleId(rule))) {
-        setBulkApplyError("Provide rule IDs when 'only update existing' is enabled.");
-        return;
-      }
-      parsedRules = parsed.rules;
-    }
-    if (bulkOperation === "add_notifications") {
-      const parsed = parseNotificationConfiguration(bulkNotificationText);
-      if ("error" in parsed) {
-        setBulkApplyError(parsed.error);
-        return;
-      }
-      parsedNotificationConfiguration = parsed.configuration;
-    }
-    if (bulkOperation === "delete_notifications") {
-      const parsedIds = parseRuleIds(bulkNotificationDeleteIds);
-      const parsedTypes = NOTIFICATION_TYPE_OPTIONS.filter((option) => bulkNotificationDeleteTypes[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedIds.length === 0 && parsedTypes.length === 0) {
-        setBulkApplyError("Provide at least one notification ID or notification type.");
-        return;
-      }
-      deleteNotificationIds = new Set(parsedIds);
-      deleteNotificationTypes = new Set(parsedTypes);
-    }
-    if (bulkOperation === "add_cors") {
-      const parsed = parseCorsRules(bulkCorsRuleText);
-      if ("error" in parsed) {
-        setBulkApplyError(parsed.error);
-        return;
-      }
-      if (
-        bulkCorsUpdateOnlyExisting &&
-        parsed.rules.every((rule) => !getLifecycleRuleId(rule) && !getCorsRuleKey(rule))
-      ) {
-        setBulkApplyError("Provide rule IDs or matching origins/methods when 'only update existing' is enabled.");
-        return;
-      }
-      parsedCorsRules = parsed.rules;
-    }
-    if (bulkOperation === "add_policy") {
-      const parsed = parsePolicyStatements(bulkPolicyText);
-      if ("error" in parsed) {
-        setBulkApplyError(parsed.error);
-        return;
-      }
-      parsedPolicyStatements = parsed.statements;
-      parsedPolicy = parsed.policy as Record<string, unknown>;
-    }
-    if (bulkOperation === "delete_lifecycle") {
-      const parsedIds = parseRuleIds(bulkLifecycleDeleteIds);
-      const parsedTypes = LIFECYCLE_TYPE_OPTIONS.filter((option) => bulkLifecycleDeleteTypes[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedIds.length === 0 && parsedTypes.length === 0) {
-        setBulkApplyError("Provide at least one rule ID or rule type.");
-        return;
-      }
-      deleteIds = new Set(parsedIds);
-      deleteTypes = new Set(parsedTypes);
-    }
-    if (bulkOperation === "delete_cors") {
-      const parsedIds = parseRuleIds(bulkCorsDeleteIds);
-      const parsedTypes = CORS_TYPE_OPTIONS.filter((option) => bulkCorsDeleteTypes[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedIds.length === 0 && parsedTypes.length === 0) {
-        setBulkApplyError("Provide at least one rule ID or rule type.");
-        return;
-      }
-      deleteCorsIds = new Set(parsedIds);
-      deleteCorsTypes = new Set(parsedTypes);
-    }
-    if (bulkOperation === "delete_policy") {
-      const parsedIds = parseRuleIds(bulkPolicyDeleteIds);
-      const parsedTypes = POLICY_TYPE_OPTIONS.filter((option) => bulkPolicyDeleteTypes[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedIds.length === 0 && parsedTypes.length === 0) {
-        setBulkApplyError("Provide at least one statement ID or statement type.");
-        return;
-      }
-      deletePolicyIds = new Set(parsedIds);
-      deletePolicyTypes = new Set(parsedTypes);
-    }
-    if (bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") {
-      const parsedTargets = PUBLIC_ACCESS_BLOCK_OPTIONS.filter((option) => bulkPublicAccessBlockTargets[option.key]).map(
-        (option) => option.key
-      );
-      if (parsedTargets.length === 0) {
-        setBulkApplyError("Select at least one block public access option.");
-        return;
-      }
-      publicAccessBlockTargets = parsedTargets;
-    }
+    const {
+      parsedQuota,
+      parsedRules,
+      parsedNotificationConfiguration,
+      parsedCorsRules,
+      parsedPolicyStatements,
+      parsedPolicy,
+      deleteIds,
+      deleteTypes,
+      deleteNotificationIds,
+      deleteNotificationTypes,
+      deleteCorsIds,
+      deleteCorsTypes,
+      deletePolicyIds,
+      deletePolicyTypes,
+      publicAccessBlockTargets,
+    } = prepared.value;
 
     setBulkApplyLoading(true);
     setBulkApplyError(null);
