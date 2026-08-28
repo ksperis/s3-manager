@@ -555,6 +555,31 @@ describe("BucketOpsWorkbench selection actions", () => {
     expect(screen.getByRole("option", { name: "Delete notification configurations" })).toBeInTheDocument();
   });
 
+  it("copies selected configurations through the shared copy service", async () => {
+    const allBuckets = buildBuckets(1);
+    mocks.listCephAdminBuckets.mockImplementation(createBucketListMock(allBuckets));
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
+    const dialog = await screen.findByRole("dialog", { name: "Bulk update" });
+    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "copy_configs" } });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Versioning" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Copy selected configs" }));
+
+    expect(await within(dialog).findByText("Copied Versioning from 1 bucket(s)."))
+      .toBeInTheDocument();
+    expect(within(dialog).getByText(/Clipboard currently contains config from/)).toHaveTextContent(
+      "Clipboard currently contains config from 1 bucket on Archive",
+    );
+  });
+
   it("does not expose Storage Ops bulk quota updates", async () => {
     mocks.listStorageOpsBuckets.mockResolvedValue({
       items: [{ name: "conn-2::bucket-001", bucket_name: "bucket-001", context_id: "conn-2" }],

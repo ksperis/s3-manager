@@ -92,6 +92,7 @@ import { useBucketOpsListing } from "./useBucketOpsListing";
 import { useBucketOpsRowTags } from "./useBucketOpsRowTags";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
+import { copyBucketOpsConfigs } from "./bucketOpsConfigCopy";
 import {
   buildBucketExportColumns,
   buildBucketSelectionJsonPayload,
@@ -236,20 +237,16 @@ import {
   normalizeQuotaLimit,
   parseQuotaInput,
   persistBulkConfigClipboard,
-  type BulkAccessLoggingSnapshot,
   type BulkConfigClipboard,
   type BulkCopyFeatureKey,
   type BulkCopyFeatureSelection,
-  type BulkObjectLockSnapshot,
   type BulkOperation,
   type BulkPastePlanItem,
   type BulkPreviewItem,
   type BulkPreviewLine,
   type BulkPreviewTone,
-  type BulkQuotaSnapshot,
   type ParsedQuotaInput,
   type PublicAccessBlockOptionKey,
-  type PublicAccessBlockState,
   type QuotaSizeUnit,
   type SelectionExportFormat,
 } from "./bucketBulkOperationsModel";
@@ -2228,13 +2225,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const copyBulkConfigs = async () => {
     if (!selectedEndpointId || selectedBucketList.length === 0) return;
-    const selectedFeatures = (Object.keys(bulkCopyFeatures) as BulkCopyFeatureKey[]).filter(
-      (feature) => bulkCopyFeatures[feature] && (!isStorageOps || feature !== "quota")
-    );
-    if (selectedFeatures.length === 0) {
-      setBulkCopyError("Select at least one configuration to copy.");
-      return;
-    }
     const runToken = bulkCopyRunTokenRef.current + 1;
     bulkCopyRunTokenRef.current = runToken;
     setBulkCopyLoading(true);
@@ -2247,126 +2237,32 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       failed: 0,
     });
     try {
-      const results = await runWithConcurrencySettled(
-        selectedBucketList,
-        BULK_CONCURRENCY_LIMIT,
-        async (bucketName) => {
-          let props: BucketProperties | null = null;
-          if (bulkCopyFeatures.versioning || bulkCopyFeatures.object_lock) {
-            props = await getBucketProperties(selectedEndpointId, bucketName);
-          }
-          const quota = !isStorageOps && bulkCopyFeatures.quota ? await fetchBucketQuota(bucketName) : null;
-          const versioningEnabled = bulkCopyFeatures.versioning
-            ? normalizeVersioningStatus(props?.versioning_status) === true
-            : null;
-          const rawObjectLock =
-            props?.object_lock && typeof props.object_lock === "object"
-              ? (props.object_lock as Record<string, unknown>)
-              : {};
-          const objectLock = bulkCopyFeatures.object_lock
-            ? normalizeObjectLockSnapshot({
-                ...rawObjectLock,
-                enabled: Boolean(props?.object_lock_enabled ?? rawObjectLock.enabled),
-              })
-            : null;
-          const publicAccessBlock = bulkCopyFeatures.public_access_block
-            ? normalizePublicAccessBlockState(await getBucketPublicAccessBlock(selectedEndpointId, bucketName))
-            : null;
-          const lifecycleRules = bulkCopyFeatures.lifecycle
-            ? ((await getBucketLifecycle(selectedEndpointId, bucketName)).rules ?? []) as Record<string, unknown>[]
-            : null;
-          const corsRules = bulkCopyFeatures.cors
-            ? ((await getBucketCors(selectedEndpointId, bucketName)).rules ?? []) as Record<string, unknown>[]
-            : null;
-          const policy = bulkCopyFeatures.policy
-            ? (((await getBucketPolicy(selectedEndpointId, bucketName)).policy ?? null) as Record<string, unknown> | null)
-            : null;
-          const accessLogging = bulkCopyFeatures.access_logging
-            ? normalizeAccessLoggingSnapshot(
-                (await getBucketLogging(selectedEndpointId, bucketName)) as unknown as Record<string, unknown>
-              )
-            : null;
-          return {
-            name: bucketName,
-            quota,
-            versioningEnabled,
-            objectLock,
-            publicAccessBlock,
-            lifecycleRules,
-            corsRules,
-            policy,
-            accessLogging,
-          };
-        },
-        (result) => {
-          if (bulkCopyRunTokenRef.current !== runToken) return;
-          setBulkCopyProgress((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              completed: Math.min(prev.total, prev.completed + 1),
-              failed: prev.failed + (result.status === "rejected" ? 1 : 0),
-            };
-          });
-        }
-      );
-      if (bulkCopyRunTokenRef.current !== runToken) return;
-      const failed = results.filter((result) => result.status === "rejected");
-      if (failed.length > 0) {
-        setBulkCopyError(`${failed.length} source bucket(s) failed while copying configs.`);
-        return;
-      }
-      const copiedBuckets = results
-        .filter(
-          (
-            result
-          ): result is PromiseFulfilledResult<{
-            name: string;
-            quota: BulkQuotaSnapshot | null;
-            versioningEnabled: boolean | null;
-            objectLock: BulkObjectLockSnapshot | null;
-            publicAccessBlock: PublicAccessBlockState | null;
-            lifecycleRules: Record<string, unknown>[] | null;
-            corsRules: Record<string, unknown>[] | null;
-            policy: Record<string, unknown> | null;
-            accessLogging: BulkAccessLoggingSnapshot | null;
-          }> => result.status === "fulfilled"
-        )
-        .map((result) => ({
-          name: result.value.name,
-          quota: result.value.quota,
-          versioningEnabled: result.value.versioningEnabled,
-          objectLock: result.value.objectLock,
-          publicAccessBlock: result.value.publicAccessBlock,
-          lifecycleRules: result.value.lifecycleRules,
-          corsRules: result.value.corsRules,
-          policy: result.value.policy,
-          accessLogging: result.value.accessLogging,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      if (copiedBuckets.length === 0) {
-        setBulkCopyError("No source bucket configuration could be copied.");
-        return;
-      }
-      setBulkConfigClipboard({
-        version: 1,
+      const result = await copyBucketOpsConfigs({
+        bucketNames: selectedBucketList,
         copiedAt: new Date().toISOString(),
+        features: bulkCopyFeatures,
+        fetchBucketQuota,
+        getBucketCors,
+        getBucketLifecycle,
+        getBucketLogging,
+        getBucketPolicy,
+        getBucketProperties,
+        getBucketPublicAccessBlock,
+        isStorageOps,
+        onProgress: (progress) => {
+          if (bulkCopyRunTokenRef.current !== runToken) return;
+          setBulkCopyProgress({ label: "Copying selected configs", ...progress });
+        },
         sourceEndpointId: selectedEndpointId,
         sourceEndpointName: selectedEndpoint?.name ?? null,
-        features: {
-          quota: !isStorageOps && bulkCopyFeatures.quota,
-          versioning: bulkCopyFeatures.versioning,
-          object_lock: bulkCopyFeatures.object_lock,
-          public_access_block: bulkCopyFeatures.public_access_block,
-          lifecycle: bulkCopyFeatures.lifecycle,
-          cors: bulkCopyFeatures.cors,
-          policy: bulkCopyFeatures.policy,
-          access_logging: bulkCopyFeatures.access_logging,
-        },
-        buckets: copiedBuckets,
       });
-      const featureLabelText = selectedFeatures.map((feature) => BULK_COPY_FEATURE_LABELS[feature]).join(", ");
-      setBulkCopySummary(`Copied ${featureLabelText} from ${copiedBuckets.length} bucket(s).`);
+      if (bulkCopyRunTokenRef.current !== runToken) return;
+      if (result.kind === "error") {
+        setBulkCopyError(result.error);
+        return;
+      }
+      setBulkConfigClipboard(result.clipboard);
+      setBulkCopySummary(result.summary);
     } catch (err) {
       if (bulkCopyRunTokenRef.current !== runToken) return;
       setBulkCopyError(extractError(err));
