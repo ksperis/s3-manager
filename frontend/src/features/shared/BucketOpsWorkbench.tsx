@@ -54,7 +54,6 @@ import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
 import {
   NOTIFICATION_CONFIGURATION_ARRAY_KEYS,
   NOTIFICATION_EVENTBRIDGE_KEY,
-  type NotificationConfigurationTypeKey,
 } from "../cephAdmin/bucketJsonParsers";
 import CephAdminAdminOpsModal, {
   type CephAdminAdminOpsAction,
@@ -92,6 +91,7 @@ import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
+import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
 import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
 import {
   createBucketUiTagTarget,
@@ -185,26 +185,20 @@ import {
   LIFECYCLE_TYPE_OPTIONS,
   NOTIFICATION_TYPE_OPTIONS,
   POLICY_TYPE_OPTIONS,
-  type CorsRuleTypeKey,
-  type LifecycleRuleTypeKey,
-  type PolicyRuleTypeKey,
 } from "./bucketConfigMerge";
 import {
   BULK_COPY_FEATURE_LABELS,
   BUCKET_CONFIG_BACKUP_FEATURE_LABELS,
-  DEFAULT_BULK_COPY_FEATURE_SELECTION,
   PUBLIC_ACCESS_BLOCK_OPTIONS,
   loadBulkConfigClipboard,
   normalizeQuotaLimit,
   persistBulkConfigClipboard,
   type BulkConfigClipboard,
   type BulkCopyFeatureKey,
-  type BulkCopyFeatureSelection,
   type BulkOperation,
   type BulkPreviewItem,
   type BulkPreviewLine,
   type BulkPreviewTone,
-  type PublicAccessBlockOptionKey,
   type QuotaSizeUnit,
 } from "./bucketBulkOperationsModel";
 import {
@@ -496,67 +490,66 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [showUsageStatsModal, setShowUsageStatsModal] = useState(false);
   const [showConfigBackupModal, setShowConfigBackupModal] = useState(false);
-  const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
+  const {
+    bulkCopyFeatures,
+    bulkCorsDeleteIds,
+    bulkCorsDeleteTypes,
+    bulkCorsRuleText,
+    bulkCorsUpdateOnlyExisting,
+    bulkLifecycleDeleteIds,
+    bulkLifecycleDeleteTypes,
+    bulkLifecycleRuleText,
+    bulkLifecycleUpdateOnlyExisting,
+    bulkNotificationDeleteIds,
+    bulkNotificationDeleteTypes,
+    bulkNotificationText,
+    bulkOperation,
+    bulkPasteMapping,
+    bulkPolicyDeleteIds,
+    bulkPolicyDeleteTypes,
+    bulkPolicyText,
+    bulkPolicyUpdateOnlyExisting,
+    bulkPublicAccessBlockTargets,
+    bulkQuotaApplyObjects,
+    bulkQuotaApplySize,
+    bulkQuotaObjects,
+    bulkQuotaSizeUnit,
+    bulkQuotaSizeValue,
+    bulkQuotaSkipConfigured,
+    resetBulkForm,
+    setBulkCopyFeatures,
+    setBulkCorsDeleteIds,
+    setBulkCorsDeleteTypes,
+    setBulkCorsRuleText,
+    setBulkCorsUpdateOnlyExisting,
+    setBulkLifecycleDeleteIds,
+    setBulkLifecycleDeleteTypes,
+    setBulkLifecycleRuleText,
+    setBulkLifecycleUpdateOnlyExisting,
+    setBulkNotificationDeleteIds,
+    setBulkNotificationDeleteTypes,
+    setBulkNotificationText,
+    setBulkOperation,
+    setBulkPasteMapping,
+    setBulkPolicyDeleteIds,
+    setBulkPolicyDeleteTypes,
+    setBulkPolicyText,
+    setBulkPolicyUpdateOnlyExisting,
+    setBulkPublicAccessBlockTargets,
+    setBulkQuotaApplyObjects,
+    setBulkQuotaApplySize,
+    setBulkQuotaObjects,
+    setBulkQuotaSizeUnit,
+    setBulkQuotaSizeValue,
+    setBulkQuotaSkipConfigured,
+  } = useBucketOpsBulkForm();
   const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(() =>
     loadBulkConfigClipboard(bulkClipboardStorageKey)
   );
-  const [bulkCopyFeatures, setBulkCopyFeatures] = useState<BulkCopyFeatureSelection>(DEFAULT_BULK_COPY_FEATURE_SELECTION);
   const [bulkCopyLoading, setBulkCopyLoading] = useState(false);
   const [bulkCopyProgress, setBulkCopyProgress] = useState<ActionProgressState | null>(null);
   const [bulkCopyError, setBulkCopyError] = useState<string | null>(null);
   const [bulkCopySummary, setBulkCopySummary] = useState<string | null>(null);
-  const [bulkPasteMapping, setBulkPasteMapping] = useState<Record<string, string>>({});
-  const [bulkQuotaSizeValue, setBulkQuotaSizeValue] = useState("");
-  const [bulkQuotaSizeUnit, setBulkQuotaSizeUnit] = useState<QuotaSizeUnit>("GiB");
-  const [bulkQuotaObjects, setBulkQuotaObjects] = useState("");
-  const [bulkQuotaApplySize, setBulkQuotaApplySize] = useState(true);
-  const [bulkQuotaApplyObjects, setBulkQuotaApplyObjects] = useState(true);
-  const [bulkQuotaSkipConfigured, setBulkQuotaSkipConfigured] = useState(false);
-  const [bulkPublicAccessBlockTargets, setBulkPublicAccessBlockTargets] = useState<
-    Record<PublicAccessBlockOptionKey, boolean>
-  >(() => ({
-    block_public_acls: true,
-    ignore_public_acls: true,
-    block_public_policy: true,
-    restrict_public_buckets: true,
-  }));
-  const [bulkLifecycleRuleText, setBulkLifecycleRuleText] = useState("");
-  const [bulkLifecycleUpdateOnlyExisting, setBulkLifecycleUpdateOnlyExisting] = useState(false);
-  const [bulkLifecycleDeleteIds, setBulkLifecycleDeleteIds] = useState("");
-  const [bulkLifecycleDeleteTypes, setBulkLifecycleDeleteTypes] = useState<Record<LifecycleRuleTypeKey, boolean>>(() => {
-    return LIFECYCLE_TYPE_OPTIONS.reduce(
-      (acc, option) => ({ ...acc, [option.key]: false }),
-      {} as Record<LifecycleRuleTypeKey, boolean>
-    );
-  });
-  const [bulkNotificationText, setBulkNotificationText] = useState("");
-  const [bulkNotificationDeleteIds, setBulkNotificationDeleteIds] = useState("");
-  const [bulkNotificationDeleteTypes, setBulkNotificationDeleteTypes] = useState<
-    Record<NotificationConfigurationTypeKey, boolean>
-  >(() => {
-    return NOTIFICATION_TYPE_OPTIONS.reduce(
-      (acc, option) => ({ ...acc, [option.key]: false }),
-      {} as Record<NotificationConfigurationTypeKey, boolean>
-    );
-  });
-  const [bulkCorsRuleText, setBulkCorsRuleText] = useState("");
-  const [bulkCorsUpdateOnlyExisting, setBulkCorsUpdateOnlyExisting] = useState(false);
-  const [bulkCorsDeleteIds, setBulkCorsDeleteIds] = useState("");
-  const [bulkCorsDeleteTypes, setBulkCorsDeleteTypes] = useState<Record<CorsRuleTypeKey, boolean>>(() => {
-    return CORS_TYPE_OPTIONS.reduce(
-      (acc, option) => ({ ...acc, [option.key]: false }),
-      {} as Record<CorsRuleTypeKey, boolean>
-    );
-  });
-  const [bulkPolicyText, setBulkPolicyText] = useState("");
-  const [bulkPolicyUpdateOnlyExisting, setBulkPolicyUpdateOnlyExisting] = useState(false);
-  const [bulkPolicyDeleteIds, setBulkPolicyDeleteIds] = useState("");
-  const [bulkPolicyDeleteTypes, setBulkPolicyDeleteTypes] = useState<Record<PolicyRuleTypeKey, boolean>>(() => {
-    return POLICY_TYPE_OPTIONS.reduce(
-      (acc, option) => ({ ...acc, [option.key]: false }),
-      {} as Record<PolicyRuleTypeKey, boolean>
-    );
-  });
   const [bulkPreview, setBulkPreview] = useState<BulkPreviewItem[]>([]);
   const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
   const [bulkPreviewProgress, setBulkPreviewProgress] = useState<ActionProgressState | null>(null);
@@ -1157,44 +1150,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const clearSelection = () => {
     setSelectedBuckets(new Set());
-    setBulkOperation("");
-    setBulkCopyFeatures(DEFAULT_BULK_COPY_FEATURE_SELECTION);
-    setBulkLifecycleRuleText("");
-    setBulkLifecycleUpdateOnlyExisting(false);
-    setBulkLifecycleDeleteIds("");
-    setBulkLifecycleDeleteTypes(
-      LIFECYCLE_TYPE_OPTIONS.reduce(
-        (acc, option) => ({ ...acc, [option.key]: false }),
-        {} as Record<LifecycleRuleTypeKey, boolean>
-      )
-    );
-    setBulkNotificationText("");
-    setBulkNotificationDeleteIds("");
-    setBulkNotificationDeleteTypes(
-      NOTIFICATION_TYPE_OPTIONS.reduce(
-        (acc, option) => ({ ...acc, [option.key]: false }),
-        {} as Record<NotificationConfigurationTypeKey, boolean>
-      )
-    );
-    setBulkCorsRuleText("");
-    setBulkCorsUpdateOnlyExisting(false);
-    setBulkCorsDeleteIds("");
-    setBulkCorsDeleteTypes(
-      CORS_TYPE_OPTIONS.reduce(
-        (acc, option) => ({ ...acc, [option.key]: false }),
-        {} as Record<CorsRuleTypeKey, boolean>
-      )
-    );
-    setBulkPolicyText("");
-    setBulkPolicyUpdateOnlyExisting(false);
-    setBulkPolicyDeleteIds("");
-    setBulkPolicyDeleteTypes(
-      POLICY_TYPE_OPTIONS.reduce(
-        (acc, option) => ({ ...acc, [option.key]: false }),
-        {} as Record<PolicyRuleTypeKey, boolean>
-      )
-    );
-    setBulkPasteMapping({});
+    resetBulkForm();
     setBulkCopyError(null);
     setBulkCopySummary(null);
     setBulkPreview([]);
@@ -1344,7 +1300,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         sourceBucketNames: sourceBuckets,
       })
     );
-  }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkOperation, selectedBucketList, showBulkUpdateModal]);
+  }, [
+    bulkConfigClipboard,
+    bulkClipboardSameEndpoint,
+    bulkOperation,
+    selectedBucketList,
+    setBulkPasteMapping,
+    showBulkUpdateModal,
+  ]);
 
   const createConfigBackup = async (features: CephAdminBucketConfigBackupFeature[]) => {
     if (isStorageOps || !selectedEndpointId || selectedBucketList.length === 0) return;
@@ -1420,65 +1383,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     if (!snsFeatureEnabled && (bulkOperation === "add_notifications" || bulkOperation === "delete_notifications")) {
       setBulkOperation("");
     }
-  }, [bulkOperation, quotaOperationDisabledReason, snsFeatureEnabled, usageFeatureEnabled]);
+  }, [
+    bulkOperation,
+    quotaOperationDisabledReason,
+    setBulkOperation,
+    snsFeatureEnabled,
+    usageFeatureEnabled,
+  ]);
 
   const openBulkUpdateModal = () => {
     bulkCopyRunTokenRef.current += 1;
     setShowBulkUpdateModal(true);
-    setBulkOperation("");
-    setBulkCopyFeatures(DEFAULT_BULK_COPY_FEATURE_SELECTION);
+    resetBulkForm();
     setBulkCopyError(null);
     setBulkCopySummary(null);
     setBulkCopyLoading(false);
     setBulkCopyProgress(null);
-    setBulkPasteMapping({});
-    setBulkQuotaSizeValue("");
-    setBulkQuotaSizeUnit("GiB");
-    setBulkQuotaObjects("");
-    setBulkQuotaApplySize(true);
-    setBulkQuotaApplyObjects(true);
-    setBulkQuotaSkipConfigured(false);
-    setBulkPublicAccessBlockTargets({
-      block_public_acls: true,
-      ignore_public_acls: true,
-      block_public_policy: true,
-      restrict_public_buckets: true,
-    });
-    setBulkLifecycleRuleText("");
-    setBulkLifecycleUpdateOnlyExisting(false);
-    setBulkLifecycleDeleteIds("");
-    setBulkLifecycleDeleteTypes(
-      LIFECYCLE_TYPE_OPTIONS.reduce(
-        (acc, option) => ({ ...acc, [option.key]: false }),
-        {} as Record<LifecycleRuleTypeKey, boolean>
-      )
-    );
-    setBulkNotificationText("");
-    setBulkNotificationDeleteIds("");
-    setBulkNotificationDeleteTypes(
-      NOTIFICATION_TYPE_OPTIONS.reduce(
-        (acc, option) => ({ ...acc, [option.key]: false }),
-        {} as Record<NotificationConfigurationTypeKey, boolean>
-      )
-    );
-    setBulkCorsRuleText("");
-    setBulkCorsUpdateOnlyExisting(false);
-    setBulkCorsDeleteIds("");
-    setBulkCorsDeleteTypes(
-      CORS_TYPE_OPTIONS.reduce(
-        (acc, option) => ({ ...acc, [option.key]: false }),
-        {} as Record<CorsRuleTypeKey, boolean>
-      )
-    );
-    setBulkPolicyText("");
-    setBulkPolicyUpdateOnlyExisting(false);
-    setBulkPolicyDeleteIds("");
-    setBulkPolicyDeleteTypes(
-      POLICY_TYPE_OPTIONS.reduce(
-        (acc, option) => ({ ...acc, [option.key]: false }),
-        {} as Record<PolicyRuleTypeKey, boolean>
-      )
-    );
     resetBulkPreview();
     setBulkApplyError(null);
     setBulkApplySummary(null);
