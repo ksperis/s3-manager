@@ -87,6 +87,7 @@ import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
 import { useBucketOpsBulkPreview } from "./useBucketOpsBulkPreview";
 import { useBucketOpsCacheRefresh } from "./useBucketOpsCacheRefresh";
 import { useBucketOpsConfigCopy } from "./useBucketOpsConfigCopy";
+import { useBucketOpsListState } from "./useBucketOpsListState";
 import { useBucketOpsSelection } from "./useBucketOpsSelection";
 import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
 import { useBucketOpsStorageScopeFilters } from "./useBucketOpsStorageScopeFilters";
@@ -143,11 +144,9 @@ import {
   buildAdvancedFilterSecondarySectionState,
   defaultAdvancedFilter,
   hasAdvancedFilters,
-  stripUnsupportedAdvancedFeatureFilters,
   type ActiveFilterRemoveAction,
   type AdvancedFilterSecondarySectionId,
   type AdvancedFilterSecondarySectionState,
-  type AdvancedFilterState,
   type AdvancedTextOrNumericField,
   type BooleanFilterState,
   type FeatureFilterState,
@@ -162,13 +161,7 @@ import {
 import {
   BUCKET_CORE_COLUMN_OPTIONS,
   BUCKET_QUOTA_COLUMN_GROUPS,
-  DEFAULT_PAGE_SIZE,
-  DEFAULT_SORT,
   FEATURE_DETAIL_COLUMN_OPTIONS,
-  loadBucketListState,
-  loadVisibleColumns,
-  persistBucketListState,
-  persistVisibleColumns,
   type ColumnId,
   type FeatureDetailColumnOption,
   type SortField,
@@ -350,21 +343,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const bucketsStateStorageKey = surface.storageKeys.bucketListState;
   const bulkClipboardStorageKey = surface.storageKeys.bulkConfigClipboard;
   const ownerQueryFilter = useMemo(() => ownerFilterFromSearch(location.search), [location.search]);
-  const initialStoredBucketListState = useMemo(
-    () => loadBucketListState(bucketsStateStorageKey, selectedEndpointId),
-    [bucketsStateStorageKey, selectedEndpointId]
-  );
-  const initialOwnerFilter = useMemo<AdvancedFilterState | null>(
-    () =>
-      ownerQueryFilter
-        ? {
-            ...defaultAdvancedFilter,
-            owner: ownerQueryFilter,
-            ownerMatchMode: "exact",
-          }
-        : null,
-    [ownerQueryFilter]
-  );
   const defaultVisibleColumns = useMemo(() => [...surface.defaultVisibleColumns] as ColumnId[], [surface]);
   const useExplicitBucketName = surface.useExplicitBucketName;
   const scopeDisplayName = surface.scopeDisplayName;
@@ -392,30 +370,48 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     () => FEATURE_STATE_OPTIONS.map((option) => ({ ...option, supported: featureSupport[option.id] !== false })),
     [featureSupport]
   );
-  const [filter, setFilter] = useState(() => (ownerQueryFilter ? "" : initialStoredBucketListState?.filter ?? ""));
-  const [filterValue, setFilterValue] = useState(() =>
-    ownerQueryFilter ? "" : initialStoredBucketListState?.filter.trim() ?? ""
-  );
-  const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>(() =>
-    ownerQueryFilter ? "contains" : initialStoredBucketListState?.quickFilterMode ?? "contains"
-  );
-  const [page, setPage] = useState(() => (ownerQueryFilter ? 1 : initialStoredBucketListState?.page ?? 1));
-  const [pageSize, setPageSize] = useState(() => initialStoredBucketListState?.pageSize ?? DEFAULT_PAGE_SIZE);
-  const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(() =>
-    loadVisibleColumns(columnsStorageKey, defaultVisibleColumns, isStorageOps)
-  );
+  const {
+    advancedApplied,
+    advancedDraft,
+    filter,
+    filterValue,
+    page,
+    pageSize,
+    persistCurrentListState,
+    quickFilterMode,
+    setAdvancedApplied,
+    setAdvancedDraft,
+    setFilter,
+    setFilterValue,
+    setPage,
+    setPageSize,
+    setQuickFilterMode,
+    setSort,
+    setTagFilterMode,
+    setTagFilters,
+    setVisibleColumns,
+    sort,
+    tagFilterMode,
+    tagFilters,
+    visibleColumns,
+  } = useBucketOpsListState({
+    bucketsStateStorageKey,
+    columnsStorageKey,
+    defaultVisibleColumns,
+    featureSupport,
+    isStorageOps,
+    ownerQueryFilter,
+    selectedScopeId: selectedEndpointId,
+    snsFeatureEnabled,
+    sseFeatureEnabled,
+    staticWebsiteFeatureEnabled,
+  });
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [advancedFilterSecondarySections, setAdvancedFilterSecondarySections] =
     useState<AdvancedFilterSecondarySectionState>(() => buildAdvancedFilterSecondarySectionState());
   const advancedFilterWasOpenRef = useRef(false);
-  const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(() =>
-    initialOwnerFilter ?? initialStoredBucketListState?.advancedApplied ?? defaultAdvancedFilter
-  );
-  const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(() =>
-    initialOwnerFilter ?? initialStoredBucketListState?.advancedApplied ?? null
-  );
   const {
     allFilteredStorageOpsContextsSelected,
     allFilteredStorageOpsEndpointsSelected,
@@ -480,12 +476,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     },
     [isStorageOps, selectedEndpointId, surface.mode]
   );
-  const [tagFilters, setTagFilters] = useState<number[]>(() =>
-    ownerQueryFilter ? [] : initialStoredBucketListState?.tagFilters ?? []
-  );
-  const [tagFilterMode, setTagFilterMode] = useState<"any" | "all">(() =>
-    ownerQueryFilter ? "any" : initialStoredBucketListState?.tagFilterMode ?? "any"
-  );
   useEffect(() => {
     if (!uiTagsReady) return;
     const visibleIds = new Set(availableUiTags.map((tag) => tag.id));
@@ -493,7 +483,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       const next = current.filter((tagId) => visibleIds.has(tagId));
       return next.length === current.length ? current : next;
     });
-  }, [availableUiTags, uiTagsReady]);
+  }, [availableUiTags, setTagFilters, uiTagsReady]);
   const [adminOpsAction, setAdminOpsAction] = useState<Extract<CephAdminAdminOpsAction, { bucket: CephAdminBucket }> | null>(null);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
@@ -581,50 +571,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   });
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
   const clearTagsTooltip = useCallback(() => setActiveTagsTooltipKey(null), []);
-  const restoreFilterRef = useRef<string | null>(null);
   const restoredReturnContextRef = useRef<number | null>(null);
-  const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(
-    () => initialStoredBucketListState?.sort ?? DEFAULT_SORT
-  );
   useEffect(() => {
-    const handle = window.setTimeout(() => {
-      setFilterValue(filter.trim());
-      if (restoreFilterRef.current !== null) {
-        const shouldSkipReset = restoreFilterRef.current === filter;
-        restoreFilterRef.current = null;
-        if (shouldSkipReset) {
-          return;
-        }
-      }
-      setPage(1);
-    }, 300);
-    return () => window.clearTimeout(handle);
-  }, [filter]);
-
-  useEffect(() => {
-    persistVisibleColumns(columnsStorageKey, visibleColumns);
-  }, [columnsStorageKey, visibleColumns]);
-
-  useEffect(() => {
-    setAdvancedDraft((prev) => stripUnsupportedAdvancedFeatureFilters(prev, featureSupport));
-    setAdvancedApplied((prev) => (prev ? stripUnsupportedAdvancedFeatureFilters(prev, featureSupport) : prev));
-  }, [featureSupport]);
-
-  useEffect(() => {
-    setVisibleColumns((prev) => {
-      const next = prev.filter((column) => {
-        if (column === "static_website") return staticWebsiteFeatureEnabled;
-        if (column === "notifications") return snsFeatureEnabled;
-        if (column === "server_side_encryption") return sseFeatureEnabled;
-        const detail = FEATURE_DETAIL_COLUMN_OPTIONS.find((option) => option.id === column);
-        if (detail?.feature === "static_website") return staticWebsiteFeatureEnabled;
-        if (detail?.feature === "notifications") return snsFeatureEnabled;
-        if (detail?.feature === "server_side_encryption") return sseFeatureEnabled;
-        return true;
-      });
-      return next.length === prev.length ? prev : next;
-    });
-  }, [snsFeatureEnabled, staticWebsiteFeatureEnabled, sseFeatureEnabled]);
+    clearTagsTooltip();
+  }, [bucketsStateStorageKey, clearTagsTooltip, ownerQueryFilter, selectedEndpointId]);
 
   useEffect(() => {
     if (!showAdvancedFilter) return;
@@ -645,78 +595,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       document.body.style.overflow = previousOverflow;
     };
   }, [showAdvancedFilter]);
-
-  useEffect(() => {
-    setActiveTagsTooltipKey(null);
-    const stored = loadBucketListState(bucketsStateStorageKey, selectedEndpointId);
-    if (ownerQueryFilter) {
-      const ownerPrefill: AdvancedFilterState = {
-        ...defaultAdvancedFilter,
-        owner: ownerQueryFilter,
-        ownerMatchMode: "exact",
-      };
-      restoreFilterRef.current = null;
-      setFilter("");
-      setFilterValue("");
-      setQuickFilterMode("contains");
-      setAdvancedApplied(ownerPrefill);
-      setAdvancedDraft(ownerPrefill);
-      setTagFilters([]);
-      setTagFilterMode("any");
-      setPage(1);
-      setPageSize(stored?.pageSize ?? DEFAULT_PAGE_SIZE);
-      setSort(stored?.sort ?? DEFAULT_SORT);
-    } else if (stored) {
-      restoreFilterRef.current = stored.filter;
-      setFilter(stored.filter);
-      setFilterValue(stored.filter.trim());
-      setQuickFilterMode(stored.quickFilterMode);
-      setAdvancedApplied(stored.advancedApplied);
-      setAdvancedDraft(stored.advancedApplied ? stored.advancedApplied : defaultAdvancedFilter);
-      setTagFilters(stored.tagFilters);
-      setTagFilterMode(stored.tagFilterMode);
-      setPage(stored.page);
-      setPageSize(stored.pageSize);
-      setSort(stored.sort);
-    } else {
-      restoreFilterRef.current = "";
-      setFilter("");
-      setFilterValue("");
-      setQuickFilterMode("contains");
-      setAdvancedApplied(null);
-      setAdvancedDraft(defaultAdvancedFilter);
-      setTagFilters([]);
-      setTagFilterMode("any");
-      setPage(1);
-      setPageSize(DEFAULT_PAGE_SIZE);
-      setSort(DEFAULT_SORT);
-    }
-  }, [bucketsStateStorageKey, ownerQueryFilter, selectedEndpointId]);
-
-  useEffect(() => {
-    if (!selectedEndpointId) return;
-    persistBucketListState(bucketsStateStorageKey, selectedEndpointId, {
-      filter,
-      quickFilterMode,
-      advancedApplied,
-      tagFilters,
-      tagFilterMode,
-      page,
-      pageSize,
-      sort,
-    });
-  }, [
-    bucketsStateStorageKey,
-    selectedEndpointId,
-    filter,
-    quickFilterMode,
-    advancedApplied,
-    tagFilters,
-    tagFilterMode,
-    page,
-    pageSize,
-    sort,
-  ]);
 
   useEffect(() => {
     if (!showColumnPicker) return;
@@ -1004,7 +882,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     if (usageFeatureEnabled || !isStatsSortField(sort.field)) return;
     setSort({ field: "name", direction: "asc" });
     setPage(1);
-  }, [sort.field, usageFeatureEnabled]);
+  }, [setPage, setSort, sort.field, usageFeatureEnabled]);
 
   const toggleColumn = (id: ColumnId) => {
     setVisibleColumns((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -2084,16 +1962,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const openBucketConfiguration = (bucket: CephAdminBucket) => {
     if (!selectedEndpointId) return;
-    persistBucketListState(bucketsStateStorageKey, selectedEndpointId, {
-      filter,
-      quickFilterMode,
-      advancedApplied,
-      tagFilters,
-      tagFilterMode,
-      page,
-      pageSize,
-      sort,
-    });
+    persistCurrentListState();
     const listUrl = `${location.pathname}${location.search}`;
     const scopeKey = isStorageOps ? "storage-ops" : String(selectedEndpointId);
     const origin = { surface: surface.mode, scopeKey, listUrl };
