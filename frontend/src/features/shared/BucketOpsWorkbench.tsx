@@ -65,6 +65,7 @@ import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal"
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
 import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
+import BucketOpsFeatureStateFilterFields from "./BucketOpsFeatureStateFilterFields";
 import BucketOpsIdentityFilterFields from "./BucketOpsIdentityFilterFields";
 import BucketOpsMetricFilterFields from "./BucketOpsMetricFilterFields";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
@@ -136,13 +137,9 @@ import {
   FEATURE_STATE_OPTIONS,
   NUMERIC_FILTER_OPTIONS,
   type AdvancedFilterSecondarySectionId,
-  type FeatureFilterState,
   type FeatureKey,
   type TextMatchMode,
 } from "./bucketOpsAdvancedFilterModel";
-import {
-  buildAdvancedFilterFieldState,
-} from "./bucketOpsAdvancedFilterUiProjection";
 import {
   BUCKET_CORE_COLUMN_OPTIONS,
   BUCKET_QUOTA_COLUMN_GROUPS,
@@ -2476,58 +2473,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           costTooltip: "High cost: feature-state filters may trigger extra checks.",
                           activeCount: advancedDraftFeatureCount,
                           children: (
-                            <>
-                              {featureStateOptions.some((feature) => !feature.supported) && (
-                                <p className="mb-3 ui-caption text-slate-500 dark:text-slate-400">
-                                  Some features are disabled on this endpoint and cannot be filtered.
-                                </p>
-                              )}
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                {featureStateOptions.map((feature) => {
-                                  const disabled = !feature.supported;
-                                  const appliedValue = advancedApplied?.features[feature.id] ?? "any";
-                                  const draftValue = advancedDraft.features[feature.id];
-                                  const state = disabled
-                                    ? { labelClass: "", fieldClass: "" }
-                                    : buildAdvancedFilterFieldState(appliedValue !== "any", draftValue !== appliedValue);
-                                  return (
-                                    <div
-                                      key={feature.id}
-                                      className={`rounded-lg border border-slate-200 p-2.5 dark:border-slate-700 ${disabled ? "opacity-60" : ""}`}
-                                    >
-                                      <label className={`ui-caption font-medium text-slate-700 dark:text-slate-200 ${state.labelClass}`}>{feature.label}</label>
-                                      <select
-                                        value={advancedDraft.features[feature.id]}
-                                        onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
-                                        className={advancedFilterControlClass(`mt-1 w-full px-2 py-1.5 font-normal ${state.fieldClass}`, disabled)}
-                                        disabled={disabled}
-                                      >
-                                        {feature.id === "versioning" ? (
-                                          <>
-                                            <option value="any">Any</option>
-                                            <option value="enabled">Enabled</option>
-                                            <option value="disabled">Disabled</option>
-                                            <option value="suspended">Suspended</option>
-                                            <option value="disabled_or_suspended">Disabled or Suspended</option>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <option value="any">Any</option>
-                                            <option value="enabled">Enabled</option>
-                                            <option value="disabled">Disabled</option>
-                                          </>
-                                        )}
-                                      </select>
-                                      {disabled && (
-                                        <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                          {feature.label} is disabled on this endpoint.
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </>
+                            <BucketOpsFeatureStateFilterFields
+                              advancedApplied={advancedApplied}
+                              advancedDraft={advancedDraft}
+                              featureStateOptions={featureStateOptions}
+                              onFeatureChange={updateFeatureFilter}
+                            />
                           ),
                         })}
 
