@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode, RefObject } from "react";
+import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import ListPageSection from "../../components/list/ListPageSection";
@@ -16,7 +16,6 @@ import {
 } from "../../components/toolbarControlClasses";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
-import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   cx,
   uiCheckboxClass,
@@ -42,8 +41,6 @@ import CephAdminBucketIndexCheckPage from "../cephAdmin/CephAdminBucketIndexChec
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketConfigBackupModal from "./BucketConfigBackupModal";
 import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal";
-import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
-import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
 import BucketOpsAdvancedFilterDrawer from "./BucketOpsAdvancedFilterDrawer";
 import BucketOpsBulkConfigurationFields from "./BucketOpsBulkConfigurationFields";
@@ -58,6 +55,12 @@ import {
   BucketOpsTagAndAdvancedFilters,
 } from "./BucketOpsListFilters";
 import BucketOpsTable, { type BucketOpsTableColumn } from "./BucketOpsTable";
+import {
+  BucketOpsFeatureCell,
+  BucketOpsOwnerCell,
+  BucketOpsS3TagsCell,
+  getBucketOpsS3TagsTooltipKey,
+} from "./BucketOpsTableCells";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketOpsRunModals from "./BucketOpsRunModals";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -92,7 +95,6 @@ import {
   loadBucketListReturnContext,
   saveBucketListReturnContext,
 } from "./bucketListReturnContext";
-import { buildBucketTagSummaryLines } from "./bucketFeatureSummaries";
 import {
   buildBucketOpsActiveFilterSummaryItems,
   buildBucketOpsDraftFilterSummaryItems,
@@ -100,11 +102,7 @@ import {
 import {
   renderAdvancedSearchProgress,
 } from "../cephAdmin/filtering/advancedFilterShared";
-import {
-  FEATURE_LABELS,
-  FEATURE_STATE_OPTIONS,
-  type FeatureKey,
-} from "./bucketOpsAdvancedFilterModel";
+import { FEATURE_STATE_OPTIONS, type FeatureKey } from "./bucketOpsAdvancedFilterModel";
 import { type ColumnId, type SortField } from "./bucketOpsListState";
 import { extractApiError } from "../../utils/apiError";
 import { triggerDownload } from "../../utils/download";
@@ -125,7 +123,6 @@ import {
   getBucketDisplayName,
   getStorageOpsBucketName,
   getStorageOpsContextId,
-  getTagColors,
   isStatsSortField,
   ownerFilterFromSearch,
   sanitizeExportFilenamePart,
@@ -134,22 +131,6 @@ import {
 const extractError = (err: unknown): string => {
   return extractApiError(err, "Unexpected error");
 };
-
-const toAnchorRef = (node: HTMLElement | null): RefObject<HTMLElement | null> => ({ current: node });
-
-function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      className={`${className} animate-spin`}
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9" className="opacity-30" stroke="currentColor" strokeWidth="2.5" />
-      <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 type BucketOpsWorkbenchProps = {
   mode: BucketOpsMode;
@@ -434,7 +415,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     featureTooltipState,
     loadFeatureTooltip,
     loadOwnerTooltip,
-    ownerTooltipAnchorRefs,
     ownerTooltipCacheKey,
     ownerTooltipState,
     resetBucketTooltipState,
@@ -1181,45 +1161,15 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     );
   };
 
-  const renderTagList = (tags: CephAdminBucket["tags"] | undefined, bucket: CephAdminBucket) => {
-    const safeTags = Array.isArray(tags) ? tags.filter((t) => (t.key ?? "").trim()) : [];
-    if (safeTags.length === 0) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
-    const maxShown = 3;
-    const shown = safeTags.slice(0, maxShown);
-    const remaining = safeTags.length - shown.length;
-    const tooltipKey = `${bucket.tenant ?? ""}:${bucket.name}:tags`;
-    const tooltip: BucketFeatureTooltipState = { status: "ready", lines: buildBucketTagSummaryLines(safeTags) };
+  const renderTagList = (bucket: CephAdminBucket) => {
+    const tooltipKey = getBucketOpsS3TagsTooltipKey(bucket);
     return (
-      <BucketSummaryTooltip
-        label="S3 tags"
-        tooltip={tooltip}
+      <BucketOpsS3TagsCell
+        bucket={bucket}
         open={activeTagsTooltipKey === tooltipKey}
         onOpen={() => setActiveTagsTooltipKey(tooltipKey)}
         onClose={() => setActiveTagsTooltipKey((prev) => (prev === tooltipKey ? null : prev))}
-        cacheKey={tooltipKey}
-        buttonClassName="inline-flex max-w-full cursor-default text-left"
-      >
-        <div className="flex flex-wrap gap-1.5">
-          {shown.map((t) => {
-            const label = `${t.key}=${t.value}`;
-            const colors = getTagColors(label);
-            return (
-              <span
-                key={`${t.key}:${t.value}`}
-                className="rounded-full border px-2 py-0.5 ui-caption font-semibold"
-                style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
-              >
-                {label}
-              </span>
-            );
-          })}
-          {remaining > 0 && (
-            <span className="rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              +{remaining}
-            </span>
-          )}
-        </div>
-      </BucketSummaryTooltip>
+      />
     );
   };
 
@@ -1237,89 +1187,37 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   };
 
   const renderOwnerCell = (bucket: CephAdminBucket) => {
-    const owner = (bucket.owner || "").trim();
-    if (!owner) return "-";
     const tooltipKey = ownerTooltipCacheKey(bucket);
-    const tooltip = ownerTooltipState[tooltipKey];
-    const isTooltipVisible = activeOwnerTooltipKey === tooltipKey;
     return (
-      <div
-        className="relative inline-flex"
-        onMouseEnter={() => {
+      <BucketOpsOwnerCell
+        bucket={bucket}
+        tooltip={ownerTooltipState[tooltipKey]}
+        open={activeOwnerTooltipKey === tooltipKey}
+        onOpen={() => {
           setActiveOwnerTooltipKey(tooltipKey);
           loadOwnerTooltip(bucket);
         }}
-        onMouseLeave={() => {
+        onClose={() => {
           setActiveOwnerTooltipKey((prev) => (prev === tooltipKey ? null : prev));
         }}
-      >
-        <button
-          ref={(node) => {
-            ownerTooltipAnchorRefs.current[tooltipKey] = node;
-          }}
-          type="button"
-          className="inline-flex cursor-help text-left decoration-dotted underline-offset-2 hover:underline focus:underline"
-          onFocus={() => {
-            setActiveOwnerTooltipKey(tooltipKey);
-            loadOwnerTooltip(bucket);
-          }}
-          onBlur={() => {
-            setActiveOwnerTooltipKey((prev) => (prev === tooltipKey ? null : prev));
-          }}
-          aria-label="Resolve owner name"
-        >
-          {owner}
-        </button>
-        <AnchoredPortalMenu
-          open={isTooltipVisible}
-          anchorRef={toAnchorRef(ownerTooltipAnchorRefs.current[tooltipKey])}
-          placement="bottom-start"
-          offset={4}
-          minWidth={288}
-          className="pointer-events-none w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div>
-            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">Owner</p>
-            <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">UID: {owner}</p>
-            {(!tooltip || tooltip.status === "loading") && (
-              <div className="mt-1.5 inline-flex items-center gap-1.5 ui-caption text-slate-500 dark:text-slate-300">
-                <SpinnerIcon />
-                Resolving owner name...
-              </div>
-            )}
-            {tooltip?.status === "error" && (
-              <p className="mt-1.5 ui-caption text-rose-600 dark:text-rose-300">{tooltip.message}</p>
-            )}
-            {tooltip?.status === "ready" && (
-              <p className="mt-1.5 ui-caption text-slate-600 dark:text-slate-300">
-                Owner name: {tooltip.ownerName ? tooltip.ownerName : "Not found"}
-              </p>
-            )}
-          </div>
-        </AnchoredPortalMenu>
-      </div>
+      />
     );
   };
 
   const renderFeatureChip = (featureKey: FeatureKey, bucket: CephAdminBucket) => {
-    const status = bucket.features?.[featureKey] ?? null;
-    if (!status) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
     const tooltipKey = featureTooltipCacheKey(bucket, featureKey);
-    const tooltip = featureTooltipState[tooltipKey];
-    const isTooltipVisible = activeFeatureTooltipKey === tooltipKey;
     return (
-      <BucketFeatureSummaryChip
-        label={FEATURE_LABELS[featureKey]}
-        state={status.state}
-        tone={status.tone}
-        tooltip={tooltip}
-        open={isTooltipVisible}
+      <BucketOpsFeatureCell
+        bucket={bucket}
+        cacheKey={tooltipKey}
+        featureKey={featureKey}
+        tooltip={featureTooltipState[tooltipKey]}
+        open={activeFeatureTooltipKey === tooltipKey}
         onOpen={() => {
           setActiveFeatureTooltipKey(tooltipKey);
           loadFeatureTooltip(bucket, featureKey);
         }}
         onClose={() => setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev))}
-        cacheKey={tooltipKey}
       />
     );
   };

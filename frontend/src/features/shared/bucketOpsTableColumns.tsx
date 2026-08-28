@@ -33,10 +33,7 @@ type BuildBucketOpsDataColumnsInput = {
   featureColumns: readonly BucketOpsFeatureColumn[];
   renderFeatureChip: (feature: FeatureKey, bucket: CephAdminBucket) => ReactNode;
   renderOwnerCell: (bucket: CephAdminBucket) => ReactNode;
-  renderS3Tags: (
-    tags: CephAdminBucket["tags"],
-    bucket: CephAdminBucket,
-  ) => ReactNode;
+  renderS3Tags: (bucket: CephAdminBucket) => ReactNode;
   renderUiTags: (bucket: CephAdminBucket) => ReactNode;
   visibleColumns: readonly ColumnId[];
 };
@@ -231,7 +228,7 @@ export function buildBucketOpsDataColumns({
       expensive: true,
       headerClassName: "min-w-[12rem] max-w-[24rem]",
       cellClassName: "min-w-[12rem] max-w-[24rem]",
-      render: (bucket) => renderS3Tags(bucket.tags, bucket),
+      render: renderS3Tags,
     },
     ...featureColumns.map<BucketOpsDataColumn>((column) => ({
       id: column.id,

@@ -119,7 +119,7 @@ describe("buildBucketOpsDataColumns", () => {
 
     expect(renderers.renderUiTags).toHaveBeenCalledWith(bucket);
     expect(renderers.renderOwnerCell).toHaveBeenCalledWith(bucket);
-    expect(renderers.renderS3Tags).toHaveBeenCalledWith(bucket.tags, bucket);
+    expect(renderers.renderS3Tags).toHaveBeenCalledWith(bucket);
     expect(renderers.renderFeatureChip).toHaveBeenCalledWith(
       "versioning",
       bucket,

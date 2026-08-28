@@ -15,7 +15,11 @@ export type BucketFeatureTooltipState =
 
 const toAnchorRef = (node: HTMLElement | null): RefObject<HTMLElement | null> => ({ current: node });
 
-function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+export function BucketTooltipSpinnerIcon({
+  className = "h-3.5 w-3.5",
+}: {
+  className?: string;
+}) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={`${className} animate-spin`} aria-hidden="true">
       <circle cx="12" cy="12" r="9" className="opacity-30" stroke="currentColor" strokeWidth="2.5" />
@@ -70,7 +74,7 @@ export function BucketSummaryTooltip({
           <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{label}</p>
           {(!tooltip || tooltip.status === "loading") && (
             <div className="mt-1.5 inline-flex items-center gap-1.5 ui-caption text-slate-500 dark:text-slate-300">
-              <SpinnerIcon />
+              <BucketTooltipSpinnerIcon />
               {loadingLabel}
             </div>
           )}

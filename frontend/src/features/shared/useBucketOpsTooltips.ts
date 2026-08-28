@@ -69,7 +69,6 @@ export function useBucketOpsTooltips({
   const featureTooltipInflightRef = useRef<Partial<Record<string, Promise<void>>>>({});
   const bucketPropertiesCacheRef = useRef<Record<string, BucketProperties>>({});
   const bucketPropertiesInflightRef = useRef<Record<string, Promise<BucketProperties>>>({});
-  const ownerTooltipAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const generationRef = useRef(0);
 
   const bucketTooltipCacheKey = useCallback(
@@ -99,7 +98,6 @@ export function useBucketOpsTooltips({
     featureTooltipInflightRef.current = {};
     bucketPropertiesCacheRef.current = {};
     bucketPropertiesInflightRef.current = {};
-    ownerTooltipAnchorRefs.current = {};
   }, []);
 
   useEffect(() => {
@@ -329,7 +327,6 @@ export function useBucketOpsTooltips({
     featureTooltipState,
     loadFeatureTooltip,
     loadOwnerTooltip,
-    ownerTooltipAnchorRefs,
     ownerTooltipCacheKey,
     ownerTooltipState,
     resetBucketTooltipState,
