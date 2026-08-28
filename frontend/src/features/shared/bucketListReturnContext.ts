@@ -14,7 +14,7 @@ import type { BucketOpsMode } from "./bucketOpsSurface";
 const BUCKET_LIST_RETURN_STORAGE_PREFIX = "bucket-list.return.v1";
 const BUCKET_LIST_ORIGIN_STATE_KEY = "bucketListOrigin";
 
-type BucketListOrigin = {
+export type BucketListOrigin = {
   surface: BucketOpsMode;
   scopeKey: string;
   listUrl: string;

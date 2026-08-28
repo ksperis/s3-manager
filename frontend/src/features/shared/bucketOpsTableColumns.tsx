@@ -40,6 +40,13 @@ type BuildBucketOpsDataColumnsInput = {
 
 type BucketOpsDataColumn = BucketOpsTableColumn & { id: ColumnId };
 
+type BuildBucketOpsTableColumnsInput = BuildBucketOpsDataColumnsInput & {
+  renderActions: (bucket: CephAdminBucket) => ReactNode;
+  renderName: (bucket: CephAdminBucket) => ReactNode;
+  renderSelection: (bucket: CephAdminBucket) => ReactNode;
+  selectionHeader: ReactNode;
+};
+
 export function buildBucketOpsDataColumns({
   featureColumns,
   renderFeatureChip,
@@ -276,4 +283,37 @@ export function buildBucketOpsDataColumns({
 
   const visible = new Set(visibleColumns);
   return dataColumns.filter((column) => visible.has(column.id));
+}
+
+export function buildBucketOpsTableColumns(
+  input: BuildBucketOpsTableColumnsInput,
+): BucketOpsTableColumn[] {
+  return [
+    {
+      id: "select",
+      label: "",
+      field: null,
+      header: input.selectionHeader,
+      align: "left",
+      render: input.renderSelection,
+    },
+    {
+      id: "name",
+      label: "Name",
+      field: "name",
+      headerClassName: "w-[12rem] min-w-[10rem] max-w-[20rem]",
+      cellClassName: "w-[12rem] min-w-[10rem] max-w-[20rem]",
+      render: input.renderName,
+    },
+    ...buildBucketOpsDataColumns(input),
+    {
+      id: "actions",
+      label: "Act.",
+      field: null,
+      align: "right",
+      headerClassName: "w-16",
+      cellClassName: "!py-1.5",
+      render: input.renderActions,
+    },
+  ];
 }

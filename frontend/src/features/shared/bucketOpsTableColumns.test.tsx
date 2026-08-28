@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { CephAdminBucket } from "../../api/cephAdmin";
 import type { ColumnId } from "./bucketOpsListState";
-import { buildBucketOpsDataColumns } from "./bucketOpsTableColumns";
+import {
+  buildBucketOpsDataColumns,
+  buildBucketOpsTableColumns,
+} from "./bucketOpsTableColumns";
 
 const bucket: CephAdminBucket = {
   name: "archive",
@@ -124,5 +127,47 @@ describe("buildBucketOpsDataColumns", () => {
       "versioning",
       bucket,
     );
+  });
+});
+
+describe("buildBucketOpsTableColumns", () => {
+  it("wraps data columns in the canonical edge columns", () => {
+    const renderers = createRenderers();
+    const renderActions = vi.fn(() => "actions");
+    const renderName = vi.fn(() => "name");
+    const renderSelection = vi.fn(() => "selection");
+    const columns = buildBucketOpsTableColumns({
+      featureColumns: [],
+      ...renderers,
+      renderActions,
+      renderName,
+      renderSelection,
+      selectionHeader: "select-all",
+      visibleColumns: ["context_name"],
+    });
+
+    expect(columns.map(({ id }) => id)).toEqual([
+      "select",
+      "name",
+      "context_name",
+      "actions",
+    ]);
+    expect(columns[0]).toEqual(
+      expect.objectContaining({ header: "select-all", align: "left" }),
+    );
+    expect(columns.at(-1)).toEqual(
+      expect.objectContaining({
+        align: "right",
+        cellClassName: "!py-1.5",
+        headerClassName: "w-16",
+      }),
+    );
+
+    columns[0].render(bucket);
+    columns[1].render(bucket);
+    columns.at(-1)?.render(bucket);
+    expect(renderSelection).toHaveBeenCalledWith(bucket);
+    expect(renderName).toHaveBeenCalledWith(bucket);
+    expect(renderActions).toHaveBeenCalledWith(bucket);
   });
 });

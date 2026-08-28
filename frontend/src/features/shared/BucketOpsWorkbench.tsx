@@ -18,7 +18,6 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import {
   cx,
-  uiCheckboxClass,
   type UiTone,
 } from "../../components/ui/styles";
 import {
@@ -54,11 +53,14 @@ import {
   BucketOpsQuickFilter,
   BucketOpsTagAndAdvancedFilters,
 } from "./BucketOpsListFilters";
-import BucketOpsTable, { type BucketOpsTableColumn } from "./BucketOpsTable";
+import BucketOpsTable from "./BucketOpsTable";
 import {
   BucketOpsFeatureCell,
+  BucketOpsNameCell,
   BucketOpsOwnerCell,
   BucketOpsS3TagsCell,
+  BucketOpsSelectionCell,
+  BucketOpsSelectionHeader,
   getBucketOpsS3TagsTooltipKey,
 } from "./BucketOpsTableCells";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
@@ -70,7 +72,12 @@ import { useBucketOpsListing } from "./useBucketOpsListing";
 import { useBucketOpsRowTags } from "./useBucketOpsRowTags";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
-import { buildBucketOpsDataColumns } from "./bucketOpsTableColumns";
+import { buildBucketOpsTableColumns } from "./bucketOpsTableColumns";
+import {
+  buildBucketOpsListOrigin,
+  buildBucketOpsNavigationTarget,
+  type BucketOpsNavigationAction,
+} from "./bucketOpsTableNavigation";
 import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
 import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
@@ -120,9 +127,7 @@ import {
 } from "./bucketBulkPasteModel";
 import {
   buildBucketUiTagKey,
-  getBucketDisplayName,
   getStorageOpsBucketName,
-  getStorageOpsContextId,
   isStatsSortField,
   ownerFilterFromSearch,
   sanitizeExportFilenamePart,
@@ -1222,148 +1227,94 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     );
   };
 
-  const openBucketConfiguration = (bucket: CephAdminBucket) => {
-    if (!selectedEndpointId) return;
-    persistCurrentListState();
-    const listUrl = `${location.pathname}${location.search}`;
-    const scopeKey = isStorageOps ? "storage-ops" : String(selectedEndpointId);
-    const origin = { surface: surface.mode, scopeKey, listUrl };
-    saveBucketListReturnContext(origin, bucket.name, window.scrollY);
-
-    if (isStorageOps) {
-      const contextId = getStorageOpsContextId(bucket);
-      const bucketName = getStorageOpsBucketName(bucket);
-      if (!contextId || !bucketName) return;
-      const params = new URLSearchParams();
-      params.set("ctx", contextId);
-      navigate({
-        pathname: `/storage-ops/buckets/${encodeURIComponent(bucketName)}`,
-        search: `?${params.toString()}`,
-      }, {
-        state: {
-          ...buildBucketDetailLocationState(origin),
-        },
-      });
-      return;
-    }
-    const params = new URLSearchParams();
-    params.set("ep", String(selectedEndpointId));
-    navigate({
-      pathname: `/ceph-admin/buckets/${encodeURIComponent(bucket.name)}`,
-      search: `?${params.toString()}`,
-    }, { state: buildBucketDetailLocationState(origin) });
+  const navigateToBucketAction = (
+    action: BucketOpsNavigationAction,
+    bucket: CephAdminBucket,
+  ) => {
+    const target = buildBucketOpsNavigationTarget({
+      action,
+      bucket,
+      mode: surface.mode,
+      selectedEndpointId,
+    });
+    if (target) navigate(target);
   };
 
-  const bucketTableColumns: BucketOpsTableColumn[] = (() => {
-    const cols: BucketOpsTableColumn[] = [
-      {
-        id: "select",
-        label: "",
-        field: null,
-        header: (
-          <input
-            ref={selectionHeaderRef}
-            type="checkbox"
-            aria-label="Select all filtered buckets"
-            checked={headerChecked}
-            onChange={(e) => {
-              void setSelectionForFilteredResults(e.target.checked);
-            }}
-            disabled={loading || selectAllLoading || !selectedEndpointId || total === 0}
-            className={uiCheckboxClass}
-          />
-        ),
-        align: "left",
-        render: (bucket) => (
-          <input
-            type="checkbox"
-            aria-label={`Select bucket ${getBucketDisplayName(bucket, useExplicitBucketName)}${
-              isStorageOps && (bucket as StorageOpsBucket).context_name
-                ? ` in ${(bucket as StorageOpsBucket).context_name}`
-                : ""
-            }`}
-            checked={selectedBuckets.has(bucket.name)}
-            onChange={() => toggleSelection(bucket.name)}
-            className={uiCheckboxClass}
-          />
-        ),
-      },
-      {
-        id: "name",
-        label: "Name",
-        field: "name",
-        headerClassName: "w-[12rem] min-w-[10rem] max-w-[20rem]",
-        cellClassName: "w-[12rem] min-w-[10rem] max-w-[20rem]",
-        render: (bucket) => (
-          <button
-            type="button"
-            onClick={() => openBucketConfiguration(bucket)}
-            data-bucket-row-key={bucket.name}
-            className="block w-full truncate text-left hover:text-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:hover:text-primary-200"
-            title={`Configure ${getBucketDisplayName(bucket, useExplicitBucketName)} with the S3 API`}
-          >
-            {getBucketDisplayName(bucket, useExplicitBucketName)}
-          </button>
-        ),
-      },
-    ];
-
-    cols.push(
-      ...buildBucketOpsDataColumns({
-        featureColumns: featureColumnOptions,
-        renderFeatureChip,
-        renderOwnerCell,
-        renderS3Tags: renderTagList,
-        renderUiTags,
-        visibleColumns,
-      }),
-    );
-
-    cols.push({
-      id: "actions",
-      label: "Act.",
-      field: null,
-      align: "right",
-      headerClassName: "w-16",
-      cellClassName: "!py-1.5",
-      render: (bucket) => {
-        return (
-          <BucketOpsRowActionsMenu
-            bucket={bucket}
-            isStorageOps={isStorageOps}
-            selectedEndpointId={selectedEndpointId}
-            cephAdminBrowserEnabled={cephAdminBrowserEnabled}
-            onOpenInBrowser={(currentBucket) => {
-              if (!selectedEndpointId) return;
-              const params = new URLSearchParams();
-              params.set("ep", String(selectedEndpointId));
-              params.set("bucket", currentBucket.name);
-              navigate({ pathname: "/ceph-admin/browser", search: `?${params.toString()}` });
-            }}
-            onConfigure={openBucketConfiguration}
-            onAdminOps={(currentBucket, kind: BucketAdminOpsKind) => {
-              if (isStorageOps) return;
-              setAdminOpsAction({ kind, bucket: currentBucket });
-            }}
-            onOpenInManager={(currentBucket) => {
-              if (!isStorageOps) return;
-              const contextId = getStorageOpsContextId(currentBucket);
-              const bucketName = getStorageOpsBucketName(currentBucket);
-              if (!contextId || !bucketName) return;
-              const params = new URLSearchParams();
-              params.set("ctx", contextId);
-              navigate({
-                pathname: `/manager/buckets/${encodeURIComponent(bucketName)}`,
-                search: `?${params.toString()}`,
-              });
-            }}
-          />
-        );
-      },
+  const openBucketConfiguration = (bucket: CephAdminBucket) => {
+    const listUrl = `${location.pathname}${location.search}`;
+    const origin = buildBucketOpsListOrigin({
+      listUrl,
+      mode: surface.mode,
+      selectedEndpointId,
     });
+    if (!origin) return;
+    persistCurrentListState();
+    saveBucketListReturnContext(origin, bucket.name, window.scrollY);
+    const target = buildBucketOpsNavigationTarget({
+      action: "configure",
+      bucket,
+      mode: surface.mode,
+      selectedEndpointId,
+    });
+    if (!target) return;
+    navigate(target, { state: buildBucketDetailLocationState(origin) });
+  };
 
-    return cols;
-  })();
+  const bucketTableColumns = buildBucketOpsTableColumns({
+    featureColumns: featureColumnOptions,
+    renderActions: (bucket) => (
+      <BucketOpsRowActionsMenu
+        bucket={bucket}
+        isStorageOps={isStorageOps}
+        selectedEndpointId={selectedEndpointId}
+        cephAdminBrowserEnabled={cephAdminBrowserEnabled}
+        onOpenInBrowser={(currentBucket) =>
+          navigateToBucketAction("browser", currentBucket)
+        }
+        onConfigure={openBucketConfiguration}
+        onAdminOps={(currentBucket, kind: BucketAdminOpsKind) => {
+          if (isStorageOps) return;
+          setAdminOpsAction({ kind, bucket: currentBucket });
+        }}
+        onOpenInManager={(currentBucket) =>
+          navigateToBucketAction("manager", currentBucket)
+        }
+      />
+    ),
+    renderFeatureChip,
+    renderName: (bucket) => (
+      <BucketOpsNameCell
+        bucket={bucket}
+        onConfigure={() => openBucketConfiguration(bucket)}
+        useExplicitBucketName={useExplicitBucketName}
+      />
+    ),
+    renderOwnerCell,
+    renderS3Tags: renderTagList,
+    renderSelection: (bucket) => (
+      <BucketOpsSelectionCell
+        bucket={bucket}
+        isStorageOps={isStorageOps}
+        onToggle={() => toggleSelection(bucket.name)}
+        selected={selectedBuckets.has(bucket.name)}
+        useExplicitBucketName={useExplicitBucketName}
+      />
+    ),
+    renderUiTags,
+    selectionHeader: (
+      <BucketOpsSelectionHeader
+        checked={headerChecked}
+        disabled={
+          loading || selectAllLoading || !selectedEndpointId || total === 0
+        }
+        inputRef={selectionHeaderRef}
+        onChange={(checked) => {
+          void setSelectionForFilteredResults(checked);
+        }}
+      />
+    ),
+    visibleColumns,
+  });
   const tableStatus = resolveListTableStatus({
     loading,
     error,

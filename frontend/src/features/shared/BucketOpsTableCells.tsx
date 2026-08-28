@@ -3,9 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useRef } from "react";
-import type { RefObject } from "react";
+import type { Ref, RefObject } from "react";
 import type { CephAdminBucket } from "../../api/cephAdmin";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   BucketFeatureSummaryChip,
   BucketSummaryTooltip,
@@ -17,7 +18,7 @@ import {
   type FeatureKey,
 } from "./bucketOpsAdvancedFilterModel";
 import { buildBucketTagSummaryLines } from "./bucketFeatureSummaries";
-import { getTagColors } from "./bucketOpsPresentation";
+import { getBucketDisplayName, getTagColors } from "./bucketOpsPresentation";
 
 type OwnerTooltipState =
   | { status: "loading" }
@@ -30,6 +31,79 @@ const toAnchorRef = (
 
 export function getBucketOpsS3TagsTooltipKey(bucket: CephAdminBucket): string {
   return `${bucket.tenant ?? ""}:${bucket.name}:tags`;
+}
+
+export function BucketOpsSelectionHeader({
+  checked,
+  disabled,
+  inputRef,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  inputRef: Ref<HTMLInputElement>;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <input
+      ref={inputRef}
+      type="checkbox"
+      aria-label="Select all filtered buckets"
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+      disabled={disabled}
+      className={uiCheckboxClass}
+    />
+  );
+}
+
+export function BucketOpsSelectionCell({
+  bucket,
+  isStorageOps,
+  onToggle,
+  selected,
+  useExplicitBucketName,
+}: {
+  bucket: CephAdminBucket;
+  isStorageOps: boolean;
+  onToggle: () => void;
+  selected: boolean;
+  useExplicitBucketName: boolean;
+}) {
+  const contextLabel =
+    isStorageOps && bucket.context_name ? ` in ${bucket.context_name}` : "";
+  return (
+    <input
+      type="checkbox"
+      aria-label={`Select bucket ${getBucketDisplayName(bucket, useExplicitBucketName)}${contextLabel}`}
+      checked={selected}
+      onChange={onToggle}
+      className={uiCheckboxClass}
+    />
+  );
+}
+
+export function BucketOpsNameCell({
+  bucket,
+  onConfigure,
+  useExplicitBucketName,
+}: {
+  bucket: CephAdminBucket;
+  onConfigure: () => void;
+  useExplicitBucketName: boolean;
+}) {
+  const displayName = getBucketDisplayName(bucket, useExplicitBucketName);
+  return (
+    <button
+      type="button"
+      onClick={onConfigure}
+      data-bucket-row-key={bucket.name}
+      className="block w-full truncate text-left hover:text-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:hover:text-primary-200"
+      title={`Configure ${displayName} with the S3 API`}
+    >
+      {displayName}
+    </button>
+  );
 }
 
 export function BucketOpsS3TagsCell({

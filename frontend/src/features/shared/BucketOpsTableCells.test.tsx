@@ -3,8 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { CephAdminBucket } from "../../api/cephAdmin";
 import {
   BucketOpsFeatureCell,
+  BucketOpsNameCell,
   BucketOpsOwnerCell,
   BucketOpsS3TagsCell,
+  BucketOpsSelectionCell,
+  BucketOpsSelectionHeader,
   getBucketOpsS3TagsTooltipKey,
 } from "./BucketOpsTableCells";
 
@@ -24,6 +27,48 @@ const bucket: CephAdminBucket = {
 };
 
 describe("BucketOpsTableCells", () => {
+  it("renders selection and name cells with canonical row identity", () => {
+    const onSelectAll = vi.fn();
+    const onToggle = vi.fn();
+    const onConfigure = vi.fn();
+    render(
+      <>
+        <BucketOpsSelectionHeader
+          checked={false}
+          disabled={false}
+          inputRef={null}
+          onChange={onSelectAll}
+        />
+        <BucketOpsSelectionCell
+          bucket={{ ...bucket, bucket_name: "archive", context_name: "Account A" }}
+          isStorageOps
+          onToggle={onToggle}
+          selected
+          useExplicitBucketName
+        />
+        <BucketOpsNameCell
+          bucket={{ ...bucket, bucket_name: "archive" }}
+          onConfigure={onConfigure}
+          useExplicitBucketName
+        />
+      </>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select all filtered buckets" }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select bucket archive in Account A",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "archive" }));
+
+    expect(onSelectAll).toHaveBeenCalledWith(true);
+    expect(onToggle).toHaveBeenCalledOnce();
+    expect(onConfigure).toHaveBeenCalledOnce();
+  });
+
   it("renders compact S3 tags and delegates tooltip transitions", () => {
     const onOpen = vi.fn();
     const onClose = vi.fn();
