@@ -80,15 +80,14 @@ import { useBucketOpsRowTags } from "./useBucketOpsRowTags";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
 import { applyBucketOpsConfigPaste } from "./bucketOpsConfigPaste";
-import { previewBucketOpsConfigPaste } from "./bucketOpsConfigPastePreview";
 import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
 import { applyBucketOpsBulkUpdate } from "./bucketOpsBulkApply";
-import { previewBucketOpsBulkUpdate } from "./bucketOpsBulkPreview";
 import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
 import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
 import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
+import { useBucketOpsBulkPreview } from "./useBucketOpsBulkPreview";
 import { useBucketOpsConfigCopy } from "./useBucketOpsConfigCopy";
 import { useBucketOpsSelection } from "./useBucketOpsSelection";
 import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
@@ -532,11 +531,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setBulkQuotaSizeValue,
     setBulkQuotaSkipConfigured,
   } = useBucketOpsBulkForm();
-  const [bulkPreview, setBulkPreview] = useState<BulkPreviewItem[]>([]);
-  const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
-  const [bulkPreviewProgress, setBulkPreviewProgress] = useState<ActionProgressState | null>(null);
-  const [bulkPreviewError, setBulkPreviewError] = useState<string | null>(null);
-  const [bulkPreviewReady, setBulkPreviewReady] = useState(false);
   const [bulkApplyLoading, setBulkApplyLoading] = useState(false);
   const [bulkApplyError, setBulkApplyError] = useState<string | null>(null);
   const [bulkApplySummary, setBulkApplySummary] = useState<string | null>(null);
@@ -568,7 +562,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     selectedScopeId: selectedEndpointId,
   });
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
-  const bulkPreviewRunTokenRef = useRef(0);
   const restoreFilterRef = useRef<string | null>(null);
   const restoredReturnContextRef = useRef<number | null>(null);
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(
@@ -1074,9 +1067,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     resetSelectedBuckets();
     resetBulkForm();
     resetBulkCopy();
-    setBulkPreview([]);
-    setBulkPreviewError(null);
-    setBulkPreviewReady(false);
+    resetBulkPreview();
     setBulkApplyError(null);
     setBulkApplySummary(null);
     resetSelectionActions();
@@ -1173,6 +1164,104 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       selectedEndpointId,
     ]
   );
+  const preparedBulkInput = useMemo(
+    () =>
+      prepareBucketOpsBulkInput({
+        operation: bulkOperation,
+        quota: {
+          applyObjects: bulkQuotaApplyObjects,
+          applySize: bulkQuotaApplySize,
+          objects: bulkQuotaObjects,
+          sizeUnit: bulkQuotaSizeUnit,
+          sizeValue: bulkQuotaSizeValue,
+        },
+        lifecycle: {
+          deleteIds: bulkLifecycleDeleteIds,
+          deleteTypes: bulkLifecycleDeleteTypes,
+          ruleText: bulkLifecycleRuleText,
+          updateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
+        },
+        notifications: {
+          configurationText: bulkNotificationText,
+          deleteIds: bulkNotificationDeleteIds,
+          deleteTypes: bulkNotificationDeleteTypes,
+        },
+        cors: {
+          deleteIds: bulkCorsDeleteIds,
+          deleteTypes: bulkCorsDeleteTypes,
+          ruleText: bulkCorsRuleText,
+          updateOnlyExisting: bulkCorsUpdateOnlyExisting,
+        },
+        policy: {
+          deleteIds: bulkPolicyDeleteIds,
+          deleteTypes: bulkPolicyDeleteTypes,
+          policyText: bulkPolicyText,
+          updateOnlyExisting: bulkPolicyUpdateOnlyExisting,
+        },
+        publicAccessBlockTargets: bulkPublicAccessBlockTargets,
+      }),
+    [
+      bulkCorsDeleteIds,
+      bulkCorsDeleteTypes,
+      bulkCorsRuleText,
+      bulkCorsUpdateOnlyExisting,
+      bulkLifecycleDeleteIds,
+      bulkLifecycleDeleteTypes,
+      bulkLifecycleRuleText,
+      bulkLifecycleUpdateOnlyExisting,
+      bulkNotificationDeleteIds,
+      bulkNotificationDeleteTypes,
+      bulkNotificationText,
+      bulkOperation,
+      bulkPolicyDeleteIds,
+      bulkPolicyDeleteTypes,
+      bulkPolicyText,
+      bulkPolicyUpdateOnlyExisting,
+      bulkPublicAccessBlockTargets,
+      bulkQuotaApplyObjects,
+      bulkQuotaApplySize,
+      bulkQuotaObjects,
+      bulkQuotaSizeUnit,
+      bulkQuotaSizeValue,
+    ],
+  );
+  const resetBulkApplyFeedback = useCallback(() => {
+    setBulkApplyError(null);
+    setBulkApplySummary(null);
+    setBulkApplyProgress(null);
+  }, []);
+  const {
+    bulkPreview,
+    bulkPreviewError,
+    bulkPreviewLoading,
+    bulkPreviewProgress,
+    bulkPreviewReady,
+    resetBulkPreview,
+    runBulkPreview,
+  } = useBucketOpsBulkPreview({
+    bucketNames: selectedBucketList,
+    clipboard: bulkConfigClipboard,
+    corsUpdateOnlyExisting: bulkCorsUpdateOnlyExisting,
+    endpointId: selectedEndpointId,
+    extractError,
+    fetchBucketQuota,
+    getBucketCors,
+    getBucketLifecycle,
+    getBucketLogging,
+    getBucketNotifications,
+    getBucketPolicy,
+    getBucketProperties,
+    getBucketPublicAccessBlock,
+    isStorageOps,
+    lifecycleUpdateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
+    onPreviewStart: resetBulkApplyFeedback,
+    operation: bulkOperation,
+    pastePlan: bulkPastePlan,
+    policyUpdateOnlyExisting: bulkPolicyUpdateOnlyExisting,
+    prepared: preparedBulkInput,
+    quotaDisabledReason: quotaOperationDisabledReason,
+    quotaSkipConfigured: bulkQuotaSkipConfigured,
+  });
 
   useEffect(() => {
     if (!showBulkUpdateModal || bulkOperation !== "paste_configs" || !bulkConfigClipboard) return;
@@ -1212,15 +1301,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     );
   };
 
-  const resetBulkPreview = () => {
-    bulkPreviewRunTokenRef.current += 1;
-    setBulkPreviewLoading(false);
-    setBulkPreview([]);
-    setBulkPreviewError(null);
-    setBulkPreviewReady(false);
-    setBulkPreviewProgress(null);
-  };
-
   useEffect(() => {
     if (!showBulkUpdateModal) return;
     resetBulkPreview();
@@ -1256,6 +1336,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     bulkPasteMapping,
     bulkConfigClipboard,
     cancelBulkCopy,
+    resetBulkPreview,
     selectedBuckets,
     showBulkUpdateModal,
   ]);
@@ -1292,156 +1373,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setBulkApplyError(null);
     setBulkApplySummary(null);
     setBulkApplyProgress(null);
-  };
-
-  const prepareCurrentBulkInput = () =>
-    prepareBucketOpsBulkInput({
-      operation: bulkOperation,
-      quota: {
-        applyObjects: bulkQuotaApplyObjects,
-        applySize: bulkQuotaApplySize,
-        objects: bulkQuotaObjects,
-        sizeUnit: bulkQuotaSizeUnit,
-        sizeValue: bulkQuotaSizeValue,
-      },
-      lifecycle: {
-        deleteIds: bulkLifecycleDeleteIds,
-        deleteTypes: bulkLifecycleDeleteTypes,
-        ruleText: bulkLifecycleRuleText,
-        updateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
-      },
-      notifications: {
-        configurationText: bulkNotificationText,
-        deleteIds: bulkNotificationDeleteIds,
-        deleteTypes: bulkNotificationDeleteTypes,
-      },
-      cors: {
-        deleteIds: bulkCorsDeleteIds,
-        deleteTypes: bulkCorsDeleteTypes,
-        ruleText: bulkCorsRuleText,
-        updateOnlyExisting: bulkCorsUpdateOnlyExisting,
-      },
-      policy: {
-        deleteIds: bulkPolicyDeleteIds,
-        deleteTypes: bulkPolicyDeleteTypes,
-        policyText: bulkPolicyText,
-        updateOnlyExisting: bulkPolicyUpdateOnlyExisting,
-      },
-      publicAccessBlockTargets: bulkPublicAccessBlockTargets,
-    });
-
-  const runBulkPreview = async () => {
-    if (!selectedEndpointId || selectedBucketList.length === 0) return;
-    if (!bulkOperation) {
-      setBulkPreviewError("Select an operation first.");
-      return;
-    }
-    if (bulkOperation === "copy_configs") {
-      setBulkPreviewError("Use 'Copy selected configs' for this operation.");
-      return;
-    }
-    if (bulkOperation === "set_quota" && quotaOperationDisabledReason) {
-      setBulkPreviewError(`Set bucket quota is unavailable: ${quotaOperationDisabledReason}.`);
-      return;
-    }
-    if (bulkOperation === "paste_configs") {
-      if (bulkPastePlan.error) {
-        setBulkPreviewError(bulkPastePlan.error);
-        return;
-      }
-      const runToken = bulkPreviewRunTokenRef.current + 1;
-      bulkPreviewRunTokenRef.current = runToken;
-      setBulkPreviewLoading(true);
-      setBulkPreviewError(null);
-      setBulkPreview([]);
-      setBulkPreviewReady(false);
-      setBulkPreviewProgress({
-        label: "Previewing changes",
-        completed: 0,
-        total: bulkPastePlan.mappings.length,
-        failed: 0,
-      });
-      setBulkApplyError(null);
-      setBulkApplySummary(null);
-      try {
-        const previewItems = await previewBucketOpsConfigPaste({
-          clipboard: bulkConfigClipboard,
-          fetchBucketQuota,
-          getBucketCors,
-          getBucketLifecycle,
-          getBucketLogging,
-          getBucketPolicy,
-          getBucketProperties,
-          getBucketPublicAccessBlock,
-          isStorageOps,
-          mappings: bulkPastePlan.mappings,
-          onProgress: (progress) => {
-            if (bulkPreviewRunTokenRef.current !== runToken) return;
-            setBulkPreviewProgress({ label: "Previewing changes", ...progress });
-          },
-          targetEndpointId: selectedEndpointId,
-        });
-        if (bulkPreviewRunTokenRef.current !== runToken) return;
-        setBulkPreview(previewItems);
-        setBulkPreviewReady(true);
-      } finally {
-        if (bulkPreviewRunTokenRef.current === runToken) {
-          setBulkPreviewLoading(false);
-          setBulkPreviewProgress(null);
-        }
-      }
-      return;
-    }
-    const prepared = prepareCurrentBulkInput();
-    if (prepared.kind === "error") {
-      setBulkPreviewError(prepared.error);
-      return;
-    }
-    const runToken = bulkPreviewRunTokenRef.current + 1;
-    bulkPreviewRunTokenRef.current = runToken;
-    setBulkPreviewLoading(true);
-    setBulkPreviewError(null);
-    setBulkPreview([]);
-    setBulkPreviewReady(false);
-    setBulkPreviewProgress({
-      label: "Previewing changes",
-      completed: 0,
-      total: selectedBucketList.length,
-      failed: 0,
-    });
-    setBulkApplyError(null);
-    setBulkApplySummary(null);
-    try {
-      const previewItems = await previewBucketOpsBulkUpdate({
-        bucketNames: selectedBucketList,
-        corsUpdateOnlyExisting: bulkCorsUpdateOnlyExisting,
-        endpointId: selectedEndpointId,
-        fetchBucketQuota,
-        getBucketCors,
-        getBucketLifecycle,
-        getBucketNotifications,
-        getBucketPolicy,
-        getBucketProperties,
-        getBucketPublicAccessBlock,
-        lifecycleUpdateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
-        onProgress: (progress) => {
-          if (bulkPreviewRunTokenRef.current !== runToken) return;
-          setBulkPreviewProgress({ label: "Previewing changes", ...progress });
-        },
-        operation: bulkOperation,
-        policyUpdateOnlyExisting: bulkPolicyUpdateOnlyExisting,
-        prepared: prepared.value,
-        quotaSkipConfigured: bulkQuotaSkipConfigured,
-      });
-      if (bulkPreviewRunTokenRef.current !== runToken) return;
-      setBulkPreview(previewItems);
-      setBulkPreviewReady(true);
-    } finally {
-      if (bulkPreviewRunTokenRef.current === runToken) {
-        setBulkPreviewLoading(false);
-        setBulkPreviewProgress(null);
-      }
-    }
   };
 
   const applyBulkUpdate = async () => {
@@ -1509,7 +1440,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       refreshBuckets();
       return;
     }
-    const prepared = prepareCurrentBulkInput();
+    const prepared = preparedBulkInput;
     if (prepared.kind === "error") {
       setBulkApplyError(prepared.error);
       return;
