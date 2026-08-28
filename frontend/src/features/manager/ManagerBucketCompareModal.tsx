@@ -53,8 +53,9 @@ import {
   renderDiffLines,
 } from "../shared/bucketCompareShared";
 import {
+  formatDownloadTimestamp,
   triggerBlobDownload,
-  triggerDownload,
+  triggerJsonDownload,
 } from "../../utils/download";
 
 type CompareRunItem = {
@@ -681,9 +682,9 @@ export default function ManagerBucketCompareModal({
         result: item.result ?? null,
       })),
     };
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const timestamp = formatDownloadTimestamp(new Date());
     const filename = `bucket-compare-${sourceContextId}-to-${targetContextId ?? "na"}-${timestamp}.json`;
-    triggerDownload(filename, JSON.stringify(payload, null, 2), "application/json");
+    triggerJsonDownload(filename, payload);
   };
 
   const startRemediationAction = useCallback(

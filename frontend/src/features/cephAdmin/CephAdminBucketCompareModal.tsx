@@ -48,7 +48,10 @@ import {
   renderCompareObjectDetails,
   renderDiffLines,
 } from "../shared/bucketCompareShared";
-import { triggerDownload } from "../../utils/download";
+import {
+  formatDownloadTimestamp,
+  triggerJsonDownload,
+} from "../../utils/download";
 
 type CompareRunItem = {
   sourceBucket: string;
@@ -585,9 +588,9 @@ export default function CephAdminBucketCompareModal({
         result: item.result ?? null,
       })),
     };
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const timestamp = formatDownloadTimestamp(new Date());
     const filename = `bucket-compare-${sourceEndpointId}-to-${targetEndpointId ?? "na"}-${timestamp}.json`;
-    triggerDownload(filename, JSON.stringify(payload, null, 2), "application/json");
+    triggerJsonDownload(filename, payload);
   };
 
   const openExploreConfirm = useCallback((href: string, detail: { key: string }) => {

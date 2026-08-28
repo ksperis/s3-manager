@@ -113,7 +113,10 @@ import {
 import { FEATURE_STATE_OPTIONS, type FeatureKey } from "./bucketOpsAdvancedFilterModel";
 import { type ColumnId, type SortField } from "./bucketOpsListState";
 import { extractApiError } from "../../utils/apiError";
-import { triggerDownload } from "../../utils/download";
+import {
+  formatDownloadTimestamp,
+  triggerJsonDownload,
+} from "../../utils/download";
 import {
   BUCKET_CONFIG_BACKUP_FEATURE_LABELS,
 } from "./bucketBulkOperationsModel";
@@ -856,7 +859,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const createConfigBackup = async (features: CephAdminBucketConfigBackupFeature[]) => {
     if (isStorageOps || !selectedEndpointId || selectedBucketList.length === 0) return;
     const generatedAt = new Date().toISOString();
-    const timestamp = generatedAt.replace(/[:.]/g, "-");
+    const timestamp = formatDownloadTimestamp(generatedAt);
     const endpointPart = sanitizeExportFilenamePart(
       selectedEndpoint?.name ?? (selectedEndpointId ? `endpoint-${selectedEndpointId}` : "endpoint")
     );
@@ -864,10 +867,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       buckets: selectedBucketList,
       features,
     });
-    triggerDownload(
+    triggerJsonDownload(
       `ceph-admin-bucket-config-backup-${endpointPart}-${timestamp}.json`,
-      JSON.stringify(backup, null, 2),
-      "application/json"
+      backup,
     );
   };
 
@@ -986,7 +988,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const exportBulkPreviewChanges = () => {
     if (bulkPreview.length === 0) return;
     const exportedAt = new Date().toISOString();
-    const timestamp = exportedAt.replace(/[:.]/g, "-");
+    const timestamp = formatDownloadTimestamp(exportedAt);
     const endpointPart = sanitizeExportFilenamePart(
       selectedEndpoint?.name ??
         (selectedEndpointId ? `${scopeDisplayName.toLowerCase()}-${selectedEndpointId}` : scopeDisplayName.toLowerCase())
@@ -1004,10 +1006,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       },
     });
 
-    triggerDownload(
+    triggerJsonDownload(
       `${exportPrefix}-bulk-preview-${endpointPart}-${operationPart}-${timestamp}.json`,
-      JSON.stringify(payload, null, 2),
-      "application/json"
+      payload,
     );
   };
 

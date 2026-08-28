@@ -22,3 +22,9 @@ export const triggerDownload = (
   if (typeof window === "undefined") return;
   triggerBlobDownload(filename, new Blob([content], { type: mimeType }));
 };
+
+export const formatDownloadTimestamp = (value: Date | string) =>
+  (typeof value === "string" ? value : value.toISOString()).replace(/[:.]/g, "-");
+
+export const triggerJsonDownload = (filename: string, payload: unknown) =>
+  triggerDownload(filename, JSON.stringify(payload, null, 2), "application/json");

@@ -17,6 +17,7 @@ import { loadBucketOpsFilteredBuckets } from "./bucketOpsFilteredBucketLoader";
 import type { ColumnId } from "./bucketOpsListState";
 import { loadBucketOpsBucketsByNames } from "./bucketOpsNamedBucketLoader";
 import { sanitizeExportFilenamePart } from "./bucketOpsPresentation";
+import { formatDownloadTimestamp } from "../../utils/download";
 
 type BucketOpsExportPage = {
   items?: CephAdminBucket[];
@@ -124,7 +125,7 @@ export async function prepareBucketOpsSelectionExport(
   input: BucketOpsSelectionExportInput,
 ): Promise<BucketOpsSelectionExportArtifact> {
   const generatedAt = (input.now ?? (() => new Date()))().toISOString();
-  const timestamp = generatedAt.replace(/[:.]/g, "-");
+  const timestamp = formatDownloadTimestamp(generatedAt);
   const fallbackScopeName =
     input.scopeId === null
       ? input.scopeDisplayName.toLowerCase()

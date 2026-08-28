@@ -4,7 +4,11 @@
  */
 import Modal from "../../components/Modal";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
-import { triggerDownload } from "../../utils/download";
+import {
+  formatDownloadTimestamp,
+  triggerDownload,
+  triggerJsonDownload,
+} from "../../utils/download";
 import { formatBytes } from "../../utils/format";
 import { bulkActionClasses, bulkDangerClasses, toolbarButtonClasses } from "./browserConstants";
 import { formatDateTime } from "./browserUtils";
@@ -56,7 +60,7 @@ export default function BrowserPrefixVersionsModal({
 
   const handleExportJson = () => {
     const exportedAt = new Date().toISOString();
-    const timestamp = exportedAt.replace(/[:.]/g, "-");
+    const timestamp = formatDownloadTimestamp(exportedAt);
     const baseName = sanitizeFilename(`prefix-versions-${bucketName}-${normalizedPrefix || "root"}`);
     const payload = {
       exportedAt,
@@ -64,16 +68,12 @@ export default function BrowserPrefixVersionsModal({
       prefix: normalizedPrefix || "",
       items: buildExportRows(),
     };
-    triggerDownload(
-      `${baseName}-${timestamp}.json`,
-      JSON.stringify(payload, null, 2),
-      "application/json"
-    );
+    triggerJsonDownload(`${baseName}-${timestamp}.json`, payload);
   };
 
   const handleExportCsv = () => {
     const exportedAt = new Date().toISOString();
-    const timestamp = exportedAt.replace(/[:.]/g, "-");
+    const timestamp = formatDownloadTimestamp(exportedAt);
     const baseName = sanitizeFilename(`prefix-versions-${bucketName}-${normalizedPrefix || "root"}`);
     const headers = [
       "key",

@@ -10,6 +10,7 @@ import type {
   OperationItem,
   UploadOperationGroup,
 } from "./browserTypes";
+import { formatDownloadTimestamp } from "../../utils/download";
 
 type BrowserOperationDetailsExportInput = {
   kind: OperationDetailsKind;
@@ -170,7 +171,7 @@ export function buildBrowserOperationDetailsExport({
       : null;
   }
   if (!payload) return null;
-  const timestamp = exportedAt.replace(/[:.]/g, "-");
+  const timestamp = formatDownloadTimestamp(exportedAt);
   return {
     filename: `${sanitizeFilename(`operation-${kind}-${operationId}`)}-${timestamp}.json`,
     payload,
