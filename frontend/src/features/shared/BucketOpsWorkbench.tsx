@@ -66,6 +66,7 @@ import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureS
 import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
 import BucketOpsIdentityFilterFields from "./BucketOpsIdentityFilterFields";
+import BucketOpsMetricFilterFields from "./BucketOpsMetricFilterFields";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import BucketOpsStorageScopeFilterFields from "./BucketOpsStorageScopeFilterFields";
@@ -2458,136 +2459,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                             </span>
                           ) : null,
                           children: (
-                            <div className="space-y-3">
-                            {!usageFeatureEnabled && (
-                              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                {usageUnavailableDescription}
-                              </p>
-                            )}
-                            <div className="grid gap-3 lg:grid-cols-2">
-                              {[
-                                {
-                                  title: "Usage",
-                                  disabled: !usageFeatureEnabled,
-                                  rows: [
-                                    { label: "Bytes", minId: "minUsedBytes" as const, maxId: "maxUsedBytes" as const },
-                                    { label: "Objects", minId: "minObjects" as const, maxId: "maxObjects" as const },
-                                  ],
-                                },
-                                {
-                                  title: "Quota",
-                                  disabled: !usageFeatureEnabled,
-                                  rows: [
-                                    { label: "Bytes", minId: "minQuotaBytes" as const, maxId: "maxQuotaBytes" as const },
-                                    { label: "Objects", minId: "minQuotaObjects" as const, maxId: "maxQuotaObjects" as const },
-                                  ],
-                                },
-                                {
-                                  title: "Quota usage %",
-                                  disabled: !usageFeatureEnabled,
-                                  rows: [
-                                    {
-                                      label: "Size %",
-                                      minId: "minQuotaUsageSizePercent" as const,
-                                      maxId: "maxQuotaUsageSizePercent" as const,
-                                    },
-                                    {
-                                      label: "Objects %",
-                                      minId: "minQuotaUsageObjectPercent" as const,
-                                      maxId: "maxQuotaUsageObjectPercent" as const,
-                                    },
-                                  ],
-                                },
-                                {
-                                  title: "Owner quota",
-                                  disabled: false,
-                                  rows: [
-                                    { label: "Bytes", minId: "minOwnerQuotaBytes" as const, maxId: "maxOwnerQuotaBytes" as const },
-                                    { label: "Objects", minId: "minOwnerQuotaObjects" as const, maxId: "maxOwnerQuotaObjects" as const },
-                                  ],
-                                },
-                                {
-                                  title: "Owner usage",
-                                  disabled: !usageFeatureEnabled,
-                                  rows: [
-                                    { label: "Bytes", minId: "minOwnerUsedBytes" as const, maxId: "maxOwnerUsedBytes" as const },
-                                    { label: "Objects", minId: "minOwnerObjects" as const, maxId: "maxOwnerObjects" as const },
-                                  ],
-                                },
-                                {
-                                  title: "Owner usage %",
-                                  disabled: !usageFeatureEnabled,
-                                  rows: [
-                                    {
-                                      label: "Size %",
-                                      minId: "minOwnerQuotaUsageSizePercent" as const,
-                                      maxId: "maxOwnerQuotaUsageSizePercent" as const,
-                                    },
-                                    {
-                                      label: "Objects %",
-                                      minId: "minOwnerQuotaUsageObjectPercent" as const,
-                                      maxId: "maxOwnerQuotaUsageObjectPercent" as const,
-                                    },
-                                  ],
-                                },
-                              ].map((section) => (
-                                <div
-                                  key={section.title}
-                                  className={advancedFilterFieldCardClass(section.disabled ? "opacity-75" : "")}
-                                >
-                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                    {section.title}
-                                  </p>
-                                  {section.disabled && (
-                                    <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                      Requires bucket stats.
-                                    </p>
-                                  )}
-                                  <div className="mt-2 space-y-2">
-                                    {section.rows.map((row) => {
-                                      const minApplied = (advancedApplied?.[row.minId] ?? "").trim();
-                                      const minDraft = advancedDraft[row.minId].trim();
-                                      const maxApplied = (advancedApplied?.[row.maxId] ?? "").trim();
-                                      const maxDraft = advancedDraft[row.maxId].trim();
-                                      const rowState = buildAdvancedFilterFieldState(
-                                        Boolean(minApplied || maxApplied),
-                                        minDraft !== minApplied || maxDraft !== maxApplied
-                                      );
-                                      const minState = buildAdvancedFilterFieldState(Boolean(minApplied), minDraft !== minApplied);
-                                      const maxState = buildAdvancedFilterFieldState(Boolean(maxApplied), maxDraft !== maxApplied);
-                                      return (
-                                        <div key={`${section.title}:${row.label}`}>
-                                          <label className={`ui-caption font-medium text-slate-600 dark:text-slate-300 ${rowState.labelClass}`}>{row.label}</label>
-                                          <div className="mt-1 grid grid-cols-2 gap-2">
-                                            <input
-                                              type="number"
-                                              min="0"
-                                              inputMode="numeric"
-                                              value={advancedDraft[row.minId]}
-                                              onChange={(e) => updateAdvancedField(row.minId, e.target.value)}
-                                              placeholder="min"
-                                              disabled={section.disabled}
-                                              className={advancedFilterControlClass(`w-full px-2 py-1.5 font-normal ${minState.fieldClass}`, section.disabled)}
-                                            />
-                                            <input
-                                              type="number"
-                                              min="0"
-                                              inputMode="numeric"
-                                              value={advancedDraft[row.maxId]}
-                                              onChange={(e) => updateAdvancedField(row.maxId, e.target.value)}
-                                              placeholder="max"
-                                              disabled={section.disabled}
-                                              className={advancedFilterControlClass(`w-full px-2 py-1.5 font-normal ${maxState.fieldClass}`, section.disabled)}
-                                            />
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                            <BucketOpsMetricFilterFields
+                              advancedApplied={advancedApplied}
+                              advancedDraft={advancedDraft}
+                              onFieldChange={updateAdvancedField}
+                              usageFeatureEnabled={usageFeatureEnabled}
+                              usageUnavailableDescription={usageUnavailableDescription}
+                            />
                           ),
                         })}
 
