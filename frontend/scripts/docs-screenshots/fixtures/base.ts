@@ -2384,19 +2384,9 @@ export function buildBaseRules(): MockRule[] {
       body: { definitions: [] },
     },
     {
-      id: "ceph-bucket-ui-tag-orphans",
-      path: /^\/ceph-admin\/endpoints\/\d+\/bucket-ui-tags\/orphans$/,
-      body: { orphans: [] },
-    },
-    {
       id: "storage-ops-bucket-ui-tags",
       path: /^\/storage-ops\/bucket-ui-tags$/,
       body: { definitions: [] },
-    },
-    {
-      id: "storage-ops-bucket-ui-tag-orphans",
-      path: /^\/storage-ops\/bucket-ui-tags\/orphans$/,
-      body: { orphans: [] },
     },
     {
       id: "browser-settings",
