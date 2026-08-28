@@ -15,13 +15,17 @@ from app.models.user import (
     UserSummary,
     UserUpdate,
 )
-from app.routers.dependencies import get_audit_service, get_current_super_admin
+from app.routers.dependencies import (
+    get_audit_service,
+    get_current_super_admin,
+    get_users_service_dependency,
+)
 from app.services.audit_service import AuditService
 from app.services.user_associations_service import (
     UserAssociationsService,
     get_user_associations_service,
 )
-from app.services.users_service import UsersService, get_users_service
+from app.services.users_service import UsersService
 from app.core.sensitive_data import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
@@ -67,7 +71,7 @@ def list_users(
     search: Optional[str] = Query(None),
     sort_by: str = Query("email"),
     sort_dir: str = Query("asc"),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     _: DbUser = Depends(get_current_super_admin),
 ) -> PaginatedUsersResponse:
     items, total = users_service.paginate_users(
@@ -83,7 +87,7 @@ def list_users(
 
 @router.get("/minimal", response_model=list[UserSummary])
 def list_users_minimal(
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     _: DbUser = Depends(get_current_super_admin),
 ) -> list[UserSummary]:
     return users_service.list_users_minimal()
@@ -92,7 +96,7 @@ def list_users_minimal(
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreate,
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     associations_service: UserAssociationsService = Depends(
         lambda db=Depends(get_db): get_user_associations_service(db)
     ),
@@ -132,7 +136,7 @@ def create_user(
 def update_user(
     user_id: int,
     payload: UserUpdate,
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     associations_service: UserAssociationsService = Depends(
         lambda db=Depends(get_db): get_user_associations_service(db)
     ),
@@ -169,7 +173,7 @@ def update_user(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
@@ -186,4 +190,3 @@ def delete_user(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
-

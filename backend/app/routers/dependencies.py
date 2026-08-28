@@ -52,9 +52,16 @@ from app.routers.dependencies_internal.portal_access import (
 )
 from app.routers.dependencies_internal.sse_c import get_optional_sse_customer_context
 from app.services.audit_service import AuditService
+from app.services.users_service import UsersService, get_users_service
 
 
 def get_audit_service(
     db: Session = Depends(get_db),
 ) -> AuditService:
     return AuditService(db)
+
+
+def get_users_service_dependency(
+    db: Session = Depends(get_db),
+) -> UsersService:
+    return get_users_service(db)

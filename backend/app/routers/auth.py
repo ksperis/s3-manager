@@ -42,6 +42,7 @@ from app.routers.auth_session_guards import require_recent_mfa
 from app.routers.dependencies import (
     get_audit_service,
     get_current_ui_superadmin,
+    get_users_service_dependency,
 )
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
@@ -154,9 +155,7 @@ def create_first_admin_from_bootstrap(
         None,
         alias="X-BucketReef-Bootstrap-Token",
     ),
-    users_service: UsersService = Depends(
-        lambda db=Depends(get_db): get_users_service(db)
-    ),
+    users_service: UsersService = Depends(get_users_service_dependency),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuthenticationResponse:
     require_trusted_origin(request)
@@ -239,7 +238,7 @@ def create_first_admin_from_bootstrap(
 def register_admin(
     request: Request,
     payload: UserCreate,
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     current_user: User = Depends(get_current_ui_superadmin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
@@ -264,7 +263,7 @@ def login(
     request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuthenticationResponse:
     require_trusted_origin(request)
@@ -341,7 +340,7 @@ def login_with_ldap(
     response: Response,
     provider_id: str,
     payload: LDAPLoginRequest,
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     ldap_service: LDAPAuthService = Depends(lambda db=Depends(get_db): get_ldap_auth_service(db)),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuthenticationResponse:
@@ -614,7 +613,7 @@ def complete_oidc_login(
     provider_id: str,
     payload: OIDCCallbackRequest,
     oidc_service: OidcService = Depends(lambda db=Depends(get_db): get_oidc_service(db)),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuthenticationResponse:
     require_trusted_origin(request)

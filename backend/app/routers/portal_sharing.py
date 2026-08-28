@@ -20,14 +20,18 @@ from app.models.portal import (
     PortalStorageSpaceSharePayload,
     PortalStorageSpaceShareUpdate,
 )
-from app.routers.dependencies import get_audit_service, get_portal_account_access
+from app.routers.dependencies import (
+    get_audit_service,
+    get_portal_account_access,
+    get_users_service_dependency,
+)
 from app.routers.portal_common import (
     get_portal_service_dependency,
     raise_portal_storage_runtime,
 )
 from app.services.audit_service import AuditService
 from app.services.portal_service import PortalService
-from app.services.users_service import UsersService, get_users_service
+from app.services.users_service import UsersService
 from app.utils.http_errors import raise_bad_gateway_from_runtime
 from app.utils.http_headers import build_attachment_content_disposition
 
@@ -204,7 +208,7 @@ def grant_portal_storage_space_share(
     payload: PortalStorageSpaceSharePayload,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceShare:
     actor = access.actor
@@ -234,7 +238,7 @@ def update_portal_storage_space_share(
     payload: PortalStorageSpaceShareUpdate,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     service: PortalService = Depends(get_portal_service_dependency),
 ) -> PortalStorageSpaceShare:
     actor = access.actor
@@ -265,7 +269,7 @@ def revoke_portal_storage_space_share(
     user_id: int,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     service: PortalService = Depends(get_portal_service_dependency),
 ) -> list[PortalStorageSpaceShare]:
     actor = access.actor

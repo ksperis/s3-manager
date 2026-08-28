@@ -9,10 +9,15 @@ from app.models.user_notification import (
     UserNotificationsResponse,
 )
 from app.models.user import UserOut, UserSelfUpdate
-from app.routers.dependencies import get_audit_service, get_current_account_user, get_current_user
+from app.routers.dependencies import (
+    get_audit_service,
+    get_current_account_user,
+    get_current_user,
+    get_users_service_dependency,
+)
 from app.services.audit_service import AuditService
 from app.services.user_notifications_service import UserNotificationsService
-from app.services.users_service import UsersService, get_users_service
+from app.services.users_service import UsersService
 from app.services.user_avatar_service import MAX_AVATAR_BYTES, UserAvatarService
 from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
@@ -23,7 +28,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/me", response_model=UserOut)
 def read_users_me(
     current_user=Depends(get_current_user),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
 ) -> UserOut:
     return users_service.user_to_out(current_user)
 
@@ -59,7 +64,7 @@ def mark_my_notifications_read(
 def update_users_me(
     payload: UserSelfUpdate,
     current_user: User = Depends(get_current_account_user),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     update_fields = payload.model_fields_set
@@ -104,7 +109,7 @@ async def upload_my_avatar(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     payload = await file.read(MAX_AVATAR_BYTES + 1)
@@ -128,7 +133,7 @@ async def upload_my_avatar(
 def delete_my_avatar(
     current_user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
-    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    users_service: UsersService = Depends(get_users_service_dependency),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     service = UserAvatarService(db)
