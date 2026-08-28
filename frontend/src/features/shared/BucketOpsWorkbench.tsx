@@ -40,7 +40,6 @@ import {
 } from "../../components/ui/styles";
 import {
   backupCephAdminBucketConfigs,
-  BucketProperties,
   CephAdminBucket,
   type CephAdminBucketConfigBackupFeature,
 } from "../../api/cephAdmin";
@@ -65,7 +64,6 @@ import {
   parseNotificationConfiguration,
   parsePolicyStatements,
   parseRuleIds,
-  stableStringify,
   type NotificationConfigurationTypeKey,
 } from "../cephAdmin/bucketJsonParsers";
 import CephAdminAdminOpsModal, {
@@ -94,6 +92,7 @@ import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
 import { copyBucketOpsConfigs } from "./bucketOpsConfigCopy";
 import { applyBucketOpsConfigPaste } from "./bucketOpsConfigPaste";
+import { previewBucketOpsConfigPaste } from "./bucketOpsConfigPastePreview";
 import {
   buildBucketExportColumns,
   buildBucketSelectionJsonPayload,
@@ -224,16 +223,11 @@ import {
   PUBLIC_ACCESS_BLOCK_OPTIONS,
   applyPublicAccessBlockTargets,
   bytesToGiB,
-  formatObjectLockSnapshot,
   formatPublicAccessBlockFlag,
   formatPublicAccessBlockState,
   hasConfiguredQuota,
-  isAccessLoggingSnapshotEqual,
-  isObjectLockSnapshotEqual,
   isPublicAccessBlockEquivalent,
   loadBulkConfigClipboard,
-  normalizeAccessLoggingSnapshot,
-  normalizeObjectLockSnapshot,
   normalizePublicAccessBlockState,
   normalizeQuotaLimit,
   parseQuotaInput,
@@ -242,7 +236,6 @@ import {
   type BulkCopyFeatureKey,
   type BulkCopyFeatureSelection,
   type BulkOperation,
-  type BulkPastePlanItem,
   type BulkPreviewItem,
   type BulkPreviewLine,
   type BulkPreviewTone,
@@ -2275,169 +2268,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
   };
 
-  const buildPasteConfigPreview = async (mapping: BulkPastePlanItem): Promise<BulkPreviewItem> => {
-    const features = bulkConfigClipboard?.features;
-    const source = mapping.sourceConfig;
-    if (!features) {
-      return {
-        bucket: mapping.destinationBucket,
-        changed: false,
-        before: [{ text: "Clipboard unavailable." }],
-        after: [{ text: "Clipboard unavailable." }],
-      };
-    }
-    let changed = false;
-    const before: BulkPreviewLine[] = [{ text: `Source bucket: ${mapping.sourceBucket}` }];
-    const after: BulkPreviewLine[] = [{ text: `Source bucket: ${mapping.sourceBucket}` }];
-    const pushSection = (label: string, beforeLines: BulkPreviewLine[], afterLines: BulkPreviewLine[]) => {
-      before.push({ text: `[${label}]` }, ...beforeLines);
-      after.push({ text: `[${label}]` }, ...afterLines);
-    };
-
-    let props: BucketProperties | null = null;
-    if (features.versioning || features.object_lock) {
-      props = await getBucketProperties(selectedEndpointId!, mapping.destinationBucket);
-    }
-
-    if (!isStorageOps && features.quota && source.quota) {
-      const currentQuota = await fetchBucketQuota(mapping.destinationBucket);
-      const sectionChanged =
-        currentQuota.maxSizeBytes !== source.quota.maxSizeBytes || currentQuota.maxObjects !== source.quota.maxObjects;
-      changed = changed || sectionChanged;
-      pushSection(
-        "Quota",
-        [
-          {
-            text: `Size: ${currentQuota.maxSizeBytes != null ? formatBytes(currentQuota.maxSizeBytes) : "Not set"}`,
-            tone: sectionChanged ? "removed" : undefined,
-          },
-          {
-            text: `Objects: ${currentQuota.maxObjects != null ? formatNumber(currentQuota.maxObjects) : "Not set"}`,
-            tone: sectionChanged ? "removed" : undefined,
-          },
-        ],
-        [
-          {
-            text: `Size: ${source.quota.maxSizeBytes != null ? formatBytes(source.quota.maxSizeBytes) : "Not set"}`,
-            tone: sectionChanged ? "added" : undefined,
-          },
-          {
-            text: `Objects: ${source.quota.maxObjects != null ? formatNumber(source.quota.maxObjects) : "Not set"}`,
-            tone: sectionChanged ? "added" : undefined,
-          },
-        ]
-      );
-    }
-
-    if (features.versioning && source.versioningEnabled !== null) {
-      const currentEnabled = normalizeVersioningStatus(props?.versioning_status);
-      const currentStatus = formatVersioningStatus(props?.versioning_status);
-      const targetStatus = source.versioningEnabled ? "Enabled" : "Suspended";
-      const sectionChanged = currentEnabled === null ? true : currentEnabled !== source.versioningEnabled;
-      changed = changed || sectionChanged;
-      pushSection(
-        "Versioning",
-        [{ text: currentStatus, tone: sectionChanged ? "removed" : undefined }],
-        [{ text: targetStatus, tone: sectionChanged ? "added" : undefined }]
-      );
-    }
-
-    if (features.object_lock && source.objectLock) {
-      const rawCurrentObjectLock =
-        props?.object_lock && typeof props.object_lock === "object"
-          ? (props.object_lock as Record<string, unknown>)
-          : {};
-      const currentObjectLock = normalizeObjectLockSnapshot({
-        ...rawCurrentObjectLock,
-        enabled: Boolean(props?.object_lock_enabled ?? rawCurrentObjectLock.enabled),
-      });
-      const sectionChanged = !isObjectLockSnapshotEqual(currentObjectLock, source.objectLock);
-      changed = changed || sectionChanged;
-      pushSection(
-        "Object Lock",
-        [{ text: formatObjectLockSnapshot(currentObjectLock), tone: sectionChanged ? "removed" : undefined }],
-        [{ text: formatObjectLockSnapshot(source.objectLock), tone: sectionChanged ? "added" : undefined }]
-      );
-    }
-
-    if (features.public_access_block && source.publicAccessBlock) {
-      const currentPublicAccessBlock = normalizePublicAccessBlockState(
-        await getBucketPublicAccessBlock(selectedEndpointId!, mapping.destinationBucket)
-      );
-      const sectionChanged = !isPublicAccessBlockEquivalent(currentPublicAccessBlock, source.publicAccessBlock);
-      changed = changed || sectionChanged;
-      pushSection(
-        "Block Public Access",
-        [{ text: JSON.stringify(currentPublicAccessBlock, null, 2), tone: sectionChanged ? "removed" : undefined }],
-        [{ text: JSON.stringify(source.publicAccessBlock, null, 2), tone: sectionChanged ? "added" : undefined }]
-      );
-    }
-
-    if (features.lifecycle && source.lifecycleRules) {
-      const currentLifecycle = ((await getBucketLifecycle(selectedEndpointId!, mapping.destinationBucket)).rules ??
-        []) as Record<string, unknown>[];
-      const sectionChanged = stableStringify(currentLifecycle) !== stableStringify(source.lifecycleRules);
-      changed = changed || sectionChanged;
-      pushSection(
-        "Lifecycle",
-        currentLifecycle.length === 0
-          ? [{ text: "(no rules)" }]
-          : currentLifecycle.map((rule) => ({ text: formatLifecycleRule(rule), tone: sectionChanged ? "removed" : undefined })),
-        source.lifecycleRules.length === 0
-          ? [{ text: "(no rules)" }]
-          : source.lifecycleRules.map((rule) => ({ text: formatLifecycleRule(rule), tone: sectionChanged ? "added" : undefined }))
-      );
-    }
-
-    if (features.cors && source.corsRules) {
-      const currentCors = ((await getBucketCors(selectedEndpointId!, mapping.destinationBucket)).rules ??
-        []) as Record<string, unknown>[];
-      const sectionChanged = stableStringify(currentCors) !== stableStringify(source.corsRules);
-      changed = changed || sectionChanged;
-      pushSection(
-        "CORS",
-        currentCors.length === 0
-          ? [{ text: "(no rules)" }]
-          : currentCors.map((rule) => ({ text: formatCorsRule(rule), tone: sectionChanged ? "removed" : undefined })),
-        source.corsRules.length === 0
-          ? [{ text: "(no rules)" }]
-          : source.corsRules.map((rule) => ({ text: formatCorsRule(rule), tone: sectionChanged ? "added" : undefined }))
-      );
-    }
-
-    if (features.policy) {
-      const currentPolicy = ((await getBucketPolicy(selectedEndpointId!, mapping.destinationBucket)).policy ??
-        null) as Record<string, unknown> | null;
-      const sectionChanged = stableStringify(currentPolicy) !== stableStringify(source.policy);
-      changed = changed || sectionChanged;
-      pushSection(
-        "Bucket Policy",
-        [{ text: currentPolicy ? JSON.stringify(currentPolicy, null, 2) : "(no policy)", tone: sectionChanged ? "removed" : undefined }],
-        [{ text: source.policy ? JSON.stringify(source.policy, null, 2) : "(no policy)", tone: sectionChanged ? "added" : undefined }]
-      );
-    }
-
-    if (features.access_logging && source.accessLogging) {
-      const currentAccessLogging = normalizeAccessLoggingSnapshot(
-        (await getBucketLogging(selectedEndpointId!, mapping.destinationBucket)) as unknown as Record<string, unknown>
-      );
-      const sectionChanged = !isAccessLoggingSnapshotEqual(currentAccessLogging, source.accessLogging);
-      changed = changed || sectionChanged;
-      pushSection(
-        "Access logging",
-        [{ text: JSON.stringify(currentAccessLogging, null, 2), tone: sectionChanged ? "removed" : undefined }],
-        [{ text: JSON.stringify(source.accessLogging, null, 2), tone: sectionChanged ? "added" : undefined }]
-      );
-    }
-
-    return {
-      bucket: mapping.destinationBucket,
-      changed,
-      before,
-      after,
-    };
-  };
-
   const runBulkPreview = async () => {
     if (!selectedEndpointId || selectedBucketList.length === 0) return;
     if (!bulkOperation) {
@@ -2472,34 +2302,24 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setBulkApplyError(null);
       setBulkApplySummary(null);
       try {
-        const previewResults = await runWithConcurrencySettled(
-          bulkPastePlan.mappings,
-          BULK_CONCURRENCY_LIMIT,
-          async (mapping) => buildPasteConfigPreview(mapping),
-          (result) => {
+        const previewItems = await previewBucketOpsConfigPaste({
+          clipboard: bulkConfigClipboard,
+          fetchBucketQuota,
+          getBucketCors,
+          getBucketLifecycle,
+          getBucketLogging,
+          getBucketPolicy,
+          getBucketProperties,
+          getBucketPublicAccessBlock,
+          isStorageOps,
+          mappings: bulkPastePlan.mappings,
+          onProgress: (progress) => {
             if (bulkPreviewRunTokenRef.current !== runToken) return;
-            setBulkPreviewProgress((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                completed: Math.min(prev.total, prev.completed + 1),
-                failed: prev.failed + (result.status === "rejected" ? 1 : 0),
-              };
-            });
-          }
-        );
-        if (bulkPreviewRunTokenRef.current !== runToken) return;
-        const previewItems = previewResults.map((result, index) => {
-          const mapping = bulkPastePlan.mappings[index];
-          if (result.status === "fulfilled") return result.value;
-          return {
-            bucket: mapping.destinationBucket,
-            before: [{ text: `Source bucket: ${mapping.sourceBucket}` }, { text: "Preview failed." }],
-            after: [{ text: `Source bucket: ${mapping.sourceBucket}` }, { text: "Preview failed." }],
-            changed: false,
-            error: extractError(result.reason),
-          };
+            setBulkPreviewProgress({ label: "Previewing changes", ...progress });
+          },
+          targetEndpointId: selectedEndpointId,
         });
+        if (bulkPreviewRunTokenRef.current !== runToken) return;
         setBulkPreview(previewItems);
         setBulkPreviewReady(true);
       } finally {
