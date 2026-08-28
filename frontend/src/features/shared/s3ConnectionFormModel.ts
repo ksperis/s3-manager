@@ -8,13 +8,13 @@ import type {
   S3Connection,
   UpdateConnectionPayload,
 } from "../../api/connections";
+import type { S3CredentialsValidationPayload } from "../../api/s3CredentialsValidation";
 import { stableSignature } from "../../utils/stableSignature";
 import {
   extractUiTagLabels,
   normalizeUiTags,
   type UiTagDefinition,
 } from "../../utils/uiTags";
-import type { S3CredentialsValidationPayload } from "./useLiveS3CredentialsValidation";
 
 export type S3ConnectionEndpointMode = "preset" | "custom";
 

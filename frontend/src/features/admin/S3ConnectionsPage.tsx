@@ -42,6 +42,7 @@ import {
   updateAdminS3Connection,
   validateAdminS3ConnectionCredentials,
 } from "../../api/s3ConnectionsAdmin";
+import type { S3CredentialsValidationPayload } from "../../api/s3CredentialsValidation";
 import type { CredentialOwnerType } from "../../api/connections";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { listMinimalUsers, type UserSummary } from "../../api/users";
@@ -70,7 +71,7 @@ import {
 import S3ConnectionEndpointFields from "../shared/S3ConnectionEndpointFields";
 import S3ConnectionCredentialFields from "../shared/S3ConnectionCredentialFields";
 import S3CredentialsValidationMessage from "../shared/S3CredentialsValidationMessage";
-import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
+import { useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 import {
   buildS3CredentialsValidationPayload,
   type S3ConnectionEndpointMode,

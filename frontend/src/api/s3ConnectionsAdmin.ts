@@ -3,6 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
+import type {
+  S3CredentialsValidationPayload,
+  S3CredentialsValidationResult,
+} from "./s3CredentialsValidation";
 import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 import type { UiGroupAvatarDescriptor } from "./groups";
@@ -90,23 +94,6 @@ type RotateS3ConnectionCredentialsPayload = {
   secret_access_key: string;
 };
 
-type ValidateS3ConnectionCredentialsPayload = {
-  storage_endpoint_id?: number | null;
-  endpoint_url?: string | null;
-  region?: string | null;
-  access_key_id: string;
-  secret_access_key: string;
-  force_path_style?: boolean;
-  verify_tls?: boolean;
-};
-
-type S3ConnectionCredentialsValidationResult = {
-  ok: boolean;
-  severity: "success" | "warning" | "error";
-  code?: string | null;
-  message: string;
-};
-
 type S3ConnectionUserLink = {
   user_id: number;
   email?: string | null;
@@ -176,9 +163,9 @@ export async function removeS3ConnectionUser(connectionId: number, userId: numbe
 }
 
 export async function validateAdminS3ConnectionCredentials(
-  payload: ValidateS3ConnectionCredentialsPayload
-): Promise<S3ConnectionCredentialsValidationResult> {
-  const { data } = await client.post<S3ConnectionCredentialsValidationResult>(
+  payload: S3CredentialsValidationPayload
+): Promise<S3CredentialsValidationResult> {
+  const { data } = await client.post<S3CredentialsValidationResult>(
     "/admin/s3-connections/validate-credentials",
     payload
   );

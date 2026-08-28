@@ -42,9 +42,10 @@ import {
   updateConnection,
   validateConnectionCredentials,
 } from "../../api/connections";
+import type { S3CredentialsValidationPayload } from "../../api/s3CredentialsValidation";
 import { retryManagedPrivateAccessCleanup } from "../../api/managedPrivateAccess";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
-import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
+import { useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
 import { notifyExecutionContextsRefresh } from "../../utils/executionContextRefresh";
 import { stableSignature } from "../../utils/stableSignature";
 import { removeClientStorage, writeClientStorage } from "../../utils/clientStorage";

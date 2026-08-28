@@ -3,7 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
-import type { LiveS3CredentialsValidationState, S3CredentialsValidationResult } from "./useLiveS3CredentialsValidation";
+import type { S3CredentialsValidationResult } from "../../api/s3CredentialsValidation";
+import type { LiveS3CredentialsValidationState } from "./useLiveS3CredentialsValidation";
 
 type S3CredentialsValidationMessageProps = {
   validation: LiveS3CredentialsValidationState;

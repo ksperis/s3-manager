@@ -3,6 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
+import type {
+  S3CredentialsValidationPayload,
+  S3CredentialsValidationResult,
+} from "./s3CredentialsValidation";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
 export type CredentialOwnerType = "iam_user" | "account_user" | "s3_user";
@@ -76,23 +80,6 @@ export type UpdateConnectionPayload = {
   tags?: TagDefinitionInput[] | null;
 };
 
-type ValidateConnectionCredentialsPayload = {
-  storage_endpoint_id?: number | null;
-  endpoint_url?: string | null;
-  region?: string | null;
-  access_key_id: string;
-  secret_access_key: string;
-  force_path_style?: boolean;
-  verify_tls?: boolean;
-};
-
-type ConnectionCredentialsValidationResult = {
-  ok: boolean;
-  severity: "success" | "warning" | "error";
-  code?: string | null;
-  message: string;
-};
-
 export async function listConnections(): Promise<S3Connection[]> {
   const { data } = await client.get<S3Connection[]>("/connections");
   return data;
@@ -118,8 +105,8 @@ export async function deleteConnection(connectionId: number): Promise<void> {
 }
 
 export async function validateConnectionCredentials(
-  payload: ValidateConnectionCredentialsPayload
-): Promise<ConnectionCredentialsValidationResult> {
-  const { data } = await client.post<ConnectionCredentialsValidationResult>("/connections/validate-credentials", payload);
+  payload: S3CredentialsValidationPayload
+): Promise<S3CredentialsValidationResult> {
+  const { data } = await client.post<S3CredentialsValidationResult>("/connections/validate-credentials", payload);
   return data;
 }
