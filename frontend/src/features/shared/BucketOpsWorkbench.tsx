@@ -24,12 +24,9 @@ import PropertySummaryChip from "../../components/PropertySummaryChip";
 import { UiTagBadge } from "../../components/UiTagSettings";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiDetails from "../../components/ui/UiDetails";
-import UiButton from "../../components/ui/UiButton";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   cx,
-  uiButtonBaseClass,
-  uiButtonVariants,
   uiCheckboxClass,
   type UiTone,
 } from "../../components/ui/styles";
@@ -42,7 +39,7 @@ import {
   STORAGE_OPS_SCOPE_ID,
   type StorageOpsBucket,
 } from "../../api/storageOps";
-import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
+import { RefreshIcon } from "../browser/browserIcons";
 import {
   NOTIFICATION_CONFIGURATION_ARRAY_KEYS,
   NOTIFICATION_EVENTBRIDGE_KEY,
@@ -63,14 +60,10 @@ import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal"
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
 import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
+import BucketOpsAdvancedFilterDrawer from "./BucketOpsAdvancedFilterDrawer";
 import BucketOpsColumnControls from "./BucketOpsColumnControls";
-import BucketOpsFeatureDetailFilterFields from "./BucketOpsFeatureDetailFilterFields";
-import BucketOpsFeatureStateFilterFields from "./BucketOpsFeatureStateFilterFields";
-import BucketOpsIdentityFilterFields from "./BucketOpsIdentityFilterFields";
-import BucketOpsMetricFilterFields from "./BucketOpsMetricFilterFields";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
-import BucketOpsStorageScopeFilterFields from "./BucketOpsStorageScopeFilterFields";
 import BucketUiTagSettingsBadge from "./BucketUiTagSettingsBadge";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
@@ -108,27 +101,11 @@ import {
   buildBucketOpsDraftFilterSummaryItems,
 } from "./bucketOpsFilterSummary";
 import {
-  advancedFilterAccordionClass,
-  advancedFilterBackdropClass,
-  advancedFilterBodyClass,
-  advancedFilterDrawerClass,
-  advancedFilterFooterClass,
-  advancedFilterHeaderClass,
-  formatAdvancedFilterSyncLabel,
-  advancedFilterSyncBadgeClass,
-  advancedFilterRootClass,
-  advancedFilterSectionClass,
-  renderAdvancedFilterCostBadge,
-  renderAdvancedFilterDraftSummary,
-  renderAdvancedFilterRuleCountBadge,
   renderAdvancedSearchProgress,
-  renderFilterCostIndicator,
-  type FilterCostLevel,
 } from "../cephAdmin/filtering/advancedFilterShared";
 import {
   FEATURE_LABELS,
   FEATURE_STATE_OPTIONS,
-  type AdvancedFilterSecondarySectionId,
   type FeatureKey,
   type TextMatchMode,
 } from "./bucketOpsAdvancedFilterModel";
@@ -396,25 +373,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   });
   const {
     addTagFilter,
-    advancedDraftActiveCount,
-    advancedDraftFeatureCount,
-    advancedDraftFeatureDetailCount,
-    advancedDraftGlobalCostLevel,
-    advancedDraftGlobalCostTooltip,
-    advancedDraftRangeCount,
-    advancedFilterCloseGuard,
     advancedFilterParam,
-    advancedFilterSecondarySections,
     advancedFiltersApplied,
-    applyAdvancedFilter,
-    contextDraftIds,
-    contextFieldState,
     effectiveQuickFilterMode,
     effectiveQuickSearchValue,
-    endpointDraftNames,
-    endpointFieldState,
-    hasAnyAdvancedToClear,
-    hasPendingAdvancedChanges,
     openAdvancedFilterDrawer,
     quickFilterAppliedParsed,
     quickFilterDraftForcesExact,
@@ -423,14 +385,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     quickFilterPending,
     removeActiveFilterItem,
     removeTagFilter,
-    resetAdvancedFilter,
     resetAllFilters,
     showAdvancedFilter,
-    toggleAdvancedFilterSecondarySection,
     toggleQuickFilterMode,
-    updateAdvancedField,
-    updateFeatureDetailFilter,
-    updateFeatureFilter,
   } = filterController;
   const storageScopeFilterController = useBucketOpsStorageScopeFilters({
     advancedDraft,
@@ -1179,61 +1136,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       return `${modeToggleBaseClass} border-primary-400 bg-primary-100 text-primary-700 focus:ring-primary/35 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
     }
     return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
-  };
-  const renderAdvancedFilterSecondarySection = ({
-    id,
-    title,
-    costLevel,
-    costTooltip,
-    activeCount,
-    badge,
-    children,
-  }: {
-    id: AdvancedFilterSecondarySectionId;
-    title: string;
-    costLevel: FilterCostLevel;
-    costTooltip: string;
-    activeCount: number;
-    badge?: ReactNode;
-    children: ReactNode;
-  }) => {
-    const open = advancedFilterSecondarySections[id];
-    const contentId = `advanced-filter-${id}-content`;
-    return (
-      <section className={advancedFilterAccordionClass}>
-        <button
-          type="button"
-          onClick={() => toggleAdvancedFilterSecondarySection(id)}
-          aria-expanded={open}
-          aria-controls={contentId}
-          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-primary/30 dark:hover:bg-neutral-800/70"
-        >
-          <span className="inline-flex min-w-0 items-center gap-2">
-            <ChevronDownIcon
-              className={cx(
-                "h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform dark:text-slate-400",
-                open ? "" : "-rotate-90"
-              )}
-            />
-            <span className="inline-flex min-w-0 items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              <span className="truncate">{title}</span>
-              {renderFilterCostIndicator(costLevel, costTooltip)}
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-2">
-            {badge}
-            <span className="ui-caption text-slate-500 dark:text-slate-400">
-              {activeCount} active
-            </span>
-          </span>
-        </button>
-        {open && (
-          <div id={contentId} className="px-3 pb-3">
-            {children}
-          </div>
-        )}
-      </section>
-    );
   };
   const activeFilterSummaryItems = useMemo(
     () =>
@@ -2278,165 +2180,21 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           secondaryContent={
             showAdvancedFilter || showActiveFiltersCard ? (
             <>
-              {showAdvancedFilter && (
-                <div className={advancedFilterRootClass}>
-                  <button
-                    type="button"
-                    onClick={advancedFilterCloseGuard.requestClose}
-                    className={advancedFilterBackdropClass}
-                    aria-label="Close advanced filter drawer"
-                  />
-                  <div className={advancedFilterDrawerClass}>
-                    <div className={advancedFilterHeaderClass}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">Buckets listing</p>
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                            {renderAdvancedFilterRuleCountBadge(advancedDraftActiveCount)}
-                            {renderAdvancedFilterCostBadge(advancedDraftGlobalCostLevel, advancedDraftGlobalCostTooltip)}
-                            <span className={advancedFilterSyncBadgeClass(hasPendingAdvancedChanges)}>
-                              {formatAdvancedFilterSyncLabel(hasPendingAdvancedChanges)}
-                            </span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={advancedFilterCloseGuard.requestClose}
-                          className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "rounded-md px-2.5 py-1.5 ui-caption")}
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className={advancedFilterBodyClass}>
-                      <div className="space-y-4">
-                        {renderAdvancedFilterDraftSummary(advancedDraftSummaryItems)}
-
-                        <section className={advancedFilterSectionClass}>
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <span>Identity and tags</span>
-                            </p>
-                          </div>
-                          <div className="grid gap-3 md:grid-cols-2">
-                            {isStorageOps && (
-                              <BucketOpsStorageScopeFilterFields
-                                contextDraftIds={contextDraftIds}
-                                contextFieldState={contextFieldState}
-                                controller={storageScopeFilterController}
-                                endpointDraftNames={endpointDraftNames}
-                                endpointFieldState={endpointFieldState}
-                              />
-                            )}
-
-                            <BucketOpsIdentityFilterFields
-                              advancedDraft={advancedDraft}
-                              controller={filterController}
-                            />
-
-                          </div>
-                        </section>
-
-                        {renderAdvancedFilterSecondarySection({
-                          id: "metrics",
-                          title: "Storage Metrics and Quota",
-                          costLevel: "medium",
-                          costTooltip:
-                            "Medium cost: owner quota filters require owner metadata lookups; usage and percentage filters also require bucket stats.",
-                          activeCount: advancedDraftRangeCount,
-                          badge: !usageFeatureEnabled ? (
-                            <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200">
-                              {usageUnavailableBadge}
-                            </span>
-                          ) : null,
-                          children: (
-                            <BucketOpsMetricFilterFields
-                              advancedApplied={advancedApplied}
-                              advancedDraft={advancedDraft}
-                              onFieldChange={updateAdvancedField}
-                              usageFeatureEnabled={usageFeatureEnabled}
-                              usageUnavailableDescription={usageUnavailableDescription}
-                            />
-                          ),
-                        })}
-
-                        {renderAdvancedFilterSecondarySection({
-                          id: "featureStates",
-                          title: "Feature states",
-                          costLevel: "high",
-                          costTooltip: "High cost: feature-state filters may trigger extra checks.",
-                          activeCount: advancedDraftFeatureCount,
-                          children: (
-                            <BucketOpsFeatureStateFilterFields
-                              advancedApplied={advancedApplied}
-                              advancedDraft={advancedDraft}
-                              featureStateOptions={featureStateOptions}
-                              onFeatureChange={updateFeatureFilter}
-                            />
-                          ),
-                        })}
-
-                        {renderAdvancedFilterSecondarySection({
-                          id: "featureDetails",
-                          title: "Feature details",
-                          costLevel: "high",
-                          costTooltip: "High cost: feature-detail filters may trigger additional per-bucket data retrieval.",
-                          activeCount: advancedDraftFeatureDetailCount,
-                          children: (
-                            <BucketOpsFeatureDetailFilterFields
-                              filters={advancedDraft.featureDetails}
-                              onFieldChange={updateFeatureDetailFilter}
-                              sseFeatureEnabled={sseFeatureEnabled}
-                            />
-                          ),
-                        })}
-                      </div>
-                    </div>
-
-                    <div className={advancedFilterFooterClass}>
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          {hasPendingAdvancedChanges
-                            ? "Draft has unapplied changes."
-                            : advancedDraftActiveCount > 0
-                              ? "Draft matches applied filters."
-                              : "No advanced filter configured."}
-                        </p>
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          <UiButton
-                            type="button"
-                            onClick={resetAdvancedFilter}
-                            disabled={!hasAnyAdvancedToClear}
-                            variant="secondary"
-                            size="sm"
-                          >
-                            Clear
-                          </UiButton>
-                          <UiButton
-                            type="button"
-                            onClick={advancedFilterCloseGuard.requestClose}
-                            variant="secondary"
-                            size="sm"
-                          >
-                            Close
-                          </UiButton>
-                          <UiButton
-                            type="button"
-                            onClick={applyAdvancedFilter}
-                            disabled={!hasPendingAdvancedChanges}
-                            variant="primary"
-                            size="sm"
-                          >
-                            Apply filters
-                          </UiButton>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <BucketOpsAdvancedFilterDrawer
+                advancedApplied={advancedApplied}
+                advancedDraft={advancedDraft}
+                controller={filterController}
+                draftSummaryItems={advancedDraftSummaryItems}
+                featureStateOptions={featureStateOptions}
+                isStorageOps={isStorageOps}
+                sseFeatureEnabled={sseFeatureEnabled}
+                storageScopeController={
+                  isStorageOps ? storageScopeFilterController : undefined
+                }
+                usageFeatureEnabled={usageFeatureEnabled}
+                usageUnavailableBadge={usageUnavailableBadge}
+                usageUnavailableDescription={usageUnavailableDescription}
+              />
 
               <ActiveFiltersBar
                 items={
@@ -3451,7 +3209,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             </div>
         </div>
       </BucketOpsBulkUpdatePage>
-      {advancedFilterCloseGuard.confirmationDialog}
     </div>
   );
 }
