@@ -22,7 +22,6 @@ import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import { UiTagBadge } from "../../components/UiTagSettings";
-import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   cx,
@@ -39,10 +38,6 @@ import {
   type StorageOpsBucket,
 } from "../../api/storageOps";
 import { RefreshIcon } from "../browser/browserIcons";
-import {
-  NOTIFICATION_CONFIGURATION_ARRAY_KEYS,
-  NOTIFICATION_EVENTBRIDGE_KEY,
-} from "../cephAdmin/bucketJsonParsers";
 import CephAdminAdminOpsModal, {
   type CephAdminAdminOpsAction,
   type BucketAdminOpsKind,
@@ -60,6 +55,7 @@ import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureS
 import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
 import BucketOpsAdvancedFilterDrawer from "./BucketOpsAdvancedFilterDrawer";
+import BucketOpsBulkConfigurationFields from "./BucketOpsBulkConfigurationFields";
 import BucketOpsBulkExecutionPanel from "./BucketOpsBulkExecutionPanel";
 import BucketOpsBulkTransferFields from "./BucketOpsBulkTransferFields";
 import BucketOpsColumnControls from "./BucketOpsColumnControls";
@@ -118,16 +114,8 @@ import { extractApiError } from "../../utils/apiError";
 import { triggerDownload } from "../../utils/download";
 import { formatBytes, formatNumber } from "../../utils/format";
 import {
-  CORS_TYPE_OPTIONS,
-  LIFECYCLE_TYPE_OPTIONS,
-  NOTIFICATION_TYPE_OPTIONS,
-  POLICY_TYPE_OPTIONS,
-} from "./bucketConfigMerge";
-import {
   BUCKET_CONFIG_BACKUP_FEATURE_LABELS,
-  PUBLIC_ACCESS_BLOCK_OPTIONS,
   type BulkCopyFeatureKey,
-  type QuotaSizeUnit,
 } from "./bucketBulkOperationsModel";
 import {
   buildBulkPreviewExportPayload,
@@ -465,30 +453,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     bulkQuotaSizeValue,
     bulkQuotaSkipConfigured,
     resetBulkForm,
-    setBulkCorsDeleteIds,
-    setBulkCorsDeleteTypes,
-    setBulkCorsRuleText,
-    setBulkCorsUpdateOnlyExisting,
-    setBulkLifecycleDeleteIds,
-    setBulkLifecycleDeleteTypes,
-    setBulkLifecycleRuleText,
-    setBulkLifecycleUpdateOnlyExisting,
-    setBulkNotificationDeleteIds,
-    setBulkNotificationDeleteTypes,
-    setBulkNotificationText,
     setBulkOperation,
     setBulkPasteMapping,
-    setBulkPolicyDeleteIds,
-    setBulkPolicyDeleteTypes,
-    setBulkPolicyText,
-    setBulkPolicyUpdateOnlyExisting,
-    setBulkPublicAccessBlockTargets,
-    setBulkQuotaApplyObjects,
-    setBulkQuotaApplySize,
-    setBulkQuotaObjects,
-    setBulkQuotaSizeUnit,
-    setBulkQuotaSizeValue,
-    setBulkQuotaSkipConfigured,
   } = bulkFormController;
   const {
     activeFeatureTooltipKey,
@@ -2404,351 +2370,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               selectedCount={selectedCount}
               snsFeatureEnabled={snsFeatureEnabled}
             />
-            {bulkOperation === "set_quota" && (
-              <div className="space-y-4">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <UiCheckboxField
-                    checked={bulkQuotaApplySize}
-                    onChange={(event) => setBulkQuotaApplySize(event.target.checked)}
-                    className="ui-caption text-slate-600 dark:text-slate-300"
-                  >
-                    Update storage quota
-                  </UiCheckboxField>
-                  <UiCheckboxField
-                    checked={bulkQuotaApplyObjects}
-                    onChange={(event) => setBulkQuotaApplyObjects(event.target.checked)}
-                    className="ui-caption text-slate-600 dark:text-slate-300"
-                  >
-                    Update object quota
-                  </UiCheckboxField>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                  <div className="space-y-1">
-                    <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Storage quota
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="any"
-                      value={bulkQuotaSizeValue}
-                      onChange={(event) => setBulkQuotaSizeValue(event.target.value)}
-                      placeholder="Leave empty to clear"
-                      disabled={!bulkQuotaApplySize}
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Unit
-                    </label>
-                    <select
-                      value={bulkQuotaSizeUnit}
-                      onChange={(event) => setBulkQuotaSizeUnit(event.target.value as QuotaSizeUnit)}
-                      disabled={!bulkQuotaApplySize}
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    >
-                      <option value="MiB">MiB</option>
-                      <option value="GiB">GiB</option>
-                      <option value="TiB">TiB</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Object quota
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={bulkQuotaObjects}
-                    onChange={(event) => setBulkQuotaObjects(event.target.value)}
-                    placeholder="Leave empty to clear"
-                    disabled={!bulkQuotaApplyObjects}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                <UiCheckboxField
-                  checked={bulkQuotaSkipConfigured}
-                  onChange={(event) => setBulkQuotaSkipConfigured(event.target.checked)}
-                  className="ui-caption text-slate-600 dark:text-slate-300"
-                >
-                  Do not change buckets that already have a quota.
-                </UiCheckboxField>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Leave both fields empty to remove quotas from the selected buckets.
-                </p>
-              </div>
-            )}
-            {(bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") && (
-              <div className="space-y-3">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Options to {bulkOperation === "add_public_access_block" ? "block" : "unblock"}
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {PUBLIC_ACCESS_BLOCK_OPTIONS.map((option) => (
-                    <UiCheckboxField
-                      key={option.key}
-                      checked={bulkPublicAccessBlockTargets[option.key]}
-                      onChange={(event) =>
-                        setBulkPublicAccessBlockTargets((prev) => ({ ...prev, [option.key]: event.target.checked }))
-                      }
-                      className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
-                    >
-                      {option.label}
-                    </UiCheckboxField>
-                  ))}
-                </div>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Only selected options are updated. Unselected options remain unchanged.
-                </p>
-              </div>
-            )}
-            {bulkOperation === "add_lifecycle" && (
-              <div className="space-y-2">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Lifecycle rules (JSON)
-                </label>
-                <textarea
-                  value={bulkLifecycleRuleText}
-                  onChange={(event) => setBulkLifecycleRuleText(event.target.value)}
-                  rows={8}
-                  placeholder='{"ID":"rule-1","Status":"Enabled","Filter":{"Prefix":"logs/"}}'
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Provide a JSON object or array. Rules will be appended, or will replace existing rules with the same ID.
-                </p>
-                <UiCheckboxField
-                  checked={bulkLifecycleUpdateOnlyExisting}
-                  onChange={(event) => setBulkLifecycleUpdateOnlyExisting(event.target.checked)}
-                  className="ui-caption text-slate-600 dark:text-slate-300"
-                >
-                  Only update rules that already exist (do not add new rules).
-                </UiCheckboxField>
-              </div>
-            )}
-            {bulkOperation === "delete_lifecycle" && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Rule IDs (comma, newline, or JSON array)
-                  </label>
-                  <textarea
-                    value={bulkLifecycleDeleteIds}
-                    onChange={(event) => setBulkLifecycleDeleteIds(event.target.value)}
-                    rows={4}
-                    placeholder='rule-1, rule-2 or ["rule-1","rule-2"]'
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Rule types
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {LIFECYCLE_TYPE_OPTIONS.map((option) => (
-                      <UiCheckboxField
-                        key={option.key}
-                        checked={bulkLifecycleDeleteTypes[option.key]}
-                        onChange={(event) =>
-                          setBulkLifecycleDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
-                        }
-                        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
-                      >
-                        {option.label}
-                      </UiCheckboxField>
-                    ))}
-                  </div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Rules are deleted if the ID matches or if any selected type is present in the rule.
-                  </p>
-                </div>
-              </div>
-            )}
-            {bulkOperation === "add_notifications" && (
-              <div className="space-y-2">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Notification configuration (JSON)
-                </label>
-                <textarea
-                  value={bulkNotificationText}
-                  onChange={(event) => setBulkNotificationText(event.target.value)}
-                  rows={8}
-                  placeholder={`{"${NOTIFICATION_CONFIGURATION_ARRAY_KEYS.topic}":[{"Id":"topic-created","TopicArn":"arn:aws:sns:default:ACCOUNT:topic","Events":["s3:ObjectCreated:*"]}],"${NOTIFICATION_EVENTBRIDGE_KEY}":{}}`}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Provide a bucket notification configuration object. Entries replace existing entries with the same ID;
-                  anonymous entries are appended when they are not already present.
-                </p>
-              </div>
-            )}
-            {bulkOperation === "delete_notifications" && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Notification IDs (comma, newline, or JSON array)
-                  </label>
-                  <textarea
-                    value={bulkNotificationDeleteIds}
-                    onChange={(event) => setBulkNotificationDeleteIds(event.target.value)}
-                    rows={4}
-                    placeholder='topic-created, queue-created or ["topic-created","queue-created"]'
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Notification types
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {NOTIFICATION_TYPE_OPTIONS.map((option) => (
-                      <UiCheckboxField
-                        key={option.key}
-                        checked={bulkNotificationDeleteTypes[option.key]}
-                        onChange={(event) =>
-                          setBulkNotificationDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
-                        }
-                        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
-                      >
-                        {option.label}
-                      </UiCheckboxField>
-                    ))}
-                  </div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Entries are deleted if the ID matches or if their notification type is selected.
-                  </p>
-                </div>
-              </div>
-            )}
-            {bulkOperation === "add_cors" && (
-              <div className="space-y-2">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  CORS rules (JSON)
-                </label>
-                <textarea
-                  value={bulkCorsRuleText}
-                  onChange={(event) => setBulkCorsRuleText(event.target.value)}
-                  rows={8}
-                  placeholder='{"AllowedOrigins":["*"],"AllowedMethods":["GET","HEAD"]}'
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Provide a JSON object or array. Rules are merged by rule ID (if present) or by AllowedOrigins +
-                  AllowedMethods.
-                </p>
-                <UiCheckboxField
-                  checked={bulkCorsUpdateOnlyExisting}
-                  onChange={(event) => setBulkCorsUpdateOnlyExisting(event.target.checked)}
-                  className="ui-caption text-slate-600 dark:text-slate-300"
-                >
-                  Only update rules that already exist (do not add new rules).
-                </UiCheckboxField>
-              </div>
-            )}
-            {bulkOperation === "delete_cors" && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Rule IDs (comma, newline, or JSON array)
-                  </label>
-                  <textarea
-                    value={bulkCorsDeleteIds}
-                    onChange={(event) => setBulkCorsDeleteIds(event.target.value)}
-                    rows={4}
-                    placeholder='rule-1, rule-2 or ["rule-1","rule-2"]'
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Rule types
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {CORS_TYPE_OPTIONS.map((option) => (
-                      <UiCheckboxField
-                        key={option.key}
-                        checked={bulkCorsDeleteTypes[option.key]}
-                        onChange={(event) =>
-                          setBulkCorsDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
-                        }
-                        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
-                      >
-                        {option.label}
-                      </UiCheckboxField>
-                    ))}
-                  </div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Rules are deleted if the ID matches or if any selected type is present in the rule.
-                  </p>
-                </div>
-              </div>
-            )}
-            {bulkOperation === "add_policy" && (
-              <div className="space-y-2">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Policy (JSON)
-                </label>
-                <textarea
-                  value={bulkPolicyText}
-                  onChange={(event) => setBulkPolicyText(event.target.value)}
-                  rows={8}
-                  placeholder='{"Version":"2012-10-17","Statement":[{"Sid":"AllowRead","Effect":"Allow","Action":["s3:GetObject"],"Resource":"*","Principal":"*"}]}'
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Provide a policy object, a statement array, or a single statement. Statements are merged by Sid or by
-                  Effect/Action/Principal/Resource.
-                </p>
-                <UiCheckboxField
-                  checked={bulkPolicyUpdateOnlyExisting}
-                  onChange={(event) => setBulkPolicyUpdateOnlyExisting(event.target.checked)}
-                  className="ui-caption text-slate-600 dark:text-slate-300"
-                >
-                  Only update statements that already exist (do not add new statements).
-                </UiCheckboxField>
-              </div>
-            )}
-            {bulkOperation === "delete_policy" && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Statement IDs (Sid) (comma, newline, or JSON array)
-                  </label>
-                  <textarea
-                    value={bulkPolicyDeleteIds}
-                    onChange={(event) => setBulkPolicyDeleteIds(event.target.value)}
-                    rows={4}
-                    placeholder='AllowRead, DenyWrite or ["AllowRead","DenyWrite"]'
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Statement types
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {POLICY_TYPE_OPTIONS.map((option) => (
-                      <UiCheckboxField
-                        key={option.key}
-                        checked={bulkPolicyDeleteTypes[option.key]}
-                        onChange={(event) =>
-                          setBulkPolicyDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
-                        }
-                        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
-                      >
-                        {option.label}
-                      </UiCheckboxField>
-                    ))}
-                  </div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Statements are deleted if the Sid matches or if any selected type is present.
-                  </p>
-                </div>
-              </div>
-            )}
+            <BucketOpsBulkConfigurationFields
+              controller={bulkFormController}
+            />
             <BucketOpsBulkExecutionPanel
               applyDisabled={bulkApplyDisabled}
               applyError={bulkApplyError}
