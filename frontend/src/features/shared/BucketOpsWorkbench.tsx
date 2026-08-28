@@ -46,7 +46,6 @@ import {
   STORAGE_OPS_SCOPE_ID,
   type StorageOpsBucket,
 } from "../../api/storageOps";
-import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
 import type {
   BucketUiTagDefinition,
 } from "../../api/bucketUiTags";
@@ -81,7 +80,6 @@ import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 import { buildBucketOpsListingProjection } from "./bucketOpsListingProjection";
 import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
 import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
-import { buildBucketOpsStorageScopeProjection } from "./bucketOpsStorageScopeProjection";
 import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
 import { useBucketOpsBulkApply } from "./useBucketOpsBulkApply";
@@ -91,6 +89,7 @@ import { useBucketOpsCacheRefresh } from "./useBucketOpsCacheRefresh";
 import { useBucketOpsConfigCopy } from "./useBucketOpsConfigCopy";
 import { useBucketOpsSelection } from "./useBucketOpsSelection";
 import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
+import { useBucketOpsStorageScopeFilters } from "./useBucketOpsStorageScopeFilters";
 import {
   createBucketUiTagTarget,
   useBucketUiTags,
@@ -144,7 +143,6 @@ import {
   buildAdvancedFilterSecondarySectionState,
   defaultAdvancedFilter,
   hasAdvancedFilters,
-  normalizeAdvancedSelectionValues,
   stripUnsupportedAdvancedFeatureFilters,
   type ActiveFilterRemoveAction,
   type AdvancedFilterSecondarySectionId,
@@ -418,11 +416,36 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(() =>
     initialOwnerFilter ?? initialStoredBucketListState?.advancedApplied ?? null
   );
-  const [storageOpsContexts, setStorageOpsContexts] = useState<ExecutionContext[]>([]);
-  const [storageOpsContextsLoading, setStorageOpsContextsLoading] = useState(false);
-  const [storageOpsContextsError, setStorageOpsContextsError] = useState<string | null>(null);
-  const [storageOpsContextFilter, setStorageOpsContextFilter] = useState("");
-  const [storageOpsEndpointFilter, setStorageOpsEndpointFilter] = useState("");
+  const {
+    allFilteredStorageOpsContextsSelected,
+    allFilteredStorageOpsEndpointsSelected,
+    deselectFilteredStorageOpsContexts,
+    deselectFilteredStorageOpsEndpoints,
+    filteredStorageOpsContextItems,
+    filteredStorageOpsEndpointItems,
+    hasFilteredStorageOpsContextSelection,
+    hasFilteredStorageOpsEndpointSelection,
+    selectFilteredStorageOpsContexts,
+    selectFilteredStorageOpsEndpoints,
+    setStorageOpsContextFilter,
+    setStorageOpsEndpointFilter,
+    storageOpsContextFilter,
+    storageOpsContextItems,
+    storageOpsContextLabelById,
+    storageOpsContextSelectionSet,
+    storageOpsContextsError,
+    storageOpsContextsLoading,
+    storageOpsEndpointFilter,
+    storageOpsEndpointItems,
+    storageOpsEndpointSelectionSet,
+    toggleAdvancedContextId,
+    toggleAdvancedEndpointName,
+  } = useBucketOpsStorageScopeFilters({
+    advancedDraft,
+    extractError,
+    isStorageOps,
+    setAdvancedDraft,
+  });
   const {
     orphanEntries: uiTagOrphanEntries,
     definitions: availableUiTags,
@@ -563,36 +586,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(
     () => initialStoredBucketListState?.sort ?? DEFAULT_SORT
   );
-  const {
-    contextItems: storageOpsContextItems,
-    contextLabelById: storageOpsContextLabelById,
-    filteredContextItems: filteredStorageOpsContextItems,
-    contextSelectionSet: storageOpsContextSelectionSet,
-    allFilteredContextsSelected: allFilteredStorageOpsContextsSelected,
-    hasFilteredContextSelection: hasFilteredStorageOpsContextSelection,
-    endpointItems: storageOpsEndpointItems,
-    filteredEndpointItems: filteredStorageOpsEndpointItems,
-    endpointSelectionSet: storageOpsEndpointSelectionSet,
-    allFilteredEndpointsSelected: allFilteredStorageOpsEndpointsSelected,
-    hasFilteredEndpointSelection: hasFilteredStorageOpsEndpointSelection,
-  } = useMemo(
-    () =>
-      buildBucketOpsStorageScopeProjection({
-        contexts: storageOpsContexts,
-        contextFilter: storageOpsContextFilter,
-        endpointFilter: storageOpsEndpointFilter,
-        selectedContextIds: advancedDraft.contextIds,
-        selectedEndpointNames: advancedDraft.endpointNames,
-      }),
-    [
-      advancedDraft.contextIds,
-      advancedDraft.endpointNames,
-      storageOpsContextFilter,
-      storageOpsContexts,
-      storageOpsEndpointFilter,
-    ]
-  );
-
   useEffect(() => {
     const handle = window.setTimeout(() => {
       setFilterValue(filter.trim());
@@ -616,36 +609,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setAdvancedDraft((prev) => stripUnsupportedAdvancedFeatureFilters(prev, featureSupport));
     setAdvancedApplied((prev) => (prev ? stripUnsupportedAdvancedFeatureFilters(prev, featureSupport) : prev));
   }, [featureSupport]);
-
-  useEffect(() => {
-    if (!isStorageOps) {
-      setStorageOpsContexts([]);
-      setStorageOpsContextsLoading(false);
-      setStorageOpsContextsError(null);
-      return;
-    }
-
-    let canceled = false;
-    setStorageOpsContextsLoading(true);
-    setStorageOpsContextsError(null);
-    listExecutionContexts("manager")
-      .then((items) => {
-        if (canceled) return;
-        setStorageOpsContexts(items);
-      })
-      .catch((error) => {
-        if (canceled) return;
-        setStorageOpsContexts([]);
-        setStorageOpsContextsError(extractError(error));
-      })
-      .finally(() => {
-        if (!canceled) setStorageOpsContextsLoading(false);
-      });
-
-    return () => {
-      canceled = true;
-    };
-  }, [isStorageOps]);
 
   useEffect(() => {
     setVisibleColumns((prev) => {
@@ -1399,67 +1362,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const updateAdvancedField = (field: AdvancedTextOrNumericField, value: string) => {
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const updateAdvancedContextIds = (values: string[]) => {
-    const contextIds = normalizeAdvancedSelectionValues(values);
-    setAdvancedDraft((prev) => ({ ...prev, contextIds }));
-  };
-
-  const toggleAdvancedContextId = (contextId: string) => {
-    const current = normalizeAdvancedSelectionValues(advancedDraft.contextIds);
-    if (current.includes(contextId)) {
-      updateAdvancedContextIds(current.filter((id) => id !== contextId));
-      return;
-    }
-    updateAdvancedContextIds([...current, contextId]);
-  };
-
-  const selectFilteredStorageOpsContexts = () => {
-    const seen = new Set(normalizeAdvancedSelectionValues(advancedDraft.contextIds));
-    const next = [...seen];
-    filteredStorageOpsContextItems.forEach((context) => {
-      if (seen.has(context.id)) return;
-      seen.add(context.id);
-      next.push(context.id);
-    });
-    updateAdvancedContextIds(next);
-  };
-
-  const deselectFilteredStorageOpsContexts = () => {
-    const filteredIds = new Set(filteredStorageOpsContextItems.map((context) => context.id));
-    updateAdvancedContextIds(normalizeAdvancedSelectionValues(advancedDraft.contextIds).filter((id) => !filteredIds.has(id)));
-  };
-
-  const updateAdvancedEndpointNames = (values: string[]) => {
-    setAdvancedDraft((prev) => ({ ...prev, endpointNames: normalizeAdvancedSelectionValues(values) }));
-  };
-
-  const toggleAdvancedEndpointName = (endpointName: string) => {
-    const current = normalizeAdvancedSelectionValues(advancedDraft.endpointNames);
-    if (current.includes(endpointName)) {
-      updateAdvancedEndpointNames(current.filter((name) => name !== endpointName));
-      return;
-    }
-    updateAdvancedEndpointNames([...current, endpointName]);
-  };
-
-  const selectFilteredStorageOpsEndpoints = () => {
-    const seen = new Set(normalizeAdvancedSelectionValues(advancedDraft.endpointNames));
-    const next = [...seen];
-    filteredStorageOpsEndpointItems.forEach((endpoint) => {
-      if (seen.has(endpoint.name)) return;
-      seen.add(endpoint.name);
-      next.push(endpoint.name);
-    });
-    updateAdvancedEndpointNames(next);
-  };
-
-  const deselectFilteredStorageOpsEndpoints = () => {
-    const filteredNames = new Set(filteredStorageOpsEndpointItems.map((endpoint) => endpoint.name));
-    updateAdvancedEndpointNames(
-      normalizeAdvancedSelectionValues(advancedDraft.endpointNames).filter((name) => !filteredNames.has(name))
-    );
   };
 
   const updateAdvancedMatchMode = (
