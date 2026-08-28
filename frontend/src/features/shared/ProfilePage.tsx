@@ -64,7 +64,7 @@ import {
   readSelectorTagsPreference,
   writeSelectorTagsPreference,
 } from "../../utils/selectorTagsPreference";
-import { buildUiTagItems, extractUiTagLabels, normalizeUiTags } from "../../utils/uiTags";
+import { buildUiTagItems, normalizeUiTags } from "../../utils/uiTags";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import S3ConnectionAccessFields from "./S3ConnectionAccessFields";
 import S3ConnectionCredentialFields from "./S3ConnectionCredentialFields";
@@ -75,10 +75,11 @@ import {
   buildEditPrivateConnectionSignature,
   buildPrivateConnectionDraft,
   buildPrivateConnectionEditorState,
+  buildPrivateConnectionsProjection,
+  buildPrivateStorageEndpointLabelById,
   buildS3CredentialsValidationPayload,
   createDefaultPrivateConnectionForm,
   createEmptyConnectionCredentialDraft,
-  parsePrivateConnectionSortDate,
   type ConnectionCredentialDraft,
   type CreatePrivateConnectionForm,
   type PrivateConnectionDraft,
@@ -303,62 +304,36 @@ export default function ProfilePage({
     debounceMs: 450,
   });
 
-  const sortedConnections = useMemo(
+  const {
+    allFilteredConnectionsSelected,
+    filteredConnectionIdSet,
+    filteredConnectionIds,
+    filteredConnections,
+    hiddenSelectedConnectionCount,
+    pagedConnections,
+    selectedFilteredConnectionIdSet,
+    selectedFilteredConnectionIds,
+  } = useMemo(
     () =>
-      [...connections].sort((a, b) => {
-        const dateDiff = parsePrivateConnectionSortDate(b) - parsePrivateConnectionSortDate(a);
-        if (dateDiff !== 0) return dateDiff;
-        return b.id - a.id;
+      buildPrivateConnectionsProjection({
+        connections,
+        filter: connectionsFilter,
+        page: connectionsPage,
+        pageSize: connectionsPageSize,
+        selectedConnectionIds,
       }),
-    [connections]
+    [
+      connections,
+      connectionsFilter,
+      connectionsPage,
+      connectionsPageSize,
+      selectedConnectionIds,
+    ],
   );
-
-  const filteredConnections = useMemo(() => {
-    const query = connectionsFilter.trim().toLowerCase();
-    if (!query) return sortedConnections;
-    return sortedConnections.filter((connection) => {
-      const values = [
-        connection.name,
-        ...extractUiTagLabels(connection.tags),
-        connection.endpoint_url,
-        connection.region,
-        connection.provider_hint,
-        connection.access_key_id,
-      ];
-      return values.some((value) => String(value ?? "").toLowerCase().includes(query));
-    });
-  }, [connectionsFilter, sortedConnections]);
-
-  const pagedConnections = useMemo(() => {
-    const start = (connectionsPage - 1) * connectionsPageSize;
-    return filteredConnections.slice(start, start + connectionsPageSize);
-  }, [connectionsPage, connectionsPageSize, filteredConnections]);
-  const filteredConnectionIds = useMemo(() => filteredConnections.map((connection) => connection.id), [filteredConnections]);
-  const filteredConnectionIdSet = useMemo(() => new Set(filteredConnectionIds), [filteredConnectionIds]);
-  const pagedConnectionIds = useMemo(() => pagedConnections.map((connection) => connection.id), [pagedConnections]);
-  const selectedFilteredConnectionIds = useMemo(
-    () => selectedConnectionIds.filter((connectionId) => filteredConnectionIdSet.has(connectionId)),
-    [filteredConnectionIdSet, selectedConnectionIds]
+  const storageEndpointLabelById = useMemo(
+    () => buildPrivateStorageEndpointLabelById(availableStorageEndpoints),
+    [availableStorageEndpoints],
   );
-  const selectedFilteredConnectionIdSet = useMemo(
-    () => new Set(selectedFilteredConnectionIds),
-    [selectedFilteredConnectionIds]
-  );
-  const selectedPagedConnectionIds = useMemo(
-    () => pagedConnectionIds.filter((connectionId) => selectedFilteredConnectionIdSet.has(connectionId)),
-    [pagedConnectionIds, selectedFilteredConnectionIdSet]
-  );
-  const allFilteredConnectionsSelected =
-    filteredConnectionIds.length > 0 && selectedFilteredConnectionIds.length === filteredConnectionIds.length;
-  const hiddenSelectedConnectionCount = Math.max(selectedFilteredConnectionIds.length - selectedPagedConnectionIds.length, 0);
-  const storageEndpointLabelById = useMemo(() => {
-    const labels = new Map<number, string>();
-    availableStorageEndpoints.forEach((endpoint) => {
-      const label = endpoint.name?.trim() || endpoint.endpoint_url || `Endpoint #${endpoint.id}`;
-      labels.set(endpoint.id, label);
-    });
-    return labels;
-  }, [availableStorageEndpoints]);
 
   const editingConnection = useMemo(
     () =>

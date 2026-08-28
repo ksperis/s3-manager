@@ -2,9 +2,16 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { S3Connection } from "../../api/connections";
+import type {
+  PrivateConnectionStorageEndpoint,
+  S3Connection,
+} from "../../api/connections";
 import { stableSignature } from "../../utils/stableSignature";
-import { normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
+import {
+  extractUiTagLabels,
+  normalizeUiTags,
+  type UiTagDefinition,
+} from "../../utils/uiTags";
 import type { S3CredentialsValidationPayload } from "./useLiveS3CredentialsValidation";
 
 export type S3ConnectionEndpointMode = "preset" | "custom";
@@ -53,6 +60,27 @@ type S3CredentialsFormFields = {
 type PrivateConnectionEditorState = {
   drafts: Record<number, PrivateConnectionDraft>;
   credentialDrafts: Record<number, ConnectionCredentialDraft>;
+};
+
+type BuildPrivateConnectionsProjectionOptions = {
+  connections: readonly S3Connection[];
+  filter: string;
+  page: number;
+  pageSize: number;
+  selectedConnectionIds: readonly number[];
+};
+
+type PrivateConnectionsProjection = {
+  allFilteredConnectionsSelected: boolean;
+  filteredConnectionIdSet: Set<number>;
+  filteredConnectionIds: number[];
+  filteredConnections: S3Connection[];
+  hiddenSelectedConnectionCount: number;
+  pagedConnectionIds: number[];
+  pagedConnections: S3Connection[];
+  selectedFilteredConnectionIdSet: Set<number>;
+  selectedFilteredConnectionIds: number[];
+  selectedPagedConnectionIds: number[];
 };
 
 export function createDefaultPrivateConnectionForm(): CreatePrivateConnectionForm {
@@ -169,4 +197,84 @@ export function parsePrivateConnectionSortDate(connection: S3Connection): number
   if (!raw) return 0;
   const parsed = Date.parse(raw);
   return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+export function buildPrivateConnectionsProjection({
+  connections,
+  filter,
+  page,
+  pageSize,
+  selectedConnectionIds,
+}: BuildPrivateConnectionsProjectionOptions): PrivateConnectionsProjection {
+  const sortedConnections = [...connections].sort((a, b) => {
+    const dateDiff =
+      parsePrivateConnectionSortDate(b) - parsePrivateConnectionSortDate(a);
+    return dateDiff !== 0 ? dateDiff : b.id - a.id;
+  });
+  const query = filter.trim().toLowerCase();
+  const filteredConnections = query
+    ? sortedConnections.filter((connection) => {
+        const values = [
+          connection.name,
+          ...extractUiTagLabels(connection.tags),
+          connection.endpoint_url,
+          connection.region,
+          connection.provider_hint,
+          connection.access_key_id,
+        ];
+        return values.some((value) =>
+          String(value ?? "")
+            .toLowerCase()
+            .includes(query),
+        );
+      })
+    : sortedConnections;
+  const start = (page - 1) * pageSize;
+  const pagedConnections = filteredConnections.slice(start, start + pageSize);
+  const filteredConnectionIds = filteredConnections.map(
+    (connection) => connection.id,
+  );
+  const filteredConnectionIdSet = new Set(filteredConnectionIds);
+  const pagedConnectionIds = pagedConnections.map(
+    (connection) => connection.id,
+  );
+  const selectedFilteredConnectionIds = selectedConnectionIds.filter(
+    (connectionId) => filteredConnectionIdSet.has(connectionId),
+  );
+  const selectedFilteredConnectionIdSet = new Set(
+    selectedFilteredConnectionIds,
+  );
+  const selectedPagedConnectionIds = pagedConnectionIds.filter((connectionId) =>
+    selectedFilteredConnectionIdSet.has(connectionId),
+  );
+  return {
+    allFilteredConnectionsSelected:
+      filteredConnectionIds.length > 0 &&
+      selectedFilteredConnectionIds.length === filteredConnectionIds.length,
+    filteredConnectionIdSet,
+    filteredConnectionIds,
+    filteredConnections,
+    hiddenSelectedConnectionCount: Math.max(
+      selectedFilteredConnectionIds.length - selectedPagedConnectionIds.length,
+      0,
+    ),
+    pagedConnectionIds,
+    pagedConnections,
+    selectedFilteredConnectionIdSet,
+    selectedFilteredConnectionIds,
+    selectedPagedConnectionIds,
+  };
+}
+
+export function buildPrivateStorageEndpointLabelById(
+  endpoints: readonly PrivateConnectionStorageEndpoint[],
+): Map<number, string> {
+  return new Map(
+    endpoints.map((endpoint) => [
+      endpoint.id,
+      endpoint.name?.trim() ||
+        endpoint.endpoint_url ||
+        `Endpoint #${endpoint.id}`,
+    ]),
+  );
 }

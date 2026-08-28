@@ -9,6 +9,8 @@ import {
   buildEditPrivateConnectionSignature,
   buildPrivateConnectionDraft,
   buildPrivateConnectionEditorState,
+  buildPrivateConnectionsProjection,
+  buildPrivateStorageEndpointLabelById,
   buildS3CredentialsValidationPayload,
   createDefaultPrivateConnectionForm,
   createEmptyConnectionCredentialDraft,
@@ -148,5 +150,64 @@ describe("s3ConnectionFormModel", () => {
         updated_at: "invalid",
       }),
     ).toBe(0);
+  });
+
+  it("projects sorted, filtered, paged, and selected private connections", () => {
+    const olderConnection = {
+      ...connection,
+      id: 8,
+      name: "Replica",
+      tags: [],
+      updated_at: "2026-08-21T10:00:00Z",
+    };
+    const projection = buildPrivateConnectionsProjection({
+      connections: [olderConnection, connection],
+      filter: "",
+      page: 1,
+      pageSize: 1,
+      selectedConnectionIds: [7, 8, 99],
+    });
+
+    expect(projection.filteredConnectionIds).toEqual([7, 8]);
+    expect(projection.pagedConnectionIds).toEqual([7]);
+    expect(projection.selectedFilteredConnectionIds).toEqual([7, 8]);
+    expect(projection.selectedPagedConnectionIds).toEqual([7]);
+    expect(projection.hiddenSelectedConnectionCount).toBe(1);
+    expect(projection.allFilteredConnectionsSelected).toBe(true);
+
+    const filtered = buildPrivateConnectionsProjection({
+      connections: [olderConnection, connection],
+      filter: "alpha",
+      page: 1,
+      pageSize: 10,
+      selectedConnectionIds: [],
+    });
+    expect(filtered.filteredConnectionIds).toEqual([7]);
+  });
+
+  it("builds stable labels for private storage endpoints", () => {
+    expect(
+      buildPrivateStorageEndpointLabelById([
+        {
+          id: 3,
+          name: " Primary ",
+          endpoint_url: "https://primary.example.test",
+          region: null,
+          is_default: true,
+        },
+        {
+          id: 4,
+          name: "",
+          endpoint_url: "https://secondary.example.test",
+          region: null,
+          is_default: false,
+        },
+      ]),
+    ).toEqual(
+      new Map([
+        [3, "Primary"],
+        [4, "https://secondary.example.test"],
+      ]),
+    );
   });
 });
