@@ -7,9 +7,7 @@ const mocks = vi.hoisted(() => ({
   streamCephAdminBuckets: vi.fn(),
   refreshCephAdminBucketListingCache: vi.fn(),
   refreshStorageOpsBucketListingCache: vi.fn(),
-  fetchCephAdminBucketUiTagOrphans: vi.fn(),
   fetchCephAdminBucketUiTags: vi.fn(),
-  fetchStorageOpsBucketUiTagOrphans: vi.fn(),
   fetchStorageOpsBucketUiTags: vi.fn(),
   patchCephAdminBucketUiTags: vi.fn(),
   patchStorageOpsBucketUiTags: vi.fn(),
@@ -87,9 +85,7 @@ vi.mock("../../api/storageOps", () => ({
 }));
 
 vi.mock("../../api/bucketUiTags", () => ({
-  fetchCephAdminBucketUiTagOrphans: mocks.fetchCephAdminBucketUiTagOrphans,
   fetchCephAdminBucketUiTags: mocks.fetchCephAdminBucketUiTags,
-  fetchStorageOpsBucketUiTagOrphans: mocks.fetchStorageOpsBucketUiTagOrphans,
   fetchStorageOpsBucketUiTags: mocks.fetchStorageOpsBucketUiTags,
   patchCephAdminBucketUiTags: mocks.patchCephAdminBucketUiTags,
   patchStorageOpsBucketUiTags: mocks.patchStorageOpsBucketUiTags,
@@ -163,15 +159,11 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
     mocks.refreshStorageOpsBucketListingCache.mockReset();
     mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
-    mocks.fetchCephAdminBucketUiTagOrphans.mockReset();
     mocks.fetchCephAdminBucketUiTags.mockReset();
-    mocks.fetchStorageOpsBucketUiTagOrphans.mockReset();
     mocks.fetchStorageOpsBucketUiTags.mockReset();
     mocks.patchCephAdminBucketUiTags.mockReset();
     mocks.patchStorageOpsBucketUiTags.mockReset();
-    mocks.fetchCephAdminBucketUiTagOrphans.mockResolvedValue({ orphans: [] });
     mocks.fetchCephAdminBucketUiTags.mockResolvedValue({ definitions: [] });
-    mocks.fetchStorageOpsBucketUiTagOrphans.mockResolvedValue({ orphans: [] });
     mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [] });
     mocks.patchCephAdminBucketUiTags.mockResolvedValue({ definitions: [] });
     mocks.patchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [] });

@@ -10,9 +10,7 @@ const mocks = vi.hoisted(() => ({
   refreshCephAdminBucketListingCache: vi.fn(),
   refreshStorageOpsBucketListingCache: vi.fn(),
   listExecutionContexts: vi.fn(),
-  fetchCephAdminBucketUiTagOrphans: vi.fn(),
   fetchCephAdminBucketUiTags: vi.fn(),
-  fetchStorageOpsBucketUiTagOrphans: vi.fn(),
   fetchStorageOpsBucketUiTags: vi.fn(),
   patchCephAdminBucketUiTags: vi.fn(),
   patchStorageOpsBucketUiTags: vi.fn(),
@@ -94,9 +92,7 @@ vi.mock("../../api/executionContexts", () => ({
 }));
 
 vi.mock("../../api/bucketUiTags", () => ({
-  fetchCephAdminBucketUiTagOrphans: mocks.fetchCephAdminBucketUiTagOrphans,
   fetchCephAdminBucketUiTags: mocks.fetchCephAdminBucketUiTags,
-  fetchStorageOpsBucketUiTagOrphans: mocks.fetchStorageOpsBucketUiTagOrphans,
   fetchStorageOpsBucketUiTags: mocks.fetchStorageOpsBucketUiTags,
   patchCephAdminBucketUiTags: mocks.patchCephAdminBucketUiTags,
   patchStorageOpsBucketUiTags: mocks.patchStorageOpsBucketUiTags,
@@ -206,15 +202,11 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     mocks.refreshCephAdminBucketListingCache.mockReset();
     mocks.refreshStorageOpsBucketListingCache.mockReset();
     mocks.listExecutionContexts.mockReset();
-    mocks.fetchCephAdminBucketUiTagOrphans.mockReset();
     mocks.fetchCephAdminBucketUiTags.mockReset();
-    mocks.fetchStorageOpsBucketUiTagOrphans.mockReset();
     mocks.fetchStorageOpsBucketUiTags.mockReset();
     mocks.patchCephAdminBucketUiTags.mockReset();
     mocks.patchStorageOpsBucketUiTags.mockReset();
-    mocks.fetchCephAdminBucketUiTagOrphans.mockResolvedValue({ orphans: [] });
     mocks.fetchCephAdminBucketUiTags.mockResolvedValue({ definitions: [] });
-    mocks.fetchStorageOpsBucketUiTagOrphans.mockResolvedValue({ orphans: [] });
     mocks.fetchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [] });
     mocks.patchCephAdminBucketUiTags.mockResolvedValue({ definitions: [] });
     mocks.patchStorageOpsBucketUiTags.mockResolvedValue({ definitions: [] });
@@ -465,7 +457,6 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         name: "Remove UI tag archive, Private",
       })
     ).toHaveLength(1);
-    expect(mocks.fetchStorageOpsBucketUiTagOrphans).toHaveBeenCalledTimes(1);
   });
 
   it("visually distinguishes selected and available UI tag filters without changing query semantics", async () => {

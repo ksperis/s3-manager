@@ -28,7 +28,6 @@ from app.services.bucket_ui_tags_service import (
     PhysicalBucketTarget,
 )
 from app.services.ceph_admin_bucket_listing_service import compute_ceph_admin_bucket_listing
-from app.services.ceph_admin_bucket_listing_cache import invalidate_bucket_listing_cache
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.rgw_admin import RGWAdminError
 from app.services.storage_ops_bucket_listing_service import (
@@ -37,7 +36,6 @@ from app.services.storage_ops_bucket_listing_service import (
 )
 from app.services.users_service import UsersService
 from app.services.audit_service import AuditService
-from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
 from app.services.buckets_service import get_buckets_service
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.tags_service import TagsService
@@ -255,6 +253,24 @@ def test_storage_ops_contract_rejects_shared_fields_and_more_than_200_targets():
             }
         )
 
+    with pytest.raises(ValidationError):
+        StorageOpsBucketUiTagPatchRequest.model_validate(
+            {
+                "targets": [
+                    {"endpoint_id": 7, "tenant": "tenant-a", "name": "bucket"}
+                ]
+            }
+        )
+
+
+def test_bucket_ui_tag_openapi_omits_orphan_inventory_routes():
+    paths = app.openapi()["paths"]
+
+    assert (
+        "/api/ceph-admin/endpoints/{endpoint_id}/bucket-ui-tags/orphans" not in paths
+    )
+    assert "/api/storage-ops/bucket-ui-tags/orphans" not in paths
+
 
 def test_bucket_ui_tag_routes_persist_ceph_visibility_and_reject_forged_storage_context(
     client,
@@ -360,10 +376,6 @@ def test_bucket_ui_tag_routes_persist_ceph_visibility_and_reject_forged_storage_
         "Revoked context tag"
     ]
     assert set(revoked_catalog.json()) == {"definitions"}
-    revoked_orphans = client.get("/api/storage-ops/bucket-ui-tags/orphans")
-    assert revoked_orphans.status_code == 200, revoked_orphans.text
-    assert revoked_orphans.json() == {"orphans": []}
-
     forged = client.patch(
         "/api/storage-ops/bucket-ui-tags",
         json={
@@ -592,192 +604,6 @@ def test_ceph_shared_mutation_survives_audit_persistence_rollback(
     assert set(response.json()) == {"definitions"}
 
 
-def test_ceph_orphan_route_returns_only_missing_visible_assignments(
-    client,
-    db_session,
-):
-    owner = _user(8246, "ceph-orphans-owner@example.test")
-    endpoint = _endpoint(db_session, "ui-tags-ceph-orphans")
-    db_session.add(owner)
-    db_session.commit()
-    service = BucketUiTagsService(db_session)
-    present = PhysicalBucketTarget.create(endpoint.id, "tenant-a", "present")
-    missing = PhysicalBucketTarget.create(endpoint.id, "tenant-a", "missing")
-    service.mutate(
-        domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
-        actor_user_id=owner.id,
-        targets=[present, missing],
-        add_tag_ids=[],
-        create_tags=[("Review", "amber", "private")],
-        remove_tag_ids=[],
-    )
-    db_session.commit()
-
-    class FakeRgwAdmin:
-        def get_all_buckets(self, with_stats=False):  # noqa: ARG002
-            return [{"name": "present", "tenant": "tenant-a", "owner": "owner-a"}]
-
-    ctx = SimpleNamespace(
-        endpoint=endpoint,
-        actor=owner,
-        audit_service=AuditService(db_session),
-        rgw_admin=FakeRgwAdmin(),
-    )
-    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
-    app.dependency_overrides[ceph_dependencies.get_ceph_admin_context] = lambda: ctx
-    invalidate_bucket_listing_cache(endpoint.id)
-
-    response = client.get(
-        f"/api/ceph-admin/endpoints/{endpoint.id}/bucket-ui-tags/orphans"
-    )
-    invalidate_bucket_listing_cache(endpoint.id)
-
-    assert response.status_code == 200, response.text
-    assert response.json() == {
-        "orphans": [
-            {
-                "target": {
-                    "endpoint_id": endpoint.id,
-                    "tenant": "tenant-a",
-                    "name": "missing",
-                },
-                "tags": [
-                    {
-                        "id": service.catalog(
-                            domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
-                            actor_user_id=owner.id,
-                        ).definitions[0].id,
-                        "label": "Review",
-                        "color_key": "amber",
-                        "scope": "standard",
-                        "visibility": "private",
-                    }
-                ],
-            }
-        ]
-    }
-
-
-def test_storage_orphan_route_uses_authorized_cached_inventory(
-    client,
-    db_session,
-    monkeypatch,
-):
-    owner = _user(8247, "storage-orphans-owner@example.test")
-    endpoint = _endpoint(db_session, "ui-tags-storage-orphans")
-    account_row = S3Account(
-        name="storage-orphans-account",
-        rgw_account_id="RGW-STORAGE-ORPHANS",
-        rgw_user_uid="storage-orphans-user",
-        rgw_access_key="AK-STORAGE-ORPHANS",
-        rgw_secret_key="SK-STORAGE-ORPHANS",
-        storage_endpoint_id=endpoint.id,
-    )
-    db_session.add_all([owner, account_row])
-    db_session.commit()
-    account = S3ExecutionContext.from_account(account_row)
-    service = BucketUiTagsService(db_session)
-    present = PhysicalBucketTarget.create(endpoint.id, "", "present")
-    missing = PhysicalBucketTarget.create(endpoint.id, "", "missing")
-    service.mutate(
-        domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
-        actor_user_id=owner.id,
-        targets=[present, missing],
-        add_tag_ids=[],
-        create_tags=[("Mine", "teal", "private")],
-        remove_tag_ids=[],
-    )
-    db_session.commit()
-    ref = StorageOpsContextRef(
-        context_id=str(account_row.id),
-        context_name=account_row.name,
-        context_kind="account",
-        endpoint_id=endpoint.id,
-        endpoint_name=endpoint.name,
-    )
-
-    class FakeBucketsService:
-        calls = 0
-
-        def list_buckets(self, _account, include=None, with_stats=False):  # noqa: ARG002
-            self.calls += 1
-            return [Bucket(name="present")]
-
-    buckets = FakeBucketsService()
-    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = lambda: owner
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
-    app.dependency_overrides[get_buckets_service] = lambda: buckets
-    monkeypatch.setattr(
-        storage_bucket_ui_tags_router,
-        "_collect_context_refs",
-        lambda _user, _db: [ref],
-    )
-    monkeypatch.setattr(
-        storage_bucket_ui_tags_router,
-        "_resolve_context_account",
-        lambda _ref, **_kwargs: account,
-    )
-
-    response = client.get("/api/storage-ops/bucket-ui-tags/orphans")
-
-    assert response.status_code == 200, response.text
-    assert buckets.calls == 1
-    assert [item["target"]["name"] for item in response.json()["orphans"]] == [
-        "missing"
-    ]
-    assert response.json()["orphans"][0]["tags"][0]["label"] == "Mine"
-
-
-def test_storage_orphan_route_fails_closed_when_inventory_is_unavailable(
-    client,
-    db_session,
-    monkeypatch,
-):
-    owner = _user(8248, "storage-orphans-error-owner@example.test")
-    endpoint = _endpoint(db_session, "ui-tags-storage-orphans-error")
-    account_row = S3Account(
-        name="storage-orphans-error-account",
-        rgw_account_id="RGW-STORAGE-ORPHANS-ERROR",
-        rgw_user_uid="storage-orphans-error-user",
-        rgw_access_key="AK-STORAGE-ORPHANS-ERROR",
-        rgw_secret_key="SK-STORAGE-ORPHANS-ERROR",
-        storage_endpoint_id=endpoint.id,
-    )
-    db_session.add_all([owner, account_row])
-    db_session.commit()
-    account = S3ExecutionContext.from_account(account_row)
-    ref = StorageOpsContextRef(
-        context_id=str(account_row.id),
-        context_name=account_row.name,
-        context_kind="account",
-        endpoint_id=endpoint.id,
-        endpoint_name=endpoint.name,
-    )
-
-    class FailingBucketsService:
-        def list_buckets(self, _account, include=None, with_stats=False):  # noqa: ARG002
-            raise RuntimeError("inventory unavailable token=secret")
-
-    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = lambda: owner
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
-    app.dependency_overrides[get_buckets_service] = FailingBucketsService
-    monkeypatch.setattr(
-        storage_bucket_ui_tags_router,
-        "_collect_context_refs",
-        lambda _user, _db: [ref],
-    )
-    monkeypatch.setattr(
-        storage_bucket_ui_tags_router,
-        "_resolve_context_account",
-        lambda _ref, **_kwargs: account,
-    )
-
-    response = client.get("/api/storage-ops/bucket-ui-tags/orphans")
-
-    assert response.status_code == 502, response.text
-    assert response.json()["detail"] == "inventory unavailable token=<redacted>"
-
-
 def test_ceph_target_validation_returns_bad_gateway_when_rgw_cannot_verify(
     client,
     db_session,
@@ -809,93 +635,6 @@ def test_ceph_target_validation_returns_bad_gateway_when_rgw_cannot_verify(
     )
 
     assert response.status_code == 502, response.text
-
-
-def test_storage_orphan_cleanup_revalidates_outside_the_shared_listing_cache(
-    client,
-    db_session,
-    monkeypatch,
-):
-    owner = _user(8243, "storage-revalidation-owner@example.test")
-    endpoint = _endpoint(db_session, "ui-tags-storage-revalidation")
-    account_row = S3Account(
-        name="storage-revalidation-account",
-        rgw_account_id="RGW-REVALIDATION",
-        rgw_user_uid="storage-revalidation-user",
-        rgw_access_key="AK-REVALIDATION",
-        rgw_secret_key="SK-REVALIDATION",
-        storage_endpoint_id=endpoint.id,
-    )
-    db_session.add_all([owner, account_row])
-    db_session.commit()
-    account = S3ExecutionContext.from_account(account_row)
-    target = PhysicalBucketTarget.create(endpoint.id, "", "reappeared")
-    tag_service = BucketUiTagsService(db_session)
-    tag_service.mutate(
-        domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
-        actor_user_id=owner.id,
-        targets=[target],
-        add_tag_ids=[],
-        create_tags=[("Keep me", "teal", "private")],
-        remove_tag_ids=[],
-    )
-    db_session.commit()
-
-    # Prime the shared listing cache with the obsolete state in which the
-    # bucket was absent. The mutation route must bypass this cached value.
-    get_cached_bucket_listing_for_account(
-        account=account,
-        include=set(),
-        with_stats=False,
-        builder=lambda: [],
-    )
-    ref = StorageOpsContextRef(
-        context_id=str(account_row.id),
-        context_name=account_row.name,
-        context_kind="account",
-        endpoint_id=endpoint.id,
-        endpoint_name=endpoint.name,
-    )
-
-    class FakeBucketsService:
-        calls = 0
-
-        def list_buckets(self, _account, include=None, with_stats=False):  # noqa: ARG002
-            self.calls += 1
-            return [Bucket(name="reappeared")]
-
-    buckets = FakeBucketsService()
-    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = lambda: owner
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
-    app.dependency_overrides[get_buckets_service] = lambda: buckets
-    monkeypatch.setattr(storage_bucket_ui_tags_router, "_collect_context_refs", lambda _user, _db: [ref])
-    monkeypatch.setattr(
-        storage_bucket_ui_tags_router,
-        "_resolve_context_account",
-        lambda _ref, **_kwargs: account,
-    )
-
-    response = client.patch(
-        "/api/storage-ops/bucket-ui-tags",
-        json={
-            "targets": [{"context_id": ref.context_id, "name": "reappeared"}],
-            "remove_all": True,
-            "require_absent": True,
-        },
-    )
-
-    assert response.status_code == 409, response.text
-    assert buckets.calls == 1
-    remaining = tag_service.catalog(
-        domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
-        actor_user_id=owner.id,
-    )
-    assert [item.label for item in remaining.definitions] == ["Keep me"]
-    assert tag_service.get_tags_for_targets(
-        domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
-        actor_user_id=owner.id,
-        targets=[target],
-    )[target]
 
 
 def test_storage_ops_target_validation_returns_sanitized_bad_gateway(

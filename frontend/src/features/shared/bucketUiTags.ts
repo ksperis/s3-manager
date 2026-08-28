@@ -5,9 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  fetchCephAdminBucketUiTagOrphans,
   fetchCephAdminBucketUiTags,
-  fetchStorageOpsBucketUiTagOrphans,
   fetchStorageOpsBucketUiTags,
   patchCephAdminBucketUiTags,
   patchCephAdminBucketUiTagDefinition,
@@ -17,7 +15,6 @@ import {
   type BucketUiTagCreate,
   type BucketUiTagDefinition,
   type BucketUiTagDefinitionPatch,
-  type BucketUiTagOrphans,
   type BucketUiTagVisibility,
 } from "../../api/bucketUiTags";
 import type { BucketOpsMode } from "./bucketOpsSurface";
@@ -25,7 +22,6 @@ import type { BucketOpsMode } from "./bucketOpsSurface";
 const STATE_KEY_SEPARATOR = "\u001e";
 const MUTATION_BATCH_SIZE = 200;
 const EMPTY_BUCKET_UI_TAG_CATALOG: BucketUiTagCatalog = { definitions: [] };
-const EMPTY_BUCKET_UI_TAG_ORPHANS: BucketUiTagOrphans = { orphans: [] };
 
 export type BucketUiTagTarget = {
   key: string;
@@ -34,11 +30,6 @@ export type BucketUiTagTarget = {
   name: string;
   tenant: string | null;
   contextId: string | null;
-};
-
-type BucketUiTagEntry = {
-  target: BucketUiTagTarget;
-  tags: BucketUiTagDefinition[];
 };
 
 type BucketUiTagMutationItem =
@@ -76,21 +67,6 @@ export const createBucketUiTagTarget = (
   };
 };
 
-const orphanEntries = (mode: BucketOpsMode, response: BucketUiTagOrphans): Record<string, BucketUiTagEntry> => {
-  const entries: Record<string, BucketUiTagEntry> = {};
-  response.orphans.forEach((orphan) => {
-    const { endpoint_id: endpointId, tenant, name } = orphan.target;
-    const identity =
-      mode === "storage-ops"
-        ? buildPhysicalBucketUiTagIdentity(endpointId, tenant, name)
-        : `${tenant ? `${tenant}/` : ""}${name}`;
-    const target = createBucketUiTagTarget(mode, endpointId, identity, name, tenant);
-    if (!target) return;
-    if (orphan.tags.length > 0) entries[target.key] = { target, tags: orphan.tags };
-  });
-  return entries;
-};
-
 const chunks = <T,>(values: T[], size: number): T[][] => {
   const result: T[][] = [];
   for (let start = 0; start < values.length; start += size) result.push(values.slice(start, start + size));
@@ -100,6 +76,13 @@ const chunks = <T,>(values: T[], size: number): T[][] => {
 const isPersistedDefinition = (item: BucketUiTagMutationItem): item is BucketUiTagDefinition =>
   "id" in item && Number.isInteger(item.id) && item.id > 0;
 
+const toStorageOpsMutationTarget = (target: BucketUiTagTarget) => {
+  if (!target.contextId) {
+    throw new Error("Storage Ops UI tag targets require an execution context.");
+  }
+  return { context_id: target.contextId, name: target.name };
+};
+
 export function useBucketUiTags(
   mode: BucketOpsMode,
   selectedEndpointId?: number | null,
@@ -107,7 +90,6 @@ export function useBucketUiTags(
 ) {
   const catalogScopeKey = `${mode}:${selectedEndpointId ?? ""}`;
   const [catalog, setCatalog] = useState<BucketUiTagCatalog>(EMPTY_BUCKET_UI_TAG_CATALOG);
-  const [orphans, setOrphans] = useState<BucketUiTagOrphans>(EMPTY_BUCKET_UI_TAG_ORPHANS);
   const [loading, setLoading] = useState(true);
   const [loadedScopeKey, setLoadedScopeKey] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
@@ -117,26 +99,11 @@ export function useBucketUiTags(
   const [error, setError] = useState<string | null>(null);
   const requestSequenceRef = useRef(0);
 
-  const refreshOrphans = useCallback((requestId: number) => {
-    const request = mode === "ceph-admin"
-      ? fetchCephAdminBucketUiTagOrphans(Number(selectedEndpointId))
-      : fetchStorageOpsBucketUiTagOrphans();
-    void request
-      .then((nextOrphans) => {
-        if (requestId === requestSequenceRef.current) setOrphans(nextOrphans);
-      })
-      .catch((orphanError: unknown) => {
-        if (requestId === requestSequenceRef.current) setOrphans(EMPTY_BUCKET_UI_TAG_ORPHANS);
-        console.warn("Unable to validate UI tags against bucket inventory.", orphanError);
-      });
-  }, [mode, selectedEndpointId]);
-
   const reload = useCallback(async () => {
     const requestId = requestSequenceRef.current + 1;
     requestSequenceRef.current = requestId;
     if (mode === "ceph-admin" && !selectedEndpointId) {
       setCatalog(EMPTY_BUCKET_UI_TAG_CATALOG);
-      setOrphans(EMPTY_BUCKET_UI_TAG_ORPHANS);
       setError(null);
       setLoadedScopeKey(catalogScopeKey);
       setLoading(false);
@@ -148,7 +115,6 @@ export function useBucketUiTags(
     const catalogRequest = mode === "ceph-admin"
       ? fetchCephAdminBucketUiTags(Number(selectedEndpointId))
       : fetchStorageOpsBucketUiTags();
-    refreshOrphans(requestId);
     try {
       const nextCatalog = await catalogRequest;
       if (requestId === requestSequenceRef.current) {
@@ -167,7 +133,7 @@ export function useBucketUiTags(
     } finally {
       if (requestId === requestSequenceRef.current) setLoading(false);
     }
-  }, [catalogScopeKey, mode, refreshOrphans, selectedEndpointId]);
+  }, [catalogScopeKey, mode, selectedEndpointId]);
 
   useEffect(() => {
     void reload();
@@ -176,11 +142,9 @@ export function useBucketUiTags(
     };
   }, [reload]);
 
-  // Do not expose the previous endpoint's definitions or orphan observations
-  // while a new Ceph Admin scope is loading or has failed to load.
+  // Do not expose the previous endpoint's definitions while a new Ceph Admin
+  // scope is loading or has failed to load.
   const visibleCatalog = loadedScopeKey === catalogScopeKey ? catalog : EMPTY_BUCKET_UI_TAG_CATALOG;
-  const visibleOrphans = loadedScopeKey === catalogScopeKey ? orphans : EMPTY_BUCKET_UI_TAG_ORPHANS;
-  const entries = useMemo(() => orphanEntries(mode, visibleOrphans), [mode, visibleOrphans]);
   const definitions = useMemo(
     () => [...visibleCatalog.definitions].sort((a, b) => a.label.localeCompare(b.label) || a.id - b.id),
     [visibleCatalog.definitions]
@@ -192,7 +156,6 @@ export function useBucketUiTags(
       remove: BucketUiTagDefinition[],
       options?: {
         removeAll?: boolean;
-        requireAbsent?: boolean;
         onProgress?: (progress: { completed: number; total: number }) => void;
       }
     ) => {
@@ -223,19 +186,13 @@ export function useBucketUiTags(
                   create_tags: createTags,
                   remove_tag_ids: remove.map((tag) => tag.id),
                   remove_all: options?.removeAll,
-                  require_absent: options?.requireAbsent,
                 })
               : await patchStorageOpsBucketUiTags({
-                  targets: batch.map((target) =>
-                    target.contextId
-                      ? { context_id: target.contextId, name: target.name }
-                      : { endpoint_id: target.endpointId, tenant: target.tenant ?? "", name: target.name }
-                  ),
+                  targets: batch.map(toStorageOpsMutationTarget),
                   add_tag_ids: addTagIds,
                   create_tags: createTags.map(({ visibility: _visibility, ...tag }) => tag),
                   remove_tag_ids: remove.map((tag) => tag.id),
                   remove_all: options?.removeAll,
-                  require_absent: options?.requireAbsent,
                 });
           completed += batch.length;
           options?.onProgress?.({ completed, total: targets.length });
@@ -243,7 +200,6 @@ export function useBucketUiTags(
         if (requestId === requestSequenceRef.current) {
           setCatalog(nextCatalog);
           setLoadedScopeKey(catalogScopeKey);
-          refreshOrphans(requestId);
           onMutated?.();
         }
       } catch (err) {
@@ -257,34 +213,13 @@ export function useBucketUiTags(
         }
         if (requestId === requestSequenceRef.current) {
           setError(err instanceof Error ? err.message : "Unable to update bucket UI tags.");
-          refreshOrphans(requestId);
         }
         throw err;
       } finally {
         if (requestId === requestSequenceRef.current) setMutating(false);
       }
     },
-    [catalog, catalogScopeKey, mode, onMutated, refreshOrphans, selectedEndpointId]
-  );
-
-  const removeTargets = useCallback(
-    async (targetKeys: string[]) => {
-      const targets = targetKeys
-        .map((key) => entries[key]?.target)
-        .filter((target): target is BucketUiTagTarget => Boolean(target));
-      await applyTags(targets, [], [], { removeAll: true, requireAbsent: true });
-      const removedTargets = new Set(
-        targets.map((target) => `${target.endpointId}${STATE_KEY_SEPARATOR}${target.tenant ?? ""}${STATE_KEY_SEPARATOR}${target.name}`)
-      );
-      setOrphans((current) => ({
-        orphans: current.orphans.filter((orphan) =>
-          !removedTargets.has(
-            `${orphan.target.endpoint_id}${STATE_KEY_SEPARATOR}${orphan.target.tenant}${STATE_KEY_SEPARATOR}${orphan.target.name}`
-          )
-        ),
-      }));
-    },
-    [applyTags, entries]
+    [catalog, catalogScopeKey, mode, onMutated, selectedEndpointId]
   );
 
   const updateDefinition = useCallback(
@@ -306,14 +241,6 @@ export function useBucketUiTags(
           definitions: current.definitions.map((definition) =>
             definition.id === updated.id ? updated : definition
           ),
-        }));
-        setOrphans((current) => ({
-          orphans: current.orphans.map((orphan) => ({
-            ...orphan,
-            tags: orphan.tags.map((definition) =>
-              definition.id === updated.id ? updated : definition
-            ),
-          })),
         }));
         onMutated?.();
         return updated;
@@ -337,7 +264,6 @@ export function useBucketUiTags(
 
   const ready = loadedScopeKey === catalogScopeKey && !loading && error === null;
   return {
-    orphanEntries: entries,
     definitions,
     loading,
     ready,
@@ -347,6 +273,5 @@ export function useBucketUiTags(
     reload,
     applyTags,
     updateDefinition,
-    removeTargets,
   };
 }

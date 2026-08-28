@@ -11,7 +11,6 @@ from app.db import User
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
     BucketUiTagDefinitionSummary,
-    BucketUiTagOrphansResponse,
     StorageOpsBucketUiTagDefinitionPatch,
     StorageOpsBucketUiTagPatchRequest,
 )
@@ -23,7 +22,6 @@ from app.services.storage_ops_bucket_ui_tags_service import (
     StorageOpsBucketUiTagAuthorizationError,
     StorageOpsBucketUiTagConflictError,
     StorageOpsBucketUiTagNotFoundError,
-    StorageOpsBucketUiTagTargetError,
     StorageOpsBucketUiTagUpstreamError,
     StorageOpsBucketUiTagsWorkflow,
 )
@@ -60,22 +58,6 @@ def get_bucket_ui_tags(
     return _workflow(request=request, user=user, db=db).catalog()
 
 
-@router.get("/orphans", response_model=BucketUiTagOrphansResponse)
-def get_bucket_ui_tag_orphans(
-    request: Request,
-    user: User = Depends(get_current_storage_ops_admin),
-    db: Session = Depends(get_db),
-    buckets: BucketsService = Depends(get_buckets_service),
-) -> BucketUiTagOrphansResponse:
-    try:
-        return _workflow(request=request, user=user, db=db).orphans(buckets)
-    except StorageOpsBucketUiTagUpstreamError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=sanitize_error_detail(str(exc)),
-        ) from exc
-
-
 @router.patch("", response_model=BucketUiTagCatalogResponse)
 def patch_bucket_ui_tags(
     payload: StorageOpsBucketUiTagPatchRequest,
@@ -104,7 +86,7 @@ def patch_bucket_ui_tags(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=sanitize_error_detail(str(exc)),
         ) from exc
-    except (StorageOpsBucketUiTagTargetError, ValueError) as exc:
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=sanitize_error_detail(str(exc)),

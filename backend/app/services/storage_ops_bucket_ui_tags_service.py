@@ -9,11 +9,9 @@ from sqlalchemy.exc import IntegrityError
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
     BucketUiTagDefinitionSummary,
-    BucketUiTagOrphansResponse,
     StorageOpsBucketUiTagDefinitionPatch,
     StorageOpsBucketUiTagPatchRequest,
 )
-from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
 from app.services.bucket_ui_tags_service import (
     BucketUiTagDefinitionNotFoundError,
     BucketUiTagsService,
@@ -29,10 +27,6 @@ from app.utils.tagging import TAG_DOMAIN_BUCKET_UI_STORAGE_OPS
 
 
 class StorageOpsBucketUiTagAuthorizationError(RuntimeError):
-    pass
-
-
-class StorageOpsBucketUiTagTargetError(RuntimeError):
     pass
 
 
@@ -64,10 +58,6 @@ class StorageOpsBucketUiTagsWorkflow:
         self.refs_by_id = {ref.context_id: ref for ref in context_refs}
         self.resolve_account = resolve_account
         self.resolved: dict[str, tuple[S3ExecutionContext, set[str]]] = {}
-
-    def _account_for_ref(self, ref: StorageOpsContextRef) -> S3ExecutionContext | None:
-        cached = self.resolved.get(ref.context_id)
-        return cached[0] if cached is not None else self.resolve_account(ref)
 
     def _bucket_inventory(
         self,
@@ -118,30 +108,6 @@ class StorageOpsBucketUiTagsWorkflow:
             bucket_name in bucket_names,
         )
 
-    def _orphan_target(
-        self,
-        *,
-        endpoint_id: int,
-        tenant: str,
-        bucket_name: str,
-        buckets: BucketsService,
-    ) -> tuple[PhysicalBucketTarget, bool]:
-        matching_contexts = 0
-        exists = False
-        for context_id in self.refs_by_id:
-            account, bucket_names = self._bucket_inventory(context_id, buckets)
-            if int(account.storage_endpoint_id or 0) != endpoint_id:
-                continue
-            if resolve_storage_ops_context_tenant(account) != tenant:
-                continue
-            matching_contexts += 1
-            exists = exists or bucket_name in bucket_names
-        if matching_contexts == 0:
-            raise StorageOpsBucketUiTagAuthorizationError(
-                "No authorized Storage Ops context can verify this bucket."
-            )
-        return PhysicalBucketTarget.create(endpoint_id, tenant, bucket_name), exists
-
     def _targets(
         self,
         payload: StorageOpsBucketUiTagPatchRequest,
@@ -150,30 +116,15 @@ class StorageOpsBucketUiTagsWorkflow:
         targets: list[PhysicalBucketTarget] = []
         has_additions = bool(payload.add_tag_ids or payload.create_tags)
         for item in payload.targets:
-            if item.context_id:
-                target, exists = self._direct_target(
-                    item.context_id,
-                    item.name,
-                    buckets,
+            target, exists = self._direct_target(
+                item.context_id,
+                item.name,
+                buckets,
+            )
+            if has_additions and not exists:
+                raise StorageOpsBucketUiTagConflictError(
+                    "Bucket not found in this Storage Ops context."
                 )
-            else:
-                if not payload.require_absent or has_additions or item.endpoint_id is None:
-                    raise StorageOpsBucketUiTagTargetError(
-                        "Physical Storage Ops targets are only valid for orphan cleanup."
-                    )
-                target, exists = self._orphan_target(
-                    endpoint_id=int(item.endpoint_id),
-                    tenant=item.tenant,
-                    bucket_name=item.name,
-                    buckets=buckets,
-                )
-            if (has_additions and not exists) or (payload.require_absent and exists):
-                detail = (
-                    "Bucket reappeared; its UI tags were not removed."
-                    if payload.require_absent
-                    else "Bucket not found in this Storage Ops context."
-                )
-                raise StorageOpsBucketUiTagConflictError(detail)
             targets.append(target)
         return targets
 
@@ -181,44 +132,6 @@ class StorageOpsBucketUiTagsWorkflow:
         return self.tags.catalog(
             domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
             actor_user_id=self.actor_user_id,
-        )
-
-    def orphans(self, buckets: BucketsService) -> BucketUiTagOrphansResponse:
-        existing_targets: set[PhysicalBucketTarget] = set()
-        allowed_scopes: set[tuple[int, str]] = set()
-        for ref in self.refs_by_id.values():
-            account = self._account_for_ref(ref)
-            endpoint_id = (
-                int(getattr(account, "storage_endpoint_id", 0) or 0)
-                if account is not None
-                else 0
-            )
-            if account is None or endpoint_id <= 0:
-                continue
-            tenant = resolve_storage_ops_context_tenant(account)
-            allowed_scopes.add((endpoint_id, tenant))
-            try:
-                listed = get_cached_bucket_listing_for_account(
-                    account=account,
-                    include=set(),
-                    with_stats=False,
-                    builder=lambda account=account: buckets.list_buckets(
-                        account,
-                        include=None,
-                        with_stats=False,
-                    ),
-                )
-            except RuntimeError as exc:
-                raise StorageOpsBucketUiTagUpstreamError(str(exc)) from exc
-            existing_targets.update(
-                PhysicalBucketTarget.create(endpoint_id, tenant, bucket.name)
-                for bucket in listed
-            )
-        return self.tags.orphans(
-            domain_kind=TAG_DOMAIN_BUCKET_UI_STORAGE_OPS,
-            actor_user_id=self.actor_user_id,
-            allowed_scopes=allowed_scopes,
-            existing_targets=existing_targets,
         )
 
     def mutate(

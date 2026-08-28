@@ -12,9 +12,6 @@ from app.db import BucketUiTagAssignment, TagDefinition
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
     BucketUiTagDefinitionSummary,
-    BucketUiTagOrphanSummary,
-    BucketUiTagOrphansResponse,
-    BucketUiTagPhysicalTarget,
     BucketUiTagVisibility,
 )
 from app.services.tags_service import TagsService
@@ -187,77 +184,6 @@ class BucketUiTagsService:
         )
         return BucketUiTagCatalogResponse(
             definitions=[self._to_definition(row) for row in definitions]
-        )
-
-    def _visible_assignments(
-        self,
-        *,
-        domain_kind: str,
-        actor_user_id: int,
-        endpoint_id: int | None = None,
-        allowed_scopes: set[tuple[int, str]] | None = None,
-    ) -> dict[PhysicalBucketTarget, list[BucketUiTagDefinitionSummary]]:
-        domain = self._validate_domain(domain_kind)
-        if allowed_scopes is not None and not allowed_scopes:
-            return {}
-        query = self._visible_assignment_query(
-            domain_kind=domain,
-            actor_user_id=actor_user_id,
-        )
-        if endpoint_id is not None:
-            query = query.filter(BucketUiTagAssignment.storage_endpoint_id == int(endpoint_id))
-        if allowed_scopes is not None:
-            query = query.filter(
-                tuple_(
-                    BucketUiTagAssignment.storage_endpoint_id,
-                    BucketUiTagAssignment.tenant_key,
-                ).in_(sorted(allowed_scopes))
-            )
-        rows = query.order_by(
-            BucketUiTagAssignment.storage_endpoint_id.asc(),
-            BucketUiTagAssignment.tenant_key.asc(),
-            BucketUiTagAssignment.bucket_name.asc(),
-            BucketUiTagAssignment.position.asc(),
-            BucketUiTagAssignment.id.asc(),
-        ).all()
-        grouped: dict[PhysicalBucketTarget, list[BucketUiTagDefinitionSummary]] = {}
-        for assignment, definition in rows:
-            target = PhysicalBucketTarget.create(
-                assignment.storage_endpoint_id,
-                assignment.tenant_key,
-                assignment.bucket_name,
-            )
-            grouped.setdefault(target, []).append(self._to_definition(definition))
-        return grouped
-
-    def orphans(
-        self,
-        *,
-        domain_kind: str,
-        actor_user_id: int,
-        existing_targets: set[PhysicalBucketTarget],
-        endpoint_id: int | None = None,
-        allowed_scopes: set[tuple[int, str]] | None = None,
-    ) -> BucketUiTagOrphansResponse:
-        assignments = self._visible_assignments(
-            domain_kind=domain_kind,
-            actor_user_id=actor_user_id,
-            endpoint_id=endpoint_id,
-            allowed_scopes=allowed_scopes,
-        )
-        return BucketUiTagOrphansResponse(
-            orphans=[
-                BucketUiTagOrphanSummary(
-                    target=BucketUiTagPhysicalTarget(
-                        endpoint_id=target.endpoint_id,
-                        tenant=target.tenant,
-                        name=target.name,
-                    ),
-                    tags=tags,
-                )
-                for target, tags in assignments.items()
-                if target not in existing_targets
-            ],
         )
 
     def _links_for_targets(

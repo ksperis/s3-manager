@@ -85,26 +85,6 @@ def _build_s3_context(ctx: CephAdminBucketListingContext) -> S3ExecutionContext:
     )
 
 
-def get_cached_ceph_admin_bucket_targets(
-    ctx: CephAdminBucketListingContext,
-) -> set[PhysicalBucketTarget]:
-    """Return canonical physical identities from the shared RGW listing cache."""
-
-    targets: set[PhysicalBucketTarget] = set()
-    for entry in get_cached_rgw_bucket_entries(ctx, with_stats=False):
-        summary = rgw_bucket_metadata.build_bucket_summary(entry)
-        if summary is None:
-            continue
-        targets.add(
-            PhysicalBucketTarget.create(
-                ctx.endpoint.id,
-                summary.tenant,
-                summary.name,
-            )
-        )
-    return targets
-
-
 def _progress_options(
     *,
     progress: ListingProgressEmitter,

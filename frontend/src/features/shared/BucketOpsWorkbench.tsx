@@ -46,9 +46,6 @@ import BucketOpsBulkConfigurationFields from "./BucketOpsBulkConfigurationFields
 import BucketOpsBulkExecutionPanel from "./BucketOpsBulkExecutionPanel";
 import BucketOpsBulkTransferFields from "./BucketOpsBulkTransferFields";
 import BucketOpsColumnControls from "./BucketOpsColumnControls";
-import BucketOpsOrphanedTagsBanner, {
-  type OrphanedTagBucketDetail,
-} from "./BucketOpsOrphanedTagsBanner";
 import {
   BucketOpsQuickFilter,
   BucketOpsTagAndAdvancedFilters,
@@ -337,7 +334,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   });
   const { storageOpsContextLabelById } = storageScopeFilterController;
   const {
-    orphanEntries: uiTagOrphanEntries,
     definitions: availableUiTags,
     ready: uiTagsReady,
     error: uiTagsError,
@@ -345,7 +341,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     applyTags: persistUiTagChanges,
     updateDefinition: persistUiTagDefinition,
     updatingDefinitionIds,
-    removeTargets: removeUiTagTargets,
   } = useBucketUiTags(surface.mode, isStorageOps ? null : selectedEndpointId);
   const resolveBucketTagTarget = useCallback(
     (bucket: CephAdminBucket): BucketTagTarget | null => {
@@ -976,40 +971,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       storageOpsContextLabelById,
     ],
   );
-  const orphanedTagBuckets = useMemo(
-    () => Object.keys(uiTagOrphanEntries).sort((a, b) => a.localeCompare(b)),
-    [uiTagOrphanEntries]
-  );
-  const clearOrphanedTags = async () => {
-    if (orphanedTagBuckets.length === 0) return;
-    try {
-      await removeUiTagTargets(orphanedTagBuckets);
-      refreshBuckets();
-    } catch (err) {
-      setError(extractError(err));
-      refreshBuckets();
-    }
-  };
-  const orphanedTagDetails = useMemo<OrphanedTagBucketDetail[]>(
-    () =>
-      orphanedTagBuckets
-        .map((bucketKey) => {
-          const entry = uiTagOrphanEntries[bucketKey];
-          return {
-            key: bucketKey,
-            endpointId: entry?.target.endpointId ?? 0,
-            name: entry?.target.name ?? bucketKey,
-            tenant: entry?.target.tenant ?? null,
-            tags: (entry?.tags ?? []).map((tag) => tag.label),
-          };
-        })
-        .sort((a, b) => {
-          const tenantCompare = (a.tenant ?? "").localeCompare(b.tenant ?? "");
-          if (tenantCompare !== 0) return tenantCompare;
-          return a.name.localeCompare(b.name);
-        }),
-    [orphanedTagBuckets, uiTagOrphanEntries]
-  );
   const {
     applyDisabled: bulkApplyDisabled,
     hasSelectedCopyFeatures,
@@ -1227,10 +1188,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {uiTagsError && <PageBanner tone="error">Bucket UI tags: {uiTagsError}</PageBanner>}
       {statsWarning && <PageBanner tone="warning">{statsWarning}</PageBanner>}
-      <BucketOpsOrphanedTagsBanner
-        details={orphanedTagDetails}
-        onClear={clearOrphanedTags}
-      />
 
       {!selectedEndpointId && shell.emptyState ? <PageEmptyState {...shell.emptyState} /> : null}
       <ListPageSection

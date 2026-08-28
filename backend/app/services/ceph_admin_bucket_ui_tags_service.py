@@ -11,7 +11,6 @@ from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
     BucketUiTagDefinitionSummary,
     CephAdminBucketUiTagDefinitionPatch,
-    BucketUiTagOrphansResponse,
     CephAdminBucketUiTagPatchRequest,
 )
 from app.services.bucket_ui_tags_service import (
@@ -58,7 +57,6 @@ class CephAdminBucketUiTagsWorkflow:
         actor_user_id: int,
         endpoint_id: int,
         bucket_info: CephAdminBucketInfoReader,
-        bucket_inventory: Callable[[], set[PhysicalBucketTarget]],
         record_shared_mutation: Callable[[int], None],
         record_shared_definition_mutation: Callable[
             [BucketUiTagDefinitionUpdate], None
@@ -68,7 +66,6 @@ class CephAdminBucketUiTagsWorkflow:
         self.actor_user_id = int(actor_user_id)
         self.endpoint_id = int(endpoint_id)
         self.bucket_info = bucket_info
-        self.bucket_inventory = bucket_inventory
         self.record_shared_mutation = record_shared_mutation
         self.record_shared_definition_mutation = record_shared_definition_mutation
 
@@ -76,18 +73,6 @@ class CephAdminBucketUiTagsWorkflow:
         return self.tags.catalog(
             domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
             actor_user_id=self.actor_user_id,
-        )
-
-    def orphans(self) -> BucketUiTagOrphansResponse:
-        try:
-            existing_targets = self.bucket_inventory()
-        except RGWAdminError as exc:
-            raise CephAdminBucketUiTagUpstreamError(str(exc)) from exc
-        return self.tags.orphans(
-            domain_kind=TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN,
-            actor_user_id=self.actor_user_id,
-            endpoint_id=self.endpoint_id,
-            existing_targets=existing_targets,
         )
 
     def _targets(
@@ -123,13 +108,8 @@ class CephAdminBucketUiTagsWorkflow:
         has_additions = bool(payload.add_tag_ids or payload.create_tags)
         for target in targets:
             exists = self._bucket_exists(target)
-            if (has_additions and not exists) or (payload.require_absent and exists):
-                detail = (
-                    "Bucket reappeared; its UI tags were not removed."
-                    if payload.require_absent
-                    else "Bucket not found."
-                )
-                raise CephAdminBucketUiTagConflictError(detail)
+            if has_additions and not exists:
+                raise CephAdminBucketUiTagConflictError("Bucket not found.")
 
     def _has_shared_mutation(
         self,

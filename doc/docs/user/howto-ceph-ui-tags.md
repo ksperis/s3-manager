@@ -63,13 +63,6 @@ Check that rows are selected and that you are on the Ceph Admin bucket workbench
     conversion. A reserved name that belongs to another private definition
     cannot be reused.
 
-    At workbench load, a dedicated backend check compares persisted UI-tag
-    assignments with the endpoint bucket inventory. This check is independent
-    from the lightweight tag-definition catalogue and does not transfer every
-    bucket assignment to the browser. If a bucket is missing, the warning
-    banner can remove its UI tags; the backend rechecks that the bucket has not
-    reappeared before removing them.
-
 ## Related pages
 
 - [Workspace: Ceph Admin](workspace-ceph-admin.md)
