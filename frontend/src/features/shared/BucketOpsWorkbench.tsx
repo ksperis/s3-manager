@@ -61,6 +61,7 @@ import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
 import BucketOpsAdvancedFilterDrawer from "./BucketOpsAdvancedFilterDrawer";
 import BucketOpsBulkExecutionPanel from "./BucketOpsBulkExecutionPanel";
+import BucketOpsBulkTransferFields from "./BucketOpsBulkTransferFields";
 import BucketOpsColumnControls from "./BucketOpsColumnControls";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -123,11 +124,9 @@ import {
   POLICY_TYPE_OPTIONS,
 } from "./bucketConfigMerge";
 import {
-  BULK_COPY_FEATURE_LABELS,
   BUCKET_CONFIG_BACKUP_FEATURE_LABELS,
   PUBLIC_ACCESS_BLOCK_OPTIONS,
   type BulkCopyFeatureKey,
-  type BulkOperation,
   type QuotaSizeUnit,
 } from "./bucketBulkOperationsModel";
 import {
@@ -153,7 +152,6 @@ import {
   getTagColors,
   isBucketQuotaConfigured,
   isStatsSortField,
-  normalizeBucketName,
   ownerFilterFromSearch,
   sanitizeExportFilenamePart,
 } from "./bucketOpsPresentation";
@@ -439,6 +437,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [showUsageStatsModal, setShowUsageStatsModal] = useState(false);
   const [showConfigBackupModal, setShowConfigBackupModal] = useState(false);
+  const bulkFormController = useBucketOpsBulkForm();
   const {
     bulkCopyFeatures,
     bulkCorsDeleteIds,
@@ -466,7 +465,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     bulkQuotaSizeValue,
     bulkQuotaSkipConfigured,
     resetBulkForm,
-    setBulkCopyFeatures,
     setBulkCorsDeleteIds,
     setBulkCorsDeleteTypes,
     setBulkCorsRuleText,
@@ -491,7 +489,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setBulkQuotaSizeUnit,
     setBulkQuotaSizeValue,
     setBulkQuotaSkipConfigured,
-  } = useBucketOpsBulkForm();
+  } = bulkFormController;
   const {
     activeFeatureTooltipKey,
     activeOwnerTooltipKey,
@@ -840,10 +838,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setError,
   });
 
-  const bulkClipboardSourceBuckets = useMemo(
-    () => (bulkConfigClipboard ? bulkConfigClipboard.buckets.map((bucket) => bucket.name) : []),
-    [bulkConfigClipboard]
-  );
   const bulkClipboardSameEndpoint = isBulkClipboardSameEndpoint(
     bulkConfigClipboard,
     selectedEndpointId
@@ -1252,19 +1246,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     () => (Object.keys(bulkCopyFeatures) as BulkCopyFeatureKey[]).some((feature) => bulkCopyFeatures[feature]),
     [bulkCopyFeatures]
   );
-  const bulkClipboardCopiedAtLabel = useMemo(() => {
-    if (!bulkConfigClipboard) return null;
-    const parsed = new Date(bulkConfigClipboard.copiedAt);
-    if (Number.isNaN(parsed.getTime())) return bulkConfigClipboard.copiedAt;
-    return parsed.toLocaleString();
-  }, [bulkConfigClipboard]);
-  const bulkClipboardFeatureLabels = useMemo(() => {
-    if (!bulkConfigClipboard) return [];
-    return (Object.keys(bulkConfigClipboard.features) as BulkCopyFeatureKey[])
-      .filter((feature) => bulkConfigClipboard.features[feature])
-      .map((feature) => BULK_COPY_FEATURE_LABELS[feature]);
-  }, [bulkConfigClipboard]);
-
   const exportBulkPreviewChanges = () => {
     if (bulkPreview.length === 0) return;
     const exportedAt = new Date().toISOString();
@@ -2411,218 +2392,18 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       )}
       <BucketOpsBulkUpdatePage mode={mode} open={showBulkUpdateModal} onClose={closeBulkUpdateModal}>
         <div className="space-y-4">
-            <p className="ui-body text-slate-700 dark:text-slate-200">
-              Apply configuration to{" "}
-              <span className="font-semibold">
-                {selectedCount} bucket{selectedCount > 1 ? "s" : ""}
-              </span>
-              .
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Operation
-                </label>
-                <select
-                  value={bulkOperation}
-                  onChange={(e) => setBulkOperation(e.target.value as BulkOperation)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                >
-                  <option value="">Select an S3 API operation</option>
-                  <optgroup label="Configuration transfer">
-                    <option value="copy_configs">Copy configurations</option>
-                    <option value="paste_configs" disabled={!bulkConfigClipboard}>
-                      {bulkConfigClipboard ? "Paste copied configurations" : "Paste copied configurations (nothing copied)"}
-                    </option>
-                  </optgroup>
-                  <optgroup label="Access and quota">
-                    {!isStorageOps && (
-                      <option value="set_quota" disabled={Boolean(quotaOperationDisabledReason)}>
-                        {quotaOperationDisabledReason
-                          ? `Set bucket quota (${quotaOperationDisabledReason})`
-                          : "Set bucket quota"}
-                      </option>
-                    )}
-                    <option value="add_public_access_block">Add block public access</option>
-                    <option value="remove_public_access_block">Remove block public access</option>
-                  </optgroup>
-                  <optgroup label="Versioning">
-                    <option value="enable_versioning">Enable versioning</option>
-                    <option value="disable_versioning">Disable versioning</option>
-                  </optgroup>
-                  <optgroup label="Rules and policies">
-                    <option value="add_lifecycle">Add or update lifecycle rules</option>
-                    <option value="delete_lifecycle">Delete lifecycle rules</option>
-                    <option value="add_notifications" disabled={!snsFeatureEnabled}>
-                      {snsFeatureEnabled
-                        ? "Add or update notification configurations"
-                        : "Add or update notification configurations (SNS unavailable)"}
-                    </option>
-                    <option value="delete_notifications" disabled={!snsFeatureEnabled}>
-                      {snsFeatureEnabled
-                        ? "Delete notification configurations"
-                        : "Delete notification configurations (SNS unavailable)"}
-                    </option>
-                    <option value="add_cors">Add or update CORS rules</option>
-                    <option value="delete_cors">Delete CORS rules</option>
-                    <option value="add_policy">Add or update policy statements</option>
-                    <option value="delete_policy">Delete policy statements</option>
-                  </optgroup>
-                </select>
-              </div>
-            </div>
-            {bulkOperation === "copy_configs" && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Configurations to copy
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {(Object.keys(BULK_COPY_FEATURE_LABELS) as BulkCopyFeatureKey[])
-                      .filter((feature) => !isStorageOps || feature !== "quota")
-                      .map((feature) => (
-                      <UiCheckboxField
-                        key={feature}
-                        checked={bulkCopyFeatures[feature]}
-                        onChange={(event) =>
-                          setBulkCopyFeatures((prev) => ({ ...prev, [feature]: event.target.checked }))
-                        }
-                        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
-                      >
-                        {BULK_COPY_FEATURE_LABELS[feature]}
-                      </UiCheckboxField>
-                      ))}
-                  </div>
-                </div>
-                {bulkConfigClipboard && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/40">
-                    <p className="ui-caption text-slate-600 dark:text-slate-300">
-                      Clipboard currently contains config from{" "}
-                      <span className="font-semibold">{bulkConfigClipboard.buckets.length}</span> bucket
-                      {bulkConfigClipboard.buckets.length > 1 ? "s" : ""} on{" "}
-                      <span className="font-semibold">
-                        {bulkConfigClipboard.sourceEndpointName ?? `${scopeDisplayName} #${bulkConfigClipboard.sourceEndpointId}`}
-                      </span>
-                      {bulkClipboardCopiedAtLabel ? ` (copied ${bulkClipboardCopiedAtLabel})` : ""}.
-                    </p>
-                    {bulkClipboardFeatureLabels.length > 0 && (
-                      <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                        Features: {bulkClipboardFeatureLabels.join(", ")}.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            {bulkOperation === "paste_configs" && (
-              <div className="space-y-4">
-                {!bulkConfigClipboard ? (
-                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                    No copied configuration available. Use "Copy configs" first.
-                  </p>
-                ) : (
-                  <>
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/40">
-                      <p className="ui-caption text-slate-700 dark:text-slate-200">
-                        Source:{" "}
-                        <span className="font-semibold">
-                          {bulkConfigClipboard.sourceEndpointName ?? `${scopeDisplayName} #${bulkConfigClipboard.sourceEndpointId}`}
-                        </span>{" "}
-                        · {bulkConfigClipboard.buckets.length} bucket{bulkConfigClipboard.buckets.length > 1 ? "s" : ""} ·
-                        {bulkClipboardCopiedAtLabel ? ` copied ${bulkClipboardCopiedAtLabel}` : " copied recently"}
-                      </p>
-                      <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                        Destination selection: {selectedBucketList.length} bucket{selectedBucketList.length > 1 ? "s" : ""}.
-                      </p>
-                      {bulkClipboardFeatureLabels.length > 0 && (
-                        <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                          Pasted features: {bulkClipboardFeatureLabels.join(", ")}.
-                        </p>
-                      )}
-                    </div>
-                    {bulkPastePlan.mode === "one_to_many" && (
-                      <div className="space-y-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-                        <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
-                          Proposed mapping: 1 source to all selected destinations.
-                        </p>
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Source bucket:{" "}
-                          <span className="font-semibold">{bulkConfigClipboard.buckets[0]?.name ?? "-"}</span>
-                        </p>
-                      </div>
-                    )}
-                    {bulkPastePlan.mode === "one_to_one" && (
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Proposed mapping (1:1)
-                        </p>
-                        <div className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
-                          <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
-                            <thead className="bg-slate-100 dark:bg-slate-900/60">
-                              <tr>
-                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  Source bucket
-                                </th>
-                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  Destination bucket
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                              {bulkClipboardSourceBuckets.map((sourceBucket) => {
-                                const usedByOther = new Set(
-                                  Object.entries(bulkPasteMapping)
-                                    .filter(([otherSource, destination]) => otherSource !== sourceBucket && destination.trim())
-                                    .map(([, destination]) => normalizeBucketName(destination))
-                                );
-                                return (
-                                  <tr key={sourceBucket}>
-                                    <td className="px-3 py-2 font-semibold text-slate-900 dark:text-slate-100">{sourceBucket}</td>
-                                    <td className="px-3 py-2">
-                                      <select
-                                        value={bulkPasteMapping[sourceBucket] ?? ""}
-                                        onChange={(event) =>
-                                          setBulkPasteMapping((prev) => ({ ...prev, [sourceBucket]: event.target.value }))
-                                        }
-                                        className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                      >
-                                        <option value="">Select destination bucket</option>
-                                        {selectedBucketList.map((destinationBucket) => {
-                                          const normalizedDestination = normalizeBucketName(destinationBucket);
-                                          const isUsed = usedByOther.has(normalizedDestination);
-                                          const isSameBucketConflict =
-                                            bulkClipboardSameEndpoint &&
-                                            normalizeBucketName(sourceBucket) === normalizedDestination;
-                                          return (
-                                            <option
-                                              key={`${sourceBucket}-${destinationBucket}`}
-                                              value={destinationBucket}
-                                              disabled={isUsed || isSameBucketConflict}
-                                            >
-                                              {destinationBucket}
-                                              {isSameBucketConflict ? " (same bucket not allowed)" : isUsed ? " (already used)" : ""}
-                                            </option>
-                                          );
-                                        })}
-                                      </select>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                    {!bulkPastePlan.mode && (
-                      <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                        Mapping impossible with current source/destination selections.
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
+            <BucketOpsBulkTransferFields
+              clipboard={bulkConfigClipboard}
+              clipboardSameEndpoint={bulkClipboardSameEndpoint}
+              controller={bulkFormController}
+              isStorageOps={isStorageOps}
+              pastePlan={bulkPastePlan}
+              quotaDisabledReason={quotaOperationDisabledReason}
+              scopeDisplayName={scopeDisplayName}
+              selectedBucketNames={selectedBucketList}
+              selectedCount={selectedCount}
+              snsFeatureEnabled={snsFeatureEnabled}
+            />
             {bulkOperation === "set_quota" && (
               <div className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2">
