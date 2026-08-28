@@ -2,10 +2,8 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { runWithConcurrencySettled } from "../../utils/concurrency";
 import { stableStringify } from "../cephAdmin/bucketJsonParsers";
 import {
-  BULK_CONCURRENCY_LIMIT,
   bytesToGiB,
   isAccessLoggingSnapshotEqual,
   isObjectLockSnapshotEqual,
@@ -17,6 +15,10 @@ import {
   type BulkPastePlanItem,
   type BulkQuotaSnapshot,
 } from "./bucketBulkOperationsModel";
+import {
+  runBucketMutationBatch,
+  type BucketMutationBatchResult,
+} from "./bucketOpsBulkExecution";
 import type { BucketOpsApi } from "./bucketOpsApi";
 import { normalizeVersioningStatus } from "./bucketOpsPresentation";
 
@@ -57,14 +59,6 @@ type BucketOpsConfigPasteInput = BucketOpsConfigPasteApi & {
   targetEndpointId: number;
 };
 
-type BucketOpsConfigPasteResult = {
-  changedCount: number;
-  unchangedCount: number;
-  failedCount: number;
-  error: string | null;
-  summary: string;
-};
-
 export async function applyBucketOpsConfigPaste({
   clipboard,
   deleteBucketCors,
@@ -90,14 +84,11 @@ export async function applyBucketOpsConfigPaste({
   updateBucketObjectLock,
   updateBucketPublicAccessBlock,
   updateBucketQuota,
-}: BucketOpsConfigPasteInput): Promise<BucketOpsConfigPasteResult> {
-  let completed = 0;
-  let failed = 0;
-  const total = mappings.length;
-  const results = await runWithConcurrencySettled(
-    [...mappings],
-    BULK_CONCURRENCY_LIMIT,
-    async (mapping) => {
+}: BucketOpsConfigPasteInput): Promise<BucketMutationBatchResult> {
+  return runBucketMutationBatch({
+    items: mappings,
+    onProgress,
+    mutate: async (mapping) => {
       const features = clipboard?.features;
       if (!features) {
         throw new Error("Copied configuration is no longer available.");
@@ -278,28 +269,5 @@ export async function applyBucketOpsConfigPaste({
 
       return { changed };
     },
-    (result) => {
-      completed += 1;
-      if (result.status === "rejected") failed += 1;
-      onProgress?.({ completed: Math.min(total, completed), total, failed });
-    },
-  );
-
-  const changedCount = results.filter(
-    (result): result is PromiseFulfilledResult<{ changed: boolean }> =>
-      result.status === "fulfilled" && result.value.changed,
-  ).length;
-  const unchangedCount = results.filter(
-    (result): result is PromiseFulfilledResult<{ changed: boolean }> =>
-      result.status === "fulfilled" && !result.value.changed,
-  ).length;
-  return {
-    changedCount,
-    unchangedCount,
-    failedCount: failed,
-    error: failed > 0 ? `${failed} bucket(s) failed to update.` : null,
-    summary: `Updated ${changedCount} bucket${changedCount !== 1 ? "s" : ""}${
-      unchangedCount > 0 ? ` (${unchangedCount} unchanged)` : ""
-    }.`,
-  };
+  });
 }

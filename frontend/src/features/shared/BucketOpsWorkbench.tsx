@@ -55,7 +55,6 @@ import type {
 import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
 import {
   deleteNotificationConfigurations,
-  isNotificationConfigurationEmpty,
   mergeNotificationConfigurations,
   NOTIFICATION_CONFIGURATION_ARRAY_KEYS,
   NOTIFICATION_EVENTBRIDGE_KEY,
@@ -89,6 +88,7 @@ import { copyBucketOpsConfigs } from "./bucketOpsConfigCopy";
 import { applyBucketOpsConfigPaste } from "./bucketOpsConfigPaste";
 import { previewBucketOpsConfigPaste } from "./bucketOpsConfigPastePreview";
 import { prepareBucketOpsBulkInput } from "./bucketOpsBulkInput";
+import { applyBucketOpsBulkUpdate } from "./bucketOpsBulkApply";
 import {
   buildBucketExportColumns,
   buildBucketSelectionJsonPayload,
@@ -217,7 +217,6 @@ import {
   DEFAULT_BULK_COPY_FEATURE_SELECTION,
   PUBLIC_ACCESS_BLOCK_OPTIONS,
   applyPublicAccessBlockTargets,
-  bytesToGiB,
   formatPublicAccessBlockFlag,
   formatPublicAccessBlockState,
   hasConfiguredQuota,
@@ -2550,24 +2549,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setBulkApplyError(prepared.error);
       return;
     }
-    const {
-      parsedQuota,
-      parsedRules,
-      parsedNotificationConfiguration,
-      parsedCorsRules,
-      parsedPolicyStatements,
-      parsedPolicy,
-      deleteIds,
-      deleteTypes,
-      deleteNotificationIds,
-      deleteNotificationTypes,
-      deleteCorsIds,
-      deleteCorsTypes,
-      deletePolicyIds,
-      deletePolicyTypes,
-      publicAccessBlockTargets,
-    } = prepared.value;
-
     setBulkApplyLoading(true);
     setBulkApplyError(null);
     setBulkApplySummary(null);
@@ -2578,235 +2559,41 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       failed: 0,
     });
 
-    const desiredEnabled = bulkOperation === "enable_versioning";
-    const desiredPublicAccessBlockEnabled = bulkOperation === "add_public_access_block";
-    const results = await runWithConcurrencySettled(
-      selectedBucketList,
-      BULK_CONCURRENCY_LIMIT,
-      async (bucketName) => {
-        if (bulkOperation === "set_quota" && parsedQuota && updateBucketQuota) {
-          const currentQuota = await fetchBucketQuota(bucketName);
-          if (bulkQuotaSkipConfigured && hasConfiguredQuota(currentQuota)) {
-            return { changed: false };
-          }
-          const currentSize = currentQuota.maxSizeBytes;
-          const currentObjects = currentQuota.maxObjects;
-          const nextSize = parsedQuota.applySize ? parsedQuota.maxSizeBytes : currentSize;
-          const nextObjects = parsedQuota.applyObjects ? parsedQuota.maxObjects : currentObjects;
-          if (currentSize === nextSize && currentObjects === nextObjects) {
-            return { changed: false };
-          }
-          const payloadSizeGb =
-            nextSize != null
-              ? parsedQuota.applySize && parsedQuota.maxSizeValue != null
-                ? parsedQuota.maxSizeValue
-                : bytesToGiB(nextSize)
-              : null;
-          const payloadSizeUnit =
-            nextSize != null
-              ? parsedQuota.applySize && parsedQuota.maxSizeValue != null
-                ? parsedQuota.maxSizeUnit
-                : "GiB"
-              : null;
-          await updateBucketQuota(selectedEndpointId, bucketName, {
-            max_size_gb: payloadSizeGb,
-            max_size_unit: payloadSizeUnit,
-            max_objects: nextObjects,
-          });
-          return { changed: true };
-        }
-        if (
-          (bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
-          publicAccessBlockTargets
-        ) {
-          const current = normalizePublicAccessBlockState(
-            await getBucketPublicAccessBlock(selectedEndpointId, bucketName)
-          );
-          const target = applyPublicAccessBlockTargets(current, desiredPublicAccessBlockEnabled, publicAccessBlockTargets);
-          if (isPublicAccessBlockEquivalent(current, target)) {
-            return { changed: false };
-          }
-          await updateBucketPublicAccessBlock(selectedEndpointId, bucketName, target);
-          return { changed: true };
-        }
-        if (bulkOperation === "enable_versioning" || bulkOperation === "disable_versioning") {
-          const props = await getBucketProperties(selectedEndpointId, bucketName);
-          const currentEnabled = normalizeVersioningStatus(props.versioning_status);
-          const shouldApply = currentEnabled === null ? true : currentEnabled !== desiredEnabled;
-          if (!shouldApply) return { changed: false };
-          await setBucketVersioning(selectedEndpointId, bucketName, desiredEnabled);
-          return { changed: true };
-        }
-        if (bulkOperation === "add_lifecycle" && parsedRules) {
-          const lifecycle = await getBucketLifecycle(selectedEndpointId, bucketName);
-          const existingRules = lifecycle.rules ?? [];
-          const { nextRules, changes } = mergeLifecycleRules(
-            existingRules as Record<string, unknown>[],
-            parsedRules,
-            { onlyUpdateExisting: bulkLifecycleUpdateOnlyExisting }
-          );
-          if (changes.length === 0) return { changed: false };
-          await putBucketLifecycle(selectedEndpointId, bucketName, nextRules);
-          return { changed: true };
-        }
-        if (bulkOperation === "delete_lifecycle" && deleteIds && deleteTypes) {
-          const lifecycle = await getBucketLifecycle(selectedEndpointId, bucketName);
-          const existingRules = lifecycle.rules ?? [];
-          const shouldDeleteRule = (rule: Record<string, unknown>) => {
-            const ruleId = getLifecycleRuleId(rule);
-            if (ruleId && deleteIds.has(ruleId)) return true;
-            if (deleteTypes.size === 0) return false;
-            const ruleTypes = getLifecycleRuleTypes(rule);
-            return ruleTypes.some((type) => deleteTypes.has(type));
-          };
-          const nextRules = existingRules.filter(
-            (rule) => !shouldDeleteRule(rule as Record<string, unknown>)
-          ) as Record<string, unknown>[];
-          if (nextRules.length === existingRules.length) return { changed: false };
-          if (nextRules.length === 0) {
-            await deleteBucketLifecycle(selectedEndpointId, bucketName);
-            return { changed: true };
-          }
-          await putBucketLifecycle(selectedEndpointId, bucketName, nextRules);
-          return { changed: true };
-        }
-        if (bulkOperation === "add_notifications" && parsedNotificationConfiguration) {
-          const notifications = await getBucketNotifications(selectedEndpointId, bucketName);
-          const currentConfiguration = notifications.configuration ?? {};
-          const { configuration: nextConfiguration, changes } = mergeNotificationConfigurations(
-            currentConfiguration,
-            parsedNotificationConfiguration
-          );
-          if (changes.length === 0) return { changed: false };
-          await putBucketNotifications(selectedEndpointId, bucketName, nextConfiguration);
-          return { changed: true };
-        }
-        if (bulkOperation === "delete_notifications" && deleteNotificationIds && deleteNotificationTypes) {
-          const notifications = await getBucketNotifications(selectedEndpointId, bucketName);
-          const currentConfiguration = notifications.configuration ?? {};
-          const { configuration: nextConfiguration, changes } = deleteNotificationConfigurations(
-            currentConfiguration,
-            deleteNotificationIds,
-            deleteNotificationTypes
-          );
-          if (changes.length === 0) return { changed: false };
-          if (isNotificationConfigurationEmpty(nextConfiguration)) {
-            await deleteBucketNotifications(selectedEndpointId, bucketName);
-            return { changed: true };
-          }
-          await putBucketNotifications(selectedEndpointId, bucketName, nextConfiguration);
-          return { changed: true };
-        }
-        if (bulkOperation === "add_cors" && parsedCorsRules) {
-          const cors = await getBucketCors(selectedEndpointId, bucketName);
-          const existingRules = cors.rules ?? [];
-          const { nextRules, changes } = mergeCorsRules(
-            existingRules as Record<string, unknown>[],
-            parsedCorsRules,
-            { onlyUpdateExisting: bulkCorsUpdateOnlyExisting }
-          );
-          if (changes.length === 0) return { changed: false };
-          await putBucketCors(selectedEndpointId, bucketName, nextRules);
-          return { changed: true };
-        }
-        if (bulkOperation === "delete_cors" && deleteCorsIds && deleteCorsTypes) {
-          const cors = await getBucketCors(selectedEndpointId, bucketName);
-          const existingRules = cors.rules ?? [];
-          const shouldDeleteRule = (rule: Record<string, unknown>) => {
-            const ruleId = getLifecycleRuleId(rule);
-            if (ruleId && deleteCorsIds.has(ruleId)) return true;
-            if (deleteCorsTypes.size === 0) return false;
-            const ruleTypes = getCorsRuleTypes(rule);
-            return ruleTypes.some((type) => deleteCorsTypes.has(type));
-          };
-          const nextRules = existingRules.filter(
-            (rule) => !shouldDeleteRule(rule as Record<string, unknown>)
-          ) as Record<string, unknown>[];
-          if (nextRules.length === existingRules.length) return { changed: false };
-          if (nextRules.length === 0) {
-            await deleteBucketCors(selectedEndpointId, bucketName);
-            return { changed: true };
-          }
-          await putBucketCors(selectedEndpointId, bucketName, nextRules);
-          return { changed: true };
-        }
-        if (bulkOperation === "add_policy" && parsedPolicyStatements) {
-          const policy = await getBucketPolicy(selectedEndpointId, bucketName);
-          const existingPolicy = policy.policy ?? {};
-          const existingStatements = Array.isArray((existingPolicy as Record<string, unknown>).Statement)
-            ? ((existingPolicy as Record<string, unknown>).Statement as Record<string, unknown>[])
-            : [];
-          const { nextStatements, changes } = mergePolicyStatements(
-            existingStatements,
-            parsedPolicyStatements,
-            { onlyUpdateExisting: bulkPolicyUpdateOnlyExisting }
-          );
-          if (changes.length === 0) return { changed: false };
-          const nextPolicy = {
-            ...(Object.keys(existingPolicy).length > 0 ? (existingPolicy as Record<string, unknown>) : (parsedPolicy ?? {})),
-            Statement: nextStatements,
-          };
-          await putBucketPolicy(selectedEndpointId, bucketName, nextPolicy);
-          return { changed: true };
-        }
-        if (bulkOperation === "delete_policy" && deletePolicyIds && deletePolicyTypes) {
-          const policy = await getBucketPolicy(selectedEndpointId, bucketName);
-          const existingPolicy = policy.policy ?? {};
-          const existingStatements = Array.isArray((existingPolicy as Record<string, unknown>).Statement)
-            ? ((existingPolicy as Record<string, unknown>).Statement as Record<string, unknown>[])
-            : [];
-          const shouldDeleteStatement = (statement: Record<string, unknown>) => {
-            const sid = getPolicyStatementSid(statement);
-            if (sid && deletePolicyIds.has(sid)) return true;
-            if (deletePolicyTypes.size === 0) return false;
-            const types = getPolicyStatementTypes(statement);
-            return types.some((type) => deletePolicyTypes.has(type));
-          };
-          const nextStatements = existingStatements.filter(
-            (statement) => !shouldDeleteStatement(statement as Record<string, unknown>)
-          ) as Record<string, unknown>[];
-          if (nextStatements.length === existingStatements.length) return { changed: false };
-          if (nextStatements.length === 0) {
-            await deleteBucketPolicy(selectedEndpointId, bucketName);
-            return { changed: true };
-          }
-          const nextPolicy = {
-            ...(existingPolicy as Record<string, unknown>),
-            Statement: nextStatements,
-          };
-          await putBucketPolicy(selectedEndpointId, bucketName, nextPolicy);
-          return { changed: true };
-        }
-        return { changed: false };
+    const result = await applyBucketOpsBulkUpdate({
+      bucketNames: selectedBucketList,
+      corsUpdateOnlyExisting: bulkCorsUpdateOnlyExisting,
+      deleteBucketCors,
+      deleteBucketLifecycle,
+      deleteBucketNotifications,
+      deleteBucketPolicy,
+      endpointId: selectedEndpointId,
+      fetchBucketQuota,
+      getBucketCors,
+      getBucketLifecycle,
+      getBucketNotifications,
+      getBucketPolicy,
+      getBucketProperties,
+      getBucketPublicAccessBlock,
+      lifecycleUpdateOnlyExisting: bulkLifecycleUpdateOnlyExisting,
+      onProgress: (progress) => {
+        setBulkApplyProgress({ label: "Applying changes", ...progress });
       },
-      (result) => {
-        setBulkApplyProgress((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            completed: Math.min(prev.total, prev.completed + 1),
-            failed: prev.failed + (result.status === "rejected" ? 1 : 0),
-          };
-        });
-      }
-    );
-
-    const failed = results.filter((result) => result.status === "rejected");
-    const changedCount = results.filter(
-      (result): result is PromiseFulfilledResult<{ changed: boolean }> =>
-        result.status === "fulfilled" && result.value.changed
-    ).length;
-    const unchangedCount = results.filter(
-      (result): result is PromiseFulfilledResult<{ changed: boolean }> =>
-        result.status === "fulfilled" && !result.value.changed
-    ).length;
-
-    if (failed.length > 0) {
-      setBulkApplyError(`${failed.length} bucket(s) failed to update.`);
+      operation: bulkOperation,
+      policyUpdateOnlyExisting: bulkPolicyUpdateOnlyExisting,
+      prepared: prepared.value,
+      putBucketCors,
+      putBucketLifecycle,
+      putBucketNotifications,
+      putBucketPolicy,
+      quotaSkipConfigured: bulkQuotaSkipConfigured,
+      setBucketVersioning,
+      updateBucketPublicAccessBlock,
+      updateBucketQuota,
+    });
+    if (result.error) {
+      setBulkApplyError(result.error);
     }
-    setBulkApplySummary(
-      `Updated ${changedCount} bucket${changedCount !== 1 ? "s" : ""}${unchangedCount > 0 ? ` (${unchangedCount} unchanged)` : ""}.`
-    );
+    setBulkApplySummary(result.summary);
     setBulkApplyLoading(false);
     refreshBuckets();
   };

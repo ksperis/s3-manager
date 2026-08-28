@@ -67,7 +67,7 @@ export type BucketOpsBulkInput = {
   publicAccessBlockTargets: OptionSelection<PublicAccessBlockOptionKey>;
 };
 
-type PreparedBucketOpsBulkInput = {
+export type PreparedBucketOpsBulkInput = {
   parsedQuota: ParsedQuotaInput | null;
   parsedRules: Record<string, unknown>[] | null;
   parsedNotificationConfiguration: Record<string, unknown> | null;

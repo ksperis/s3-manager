@@ -616,6 +616,34 @@ describe("BucketOpsWorkbench selection actions", () => {
     expect(mocks.noopAsync).toHaveBeenCalledWith(7, "bucket-001", true);
   });
 
+  it("applies a prepared bulk operation through the shared execution service", async () => {
+    const allBuckets = buildBuckets(1);
+    mocks.listCephAdminBuckets.mockImplementation(createBucketListMock(allBuckets));
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
+    const dialog = await screen.findByRole("dialog", { name: "Bulk update" });
+    fireEvent.change(within(dialog).getByRole("combobox"), {
+      target: { value: "enable_versioning" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Preview" }));
+
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Apply changes" })).toBeEnabled(),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply changes" }));
+
+    expect(await within(dialog).findByText("Updated 1 bucket.")).toBeInTheDocument();
+    expect(mocks.noopAsync).toHaveBeenCalledWith(7, "bucket-001", true);
+  });
+
   it("does not expose Storage Ops bulk quota updates", async () => {
     mocks.listStorageOpsBuckets.mockResolvedValue({
       items: [{ name: "conn-2::bucket-001", bucket_name: "bucket-001", context_id: "conn-2" }],
