@@ -12,7 +12,6 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import { workflowPageHostClass } from "../../components/WorkflowPage";
 import TableEmptyState from "../../components/TableEmptyState";
-import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import {
   toolbarCompactButtonClasses,
   toolbarCompactInputClasses,
@@ -46,9 +45,6 @@ import {
   STORAGE_OPS_SCOPE_ID,
   type StorageOpsBucket,
 } from "../../api/storageOps";
-import type {
-  BucketUiTagDefinition,
-} from "../../api/bucketUiTags";
 import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
 import {
   NOTIFICATION_CONFIGURATION_ARRAY_KEYS,
@@ -87,6 +83,7 @@ import { useBucketOpsBulkForm } from "./useBucketOpsBulkForm";
 import { useBucketOpsBulkPreview } from "./useBucketOpsBulkPreview";
 import { useBucketOpsCacheRefresh } from "./useBucketOpsCacheRefresh";
 import { useBucketOpsConfigCopy } from "./useBucketOpsConfigCopy";
+import { useBucketOpsFilterController } from "./useBucketOpsFilterController";
 import { useBucketOpsListState } from "./useBucketOpsListState";
 import { useBucketOpsSelection } from "./useBucketOpsSelection";
 import { useBucketOpsSelectionActions } from "./useBucketOpsSelectionActions";
@@ -108,8 +105,6 @@ import {
   buildBucketOpsDraftFilterSummaryItems,
 } from "./bucketOpsFilterSummary";
 import {
-  clearFeatureDetailField,
-  type FeatureDetailFilterKey,
   type FeatureDetailFilters,
   type NumericComparisonOpUi,
 } from "../cephAdmin/filtering/bucketAdvancedFilter";
@@ -127,7 +122,6 @@ import {
   advancedFilterSyncBadgeClass,
   advancedFilterRootClass,
   advancedFilterSectionClass,
-  parseExactListInput,
   renderAdvancedFilterCostBadge,
   renderAdvancedFilterDraftSummary,
   renderAdvancedFilterRuleCountBadge,
@@ -140,14 +134,7 @@ import {
   FEATURE_LABELS,
   FEATURE_STATE_OPTIONS,
   NUMERIC_FILTER_OPTIONS,
-  buildAdvancedFilterPayload,
-  buildAdvancedFilterSecondarySectionState,
-  defaultAdvancedFilter,
-  hasAdvancedFilters,
-  type ActiveFilterRemoveAction,
   type AdvancedFilterSecondarySectionId,
-  type AdvancedFilterSecondarySectionState,
-  type AdvancedTextOrNumericField,
   type BooleanFilterState,
   type FeatureFilterState,
   type FeatureKey,
@@ -156,7 +143,6 @@ import {
 } from "./bucketOpsAdvancedFilterModel";
 import {
   buildAdvancedFilterFieldState,
-  buildBucketOpsAdvancedFilterUiProjection,
 } from "./bucketOpsAdvancedFilterUiProjection";
 import {
   BUCKET_CORE_COLUMN_OPTIONS,
@@ -406,12 +392,77 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     sseFeatureEnabled,
     staticWebsiteFeatureEnabled,
   });
+  const {
+    addTagFilter,
+    advancedDraftActiveCount,
+    advancedDraftFeatureCount,
+    advancedDraftFeatureDetailCount,
+    advancedDraftGlobalCostLevel,
+    advancedDraftGlobalCostTooltip,
+    advancedDraftRangeCount,
+    advancedFilterCloseGuard,
+    advancedFilterParam,
+    advancedFilterSecondarySections,
+    advancedFiltersApplied,
+    applyAdvancedFilter,
+    contextDraftIds,
+    contextFieldState,
+    effectiveQuickFilterMode,
+    effectiveQuickSearchValue,
+    endpointDraftNames,
+    endpointFieldState,
+    hasAnyAdvancedToClear,
+    hasPendingAdvancedChanges,
+    openAdvancedFilterDrawer,
+    ownerDraftEffectiveMatchMode,
+    ownerDraftForcesExact,
+    ownerFieldState,
+    ownerNameDraftEffectiveMatchMode,
+    ownerNameDraftForcesExact,
+    ownerNameFieldState,
+    ownerSuspendedFieldState,
+    quickFilterAppliedParsed,
+    quickFilterDraftForcesExact,
+    quickFilterFieldState,
+    quickFilterModeForDisplay,
+    quickFilterPending,
+    removeActiveFilterItem,
+    removeTagFilter,
+    resetAdvancedFilter,
+    resetAllFilters,
+    s3TagsDraftEffectiveMatchMode,
+    s3TagsDraftForcesExact,
+    s3TagsFieldState,
+    showAdvancedFilter,
+    tenantDraftEffectiveMatchMode,
+    tenantDraftForcesExact,
+    tenantFieldState,
+    toggleAdvancedFilterSecondarySection,
+    toggleQuickFilterMode,
+    updateAdvancedField,
+    updateAdvancedMatchMode,
+    updateFeatureDetailFilter,
+    updateFeatureFilter,
+  } = useBucketOpsFilterController({
+    advancedApplied,
+    advancedDraft,
+    featureSupport,
+    filter,
+    filterValue,
+    isStorageOps,
+    quickFilterMode,
+    setAdvancedApplied,
+    setAdvancedDraft,
+    setFilter,
+    setFilterValue,
+    setPage,
+    setQuickFilterMode,
+    setTagFilterMode,
+    setTagFilters,
+    usageFeatureEnabled,
+  });
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
-  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
-  const [advancedFilterSecondarySections, setAdvancedFilterSecondarySections] =
-    useState<AdvancedFilterSecondarySectionState>(() => buildAdvancedFilterSecondarySectionState());
-  const advancedFilterWasOpenRef = useRef(false);
   const {
     allFilteredStorageOpsContextsSelected,
     allFilteredStorageOpsEndpointsSelected,
@@ -577,26 +628,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [bucketsStateStorageKey, clearTagsTooltip, ownerQueryFilter, selectedEndpointId]);
 
   useEffect(() => {
-    if (!showAdvancedFilter) return;
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowAdvancedFilter(false);
-      }
-    };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [showAdvancedFilter]);
-
-  useEffect(() => {
-    if (!showAdvancedFilter) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [showAdvancedFilter]);
-
-  useEffect(() => {
     if (!showColumnPicker) return;
     const handler = (event: MouseEvent) => {
       const target = event.target as Node | null;
@@ -648,27 +679,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       usageFeatureEnabled,
       visibleColumns,
     ],
-  );
-
-  const quickFilterDraftParsed = useMemo(() => parseExactListInput(filter), [filter]);
-  const quickFilterAppliedParsed = useMemo(() => parseExactListInput(filterValue), [filterValue]);
-  const quickFilterDraftForcesExact = quickFilterDraftParsed.listProvided && quickFilterDraftParsed.values.length > 0;
-  const quickFilterAppliedForcesExact = quickFilterAppliedParsed.listProvided && quickFilterAppliedParsed.values.length > 0;
-  const quickFilterModeForDisplay: TextMatchMode = quickFilterDraftForcesExact ? "exact" : quickFilterMode;
-  const effectiveQuickFilterMode: TextMatchMode = quickFilterAppliedForcesExact ? "exact" : quickFilterMode;
-  const effectiveQuickSearchValue = effectiveQuickFilterMode === "contains" ? filterValue : "";
-  const advancedFilterParam = useMemo(
-    () =>
-      buildAdvancedFilterPayload(
-        effectiveQuickFilterMode === "exact" ? filterValue : "",
-        effectiveQuickFilterMode,
-        advancedApplied,
-        null,
-        isStorageOps,
-        usageFeatureEnabled,
-        featureSupport
-      ),
-    [advancedApplied, filterValue, effectiveQuickFilterMode, isStorageOps, usageFeatureEnabled, featureSupport]
   );
 
   const {
@@ -900,16 +910,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     resetBulkApply();
     resetSelectionActions();
     setShowConfigBackupModal(false);
-  };
-
-  const addTagFilter = (tag: BucketUiTagDefinition) => {
-    setTagFilters((prev) => (prev.includes(tag.id) ? prev : [...prev, tag.id]));
-    setPage(1);
-  };
-
-  const removeTagFilter = (tagId: number) => {
-    setTagFilters((prev) => prev.filter((item) => item !== tagId));
-    setPage(1);
   };
 
   const {
@@ -1238,66 +1238,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     resetBulkApply();
   };
 
-  const updateAdvancedField = (field: AdvancedTextOrNumericField, value: string) => {
-    setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const updateAdvancedMatchMode = (
-    field: "tenantMatchMode" | "ownerMatchMode" | "ownerNameMatchMode" | "s3TagsMatchMode",
-    value: TextMatchMode
-  ) => {
-    setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const updateFeatureFilter = (feature: FeatureKey, value: FeatureFilterState) => {
-    setAdvancedDraft((prev) => ({ ...prev, features: { ...prev.features, [feature]: value } }));
-  };
-
-  const updateFeatureDetailFilter = (
-    field: FeatureDetailFilterKey,
-    value: FeatureDetailFilters[FeatureDetailFilterKey]
-  ) => {
-    setAdvancedDraft((prev) => ({
-      ...prev,
-      featureDetails: {
-        ...prev.featureDetails,
-        [field]: value,
-      },
-    }));
-  };
-
-  const closeAdvancedFilterDrawer = () => {
-    setShowAdvancedFilter(false);
-  };
-
-  const applyAdvancedFilter = () => {
-    setAdvancedApplied(advancedDraft);
-    setPage(1);
-    setShowAdvancedFilter(false);
-  };
-
-  const resetAdvancedFilter = () => {
-    setAdvancedDraft(defaultAdvancedFilter);
-    setAdvancedApplied(null);
-    setPage(1);
-  };
-
-  const advancedFiltersApplied = hasAdvancedFilters(advancedApplied, isStorageOps, usageFeatureEnabled, featureSupport);
-  const advancedAppliedPayload = useMemo(
-    () => buildAdvancedFilterPayload("", "contains", advancedApplied, null, isStorageOps, usageFeatureEnabled, featureSupport),
-    [advancedApplied, isStorageOps, usageFeatureEnabled, featureSupport]
-  );
-  const advancedDraftPayload = useMemo(
-    () => buildAdvancedFilterPayload("", "contains", advancedDraft, null, isStorageOps, usageFeatureEnabled, featureSupport),
-    [advancedDraft, isStorageOps, usageFeatureEnabled, featureSupport]
-  );
-  const hasPendingAdvancedChanges = advancedDraftPayload !== advancedAppliedPayload;
-  const hasAnyAdvancedToClear = advancedDraftPayload !== undefined || advancedAppliedPayload !== undefined;
-  const advancedFilterCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: showAdvancedFilter && hasPendingAdvancedChanges,
-    onClose: closeAdvancedFilterDrawer,
-    zIndexClass: "z-[70]",
-  });
   const quickFilterActive = filterValue.trim().length > 0;
   const columnsCustomized = useMemo(() => {
     if (visibleColumns.length !== defaultVisibleColumns.length) return true;
@@ -1322,9 +1262,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       return `${modeToggleBaseClass} border-primary-400 bg-primary-100 text-primary-700 focus:ring-primary/35 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
     }
     return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
-  };
-  const toggleAdvancedFilterSecondarySection = (sectionId: AdvancedFilterSecondarySectionId) => {
-    setAdvancedFilterSecondarySections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
   };
   const renderAdvancedFilterSecondarySection = ({
     id,
@@ -1380,160 +1317,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         )}
       </section>
     );
-  };
-  const {
-    contextDraftIds,
-    endpointDraftNames,
-    tenantDraftEffectiveMatchMode,
-    tenantDraftForcesExact,
-    ownerDraftEffectiveMatchMode,
-    ownerDraftForcesExact,
-    ownerNameDraftEffectiveMatchMode,
-    ownerNameDraftForcesExact,
-    s3TagsDraftEffectiveMatchMode,
-    s3TagsDraftForcesExact,
-    contextFieldState,
-    endpointFieldState,
-    tenantFieldState,
-    ownerFieldState,
-    ownerNameFieldState,
-    ownerSuspendedFieldState,
-    s3TagsFieldState,
-    quickFilterFieldState,
-    quickFilterPending,
-    advancedDraftRangeCount,
-    advancedDraftFeatureCount,
-    advancedDraftFeatureDetailCount,
-    advancedDraftActiveCount,
-    advancedDraftGlobalCostLevel,
-    advancedDraftGlobalCostTooltip,
-  } = useMemo(
-    () =>
-      buildBucketOpsAdvancedFilterUiProjection({
-        advancedApplied,
-        advancedDraft,
-        featureSupport,
-        isStorageOps,
-        quickFilterApplied: filterValue,
-        quickFilterDraft: filter,
-        usageFeatureEnabled,
-      }),
-    [
-      advancedApplied,
-      advancedDraft,
-      featureSupport,
-      filter,
-      filterValue,
-      isStorageOps,
-      usageFeatureEnabled,
-    ]
-  );
-  useEffect(() => {
-    if (showAdvancedFilter && !advancedFilterWasOpenRef.current) {
-      setAdvancedFilterSecondarySections(
-        buildAdvancedFilterSecondarySectionState({
-          metrics: advancedDraftRangeCount,
-          featureStates: advancedDraftFeatureCount,
-          featureDetails: advancedDraftFeatureDetailCount,
-        })
-      );
-    }
-    advancedFilterWasOpenRef.current = showAdvancedFilter;
-  }, [showAdvancedFilter, advancedDraftRangeCount, advancedDraftFeatureCount, advancedDraftFeatureDetailCount]);
-  const toggleQuickFilterMode = () => {
-    if (quickFilterDraftForcesExact) return;
-    setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
-    setPage(1);
-  };
-  const resetAllFilters = () => {
-    setFilter("");
-    setFilterValue("");
-    setQuickFilterMode("contains");
-    setAdvancedDraft(defaultAdvancedFilter);
-    setAdvancedApplied(null);
-    setTagFilters([]);
-    setTagFilterMode("any");
-    setShowAdvancedFilter(false);
-    setPage(1);
-  };
-  const clearAdvancedTextOrNumericField = (field: AdvancedTextOrNumericField) => {
-    setAdvancedDraft((prev) => ({ ...prev, [field]: "" }));
-    setAdvancedApplied((prev) => (prev ? { ...prev, [field]: "" } : prev));
-    setPage(1);
-  };
-  const clearAdvancedContextIds = () => {
-    setAdvancedDraft((prev) => ({ ...prev, contextIds: [] }));
-    setAdvancedApplied((prev) => (prev ? { ...prev, contextIds: [] } : prev));
-    setPage(1);
-  };
-  const clearAdvancedEndpointNames = () => {
-    setAdvancedDraft((prev) => ({ ...prev, endpointNames: [] }));
-    setAdvancedApplied((prev) => (prev ? { ...prev, endpointNames: [] } : prev));
-    setPage(1);
-  };
-  const clearAdvancedOwnerScope = () => {
-    setAdvancedDraft((prev) => ({ ...prev, ownerNameScope: "any" }));
-    setAdvancedApplied((prev) => (prev ? { ...prev, ownerNameScope: "any" } : prev));
-    setPage(1);
-  };
-  const clearAdvancedOwnerSuspended = () => {
-    setAdvancedDraft((prev) => ({ ...prev, ownerSuspended: "any" }));
-    setAdvancedApplied((prev) => (prev ? { ...prev, ownerSuspended: "any" } : prev));
-    setPage(1);
-  };
-  const clearAdvancedFeatureField = (feature: FeatureKey) => {
-    setAdvancedDraft((prev) => ({ ...prev, features: { ...prev.features, [feature]: "any" } }));
-    setAdvancedApplied((prev) => (prev ? { ...prev, features: { ...prev.features, [feature]: "any" } } : prev));
-    setPage(1);
-  };
-  const clearAdvancedFeatureDetailFilterField = (field: FeatureDetailFilterKey) => {
-    setAdvancedDraft((prev) => ({ ...prev, featureDetails: clearFeatureDetailField(prev.featureDetails, field) }));
-    setAdvancedApplied((prev) =>
-      prev ? { ...prev, featureDetails: clearFeatureDetailField(prev.featureDetails, field) } : prev
-    );
-    setPage(1);
-  };
-  const removeActiveFilterItem = (action: ActiveFilterRemoveAction) => {
-    if (action.type === "quick") {
-      setFilter("");
-      setFilterValue("");
-      setPage(1);
-      return;
-    }
-    if (action.type === "tag_mode") {
-      setTagFilterMode("any");
-      setPage(1);
-      return;
-    }
-    if (action.type === "tag") {
-      removeTagFilter(action.tag);
-      return;
-    }
-    if (action.type === "advanced_owner_scope") {
-      clearAdvancedOwnerScope();
-      return;
-    }
-    if (action.type === "advanced_owner_suspended") {
-      clearAdvancedOwnerSuspended();
-      return;
-    }
-    if (action.type === "advanced_context_ids") {
-      clearAdvancedContextIds();
-      return;
-    }
-    if (action.type === "advanced_endpoint_names") {
-      clearAdvancedEndpointNames();
-      return;
-    }
-    if (action.type === "advanced_text" || action.type === "advanced_numeric") {
-      clearAdvancedTextOrNumericField(action.field);
-      return;
-    }
-    if (action.type === "advanced_feature_detail") {
-      clearAdvancedFeatureDetailFilterField(action.field);
-      return;
-    }
-    clearAdvancedFeatureField(action.feature);
   };
   const activeFilterSummaryItems = useMemo(
     () =>
@@ -2514,7 +2297,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                         colorKey={tag.color_key}
                         visibility={tag.visibility}
                         selectionState="available"
-                        onClick={() => addTagFilter(tag)}
+                        onClick={() => addTagFilter(tag.id)}
                         ariaLabel={`Add UI tag filter ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}`}
                         title={`Available UI tag filter: ${tag.label}, ${tag.visibility === "shared" ? "Shared" : "Private"}. Click to add.`}
                       />
@@ -2535,7 +2318,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               ) : null}
               <button
                 type="button"
-                onClick={() => setShowAdvancedFilter(true)}
+                onClick={openAdvancedFilterDrawer}
                 className={cx(
                   toolbarCompactButtonClasses,
                   showAdvancedFilter || advancedFiltersApplied
