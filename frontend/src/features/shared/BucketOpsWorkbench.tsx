@@ -17,7 +17,6 @@ import {
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
-import { UiTagBadge } from "../../components/UiTagSettings";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   cx,
@@ -63,7 +62,7 @@ import BucketOpsTable, { type BucketOpsTableColumn } from "./BucketOpsTable";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketOpsRunModals from "./BucketOpsRunModals";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
-import BucketUiTagSettingsBadge from "./BucketUiTagSettingsBadge";
+import BucketOpsUiTagsCell from "./BucketOpsUiTagsCell";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { useBucketOpsRowTags } from "./useBucketOpsRowTags";
@@ -615,18 +614,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     selectedEndpointId,
   ]);
 
-  const {
-    addExistingTagForBucket,
-    addTagDraftForBucket,
-    getRowTagProjection,
-    removeTagCreationDraft,
-    removeTagForBucket,
-    setTagSuggestionBucket,
-    stageTagsForBucket,
-    updateBucketUiTagDefinition,
-    updateTagCreationDraft,
-    updateTagDraft,
-  } = useBucketOpsRowTags({
+  const rowTagsController = useBucketOpsRowTags({
     availableUiTags,
     extractError,
     persistUiTagChanges,
@@ -1250,95 +1238,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const renderUiTags = (bucket: CephAdminBucket) => {
     const bucketTarget = resolveBucketTagTarget(bucket);
-    if (!bucketTarget) {
-      return (
-        <span className="ui-caption text-slate-500 dark:text-slate-400" title="UI tags require a configured storage endpoint.">
-          Endpoint required
-        </span>
-      );
-    }
-    const {
-      creationDrafts,
-      draft,
-      showSuggestions,
-      suggestions,
-      tags,
-    } = getRowTagProjection(bucketTarget, bucket.ui_tags ?? []);
     return (
-      <div className="group relative flex flex-wrap items-center gap-2">
-        {tags.map((tag) => (
-          <BucketUiTagSettingsBadge
-            key={`${bucketTarget.key}:${tag.id}`}
-            tag={tag}
-            isStorageOps={isStorageOps}
-            disabled={updatingDefinitionIds.has(tag.id)}
-            onChange={(changes) => updateBucketUiTagDefinition(tag, changes)}
-            onRemove={() => void removeTagForBucket(bucketTarget, tag)}
-          />
-        ))}
-        {creationDrafts.map((draft, index) => (
-          <BucketUiTagSettingsBadge
-            key={draft.draftId}
-            tag={draft}
-            isStorageOps={isStorageOps}
-            initiallyOpen={index === creationDrafts.length - 1}
-            onChange={(changes) =>
-              updateTagCreationDraft(bucketTarget.key, draft.draftId, changes)
-            }
-            onRemove={() =>
-              removeTagCreationDraft(bucketTarget.key, draft.draftId)
-            }
-            onCommit={() => addTagDraftForBucket(bucketTarget, draft)}
-          />
-        ))}
-        <div className="flex w-28 shrink-0 items-center gap-1">
-          <input
-            type="text"
-            value={draft}
-            onChange={(e) => updateTagDraft(bucketTarget.key, e.target.value)}
-            onFocus={() => setTagSuggestionBucket(bucketTarget.key)}
-            onBlur={() => {
-              window.setTimeout(() => {
-                setTagSuggestionBucket((prev) => (prev === bucketTarget.key ? null : prev));
-              }, 120);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === ",") {
-                e.preventDefault();
-                stageTagsForBucket(bucketTarget, draft);
-              }
-            }}
-            placeholder="+"
-            className={`w-full border-0 bg-transparent p-0 ui-caption text-slate-500 placeholder:text-slate-400 transition-opacity duration-150 focus:outline-none focus:ring-0 dark:text-slate-300 ${
-              draft ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
-            }`}
-          />
-        </div>
-        {showSuggestions && (
-          <div
-            className="absolute left-0 top-full z-20 mt-1 max-h-40 w-56 overflow-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            {suggestions.map((tag) => (
-              <button
-                key={`${bucketTarget.key}:suggest:${tag.id}`}
-                type="button"
-                onClick={() => {
-                  void addExistingTagForBucket(bucketTarget, tag);
-                  updateTagDraft(bucketTarget.key, "");
-                }}
-                className="flex w-full items-center rounded-md px-2 py-1 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <UiTagBadge
-                  label={tag.label}
-                  colorKey={tag.color_key}
-                  visibility={tag.visibility}
-                />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <BucketOpsUiTagsCell
+        assignedTags={bucket.ui_tags ?? []}
+        controller={rowTagsController}
+        isStorageOps={isStorageOps}
+        target={bucketTarget}
+        updatingDefinitionIds={updatingDefinitionIds}
+      />
     );
   };
 
@@ -1953,7 +1860,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             parsedSelectionTagAddInput={parsedSelectionTagAddInput}
             selectionTagActionLoading={selectionTagActionLoading}
             applyUiTagToSelection={applyUiTagToSelection}
-            updateUiTagDefinition={updateBucketUiTagDefinition}
+            updateUiTagDefinition={rowTagsController.updateBucketUiTagDefinition}
             updatingDefinitionIds={updatingDefinitionIds}
             selectionExportLoading={selectionExportLoading}
             exportSelectedBuckets={exportSelectedBuckets}
