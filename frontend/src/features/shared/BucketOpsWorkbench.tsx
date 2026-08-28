@@ -42,9 +42,6 @@ import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import CephAdminBucketIndexCheckPage from "../cephAdmin/CephAdminBucketIndexCheckPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
-import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
-import BucketPurgeRunModal from "./BucketPurgeRunModal";
-import BucketUsageStatsRunModal from "./BucketUsageStatsRunModal";
 import BucketConfigBackupModal from "./BucketConfigBackupModal";
 import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal";
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
@@ -64,6 +61,7 @@ import {
 } from "./BucketOpsListFilters";
 import BucketOpsTable, { type BucketOpsTableColumn } from "./BucketOpsTable";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
+import BucketOpsRunModals from "./BucketOpsRunModals";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import BucketUiTagSettingsBadge from "./BucketUiTagSettingsBadge";
 import ActionProgressCard from "./ActionProgressCard";
@@ -2030,54 +2028,18 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           onClose={closeSelectedBucketIndexChecks}
         />
       )}
-      {!isStorageOps && showIntegrityModal && selectedEndpointId && selectedOperationTargets.length > 0 && (
-        <BucketIntegrityCheckModal
-          mode="ceph-admin"
-          endpointId={selectedEndpointId}
-          endpointName={selectedEndpoint?.name}
-          targets={selectedOperationTargets}
-          onClose={() => setShowIntegrityModal(false)}
-        />
-      )}
-      {isStorageOps && showIntegrityModal && selectedOperationTargets.length > 0 && (
-        <BucketIntegrityCheckModal
-          mode="storage-ops"
-          targets={selectedOperationTargets}
-          onClose={() => setShowIntegrityModal(false)}
-        />
-      )}
-      {!isStorageOps && showPurgeModal && selectedEndpointId && selectedOperationTargets.length > 0 && (
-        <BucketPurgeRunModal
-          mode="ceph-admin"
-          endpointId={selectedEndpointId}
-          endpointName={selectedEndpoint?.name}
-          targets={selectedOperationTargets}
-          onClose={() => setShowPurgeModal(false)}
-        />
-      )}
-      {isStorageOps && showPurgeModal && selectedOperationTargets.length > 0 && (
-        <BucketPurgeRunModal
-          mode="storage-ops"
-          targets={selectedOperationTargets}
-          onClose={() => setShowPurgeModal(false)}
-        />
-      )}
-      {!isStorageOps && showUsageStatsModal && selectedEndpointId && selectedOperationTargets.length > 0 && (
-        <BucketUsageStatsRunModal
-          mode="ceph-admin"
-          endpointId={selectedEndpointId}
-          endpointName={selectedEndpoint?.name}
-          targets={selectedOperationTargets}
-          onClose={() => setShowUsageStatsModal(false)}
-        />
-      )}
-      {isStorageOps && showUsageStatsModal && selectedOperationTargets.length > 0 && (
-        <BucketUsageStatsRunModal
-          mode="storage-ops"
-          targets={selectedOperationTargets}
-          onClose={() => setShowUsageStatsModal(false)}
-        />
-      )}
+      <BucketOpsRunModals
+        endpointId={selectedEndpointId}
+        endpointName={selectedEndpoint?.name}
+        isStorageOps={isStorageOps}
+        onCloseIntegrity={() => setShowIntegrityModal(false)}
+        onClosePurge={() => setShowPurgeModal(false)}
+        onCloseUsageStats={() => setShowUsageStatsModal(false)}
+        showIntegrity={showIntegrityModal}
+        showPurge={showPurgeModal}
+        showUsageStats={showUsageStatsModal}
+        targets={selectedOperationTargets}
+      />
       {!isStorageOps && showConfigBackupModal && selectedEndpointId && selectedBucketList.length > 0 && (
         <BucketConfigBackupModal
           bucketCount={selectedBucketList.length}
