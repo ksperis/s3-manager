@@ -58,7 +58,11 @@ describe("BrowserObjectTableScaffold", () => {
 
     const table = screen.getByRole("table");
     expect(table).toHaveStyle({ minWidth: "900px" });
-    expect(container.querySelectorAll("col")).toHaveLength(5);
+    const tableColumns = container.querySelectorAll("col");
+    expect(tableColumns).toHaveLength(5);
+    expect(tableColumns[0]).toHaveStyle({ width: "36px" });
+    expect(tableColumns[1]).not.toHaveAttribute("style");
+    expect(tableColumns[4]).toHaveStyle({ width: "108px" });
     expect(screen.getByText("Name controls")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Select all" })).toBeChecked();
     expect(

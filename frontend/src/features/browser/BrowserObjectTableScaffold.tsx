@@ -45,7 +45,6 @@ export function BrowserObjectTableScaffold({
   children,
   minWidthPx,
   selectionColumnWidthPx,
-  nameColumnWidthPx,
   actionsColumnWidthPx,
   columns,
   columnWidthsPx,
@@ -69,7 +68,10 @@ export function BrowserObjectTableScaffold({
     >
       <colgroup>
         <col style={{ width: `${selectionColumnWidthPx}px` }} />
-        <col style={{ width: `${nameColumnWidthPx}px` }} />
+        {/* Keep Name as the only elastic column so fixed columns do not absorb
+            spare table width. The table minimum width still reserves its
+            configured width when horizontal scrolling is required. */}
+        <col />
         {columns.map((column) => (
           <col
             key={column.id}

@@ -1657,7 +1657,8 @@ describe("BrowserPage interactions", () => {
     const rootView = renderPage({ initialEntry: "/browser" });
     await findRowByLabel("a.txt");
 
-    expect(getObjectTableCols()[1]?.style.width).toBe("320px");
+    expect(getObjectTableCols()[1]?.style.width).toBe("");
+    expect(screen.getByRole("table")).toHaveStyle({ minWidth: "720px" });
 
     const nameSeparator = screen.getByRole("separator", {
       name: "Resize Name column",
@@ -1667,7 +1668,7 @@ describe("BrowserPage interactions", () => {
     fireEvent.pointerUp(document);
 
     await waitFor(() => {
-      expect(getObjectTableCols()[1]?.style.width).toBe("420px");
+      expect(screen.getByRole("table")).toHaveStyle({ minWidth: "804px" });
     });
     await waitFor(() => {
       expect(
@@ -1680,7 +1681,7 @@ describe("BrowserPage interactions", () => {
 
     const embeddedView = renderEmbeddedPage({ initialEntry: "/manager/browser" });
     await findRowByLabel("a.txt");
-    expect(getObjectTableCols()[1]?.style.width).toBe("320px");
+    expect(getObjectTableCols()[1]?.style.width).toBe("");
 
     const modifiedSeparator = screen.getByRole("separator", {
       name: "Resize Modified column",
@@ -1705,7 +1706,7 @@ describe("BrowserPage interactions", () => {
 
     renderPage({ initialEntry: "/browser" });
     await findRowByLabel("a.txt");
-    expect(getObjectTableCols()[1]?.style.width).toBe("420px");
+    expect(screen.getByRole("table")).toHaveStyle({ minWidth: "804px" });
     expect(
       JSON.parse(
         window.localStorage.getItem(
@@ -1787,7 +1788,7 @@ describe("BrowserPage interactions", () => {
       expect(
         screen.queryByRole("columnheader", { name: "ETag" }),
       ).not.toBeInTheDocument();
-      expect(getObjectTableCols()[1]?.style.width).toBe("320px");
+      expect(screen.getByRole("table")).toHaveStyle({ minWidth: "720px" });
       expect(
         JSON.parse(
           window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY) ?? "{}",
@@ -1808,13 +1809,13 @@ describe("BrowserPage interactions", () => {
     fireEvent.pointerUp(document);
 
     await waitFor(() => {
-      expect(getObjectTableCols()[1]?.style.width).toBe("430px");
+      expect(screen.getByRole("table")).toHaveStyle({ minWidth: "814px" });
     });
 
     fireEvent.doubleClick(separator);
 
     await waitFor(() => {
-      expect(getObjectTableCols()[1]?.style.width).toBe("320px");
+      expect(screen.getByRole("table")).toHaveStyle({ minWidth: "720px" });
       expect(
         JSON.parse(
           window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY) ?? "{}",
