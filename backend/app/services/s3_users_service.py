@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 import logging
 import re
-from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import exists, func, or_
@@ -38,6 +37,7 @@ from app.models.s3_user import (
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
+from app.services.rgw_user_key_parser import RgwUserKeyParser
 from app.services import s3_client
 from app.utils.rgw_payloads import extract_bucket_list, extract_rgw_user_payload
 from app.utils.s3_endpoint import resolve_s3_client_options
@@ -185,50 +185,6 @@ class S3UsersService:
         if response.get("not_implemented"):
             raise ValueError("RGW user quota update is not supported on this cluster.")
 
-    def extract_keys(
-        self,
-        admin: RGWAdminClient,
-        response: Optional[dict],
-        *,
-        exclude_access_key: Optional[str] = None,
-    ) -> tuple[Optional[str], Optional[str]]:
-        if not response:
-            return None, None
-        keys = admin.extract_keys(response)
-        if not keys:
-            return None, None
-
-        def _normalize(value: Optional[str]) -> Optional[str]:
-            return value.strip() if isinstance(value, str) and value.strip() else value
-
-        def _entry_access(entry: dict) -> Optional[str]:
-            return _normalize(entry.get("access_key") or entry.get("access-key"))
-
-        def _entry_secret(entry: dict) -> Optional[str]:
-            return _normalize(entry.get("secret_key") or entry.get("secret-key"))
-
-        chosen_entry: Optional[dict] = None
-        if exclude_access_key:
-            normalized_previous = exclude_access_key.strip()
-            # Prefer entries with a secret first, then fall back to any new access key.
-            for prefer_secret in (True, False):
-                for entry in keys:
-                    access_value = _entry_access(entry)
-                    if not access_value or access_value == normalized_previous:
-                        continue
-                    has_secret = bool(_entry_secret(entry))
-                    if prefer_secret and not has_secret:
-                        continue
-                    chosen_entry = entry
-                    break
-                if chosen_entry:
-                    break
-        if not chosen_entry:
-            chosen_entry = keys[0]
-        access_key = _entry_access(chosen_entry)
-        secret_key = _entry_secret(chosen_entry)
-        return access_key, secret_key
-
     def _slugify_uid(self, name: str) -> str:
         slug = re.sub(r"[^a-zA-Z0-9-]+", "-", name.strip().lower()).strip("-")
         return slug or "s3-user"
@@ -238,75 +194,6 @@ class S3UsersService:
         if not s3_user:
             raise ValueError("S3 user not found")
         return s3_user
-
-    def _parse_key_created_at(self, raw_value: Any) -> Optional[datetime]:
-        if raw_value is None:
-            return None
-        if isinstance(raw_value, datetime):
-            return raw_value
-        if isinstance(raw_value, (int, float)):
-            try:
-                return datetime.fromtimestamp(float(raw_value), tz=timezone.utc)
-            except (OverflowError, ValueError):
-                return None
-        if isinstance(raw_value, str):
-            value = raw_value.strip()
-            if not value:
-                return None
-            try:
-                return datetime.fromtimestamp(float(value), tz=timezone.utc)
-            except (OverflowError, ValueError):
-                pass
-            # Support "2023-01-01 12:00:00" and ISO8601 strings
-            candidates = [value]
-            if " " in value and "T" not in value:
-                candidates.append(value.replace(" ", "T"))
-            for candidate in candidates:
-                try:
-                    return datetime.fromisoformat(candidate)
-                except ValueError:
-                    continue
-        return None
-
-    def _extract_key_created_source(self, entry: Optional[dict[str, Any]]) -> Any:
-        if not isinstance(entry, dict):
-            return None
-        return (
-            entry.get("create_time")
-            or entry.get("create-time")
-            or entry.get("create_date")
-            or entry.get("create-date")
-            or entry.get("created_at")
-            or entry.get("create_timestamp")
-            or entry.get("timestamp")
-        )
-
-    def _parse_key_active(self, raw_value: Any) -> Optional[bool]:
-        if raw_value is None:
-            return None
-        if isinstance(raw_value, bool):
-            return raw_value
-        if isinstance(raw_value, (int, float)):
-            return bool(raw_value)
-        if isinstance(raw_value, str):
-            normalized = raw_value.strip().lower()
-            if normalized in {"1", "true", "enabled", "active"}:
-                return True
-            if normalized in {"0", "false", "disabled", "inactive", "suspended"}:
-                return False
-        return None
-
-    def _is_active_status(self, status: Optional[str]) -> Optional[bool]:
-        if status is None:
-            return None
-        normalized = status.strip().lower()
-        if not normalized:
-            return None
-        if normalized in {"active", "enabled", "enable"}:
-            return True
-        if normalized in {"inactive", "disabled", "disable", "suspended"}:
-            return False
-        return None
 
     def _serialize_s3_user(
         self,
@@ -478,13 +365,17 @@ class S3UsersService:
             )
         except RGWAdminError as exc:
             raise ValueError(f"RGW user creation failed: {exc}") from exc
-        access_key, secret_key = self.extract_keys(admin, response)
+        access_key, secret_key = RgwUserKeyParser.select_credentials(
+            admin.extract_keys(response)
+        )
         if not access_key or not secret_key:
             try:
                 key_response = admin.create_access_key(uid, tenant=None)
             except RGWAdminError as exc:
                 raise ValueError(f"Unable to obtain RGW access keys: {exc}") from exc
-            access_key, secret_key = self.extract_keys(admin, key_response)
+            access_key, secret_key = RgwUserKeyParser.select_credentials(
+                admin.extract_keys(key_response)
+            )
         if not access_key or not secret_key:
             raise ValueError("RGW did not return access credentials for the new user")
         s3_user = S3UserModel(
@@ -545,7 +436,9 @@ class S3UsersService:
                 key_resp = admin.create_access_key(uid, tenant=None)
             except RGWAdminError as exc:
                 raise ValueError(f"Unable to create access key for {uid}: {exc}") from exc
-            access_key, secret_key = self.extract_keys(admin, key_resp)
+            access_key, secret_key = RgwUserKeyParser.select_credentials(
+                admin.extract_keys(key_resp)
+            )
             if not access_key or not secret_key:
                 raise ValueError(f"RGW did not return access credentials for {uid}")
             name = payload.name or user_info.get("display_name") or uid
@@ -631,9 +524,8 @@ class S3UsersService:
             response = admin.create_access_key(s3_user.rgw_user_uid, tenant=None)
         except RGWAdminError as exc:
             raise ValueError(f"Unable to rotate keys: {exc}") from exc
-        access_key, secret_key = self.extract_keys(
-            admin,
-            response,
+        access_key, secret_key = RgwUserKeyParser.select_credentials(
+            admin.extract_keys(response),
             exclude_access_key=previous_access_key,
         )
         if not access_key or not secret_key:
@@ -686,32 +578,10 @@ class S3UsersService:
             raise ValueError(f"Unable to list keys: {exc}") from exc
         if not user_info or user_info.get("not_found"):
             raise ValueError("RGW user not found")
-        entries = admin.extract_keys(user_info)
-        result: list[S3UserAccessKey] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            access_key = entry.get("access_key") or entry.get("access-key")
-            if not access_key:
-                continue
-            status_value = entry.get("status") or entry.get("key_status") or entry.get("state")
-            active_value = self._parse_key_active(entry.get("active"))
-            is_active = active_value if active_value is not None else self._is_active_status(status_value)
-            if is_active is None:
-                is_active = True
-            if status_value is None:
-                status_value = "enabled" if is_active else "disabled"
-            created_source = self._extract_key_created_source(entry)
-            result.append(
-                S3UserAccessKey(
-                    access_key_id=access_key,
-                    status=status_value,
-                    created_at=self._parse_key_created_at(created_source),
-                    is_ui_managed=access_key == s3_user.rgw_access_key,
-                    is_active=is_active,
-                )
-            )
-        return result
+        return RgwUserKeyParser.to_access_keys(
+            admin.extract_keys(user_info),
+            ui_managed_access_key=s3_user.rgw_access_key,
+        )
 
     def create_access_key_entry(self, user_id: int) -> S3UserGeneratedKey:
         s3_user = self._get_s3_user(user_id)
@@ -723,14 +593,9 @@ class S3UsersService:
                 allow_not_found=True,
             )
             if before_payload and not before_payload.get("not_found"):
-                for existing_entry in admin.extract_keys(before_payload):
-                    if not isinstance(existing_entry, dict):
-                        continue
-                    existing_access = str(
-                        existing_entry.get("access_key") or existing_entry.get("access-key") or ""
-                    ).strip()
-                    if existing_access:
-                        existing_access_keys.add(existing_access)
+                existing_access_keys = RgwUserKeyParser.access_key_ids(
+                    admin.extract_keys(before_payload)
+                )
         except RGWAdminError:
             # Creation can still succeed even if pre-read fails.
             pass
@@ -738,49 +603,9 @@ class S3UsersService:
             response = admin.create_access_key(s3_user.rgw_user_uid, tenant=None)
         except RGWAdminError as exc:
             raise ValueError(f"Unable to create access key: {exc}") from exc
-        entries = admin.extract_keys(response)
-        if not entries:
-            raise ValueError("RGW did not return access credentials")
-
-        def _entry_access(entry: dict[str, Any]) -> Optional[str]:
-            access_value = entry.get("access_key") or entry.get("access-key")
-            normalized = str(access_value or "").strip()
-            return normalized or None
-
-        def _entry_secret(entry: dict[str, Any]) -> Optional[str]:
-            secret_value = entry.get("secret_key") or entry.get("secret-key")
-            normalized = str(secret_value or "").strip()
-            return normalized or None
-
-        entry: Optional[dict[str, Any]] = None
-        for candidate in entries:
-            if not isinstance(candidate, dict):
-                continue
-            access_value = _entry_access(candidate)
-            secret_value = _entry_secret(candidate)
-            if not access_value or not secret_value:
-                continue
-            if access_value not in existing_access_keys:
-                entry = candidate
-                break
-        if entry is None:
-            for candidate in entries:
-                if isinstance(candidate, dict) and _entry_secret(candidate):
-                    entry = candidate
-                    break
-        if entry is None and isinstance(entries[0], dict):
-            entry = entries[0]
-        if not isinstance(entry, dict):
-            raise ValueError("RGW did not return structured key data")
-        access_key = _entry_access(entry)
-        secret_key = _entry_secret(entry)
-        if not access_key or not secret_key:
-            raise ValueError("RGW did not return full access credentials")
-        created_source = self._extract_key_created_source(entry)
-        return S3UserGeneratedKey(
-            access_key_id=access_key,
-            secret_access_key=secret_key,
-            created_at=self._parse_key_created_at(created_source),
+        return RgwUserKeyParser.to_generated_key(
+            admin.extract_keys(response),
+            existing_access_keys=existing_access_keys,
         )
 
     def set_key_status(self, user_id: int, access_key: str, active: bool) -> S3UserAccessKey:
