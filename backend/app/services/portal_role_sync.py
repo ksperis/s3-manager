@@ -6,17 +6,16 @@ from collections.abc import Iterable
 
 from sqlalchemy.orm import Session
 
-from app.db import AccountRole, S3Account, User
+from app.db import S3Account, User
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.portal_ownership import require_no_private_storage_space_ownership
+from app.utils.account_roles import (
+    PortalAccountRoleValue,
+    portal_account_role_rank,
+)
 
 
-PortalRoleMap = dict[tuple[int, int], str | None]
-_ROLE_RANK = {
-    None: 0,
-    AccountRole.PORTAL_USER.value: 1,
-    AccountRole.PORTAL_MANAGER.value: 2,
-}
+PortalRoleMap = dict[tuple[int, int], PortalAccountRoleValue | None]
 
 
 def capture_effective_portal_roles(
@@ -49,7 +48,9 @@ def sync_portal_role_downgrades(
     service = PortalService(db)
     for (user_id, account_id), previous_role in before.items():
         next_role = after.get((user_id, account_id))
-        if _ROLE_RANK[next_role] >= _ROLE_RANK[previous_role]:
+        if portal_account_role_rank(next_role) >= portal_account_role_rank(
+            previous_role
+        ):
             continue
         if next_role is None:
             require_no_private_storage_space_ownership(db, user_id=user_id, account_id=account_id)
@@ -69,7 +70,9 @@ def sync_portal_role_promotions(
     service = PortalService(db)
     for (user_id, account_id), next_role in after.items():
         previous_role = before.get((user_id, account_id))
-        if _ROLE_RANK[next_role] <= _ROLE_RANK[previous_role]:
+        if portal_account_role_rank(next_role) <= portal_account_role_rank(
+            previous_role
+        ):
             continue
         user = db.query(User).filter(User.id == user_id).one()
         account = db.query(S3Account).filter(S3Account.id == account_id).one()

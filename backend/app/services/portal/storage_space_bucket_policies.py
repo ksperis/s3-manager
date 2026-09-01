@@ -7,7 +7,7 @@ from typing import Optional
 
 from app.db import (
     AccountIAMUser,
-    AccountRole,
+    PortalAccountRole,
     PortalExternalAccessCredential,
     PortalStorageSpaceGrant,
     PortalStorageSpaceMetadata,
@@ -89,7 +89,7 @@ class PortalStorageSpaceBucketPoliciesMixin:
         manager_user_ids = {
             user_id
             for user_id, (_target, role, _sources) in self._portal_account_member_map(account).items()
-            if role == AccountRole.PORTAL_MANAGER.value
+            if role == PortalAccountRole.PORTAL_MANAGER.value
         }
         return self._portal_policy_principals_for_user_ids(account, manager_user_ids)
 
@@ -103,7 +103,7 @@ class PortalStorageSpaceBucketPoliciesMixin:
         allowed_user_ids: set[int] = {
             user_id
             for user_id, (_target, role, _sources) in self._portal_account_member_map(account).items()
-            if role == AccountRole.PORTAL_MANAGER.value
+            if role == PortalAccountRole.PORTAL_MANAGER.value
         }
         if metadata.owner_user_id is not None:
             allowed_user_ids.add(metadata.owner_user_id)

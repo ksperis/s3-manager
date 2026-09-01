@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db import AccountRole, S3Account, User, UserRole
+from app.db import PortalAccountRole, S3Account, User, UserRole
 from app.main import app
 from app.models.portal import PortalServerAccessLogPage
 from app.routers import dependencies
@@ -18,12 +18,12 @@ from tests.router_test_utils import effective_routes
 
 
 def _portal_access(account: S3Account, user: User, role: str) -> AccountAccess:
-    is_manager = role == AccountRole.PORTAL_MANAGER.value
+    is_manager = role == PortalAccountRole.PORTAL_MANAGER.value
     return AccountAccess(
         account=account,
         actor=user,
         membership=None,
-        role=role,
+        portal_role=role,
         capabilities=AccountCapabilities(
             can_manage_buckets=is_manager,
             can_manage_portal_users=is_manager,
@@ -74,7 +74,7 @@ def test_portal_server_access_log_routes_require_manager(
     app.dependency_overrides[dependencies.get_portal_account_access] = lambda: _portal_access(
         account,
         user,
-        AccountRole.PORTAL_USER.value,
+        PortalAccountRole.PORTAL_USER.value,
     )
 
     denied = client.get(url)
@@ -85,7 +85,7 @@ def test_portal_server_access_log_routes_require_manager(
     app.dependency_overrides[dependencies.get_portal_account_access] = lambda: _portal_access(
         account,
         user,
-        AccountRole.PORTAL_MANAGER.value,
+        PortalAccountRole.PORTAL_MANAGER.value,
     )
 
     allowed = client.get(url)

@@ -240,14 +240,16 @@ describe("AccountsPage modal tabs", () => {
             {
               user_id: 7,
               user_email: "ui7@example.com",
-              role: "portal_user",
+              manager_role: null,
+              portal_role: "portal_user",
             },
           ],
           group_links: [
             {
               group_id: 31,
               group_name: "Research Group",
-              role: "account_administrator",
+              manager_role: "account_administrator",
+              portal_role: null,
             },
           ],
         },
@@ -297,20 +299,21 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(usersTab);
 
-    expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
-    expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
-
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
     expect(screen.getByRole("textbox", { name: "Search UI users" })).toHaveClass("ui-caption");
-    const userRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Access role for ui7@example.com",
+    const managerRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Manager role for ui7@example.com",
     });
-    expect(userRoleSelect).toHaveValue(
-      "account_administrator",
-    );
-    expect(Array.from(userRoleSelect.options).map((option) => option.value)).toEqual([
+    const portalRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Portal role for ui7@example.com",
+    });
+    expect(managerRoleSelect).toHaveValue("account_administrator");
+    expect(Array.from(managerRoleSelect.options).map((option) => option.value)).toEqual([
+      "",
       "account_administrator",
     ]);
+    expect(portalRoleSelect).toHaveValue("");
+    expect(portalRoleSelect).toBeDisabled();
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -328,7 +331,8 @@ describe("AccountsPage modal tabs", () => {
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
-            role: "account_administrator",
+            manager_role: "account_administrator",
+            portal_role: null,
           }),
         ]),
       })
@@ -346,12 +350,17 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
     expect(screen.getByRole("textbox", { name: "Search UI groups" })).toHaveClass("ui-caption");
-    const groupRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Access role for Research Group",
+    const managerRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Manager role for Research Group",
     });
-    expect(Array.from(groupRoleSelect.options).map((option) => option.value)).toEqual([
+    const portalRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Portal role for Research Group",
+    });
+    expect(Array.from(managerRoleSelect.options).map((option) => option.value)).toEqual([
+      "",
       "account_administrator",
     ]);
+    expect(portalRoleSelect).toBeDisabled();
     fireEvent.click(await screen.findByRole("checkbox", { name: "Research Group" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -370,7 +379,8 @@ describe("AccountsPage modal tabs", () => {
           expect.objectContaining({
             group_id: 31,
             group_name: "Research Group",
-            role: "account_administrator",
+            manager_role: "account_administrator",
+            portal_role: null,
           }),
         ],
       })
@@ -385,8 +395,11 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
 
     fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
+    expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Portal role" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Access roles" })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
-    fireEvent.change(await screen.findByRole("combobox", { name: "Access role for ui7@example.com" }), {
+    fireEvent.change(await screen.findByRole("combobox", { name: "Portal role for ui7@example.com" }), {
       target: { value: "portal_manager" },
     });
     fireEvent.click(screen.getByRole("checkbox", { name: "ui7@example.com" }));
@@ -394,7 +407,13 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Linked UI groups" }));
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
-    fireEvent.change(await screen.findByRole("combobox", { name: "Access role for Research Group" }), {
+    expect(await screen.findByRole("combobox", { name: "Portal role for Research Group" })).toHaveValue(
+      "portal_user",
+    );
+    fireEvent.change(screen.getByRole("combobox", { name: "Manager role for Research Group" }), {
+      target: { value: "account_administrator" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Portal role for Research Group" }), {
       target: { value: "portal_user" },
     });
     fireEvent.click(screen.getByRole("checkbox", { name: "Research Group" }));
@@ -412,20 +431,22 @@ describe("AccountsPage modal tabs", () => {
         user_links: [
           expect.objectContaining({
             user_id: 7,
-            role: "portal_manager",
+            manager_role: null,
+            portal_role: "portal_manager",
           }),
         ],
         group_links: [
           expect.objectContaining({
             group_id: 31,
-            role: "portal_user",
+            manager_role: "account_administrator",
+            portal_role: "portal_user",
           }),
         ],
       })
     );
   });
 
-  it("preserves an existing portal role as a disabled option when Portal is disabled", async () => {
+  it("preserves an existing portal role while hiding its column when Portal is disabled", async () => {
     listS3AccountsMock.mockResolvedValueOnce({
       items: [
         {
@@ -436,7 +457,12 @@ describe("AccountsPage modal tabs", () => {
           storage_endpoint_id: 10,
           storage_endpoint_name: "ceph-main",
           storage_endpoint_url: "https://ceph.example.test",
-          user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "portal_manager" }],
+          user_links: [{
+            user_id: 7,
+            user_email: "ui7@example.com",
+            manager_role: null,
+            portal_role: "portal_manager",
+          }],
           group_links: [],
         },
       ],
@@ -460,7 +486,12 @@ describe("AccountsPage modal tabs", () => {
       },
       quota_max_size_gb: null,
       quota_max_objects: null,
-      user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "portal_manager" }],
+      user_links: [{
+        user_id: 7,
+        user_email: "ui7@example.com",
+        manager_role: null,
+        portal_role: "portal_manager",
+      }],
       group_links: [],
     });
 
@@ -473,14 +504,18 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
 
-    const roleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Access role for ui7@example.com",
+    expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /Portal role/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Access roles" })).not.toBeInTheDocument();
+
+    const managerRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Manager role for ui7@example.com",
     });
-    expect(roleSelect).toHaveValue("portal_manager");
-    expect(Array.from(roleSelect.options).map((option) => [option.value, option.disabled])).toEqual([
-      ["portal_manager", true],
-      ["account_administrator", false],
-    ]);
+    expect(managerRoleSelect).toHaveValue("");
+    expect(managerRoleSelect).toBeEnabled();
+    expect(
+      screen.queryByRole("combobox", { name: "Portal role for ui7@example.com" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
@@ -494,10 +529,70 @@ describe("AccountsPage modal tabs", () => {
         user_links: [
           expect.objectContaining({
             user_id: 7,
-            role: "portal_manager",
+            manager_role: null,
+            portal_role: "portal_manager",
           }),
         ],
       })
+    );
+  });
+
+  it("blocks saving an account principal association without either role", async () => {
+    const accountWithManagerLink = {
+      id: 1,
+      name: "acc-1",
+      tags: [makeTag(501, "gold", "amber")],
+      rgw_account_id: "RGW000000000000001",
+      storage_endpoint_id: 10,
+      storage_endpoint_name: "ceph-main",
+      storage_endpoint_url: "https://ceph.example.test",
+      quota_max_size_gb: null,
+      quota_max_objects: null,
+      user_links: [
+        {
+          user_id: 7,
+          user_email: "ui7@example.com",
+          manager_role: "account_administrator" as const,
+          portal_role: null,
+        },
+      ],
+      group_links: [],
+    };
+    listS3AccountsMock.mockResolvedValueOnce({
+      items: [accountWithManagerLink],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+    getS3AccountMock.mockResolvedValueOnce({
+      ...accountWithManagerLink,
+      storage_endpoint_capabilities: {
+        account: true,
+        admin: true,
+        usage: true,
+      },
+    });
+
+    render(<AccountsPage />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
+    fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
+    expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /Portal role/ })).not.toBeInTheDocument();
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Manager role for ui7@example.com" }),
+      { target: { value: "" } },
+    );
+
+    expect(
+      screen.getByText("Choose a Manager role; Portal is off."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(updateS3AccountMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("tab", { name: "Linked UI users" })).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
   });
 
@@ -716,9 +811,10 @@ describe("AccountsPage modal tabs", () => {
     if (!userRow) {
       throw new Error("User row not found");
     }
-    expect(within(userRow).getByRole("combobox", { name: "Access role for ui7@example.com" })).toHaveValue(
+    expect(within(userRow).getByRole("combobox", { name: "Manager role for ui7@example.com" })).toHaveValue(
       "account_administrator",
     );
+    expect(within(userRow).getByRole("combobox", { name: "Portal role for ui7@example.com" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -734,7 +830,8 @@ describe("AccountsPage modal tabs", () => {
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
-            role: "account_administrator",
+            manager_role: "account_administrator",
+            portal_role: null,
           }),
         ]),
       })

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Optional, TYPE_CHECKING
 
-from app.db import AccountRole, User
+from app.db import PortalAccountRole, User
 from app.models.bucket import Bucket
 from app.models.portal import (
     PortalState,
@@ -76,11 +76,11 @@ class PortalStateUsageMixin:
         portal_settings = self._effective_portal_settings(account)
         can_create_private_storage_spaces = bool(
             portal_settings.allow_private_storage_space_create
-            and access.role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}
+            and access.portal_role in {PortalAccountRole.PORTAL_MANAGER.value, PortalAccountRole.PORTAL_USER.value}
         )
-        can_create_team_storage_spaces = access.role == AccountRole.PORTAL_MANAGER.value
+        can_create_team_storage_spaces = access.portal_role == PortalAccountRole.PORTAL_MANAGER.value
         return PortalState(
-            account_role=access.role,
+            portal_role=access.portal_role,
             can_manage_buckets=access.capabilities.can_manage_buckets,
             can_create_private_storage_spaces=can_create_private_storage_spaces,
             can_create_team_storage_spaces=can_create_team_storage_spaces,
@@ -93,8 +93,8 @@ class PortalStateUsageMixin:
     def get_usage(self, user: User, access: "AccountAccess") -> PortalUsage:
         account = access.account
         quota_max_size_bytes, quota_max_objects, max_buckets = self._account_limits(account)
-        is_portal_user = access.role == AccountRole.PORTAL_USER.value
-        allowed = set(self.list_existing_user_bucket_access(user, account, access.role))
+        is_portal_user = access.portal_role == PortalAccountRole.PORTAL_USER.value
+        allowed = set(self.list_existing_user_bucket_access(user, account, access.portal_role))
         if not allowed and not is_portal_user:
             return PortalUsage(
                 used_bytes=None,
@@ -171,7 +171,7 @@ class PortalStateUsageMixin:
             raise RuntimeError("Bucket name requis.")
         account = access.account
         if not access.capabilities.can_manage_buckets:
-            allowed = self.list_existing_user_bucket_access(user, access.account, access.role)
+            allowed = self.list_existing_user_bucket_access(user, access.account, access.portal_role)
             if bucket_name not in allowed:
                 raise RuntimeError("Accès bucket non autorisé.")
         try:

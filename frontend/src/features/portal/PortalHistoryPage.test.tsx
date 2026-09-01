@@ -34,9 +34,9 @@ vi.mock("./usePortalWorkspaceData", () => ({
     },
     state: {
       server_access_logging_enabled: mocks.serverAccessLoggingEnabled,
-      account_role: mocks.accountRole,
+      portal_role: mocks.accountRole,
     },
-    selectedAccount: { account_role: mocks.accountRole },
+    selectedAccount: { portal_role: mocks.accountRole },
     loading: mocks.workspaceLoading,
     accountLoading: false,
     activityLoading: false,

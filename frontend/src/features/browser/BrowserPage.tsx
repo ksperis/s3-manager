@@ -1185,7 +1185,7 @@ export default function BrowserPage({
   );
   const workspaceAccountActionTarget = useMemo<"manager" | "portal" | null>(() => {
     if (
-      selectedContext?.manager_account_is_admin === true ||
+      selectedContext?.manager_role === "account_administrator" ||
       selectedContext?.kind === "s3_user"
     ) {
       return "manager";

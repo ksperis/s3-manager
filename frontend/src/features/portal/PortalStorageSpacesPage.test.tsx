@@ -73,7 +73,7 @@ const mocks = vi.hoisted(() => ({
       alerts: [],
     },
     state: {
-      account_role: "portal_manager",
+      portal_role: "portal_manager",
       can_manage_buckets: true,
       can_create_private_storage_spaces: true,
       can_create_team_storage_spaces: true,
@@ -125,7 +125,7 @@ describe("PortalStorageSpacesPage", () => {
         user_id: 12,
         email: "viewer@example.com",
         display_name: null,
-        account_role: "portal_user",
+        portal_role: "portal_user",
         access_source: "direct",
         already_shared: false,
       },
@@ -173,7 +173,7 @@ describe("PortalStorageSpacesPage", () => {
       },
     ];
     mocks.hookResult.state = {
-      account_role: "portal_manager",
+      portal_role: "portal_manager",
       can_manage_buckets: true,
       can_create_private_storage_spaces: true,
       can_create_team_storage_spaces: true,
@@ -412,7 +412,7 @@ describe("PortalStorageSpacesPage", () => {
 
   it("ignores the dashboard create query when creation is unavailable", () => {
     mocks.hookResult.state = {
-      account_role: "portal_user",
+      portal_role: "portal_user",
       can_manage_buckets: false,
       can_create_private_storage_spaces: false,
       can_create_team_storage_spaces: false,
@@ -533,7 +533,7 @@ describe("PortalStorageSpacesPage", () => {
 
   it("shows the named bucket creation mode only when allowed by portal state", () => {
     mocks.hookResult.state = {
-      account_role: "portal_manager",
+      portal_role: "portal_manager",
       can_manage_buckets: true,
       can_create_private_storage_spaces: true,
       can_create_team_storage_spaces: true,
@@ -575,7 +575,7 @@ describe("PortalStorageSpacesPage", () => {
 
   it("allows portal users to create spaces without showing bucket import", () => {
     mocks.hookResult.state = {
-      account_role: "portal_user",
+      portal_role: "portal_user",
       can_manage_buckets: false,
       can_create_private_storage_spaces: true,
       can_create_team_storage_spaces: false,
@@ -598,7 +598,7 @@ describe("PortalStorageSpacesPage", () => {
 
   it("forces private visibility when a portal user creates a space", async () => {
     mocks.hookResult.state = {
-      account_role: "portal_user",
+      portal_role: "portal_user",
       can_manage_buckets: false,
       can_create_private_storage_spaces: true,
       can_create_team_storage_spaces: false,
@@ -792,7 +792,7 @@ describe("PortalStorageSpacesPage", () => {
 
   it("does not fall back to bucket management when space creation is absent", () => {
     mocks.hookResult.state = {
-      account_role: "portal_manager",
+      portal_role: "portal_manager",
       can_manage_buckets: true,
       allow_named_bucket_create: false,
     };
@@ -823,7 +823,7 @@ describe("PortalStorageSpacesPage", () => {
 
   it("hides space creation when the portal user setting is disabled", () => {
     mocks.hookResult.state = {
-      account_role: "portal_user",
+      portal_role: "portal_user",
       can_manage_buckets: true,
       can_create_private_storage_spaces: false,
       can_create_team_storage_spaces: false,
@@ -847,7 +847,7 @@ describe("PortalStorageSpacesPage", () => {
   it("explains the empty state when a portal user has no spaces and cannot create one", () => {
     mocks.hookResult.workspace.spaces = [];
     mocks.hookResult.state = {
-      account_role: "portal_user",
+      portal_role: "portal_user",
       can_manage_buckets: false,
       can_create_private_storage_spaces: false,
       can_create_team_storage_spaces: false,

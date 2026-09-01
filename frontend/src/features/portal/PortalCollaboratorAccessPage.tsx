@@ -373,7 +373,7 @@ export default function PortalCollaboratorAccessPage() {
               <dt className={cx("ui-caption font-semibold uppercase", uiMutedTextClass)}>
                 {t({ en: "Project role", fr: "Rôle projet", de: "Projektrolle" })}
               </dt>
-              <dd className="mt-1 ui-body">{portalAccountRoleLabel(collaborator.account_role, t)}</dd>
+              <dd className="mt-1 ui-body">{portalAccountRoleLabel(collaborator.portal_role, t)}</dd>
             </div>
             <div>
               <dt className={cx("ui-caption font-semibold uppercase", uiMutedTextClass)}>

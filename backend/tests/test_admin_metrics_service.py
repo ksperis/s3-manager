@@ -208,14 +208,14 @@ def test_summary_payload_preserves_global_counts_and_endpoint_assignment_scope(d
             UserS3Account(
                 user_id=manager.id,
                 account_id=account_one.id,
-                is_root=False,
-                role="portal_user",
+                manager_role=None,
+                portal_role="portal_user",
             ),
             UserS3Account(
                 user_id=admin.id,
                 account_id=account_two.id,
-                is_root=True,
-                role="account_administrator",
+                manager_role="account_administrator",
+                portal_role=None,
             ),
             UserS3User(user_id=manager.id, s3_user_id=s3_user_one.id),
             S3Connection(
@@ -254,8 +254,8 @@ def test_summary_payload_preserves_global_counts_and_endpoint_assignment_scope(d
         "total_admins": 2,
         "total_none_users": 1,
         "total_s3_users": 2,
-        "assigned_accounts": 1,
-        "unassigned_accounts": 1,
+        "assigned_accounts": 2,
+        "unassigned_accounts": 0,
         "assigned_s3_users": 1,
         "unassigned_s3_users": 1,
         "total_endpoints": 3,
@@ -284,8 +284,8 @@ def test_summary_payload_preserves_global_counts_and_endpoint_assignment_scope(d
         "unassigned_s3_users": 0,
     }
     assert ceph_two_summary["total_accounts"] == 1
-    assert ceph_two_summary["assigned_accounts"] == 0
-    assert ceph_two_summary["unassigned_accounts"] == 1
+    assert ceph_two_summary["assigned_accounts"] == 1
+    assert ceph_two_summary["unassigned_accounts"] == 0
     assert ceph_two_summary["total_s3_users"] == 1
     assert ceph_two_summary["assigned_s3_users"] == 0
     assert ceph_two_summary["unassigned_s3_users"] == 1

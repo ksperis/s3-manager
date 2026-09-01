@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import ManagerAccountRole, PortalAccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.models.s3_account import AccountUserLink, S3AccountUpdate
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_account_topics_resolver import normalize_account_key
@@ -191,8 +191,8 @@ def test_update_account_user_links_missing_user(db_session, monkeypatch):
         UserS3Account(
             user_id=user_existing.id,
             account_id=account.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-            is_root=False,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
         )
     )
     db_session.commit()
@@ -207,7 +207,8 @@ def test_update_account_user_links_missing_user(db_session, monkeypatch):
                 user_links=[
                     AccountUserLink(
                         user_id=99999,
-                        role=AccountRole.PORTAL_USER.value,
+                        manager_role=None,
+                        portal_role=PortalAccountRole.PORTAL_USER.value,
                     )
                 ],
             ),
@@ -218,11 +219,10 @@ def test_update_account_user_links_missing_user(db_session, monkeypatch):
         .filter(
             UserS3Account.account_id == account.id,
             UserS3Account.user_id == user_existing.id,
-            UserS3Account.is_root.is_(False),
         )
         .one()
-        .role
-        == AccountRole.ACCOUNT_ADMINISTRATOR.value
+        .manager_role
+        == ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
     )
 
 
@@ -239,14 +239,14 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
             UserS3Account(
                 user_id=keep_user.id,
                 account_id=account.id,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                is_root=False,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             ),
             UserS3Account(
                 user_id=remove_user.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_USER.value,
-                is_root=False,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
             ),
         ]
     )
@@ -264,8 +264,16 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
             quota_max_size_gb=1.0,
             quota_max_objects=100,
             user_links=[
-                AccountUserLink(user_id=keep_user.id, role=AccountRole.ACCOUNT_ADMINISTRATOR.value),
-                AccountUserLink(user_id=add_user.id, role=AccountRole.PORTAL_USER.value),
+                AccountUserLink(
+                    user_id=keep_user.id,
+                    manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    portal_role=None,
+                ),
+                AccountUserLink(
+                    user_id=add_user.id,
+                    manager_role=None,
+                    portal_role=PortalAccountRole.PORTAL_USER.value,
+                ),
             ],
         ),
     )
@@ -279,7 +287,7 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
     # Removed user link should be gone
     assert (
         db_session.query(UserS3Account)
-        .filter(UserS3Account.account_id == account.id, UserS3Account.user_id == remove_user.id, UserS3Account.is_root.is_(False))
+        .filter(UserS3Account.account_id == account.id, UserS3Account.user_id == remove_user.id)
         .first()
         is None
     )

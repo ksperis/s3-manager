@@ -195,7 +195,7 @@ def ensure_bucket_migration_allowed(user: User, db: Session | None = None) -> No
 def _manager_link_allows_bucket_migration(
     link: UserS3Account | EffectiveAccountLink,
 ) -> bool:
-    return EffectiveAccessService.manager_account_allowed(link.role)
+    return EffectiveAccessService.manager_account_allowed(link)
 
 
 def build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[str]:

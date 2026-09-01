@@ -42,7 +42,7 @@ class PortalObjectsMixin:
         role_by_bucket = self._storage_space_roles_by_bucket(
             user,
             access.account,
-            access.role,
+            access.portal_role,
             include_archived=include_archived,
         )
         return self._storage_space_effective_role(

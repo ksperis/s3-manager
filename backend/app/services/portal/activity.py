@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta, timezone
 from typing import Any, Optional, TYPE_CHECKING
 
-from app.db import AuditLog, AccountRole, PortalPublicLink as DBPortalPublicLink, User
+from app.db import AuditLog, PortalAccountRole, PortalPublicLink as DBPortalPublicLink, User
 from app.models.portal import PortalActivityItem, PortalAlert, PortalStorageSpaceSummary
 from app.services.audit_service import parse_audit_metadata
 from app.services.audit_policy import NON_PERSISTED_AUDIT_ACTIONS
@@ -26,8 +26,8 @@ class PortalActivityMixin:
     ) -> dict[str, PortalStorageSpaceSummary]:
         lookup: dict[str, PortalStorageSpaceSummary] = {}
         visible_bucket_names = (
-            set(self.list_existing_user_bucket_access(user, access.account, access.role))
-            if access.role == AccountRole.PORTAL_USER.value
+            set(self.list_existing_user_bucket_access(user, access.account, access.portal_role))
+            if access.portal_role == PortalAccountRole.PORTAL_USER.value
             else None
         )
         for item in self.list_storage_spaces(user, access):

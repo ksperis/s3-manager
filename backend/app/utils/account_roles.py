@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-"""Canonical RGW account association role utilities."""
+"""Independent Manager and Portal account-role utilities."""
 
 from __future__ import annotations
 
@@ -8,46 +8,50 @@ from typing import Annotated
 
 from pydantic import AfterValidator
 
-from app.db.enums import AccountRole
+from app.db.enums import ManagerAccountRole, PortalAccountRole
 
 
-ACCOUNT_ROLE_RANK: dict[str, int] = {
-    AccountRole.PORTAL_USER.value: 1,
-    AccountRole.PORTAL_MANAGER.value: 2,
-    AccountRole.ACCOUNT_ADMINISTRATOR.value: 3,
+PORTAL_ROLE_RANK: dict[str, int] = {
+    PortalAccountRole.PORTAL_USER.value: 1,
+    PortalAccountRole.PORTAL_MANAGER.value: 2,
 }
-ACCOUNT_ROLE_VALUES = frozenset(ACCOUNT_ROLE_RANK)
+MANAGER_ROLE_VALUES = frozenset({ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value})
+PORTAL_ROLE_VALUES = frozenset(PORTAL_ROLE_RANK)
 
 
-def normalize_account_role(value: object) -> str | None:
-    if value is None:
+def require_manager_account_role(value: str) -> str:
+    if value not in MANAGER_ROLE_VALUES:
+        raise ValueError("Invalid Manager account role")
+    return value
+
+
+def require_portal_account_role(value: str) -> str:
+    if value not in PORTAL_ROLE_VALUES:
+        raise ValueError("Invalid Portal account role")
+    return value
+
+
+ManagerAccountRoleValue = Annotated[
+    str,
+    AfterValidator(require_manager_account_role),
+]
+PortalAccountRoleValue = Annotated[
+    str,
+    AfterValidator(require_portal_account_role),
+]
+
+
+def portal_account_role_rank(role: str | None) -> int:
+    if role is None:
+        return 0
+    try:
+        return PORTAL_ROLE_RANK[role]
+    except KeyError as exc:
+        raise ValueError("Invalid Portal account role") from exc
+
+
+def max_portal_account_role(*roles: str | None) -> str | None:
+    present = [role for role in roles if role is not None]
+    if not present:
         return None
-    normalized = str(getattr(value, "value", value) or "").strip().lower()
-    return normalized or None
-
-
-def require_account_role(value: object) -> str:
-    normalized = normalize_account_role(value)
-    if normalized not in ACCOUNT_ROLE_VALUES:
-        raise ValueError("Invalid account role")
-    return normalized
-
-
-CanonicalAccountRole = Annotated[str, AfterValidator(require_account_role)]
-
-
-def portal_role_for(role: object) -> str | None:
-    normalized = normalize_account_role(role)
-    if normalized == AccountRole.ACCOUNT_ADMINISTRATOR.value:
-        return AccountRole.PORTAL_MANAGER.value
-    if normalized in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
-        return normalized
-    return None
-
-
-def max_account_role(*roles: object) -> str | None:
-    normalized = [normalize_account_role(role) for role in roles]
-    valid = [role for role in normalized if role in ACCOUNT_ROLE_VALUES]
-    if not valid:
-        return None
-    return max(valid, key=lambda role: ACCOUNT_ROLE_RANK[role])
+    return max(present, key=portal_account_role_rank)

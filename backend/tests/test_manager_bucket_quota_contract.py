@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.db import AccountRole, S3Account, S3Connection, StorageEndpoint, User, UserRole, UserS3Account
+from app.db import ManagerAccountRole, S3Account, S3Connection, StorageEndpoint, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
 from app.routers.manager import buckets as manager_buckets_router
@@ -52,7 +52,8 @@ def _grant_manager_access(db_session, user: User, account: S3Account) -> None:
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
         )
     )
     db_session.commit()

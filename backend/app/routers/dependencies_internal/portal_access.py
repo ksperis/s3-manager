@@ -9,7 +9,7 @@ from fastapi import Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import AccountRole, S3Account, StorageProvider, User, UserS3Account
+from app.db import PortalAccountRole, S3Account, StorageProvider, User, UserS3Account
 from app.models.access_context import AccountAccess, EffectiveAccountLink
 from app.models.account_capabilities import AccountCapabilities
 from app.utils.http_errors import raise_http_exception_from_exception
@@ -17,7 +17,6 @@ from app.services import app_settings_service
 from app.services.s3_execution_context import S3ExecutionContext
 from app.utils.normalize import normalize_storage_provider
 from app.utils.storage_endpoint_features import resolve_feature_flags
-from app.utils.account_roles import portal_role_for
 
 from .account_context import _parse_account_selector, _resolve_user_account_link, _resolve_workspace_surface
 from .auth_session import get_current_account_user, settings
@@ -27,12 +26,12 @@ def _portal_membership_capabilities(
 ) -> tuple[Optional[str], AccountCapabilities]:
     if not link:
         return None, AccountCapabilities()
-    role = portal_role_for(link.role)
-    if role is None:
-        return role, AccountCapabilities()
-    can_manage_portal_users = role == AccountRole.PORTAL_MANAGER.value
-    can_manage_buckets = role == AccountRole.PORTAL_MANAGER.value
-    return role, AccountCapabilities(
+    portal_role = link.portal_role
+    if portal_role is None:
+        return portal_role, AccountCapabilities()
+    can_manage_portal_users = portal_role == PortalAccountRole.PORTAL_MANAGER.value
+    can_manage_buckets = portal_role == PortalAccountRole.PORTAL_MANAGER.value
+    return portal_role, AccountCapabilities(
         can_manage_buckets=can_manage_buckets,
         can_manage_portal_users=can_manage_portal_users,
         can_manage_iam=False,
@@ -142,16 +141,26 @@ def _resolve_portal_browser_context(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser is disabled for Portal workspace")
 
     _validate_portal_account_surface(account)
-    role, portal_capabilities = _portal_membership_capabilities(link)
-    if role is None:
+    portal_role, portal_capabilities = _portal_membership_capabilities(link)
+    if portal_role is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
 
     from app.services.portal_service import PortalService
 
     portal_service = PortalService(db)
-    portal_access = AccountAccess(account=account, actor=user, membership=link, capabilities=portal_capabilities, role=role)
+    portal_access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=link,
+        capabilities=portal_capabilities,
+        portal_role=portal_role,
+    )
     try:
-        access_key, secret_key = portal_service.get_portal_credentials(user, account, role)
+        access_key, secret_key = portal_service.get_portal_credentials(
+            user,
+            account,
+            portal_role,
+        )
     except RuntimeError as exc:
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     if not access_key or not secret_key:
@@ -187,7 +196,7 @@ def _resolve_portal_browser_context(
             using_root_key=False,
         ),
     )
-    context.portal_browser_role = role
+    context.portal_browser_role = portal_role
     context.portal_browser_access = portal_access
     context.portal_allowed_buckets = allowed_buckets
     context.portal_storage_spaces = browse_spaces
@@ -206,13 +215,19 @@ def get_portal_account_access(
     account, link = _resolve_user_account_link(db, user, account_id, allow_default=False)
     _validate_portal_account_surface(account)
 
-    role, capabilities = _portal_membership_capabilities(link)
-    if role is None:
+    portal_role, capabilities = _portal_membership_capabilities(link)
+    if portal_role is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-    return AccountAccess(account=account, actor=user, membership=link, capabilities=capabilities, role=role)
+    return AccountAccess(
+        account=account,
+        actor=user,
+        membership=link,
+        capabilities=capabilities,
+        portal_role=portal_role,
+    )
 
 
 def require_portal_manager(access: AccountAccess = Depends(get_portal_account_access)) -> AccountAccess:
-    if access.role != AccountRole.PORTAL_MANAGER.value:
+    if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager rights required for this account")
     return access

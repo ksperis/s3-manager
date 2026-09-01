@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db import (
-    AccountRole,
+    ManagerAccountRole, PortalAccountRole,
     AuditLog,
     ManagedPrivateAccess,
     S3Account,
@@ -608,8 +608,8 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-            is_root=False,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
         )
     )
     connection = S3Connection(

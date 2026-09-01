@@ -185,7 +185,7 @@ export function PortalShareCandidatePicker({
   const visibleCandidates = candidates.filter((candidate) => {
     if (!includeAlreadyShared && candidate.already_shared) return false;
     if (!term) return true;
-    return [candidate.email, candidate.display_name, candidate.account_role]
+    return [candidate.email, candidate.display_name, candidate.portal_role]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(term));
   });
@@ -284,7 +284,7 @@ export function PortalShareCandidatePicker({
                   </span>
                 </label>
                 <div className={cx("self-center text-[11px] font-semibold", uiMutedTextClass)}>
-                  {portalAccountRoleLabel(candidate.account_role, t)} · {portalAccessSourceLabel(candidate.access_source, t)}
+                  {portalAccountRoleLabel(candidate.portal_role, t)} · {portalAccessSourceLabel(candidate.access_source, t)}
                 </div>
                 {disabled ? (
                   <UiBadge tone="neutral">

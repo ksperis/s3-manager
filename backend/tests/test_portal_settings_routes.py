@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.db import AccountRole, AuditLog, S3Account, User, UserRole, UserS3Account
+from app.db import ManagerAccountRole, PortalAccountRole, AuditLog, S3Account, User, UserRole, UserS3Account
 from app.main import app
 from app.models.portal import PortalStorageSpaceSettings
 from app.routers import dependencies
@@ -34,13 +34,13 @@ def _seed(db_session, *, delegated: bool = False):
 
 
 def _install_access(account: S3Account, user: User, role: str) -> None:
-    is_manager = role == AccountRole.PORTAL_MANAGER.value
+    is_manager = role == PortalAccountRole.PORTAL_MANAGER.value
     app.dependency_overrides[dependencies.require_portal_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_portal_account_access] = lambda: AccountAccess(
         account=account,
         actor=user,
         membership=None,
-        role=role,
+        portal_role=role,
         capabilities=AccountCapabilities(
             can_manage_buckets=is_manager,
             can_manage_portal_users=is_manager,
@@ -50,7 +50,7 @@ def _install_access(account: S3Account, user: User, role: str) -> None:
 
 def test_project_settings_are_read_only_without_delegation(client: TestClient, db_session):
     account, manager = _seed(db_session)
-    _install_access(account, manager, AccountRole.PORTAL_MANAGER.value)
+    _install_access(account, manager, PortalAccountRole.PORTAL_MANAGER.value)
 
     fetched = client.get(f"/api/portal/settings?account_id={account.id}")
     updated = client.put(
@@ -65,19 +65,22 @@ def test_project_settings_are_read_only_without_delegation(client: TestClient, d
     assert "delegation" in updated.json()["detail"].lower()
 
 
-def test_account_administrator_projects_to_portal_manager_for_settings():
+def test_account_administrator_has_no_implicit_portal_settings_access():
     role, capabilities = _portal_membership_capabilities(
-        UserS3Account(role=AccountRole.ACCOUNT_ADMINISTRATOR.value)
+        UserS3Account(
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
+        )
     )
 
-    assert role == AccountRole.PORTAL_MANAGER.value
-    assert capabilities.can_manage_buckets is True
-    assert capabilities.can_manage_portal_users is True
+    assert role is None
+    assert capabilities.can_manage_buckets is False
+    assert capabilities.can_manage_portal_users is False
 
 
 def test_portal_user_cannot_update_delegated_project_settings(client: TestClient, db_session):
     account, user = _seed(db_session, delegated=True)
-    _install_access(account, user, AccountRole.PORTAL_USER.value)
+    _install_access(account, user, PortalAccountRole.PORTAL_USER.value)
 
     response = client.put(
         f"/api/portal/settings?account_id={account.id}",
@@ -94,7 +97,7 @@ def test_delegated_manager_updates_shared_override_and_audits(
     monkeypatch,
 ):
     account, manager = _seed(db_session, delegated=True)
-    _install_access(account, manager, AccountRole.PORTAL_MANAGER.value)
+    _install_access(account, manager, PortalAccountRole.PORTAL_MANAGER.value)
     monkeypatch.setattr(
         PortalService,
         "reconcile_portal_server_access_logging",
@@ -126,7 +129,7 @@ def test_storage_space_settings_routes_return_capability_and_audit_updates(
     monkeypatch,
 ):
     account, manager = _seed(db_session)
-    _install_access(account, manager, AccountRole.PORTAL_MANAGER.value)
+    _install_access(account, manager, PortalAccountRole.PORTAL_MANAGER.value)
     current = PortalStorageSpaceSettings(
         versioning_enabled=True,
         versioning_status="Enabled",

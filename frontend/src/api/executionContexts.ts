@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client, { timeoutForRequestProfile } from "./client";
-import type { AccountAccessRole } from "./accountRoles";
+import type { ManagerAccountRole, PortalAccountRole } from "./accountAccess";
 import type { TagDefinitionSummary } from "./tags";
 
 export type ExecutionContextKind = "account" | "connection" | "s3_user" | "portal_account";
@@ -20,8 +20,8 @@ export type ExecutionContext = {
   display_name: string;
   tags: TagDefinitionSummary[];
   endpoint_tags: TagDefinitionSummary[];
-  role?: AccountAccessRole | null;
-  manager_account_is_admin?: boolean | null;
+  manager_role?: ManagerAccountRole | null;
+  portal_role?: PortalAccountRole | null;
   rgw_account_id?: string | null;
   endpoint_id?: number | null;
   endpoint_name: string;

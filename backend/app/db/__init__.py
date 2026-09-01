@@ -1,7 +1,15 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from .base import Base
-from .enums import AccountRole, HealthCheckStatus, StorageProvider, UserRole, is_admin_ui_role, is_superadmin_ui_role
+from .enums import (
+    HealthCheckStatus,
+    ManagerAccountRole,
+    PortalAccountRole,
+    StorageProvider,
+    UserRole,
+    is_admin_ui_role,
+    is_superadmin_ui_role,
+)
 from .storage_endpoint import StorageEndpoint
 from .s3_account import AccountIAMUser, S3Account, UserS3Account
 from .user import User
@@ -49,7 +57,8 @@ from .first_admin_bootstrap import FirstAdminBootstrap
 
 __all__ = [
     "Base",
-    "AccountRole",
+    "ManagerAccountRole",
+    "PortalAccountRole",
     "StorageProvider",
     "HealthCheckStatus",
     "UserRole",

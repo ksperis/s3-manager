@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import quote
 
 from app.db import (
-    AccountRole,
+    PortalAccountRole,
     PortalExternalAccessCredential,
     PortalPublicLink as DBPortalPublicLink,
     PortalStorageSpaceGrant,
@@ -191,7 +191,7 @@ class PortalStorageSpacesMixin:
         visible = self._storage_space_roles_by_bucket(
             user,
             access.account,
-            access.role,
+            access.portal_role,
             include_archived=True,
         )
         if metadata.bucket_name not in visible:
@@ -207,7 +207,7 @@ class PortalStorageSpacesMixin:
         source: PortalStorageSpaceIconSource,
         preset: PortalStorageSpaceIconPreset | None = None,
     ) -> PortalStorageSpaceIcon:
-        if access.role != AccountRole.PORTAL_MANAGER.value:
+        if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
             raise RuntimeError("Only project managers can configure Storage Space icons.")
         metadata = self._visible_storage_space_icon_metadata(user, access, space_id)
         if source == "uploaded":
@@ -232,7 +232,7 @@ class PortalStorageSpacesMixin:
         payload: bytes,
         content_type: str | None,
     ) -> PortalStorageSpaceIcon:
-        if access.role != AccountRole.PORTAL_MANAGER.value:
+        if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
             raise RuntimeError("Only project managers can configure Storage Space icons.")
         metadata = self._visible_storage_space_icon_metadata(user, access, space_id)
         detected_type = validate_avatar_image(payload, content_type)
@@ -251,7 +251,7 @@ class PortalStorageSpacesMixin:
         access: "AccountAccess",
         space_id: str,
     ) -> PortalStorageSpaceIcon:
-        if access.role != AccountRole.PORTAL_MANAGER.value:
+        if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
             raise RuntimeError("Only project managers can configure Storage Space icons.")
         metadata = self._visible_storage_space_icon_metadata(user, access, space_id)
         metadata.icon_image = None
@@ -280,9 +280,9 @@ class PortalStorageSpacesMixin:
         return bytes(metadata.icon_image), str(metadata.icon_content_type), version
 
     def _storage_space_role(self, access: "AccountAccess") -> PortalStorageSpaceRole:
-        if access.role == AccountRole.PORTAL_MANAGER.value:
+        if access.portal_role == PortalAccountRole.PORTAL_MANAGER.value:
             return "Manager"
-        if access.role == AccountRole.PORTAL_USER.value:
+        if access.portal_role == PortalAccountRole.PORTAL_USER.value:
             return "Editor"
         return "Viewer"
 
@@ -363,7 +363,7 @@ class PortalStorageSpacesMixin:
         role_by_bucket = self._storage_space_roles_by_bucket(
             user,
             access.account,
-            access.role,
+            access.portal_role,
             include_archived=include_archived,
         )
         metadata_by_bucket = self._storage_space_metadata_map(access.account)
@@ -497,8 +497,8 @@ class PortalStorageSpacesMixin:
     ) -> PortalStorageSpace:
         portal_settings = self._effective_portal_settings(access.account)
         allow_private_create = portal_settings.allow_private_storage_space_create
-        is_portal_user = access.role == AccountRole.PORTAL_USER.value
-        is_portal_manager = access.role == AccountRole.PORTAL_MANAGER.value
+        is_portal_user = access.portal_role == PortalAccountRole.PORTAL_USER.value
+        is_portal_manager = access.portal_role == PortalAccountRole.PORTAL_MANAGER.value
         if not (is_portal_manager or (allow_private_create and is_portal_user)):
             raise RuntimeError("Storage Space creation not allowed for this role.")
         if is_portal_user and visibility != "private":
@@ -588,7 +588,7 @@ class PortalStorageSpacesMixin:
         cleaned_bucket_name = (bucket_name or "").strip()
         if not cleaned_bucket_name:
             raise RuntimeError("Bucket name requis.")
-        if access.role != AccountRole.PORTAL_MANAGER.value:
+        if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
             raise RuntimeError("Storage Space import not allowed for this role.")
         portal_settings = self._effective_portal_settings(access.account)
         if visibility == "private" and not portal_settings.allow_private_storage_space_create:
@@ -622,7 +622,7 @@ class PortalStorageSpacesMixin:
         self._sync_user_group_membership(
             iam_service,
             link.iam_username,
-            access.role,
+            access.portal_role,
             account=access.account,
         )
         self._ensure_active_key(link, iam_service)
@@ -731,7 +731,7 @@ class PortalStorageSpacesMixin:
         access: "AccountAccess",
         space_id: str,
     ) -> PortalStorageSpace:
-        if access.role != AccountRole.PORTAL_MANAGER.value:
+        if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
             raise RuntimeError("Only project managers can take ownership of a private Storage Space.")
         bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id, include_archived=True)
         if not bucket_name:
@@ -791,7 +791,7 @@ class PortalStorageSpacesMixin:
         roles_by_bucket = self._storage_space_roles_by_bucket(
             user,
             access.account,
-            access.role,
+            access.portal_role,
             include_archived=True,
         )
         if roles_by_bucket.get(bucket_name) not in {"Owner", "Manager"}:

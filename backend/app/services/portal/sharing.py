@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Optional
 
 from app.db import (
-    AccountRole,
+    PortalAccountRole,
     PortalExternalAccessCredential,
     PortalPublicLink as DBPortalPublicLink,
     PortalStorageSpaceGrant,
@@ -95,8 +95,8 @@ class PortalSharingMixin:
             if self._metadata_visibility(metadata) == "shared":
                 if self._metadata_share_scope(metadata) == "account":
                     default_role = self._metadata_account_member_role(metadata) or "Editor"
-                    for user_id, (_target, account_role, _sources) in member_map.items():
-                        if account_role != AccountRole.PORTAL_USER.value:
+                    for user_id, (_target, portal_role, _sources) in member_map.items():
+                        if portal_role != PortalAccountRole.PORTAL_USER.value:
                             continue
                         roles_by_user_id[user_id] = self._best_storage_space_role(
                             roles_by_user_id.get(user_id),
@@ -238,13 +238,13 @@ class PortalSharingMixin:
                 user_id=user_id,
                 email=target.email,
                 display_name=target.display_name or target.full_name,
-                account_role=account_role,
+                portal_role=portal_role,
                 access_source=self._portal_access_source(sources),
                 member_since=self._portal_collaborator_member_since(target, sources, source_dates.get(user_id)),
                 avatar=UserAvatarService(self.db).descriptor(target),
                 can_review_access=access.capabilities.can_manage_portal_users or user.id == user_id,
             )
-            for user_id, (target, account_role, sources) in member_map.items()
+            for user_id, (target, portal_role, sources) in member_map.items()
         ]
         collaborators = sorted(collaborators, key=lambda item: item.email.lower())
         return PortalCollaboratorsResponse(
@@ -269,13 +269,13 @@ class PortalSharingMixin:
         if user.id != target_user_id and not access.capabilities.can_manage_portal_users:
             raise RuntimeError("Reviewing this collaborator is not allowed.")
 
-        target, account_role, sources = member
+        target, portal_role, sources = member
         source_dates = self._portal_collaborator_source_dates(access.account, {target_user_id})
         collaborator = PortalCollaborator(
             user_id=target.id,
             email=target.email,
             display_name=target.display_name or target.full_name,
-            account_role=account_role,
+            portal_role=portal_role,
             access_source=self._portal_access_source(sources),
             member_since=self._portal_collaborator_member_since(
                 target,
@@ -306,7 +306,7 @@ class PortalSharingMixin:
             if metadata.owner_user_id == target_user_id:
                 role = "Owner"
                 source = "owner"
-            elif account_role == AccountRole.PORTAL_MANAGER.value:
+            elif portal_role == PortalAccountRole.PORTAL_MANAGER.value:
                 role = "Manager"
                 source = "project_manager"
             elif (
@@ -342,7 +342,7 @@ class PortalSharingMixin:
             collaborator=collaborator,
             can_request_project_removal=(
                 access.capabilities.can_manage_portal_users
-                and account_role == AccountRole.PORTAL_USER.value
+                and portal_role == PortalAccountRole.PORTAL_USER.value
                 and self._portal_access_source(sources) == "direct"
             ),
             space_accesses=space_accesses,
@@ -381,7 +381,7 @@ class PortalSharingMixin:
             return []
         if visibility != "shared" or share_scope != "restricted":
             raise RuntimeError("Initial shares are allowed only for restricted shared Storage Spaces.")
-        if access.role != AccountRole.PORTAL_MANAGER.value:
+        if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
             raise RuntimeError("Only project managers can configure team Storage Space access.")
         member_map = self._portal_account_member_map(access.account)
         seen_user_ids: set[int] = set()
@@ -390,7 +390,7 @@ class PortalSharingMixin:
             if share.user_id in seen_user_ids:
                 raise RuntimeError("Duplicate initial share user.")
             member = member_map.get(share.user_id)
-            if member is None or member[1] != AccountRole.PORTAL_USER.value:
+            if member is None or member[1] != PortalAccountRole.PORTAL_USER.value:
                 raise RuntimeError("Only Portal users can receive an explicit team Storage Space role.")
             seen_user_ids.add(share.user_id)
             validated.append(share)
@@ -441,7 +441,7 @@ class PortalSharingMixin:
             email=owner.email,
             display_name=owner.display_name or owner.full_name,
             role="Owner",
-            account_role=member[1] if member else None,
+            portal_role=member[1] if member else None,
             access_source="owner",
             avatar=UserAvatarService(self.db).descriptor(owner),
         )
@@ -457,7 +457,7 @@ class PortalSharingMixin:
             user_ids.update(
                 user_id
                 for user_id, (_target, role, _sources) in self._portal_account_member_map(account).items()
-                if role == AccountRole.PORTAL_MANAGER.value
+                if role == PortalAccountRole.PORTAL_MANAGER.value
             )
         if self._metadata_visibility(metadata) != "shared":
             return user_ids
@@ -466,7 +466,7 @@ class PortalSharingMixin:
                 user_ids.update(
                     user_id
                     for user_id, (_target, role, _sources) in self._portal_account_member_map(account).items()
-                    if role == AccountRole.PORTAL_USER.value
+                    if role == PortalAccountRole.PORTAL_USER.value
                 )
             return user_ids
         grant_rows = (
@@ -643,15 +643,15 @@ class PortalSharingMixin:
                 )
             }
         rows = []
-        for user_id, (target, account_role, sources) in self._portal_account_member_map(access.account).items():
-            if user_id in excluded_user_ids or account_role != AccountRole.PORTAL_USER.value:
+        for user_id, (target, portal_role, sources) in self._portal_account_member_map(access.account).items():
+            if user_id in excluded_user_ids or portal_role != PortalAccountRole.PORTAL_USER.value:
                 continue
             rows.append(
                 PortalStorageSpaceShareCandidate(
                     user_id=user_id,
                     email=target.email,
                     display_name=target.display_name or target.full_name,
-                    account_role=account_role,
+                    portal_role=portal_role,
                     access_source=self._portal_access_source(sources),
                     already_shared=user_id in shared_user_ids,
                 )
@@ -673,8 +673,11 @@ class PortalSharingMixin:
         metadata = self._require_storage_space_shared(access.account, bucket_name)
         if metadata is None:
             raise RuntimeError("Storage space metadata is missing.")
-        account_role = self._user_s3_account_role(target.id, access.account.id)
-        if account_role != AccountRole.PORTAL_USER.value:
+        portal_role = self._user_s3_account_portal_role(
+            target.id,
+            access.account.id,
+        )
+        if portal_role != PortalAccountRole.PORTAL_USER.value:
             raise RuntimeError("Only Portal users can receive an explicit team Storage Space role.")
         grant = (
             self.db.query(PortalStorageSpaceGrant)

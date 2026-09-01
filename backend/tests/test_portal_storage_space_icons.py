@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.db import AccountRole, AuditLog, PortalStorageSpaceMetadata, S3Account, User, UserRole
+from app.db import PortalAccountRole, AuditLog, PortalStorageSpaceMetadata, S3Account, User, UserRole
 from app.main import app
 from app.routers import dependencies
 from app.models.access_context import AccountAccess
@@ -13,12 +13,12 @@ from tests.s3_account_factory import make_s3_account
 
 
 def _portal_access(account: S3Account, user: User, role: str) -> AccountAccess:
-    is_manager = role == AccountRole.PORTAL_MANAGER.value
+    is_manager = role == PortalAccountRole.PORTAL_MANAGER.value
     return AccountAccess(
         account=account,
         actor=user,
         membership=None,
-        role=role,
+        portal_role=role,
         capabilities=AccountCapabilities(
             can_manage_buckets=is_manager,
             can_manage_portal_users=is_manager,
@@ -70,7 +70,7 @@ def test_portal_manager_can_choose_icon_and_action_is_audited(client: TestClient
     app.dependency_overrides[dependencies.get_portal_account_access] = lambda: _portal_access(
         account,
         manager,
-        AccountRole.PORTAL_MANAGER.value,
+        PortalAccountRole.PORTAL_MANAGER.value,
     )
 
     response = client.put(
@@ -103,7 +103,7 @@ def test_uploaded_icon_is_validated_served_with_versioned_private_cache_and_audi
     app.dependency_overrides[dependencies.get_portal_account_access] = lambda: _portal_access(
         account,
         manager,
-        AccountRole.PORTAL_MANAGER.value,
+        PortalAccountRole.PORTAL_MANAGER.value,
     )
     image = _png()
 
@@ -165,7 +165,7 @@ def test_portal_user_cannot_configure_icons_but_can_fetch_visible_space_icon(
     app.dependency_overrides[dependencies.get_portal_account_access] = lambda: _portal_access(
         account,
         member,
-        AccountRole.PORTAL_USER.value,
+        PortalAccountRole.PORTAL_USER.value,
     )
 
     denied = client.put(

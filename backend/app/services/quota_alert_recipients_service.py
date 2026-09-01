@@ -8,7 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db import (
-    AccountRole,
+    PortalAccountRole,
     UiGroupS3Account,
     UiGroupS3User,
     User,
@@ -104,15 +104,8 @@ class QuotaAlertRecipientsService:
             .join(User, User.id == UserS3Account.user_id)
             .filter(User.is_active.is_(True))
             .filter(
-                or_(
-                    UserS3Account.is_root.is_(True),
-                    UserS3Account.role.in_(
-                        [
-                            AccountRole.PORTAL_MANAGER.value,
-                            AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                        ]
-                    ),
-                )
+                UserS3Account.portal_role
+                == PortalAccountRole.PORTAL_MANAGER.value
             )
             .all()
         )
@@ -144,12 +137,8 @@ class QuotaAlertRecipientsService:
             .join(User, User.id == UserUiGroup.user_id)
             .filter(User.is_active.is_(True))
             .filter(
-                UiGroupS3Account.role.in_(
-                    [
-                        AccountRole.PORTAL_MANAGER.value,
-                        AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                    ]
-                )
+                UiGroupS3Account.portal_role
+                == PortalAccountRole.PORTAL_MANAGER.value
             )
             .all()
         )

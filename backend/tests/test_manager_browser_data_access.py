@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.db import (
-    AccountRole,
+    ManagerAccountRole, PortalAccountRole,
     S3Connection,
     S3User,
     UiGroup,
@@ -72,7 +72,8 @@ def test_account_requires_admin_and_permission_on_same_direct_link(db_session):
     link = UserS3Account(
         user_id=user.id,
         account_id=account.id,
-        role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+        manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+        portal_role=None,
         allow_manager_browser_data_access=True,
     )
     db_session.add(link)
@@ -114,8 +115,9 @@ def test_account_permissions_cannot_escalate_by_combining_links(db_session):
     group_account_link = UiGroupS3Account(
         group_id=group.id,
         account_id=account.id,
-        role=AccountRole.PORTAL_USER.value,
-        allow_manager_browser_data_access=True,
+        manager_role=None,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
+        allow_manager_browser_data_access=False,
     )
     db_session.add_all(
         [
@@ -123,7 +125,8 @@ def test_account_permissions_cannot_escalate_by_combining_links(db_session):
             UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
                 allow_manager_browser_data_access=False,
             ),
             group_account_link,
@@ -141,7 +144,8 @@ def test_account_permissions_cannot_escalate_by_combining_links(db_session):
     assert exc.value.status_code == 403
     assert "same association" in str(exc.value.detail)
 
-    group_account_link.role = AccountRole.ACCOUNT_ADMINISTRATOR.value
+    group_account_link.manager_role = ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
+    group_account_link.allow_manager_browser_data_access = True
     db_session.add(group_account_link)
     db_session.commit()
     context = dependencies.get_account_context(
@@ -319,7 +323,8 @@ def test_manager_context_and_surface_gate_use_same_explicit_permission(db_sessio
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
             allow_manager_browser_data_access=True,
         )
     )
@@ -380,7 +385,8 @@ def test_forged_browser_read_and_mutation_are_rejected_before_data_plane(
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
             allow_manager_browser_data_access=False,
         )
     )

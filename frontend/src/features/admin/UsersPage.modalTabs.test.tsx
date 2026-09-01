@@ -180,21 +180,30 @@ describe("UsersPage modal tabs", () => {
           id: 12,
           email: "assoc.summary@example.com",
           role: "ui_user",
-          account_links: [{ account_id: 1, role: "account_administrator" }],
+          account_links: [{
+            account_id: 1,
+            manager_role: "account_administrator",
+            portal_role: null,
+          }],
           effective_access: {
             account_links: [
               {
                 account_id: 1,
-                role: "account_administrator",
+                manager_role: "account_administrator",
+                portal_role: "portal_user",
                 provenance: {
-                  direct_role: "portal_user",
-                  direct_determines_effective_role: false,
+                  direct_manager_role: null,
+                  direct_portal_role: "portal_user",
+                  direct_determines_effective_manager_role: false,
+                  direct_determines_effective_portal_role: true,
                   groups: [
                     {
                       group_id: 31,
                       group_name: "storage-operators",
-                      role: "account_administrator",
-                      determines_effective_role: true,
+                      manager_role: "account_administrator",
+                      portal_role: null,
+                      determines_effective_manager_role: true,
+                      determines_effective_portal_role: false,
                     },
                   ],
                 },
@@ -217,7 +226,7 @@ describe("UsersPage modal tabs", () => {
 
     const associations = await screen.findByLabelText("3 linked associations");
     expect(associations).toHaveAccessibleDescription(
-      "Linked associations (3)\nRGW account: acc-1 — Roles: Account administrator\nRGW user: s3-user-1\nS3 connection: conn-1",
+      "Linked associations (3)\nRGW account: acc-1 — Roles: Account administrator, Portal user\nRGW user: s3-user-1\nS3 connection: conn-1",
     );
     expect(screen.getByLabelText("1 accounts")).toBeInTheDocument();
     expect(screen.getByLabelText("1 rgw users")).toBeInTheDocument();
@@ -264,14 +273,14 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getAllByRole("button", { name: "Edit" })[0].closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });
 
-  it("preserves an existing portal role as a disabled option when Portal is disabled", async () => {
+  it("preserves an existing portal role while hiding its column when Portal is disabled", async () => {
     listUsersMock.mockResolvedValue({
       items: [
         {
           id: 12,
           email: "assoc.summary@example.com",
           role: "ui_user",
-          account_links: [{ account_id: 1, role: "portal_manager" }],
+          account_links: [{ account_id: 1, manager_role: null, portal_role: "portal_manager" }],
         },
       ],
       total: 1,
@@ -290,14 +299,18 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
 
-    const roleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Access role for acc-1",
+    expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /Portal role/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Access roles" })).not.toBeInTheDocument();
+
+    const managerRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Manager role for acc-1",
     });
-    expect(roleSelect).toHaveValue("portal_manager");
-    expect(Array.from(roleSelect.options).map((option) => [option.value, option.disabled])).toEqual([
-      ["portal_manager", true],
-      ["account_administrator", false],
-    ]);
+    expect(managerRoleSelect).toHaveValue("");
+    expect(managerRoleSelect).toBeEnabled();
+    expect(
+      screen.queryByRole("combobox", { name: "Portal role for acc-1" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -309,7 +322,8 @@ describe("UsersPage modal tabs", () => {
             {
               account_id: 1,
               allow_manager_browser_data_access: false,
-              role: "portal_manager",
+              manager_role: null,
+              portal_role: "portal_manager",
             },
           ],
         })
@@ -318,7 +332,7 @@ describe("UsersPage modal tabs", () => {
     expect(assignUserToS3AccountMock).not.toHaveBeenCalled();
   });
 
-  it("protects a root account link while allowing its advanced data access setting", async () => {
+  it("allows editing a Manager link and its advanced data access setting", async () => {
     listUsersMock.mockResolvedValue({
       items: [
         {
@@ -328,8 +342,8 @@ describe("UsersPage modal tabs", () => {
           account_links: [
             {
               account_id: 1,
-              role: "account_administrator",
-              is_root: true,
+              manager_role: "account_administrator",
+              portal_role: null,
               allow_manager_browser_data_access: false,
             },
           ],
@@ -345,8 +359,10 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
 
-    expect(screen.getByRole("combobox", { name: "Access role for acc-1" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Remove" })).toBeDisabled();
+    expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /Portal role/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Manager role for acc-1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Allow Manager Browser data access" }));
@@ -361,12 +377,55 @@ describe("UsersPage modal tabs", () => {
             {
               account_id: 1,
               allow_manager_browser_data_access: true,
-              role: "account_administrator",
+              manager_role: "account_administrator",
+              portal_role: null,
             },
           ],
         })
       );
     });
+  });
+
+  it("blocks saving a user account association without either role", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 12,
+          email: "empty.link@example.com",
+          role: "ui_user",
+          account_links: [
+            {
+              account_id: 1,
+              manager_role: "account_administrator",
+              portal_role: null,
+            },
+          ],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Manager role for acc-1" }),
+      { target: { value: "" } },
+    );
+
+    expect(
+      screen.getByText("Choose a Manager role; Portal is off."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(updateUserMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("tab", { name: "Associations" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("keeps associations when switching General/Associations and submits linked payload", async () => {
@@ -383,12 +442,19 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Add accounts" }));
-    const accountRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Access role for acc-1",
+    const managerRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Manager role for acc-1",
     });
-    expect(Array.from(accountRoleSelect.options).map((option) => option.value)).toEqual([
+    const portalRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Portal role for acc-1",
+    });
+    expect(Array.from(managerRoleSelect.options).map((option) => option.value)).toEqual([
+      "",
       "account_administrator",
     ]);
+    expect(managerRoleSelect).toHaveValue("account_administrator");
+    expect(portalRoleSelect).toHaveValue("");
+    expect(portalRoleSelect).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox", { name: "acc-1" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -420,7 +486,8 @@ describe("UsersPage modal tabs", () => {
           {
             account_id: 1,
             allow_manager_browser_data_access: false,
-            role: "account_administrator",
+            manager_role: "account_administrator",
+            portal_role: null,
           },
         ],
         s3_user_links: [
@@ -822,7 +889,7 @@ describe("UsersPage modal tabs", () => {
     );
   });
 
-  it("allows choosing the canonical role while linking an account", async () => {
+  it("allows choosing Manager and Portal roles independently while linking an account", async () => {
     generalSettingsState.portal_enabled = true;
     render(<UsersPage />);
 
@@ -838,15 +905,27 @@ describe("UsersPage modal tabs", () => {
     if (!accountRow) {
       throw new Error("Account row not found");
     }
-    const roleSelect = within(accountRow).getByRole<HTMLSelectElement>("combobox", {
-      name: "Access role for acc-1",
+    const managerRoleSelect = within(accountRow).getByRole<HTMLSelectElement>("combobox", {
+      name: "Manager role for acc-1",
     });
-    expect(Array.from(roleSelect.options).map((option) => option.value)).toEqual([
-      "portal_user",
-      "portal_manager",
+    const portalRoleSelect = within(accountRow).getByRole<HTMLSelectElement>("combobox", {
+      name: "Portal role for acc-1",
+    });
+    expect(Array.from(managerRoleSelect.options).map((option) => option.value)).toEqual([
+      "",
       "account_administrator",
     ]);
-    fireEvent.change(roleSelect, {
+    expect(Array.from(portalRoleSelect.options).map((option) => option.value)).toEqual([
+      "",
+      "portal_user",
+      "portal_manager",
+    ]);
+    expect(managerRoleSelect).toHaveValue("");
+    expect(portalRoleSelect).toHaveValue("portal_user");
+    fireEvent.change(managerRoleSelect, {
+      target: { value: "account_administrator" },
+    });
+    fireEvent.change(portalRoleSelect, {
       target: { value: "portal_manager" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
@@ -861,7 +940,8 @@ describe("UsersPage modal tabs", () => {
             {
               account_id: 1,
               allow_manager_browser_data_access: false,
-              role: "portal_manager",
+              manager_role: "account_administrator",
+              portal_role: "portal_manager",
             },
           ],
         })

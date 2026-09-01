@@ -69,7 +69,8 @@ def test_update_user_replaces_account_links_atomically(client: TestClient, db_se
             "account_links": [
                 {
                     "account_id": second_account.id,
-                    "role": "account_administrator",
+                    "manager_role": "account_administrator",
+                    "portal_role": None,
                     "allow_manager_browser_data_access": True,
                 }
             ]
@@ -82,12 +83,41 @@ def test_update_user_replaces_account_links_atomically(client: TestClient, db_se
     assert payload["account_links"] == [
         {
             "account_id": second_account.id,
-            "role": "account_administrator",
+            "manager_role": "account_administrator",
+            "portal_role": None,
             "allow_manager_browser_data_access": True,
-            "is_root": False,
         }
     ]
     assert first_account.id not in [link["account_id"] for link in payload["account_links"]]
+
+
+@pytest.mark.parametrize(
+    "invalid_link",
+    [
+        {"role": "portal_user"},
+        {"manager_role": "account_administrator"},
+        {"portal_role": "portal_user"},
+        {"manager_role": None, "portal_role": None},
+        {
+            "manager_role": None,
+            "portal_role": "portal_user",
+            "allow_manager_browser_data_access": True,
+        },
+    ],
+)
+def test_update_user_rejects_invalid_account_access_contracts(
+    client: TestClient,
+    seed_user_account,
+    invalid_link: dict[str, object],
+):
+    user, account = seed_user_account
+
+    response = client.put(
+        f"/api/admin/users/{user.id}",
+        json={"account_links": [{"account_id": account.id, **invalid_link}]},
+    )
+
+    assert response.status_code == 422
 
 
 def test_update_user_rejects_removed_s3_user_ids_contract(

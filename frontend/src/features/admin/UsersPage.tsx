@@ -15,9 +15,10 @@ import {
   updateUser,
 } from "../../api/users";
 import {
-  normalizeAccountAccessRole,
-  type AccountAccessRole,
-} from "../../api/accountRoles";
+  getAccountAccessRequiredMessage,
+  hasAccountAccessRole,
+  type AccountAccessGrant,
+} from "../../api/accountAccess";
 import { UiGroupSummary, listMinimalGroups } from "../../api/groups";
 import { S3AccountSummary, listMinimalS3Accounts } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
@@ -209,15 +210,15 @@ export default function UsersPage() {
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
       pendingGroupSelections: [],
-      accountPortalRoleChoice: {},
+      accountAccessChoice: {},
     })
   );
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<S3UserMembership[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
   const [createSelectedGroups, setCreateSelectedGroups] = useState<number[]>([]);
-  const [createAccountPortalRoleChoice, setCreateAccountPortalRoleChoice] = useState<
-    Record<number, AccountAccessRole>
+  const [createAccountAccessChoice, setCreateAccountAccessChoice] = useState<
+    Record<number, AccountAccessGrant>
   >({});
   const [createS3AccountSearch, setCreateS3AccountSearch] = useState("");
   const [createS3Search, setCreateS3Search] = useState("");
@@ -246,15 +247,15 @@ export default function UsersPage() {
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
       pendingGroupSelections: [],
-      accountPortalRoleChoice: {},
+      accountAccessChoice: {},
     })
   );
   const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<S3UserMembership[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
   const [editSelectedGroups, setEditSelectedGroups] = useState<number[]>([]);
-  const [editAccountPortalRoleChoice, setEditAccountPortalRoleChoice] = useState<
-    Record<number, AccountAccessRole>
+  const [editAccountAccessChoice, setEditAccountAccessChoice] = useState<
+    Record<number, AccountAccessGrant>
   >({});
   const [editS3AccountSearch, setEditS3AccountSearch] = useState("");
   const [editS3Search, setEditS3Search] = useState("");
@@ -414,9 +415,19 @@ export default function UsersPage() {
     const accountItems = displayedAccountLinks.map((link) => {
       const id = Number(link.account_id);
       const label = accountOptionsById.get(id)?.name ?? `Account #${id}`;
-      const role = normalizeAccountAccessRole(link.role);
-      const effectiveRoleLabel = accountAssociationRoleLabels({ id, label, role }, showPortalRole)[0];
-      return { id, label, role, role_labels: [effectiveRoleLabel] };
+      const roleLabels = accountAssociationRoleLabels({
+        id,
+        label,
+        manager_role: link.manager_role,
+        portal_role: link.portal_role,
+      });
+      return {
+        id,
+        label,
+        manager_role: link.manager_role,
+        portal_role: link.portal_role,
+        role_labels: roleLabels,
+      };
     });
     const effectiveS3UserDetails = user.effective_access?.s3_user_details ?? [];
     const s3UserItems =
@@ -680,7 +691,7 @@ export default function UsersPage() {
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
       pendingGroupSelections: [],
-      accountPortalRoleChoice: {},
+      accountAccessChoice: {},
     });
 
   const createCurrentSignature = useMemo(
@@ -695,10 +706,10 @@ export default function UsersPage() {
         pendingS3UserSelections: createS3UserSelections,
         pendingConnectionSelections: createConnectionSelections,
         pendingGroupSelections: createGroupSelections,
-        accountPortalRoleChoice: createAccountPortalRoleChoice,
+        accountAccessChoice: createAccountAccessChoice,
       }),
     [
-      createAccountPortalRoleChoice,
+      createAccountAccessChoice,
       createAccountSelections,
       createConnectionSelections,
       createGroupSelections,
@@ -717,7 +728,7 @@ export default function UsersPage() {
     setCreateSelectedS3Users([]);
     setCreateSelectedS3Connections([]);
     setCreateSelectedGroups([]);
-    setCreateAccountPortalRoleChoice({});
+    setCreateAccountAccessChoice({});
     setCreateS3AccountSearch("");
     setCreateS3Search("");
     setCreateConnectionSearch("");
@@ -753,10 +764,10 @@ export default function UsersPage() {
         pendingS3UserSelections: editS3UserSelections,
         pendingConnectionSelections: editConnectionSelections,
         pendingGroupSelections: editGroupSelections,
-        accountPortalRoleChoice: editAccountPortalRoleChoice,
+        accountAccessChoice: editAccountAccessChoice,
       }),
     [
-      editAccountPortalRoleChoice,
+      editAccountAccessChoice,
       editAccountSelections,
       editConnectionSelections,
       editGroupSelections,
@@ -790,7 +801,7 @@ export default function UsersPage() {
     setEditS3UserSelections([]);
     setEditConnectionSelections([]);
     setEditGroupSelections([]);
-    setEditAccountPortalRoleChoice({});
+    setEditAccountAccessChoice({});
     setEditForm({});
     setEditRoleHelpOpen(false);
     setEditInitialSignature(
@@ -804,7 +815,7 @@ export default function UsersPage() {
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
         pendingGroupSelections: [],
-        accountPortalRoleChoice: {},
+        accountAccessChoice: {},
       })
     );
     clearAdminPrincipalEditRequest();
@@ -828,6 +839,12 @@ export default function UsersPage() {
     if (!form.email || !form.password) {
       setCreateModalTab("general");
       setActionError("Email and password are required.");
+      return;
+    }
+    if (createSelectedS3Accounts.some((entry) => !hasAccountAccessRole(entry))) {
+      setCreateModalTab("associations");
+      setCreateAssociationsTab("accounts");
+      setActionError(getAccountAccessRequiredMessage(showPortalRole));
       return;
     }
     const role = form.role ?? "ui_user";
@@ -862,7 +879,8 @@ export default function UsersPage() {
         const associationsPayload: UpdateUserPayload = {
           account_links: createSelectedS3Accounts.map((entry) => ({
             account_id: Number(entry.id),
-            role: normalizeAccountAccessRole(entry.role),
+            manager_role: entry.manager_role,
+            portal_role: entry.portal_role,
             allow_manager_browser_data_access: Boolean(entry.allow_manager_browser_data_access),
           })),
         };
@@ -921,9 +939,9 @@ export default function UsersPage() {
     setEditForm(nextEditForm);
     const selectedAccounts = (user.account_links ?? []).map((link) => ({
       id: Number(link.account_id),
-      role: normalizeAccountAccessRole(link.role),
+      manager_role: link.manager_role,
+      portal_role: link.portal_role,
       allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
-      is_root: Boolean(link.is_root),
     }));
     setEditSelectedS3Accounts(selectedAccounts);
     const nextSelectedS3Users = (user.s3_user_links ?? []).map((link) => ({
@@ -958,7 +976,7 @@ export default function UsersPage() {
     setEditS3UserSelections([]);
     setEditConnectionSelections([]);
     setEditGroupSelections([]);
-    setEditAccountPortalRoleChoice({});
+    setEditAccountAccessChoice({});
     setEditInitialSignature(
       stableSignature({
         form: nextEditForm,
@@ -970,7 +988,7 @@ export default function UsersPage() {
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
         pendingGroupSelections: [],
-        accountPortalRoleChoice: {},
+      accountAccessChoice: {},
       })
     );
     setEditModalTab("general");
@@ -993,9 +1011,15 @@ export default function UsersPage() {
   const submitEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    setBusyId(editingUser.id);
     setActionError(null);
     setActionMessage(null);
+    if (editSelectedS3Accounts.some((entry) => !hasAccountAccessRole(entry))) {
+      setEditModalTab("associations");
+      setEditAssociationsTab("accounts");
+      setActionError(getAccountAccessRequiredMessage(showPortalRole));
+      return;
+    }
+    setBusyId(editingUser.id);
     try {
       const payload: UpdateUserPayload = {};
       const nextRole = editForm.role ?? editingUser.role;
@@ -1037,7 +1061,8 @@ export default function UsersPage() {
       );
       payload.account_links = editSelectedS3Accounts.map((entry) => ({
         account_id: Number(entry.id),
-        role: normalizeAccountAccessRole(entry.role),
+        manager_role: entry.manager_role,
+        portal_role: entry.portal_role,
         allow_manager_browser_data_access: Boolean(entry.allow_manager_browser_data_access),
       }));
       payload.group_ids = editSelectedGroups;
@@ -1432,8 +1457,8 @@ export default function UsersPage() {
                   setShowPanel: setShowCreateAccountPanel,
                   selections: createAccountSelections,
                   setSelections: setCreateAccountSelections,
-                  portalRoleChoice: createAccountPortalRoleChoice,
-                  setPortalRoleChoice: setCreateAccountPortalRoleChoice,
+                  accountAccessChoice: createAccountAccessChoice,
+                  setAccountAccessChoice: setCreateAccountAccessChoice,
                   toggleSelection: toggleCreateAccountSelection,
                 }}
                 s3Users={{
@@ -1791,8 +1816,8 @@ export default function UsersPage() {
                   setShowPanel: setShowEditAccountPanel,
                   selections: editAccountSelections,
                   setSelections: setEditAccountSelections,
-                  portalRoleChoice: editAccountPortalRoleChoice,
-                  setPortalRoleChoice: setEditAccountPortalRoleChoice,
+                  accountAccessChoice: editAccountAccessChoice,
+                  setAccountAccessChoice: setEditAccountAccessChoice,
                   toggleSelection: toggleEditAccountSelection,
                 }}
                 s3Users={{

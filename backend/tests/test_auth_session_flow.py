@@ -206,8 +206,8 @@ def _setup_account(db_session) -> S3Account:
             UserS3Account(
                 user_id=manager.id,
                 account_id=account.id,
-                is_root=True,
-                role="account_administrator",
+                manager_role="account_administrator",
+                portal_role=None,
             )
         )
         db_session.commit()

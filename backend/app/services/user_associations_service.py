@@ -17,7 +17,6 @@ from app.db import (
     UserUiGroup,
 )
 from app.models.user import AccountMembership, S3UserMembership, UserUpdate
-from app.utils.account_roles import require_account_role
 from app.utils.time import utcnow
 
 
@@ -78,16 +77,7 @@ class UserAssociationsService:
         user: User,
         links: list[AccountMembership],
     ) -> None:
-        cleaned: dict[int, AccountMembership] = {}
-        for link in links:
-            account_id = int(link.account_id)
-            cleaned[account_id] = AccountMembership(
-                account_id=account_id,
-                role=require_account_role(link.role),
-                allow_manager_browser_data_access=bool(
-                    link.allow_manager_browser_data_access
-                ),
-            )
+        cleaned = {int(link.account_id): link for link in links}
         if cleaned:
             found_ids = {
                 int(account_id)
@@ -111,37 +101,24 @@ class UserAssociationsService:
         existing_by_account = {
             int(link.account_id): link for link in existing
         }
-        protected_root_ids = {
-            int(link.account_id) for link in existing if bool(link.is_root)
-        }
         desired_ids = set(cleaned)
         for account_id, row in existing_by_account.items():
-            if (
-                account_id not in desired_ids
-                and account_id not in protected_root_ids
-            ):
+            if account_id not in desired_ids:
                 self.db.delete(row)
         for account_id, link in cleaned.items():
             row = existing_by_account.get(account_id)
-            if account_id in protected_root_ids:
-                if row is not None:
-                    row.allow_manager_browser_data_access = bool(
-                        link.allow_manager_browser_data_access
-                    )
-                    row.updated_at = utcnow()
-                    self.db.add(row)
-                continue
             if row is None:
                 row = UserS3Account(
                     user_id=user.id,
                     account_id=account_id,
-                    is_root=False,
-                    role=link.role,
+                    manager_role=link.manager_role,
+                    portal_role=link.portal_role,
                     allow_manager_browser_data_access=bool(
                         link.allow_manager_browser_data_access
                     ),
                 )
-            row.role = require_account_role(link.role)
+            row.manager_role = link.manager_role
+            row.portal_role = link.portal_role
             row.allow_manager_browser_data_access = bool(
                 link.allow_manager_browser_data_access
             )

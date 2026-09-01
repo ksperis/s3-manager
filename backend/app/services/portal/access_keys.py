@@ -179,7 +179,7 @@ class PortalAccessKeysMixin:
         self._sync_user_group_membership(
             iam_service,
             link.iam_username,
-            access.role,
+            access.portal_role,
             account=access.account,
         )
         if not link.iam_username:
@@ -328,7 +328,7 @@ class PortalAccessKeysMixin:
         self._sync_user_group_membership(
             iam_service,
             link.iam_username,
-            access.role,
+            access.portal_role,
             account=access.account,
         )
         if not link.iam_username:
@@ -378,7 +378,7 @@ class PortalAccessKeysMixin:
         self._sync_user_group_membership(
             iam_service,
             link.iam_username,
-            access.role,
+            access.portal_role,
             account=access.account,
         )
         if access_key_id == link.active_access_key:

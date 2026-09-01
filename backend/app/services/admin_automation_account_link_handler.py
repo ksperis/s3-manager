@@ -2,8 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from typing import cast
-
 from sqlalchemy.orm import Session
 
 from app.db import S3Account, User, UserS3Account
@@ -34,8 +32,6 @@ class AdminAutomationAccountLinkHandler(AdminAutomationResultFactory):
             if item.state == "absent":
                 if not link:
                     return self._skipped("account_link", key, dry_run=dry_run)
-                if link.is_root:
-                    raise ValueError("Cannot remove the root account link")
                 if dry_run:
                     return self._deleted(
                         "account_link",
@@ -44,7 +40,8 @@ class AdminAutomationAccountLinkHandler(AdminAutomationResultFactory):
                         dry_run=dry_run,
                     )
                 link_id = link.id
-                removed_role = link.role
+                removed_manager_role = link.manager_role
+                removed_portal_role = link.portal_role
                 self.users.unassign_user_from_account(user.id, account.id)
                 audit_service.record_action(
                     user=current_user,
@@ -55,7 +52,8 @@ class AdminAutomationAccountLinkHandler(AdminAutomationResultFactory):
                     account_id=account.id,
                     metadata={
                         "assigned_user_id": user.id,
-                        "removed_role": removed_role,
+                        "removed_manager_role": removed_manager_role,
+                        "removed_portal_role": removed_portal_role,
                     },
                 )
                 return self._deleted(
@@ -65,13 +63,24 @@ class AdminAutomationAccountLinkHandler(AdminAutomationResultFactory):
                     dry_run=dry_run,
                 )
 
-            desired_role = cast(str, item.role)
+            desired_manager_role = item.manager_role
+            desired_portal_role = item.portal_role
             if link:
-                if link.is_root and desired_role != "account_administrator":
-                    raise ValueError("Cannot modify the root account link")
-                if desired_role == link.role:
+                if (
+                    desired_manager_role == link.manager_role
+                    and desired_portal_role == link.portal_role
+                ):
                     return self._skipped("account_link", key, dry_run=dry_run)
-                diff = {"role": {"from": link.role, "to": desired_role}}
+                diff = {
+                    "manager_role": {
+                        "from": link.manager_role,
+                        "to": desired_manager_role,
+                    },
+                    "portal_role": {
+                        "from": link.portal_role,
+                        "to": desired_portal_role,
+                    },
+                }
                 if dry_run:
                     return self._updated(
                         "account_link",
@@ -83,8 +92,8 @@ class AdminAutomationAccountLinkHandler(AdminAutomationResultFactory):
                 self.users.assign_user_to_account(
                     user.id,
                     account.id,
-                    account_root=link.is_root,
-                    role=desired_role,
+                    manager_role=desired_manager_role,
+                    portal_role=desired_portal_role,
                 )
                 audit_service.record_action(
                     user=current_user,
@@ -94,9 +103,9 @@ class AdminAutomationAccountLinkHandler(AdminAutomationResultFactory):
                     entity_id=str(user.id),
                     account_id=account.id,
                     metadata={
-                        "account_root": bool(link.is_root),
                         "assigned_user_id": user.id,
-                        "role": desired_role,
+                        "manager_role": desired_manager_role,
+                        "portal_role": desired_portal_role,
                     },
                 )
                 return self._updated(
@@ -112,8 +121,8 @@ class AdminAutomationAccountLinkHandler(AdminAutomationResultFactory):
             self.users.assign_user_to_account(
                 user.id,
                 account.id,
-                account_root=False,
-                role=desired_role,
+                manager_role=desired_manager_role,
+                portal_role=desired_portal_role,
             )
             created_link = self._find_link(user.id, account.id)
             if created_link is None:
@@ -126,9 +135,9 @@ class AdminAutomationAccountLinkHandler(AdminAutomationResultFactory):
                 entity_id=str(user.id),
                 account_id=account.id,
                 metadata={
-                    "account_root": False,
                     "assigned_user_id": user.id,
-                    "role": desired_role,
+                    "manager_role": desired_manager_role,
+                    "portal_role": desired_portal_role,
                 },
             )
             return self._created(

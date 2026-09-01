@@ -36,7 +36,7 @@ const review = {
     user_id: 13,
     email: "editor@example.com",
     display_name: "Editor User",
-    account_role: "portal_user",
+    portal_role: "portal_user",
     access_source: "direct" as const,
     member_since: "2026-06-01T10:00:00Z",
     can_review_access: true,

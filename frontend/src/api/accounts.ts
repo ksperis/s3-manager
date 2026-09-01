@@ -9,23 +9,19 @@ import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 import type { UiGroupAvatarDescriptor } from "./groups";
 import type { UserAvatarDescriptor } from "./users";
-import type { AccountAccessRole } from "./accountRoles";
+import type { AccountAccessGrant } from "./accountAccess";
 
-export type AccountUserLink = {
+export type AccountUserLink = AccountAccessGrant & {
   user_id: number;
-  role: AccountAccessRole;
-  allow_manager_browser_data_access?: boolean;
   user_email?: string | null;
   user_full_name?: string | null;
   user_avatar?: UserAvatarDescriptor | null;
 };
 
-export type AccountGroupLink = {
+export type AccountGroupLink = AccountAccessGrant & {
   group_id: number;
   group_name?: string | null;
   group_avatar?: UiGroupAvatarDescriptor | null;
-  role: AccountAccessRole;
-  allow_manager_browser_data_access?: boolean;
 };
 
 export type S3Account = {

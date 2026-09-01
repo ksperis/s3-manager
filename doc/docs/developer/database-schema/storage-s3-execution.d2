@@ -69,8 +69,9 @@ Legend: {
     "id": "INTEGER [PK, NN]"
     "user_id": "INTEGER [FK, NN]"
     "account_id": "INTEGER [FK, NN]"
-    "is_root": "BOOLEAN [NN]"
-    "role": "VARCHAR [NN]"
+    "manager_role": "VARCHAR"
+    "portal_role": "VARCHAR"
+    "allow_manager_browser_data_access": "BOOLEAN [NN]"
     "created_at": "DATETIME [NN]"
     "updated_at": "DATETIME [NN]"
   }
@@ -172,7 +173,9 @@ Legend: {
     "id": "INTEGER [PK, NN]"
     "group_id": "INTEGER [FK, NN]"
     "account_id": "INTEGER [FK, NN]"
-    "role": "VARCHAR [NN]"
+    "manager_role": "VARCHAR"
+    "portal_role": "VARCHAR"
+    "allow_manager_browser_data_access": "BOOLEAN [NN]"
     "created_at": "DATETIME [NN]"
     "updated_at": "DATETIME [NN]"
   }

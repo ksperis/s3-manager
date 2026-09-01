@@ -116,7 +116,13 @@ function storePortalAdminUser() {
       email: "admin@example.com",
       role: "ui_admin",
       authType: "password",
-      account_links: [{ account_id: 101, role: "account_administrator" }],
+      account_links: [
+        {
+          account_id: 101,
+          manager_role: "account_administrator" as const,
+          portal_role: "portal_manager" as const,
+        },
+      ],
   };
   mocks.sessionUser = user;
   setSessionUserCache(user as SessionUser);
@@ -143,7 +149,13 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       email: "admin@example.com",
       role: "ui_admin",
       authType: "password",
-      account_links: [{ account_id: 101, role: "account_administrator" }],
+      account_links: [
+        {
+          account_id: 101,
+          manager_role: "account_administrator",
+          portal_role: "portal_manager",
+        },
+      ],
     });
     mocks.getWorkspaceAccess.mockResolvedValue({
       admin: { available: true, context_count: 1 },
@@ -216,7 +228,11 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       email: "plain-admin@example.com",
       role: "ui_superadmin",
       authType: "password",
-      account_links: [{ account_id: 101, role: "account_administrator" }],
+      account_links: [{
+        account_id: 101,
+        manager_role: "account_administrator",
+        portal_role: "portal_manager",
+      }],
     });
 
     renderSwitcherModel("/admin");
@@ -225,8 +241,8 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       const options = within(screen.getByRole("list", { name: "Workspace options" }));
       expect(options.getByText("Portal (self-service)")).toBeInTheDocument();
     });
-    expect(readStoredUser()?.account_links?.[0]?.role).toBe(
-      "account_administrator"
+    expect(readStoredUser()?.account_links?.[0]?.portal_role).toBe(
+      "portal_manager",
     );
   });
 
@@ -241,7 +257,9 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
         role: "ui_user",
         authType: "password",
         can_access_storage_ops: true,
-        account_links: [{ account_id: 101, role: "portal_user" }],
+        account_links: [
+          { account_id: 101, manager_role: null, portal_role: "portal_user" as const },
+        ],
     };
     mocks.sessionUser = portalOnlyUser;
     mocks.fetchCurrentUser.mockResolvedValue(portalOnlyUser);

@@ -34,7 +34,7 @@ const adminUser: SessionUser = {
   role: "ui_admin",
   can_access_ceph_admin: true,
   can_access_storage_ops: true,
-  account_links: [{ account_id: 1, role: "account_administrator" }],
+  account_links: [{ account_id: 1, manager_role: "account_administrator", portal_role: null }],
 };
 
 const superAdminUser: SessionUser = {
@@ -43,7 +43,7 @@ const superAdminUser: SessionUser = {
   role: "ui_superadmin",
   can_access_ceph_admin: true,
   can_access_storage_ops: true,
-  account_links: [{ account_id: 2, role: "account_administrator" }],
+  account_links: [{ account_id: 2, manager_role: "account_administrator", portal_role: null }],
 };
 
 describe("resolveAvailableWorkspacesWithFlags", () => {
@@ -112,7 +112,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       email: "user@example.com",
       role: "ui_user",
       can_access_storage_ops: false,
-      account_links: [{ account_id: 12, role: "account_administrator" }],
+      account_links: [{ account_id: 12, manager_role: "account_administrator", portal_role: null }],
     };
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
       ...baseSettings,
@@ -127,7 +127,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       email: "ops-without-context@example.com",
       role: "ui_user",
       can_access_storage_ops: true,
-      account_links: [{ account_id: 24, role: "portal_user" }],
+      account_links: [{ account_id: 24, manager_role: null, portal_role: "portal_user" }],
     };
 
     const workspaces = resolveAvailableWorkspacesWithFlags(
@@ -151,7 +151,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       email: "ops-user@example.com",
       role: "ui_user",
       can_access_storage_ops: true,
-      account_links: [{ account_id: 24, role: "account_administrator" }],
+      account_links: [{ account_id: 24, manager_role: "account_administrator", portal_role: null }],
     };
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
       ...baseSettings,
@@ -165,7 +165,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 7,
       email: "portal-user@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, role: "portal_user" }],
+      account_links: [{ account_id: 24, manager_role: null, portal_role: "portal_user" }],
     };
 
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
@@ -194,10 +194,13 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
         },
         account_links: [{
           account_id: 42,
-          role: "account_administrator",
+          manager_role: "account_administrator",
+          portal_role: "portal_user",
           provenance: {
-            direct_role: null,
-            direct_determines_effective_role: false,
+            direct_manager_role: null,
+            direct_portal_role: null,
+            direct_determines_effective_manager_role: false,
+            direct_determines_effective_portal_role: false,
             groups: [],
           },
         }],
@@ -247,7 +250,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 9,
       email: "portal-manager@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, role: "portal_manager" }],
+      account_links: [{ account_id: 24, manager_role: null, portal_role: "portal_manager" }],
     };
 
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
@@ -266,7 +269,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 15,
       email: "portal-browser@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, role: "portal_user" }],
+      account_links: [{ account_id: 24, manager_role: null, portal_role: "portal_user" }],
       s3_connection_details: [],
       s3_user_details: [],
     };
@@ -285,7 +288,11 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(
       {
         ...adminUser,
-        account_links: [{ account_id: 24, role: "account_administrator" }],
+        account_links: [{
+          account_id: 24,
+          manager_role: "account_administrator",
+          portal_role: "portal_manager",
+        }],
       },
       {
         ...baseSettings,
@@ -303,7 +310,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(
       {
         ...superAdminUser,
-        account_links: [{ account_id: 24, role: "portal_user" }],
+        account_links: [{ account_id: 24, manager_role: null, portal_role: "portal_user" }],
       },
       {
         ...baseSettings,
@@ -334,7 +341,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 10,
       email: "portal-disabled@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, role: "portal_user" }],
+      account_links: [{ account_id: 24, manager_role: null, portal_role: "portal_user" }],
     };
 
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
@@ -382,7 +389,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 12,
       email: "portal-only@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, role: "portal_user" }],
+      account_links: [{ account_id: 24, manager_role: null, portal_role: "portal_user" }],
     };
 
     expect(resolvePostLoginPath(user, { ...baseSettings, portal_enabled: true })).toBe("/portal");

@@ -10,7 +10,10 @@ from app.models.base import ApiModel
 from app.db import StorageProvider
 from app.models.s3_connection import CredentialOwnerType
 from app.models.user import ManagerToolAccess, UiRole
-from app.utils.account_roles import CanonicalAccountRole
+from app.utils.account_roles import (
+    ManagerAccountRoleValue,
+    PortalAccountRoleValue,
+)
 
 
 ApplyState = Literal["present", "absent"]
@@ -80,7 +83,6 @@ class UiUserSpec(ApiModel):
     full_name: Optional[str] = None
     role: Optional[UiRole] = None
     is_active: Optional[bool] = None
-    is_root: Optional[bool] = None
     can_create_manual_private_connections: Optional[bool] = None
     can_provision_managed_private_connections: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None
@@ -296,12 +298,18 @@ class AccountLinkApply(ApiModel):
     state: ApplyState = "present"
     user: AccountLinkUserRef
     account: AccountLinkAccountRef
-    role: Optional[CanonicalAccountRole] = None
+    manager_role: Optional[ManagerAccountRoleValue]
+    portal_role: Optional[PortalAccountRoleValue]
 
     @model_validator(mode="after")
-    def _require_role_for_present_link(self) -> "AccountLinkApply":
-        if self.state == "present" and self.role is None:
-            raise ValueError("account_links.role is required when state is present")
+    def _validate_roles_for_state(self) -> "AccountLinkApply":
+        if self.state == "present":
+            if self.manager_role is None and self.portal_role is None:
+                raise ValueError("account_links requires at least one account role")
+        elif self.manager_role is not None or self.portal_role is not None:
+            raise ValueError(
+                "absent account_links require null manager_role and portal_role"
+            )
         return self
 
 

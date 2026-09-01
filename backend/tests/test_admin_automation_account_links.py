@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.db import AccountRole, S3Account, User, UserRole, UserS3Account
+from app.db import ManagerAccountRole, PortalAccountRole, S3Account, User, UserRole, UserS3Account
 from app.models.admin_automation import (
     AccountLinkAccountRef,
     AccountLinkApply,
@@ -70,7 +70,8 @@ def test_automation_creates_account_link_with_canonical_result_key(db_session):
                 AccountLinkApply(
                     user=AccountLinkUserRef(email=target.email),
                     account=AccountLinkAccountRef(name=account.name),
-                    role=AccountRole.PORTAL_USER.value,
+                    manager_role=None,
+                    portal_role=PortalAccountRole.PORTAL_USER.value,
                 )
             ]
         ),
@@ -89,8 +90,10 @@ def test_automation_creates_account_link_with_canonical_result_key(db_session):
     assert result.results[0].key == (
         f"user[email={target.email}],account[name={account.name}]"
     )
-    assert link.role == AccountRole.PORTAL_USER.value
-    assert audit.actions[0]["metadata"]["role"] == AccountRole.PORTAL_USER.value
+    assert link.manager_role is None
+    assert link.portal_role == PortalAccountRole.PORTAL_USER.value
+    assert audit.actions[0]["metadata"]["manager_role"] is None
+    assert audit.actions[0]["metadata"]["portal_role"] == PortalAccountRole.PORTAL_USER.value
 
 
 def test_automation_updates_existing_account_link_role(db_session):
@@ -108,8 +111,8 @@ def test_automation_updates_existing_account_link_role(db_session):
     link = UserS3Account(
         user_id=target.id,
         account_id=account.id,
-        role=AccountRole.PORTAL_USER.value,
-        is_root=False,
+        manager_role=None,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
     )
     db_session.add(link)
     db_session.commit()
@@ -120,7 +123,8 @@ def test_automation_updates_existing_account_link_role(db_session):
                 AccountLinkApply(
                     user=AccountLinkUserRef(id=target.id),
                     account=AccountLinkAccountRef(id=account.id),
-                    role=AccountRole.PORTAL_MANAGER.value,
+                    manager_role=None,
+                    portal_role=PortalAccountRole.PORTAL_MANAGER.value,
                 )
             ]
         ),
@@ -131,12 +135,14 @@ def test_automation_updates_existing_account_link_role(db_session):
     db_session.refresh(link)
     assert result.success is True
     assert result.results[0].diff == {
-        "role": {
-            "from": AccountRole.PORTAL_USER.value,
-            "to": AccountRole.PORTAL_MANAGER.value,
+        "manager_role": {"from": None, "to": None},
+        "portal_role": {
+            "from": PortalAccountRole.PORTAL_USER.value,
+            "to": PortalAccountRole.PORTAL_MANAGER.value,
         }
     }
-    assert link.role == AccountRole.PORTAL_MANAGER.value
+    assert link.manager_role is None
+    assert link.portal_role == PortalAccountRole.PORTAL_MANAGER.value
 
 
 def test_automation_unassigns_through_portal_role_sync_boundary(
@@ -157,12 +163,12 @@ def test_automation_unassigns_through_portal_role_sync_boundary(
     link = UserS3Account(
         user_id=target.id,
         account_id=account.id,
-        role=AccountRole.PORTAL_MANAGER.value,
-        is_root=False,
+        manager_role=None,
+        portal_role=PortalAccountRole.PORTAL_MANAGER.value,
     )
     db_session.add(link)
     db_session.commit()
-    before = {(target.id, account.id): AccountRole.PORTAL_MANAGER.value}
+    before = {(target.id, account.id): PortalAccountRole.PORTAL_MANAGER.value}
     after = {(target.id, account.id): None}
     snapshots = iter((before, after))
     sync_calls: list[tuple[str, dict, dict]] = []
@@ -189,6 +195,8 @@ def test_automation_unassigns_through_portal_role_sync_boundary(
                     state="absent",
                     user=AccountLinkUserRef(id=target.id),
                     account=AccountLinkAccountRef(id=account.id),
+                    manager_role=None,
+                    portal_role=None,
                 )
             ]
         ),
@@ -210,7 +218,7 @@ def test_automation_unassigns_through_portal_role_sync_boundary(
     ]
 
 
-def test_automation_cannot_remove_root_account_link(db_session):
+def test_automation_can_remove_former_root_account_link(db_session):
     actor = _user(
         db_session,
         email="root-link-actor@example.com",
@@ -225,8 +233,8 @@ def test_automation_cannot_remove_root_account_link(db_session):
     link = UserS3Account(
         user_id=target.id,
         account_id=account.id,
-        role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-        is_root=True,
+        manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+        portal_role=None,
     )
     db_session.add(link)
     db_session.commit()
@@ -238,6 +246,8 @@ def test_automation_cannot_remove_root_account_link(db_session):
                     state="absent",
                     user=AccountLinkUserRef(id=target.id),
                     account=AccountLinkAccountRef(id=account.id),
+                    manager_role=None,
+                    portal_role=None,
                 )
             ]
         ),
@@ -245,10 +255,9 @@ def test_automation_cannot_remove_root_account_link(db_session):
         audit_service=_Audit(),
     )
 
-    assert result.success is False
-    assert result.results[0].action == "failed"
-    assert "root account link" in (result.results[0].error or "")
-    assert db_session.query(UserS3Account).filter_by(id=link.id).one()
+    assert result.success is True
+    assert result.results[0].action == "deleted"
+    assert db_session.query(UserS3Account).filter_by(id=link.id).first() is None
 
 
 @pytest.mark.parametrize(

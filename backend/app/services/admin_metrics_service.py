@@ -174,7 +174,6 @@ class AdminMetricsService:
         assigned_accounts_query = (
             db.query(func.count(func.distinct(S3Account.id)))
             .join(UserS3Account, UserS3Account.account_id == S3Account.id)
-            .filter(UserS3Account.is_root.is_(False))
         )
         assigned = cls._endpoint_scoped_count(
             assigned_accounts_query,

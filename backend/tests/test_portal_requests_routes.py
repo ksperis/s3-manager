@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.db import AccountRole, S3Account, User, UserRole, UserS3Account
+from app.db import PortalAccountRole, S3Account, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
 from app.models.access_context import AccountAccess
@@ -39,12 +39,12 @@ def _install_portal_access_override(
     account: S3Account,
     user: User,
     *,
-    role: str = AccountRole.PORTAL_MANAGER.value,
+    portal_role: str = PortalAccountRole.PORTAL_MANAGER.value,
     can_manage: bool | None = None,
 ) -> None:
     def override_portal_access():
         effective_can_manage = (
-            role == AccountRole.PORTAL_MANAGER.value
+            portal_role == PortalAccountRole.PORTAL_MANAGER.value
             if can_manage is None
             else can_manage
         )
@@ -52,7 +52,7 @@ def _install_portal_access_override(
             account=account,
             actor=user,
             membership=None,
-            role=role,
+            portal_role=portal_role,
             capabilities=AccountCapabilities(
                 can_manage_buckets=effective_can_manage,
                 can_manage_portal_users=effective_can_manage,
@@ -110,7 +110,7 @@ def test_portal_request_routes_create_and_isolate_by_requester(client: TestClien
 def test_portal_request_routes_require_manager_for_creation(client: TestClient, db_session):
     account = _seed_account(db_session)
     requester = _seed_user(db_session, email="requester@example.org")
-    _install_portal_access_override(account, requester, role=AccountRole.PORTAL_USER.value)
+    _install_portal_access_override(account, requester, portal_role=PortalAccountRole.PORTAL_USER.value)
 
     response = client.post(
         "/api/portal/requests",
@@ -130,7 +130,7 @@ def test_portal_request_routes_use_effective_manager_role_for_creation(client: T
     _install_portal_access_override(
         account,
         requester,
-        role=AccountRole.PORTAL_MANAGER.value,
+        portal_role=PortalAccountRole.PORTAL_MANAGER.value,
         can_manage=False,
     )
 
@@ -178,7 +178,8 @@ def test_admin_request_routes_approve_and_conflict(client: TestClient, db_sessio
     assert approved["messages"][0]["message"] == "Approved"
     target = db_session.query(User).filter(User.email == "jane@example.org").one()
     link = db_session.query(UserS3Account).filter_by(user_id=target.id, account_id=account.id).one()
-    assert link.role == AccountRole.PORTAL_USER.value
+    assert link.manager_role is None
+    assert link.portal_role == PortalAccountRole.PORTAL_USER.value
 
     conflict = client.post(f"/api/admin/portal-requests/{request_id}/approve", json={})
     assert conflict.status_code == 409
@@ -193,7 +194,8 @@ def test_admin_request_routes_approve_user_removal(client: TestClient, db_sessio
         UserS3Account(
             user_id=target.id,
             account_id=account.id,
-            role=AccountRole.PORTAL_USER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()

@@ -1,5 +1,31 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-09 Manager and Portal account-role split
+
+Migration `0122_split_account_access_roles` replaces the single association
+`role` with independent `manager_role` and `portal_role` columns on direct user
+and UI-group links. It also removes the obsolete BucketReef `users.is_root` and
+`user_s3_accounts.is_root` columns. Ceph `account-root` identities, RGW account
+credentials, and the corresponding technical sessions are unchanged.
+
+The migration maps `account_administrator` and former root links to Manager
+administrator only; `portal_user` and `portal_manager` map to the matching
+Portal role only. It adds database constraints requiring at least one role and
+allowing Manager Browser data access only with a Manager administrator role.
+Backend, frontend, automation clients, and migration must be deployed together
+because the old `role` contract is rejected.
+
+Alembic does not contact RGW, delete `AccountIAMUser` rows, reconcile Portal IAM,
+or install a post-migration cleanup hook. Historical IAM identities are left
+untouched. This project is treated as not yet deployed in production; if an
+existing development environment is inconsistent, recreate its database and
+RGW test resources instead of adding migration compatibility machinery.
+
+Normal runtime synchronization remains active for explicit Portal-role grants
+and revocations after the migration. Downgrade is refused when any association
+contains both a Manager and Portal role because the former schema cannot
+represent that state without losing access information.
+
 ## 2026-08 first-administrator bootstrap cutover
 
 Migration `0119_first_admin_bootstrap` adds the one-time bootstrap singleton.

@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from app.db import (
-    AccountRole,
+    ManagerAccountRole,
     S3Account,
     StorageEndpoint,
     StorageProvider,
@@ -47,8 +47,8 @@ def test_list_accounts_exposes_user_email_in_user_links(db_session):
             UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                is_root=False,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             )
     )
     db_session.commit()
@@ -91,7 +91,8 @@ def test_accounts_expose_direct_group_links(db_session):
             UiGroupS3Account(
                 account_id=account.id,
                 group_id=group.id,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             )
     )
     db_session.commit()
@@ -109,4 +110,5 @@ def test_accounts_expose_direct_group_links(db_session):
         assert len(item.group_links) == 1
         assert item.group_links[0].group_id == group.id
         assert item.group_links[0].group_name == "Platform Operators"
-    assert item.group_links[0].role == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert item.group_links[0].manager_role == ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert item.group_links[0].portal_role is None

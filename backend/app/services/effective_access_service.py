@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session, joinedload
 
 from app.db import (
-    AccountRole,
+    ManagerAccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -37,7 +37,11 @@ from app.models.user import (
 )
 from app.models.access_context import EffectiveAccountGroupRole, EffectiveAccountLink
 from app.services.association_names import load_s3_user_names, load_shared_s3_connection_names
-from app.utils.account_roles import max_account_role
+from app.utils.account_roles import (
+    ManagerAccountRoleValue,
+    PortalAccountRoleValue,
+    max_portal_account_role,
+)
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.time import utcnow
 
@@ -59,26 +63,46 @@ _MANAGER_TOOL_FIELDS = {
 @dataclass
 class _AccountRoleAccumulator:
     account_id: int
-    is_root: bool = False
-    direct_role: str | None = None
+    direct_manager_role: ManagerAccountRoleValue | None = None
+    direct_portal_role: PortalAccountRoleValue | None = None
     direct_allow_manager_browser_data_access: bool = False
-    group_roles: list[tuple[int, str, str, bool]] = field(default_factory=list)
+    group_roles: list[
+        tuple[
+            int,
+            str,
+            ManagerAccountRoleValue | None,
+            PortalAccountRoleValue | None,
+            bool,
+        ]
+    ] = field(default_factory=list)
 
     def build(self) -> EffectiveAccountLink:
-        direct_role = (
-            AccountRole.ACCOUNT_ADMINISTRATOR.value
-            if self.is_root
-            else self.direct_role
+        manager_role = (
+            ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
+            if self.direct_manager_role is not None
+            or any(source[2] is not None for source in self.group_roles)
+            else None
         )
-        role = max_account_role(direct_role, *(source[2] for source in self.group_roles))
-        if role is None:
-            raise ValueError("Account association has no canonical role")
+        portal_role = max_portal_account_role(
+            self.direct_portal_role,
+            *(source[3] for source in self.group_roles),
+        )
+        if manager_role is None and portal_role is None:
+            raise ValueError("Account association has no role")
         return EffectiveAccountLink(
             account_id=self.account_id,
-            role=role,
-            is_root=self.is_root,
-            direct_role=direct_role,
-            direct_determines_effective_role=direct_role == role,
+            manager_role=manager_role,
+            portal_role=portal_role,
+            direct_manager_role=self.direct_manager_role,
+            direct_portal_role=self.direct_portal_role,
+            direct_determines_effective_manager_role=(
+                self.direct_manager_role is not None
+                and self.direct_manager_role == manager_role
+            ),
+            direct_determines_effective_portal_role=(
+                self.direct_portal_role is not None
+                and self.direct_portal_role == portal_role
+            ),
             direct_allow_manager_browser_data_access=(
                 self.direct_allow_manager_browser_data_access
             ),
@@ -86,11 +110,19 @@ class _AccountRoleAccumulator:
                 EffectiveAccountGroupRole(
                     group_id=group_id,
                     group_name=group_name,
-                    role=group_role,
-                    determines_effective_role=group_role == role,
+                    manager_role=group_manager_role,
+                    portal_role=group_portal_role,
+                    determines_effective_manager_role=(
+                        group_manager_role is not None
+                        and group_manager_role == manager_role
+                    ),
+                    determines_effective_portal_role=(
+                        group_portal_role is not None
+                        and group_portal_role == portal_role
+                    ),
                     allow_manager_browser_data_access=allow_manager_browser_data_access,
                 )
-                for group_id, group_name, group_role, allow_manager_browser_data_access in sorted(
+                for group_id, group_name, group_manager_role, group_portal_role, allow_manager_browser_data_access in sorted(
                     self.group_roles,
                     key=lambda source: (source[1].lower(), source[0]),
                 )
@@ -217,12 +249,8 @@ class EffectiveAccessService:
                 int(link.account_id),
                 _AccountRoleAccumulator(account_id=int(link.account_id)),
             )
-            accumulator.is_root = bool(accumulator.is_root or link.is_root)
-            accumulator.direct_role = (
-                AccountRole.ACCOUNT_ADMINISTRATOR.value
-                if link.is_root
-                else str(link.role)
-            )
+            accumulator.direct_manager_role = link.manager_role
+            accumulator.direct_portal_role = link.portal_role
             accumulator.direct_allow_manager_browser_data_access = bool(
                 link.allow_manager_browser_data_access
             )
@@ -245,7 +273,8 @@ class EffectiveAccessService:
                             int(link.group_id),
                             f"Group #{link.group_id}",
                         ),
-                        str(link.role),
+                        link.manager_role,
+                        link.portal_role,
                         bool(link.allow_manager_browser_data_access),
                     )
                 )
@@ -521,9 +550,8 @@ class EffectiveAccessService:
         ]
 
     @staticmethod
-    def manager_account_allowed(role_or_link: object) -> bool:
-        role = getattr(role_or_link, "role", role_or_link)
-        return role == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    def manager_account_allowed(link: EffectiveAccountLink) -> bool:
+        return link.manager_role == ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
 
     def to_user_effective_access(self, user: User) -> EffectiveUserAccess:
         resolved = self.resolve_user(user)
@@ -540,11 +568,18 @@ class EffectiveAccessService:
             account_links=[
                 EffectiveAccountMembership(
                     account_id=link.account_id,
-                    role=link.role,
+                    manager_role=link.manager_role,
+                    portal_role=link.portal_role,
                     allow_manager_browser_data_access=link.manager_browser_allowed,
                     provenance=EffectiveAccountRoleProvenance(
-                        direct_role=link.direct_role,
-                        direct_determines_effective_role=link.direct_determines_effective_role,
+                        direct_manager_role=link.direct_manager_role,
+                        direct_portal_role=link.direct_portal_role,
+                        direct_determines_effective_manager_role=(
+                            link.direct_determines_effective_manager_role
+                        ),
+                        direct_determines_effective_portal_role=(
+                            link.direct_determines_effective_portal_role
+                        ),
                         direct_allow_manager_browser_data_access=(
                             link.direct_allow_manager_browser_data_access
                         ),
@@ -552,8 +587,14 @@ class EffectiveAccessService:
                             EffectiveAccountGroupSource(
                                 group_id=source.group_id,
                                 group_name=source.group_name,
-                                role=source.role,
-                                determines_effective_role=source.determines_effective_role,
+                                manager_role=source.manager_role,
+                                portal_role=source.portal_role,
+                                determines_effective_manager_role=(
+                                    source.determines_effective_manager_role
+                                ),
+                                determines_effective_portal_role=(
+                                    source.determines_effective_portal_role
+                                ),
                                 allow_manager_browser_data_access=(
                                     source.allow_manager_browser_data_access
                                 ),

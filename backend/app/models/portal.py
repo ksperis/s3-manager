@@ -5,6 +5,7 @@ from typing import Literal, Optional, Union
 
 from pydantic import AwareDatetime, Field, field_validator, model_validator
 
+from app.db import PortalAccountRole
 from app.models.base import ApiModel
 from app.models.app_settings import PortalSettings, PortalSettingsOverride
 from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsScanMode
@@ -15,7 +16,7 @@ class PortalAccount(ApiModel):
     id: int
     name: str
     rgw_account_id: str
-    account_role: Literal["portal_user", "portal_manager"]
+    portal_role: PortalAccountRole
     storage_endpoint_name: str
     storage_endpoint_url: str
     storage_endpoint_is_default: bool
@@ -78,7 +79,7 @@ class PortalIAMUser(ApiModel):
 
 
 class PortalState(ApiModel):
-    account_role: Optional[str] = None
+    portal_role: Optional[PortalAccountRole] = None
     can_manage_buckets: bool = False
     can_create_private_storage_spaces: bool = False
     can_create_team_storage_spaces: bool = False
@@ -456,7 +457,7 @@ class PortalStorageSpaceAccessPerson(ApiModel):
     email: str
     display_name: Optional[str] = None
     role: PortalStorageSpaceRole
-    account_role: Optional[str] = None
+    portal_role: Optional[PortalAccountRole] = None
     access_source: Optional[Literal["owner", "direct", "group", "direct_and_group"]] = None
     avatar: Optional[UserAvatar] = None
 
@@ -476,7 +477,7 @@ class PortalStorageSpaceShareCandidate(ApiModel):
     user_id: int
     email: str
     display_name: Optional[str] = None
-    account_role: str
+    portal_role: PortalAccountRole
     access_source: Literal["direct", "group", "direct_and_group"]
     already_shared: bool = False
     avatar: Optional[UserAvatar] = None
@@ -486,7 +487,7 @@ class PortalCollaborator(ApiModel):
     user_id: int
     email: str
     display_name: Optional[str] = None
-    account_role: str
+    portal_role: PortalAccountRole
     access_source: Literal["direct", "group", "direct_and_group"]
     member_since: Optional[datetime] = None
     avatar: Optional[UserAvatar] = None
@@ -672,4 +673,3 @@ class PortalProjectSettings(ApiModel):
     project_override: PortalSettingsOverride
     delegated_to_portal_managers: bool = False
     can_update: bool = False
-

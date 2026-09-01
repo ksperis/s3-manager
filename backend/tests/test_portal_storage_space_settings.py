@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.db import AccountRole, PortalStorageSpaceMetadata, S3Account, User
+from app.db import PortalAccountRole, PortalStorageSpaceMetadata, S3Account, User
 from app.models.portal import PortalStorageSpaceSettingsUpdate
 from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
@@ -42,12 +42,12 @@ def _setup(db_session, *, archived: bool = False):
 
 
 def _access(account: S3Account, user: User, role: str) -> AccountAccess:
-    is_manager = role == AccountRole.PORTAL_MANAGER.value
+    is_manager = role == PortalAccountRole.PORTAL_MANAGER.value
     return AccountAccess(
         account=account,
         actor=user,
         membership=None,
-        role=role,
+        portal_role=role,
         capabilities=AccountCapabilities(can_manage_buckets=is_manager),
     )
 
@@ -95,7 +95,7 @@ def test_owner_reads_storage_space_settings_without_update_rights(monkeypatch, d
 
     settings = service.get_storage_space_settings(
         owner,
-        _access(account, owner, AccountRole.PORTAL_USER.value),
+        _access(account, owner, PortalAccountRole.PORTAL_USER.value),
         "research-data",
     )
 
@@ -113,7 +113,7 @@ def test_missing_versioning_configuration_is_reported_as_disabled(monkeypatch, d
 
     settings = service.get_storage_space_settings(
         owner,
-        _access(account, owner, AccountRole.PORTAL_USER.value),
+        _access(account, owner, PortalAccountRole.PORTAL_USER.value),
         "research-data",
     )
 
@@ -136,7 +136,7 @@ def test_manager_updates_managed_rules_and_preserves_foreign_lifecycle(monkeypat
 
     updated = service.update_storage_space_settings(
         manager,
-        _access(account, manager, AccountRole.PORTAL_MANAGER.value),
+        _access(account, manager, PortalAccountRole.PORTAL_MANAGER.value),
         "research-data",
         PortalStorageSpaceSettingsUpdate(
             versioning_enabled=True,
@@ -166,7 +166,7 @@ def test_manager_disables_only_portal_lifecycle_rules(monkeypatch, db_session):
 
     updated = service.update_storage_space_settings(
         manager,
-        _access(account, manager, AccountRole.PORTAL_MANAGER.value),
+        _access(account, manager, PortalAccountRole.PORTAL_MANAGER.value),
         "research-data",
         PortalStorageSpaceSettingsUpdate(
             versioning_enabled=False,
@@ -193,7 +193,7 @@ def test_storage_space_settings_require_project_manager_and_active_space(monkeyp
     with pytest.raises(RuntimeError, match="Portal manager rights required"):
         service.update_storage_space_settings(
             owner,
-            _access(account, owner, AccountRole.PORTAL_USER.value),
+            _access(account, owner, PortalAccountRole.PORTAL_USER.value),
             "research-data",
             payload,
         )
@@ -201,7 +201,7 @@ def test_storage_space_settings_require_project_manager_and_active_space(monkeyp
     with pytest.raises(RuntimeError, match="archived"):
         service.update_storage_space_settings(
             owner,
-            _access(account, owner, AccountRole.PORTAL_MANAGER.value),
+            _access(account, owner, PortalAccountRole.PORTAL_MANAGER.value),
             "research-data",
             payload,
         )
@@ -229,7 +229,7 @@ def test_versioning_failure_restores_previous_lifecycle(monkeypatch, db_session)
     with pytest.raises(RuntimeError, match="Previous lifecycle settings were restored"):
         service.update_storage_space_settings(
             manager,
-            _access(account, manager, AccountRole.PORTAL_MANAGER.value),
+            _access(account, manager, PortalAccountRole.PORTAL_MANAGER.value),
             "research-data",
             PortalStorageSpaceSettingsUpdate(
                 versioning_enabled=True,

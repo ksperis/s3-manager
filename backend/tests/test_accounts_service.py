@@ -600,8 +600,8 @@ def test_unlink_account_deletes_root_and_interface_links(db_session, monkeypatch
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            is_root=False,
-            role="account_administrator",
+            manager_role="account_administrator",
+            portal_role=None,
         )
     )
     db_session.commit()

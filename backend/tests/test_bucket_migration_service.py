@@ -14,7 +14,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.db import (
-    AccountRole,
+    ManagerAccountRole,
     Base,
     BucketMigration,
     BucketMigrationEvent,
@@ -81,7 +81,8 @@ def _create_account(db_session, *, name: str, endpoint_url: str, account_id: str
             UserS3Account(
                 user_id=creator.id,
                 account_id=account.id,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             )
         )
     return account

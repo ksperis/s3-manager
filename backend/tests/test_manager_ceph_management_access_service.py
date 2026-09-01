@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from app.db import (
-    AccountRole,
+    ManagerAccountRole, PortalAccountRole,
     S3Account,
     S3User,
     StorageEndpoint,
@@ -61,7 +61,8 @@ def test_quota_policy_revalidates_direct_manager_access_after_revocation(db_sess
     link = UserS3Account(
         user_id=user.id,
         account_id=account.id,
-        role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+        manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+        portal_role=None,
     )
     db_session.add(link)
     db_session.commit()

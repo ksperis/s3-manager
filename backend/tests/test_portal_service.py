@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from app.db import (
     AuditLog,
     AccountIAMUser,
-    AccountRole,
+    PortalAccountRole,
     PortalExternalAccessCredential,
     PortalPublicLink,
     PortalStorageSpaceGrant,
@@ -103,15 +103,15 @@ def test_portal_state_rejects_removed_fields(removed_field):
         PortalState(**{removed_field: None})
 
 
-def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False):
+def _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False):
     return AccountAccess(
         account=account,
         actor=user,
         membership=None,
-        role=role,
+        portal_role=portal_role,
         capabilities=AccountCapabilities(
             can_manage_buckets=can_manage_buckets,
-            can_manage_portal_users=role == AccountRole.PORTAL_MANAGER.value,
+            can_manage_portal_users=portal_role == PortalAccountRole.PORTAL_MANAGER.value,
             can_manage_iam=False,
             can_view_root_key=False,
             using_root_key=False,
@@ -305,7 +305,7 @@ def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(m
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_MANAGER.value,
+        portal_role=PortalAccountRole.PORTAL_MANAGER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=True,
             can_manage_portal_users=False,
@@ -394,7 +394,7 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=False,
             can_manage_portal_users=False,
@@ -534,7 +534,7 @@ def test_manager_group_access_is_protected_before_policy_update(monkeypatch, db_
     service._sync_user_group_membership(
         FakeIAM(),
         "portal-manager-1",
-        AccountRole.PORTAL_MANAGER.value,
+        PortalAccountRole.PORTAL_MANAGER.value,
         account=account,
     )
 
@@ -558,7 +558,7 @@ def test_manager_demotion_removes_manager_group_before_adding_user_group(monkeyp
             events.append(("remove", group_name, username))
 
     monkeypatch.setattr(service, "_ensure_portal_groups", lambda *_args, **_kwargs: None)
-    service._sync_user_group_membership(FakeIAM(), "portal-1", AccountRole.PORTAL_USER.value)
+    service._sync_user_group_membership(FakeIAM(), "portal-1", PortalAccountRole.PORTAL_USER.value)
 
     assert events == [
         ("remove", "portal-manager", "portal-1"),
@@ -576,7 +576,7 @@ def test_portal_bucket_creation_rejects_unauthorized_role_before_s3_calls(monkey
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=False,
             can_manage_portal_users=False,
@@ -609,7 +609,7 @@ def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=False,
             can_manage_portal_users=False,
@@ -628,7 +628,7 @@ def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
     state = service.get_state(access)
 
     assert set(state.model_dump()) == {
-        "account_role",
+        "portal_role",
         "can_manage_buckets",
         "can_create_private_storage_spaces",
         "can_create_team_storage_spaces",
@@ -637,7 +637,7 @@ def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
         "server_access_logging_enabled",
         "storage_space_version_cleanup_enabled",
     }
-    assert state.account_role == AccountRole.PORTAL_USER.value
+    assert state.portal_role == PortalAccountRole.PORTAL_USER.value
 
 
 def test_get_state_does_not_load_dynamic_quota_limits(monkeypatch, db_session):
@@ -655,7 +655,7 @@ def test_get_state_does_not_load_dynamic_quota_limits(monkeypatch, db_session):
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=False,
             can_manage_portal_users=False,
@@ -785,7 +785,7 @@ def test_list_access_keys_without_bootstrap_returns_empty(monkeypatch, db_sessio
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=False,
             can_manage_portal_users=False,
@@ -827,7 +827,7 @@ def test_get_state_does_not_load_portal_identity_metadata(monkeypatch, db_sessio
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=True,
             can_manage_portal_users=False,
@@ -933,7 +933,7 @@ def test_get_state_does_not_list_buckets_for_portal_manager(monkeypatch, db_sess
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_MANAGER.value,
+        portal_role=PortalAccountRole.PORTAL_MANAGER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=True,
             can_manage_portal_users=True,
@@ -980,7 +980,7 @@ def test_get_state_does_not_list_buckets_for_portal_user(monkeypatch, db_session
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=False,
             can_manage_portal_users=False,
@@ -1009,7 +1009,7 @@ def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     portal_settings = PortalSettings(allow_private_storage_space_create=False)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
@@ -1027,7 +1027,7 @@ def test_get_state_exposes_effective_server_access_logging_setting(monkeypatch, 
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     portal_settings = PortalSettings(server_access_logging_enabled=False)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
@@ -1058,7 +1058,7 @@ def test_get_state_ignores_bucket_scope_for_portal_state(monkeypatch, db_session
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=False,
             can_manage_portal_users=False,
@@ -1096,7 +1096,7 @@ def test_list_storage_spaces_maps_visible_metadata_to_workspace_summary(db_sessi
     )
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
 
     spaces = service.list_storage_spaces(user, access, search="research")
@@ -1138,7 +1138,7 @@ def test_storage_space_metadata_filters_sorting_and_archive(db_session):
     )
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
 
     spaces = service.list_storage_spaces(user, access, search="gen", sort="-used_bytes")
@@ -1174,7 +1174,7 @@ def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(db_s
     other_spaces = service.list_storage_spaces(other, _portal_access(account, other))
     manager_spaces = service.list_storage_spaces(
         manager,
-        _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
+        _portal_access(account, manager, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
     )
 
     assert [(space.id, space.role, space.status, space.visibility) for space in owner_spaces] == [
@@ -1226,7 +1226,7 @@ def test_portal_manager_can_take_private_storage_space_ownership(monkeypatch, db
 
     result = service.take_private_storage_space_ownership(
         manager,
-        _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
+        _portal_access(account, manager, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
         "private-space",
     )
 
@@ -1252,7 +1252,7 @@ def test_private_owner_cannot_lose_final_portal_role(db_session):
     )
     db_session.commit()
 
-    before = {(owner.id, account.id): AccountRole.PORTAL_USER.value}
+    before = {(owner.id, account.id): PortalAccountRole.PORTAL_USER.value}
     after = {}
 
     with pytest.raises(ValueError, match="take ownership"):
@@ -1268,9 +1268,9 @@ def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(mon
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=delegated_owner.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=owner.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=delegated_owner.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -1348,7 +1348,7 @@ def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(mon
 
     result = service.delete_storage_space(
         owner,
-        _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
+        _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
         "imported-data",
     )
 
@@ -1400,7 +1400,7 @@ def test_delete_storage_space_allows_portal_manager_on_private_space(monkeypatch
     with pytest.raises(PortalStorageSpaceNotEmpty):
         service.delete_storage_space(
             manager,
-            _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
+            _portal_access(account, manager, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
             "private-delete-denied",
         )
     assert calls == [True]
@@ -1413,7 +1413,7 @@ def test_delete_storage_space_rejects_non_owner_content_roles(monkeypatch, db_se
     participant = User(email=f"{role.lower()}-delete@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, participant])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=participant.id, account_id=account.id, role=AccountRole.PORTAL_USER.value))
+    db_session.add(UserS3Account(user_id=participant.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value))
     metadata = PortalStorageSpaceMetadata(
         account_id=account.id,
         bucket_name=f"shared-delete-{role.lower()}",
@@ -1678,9 +1678,9 @@ def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=owner.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -1703,7 +1703,7 @@ def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
 
     spaces = PortalService(db_session).list_storage_spaces(
         manager,
-        _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value),
+        _portal_access(account, manager, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
     )
 
     assert len(spaces) == 1
@@ -1765,7 +1765,7 @@ def test_portal_manager_content_access_is_carried_only_by_the_manager_group(monk
     service._sync_user_storage_space_projection(
         manager,
         account,
-        AccountRole.PORTAL_MANAGER.value,
+        PortalAccountRole.PORTAL_MANAGER.value,
         iam,
         "manager-iam",
     )
@@ -1802,7 +1802,7 @@ def test_portal_manager_can_read_and_modify_private_storage_space_content_owned_
             return None
 
     monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: FakeClient())
-    access = _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, manager, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     assert service.get_storage_space_object_detail(manager, access, "private-data", "file.txt").size == 4
     assert service.download_storage_space_object(manager, access, "private-data", "file.txt")[0].read() == b"data"
@@ -1817,7 +1817,7 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
     user = User(email="portal-browser-content@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    link = UserS3Account(user_id=user.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value)
+    link = UserS3Account(user_id=user.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value)
 
     app_settings = AppSettings()
     app_settings.general.portal_enabled = True
@@ -1896,7 +1896,7 @@ def test_storage_space_bucket_policy_preserves_external_statements_and_private_o
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
             AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
             AccountIAMUser(user_id=manager.id, account_id=account.id, iam_user_id="manager-iam-id", iam_username="manager-iam"),
         ]
@@ -1972,10 +1972,10 @@ def test_account_scope_bucket_policy_allows_effective_portal_members(db_session)
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=direct.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=inactive.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UiGroupS3Account(group_id=group.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=direct.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=inactive.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UiGroupS3Account(group_id=group.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
             UserUiGroup(user_id=grouped.id, group_id=group.id),
             AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
             AccountIAMUser(user_id=direct.id, account_id=account.id, iam_user_id="direct-iam-id", iam_username="direct-iam"),
@@ -2025,10 +2025,10 @@ def test_restricted_bucket_policy_allows_owner_and_real_grants_only(db_session):
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=editor.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=delegated_owner.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=member_without_grant.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=editor.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=delegated_owner.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member_without_grant.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
             AccountIAMUser(user_id=viewer.id, account_id=account.id, iam_user_id="viewer-iam-id", iam_username="viewer-iam"),
             AccountIAMUser(user_id=editor.id, account_id=account.id, iam_user_id="editor-iam-id", iam_username="editor-iam"),
@@ -2105,7 +2105,7 @@ def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monke
     db_session.add(PortalStorageSpaceGrant(storage_space_metadata_id=metadata.id, user_id=user.id, role="Viewer"))
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
 
     def fake_stats(_user, _access, bucket_name):
@@ -2133,7 +2133,7 @@ def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeyp
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
@@ -2183,7 +2183,7 @@ def test_create_storage_space_configures_server_access_logging(monkeypatch, db_s
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     portal_settings = PortalSettings(server_access_logging_enabled=True)
@@ -2294,7 +2294,7 @@ def test_prepare_storage_space_version_cleanup_requires_effective_setting(monkey
     db_session.commit()
 
     service = PortalService(db_session)
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     monkeypatch.setattr(
         service,
         "_effective_portal_settings",
@@ -2326,7 +2326,7 @@ def test_prepare_storage_space_version_cleanup_uses_long_running_profile(monkeyp
     db_session.commit()
 
     service = PortalService(db_session)
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     captured: list[dict] = []
     fake_client = object()
 
@@ -2353,7 +2353,7 @@ def test_portal_user_can_create_storage_space_when_setting_is_enabled(monkeypatc
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
@@ -2400,7 +2400,7 @@ def test_portal_user_cannot_create_shared_storage_space(monkeypatch, db_session)
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     portal_settings = PortalSettings(allow_private_storage_space_create=True)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
@@ -2420,7 +2420,7 @@ def test_portal_user_cannot_create_storage_space_when_setting_is_disabled(monkey
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     portal_settings = PortalSettings(allow_private_storage_space_create=False)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
@@ -2435,7 +2435,7 @@ def test_portal_manager_needs_private_create_setting_but_can_always_create_team_
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
     portal_settings = PortalSettings(allow_private_storage_space_create=False)
@@ -2471,13 +2471,13 @@ def test_create_restricted_storage_space_persists_initial_shares_atomically(monk
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=editor.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=editor.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
         ]
     )
     db_session.commit()
 
-    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings(allow_private_storage_space_create=True))
@@ -2533,10 +2533,10 @@ def test_create_restricted_storage_space_rejects_invalid_initial_shares_before_b
     outsider = User(email=f"outsider-invalid-{message}@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer, outsider])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value))
+    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value))
     db_session.commit()
 
-    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
@@ -2566,10 +2566,10 @@ def test_create_restricted_storage_space_rolls_back_bucket_and_grants_when_sync_
     viewer = User(email="viewer-initial-rollback@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value))
+    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value))
     db_session.commit()
 
-    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
     created_buckets: list[str] = []
@@ -2610,7 +2610,7 @@ def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monke
     portal_settings = PortalSettings()
     portal_settings.allow_private_storage_space_create = True
     portal_settings.allow_portal_named_bucket_create = True
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
@@ -2668,7 +2668,7 @@ def test_create_storage_space_named_bucket_requires_effective_setting(monkeypatc
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings(allow_private_storage_space_create=True))
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
@@ -2688,7 +2688,7 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     link = AccountIAMUser(user_id=user.id, account_id=account.id, iam_user_id="iam-uid", iam_username="portal-iam")
     projection_calls = []
@@ -2739,10 +2739,10 @@ def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db
     viewer = User(email="viewer-import-restricted@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value))
+    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value))
     db_session.commit()
 
-    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     link = AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="iam-uid", iam_username="portal-iam")
     monkeypatch.setattr(s3_client, "list_buckets", lambda **_kwargs: [{"name": "existing-restricted"}])
@@ -2801,7 +2801,7 @@ def test_update_storage_space_locked_names_reject_rename_but_accept_description(
     db_session.add(metadata)
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: f"{origin}-bucket")
@@ -2843,7 +2843,7 @@ def test_update_storage_space_allows_rename_when_name_is_editable(monkeypatch, d
     db_session.add(metadata)
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: "uuid-bucket")
@@ -2890,7 +2890,7 @@ def test_update_storage_space_restores_archived_space_without_deleting_links(mon
     db_session.add_all([metadata, public_link])
     db_session.commit()
 
-    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     sync_archived_values = []
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: "restore-data")
@@ -3001,7 +3001,8 @@ def test_portal_server_access_log_bucket_policy_preserves_existing_statements(db
             UserS3Account(
                 user_id=manager.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_MANAGER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_MANAGER.value,
             ),
             AccountIAMUser(
                 user_id=manager.id,
@@ -3235,7 +3236,7 @@ def test_portal_server_access_logs_parse_all_standard_records_and_filters(monkey
 
     service = PortalService(db_session)
     client = _Client()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     monkeypatch.setattr(service, "_portal_server_access_client", lambda _account: client)
 
     operations = service.list_portal_server_access_logs(user, access, date="2026-07-08")
@@ -3296,7 +3297,7 @@ def test_portal_server_access_logs_require_portal_manager(db_session):
     user = User(email="portal-log-denied@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value)
     service = PortalService(db_session)
 
     with pytest.raises(RuntimeError, match="Only project managers"):
@@ -3395,7 +3396,7 @@ def test_portal_server_access_logs_resolve_requester_identities(monkeypatch, db_
 
     service = PortalService(db_session)
     admin = _Admin()
-    access = _portal_access(account, actor, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, actor, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     monkeypatch.setattr(service, "_portal_server_access_client", lambda _account: _Client())
     monkeypatch.setattr(service, "_portal_server_access_rgw_admin_client", lambda _account: admin)
 
@@ -3534,7 +3535,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=target.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=target.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="iam-target", iam_username=f"iam-{target.id}"),
         ]
     )
@@ -3629,7 +3630,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
         ),
     )
     monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
-    access = _portal_access(account, actor, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, actor, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
     def assert_file_capabilities(role, *, can_write: bool, can_share: bool):
         actor_grant.role = role
@@ -3654,7 +3655,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
 
     assert_file_capabilities("Viewer", can_write=False, can_share=False)
     assert_file_capabilities("Editor", can_write=True, can_share=False)
-    manager_access = _portal_access(account, actor, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    manager_access = _portal_access(account, actor, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     share = service.set_storage_space_share(actor, manager_access, target, "research-data", "Viewer")
     assert share.email == target.email
     target_grant = (
@@ -3687,7 +3688,7 @@ def test_object_detail_and_delete_use_safe_portal_operations(monkeypatch, db_ses
     )
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_user_storage_space_role", lambda *_args, **_kwargs: "Editor")
     monkeypatch.setattr(
@@ -3752,7 +3753,7 @@ def test_portal_object_history_lists_versions_and_delete_markers(monkeypatch, db
     user = User(email="history@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args: "history-bucket")
     monkeypatch.setattr(service, "_require_storage_space_content_role", lambda *_args: "Editor")
@@ -3814,7 +3815,7 @@ def test_portal_trash_lists_only_current_delete_markers(monkeypatch, db_session)
     user = User(email="trash@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args: "trash-bucket")
     monkeypatch.setattr(service, "_require_storage_space_content_role", lambda *_args: "Viewer")
@@ -3867,7 +3868,7 @@ def test_portal_restore_deleted_object_creates_new_current_version(monkeypatch, 
     user = User(email="trash-restore@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args: "trash-bucket")
     monkeypatch.setattr(service, "_require_storage_space_content_role", lambda *_args: "Editor")
@@ -4098,7 +4099,7 @@ def test_portal_viewer_cannot_restore_object_version(monkeypatch, db_session):
     user = User(email="history-viewer@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args: "history-bucket")
     monkeypatch.setattr(service, "_require_storage_space_content_role", lambda *_args: "Viewer")
@@ -4165,8 +4166,8 @@ def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=owner.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -4200,8 +4201,8 @@ def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):
             )
         ],
     )
-    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
-    viewer_access = _portal_access(account, viewer, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    owner_access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    viewer_access = _portal_access(account, viewer, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
     owner_shares = service.list_storage_space_shares(owner, owner_access, "research-data")
     viewer_shares = service.list_storage_space_shares(viewer, viewer_access, "research-data")
@@ -4223,8 +4224,8 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=member.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -4243,12 +4244,12 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
     assert service.list_existing_user_storage_space_access(
         member,
         account,
-        AccountRole.PORTAL_USER.value,
+        PortalAccountRole.PORTAL_USER.value,
     ) == {"team-data": "Viewer"}
     assert service.list_existing_user_storage_space_access(
         manager,
         account,
-        AccountRole.PORTAL_MANAGER.value,
+        PortalAccountRole.PORTAL_MANAGER.value,
     ) == {"team-data": "Manager"}
 
     db_session.add(
@@ -4264,7 +4265,7 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
     assert service.list_existing_user_storage_space_access(
         member,
         account,
-        AccountRole.PORTAL_USER.value,
+        PortalAccountRole.PORTAL_USER.value,
     ) == {"team-data": "Editor"}
 
 
@@ -4279,9 +4280,9 @@ def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=direct.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UiGroupS3Account(group_id=group.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=owner.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=direct.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UiGroupS3Account(group_id=group.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
             UserUiGroup(user_id=grouped.id, group_id=group.id),
         ]
     )
@@ -4316,11 +4317,11 @@ def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch
             )
         ],
     )
-    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    owner_access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     candidates = service.list_storage_space_share_candidates(owner, owner_access, "research-data")
 
-    assert [(candidate.email, candidate.account_role, candidate.access_source, candidate.already_shared) for candidate in candidates] == [
+    assert [(candidate.email, candidate.portal_role, candidate.access_source, candidate.already_shared) for candidate in candidates] == [
         ("direct-candidates@example.com", "portal_user", "direct", True),
     ]
     assert all(candidate.email != outsider.email for candidate in candidates)
@@ -4343,37 +4344,43 @@ def test_portal_collaborators_summarize_effective_members_and_visible_external_a
             UserS3Account(
                 user_id=actor.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_MANAGER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_MANAGER.value,
                 created_at=now - timedelta(days=40),
             ),
             UserS3Account(
                 user_id=direct.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_USER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
                 created_at=now - timedelta(days=35),
             ),
             UserS3Account(
                 user_id=promoted.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_USER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
                 created_at=now - timedelta(days=35),
             ),
             UserS3Account(
                 user_id=inactive.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_USER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
                 created_at=now - timedelta(days=35),
             ),
             UiGroupS3Account(
                 group_id=group.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_USER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
                 created_at=now - timedelta(days=20),
             ),
             UiGroupS3Account(
                 group_id=manager_group.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_MANAGER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_MANAGER.value,
                 created_at=now - timedelta(days=40),
             ),
             UserUiGroup(user_id=grouped.id, group_id=group.id, created_at=now - timedelta(days=10)),
@@ -4458,7 +4465,7 @@ def test_portal_collaborators_summarize_effective_members_and_visible_external_a
             )
         ],
     )
-    access = _portal_access(account, actor, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, actor, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     result = service.list_portal_collaborators(actor, access)
 
@@ -4467,7 +4474,7 @@ def test_portal_collaborators_summarize_effective_members_and_visible_external_a
     assert result.summary.trend is not None
     assert result.summary.trend.window == "month"
     assert result.summary.trend.collaborator_count == 3
-    assert [(item.email, item.account_role, item.access_source) for item in result.collaborators] == [
+    assert [(item.email, item.portal_role, item.access_source) for item in result.collaborators] == [
         ("actor-collab@example.com", "portal_manager", "direct"),
         ("direct-collab@example.com", "portal_user", "direct"),
         ("grouped-collab@example.com", "portal_user", "group"),
@@ -4488,9 +4495,9 @@ def test_portal_collaborator_access_review_reports_effective_sources_and_revoke_
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=member.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=outsider.id, account_id=other_account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=outsider.id, account_id=other_account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
         ]
     )
     owned = PortalStorageSpaceMetadata(
@@ -4550,7 +4557,7 @@ def test_portal_collaborator_access_review_reports_effective_sources_and_revoke_
     db_session.commit()
 
     service = PortalService(db_session)
-    manager_access = _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value)
+    manager_access = _portal_access(account, manager, portal_role=PortalAccountRole.PORTAL_MANAGER.value)
 
     result = service.get_portal_collaborator_access_review(manager, manager_access, member.id)
 
@@ -4585,10 +4592,10 @@ def test_portal_collaborator_access_review_authorizes_manager_or_self_and_isolat
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=member.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=peer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=outsider.id, account_id=other_account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=peer.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=outsider.id, account_id=other_account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
         ]
     )
     space = PortalStorageSpaceMetadata(
@@ -4612,11 +4619,11 @@ def test_portal_collaborator_access_review_authorizes_manager_or_self_and_isolat
     with pytest.raises(RuntimeError, match="not allowed"):
         service.get_portal_collaborator_access_review(member, member_access, peer.id)
     with pytest.raises(RuntimeError, match="not found"):
-        service.get_portal_collaborator_access_review(manager, _portal_access(account, manager, AccountRole.PORTAL_MANAGER.value), outsider.id)
+        service.get_portal_collaborator_access_review(manager, _portal_access(account, manager, PortalAccountRole.PORTAL_MANAGER.value), outsider.id)
 
     manager_rows = service.list_portal_collaborators(
         manager,
-        _portal_access(account, manager, AccountRole.PORTAL_MANAGER.value),
+        _portal_access(account, manager, PortalAccountRole.PORTAL_MANAGER.value),
     ).collaborators
     assert all(item.can_review_access for item in manager_rows)
     member_rows = service.list_portal_collaborators(member, member_access).collaborators
@@ -4633,8 +4640,8 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=member.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_MANAGER.value),
         ]
     )
     private_metadata = PortalStorageSpaceMetadata(
@@ -4706,8 +4713,8 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
         ]
 
     monkeypatch.setattr(service, "list_storage_spaces", fake_list_storage_spaces)
-    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
-    manager_access = _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    owner_access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    manager_access = _portal_access(account, manager, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     private_summary = service.get_storage_space_access_summary(owner, owner_access, "private-data")
     all_summary = service.get_storage_space_access_summary(manager, manager_access, "all-data")
@@ -4767,7 +4774,7 @@ def test_set_storage_space_share_requires_existing_portal_member(monkeypatch, db
             )
         ],
     )
-    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    owner_access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     with pytest.raises(RuntimeError, match="Only Portal users"):
         service.set_storage_space_share(owner, owner_access, target, "research-data", "Viewer")
@@ -4784,7 +4791,7 @@ def test_set_storage_space_share_rolls_back_db_grant_when_projection_fails(monke
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=target.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=target.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="target-iam", iam_username="target-iam"),
         ]
     )
@@ -4823,7 +4830,7 @@ def test_set_storage_space_share_rolls_back_db_grant_when_projection_fails(monke
             raise RuntimeError("projection failed")
 
     monkeypatch.setattr(service, "_get_iam_service", lambda _account: FailingIAMService())
-    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    owner_access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     with pytest.raises(RuntimeError, match="projection failed"):
         service.set_storage_space_share(owner, owner_access, target, "research-data", "Viewer")
@@ -4839,7 +4846,7 @@ def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_sess
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=target.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=target.id, account_id=account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="target-iam", iam_username="target-iam"),
         ]
     )
@@ -4877,7 +4884,7 @@ def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_sess
             (account_arg.id, metadata_arg.bucket_name, metadata_arg.id, kwargs.get("extra_user_ids"))
         ),
     )
-    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    owner_access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     service.set_storage_space_share(owner, owner_access, target, "research-data", "Viewer")
     service.revoke_storage_space_share(owner, owner_access, target, "research-data")
@@ -4917,7 +4924,7 @@ def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session
             )
         ],
     )
-    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     class FakeClient:
         def __init__(self):
@@ -4993,7 +5000,7 @@ def test_public_link_creation_rejects_missing_objects(monkeypatch, db_session):
             )
         ],
     )
-    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     class FakeClient:
         def head_object(self, **_kwargs):
@@ -5058,7 +5065,7 @@ def test_private_storage_space_blocks_new_shares_and_public_links(monkeypatch, d
             )
         ],
     )
-    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, owner, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     assert service.list_storage_space_shares(owner, access, "private-data") == []
     with pytest.raises(RuntimeError, match="Private storage spaces cannot be shared"):
@@ -5145,7 +5152,7 @@ def test_portal_governance_activity_is_filtered_by_visible_storage_spaces(monkey
             PortalStorageSpaceSummary(id="research-data", name="Research Data", role="Owner", internal_bucket_name="research-data")
         ],
     )
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     activity = service.list_portal_activity(user, access)
     assert [(item.action, item.target, item.storage_space_name, item.ip_address) for item in activity] == [
@@ -5207,7 +5214,7 @@ def test_portal_user_governance_activity_uses_visible_space_access(db_session):
     )
     db_session.commit()
     service = PortalService(db_session)
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
     activity = service.list_portal_activity(user, access)
     assert [(item.action, item.storage_space_name, item.target) for item in activity] == [
@@ -5238,7 +5245,7 @@ def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch
     )
     db_session.commit()
     service = PortalService(db_session)
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     monkeypatch.setattr(service, "_account_limits", lambda _account: (1_000, 100, 12))
     monkeypatch.setattr(service, "_supervision_admin_for_account", lambda _account: object())
@@ -5300,7 +5307,7 @@ def test_portal_user_usage_aggregates_hidden_storage_as_other(monkeypatch, db_se
     )
     db_session.commit()
     service = PortalService(db_session)
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
     monkeypatch.setattr(service, "_account_limits", lambda _account: (2_000, 200, 20))
     monkeypatch.setattr(service, "_supervision_admin_for_account", lambda _account: object())
@@ -5350,7 +5357,7 @@ def test_portal_user_usage_omits_other_when_all_usage_is_visible(monkeypatch, db
     )
     db_session.commit()
     service = PortalService(db_session)
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
     monkeypatch.setattr(service, "_supervision_admin_for_account", lambda _account: object())
     monkeypatch.setattr(
@@ -5855,7 +5862,7 @@ def test_portal_alerts_are_derived_from_quota_and_public_sharing(monkeypatch, db
         "get_usage",
         lambda *_args, **_kwargs: PortalUsage(used_bytes=90, used_objects=None, quota_max_size_bytes=100),
     )
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     alerts = service.list_portal_alerts(user, access)
 
@@ -5918,7 +5925,7 @@ def test_portal_endpoint_alerts_report_degraded_endpoint(monkeypatch, db_session
     monkeypatch.setattr(portal_monitoring_router, "load_app_settings", lambda: FakeSettings())
     monkeypatch.setattr(portal_monitoring_router, "HealthCheckQueryService", FakeHealthQueryService)
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     alerts = portal_monitoring_router._portal_endpoint_alerts(access, db_session)
 
@@ -6078,7 +6085,7 @@ def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch,
         "get_usage",
         lambda *_args, **_kwargs: PortalUsage(used_bytes=None, used_objects=None, quota_max_size_bytes=None),
     )
-    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     assert service.list_portal_alerts(user, access) == []
 
@@ -6098,7 +6105,7 @@ def test_download_storage_space_object_streams_visible_object(monkeypatch, db_se
     )
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_user_storage_space_role", lambda *_args, **_kwargs: "Editor")
     monkeypatch.setattr(
@@ -6148,7 +6155,7 @@ def test_portal_object_access_rejects_hidden_storage_space(monkeypatch, db_sessi
     db_session.add_all([account, user])
     db_session.commit()
 
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
 
@@ -6161,7 +6168,7 @@ def test_portal_object_download_route_does_not_require_application_audit(db_sess
     user = User(email="portal-object-download-route@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
     class FakeService:
         def download_storage_space_object(self, user_obj, access_obj, space_id, key):
@@ -6187,7 +6194,7 @@ def test_portal_object_restore_route_does_not_require_application_audit(db_sessi
     user = User(email="portal-object-restore-route@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
     class FakeService:
         def restore_storage_space_object_version(
@@ -6275,7 +6282,7 @@ def test_create_access_key_rejects_when_limit_reached(monkeypatch, db_session):
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=False,
             can_manage_portal_users=False,
@@ -6333,7 +6340,7 @@ def test_create_access_key_allows_when_below_limit(monkeypatch, db_session):
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_USER.value,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=False,
             can_manage_portal_users=False,

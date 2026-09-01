@@ -383,25 +383,73 @@ def test_automation_connection_spec_rejects_visibility_and_access_flags(legacy_f
         )
 
 
-@pytest.mark.parametrize("removed_field", ["account_admin", "account_role"])
+@pytest.mark.parametrize(
+    "removed_field",
+    ["role", "is_root", "account_admin", "account_role"],
+)
 def test_automation_account_link_rejects_removed_role_fields(removed_field):
     with pytest.raises(ValidationError):
         AccountLinkApply.model_validate(
             {
                 "user": {"id": 1},
                 "account": {"id": 2},
-                "role": "portal_user",
-                removed_field: False,
+                "manager_role": None,
+                "portal_role": "portal_user",
+                removed_field: "portal_user",
             }
         )
 
 
-def test_automation_present_account_link_requires_canonical_role():
+def test_automation_account_link_requires_explicit_role_axes():
     with pytest.raises(ValidationError):
         AccountLinkApply.model_validate(
             {
                 "user": {"id": 1},
                 "account": {"id": 2},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("manager_role", "portal_role"),
+    [
+        (" account_administrator ", None),
+        (None, "PORTAL_USER"),
+    ],
+)
+def test_automation_account_link_rejects_noncanonical_role_values(
+    manager_role,
+    portal_role,
+):
+    with pytest.raises(ValidationError):
+        AccountLinkApply.model_validate(
+            {
+                "user": {"id": 1},
+                "account": {"id": 2},
+                "manager_role": manager_role,
+                "portal_role": portal_role,
+            }
+        )
+
+
+def test_automation_absent_account_link_requires_explicit_null_roles():
+    with pytest.raises(ValidationError):
+        AccountLinkApply.model_validate(
+            {
+                "state": "absent",
+                "user": {"id": 1},
+                "account": {"id": 2},
+            }
+        )
+
+    with pytest.raises(ValidationError):
+        AccountLinkApply.model_validate(
+            {
+                "state": "absent",
+                "user": {"id": 1},
+                "account": {"id": 2},
+                "manager_role": "account_administrator",
+                "portal_role": None,
             }
         )
 

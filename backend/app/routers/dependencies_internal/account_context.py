@@ -226,7 +226,7 @@ def _resolve_user_account_link(
 def manager_membership_capabilities(
     link: UserS3Account | EffectiveAccountLink,
 ) -> AccountCapabilities:
-    is_account_admin = EffectiveAccessService.manager_account_allowed(link.role)
+    is_account_admin = EffectiveAccessService.manager_account_allowed(link)
     if not is_account_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
     return AccountCapabilities(

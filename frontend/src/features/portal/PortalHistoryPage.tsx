@@ -295,7 +295,7 @@ export default function PortalHistoryPage() {
   const storageSpaces = workspace.spaces ?? [];
   const serverAccessLoggingEnabled = state?.server_access_logging_enabled ?? true;
   const canViewServerAccessLogs =
-    selectedAccount?.account_role === "portal_manager" || state?.account_role === "portal_manager";
+    selectedAccount?.portal_role === "portal_manager" || state?.portal_role === "portal_manager";
   const activeHistoryTab: HistoryTab =
     requestedHistoryTab === "access" && (!serverAccessLoggingEnabled || !canViewServerAccessLogs)
       ? "activity"

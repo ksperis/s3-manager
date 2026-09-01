@@ -6,6 +6,7 @@ from pydantic import Field
 
 from app.models.base import ApiModel
 from app.models.tagging import TagDefinitionSummary
+from app.utils.account_roles import ManagerAccountRoleValue, PortalAccountRoleValue
 
 
 class ExecutionContextCapabilities(ApiModel):
@@ -18,8 +19,8 @@ class ExecutionContext(ApiModel):
     kind: Literal["account", "connection", "s3_user", "portal_account"]
     id: str
     display_name: str
-    role: Optional[str] = None
-    manager_account_is_admin: Optional[bool] = None
+    manager_role: Optional[ManagerAccountRoleValue] = None
+    portal_role: Optional[PortalAccountRoleValue] = None
     rgw_account_id: Optional[str] = None
     endpoint_id: Optional[int] = None
     endpoint_name: str

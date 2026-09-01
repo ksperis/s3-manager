@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Optional, TYPE_CHECKING
 
-from app.db import AccountRole, S3Account, User
+from app.db import PortalAccountRole, S3Account, User
 from app.models.portal import PortalStorageSpaceSettings, PortalStorageSpaceSettingsUpdate
 from app.services import s3_bucket_metadata, s3_client
 
@@ -61,7 +61,7 @@ class PortalStorageSpaceSettingsMixin:
         *,
         can_update: bool,
     ) -> PortalStorageSpaceSettings:
-        access_key, secret_key = self.get_portal_credentials(user, access.account, access.role)
+        access_key, secret_key = self.get_portal_credentials(user, access.account, access.portal_role)
         kwargs = self._s3_client_kwargs(access.account)
         versioning_status = s3_client.get_bucket_versioning(
             bucket_name,
@@ -99,7 +99,7 @@ class PortalStorageSpaceSettingsMixin:
         self._require_storage_space_manager(user, access, bucket_name, include_archived=True)
         metadata = self._storage_space_metadata(access.account, bucket_name)
         can_update = bool(
-            access.role == AccountRole.PORTAL_MANAGER.value
+            access.portal_role == PortalAccountRole.PORTAL_MANAGER.value
             and metadata is not None
             and metadata.archived_at is None
         )
@@ -117,7 +117,7 @@ class PortalStorageSpaceSettingsMixin:
         space_id: str,
         payload: PortalStorageSpaceSettingsUpdate,
     ) -> PortalStorageSpaceSettings:
-        if access.role != AccountRole.PORTAL_MANAGER.value:
+        if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
             raise RuntimeError("Portal manager rights required for Storage Space settings.")
         bucket_name = self._resolve_storage_space_bucket_name(
             user,
@@ -130,7 +130,7 @@ class PortalStorageSpaceSettingsMixin:
         self._require_storage_space_manager(user, access, bucket_name, include_archived=True)
         self._require_storage_space_active(access.account, bucket_name)
 
-        access_key, secret_key = self.get_portal_credentials(user, access.account, access.role)
+        access_key, secret_key = self.get_portal_credentials(user, access.account, access.portal_role)
         kwargs = self._s3_client_kwargs(access.account)
         previous_versioning = s3_client.get_bucket_versioning(
             bucket_name,

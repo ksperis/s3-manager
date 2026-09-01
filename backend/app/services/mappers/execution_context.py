@@ -7,6 +7,7 @@ from typing import TypedDict
 from app.db import S3Account, S3Connection, S3User, StorageEndpoint
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.services.tags_service import TagsService
+from app.utils.account_roles import ManagerAccountRoleValue, PortalAccountRoleValue
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_details
 from app.utils.storage_endpoint_features import features_to_capabilities, normalize_features_config
@@ -54,8 +55,7 @@ def account_execution_context_from_db(
     account: S3Account,
     *,
     tags_service: TagsService,
-    role: str | None = None,
-    manager_account_is_admin: bool | None = None,
+    manager_role: ManagerAccountRoleValue | None = None,
 ) -> ExecutionContext:
     endpoint = account.storage_endpoint
     endpoint_projection = _storage_endpoint_projection(endpoint)
@@ -63,8 +63,7 @@ def account_execution_context_from_db(
         kind="account",
         id=str(account.id),
         display_name=account.name,
-        role=role,
-        manager_account_is_admin=manager_account_is_admin,
+        manager_role=manager_role,
         rgw_account_id=account.rgw_account_id,
         **endpoint_projection,
         tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
@@ -81,16 +80,16 @@ def portal_account_execution_context_from_db(
     account: S3Account,
     *,
     tags_service: TagsService,
-    role: str,
-    manager_account_is_admin: bool,
+    portal_role: PortalAccountRoleValue,
+    manager_role: ManagerAccountRoleValue | None,
 ) -> ExecutionContext:
     endpoint = account.storage_endpoint
     return ExecutionContext(
         kind="portal_account",
         id=str(account.id),
         display_name=account.name,
-        role=role,
-        manager_account_is_admin=manager_account_is_admin,
+        manager_role=manager_role,
+        portal_role=portal_role,
         rgw_account_id=account.rgw_account_id,
         **_storage_endpoint_projection(endpoint),
         tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),

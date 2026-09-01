@@ -70,7 +70,6 @@ def _usage_history_settings(enabled: bool) -> AppSettings:
             email="rgw-metrics-root@example.com",
             hashed_password="x",
             is_active=True,
-            is_root=True,
             role=UserRole.UI_ADMIN.value,
         ),
         ManagerSessionPrincipal(

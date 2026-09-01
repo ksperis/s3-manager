@@ -13,7 +13,7 @@ from typing import Optional
 from app.core.config import get_settings
 from app.core.database import SessionLocal, engine
 from app.services.database_initialization import init_db
-from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider
+from app.db import ManagerAccountRole, S3Account, StorageEndpoint, StorageProvider
 from app.models.s3_account import S3AccountCreate, S3AccountUpdate
 from app.models.user import UserCreate
 from app.services.buckets_service import BucketsService
@@ -567,7 +567,8 @@ def create_account_data(
             users_service.assign_user_to_account(
                 user.id,
                 account.id,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             )
         except Exception as exc:
             logger.warning("  unable to link user %s to %s: %s", user_plan.email, account.name, exc)

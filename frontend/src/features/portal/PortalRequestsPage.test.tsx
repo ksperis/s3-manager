@@ -67,7 +67,7 @@ describe("PortalRequestsPage", () => {
         id: "101",
         name: "Research Account",
         tags: [],
-        account_role: "portal_manager",
+        portal_role: "portal_manager",
       },
       loading: false,
       error: null,
@@ -75,7 +75,7 @@ describe("PortalRequestsPage", () => {
     mocks.listPortalRequests.mockResolvedValue([pendingRequest]);
     mocks.createPortalRequest.mockResolvedValue({ ...pendingRequest, id: 8 });
     mocks.fetchPortalState.mockResolvedValue({
-      account_role: "portal_manager",
+      portal_role: "portal_manager",
       can_manage_portal_users: true,
     });
     mocks.fetchPortalUsage.mockResolvedValue({
@@ -96,7 +96,7 @@ describe("PortalRequestsPage", () => {
           user_id: 22,
           email: "old@example.org",
           display_name: "Old User",
-          account_role: "portal_user",
+          portal_role: "portal_user",
           access_source: "direct",
           member_since: "2026-07-01T10:00:00Z",
         },
@@ -246,7 +246,7 @@ describe("PortalRequestsPage", () => {
 
   it("keeps managed request actions unavailable for non-manager Portal users", async () => {
     mocks.fetchPortalState.mockResolvedValue({
-      account_role: "portal_user",
+      portal_role: "portal_user",
       can_manage_portal_users: false,
     });
     mocks.usePortalAccountContext.mockReturnValue({
@@ -256,7 +256,7 @@ describe("PortalRequestsPage", () => {
         id: "101",
         name: "Research Account",
         tags: [],
-        account_role: "portal_user",
+        portal_role: "portal_user",
       },
       loading: false,
       error: null,

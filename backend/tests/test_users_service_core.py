@@ -7,7 +7,8 @@ from pydantic import ValidationError
 
 from app.core.security import get_password_hash
 from app.db import (
-    AccountRole,
+    ManagerAccountRole,
+    PortalAccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -200,7 +201,6 @@ def test_update_user_and_link_validations(db_session):
             password="anotherlongpass123",
             role=UserRole.UI_USER.value,
             is_active=False,
-            is_root=True,
             can_access_ceph_admin=True,
             can_access_storage_ops=True,
             can_create_manual_private_connections=True,
@@ -228,7 +228,6 @@ def test_update_user_and_link_validations(db_session):
     assert updated.can_provision_managed_private_connections is True
     assert updated.quota_alerts_global_watch is False
     assert updated.is_active is False
-    assert updated.is_root is True
 
 
 def test_update_user_validates_s3_users_before_replacing_links(db_session):
@@ -261,7 +260,7 @@ def test_update_user_validates_s3_users_before_replacing_links(db_session):
     )
 
 
-def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_session):
+def test_update_user_replaces_direct_account_links_without_root_protection(db_session):
     service = UsersService(db_session)
     user = _seed_user(db_session, "account-links@example.com", role=UserRole.UI_NONE.value)
     removed_account = _seed_account(db_session, "removed-account", "RGW-REMOVED")
@@ -272,14 +271,14 @@ def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_s
             UserS3Account(
                 user_id=user.id,
                 account_id=removed_account.id,
-                is_root=False,
-                role=AccountRole.PORTAL_USER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
             ),
             UserS3Account(
                 user_id=user.id,
                 account_id=root_account.id,
-                is_root=True,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             ),
         ]
     )
@@ -291,12 +290,13 @@ def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_s
             account_links=[
                 {
                     "account_id": added_account.id,
-                    "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    "manager_role": ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    "portal_role": None,
                 },
                 {
                     "account_id": root_account.id,
-                    "role": AccountRole.PORTAL_USER.value,
-                    "allow_manager_browser_data_access": True,
+                    "manager_role": None,
+                    "portal_role": PortalAccountRole.PORTAL_USER.value,
                 },
             ]
         ),
@@ -311,12 +311,12 @@ def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_s
     assert updated.role == UserRole.UI_USER.value
     assert {link.account_id for link in links} == {root_account.id, added_account.id}
     root_link = next(link for link in links if link.account_id == root_account.id)
-    assert root_link.is_root is True
-    assert root_link.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
-    assert root_link.allow_manager_browser_data_access is True
+    assert root_link.manager_role is None
+    assert root_link.portal_role == PortalAccountRole.PORTAL_USER.value
+    assert root_link.allow_manager_browser_data_access is False
     added_link = next(link for link in links if link.account_id == added_account.id)
-    assert added_link.is_root is False
-    assert added_link.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert added_link.manager_role == ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert added_link.portal_role is None
 
     with pytest.raises(ValueError, match="S3 accounts not found: 99999"):
         service.update_user(
@@ -325,7 +325,8 @@ def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_s
                 account_links=[
                     {
                         "account_id": 99999,
-                        "role": AccountRole.PORTAL_USER.value,
+                        "manager_role": None,
+                        "portal_role": PortalAccountRole.PORTAL_USER.value,
                     }
                 ]
             ),
@@ -449,8 +450,8 @@ def test_paginate_users_and_detached_user_use_canonical_preload(db_session, monk
     service.assign_user_to_account(
         user.id,
         account.id,
-        account_root=False,
-        role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+        manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+        portal_role=None,
     )
     service.update_user(
         user.id,
@@ -528,29 +529,31 @@ def test_assign_user_to_account_paths_and_list_users_minimal(db_session):
     user = _seed_user(db_session, "assign@example.com", role=UserRole.UI_NONE.value)
 
     with pytest.raises(ValueError, match="User not found"):
-        service.assign_user_to_account(99999, account.id)
+        service.assign_user_to_account(99999, account.id, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value)
     with pytest.raises(ValueError, match="S3Account not found"):
-        service.assign_user_to_account(user.id, 99999)
+        service.assign_user_to_account(user.id, 99999, manager_role=None, portal_role=PortalAccountRole.PORTAL_USER.value)
 
     updated = service.assign_user_to_account(
         user.id,
         account.id,
-        account_root=True,
-        role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+        manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+        portal_role=None,
     )
     assert updated.role == UserRole.UI_USER.value
     link = db_session.query(UserS3Account).filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id).first()
-    assert link is not None and link.is_root is True
-    assert link.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert link is not None
+    assert link.manager_role == ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert link.portal_role is None
 
     service.assign_user_to_account(
         user.id,
         account.id,
-        role=AccountRole.PORTAL_USER.value,
+        manager_role=None,
+        portal_role=PortalAccountRole.PORTAL_USER.value,
     )
     db_session.refresh(link)
-    assert link.is_root is True
-    assert link.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert link.manager_role is None
+    assert link.portal_role == PortalAccountRole.PORTAL_USER.value
 
     minimal = service.list_users_minimal()
     assert any(entry.email == "assign@example.com" for entry in minimal)

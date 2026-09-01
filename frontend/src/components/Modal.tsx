@@ -143,7 +143,7 @@ export default function Modal({
         aria-labelledby={ariaLabelledby ?? fallbackTitleId}
         aria-describedby={ariaDescribedby}
         tabIndex={-1}
-        className={cx("w-full shadow-[var(--shell-menu-shadow)]", uiCardClass, maxWidthClass)}
+        className={cx("w-full text-left shadow-[var(--shell-menu-shadow)]", uiCardClass, maxWidthClass)}
       >
         <div className={cx("flex items-center justify-between border-b px-6 py-4", uiDividerClass)}>
           <h3 id={fallbackTitleId} className={cx("ui-subtitle", uiTitleTextClass)}>

@@ -9,7 +9,6 @@ from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
 from .base import Base
-from .enums import AccountRole
 
 
 class S3Account(Base):
@@ -67,16 +66,29 @@ class UserS3Account(Base):
         UniqueConstraint("user_id", "account_id", name="uq_user_s3_account"),
         Index("ix_user_s3_accounts_account_user", "account_id", "user_id"),
         CheckConstraint(
-            "role IN ('portal_user', 'portal_manager', 'account_administrator')",
-            name="ck_user_s3_accounts_role",
+            "manager_role IS NULL OR manager_role = 'account_administrator'",
+            name="ck_user_s3_accounts_manager_role",
+        ),
+        CheckConstraint(
+            "portal_role IS NULL OR portal_role IN ('portal_user', 'portal_manager')",
+            name="ck_user_s3_accounts_portal_role",
+        ),
+        CheckConstraint(
+            "manager_role IS NOT NULL OR portal_role IS NOT NULL",
+            name="ck_user_s3_accounts_has_role",
+        ),
+        CheckConstraint(
+            "allow_manager_browser_data_access IS FALSE "
+            "OR manager_role = 'account_administrator'",
+            name="ck_user_s3_accounts_manager_browser_role",
         ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
-    is_root = Column(Boolean, nullable=False, default=False, server_default="0")
-    role = Column(String, nullable=False)
+    manager_role = Column(String, nullable=True)
+    portal_role = Column(String, nullable=True)
     allow_manager_browser_data_access = Column(
         Boolean,
         nullable=False,

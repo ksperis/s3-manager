@@ -3357,7 +3357,7 @@ describe("BrowserPage interactions", () => {
     const portalContext = makeExecutionContext({
       id: "101",
       kind: "portal_account",
-      manager_account_is_admin: false,
+      manager_role: null,
     });
     setBrowserContext({
       contexts: [portalContext],
@@ -3384,7 +3384,7 @@ describe("BrowserPage interactions", () => {
     const portalContext = makeExecutionContext({
       id: "101",
       kind: "portal_account",
-      manager_account_is_admin: true,
+      manager_role: "account_administrator",
     });
     setBrowserContext({
       contexts: [portalContext],

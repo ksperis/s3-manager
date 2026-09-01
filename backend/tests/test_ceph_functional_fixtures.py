@@ -47,7 +47,6 @@ def test_grant_account_root_access_preserves_existing_account_links() -> None:
                                 "account_id": 11,
                                 "role": "account_administrator",
                                 "allow_manager_browser_data_access": True,
-                                "is_root": True,
                             }
                         ],
                     }
@@ -79,7 +78,6 @@ def test_grant_account_root_access_preserves_existing_account_links() -> None:
         },
         200,
     )
-
 
 def test_grant_account_access_to_user_preserves_existing_account_links() -> None:
     class StubAdminSession:

@@ -5,6 +5,13 @@
 import { useEffect, useState } from "react";
 import Modal from "../../components/Modal";
 import UiButton from "../../components/ui/UiButton";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import {
+  cx,
+  uiMutedTextClass,
+  uiPanelMutedClass,
+  uiTitleTextClass,
+} from "../../components/ui/styles";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 
 type AdminAssociationAdvancedSettingsProps = {
@@ -39,33 +46,34 @@ export default function AdminAssociationAdvancedSettings({
           maxWidthClass="max-w-lg"
         >
           <div className="space-y-4">
-            <div>
-              <p className="ui-body font-medium text-[var(--ui-text)]">{targetLabel}</p>
-              <p className="ui-caption text-[var(--ui-text-muted)]">
+            <div className="space-y-1">
+              <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{targetLabel}</p>
+              <p className={cx("ui-caption", uiMutedTextClass)}>
                 {associationKind === "account"
                   ? "This permission is effective only when this same association also has the Account administrator role."
                   : "Direct and UI group permissions are aggregated for this RGW user."}
               </p>
             </div>
-            <label className="flex items-start gap-3 rounded-md border border-[color:var(--ui-border)] p-3">
-              <input
-                type="checkbox"
-                aria-label="Allow Manager Browser data access"
-                checked={draftAllowed}
-                onChange={(event) => setDraftAllowed(event.target.checked)}
-                className="mt-0.5 h-4 w-4"
-              />
-              <span>
-                <span className="block ui-body font-medium text-[var(--ui-text)]">
+            <UiCheckboxField
+              aria-label="Allow Manager Browser data access"
+              checked={draftAllowed}
+              onChange={(event) => setDraftAllowed(event.target.checked)}
+              checkboxClassName="mt-0.5 shrink-0"
+              className={cx("w-full items-start gap-3 px-4 py-4", uiPanelMutedClass)}
+            >
+              <span className="min-w-0 flex-1">
+                <span className={cx("block ui-body font-semibold", uiTitleTextClass)}>
                   Allow Manager Browser data access
                 </span>
-                <span className="block ui-caption text-[var(--ui-text-muted)]">
+                <span className={cx("mt-0.5 block ui-caption", uiMutedTextClass)}>
                   Disabled by default. This permits data-plane Browser operations from the active Manager context.
                 </span>
               </span>
-            </label>
-            <div className="flex justify-end gap-2">
-              <UiButton variant="secondary" onClick={() => setOpen(false)}>Cancel</UiButton>
+            </UiCheckboxField>
+            <div className="flex items-center justify-end gap-2">
+              <UiButton variant="secondary" onClick={() => setOpen(false)}>
+                Cancel
+              </UiButton>
               <UiButton
                 onClick={() => {
                   onApply(draftAllowed);

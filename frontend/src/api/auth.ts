@@ -10,7 +10,7 @@ import type {
   UiRole,
   UserAvatarDescriptor,
 } from "./users";
-import type { AccountAccessRole } from "./accountRoles";
+import type { AccountAccessGrant } from "./accountAccess";
 
 export type AuthUser = {
     id: number;
@@ -21,7 +21,6 @@ export type AuthUser = {
     avatar?: UserAvatarDescriptor | null;
     role: UiRole;
     is_admin?: boolean;
-    is_root?: boolean;
     can_access_ceph_admin?: boolean;
     can_access_storage_ops?: boolean;
     can_create_manual_private_connections?: boolean;
@@ -30,10 +29,9 @@ export type AuthUser = {
     browser_advanced_features_enabled?: boolean;
     ui_language?: "en" | "fr" | "de" | null;
     ui_preferences?: UiPreferences | null;
-    account_links?: {
+    account_links?: (AccountAccessGrant & {
       account_id: number;
-      role: AccountAccessRole;
-    }[] | null;
+    })[] | null;
     group_details?: { id: number; name: string }[] | null;
     s3_user_details?: { id: number; name: string }[] | null;
     s3_connection_details?: {

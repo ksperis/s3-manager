@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.db import (
-    AccountRole,
+    ManagerAccountRole, PortalAccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -129,7 +129,8 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
             "account_links": [
                 {
                     "account_id": account.id,
-                    "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    "manager_role": ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    "portal_role": None,
                     "allow_manager_browser_data_access": True,
                 }
             ],
@@ -163,7 +164,8 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
     assert payload["account_links"] == [
         {
             "account_id": account.id,
-            "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            "manager_role": ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            "portal_role": None,
             "allow_manager_browser_data_access": True,
         }
     ]
@@ -301,8 +303,8 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
             UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                is_root=False,
-                role=AccountRole.PORTAL_USER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
             )
     )
     db_session.commit()
@@ -326,7 +328,8 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
             "account_links": [
                 {
                     "account_id": account.id,
-                    "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    "manager_role": ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    "portal_role": None,
                 }
             ],
             "s3_user_links": [{"s3_user_id": s3_user.id}],
@@ -358,12 +361,17 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
     assert "manager_browser_s3_users" not in effective_payload
     assert "s3_connections" not in effective_payload
     effective_account = out.effective_access.account_links[0]
-    assert effective_account.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
-    assert effective_account.provenance.direct_role == AccountRole.PORTAL_USER.value
-    assert effective_account.provenance.direct_determines_effective_role is False
+    assert effective_account.manager_role == ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert effective_account.portal_role == PortalAccountRole.PORTAL_USER.value
+    assert effective_account.provenance.direct_manager_role is None
+    assert effective_account.provenance.direct_portal_role == PortalAccountRole.PORTAL_USER.value
+    assert effective_account.provenance.direct_determines_effective_manager_role is False
+    assert effective_account.provenance.direct_determines_effective_portal_role is True
     assert len(effective_account.provenance.groups) == 1
-    assert effective_account.provenance.groups[0].role == AccountRole.ACCOUNT_ADMINISTRATOR.value
-    assert effective_account.provenance.groups[0].determines_effective_role is True
+    assert effective_account.provenance.groups[0].manager_role == ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert effective_account.provenance.groups[0].portal_role is None
+    assert effective_account.provenance.groups[0].determines_effective_manager_role is True
+    assert effective_account.provenance.groups[0].determines_effective_portal_role is False
     assert [details.id for details in out.effective_access.s3_user_details] == [s3_user.id]
     assert [details.id for details in out.effective_access.s3_connection_details] == [connection.id]
 

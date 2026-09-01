@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.db import AccountRole, S3Account, UiGroup, UiGroupS3Account, User, UserRole, UserS3Account
+from app.db import ManagerAccountRole, PortalAccountRole, S3Account, UiGroup, UiGroupS3Account, User, UserRole, UserS3Account
 from app.services.tags_service import TagsService
 from tests.s3_account_factory import make_s3_account
 
@@ -104,7 +104,8 @@ def test_admin_accounts_search_matches_direct_group_links(client, db_session):
         UiGroupS3Account(
             account_id=linked.id,
             group_id=group.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
         )
     )
     db_session.commit()
@@ -118,7 +119,8 @@ def test_admin_accounts_search_matches_direct_group_links(client, db_session):
     group_link = payload["items"][0]["group_links"][0]
     assert group_link["group_id"] == group.id
     assert group_link["group_name"] == "Analytics Team"
-    assert group_link["role"] == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert group_link["manager_role"] == ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert group_link["portal_role"] is None
     assert group_link["group_avatar"]["initials"] == "AT"
 
 
@@ -138,8 +140,8 @@ def test_admin_accounts_search_matches_linked_user_email_and_exposes_avatar(clie
         UserS3Account(
             account_id=linked.id,
             user_id=user.id,
-            is_root=False,
-            role=AccountRole.PORTAL_USER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -164,7 +166,8 @@ def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
         UiGroupS3Account(
             account_id=account.id,
             group_id=old_group.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
         )
     )
     db_session.commit()
@@ -175,7 +178,8 @@ def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
             "group_links": [
                 {
                     "group_id": new_group.id,
-                    "role": AccountRole.PORTAL_MANAGER.value,
+                    "manager_role": None,
+                    "portal_role": PortalAccountRole.PORTAL_MANAGER.value,
                 }
             ]
         },
@@ -187,11 +191,12 @@ def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
     group_link = payload["group_links"][0]
     assert group_link["group_id"] == new_group.id
     assert group_link["group_name"] == "New Account Group"
-    assert group_link["role"] == AccountRole.PORTAL_MANAGER.value
+    assert group_link["manager_role"] is None
+    assert group_link["portal_role"] == PortalAccountRole.PORTAL_MANAGER.value
     assert group_link["group_avatar"]["initials"] == "NG"
     rows = db_session.query(UiGroupS3Account).filter(UiGroupS3Account.account_id == account.id).all()
-    assert [(row.group_id, row.role) for row in rows] == [
-        (new_group.id, AccountRole.PORTAL_MANAGER.value)
+    assert [(row.group_id, row.manager_role, row.portal_role) for row in rows] == [
+        (new_group.id, None, PortalAccountRole.PORTAL_MANAGER.value)
     ]
 
 

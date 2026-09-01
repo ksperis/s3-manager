@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import PortalAccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
 
@@ -58,17 +58,17 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
         _seed_account(db_session, name="Beta", rgw_account_id="RGW-PORTAL-03", endpoint_id=endpoint.id),
     ]
     roles = [
-        AccountRole.PORTAL_USER.value,
-        AccountRole.PORTAL_MANAGER.value,
-        AccountRole.PORTAL_USER.value,
+        PortalAccountRole.PORTAL_USER.value,
+        PortalAccountRole.PORTAL_MANAGER.value,
+        PortalAccountRole.PORTAL_USER.value,
     ]
     for account, role in zip(accounts, roles, strict=True):
         db_session.add(
             UserS3Account(
                 user_id=actor.id,
                 account_id=account.id,
-                role=role,
-                is_root=False,
+                manager_role=None,
+                portal_role=role,
             )
         )
     db_session.commit()
@@ -98,16 +98,16 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
     payload = response.json()
     assert all(isinstance(item["id"], int) for item in payload)
     assert [item["name"] for item in payload] == ["alpha", "Beta", "Zulu"]
-    assert [item["account_role"] for item in payload] == [
-        AccountRole.PORTAL_MANAGER.value,
-        AccountRole.PORTAL_USER.value,
-        AccountRole.PORTAL_USER.value,
+    assert [item["portal_role"] for item in payload] == [
+        PortalAccountRole.PORTAL_MANAGER.value,
+        PortalAccountRole.PORTAL_USER.value,
+        PortalAccountRole.PORTAL_USER.value,
     ]
     assert set(payload[0]) == {
         "id",
         "name",
         "rgw_account_id",
-        "account_role",
+        "portal_role",
         "storage_endpoint_name",
         "storage_endpoint_url",
         "storage_endpoint_is_default",

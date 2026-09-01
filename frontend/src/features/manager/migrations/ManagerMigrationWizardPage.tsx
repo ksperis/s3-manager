@@ -71,7 +71,7 @@ export default function ManagerMigrationWizardPage() {
         if (context.id === sourceContextId) return false;
         if (context.kind !== "account") return true;
         if (context.id === targetContextId) return true;
-        return context.manager_account_is_admin === true;
+        return context.manager_role === "account_administrator";
       }),
     [contexts, sourceContextId, targetContextId]
   );
@@ -263,7 +263,8 @@ export default function ManagerMigrationWizardPage() {
         sourceContext?.kind === "account" &&
         targetContext?.kind === "account" &&
         sourceContext.id !== targetContext.id &&
-        (sourceContext.manager_account_is_admin !== true || targetContext.manager_account_is_admin !== true)
+        (sourceContext.manager_role !== "account_administrator" ||
+          targetContext.manager_role !== "account_administrator")
       ) {
         setFormError("Cross-account migrations require admin access on both source and target account contexts.");
         return false;

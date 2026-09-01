@@ -61,7 +61,7 @@ def list_execution_contexts(
     account_by_id = {account.id: account for account in accounts}
     if workspace == "manager":
         for link in links:
-            if not access_service.manager_account_allowed(link.role):
+            if not access_service.manager_account_allowed(link):
                 continue
             account = account_by_id.get(link.account_id)
             if account is not None:
@@ -69,8 +69,7 @@ def list_execution_contexts(
                     account_execution_context_from_db(
                         account,
                         tags_service=tags_service,
-                        role=link.role,
-                        manager_account_is_admin=True,
+                        manager_role=link.manager_role,
                     )
                 )
     elif workspace is None:
@@ -93,8 +92,8 @@ def list_execution_contexts(
                 portal_account_execution_context_from_db(
                     account,
                     tags_service=tags_service,
-                    role=portal_role,
-                    manager_account_is_admin=access_service.manager_account_allowed(link.role),
+                    portal_role=portal_role,
+                    manager_role=link.manager_role,
                 )
             )
     if workspace in {None, "manager"}:
@@ -129,7 +128,7 @@ def get_workspace_access(
     service = EffectiveAccessService(db)
     effective = service.resolve_user(user)
     manager_count = sum(
-        1 for link in effective.account_links if service.manager_account_allowed(link.role)
+        1 for link in effective.account_links if service.manager_account_allowed(link)
     ) + len(effective.s3_user_ids) + len(
         service.list_workspace_connections(user, workspace="manager", resolved=effective)
     )

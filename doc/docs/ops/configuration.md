@@ -198,10 +198,11 @@ Superadmins manage login behavior and UI-managed OIDC/LDAP providers from Admin
 LDAP providers are persisted separately in their own database tables.
 
 `FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. Account access
-always uses one explicit canonical role: `portal_user`, `portal_manager`, or
-`account_administrator`. Disabling Portal does not rewrite that role. Migration
-`0069` deletes legacy associations that granted no useful right; it does not
-retain a `portal_none` association.
+uses two independent axes: `manager_role` is `account_administrator` or `null`,
+and `portal_role` is `portal_user`, `portal_manager`, or `null`. At least one
+axis is required. Disabling Portal prevents new Portal selections but does not
+rewrite or remove existing Portal roles; new links default to Manager
+administrator while the feature is off and to Portal user while it is on.
 
 The code-owned `portal-user` IAM group policy grants only
 `s3:ListAllMyBuckets` and `sts:GetSessionToken`. The code-owned

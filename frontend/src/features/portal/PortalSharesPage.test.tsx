@@ -32,7 +32,7 @@ const mocks = vi.hoisted(() => ({
     hasAccountContext: true,
     accountIdForApi: "101",
     state: {
-      account_role: "portal_manager",
+      portal_role: "portal_manager",
       can_manage_portal_users: true,
     },
     collaborators: {
@@ -46,7 +46,7 @@ const mocks = vi.hoisted(() => ({
           user_id: 7,
           email: "manager@example.com",
           display_name: "Manager User",
-          account_role: "portal_manager",
+          portal_role: "portal_manager",
           access_source: "direct",
           member_since: "2026-05-01T10:00:00Z",
           avatar: {
@@ -61,7 +61,7 @@ const mocks = vi.hoisted(() => ({
           user_id: 13,
           email: "editor@example.com",
           display_name: "Editor User",
-          account_role: "portal_user",
+          portal_role: "portal_user",
           access_source: "direct",
           member_since: "2026-06-01T10:00:00Z",
           avatar: {

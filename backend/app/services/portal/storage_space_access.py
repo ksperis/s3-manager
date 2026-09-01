@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, cast, Optional, TypeGuard
 
 from app.db import (
     AccountIAMUser,
-    AccountRole,
+    PortalAccountRole,
     PortalStorageSpaceGrant,
     PortalStorageSpaceMetadata,
     S3Account,
@@ -22,7 +22,7 @@ from app.models.portal import (
     PortalStorageSpaceVisibility,
 )
 from app.services.rgw_iam import RGWIAMService
-from app.utils.account_roles import portal_role_for
+from app.utils.account_roles import PortalAccountRoleValue, max_portal_account_role
 
 if TYPE_CHECKING:
     from app.models.access_context import AccountAccess
@@ -68,47 +68,53 @@ class PortalStorageSpaceAccessMixin:
                 best = role
         return best
 
-    def _portal_account_member_map(self, account: S3Account) -> dict[int, tuple[User, str, set[str]]]:
-        role_rank = {
-            AccountRole.PORTAL_USER.value: 1,
-            AccountRole.PORTAL_MANAGER.value: 2,
-        }
-        rank_role = {
-            1: AccountRole.PORTAL_USER.value,
-            2: AccountRole.PORTAL_MANAGER.value,
-        }
-        rows_by_user: dict[int, tuple[User, str, set[str]]] = {}
+    def _portal_account_member_map(
+        self,
+        account: S3Account,
+    ) -> dict[int, tuple[User, PortalAccountRoleValue, set[str]]]:
+        rows_by_user: dict[int, tuple[User, PortalAccountRoleValue, set[str]]] = {}
 
-        def merge(user: User, role: Optional[str], source: str) -> None:
-            if role not in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
+        def merge(
+            user: User,
+            portal_role: Optional[PortalAccountRoleValue],
+            source: str,
+        ) -> None:
+            if portal_role not in {
+                PortalAccountRole.PORTAL_USER.value,
+                PortalAccountRole.PORTAL_MANAGER.value,
+            }:
                 return
             if not bool(user.is_active):
                 return
             current = rows_by_user.get(user.id)
-            current_rank = role_rank.get(current[1], 0) if current else 0
-            next_rank = max(current_rank, role_rank.get(role or "", 0))
+            effective_portal_role = max_portal_account_role(
+                current[1] if current else None,
+                portal_role,
+            )
+            if effective_portal_role is None:
+                return
             sources = set(current[2]) if current else set()
             sources.add(source)
-            rows_by_user[user.id] = (user, rank_role.get(next_rank, AccountRole.PORTAL_USER.value), sources)
+            rows_by_user[user.id] = (user, effective_portal_role, sources)
 
         direct_rows = (
-            self.db.query(User, UserS3Account.role)
+            self.db.query(User, UserS3Account.portal_role)
             .join(UserS3Account, UserS3Account.user_id == User.id)
             .filter(UserS3Account.account_id == account.id)
             .all()
         )
-        for user, role in direct_rows:
-            merge(user, portal_role_for(role), "direct")
+        for user, portal_role in direct_rows:
+            merge(user, portal_role, "direct")
 
         group_rows = (
-            self.db.query(User, UiGroupS3Account.role)
+            self.db.query(User, UiGroupS3Account.portal_role)
             .join(UserUiGroup, UserUiGroup.user_id == User.id)
             .join(UiGroupS3Account, UiGroupS3Account.group_id == UserUiGroup.group_id)
             .filter(UiGroupS3Account.account_id == account.id)
             .all()
         )
-        for user, role in group_rows:
-            merge(user, portal_role_for(role), "group")
+        for user, portal_role in group_rows:
+            merge(user, portal_role, "group")
 
         return rows_by_user
 
@@ -127,7 +133,7 @@ class PortalStorageSpaceAccessMixin:
             return None
         if metadata.owner_user_id == user.id:
             return "Owner"
-        if access.role == AccountRole.PORTAL_MANAGER.value:
+        if access.portal_role == PortalAccountRole.PORTAL_MANAGER.value:
             return "Manager"
         if metadata.archived_at:
             return role if include_archived and role in {"Owner", "Manager"} else None
@@ -139,11 +145,11 @@ class PortalStorageSpaceAccessMixin:
         self,
         target: User,
         account: S3Account,
-        account_role: str,
+        portal_role: str,
         *,
         include_archived: bool = False,
     ) -> dict[str, PortalStorageSpaceRole]:
-        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+        if portal_role not in {PortalAccountRole.PORTAL_MANAGER.value, PortalAccountRole.PORTAL_USER.value}:
             return {}
         rows = (
             self.db.query(PortalStorageSpaceMetadata, PortalStorageSpaceGrant.role)
@@ -159,7 +165,7 @@ class PortalStorageSpaceAccessMixin:
         for metadata, grant_role in rows:
             if metadata.archived_at and not include_archived:
                 continue
-            if account_role == AccountRole.PORTAL_MANAGER.value:
+            if portal_role == PortalAccountRole.PORTAL_MANAGER.value:
                 access_by_bucket[metadata.bucket_name] = "Manager"
                 continue
             if metadata.owner_user_id == target.id:
@@ -175,25 +181,29 @@ class PortalStorageSpaceAccessMixin:
                 access_by_bucket[metadata.bucket_name] = role
         return access_by_bucket
 
-    def _user_s3_account_role(self, user_id: int, account_id: int) -> Optional[str]:
+    def _user_s3_account_portal_role(
+        self,
+        user_id: int,
+        account_id: int,
+    ) -> Optional[str]:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if account is None:
             return None
         row = self._portal_account_member_map(account).get(user_id)
         return row[1] if row else None
 
-    def list_existing_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
+    def list_existing_user_bucket_access(self, target: User, account: S3Account, portal_role: str) -> list[str]:
         """Read bucket permissions without provisioning IAM user/key side effects."""
-        return sorted(self.list_existing_user_storage_space_access(target, account, account_role).keys())
+        return sorted(self.list_existing_user_storage_space_access(target, account, portal_role).keys())
 
     def list_existing_user_storage_space_access(
         self,
         target: User,
         account: S3Account,
-        account_role: str,
+        portal_role: str,
     ) -> dict[str, PortalStorageSpaceRole]:
         """Read active Storage Space permissions from DB without IAM side effects."""
-        return self._storage_space_roles_by_bucket(target, account, account_role)
+        return self._storage_space_roles_by_bucket(target, account, portal_role)
 
     def _sync_user_storage_space_policy_projection(
         self,
@@ -244,14 +254,14 @@ class PortalStorageSpaceAccessMixin:
         self,
         user: User,
         account: S3Account,
-        account_role: str,
+        portal_role: str,
         iam_service: RGWIAMService,
         iam_username: Optional[str],
     ) -> None:
         access_by_bucket = (
             {}
-            if account_role == AccountRole.PORTAL_MANAGER.value
-            else self._storage_space_roles_by_bucket(user, account, account_role)
+            if portal_role == PortalAccountRole.PORTAL_MANAGER.value
+            else self._storage_space_roles_by_bucket(user, account, portal_role)
         )
         self._sync_user_storage_space_policy_projection(iam_service, iam_username, access_by_bucket)
 
@@ -270,7 +280,7 @@ class PortalStorageSpaceAccessMixin:
             user_ids.update(
                 user_id
                 for user_id, (_target, role, _sources) in self._portal_account_member_map(account).items()
-                if role == AccountRole.PORTAL_MANAGER.value
+                if role == PortalAccountRole.PORTAL_MANAGER.value
             )
         if self._metadata_account_member_role(metadata) and account is not None:
             user_ids.update(self._portal_account_member_map(account))
@@ -309,16 +319,16 @@ class PortalStorageSpaceAccessMixin:
         if not rows:
             return
         iam_service = self._get_iam_service(account)
-        for target, account_role, iam_username in rows:
-            if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+        for target, portal_role, iam_username in rows:
+            if portal_role not in {PortalAccountRole.PORTAL_MANAGER.value, PortalAccountRole.PORTAL_USER.value}:
                 continue
             self._sync_user_group_membership(
                 iam_service,
                 iam_username,
-                account_role,
+                portal_role,
                 account=account,
             )
-            self._sync_user_storage_space_projection(target, account, account_role, iam_service, iam_username)
+            self._sync_user_storage_space_projection(target, account, portal_role, iam_service, iam_username)
 
     def _sync_storage_space_access_projection(
         self,

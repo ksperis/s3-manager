@@ -145,7 +145,7 @@ describe("portal routes", () => {
       email: "admin@example.com",
       role: "ui_superadmin",
       authType: "password",
-      account_links: [{ account_id: 24, role: "portal_manager" }],
+      account_links: [{ account_id: 24, manager_role: null, portal_role: "portal_manager" }],
     });
     setSessionUserCache({
       id: 1,
@@ -167,7 +167,7 @@ describe("portal routes", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Portal workspace" })).toBeInTheDocument();
-    expect(readStoredUser()?.account_links?.[0]?.role).toBe("portal_manager");
+    expect(readStoredUser()?.account_links?.[0]?.portal_role).toBe("portal_manager");
     expect(window.localStorage.getItem("user")).toBeNull();
   });
 });

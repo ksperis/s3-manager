@@ -179,7 +179,8 @@ def test_unlink_account_cleans_links_and_purges_derived_rows(db_session):
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role="portal_user",
+            manager_role=None,
+            portal_role="portal_user",
         )
     )
     db_session.add(AuditLog(user_email=user.email, user_role=user.role, scope="admin", action="x", account_id=account.id))

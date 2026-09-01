@@ -41,7 +41,7 @@ class BucketMigrationPersistenceMixin:
         allowed = {
             str(link.account_id)
             for link in effective.account_links
-            if service.manager_account_allowed(link.role)
+            if service.manager_account_allowed(link)
         }
         allowed.update(f"s3u-{item}" for item in effective.s3_user_ids)
         allowed.update(

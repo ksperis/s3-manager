@@ -2,7 +2,10 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
 import type { UiGroupAvatarDescriptor } from "../../api/groups";
 import type { UserAvatarDescriptor } from "../../api/users";
-import { normalizeAccountAccessRole } from "../../api/accountRoles";
+import type {
+  ManagerAccountRole,
+  PortalAccountRole,
+} from "../../api/accountAccess";
 import GroupAvatar from "../../components/GroupAvatar";
 import UserAvatar from "../../components/UserAvatar";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
@@ -14,7 +17,8 @@ export type AssociationChipItem = {
 };
 
 export type AssociationAccountItem = AssociationChipItem & {
-  role?: string | null;
+  manager_role?: ManagerAccountRole | null;
+  portal_role?: PortalAccountRole | null;
 };
 
 export type AssociationPrincipalItem = {
@@ -23,7 +27,8 @@ export type AssociationPrincipalItem = {
   label: string;
   email?: string | null;
   avatar?: UserAvatarDescriptor | UiGroupAvatarDescriptor | null;
-  role?: string | null;
+  manager_role?: ManagerAccountRole | null;
+  portal_role?: PortalAccountRole | null;
   role_labels?: string[];
 };
 
@@ -213,19 +218,13 @@ export function AssociationRoleTooltip({
   );
 }
 
-export function accountAssociationRoleLabels(
-  account: AssociationAccountItem,
-  _showPortalRole = true,
-): string[] {
+export function accountAssociationRoleLabels(account: AssociationAccountItem): string[] {
   const roles: string[] = [];
-  const portalRole = normalizeAccountAccessRole(account.role);
-  roles.push(
-    portalRole === "account_administrator"
-      ? "Account administrator"
-      : portalRole === "portal_manager"
-        ? "Portal manager"
-        : "Portal user"
-  );
+  if (account.manager_role === "account_administrator") {
+    roles.push("Account administrator");
+  }
+  if (account.portal_role === "portal_manager") roles.push("Portal manager");
+  if (account.portal_role === "portal_user") roles.push("Portal user");
   if (roles.length === 0) roles.push("Member");
   return roles;
 }
@@ -283,20 +282,15 @@ export function CompactAssociationSummary({
   );
 }
 
-function principalTooltipEntry(item: AssociationPrincipalItem, _showPortalRole: boolean): AssociationRoleTooltipEntry {
+function principalTooltipEntry(item: AssociationPrincipalItem): AssociationRoleTooltipEntry {
   const identity = item.email && item.email !== item.label ? `${item.label} · ${item.email}` : item.label;
   const roles: string[] = [...(item.role_labels ?? [])];
   const kindLabel = item.kind === "group" ? "UI group" : "UI user";
-  if (item.role) {
-    const portalRole = normalizeAccountAccessRole(item.role);
-    roles.push(
-      portalRole === "account_administrator"
-        ? "Account administrator"
-        : portalRole === "portal_manager"
-          ? "Portal manager"
-          : "Portal user"
-    );
+  if (item.manager_role === "account_administrator") {
+    roles.push("Account administrator");
   }
+  if (item.portal_role === "portal_manager") roles.push("Portal manager");
+  if (item.portal_role === "portal_user") roles.push("Portal user");
   return {
     key: `${item.kind}:${item.id}`,
     identity,
@@ -308,19 +302,17 @@ function principalTooltipEntry(item: AssociationPrincipalItem, _showPortalRole: 
 
 export function AssociationPrincipalStack({
   items,
-  showPortalRole = true,
   maxVisible = 5,
   tooltipLimit = DEFAULT_TOOLTIP_LIMIT,
 }: {
   items: AssociationPrincipalItem[];
-  showPortalRole?: boolean;
   maxVisible?: number;
   tooltipLimit?: number;
 }) {
   if (items.length === 0) return <span className="ui-caption text-slate-500 dark:text-slate-400">None</span>;
   const visible = items.slice(0, maxVisible);
   const remaining = items.length - visible.length;
-  const entries = items.map((item) => principalTooltipEntry(item, showPortalRole));
+  const entries = items.map(principalTooltipEntry);
   return (
     <AssociationRoleTooltip
       label="Linked principals"

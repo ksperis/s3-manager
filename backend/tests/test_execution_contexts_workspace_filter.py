@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.db import (
-    AccountRole,
+    ManagerAccountRole, PortalAccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -176,14 +176,14 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
             UserS3Account(
                 user_id=user.id,
                 account_id=admin_account.id,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                is_root=False,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             ),
             UserS3Account(
                 user_id=user.id,
                 account_id=portal_manager_account.id,
-                role=AccountRole.PORTAL_MANAGER.value,
-                is_root=False,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_MANAGER.value,
             ),
             UserS3User(user_id=user.id, s3_user_id=s3_user.id),
         ]
@@ -218,8 +218,8 @@ def test_manager_workspace_catalog_omits_dynamic_quota_limits(db_session):
             UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                is_root=False,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             ),
             UserS3User(user_id=user.id, s3_user_id=s3_user.id),
         ]
@@ -255,8 +255,8 @@ def test_browser_workspace_returns_only_owned_private_connections(db_session):
             UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-                is_root=False,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             ),
             UserS3User(user_id=user.id, s3_user_id=s3_user.id),
         ]
@@ -336,8 +336,8 @@ def test_browser_workspace_omits_portal_account_when_project_access_is_disabled(
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            is_root=False,
-            role=AccountRole.PORTAL_USER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -350,33 +350,40 @@ def test_browser_workspace_omits_portal_account_when_project_access_is_disabled(
 
 
 @pytest.mark.parametrize(
-    ("role", "expected_portal_role"),
+    ("manager_role", "portal_role", "expected_portal_role", "expected_manager_role"),
     [
-        (AccountRole.PORTAL_USER.value, AccountRole.PORTAL_USER.value),
-        (AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_MANAGER.value),
-        (AccountRole.ACCOUNT_ADMINISTRATOR.value, AccountRole.PORTAL_MANAGER.value),
+        (None, PortalAccountRole.PORTAL_USER.value, PortalAccountRole.PORTAL_USER.value, None),
+        (None, PortalAccountRole.PORTAL_MANAGER.value, PortalAccountRole.PORTAL_MANAGER.value, None),
+        (
+            ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            PortalAccountRole.PORTAL_MANAGER.value,
+            PortalAccountRole.PORTAL_MANAGER.value,
+            ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+        ),
     ],
 )
 def test_browser_workspace_returns_enabled_portal_account_roles(
     db_session,
     monkeypatch,
-    role,
+    manager_role,
+    portal_role,
     expected_portal_role,
+    expected_manager_role,
 ):
     user = _create_user(db_session)
-    endpoint = _create_endpoint(db_session, name=f"portal-browser-{role}")
+    endpoint = _create_endpoint(db_session, name=f"portal-browser-{portal_role}")
     account = _create_account(
         db_session,
-        name=f"portal-browser-{role}",
-        rgw_account_id=f"RGW-{role}",
+        name=f"portal-browser-{portal_role}",
+        rgw_account_id=f"RGW-{portal_role}-{bool(manager_role)}",
         storage_endpoint=endpoint,
     )
     db_session.add(
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            is_root=False,
-            role=role,
+            manager_role=manager_role,
+            portal_role=portal_role,
         )
     )
     db_session.commit()
@@ -388,10 +395,8 @@ def test_browser_workspace_returns_enabled_portal_account_roles(
     context = contexts[0]
     assert context.id == str(account.id)
     assert context.kind == "portal_account"
-    assert context.role == expected_portal_role
-    assert context.manager_account_is_admin is (
-        role == AccountRole.ACCOUNT_ADMINISTRATOR.value
-    )
+    assert context.portal_role == expected_portal_role
+    assert context.manager_role == expected_manager_role
     assert context.capabilities.can_manage_iam is False
     assert context.capabilities.admin_api_capable is False
 
@@ -414,7 +419,8 @@ def test_browser_workspace_returns_enabled_group_portal_account(db_session, monk
             UiGroupS3Account(
                 group_id=group.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_USER.value,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
             ),
         ]
     )
@@ -423,8 +429,8 @@ def test_browser_workspace_returns_enabled_group_portal_account(db_session, monk
 
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
 
-    assert [(context.id, context.kind, context.role) for context in contexts] == [
-        (str(account.id), "portal_account", AccountRole.PORTAL_USER.value)
+    assert [(context.id, context.kind, context.portal_role) for context in contexts] == [
+        (str(account.id), "portal_account", PortalAccountRole.PORTAL_USER.value)
     ]
 
 
@@ -460,7 +466,8 @@ def test_browser_workspace_applies_effective_project_override(
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.PORTAL_USER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -503,7 +510,8 @@ def test_browser_workspace_global_gates_override_enabled_project(
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.PORTAL_USER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -528,8 +536,8 @@ def test_browser_workspace_never_reuses_manager_account_context(db_session, monk
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            is_root=False,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
         )
     )
     db_session.commit()
@@ -538,13 +546,7 @@ def test_browser_workspace_never_reuses_manager_account_context(db_session, monk
 
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
 
-    assert len(contexts) == 1
-    context = contexts[0]
-    assert context.kind == "portal_account"
-    assert context.id == str(account.id)
-    assert context.role == AccountRole.PORTAL_MANAGER.value
-    assert context.manager_account_is_admin is True
-    assert all(candidate.kind != "account" for candidate in contexts)
+    assert contexts == []
 
 
 def test_connection_context_includes_endpoint_capabilities_when_bound_to_endpoint(db_session):
@@ -647,7 +649,8 @@ def test_workspace_access_counts_enabled_portal_project_and_keeps_portal_default
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.PORTAL_USER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -673,8 +676,8 @@ def test_workspace_access_excludes_portal_role_on_incompatible_account(db_sessio
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-            is_root=False,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
         )
     )
     db_session.commit()

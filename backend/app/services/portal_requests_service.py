@@ -10,7 +10,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db import (
-    AccountRole,
+    PortalAccountRole,
     PortalAdminRequest,
     PortalAdminRequestMessage,
     S3Account,
@@ -392,23 +392,23 @@ class PortalRequestsService:
             .filter(UserS3Account.user_id == target.id, UserS3Account.account_id == row.account_id)
             .first()
         )
-        next_account_role = AccountRole.PORTAL_USER.value
-        if existing_link and existing_link.role in {
-            AccountRole.PORTAL_MANAGER.value,
-            AccountRole.ACCOUNT_ADMINISTRATOR.value,
-        }:
-            next_account_role = existing_link.role
+        next_portal_role = PortalAccountRole.PORTAL_USER.value
+        if (
+            existing_link
+            and existing_link.portal_role == PortalAccountRole.PORTAL_MANAGER.value
+        ):
+            next_portal_role = existing_link.portal_role
         self.users_service.assign_user_to_account(
             int(target.id),
             int(row.account_id),
-            account_root=False,
-            role=next_account_role,
+            manager_role=existing_link.manager_role if existing_link else None,
+            portal_role=next_portal_role,
         )
         return {
             "target_user_id": int(target.id),
             "target_email": target.email,
             "created_user": created_user,
-            "account_role": next_account_role,
+            "portal_role": next_portal_role,
         }
 
     def _execute_user_removal(self, row: PortalAdminRequest) -> dict[str, Any]:
@@ -428,21 +428,24 @@ class PortalRequestsService:
         )
         if not link:
             raise ValueError("Target user is not linked to this Portal project")
-        if link.is_root or link.role == AccountRole.ACCOUNT_ADMINISTRATOR.value:
-            raise ValueError("Admin account links cannot be removed through Portal requests")
-        if link.role != AccountRole.PORTAL_USER.value:
+        if link.portal_role != PortalAccountRole.PORTAL_USER.value:
             raise ValueError("Only Portal user links can be removed through this request")
 
-        removed_role = link.role
+        removed_role = link.portal_role
         # Revoke the dedicated Portal IAM identity first when one exists, then
         # remove the UI account link. The UI user itself is intentionally kept.
         PortalService(self.db).remove_portal_user(target, row.account)
-        self.db.delete(link)
+        if link.manager_role is None:
+            self.db.delete(link)
+        else:
+            link.portal_role = None
+            link.updated_at = utcnow()
+            self.db.add(link)
         self.db.commit()
         return {
             "target_user_id": int(target.id),
             "target_email": target.email,
-            "removed_account_role": removed_role,
+            "removed_portal_role": removed_role,
         }
 
     def _execute_quota_change(self, row: PortalAdminRequest) -> dict[str, Any]:

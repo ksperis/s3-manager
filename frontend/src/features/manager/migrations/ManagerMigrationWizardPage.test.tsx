@@ -46,8 +46,8 @@ describe("ManagerMigrationWizardPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listExecutionContextsMock.mockResolvedValue([
-      { id: "src-ctx", kind: "account", manager_account_is_admin: true, display_name: "Source", endpoint_id: 1 },
-      { id: "tgt-ctx", kind: "account", manager_account_is_admin: true, display_name: "Target", endpoint_id: 2 },
+      { id: "src-ctx", kind: "account", manager_role: "account_administrator", display_name: "Source", endpoint_id: 1 },
+      { id: "tgt-ctx", kind: "account", manager_role: "account_administrator", display_name: "Target", endpoint_id: 2 },
     ]);
     listBucketsMock.mockResolvedValue([{ name: "bucket-a" }]);
     createManagerMigrationMock.mockResolvedValue({ id: 77 });
@@ -181,8 +181,8 @@ describe("ManagerMigrationWizardPage", () => {
   it("enables x-amz-copy-source on same endpoint and auto-enables auto-grant", async () => {
     const user = userEvent.setup();
     listExecutionContextsMock.mockResolvedValue([
-      { id: "src-ctx", kind: "account", manager_account_is_admin: true, display_name: "Source", endpoint_id: 1 },
-      { id: "tgt-ctx", kind: "account", manager_account_is_admin: true, display_name: "Target", endpoint_id: 1 },
+      { id: "src-ctx", kind: "account", manager_role: "account_administrator", display_name: "Source", endpoint_id: 1 },
+      { id: "tgt-ctx", kind: "account", manager_role: "account_administrator", display_name: "Target", endpoint_id: 1 },
     ]);
 
     render(
@@ -305,9 +305,9 @@ describe("ManagerMigrationWizardPage", () => {
 
   it("filters non-admin account targets while keeping non-account contexts", async () => {
     listExecutionContextsMock.mockResolvedValue([
-      { id: "src-ctx", kind: "account", manager_account_is_admin: true, display_name: "Source", endpoint_id: 1 },
-      { id: "acct-non-admin", kind: "account", manager_account_is_admin: false, display_name: "Account portal", endpoint_id: 2 },
-      { id: "acct-admin", kind: "account", manager_account_is_admin: true, display_name: "Account admin", endpoint_id: 3 },
+      { id: "src-ctx", kind: "account", manager_role: "account_administrator", display_name: "Source", endpoint_id: 1 },
+      { id: "acct-non-admin", kind: "account", manager_role: null, display_name: "Account portal", endpoint_id: 2 },
+      { id: "acct-admin", kind: "account", manager_role: "account_administrator", display_name: "Account admin", endpoint_id: 3 },
       { id: "conn-7", kind: "connection", display_name: "Shared connection", endpoint_id: null },
     ]);
 
@@ -331,8 +331,8 @@ describe("ManagerMigrationWizardPage", () => {
   it("blocks cross-account account migration when one side is non-admin", async () => {
     const user = userEvent.setup();
     listExecutionContextsMock.mockResolvedValue([
-      { id: "src-ctx", kind: "account", manager_account_is_admin: false, display_name: "Source", endpoint_id: 1 },
-      { id: "tgt-ctx", kind: "account", manager_account_is_admin: true, display_name: "Target", endpoint_id: 2 },
+      { id: "src-ctx", kind: "account", manager_role: null, display_name: "Source", endpoint_id: 1 },
+      { id: "tgt-ctx", kind: "account", manager_role: "account_administrator", display_name: "Target", endpoint_id: 2 },
     ]);
 
     render(

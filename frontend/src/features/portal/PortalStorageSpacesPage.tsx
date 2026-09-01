@@ -352,7 +352,7 @@ export default function PortalStorageSpacesPage() {
   const canCreateTeam = Boolean(state?.can_create_team_storage_spaces);
   const canCreate = canCreatePrivate || canCreateTeam;
   const canImport =
-    state?.account_role === "portal_manager" &&
+    state?.portal_role === "portal_manager" &&
     Boolean(state?.can_manage_buckets);
   const canUseNamedBucket = Boolean(state?.allow_named_bucket_create);
   const createAccessModes = useMemo<PortalAccessMode[]>(

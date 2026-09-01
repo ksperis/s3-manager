@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.security import get_password_hash, verify_password
-from app.db import AccountRole, User, UserRole, UserS3Account
+from app.db import PortalAccountRole, User, UserRole, UserS3Account
 from app.main import app
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
@@ -158,8 +158,18 @@ def test_user_avatar_requires_a_shared_portal_account(client, db_session):
     db_session.flush()
     db_session.add_all(
         [
-            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=target.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(
+                user_id=viewer.id,
+                account_id=account.id,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
+            ),
+            UserS3Account(
+                user_id=target.id,
+                account_id=account.id,
+                manager_role=None,
+                portal_role=PortalAccountRole.PORTAL_USER.value,
+            ),
         ]
     )
     db_session.commit()

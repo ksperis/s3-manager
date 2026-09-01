@@ -7,7 +7,6 @@ from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Index, Inte
 from sqlalchemy.orm import relationship
 
 from .base import Base
-from .enums import AccountRole
 
 
 class UiGroup(Base):
@@ -63,15 +62,29 @@ class UiGroupS3Account(Base):
         UniqueConstraint("group_id", "account_id", name="uq_ui_group_s3_account"),
         Index("ix_ui_group_s3_accounts_account_group", "account_id", "group_id"),
         CheckConstraint(
-            "role IN ('portal_user', 'portal_manager', 'account_administrator')",
-            name="ck_ui_group_s3_accounts_role",
+            "manager_role IS NULL OR manager_role = 'account_administrator'",
+            name="ck_ui_group_s3_accounts_manager_role",
+        ),
+        CheckConstraint(
+            "portal_role IS NULL OR portal_role IN ('portal_user', 'portal_manager')",
+            name="ck_ui_group_s3_accounts_portal_role",
+        ),
+        CheckConstraint(
+            "manager_role IS NOT NULL OR portal_role IS NOT NULL",
+            name="ck_ui_group_s3_accounts_has_role",
+        ),
+        CheckConstraint(
+            "allow_manager_browser_data_access IS FALSE "
+            "OR manager_role = 'account_administrator'",
+            name="ck_ui_group_s3_accounts_manager_browser_role",
         ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey("ui_groups.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
-    role = Column(String, nullable=False)
+    manager_role = Column(String, nullable=True)
+    portal_role = Column(String, nullable=True)
     allow_manager_browser_data_access = Column(
         Boolean,
         nullable=False,

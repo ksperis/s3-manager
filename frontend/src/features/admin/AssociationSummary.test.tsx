@@ -13,14 +13,16 @@ describe("AssociationPrincipalStack", () => {
             label: "Alice Example",
             email: "alice@example.com",
             avatar: { preference: "initials", source: "initials", initials: "AE" },
-            role: "portal_user",
+            manager_role: null,
+            portal_role: "portal_user",
           },
           {
             id: 2,
             kind: "group",
             label: "Storage Operators",
             avatar: { source: "preset", initials: "SO", icon: "users" },
-            role: "account_administrator",
+            manager_role: "account_administrator",
+            portal_role: null,
           },
         ]}
       />,
@@ -56,8 +58,21 @@ describe("AssociationPrincipalStack", () => {
         tooltipLimit={2}
         maxVisible={2}
         items={[
-          { id: 1, kind: "user", label: "Alice", email: "alice@example.com", role: "portal_user" },
-          { id: 2, kind: "group", label: "Operators", role: "account_administrator" },
+          {
+            id: 1,
+            kind: "user",
+            label: "Alice",
+            email: "alice@example.com",
+            manager_role: null,
+            portal_role: "portal_user",
+          },
+          {
+            id: 2,
+            kind: "group",
+            label: "Operators",
+            manager_role: "account_administrator",
+            portal_role: null,
+          },
           { id: 3, kind: "user", label: "Charlie", email: "charlie@example.com" },
         ]}
       />,

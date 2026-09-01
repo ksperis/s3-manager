@@ -4,15 +4,16 @@
  */
 import client, { timeoutForRequestProfile } from "./client";
 import { PaginatedResponse } from "./types";
-import type { AccountAccessRole } from "./accountRoles";
+import type {
+  AccountAccessGrant,
+  ManagerAccountRole,
+  PortalAccountRole,
+} from "./accountAccess";
 
 export type UiRole = "ui_superadmin" | "ui_admin" | "ui_user" | "ui_none";
 
-export type AccountMembership = {
+export type AccountMembership = AccountAccessGrant & {
   account_id: number;
-  role: AccountAccessRole;
-  allow_manager_browser_data_access?: boolean;
-  is_root?: boolean;
 };
 
 export type S3UserMembership = {
@@ -22,13 +23,17 @@ export type S3UserMembership = {
 
 export type EffectiveAccountMembership = AccountMembership & {
   provenance: {
-    direct_role?: AccountAccessRole | null;
-    direct_determines_effective_role: boolean;
+    direct_manager_role?: ManagerAccountRole | null;
+    direct_portal_role?: PortalAccountRole | null;
+    direct_determines_effective_manager_role: boolean;
+    direct_determines_effective_portal_role: boolean;
     groups: Array<{
       group_id: number;
       group_name: string;
-      role: AccountAccessRole;
-      determines_effective_role: boolean;
+      manager_role?: ManagerAccountRole | null;
+      portal_role?: PortalAccountRole | null;
+      determines_effective_manager_role: boolean;
+      determines_effective_portal_role: boolean;
     }>;
   };
 };
@@ -102,7 +107,6 @@ export type User = {
   }[];
   effective_access?: EffectiveUserAccess | null;
   is_active?: boolean;
-  is_root?: boolean;
   last_login_at?: string | null;
 };
 

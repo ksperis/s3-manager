@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import AccountRole, User
+from app.db import PortalAccountRole, User
 from app.models.access_context import AccountAccess
 from app.models.app_settings import PortalSettingsOverride
 from app.models.portal import (
@@ -54,7 +54,7 @@ def list_portal_accounts(
             id=account.id,
             name=account.name,
             rgw_account_id=account.rgw_account_id,
-            account_role=portal_roles[account.id],
+            portal_role=portal_roles[account.id],
             storage_endpoint_name=account.storage_endpoint.name,
             storage_endpoint_url=account.storage_endpoint.endpoint_url,
             storage_endpoint_is_default=bool(account.storage_endpoint.is_default),
@@ -95,7 +95,7 @@ def get_portal_project_settings(
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     can_update = bool(
-        access.role == AccountRole.PORTAL_MANAGER.value
+        access.portal_role == PortalAccountRole.PORTAL_MANAGER.value
         and access.account.portal_settings_delegated
     )
     return service.get_portal_project_settings(access.account, can_update=can_update)
@@ -111,7 +111,7 @@ def update_portal_project_settings(
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    if access.role != AccountRole.PORTAL_MANAGER.value:
+    if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal manager rights required")
     if not access.account.portal_settings_delegated:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal settings delegation is disabled")

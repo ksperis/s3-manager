@@ -65,26 +65,24 @@ migrated by revision `0092`; they are not accepted or normalized at runtime.
 `ui_none` is the explicit no-workspace role. Unknown historical values migrate
 to `ui_none` so canonicalization cannot grant access accidentally.
 
-## Canonical account access
+## Account access axes
 
-Account associations carry one canonical, ordered role:
+Account associations carry two independent, nullable rights:
 
-1. `portal_user`
-2. `portal_manager`
-3. `account_administrator`
+- `manager_role`: `account_administrator` or `NULL`;
+- `portal_role`: `portal_user`, `portal_manager`, or `NULL`.
 
-Direct and UI-group associations are combined by taking the highest role. The
-effective-access response includes the direct source, every contributing group,
-and the source or sources that determine the maximum. `UserS3Account.is_root`
-is internal and protected; it always projects `account_administrator`.
+At least one axis must be present. Direct and UI-group associations are
+combined separately: Manager access is the union of administrator grants,
+while Portal access takes the highest Portal role only. The effective-access
+response exposes separate direct and group provenance for both axes. There is
+no conversion between Manager and Portal roles.
 
-Account-association API payloads expose and accept only `role`. Unknown or
-removed association fields are rejected with `422`, and the legacy database
-columns no longer exist.
-
-An association without a useful legacy right is deleted by migration `0069`.
-It is not represented as `role = NULL` and cannot be recovered by downgrade;
-only the verified pre-upgrade database backup can restore it.
+Account-association API payloads require both fields, using `null` for an absent
+right. The removed `role` and `is_root` fields, missing role fields, empty
+associations, and Manager Browser access without `manager_role` are rejected.
+Ceph's technical `account-root` identity and RGW account credentials remain
+execution details; they do not grant a BucketReef Portal role.
 
 ## Workspace authorization matrix
 
@@ -96,7 +94,7 @@ execution of a selected context.
 | Manager | `account_administrator` accounts, assigned RGW users, assigned shared Manager connections, and the owner's active private Manager connections. |
 | Manager Browser | The active Manager context only. Accounts require `account_administrator` and `allow_manager_browser_data_access = true` on the same direct or group link and execute as root. RGW users require the flag on any direct or group link and execute with that RGW user's credentials. Owned private connections require both Manager and Browser access. Shared connections are rejected. |
 | Browser | The owner's active, unexpired private connections with `access_browser = true`, plus compatible Portal projects whose effective `portal.browser_access_enabled` setting is true. Portal project execution uses the personal Portal IAM identity and Portal profile. |
-| Portal | Compatible account membership projected to `portal_user` or `portal_manager`; account administrators project to Portal manager. Execution always uses the user's personal Portal IAM identity. |
+| Portal | Explicit `portal_user` or `portal_manager` account membership only. Execution always uses the user's personal Portal IAM identity. |
 | Ceph Admin Browser | The explicit endpoint-wide Ceph Admin branch. |
 | Direct S3 session | The explicit session principal and its session capabilities. |
 
@@ -189,7 +187,7 @@ reject direct status or delete operations.
 | Symptom | Check first |
 |---|---|
 | Workspace is missing | Global feature flag, UI role, user or group entitlement. |
-| Context is missing | Canonical account role, assigned RGW user/shared Manager connection, owned private connection flags/activity/expiry, or endpoint availability. |
+| Context is missing | Explicit Manager or Portal account role, assigned RGW user/shared Manager connection, owned private connection flags/activity/expiry, or endpoint availability. |
 | Menu item is hidden in Manager | Global Manager tool setting, user or group Manager tool access, endpoint capability, and selected context type. |
 | Portal Storage Space is missing | Portal account link, Storage Space metadata, access mode, collaborator grant, and archived state. |
 | Action is visible but returns `AccessDenied` | Storage-side IAM/S3/RGW permission and the selected execution identity. |

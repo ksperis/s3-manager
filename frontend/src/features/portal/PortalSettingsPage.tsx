@@ -68,9 +68,9 @@ function resolveWorkspaceAccess(user: User | null, selectedAccountId: string | n
   if (!user || !selectedAccountId) return "limited";
   const numericId = Number(selectedAccountId);
   const link = user.account_links?.find((item) => Number(item.account_id) === numericId);
-  if (!link?.role) return "limited";
-  if (link.role === "portal_manager" || link.role === "account_administrator") return "manager";
-  if (link.role === "portal_user") return "user";
+  if (!link?.portal_role) return "limited";
+  if (link.portal_role === "portal_manager") return "manager";
+  if (link.portal_role === "portal_user") return "user";
   return "limited";
 }
 

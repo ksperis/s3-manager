@@ -35,7 +35,7 @@ def portal_traffic(
     if endpoint and not resolve_feature_flags(endpoint).usage_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage logs are disabled for this endpoint")
     requested_bucket = (bucket or "").strip()
-    allowed_buckets = set(portal_service.list_existing_user_bucket_access(actor, account, access.role))
+    allowed_buckets = set(portal_service.list_existing_user_bucket_access(actor, account, access.portal_role))
     if requested_bucket and requested_bucket not in allowed_buckets:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket access not allowed for this role.")
     bucket_filters: Optional[set[str]] = None

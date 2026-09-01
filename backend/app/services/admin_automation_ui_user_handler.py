@@ -70,7 +70,6 @@ class AdminAutomationUiUserHandler(AdminAutomationResultFactory):
                         password=spec.password,
                         full_name=spec.full_name,
                         role=spec.role,
-                        is_root=bool(spec.is_root),
                         can_create_manual_private_connections=bool(
                             spec.can_create_manual_private_connections
                         ),
@@ -137,12 +136,6 @@ class AdminAutomationUiUserHandler(AdminAutomationResultFactory):
                 diff["is_active"] = {
                     "from": bool(user.is_active),
                     "to": bool(spec.is_active),
-                }
-        if "is_root" in fields_set and spec.is_root is not None:
-            if bool(spec.is_root) != bool(user.is_root):
-                diff["is_root"] = {
-                    "from": bool(user.is_root),
-                    "to": bool(spec.is_root),
                 }
         if (
             "can_create_manual_private_connections" in fields_set

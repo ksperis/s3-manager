@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { GeneralSettings } from "../api/appSettings";
-import type { AccountAccessRole } from "../api/accountRoles";
+import type { AccountAccessGrant } from "../api/accountAccess";
 import type { WorkspaceAccess } from "../api/executionContexts";
 import type {
   EffectiveUserAccess,
@@ -57,10 +57,9 @@ export type SessionUser = {
   actorType?: string | null;
   accountId?: string | null;
   accountName?: string | null;
-  account_links?: {
+  account_links?: (AccountAccessGrant & {
     account_id: number;
-    role: AccountAccessRole;
-  }[] | null;
+  })[] | null;
   s3_user_details?: { id: number; name?: string | null }[] | null;
   s3_connection_details?: {
     id: number;
@@ -149,9 +148,7 @@ export function readStoredWorkspaceId(): WorkspaceId | null {
 export function hasPortalWorkspaceAccess(user: SessionUser | null): boolean {
   const links = getAccountLinks(user);
   return Boolean(
-    links.some(
-      (link) => ["portal_user", "portal_manager", "account_administrator"].includes(link.role)
-    )
+    links.some((link) => link.portal_role === "portal_user" || link.portal_role === "portal_manager")
   );
 }
 
@@ -198,7 +195,9 @@ function resolveAvailableWorkspaces(
   }
   const s3UserDetails = getS3UserDetails(user);
   const connectionDetails = getConnectionDetails(user);
-  const hasAccountAdmin = links.some((link) => link.role === "account_administrator");
+  const hasAccountAdmin = links.some(
+    (link) => link.manager_role === "account_administrator",
+  );
   const hasS3UserAccess = s3UserDetails.length > 0;
   const hasManagerConnectionAccess = connectionDetails.length > 0;
   const hasManagerAccess =
@@ -269,7 +268,9 @@ function resolveRoleHomePath(user: SessionUser | null, generalSettings: GeneralS
   const hasPortalAccess = hasPortalWorkspaceAccess(user);
   const s3UserDetails = getS3UserDetails(user);
   const connectionDetails = getConnectionDetails(user);
-  const hasAccountAdmin = links.some((link) => link.role === "account_administrator");
+  const hasAccountAdmin = links.some(
+    (link) => link.manager_role === "account_administrator",
+  );
   const hasS3UserAccess = s3UserDetails.length > 0;
   const hasBrowserAccess = false;
   const hasManagerConnectionAccess = connectionDetails.length > 0;

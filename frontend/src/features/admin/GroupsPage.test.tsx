@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import GroupsPage from "./GroupsPage";
 
@@ -151,7 +151,11 @@ describe("GroupsPage", () => {
             feature_rules: false,
           },
           user_details: [{ id: 2, email: "alice@example.com" }],
-          account_links: [{ account_id: 99, role: "account_administrator" }],
+          account_links: [{
+            account_id: 99,
+            manager_role: "account_administrator",
+            portal_role: null,
+          }],
           account_details: [{ id: 99, name: "production-account", rgw_account_id: "RGW-PROD" }],
           s3_user_links: [{ s3_user_id: 88, allow_manager_browser_data_access: false }],
           s3_user_details: [{ id: 88, name: "archive-rgw-user" }],
@@ -240,7 +244,7 @@ describe("GroupsPage", () => {
     expect(memberStack).toHaveAccessibleDescription(/UI user: member-7@example\.com — Roles: User/);
   });
 
-  it("preserves an existing portal role as a disabled option when Portal is disabled", async () => {
+  it("preserves an existing portal role while hiding its column when Portal is disabled", async () => {
     listGroupsMock.mockResolvedValue({
       items: [
         {
@@ -256,7 +260,7 @@ describe("GroupsPage", () => {
             feature_rules: false,
           },
           user_details: [],
-          account_links: [{ account_id: 99, role: "portal_user" }],
+          account_links: [{ account_id: 99, manager_role: null, portal_role: "portal_user" }],
           account_details: [{ id: 99, name: "production-account", rgw_account_id: "RGW-PROD" }],
         },
       ],
@@ -276,14 +280,18 @@ describe("GroupsPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
 
-    const roleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Access role for Account #99",
+    expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /Portal role/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Access roles" })).not.toBeInTheDocument();
+
+    const managerRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Manager role for Account #99",
     });
-    expect(roleSelect).toHaveValue("portal_user");
-    expect(Array.from(roleSelect.options).map((option) => [option.value, option.disabled])).toEqual([
-      ["portal_user", true],
-      ["account_administrator", false],
-    ]);
+    expect(managerRoleSelect).toHaveValue("");
+    expect(managerRoleSelect).toBeEnabled();
+    expect(
+      screen.queryByRole("combobox", { name: "Portal role for Account #99" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -295,10 +303,60 @@ describe("GroupsPage", () => {
       expect.objectContaining({
         account_links: [{
           account_id: 99,
-          role: "portal_user",
+          manager_role: null,
+          portal_role: "portal_user",
           allow_manager_browser_data_access: false,
         }],
       })
+    );
+  });
+
+  it("blocks saving a group account association without either role", async () => {
+    listGroupsMock.mockResolvedValue({
+      items: [
+        {
+          id: 50,
+          name: "ops-group",
+          description: null,
+          user_details: [],
+          account_links: [
+            {
+              account_id: 1,
+              manager_role: "account_administrator",
+              portal_role: null,
+            },
+          ],
+          account_details: [{ id: 1, name: "acc-1", rgw_account_id: "RGW-ACC-1" }],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<GroupsPage />);
+    const editButton = await screen.findByRole("button", { name: "Edit" });
+    await act(async () => {
+      fireEvent.click(editButton);
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
+    expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /Portal role/ })).not.toBeInTheDocument();
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Manager role for acc-1" }),
+      { target: { value: "" } },
+    );
+
+    expect(
+      screen.getByText("Choose a Manager role; Portal is off."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(updateGroupMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("tab", { name: "Associations" })).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
   });
 
@@ -326,15 +384,19 @@ describe("GroupsPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
     fireEvent.click(screen.getByRole("button", { name: "Add accounts" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "acc-1" }));
-    const accountRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Access role for acc-1",
+    const managerRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Manager role for acc-1",
     });
-    expect(accountRoleSelect).toHaveValue(
-      "account_administrator",
-    );
-    expect(Array.from(accountRoleSelect.options).map((option) => option.value)).toEqual([
+    const portalRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Portal role for acc-1",
+    });
+    expect(managerRoleSelect).toHaveValue("account_administrator");
+    expect(Array.from(managerRoleSelect.options).map((option) => option.value)).toEqual([
+      "",
       "account_administrator",
     ]);
+    expect(portalRoleSelect).toHaveValue("");
+    expect(portalRoleSelect).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
     fireEvent.click(screen.getByRole("button", { name: /S3 Users \(0\)/ }));
     fireEvent.click(screen.getByRole("button", { name: "Add RGW users" }));
@@ -385,7 +447,8 @@ describe("GroupsPage", () => {
       user_ids: [2],
       account_links: [{
         account_id: 1,
-        role: "account_administrator",
+        manager_role: "account_administrator",
+        portal_role: null,
         allow_manager_browser_data_access: false,
       }],
       s3_user_links: [{
@@ -403,7 +466,7 @@ describe("GroupsPage", () => {
           id: 50,
           name: "ops-group",
           description: null,
-          account_links: [{ account_id: 1, role: "portal_user" }],
+          account_links: [{ account_id: 1, manager_role: null, portal_role: "portal_user" }],
         account_details: [{ id: 1, name: "acc-1", rgw_account_id: "RGW-ACC-1" }],
         },
       ],

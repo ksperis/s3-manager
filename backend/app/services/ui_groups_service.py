@@ -37,7 +37,6 @@ from app.services.portal_role_sync import (
 )
 from app.utils.normalize import normalize_optional_string
 from app.utils.time import utcnow
-from app.utils.account_roles import require_account_role
 
 class UiGroupsService:
     def __init__(self, db: Session) -> None:
@@ -340,7 +339,8 @@ class UiGroupsService:
             account_links=[
                 AccountMembership(
                     account_id=link.account_id,
-                    role=link.role,
+                    manager_role=link.manager_role,
+                    portal_role=link.portal_role,
                     allow_manager_browser_data_access=bool(
                         link.allow_manager_browser_data_access
                     ),
@@ -383,16 +383,7 @@ class UiGroupsService:
             self.db.add(UserUiGroup(user_id=user_id, group_id=group.id))
 
     def _set_account_links(self, group: UiGroup, links: list[AccountMembership]) -> None:
-        cleaned: dict[int, AccountMembership] = {}
-        for link in links:
-            account_id = int(link.account_id)
-            cleaned[account_id] = AccountMembership(
-                account_id=account_id,
-                role=require_account_role(link.role),
-                allow_manager_browser_data_access=bool(
-                    link.allow_manager_browser_data_access
-                ),
-            )
+        cleaned = {int(link.account_id): link for link in links}
         self._ensure_accounts_exist(sorted(cleaned))
         existing = self.db.query(UiGroupS3Account).filter(UiGroupS3Account.group_id == group.id).all()
         existing_by_id = {link.account_id: link for link in existing}
@@ -405,12 +396,14 @@ class UiGroupsService:
                 row = UiGroupS3Account(
                     group_id=group.id,
                     account_id=account_id,
-                    role=payload.role,
+                    manager_role=payload.manager_role,
+                    portal_role=payload.portal_role,
                     allow_manager_browser_data_access=bool(
                         payload.allow_manager_browser_data_access
                     ),
                 )
-            row.role = require_account_role(payload.role)
+            row.manager_role = payload.manager_role
+            row.portal_role = payload.portal_role
             row.allow_manager_browser_data_access = bool(
                 payload.allow_manager_browser_data_access
             )

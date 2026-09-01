@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
 
-from app.db import AccountIAMUser, AccountRole, S3Account, User
+from app.db import AccountIAMUser, PortalAccountRole, S3Account, User
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
 from app.services import s3_bucket_access, s3_bucket_metadata, s3_client, s3_deletion
 from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
 from app.services.rgw_iam import RGWIAMService
 from app.services.storage_ops_bucket_listing_service import resolve_storage_ops_context_tenant
+from app.utils.account_roles import PortalAccountRoleValue
 from app.utils.normalize import normalize_string_list
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ class PortalBucketsUsersMixin:
         portal_defaults = portal_settings or self._effective_portal_settings(account)
         versioning_flag = portal_defaults.bucket_defaults.versioning if versioning is None else versioning
         is_portal_user_creation = bool(
-            access.role == AccountRole.PORTAL_USER.value and portal_defaults.allow_private_storage_space_create
+            access.portal_role == PortalAccountRole.PORTAL_USER.value and portal_defaults.allow_private_storage_space_create
         )
         can_create_bucket = bool(access.capabilities.can_manage_buckets or is_portal_user_creation)
         if not can_create_bucket:
@@ -40,7 +41,7 @@ class PortalBucketsUsersMixin:
         self._sync_user_group_membership(
             iam_service,
             link.iam_username,
-            access.role,
+            access.portal_role,
             account=account,
         )
         # Keep the Portal identity ready for subsequent object access; bucket
@@ -107,7 +108,7 @@ class PortalBucketsUsersMixin:
             self._sync_user_group_membership(
                 iam_service,
                 link.iam_username,
-                access.role,
+                access.portal_role,
                 account=account,
             )
             access_key, secret_key = self._active_credentials(link, iam_service)
@@ -128,18 +129,18 @@ class PortalBucketsUsersMixin:
                 )
             )
 
-    def provision_portal_user(self, target: User, account: S3Account, account_role: str) -> None:
+    def provision_portal_user(self, target: User, account: S3Account, portal_role: str) -> None:
         """Create/sync IAM user and group membership immediately when roles change."""
-        if account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+        if portal_role in {PortalAccountRole.PORTAL_MANAGER.value, PortalAccountRole.PORTAL_USER.value}:
             iam_service = self._get_iam_service(account)
             link, _, _ = self._ensure_portal_user(target, account, iam_service)
             self._sync_user_group_membership(
                 iam_service,
                 link.iam_username,
-                account_role,
+                portal_role,
                 account=account,
             )
-            self._sync_user_storage_space_projection(target, account, account_role, iam_service, link.iam_username)
+            self._sync_user_storage_space_projection(target, account, portal_role, iam_service, link.iam_username)
             self._ensure_active_key(link, iam_service)
             self._sync_account_storage_space_bucket_policies(account)
             return
@@ -166,7 +167,7 @@ class PortalBucketsUsersMixin:
         self,
         target: User,
         account: S3Account,
-        account_role: Optional[str],
+        portal_role: Optional[PortalAccountRoleValue],
     ) -> None:
         """Synchronize an existing IAM identity without creating credentials.
 
@@ -186,17 +187,17 @@ class PortalBucketsUsersMixin:
             return
 
         iam_service = self._get_iam_service(account)
-        if account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+        if portal_role in {PortalAccountRole.PORTAL_MANAGER.value, PortalAccountRole.PORTAL_USER.value}:
             self._sync_user_group_membership(
                 iam_service,
                 link.iam_username,
-                account_role,
+                portal_role,
                 account=account,
             )
             self._sync_user_storage_space_projection(
                 target,
                 account,
-                account_role,
+                portal_role,
                 iam_service,
                 link.iam_username,
             )

@@ -16,7 +16,7 @@ from app.db import (
     is_admin_ui_role,
 )
 from app.models.user import (
-    AccountMembershipDetail,
+    AccountMembership,
     LinkedS3Connection,
     LinkedS3User,
     LinkedUiGroup,
@@ -32,7 +32,7 @@ from app.services.user_avatar_service import UserAvatarService
 
 @dataclass(frozen=True)
 class UserOutputPreload:
-    account_links_by_user: dict[int, list[AccountMembershipDetail]]
+    account_links_by_user: dict[int, list[AccountMembership]]
     group_ids_by_user: dict[int, list[int]]
     group_names: dict[int, str]
     s3_user_links_by_user: dict[int, list[S3UserMembership]]
@@ -49,7 +49,7 @@ class UserOutputService:
 
     def preload(self, users: list[User]) -> UserOutputPreload:
         user_ids = [int(user.id) for user in users]
-        account_links_by_user: dict[int, list[AccountMembershipDetail]] = {
+        account_links_by_user: dict[int, list[AccountMembership]] = {
             user_id: [] for user_id in user_ids
         }
         group_ids_by_user: dict[int, list[int]] = {
@@ -80,13 +80,13 @@ class UserOutputService:
         )
         for link in account_rows:
             account_links_by_user[int(link.user_id)].append(
-                AccountMembershipDetail(
+                AccountMembership(
                     account_id=link.account_id,
-                    role=link.role,
+                    manager_role=link.manager_role,
+                    portal_role=link.portal_role,
                     allow_manager_browser_data_access=bool(
                         link.allow_manager_browser_data_access
                     ),
-                    is_root=bool(link.is_root),
                 )
             )
 
@@ -206,7 +206,6 @@ class UserOutputService:
             is_active=user.is_active,
             is_admin=is_admin_ui_role(user.role),
             role=user.role,
-            is_root=user.is_root,
             can_access_ceph_admin=bool(user.can_access_ceph_admin),
             can_access_storage_ops=bool(user.can_access_storage_ops),
             can_create_manual_private_connections=bool(

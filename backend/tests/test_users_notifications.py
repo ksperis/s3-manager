@@ -8,7 +8,7 @@ import json
 import pytest
 
 from app.db import (
-    AccountRole,
+    PortalAccountRole,
     S3Account,
     S3User,
     StorageEndpoint,
@@ -140,7 +140,8 @@ def test_list_notifications_filters_by_current_account_access(client, db_session
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.PORTAL_MANAGER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_MANAGER.value,
         )
     )
     db_session.commit()

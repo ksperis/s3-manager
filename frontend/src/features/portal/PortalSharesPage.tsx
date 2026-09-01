@@ -82,7 +82,7 @@ function CollaboratorsInventory({
         return [
           collaborator.email,
           collaborator.display_name,
-          collaborator.account_role,
+          collaborator.portal_role,
           collaborator.access_source,
         ]
           .filter(Boolean)
@@ -147,12 +147,12 @@ function CollaboratorsInventory({
         render: (collaborator) => (
           <UiBadge
             tone={
-              collaborator.account_role === "portal_manager"
+              collaborator.portal_role === "portal_manager"
                 ? "primary"
                 : "neutral"
             }
           >
-            {portalAccountRoleLabel(collaborator.account_role, t)}
+            {portalAccountRoleLabel(collaborator.portal_role, t)}
           </UiBadge>
         ),
       },
@@ -307,8 +307,8 @@ export default function PortalSharesPage() {
     collaboratorsError,
   } = usePortalWorkspaceData({ includeCollaborators: true });
   const canRequestMemberChanges = Boolean(
-    selectedAccount?.account_role === "portal_manager" ||
-      state?.account_role === "portal_manager" ||
+    selectedAccount?.portal_role === "portal_manager" ||
+      state?.portal_role === "portal_manager" ||
       state?.can_manage_portal_users,
   );
   const activeCollaboratorSpaces = useMemo(

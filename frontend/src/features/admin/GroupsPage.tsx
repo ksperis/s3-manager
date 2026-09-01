@@ -25,13 +25,20 @@ import {
 } from "../../api/groups";
 import { AccountMembership, UserSummary, listMinimalUsers } from "../../api/users";
 import {
-  getAccountAccessRoleOptions,
-  normalizeAccountAccessRole,
-} from "../../api/accountRoles";
+  defaultAccountAccessGrant,
+  getAccountAccessRequiredMessage,
+  hasAccountAccessRole,
+  type AccountAccessGrant,
+} from "../../api/accountAccess";
 import { S3AccountSummary, listMinimalS3Accounts } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
+import AccountAccessRoleSelectors, {
+  AccountAccessRoleValidationMessage,
+  ManagerAccountRoleSelect,
+  PortalAccountRoleSelect,
+} from "./AccountAccessRoleSelectors";
 import GroupAvatar from "../../components/GroupAvatar";
 import ListPageSection from "../../components/list/ListPageSection";
 import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
@@ -75,7 +82,6 @@ import {
 } from "./adminAccessConfig";
 import PageTabs from "../../components/PageTabs";
 import UiButton from "../../components/ui/UiButton";
-import UiSelect from "../../components/ui/UiSelect";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -166,7 +172,9 @@ export default function GroupsPage() {
   const [accountSelections, setAccountSelections] = useState<number[]>([]);
   const [s3UserSelections, setS3UserSelections] = useState<number[]>([]);
   const [connectionSelections, setConnectionSelections] = useState<number[]>([]);
-  const [accountPortalRoleChoice, setAccountPortalRoleChoice] = useState<Record<number, string>>({});
+  const [accountAccessChoice, setAccountAccessChoice] = useState<
+    Record<number, AccountAccessGrant>
+  >({});
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [removeAvatarImage, setRemoveAvatarImage] = useState(false);
   const avatarFileUrl = useMemo(
@@ -318,7 +326,7 @@ export default function GroupsPage() {
     setAccountSelections([]);
     setS3UserSelections([]);
     setConnectionSelections([]);
-    setAccountPortalRoleChoice({});
+    setAccountAccessChoice({});
     setAvatarFile(null);
     setRemoveAvatarImage(false);
   };
@@ -349,7 +357,8 @@ export default function GroupsPage() {
       account_links:
         group.account_links?.map((link) => ({
           account_id: Number(link.account_id),
-          role: normalizeAccountAccessRole(link.role),
+          manager_role: link.manager_role,
+          portal_role: link.portal_role,
           allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
         })) ?? [],
       s3_user_links: (group.s3_user_links ?? []).map((link) => ({
@@ -393,10 +402,18 @@ export default function GroupsPage() {
 
   const submitGroup = async (event: FormEvent) => {
     event.preventDefault();
+    setActionError(null);
+    setActionMessage(null);
     const name = String(form.name || "").trim();
     if (!name) {
       setModalTab("general");
       setActionError("Group name is required.");
+      return;
+    }
+    if ((form.account_links ?? []).some((link) => !hasAccountAccessRole(link))) {
+      setModalTab("associations");
+      setAssociationTab("accounts");
+      setActionError(getAccountAccessRequiredMessage(showPortalRole));
       return;
     }
     const payload: UiGroupPayload = {
@@ -414,7 +431,8 @@ export default function GroupsPage() {
       account_links:
         form.account_links?.map((link) => ({
           account_id: Number(link.account_id),
-          role: normalizeAccountAccessRole(link.role),
+          manager_role: link.manager_role,
+          portal_role: link.portal_role,
           allow_manager_browser_data_access: Boolean(link.allow_manager_browser_data_access),
         })) ?? [],
       s3_user_links: form.s3_user_links ?? [],
@@ -465,6 +483,7 @@ export default function GroupsPage() {
   const selectedS3UserIds = new Set((form.s3_user_links ?? []).map((link) => link.s3_user_id));
   const selectedConnectionIds = new Set(form.s3_connection_ids ?? []);
   const selectedAccountIds = new Set((form.account_links ?? []).map((link) => Number(link.account_id)));
+  const showAccountPortalRoleColumn = showPortalRole;
   const userLabelById = new Map(users.map((user) => [user.id, user.email]));
   const availableUsers = users.filter(
     (user) => !selectedUserIds.has(user.id) && includesQuery(user.email, memberSearch)
@@ -586,53 +605,67 @@ export default function GroupsPage() {
               onAction={() => setShowAccountPicker((current) => !current)}
               headers={[
                 { label: "Account" },
-                { label: "Access role" },
+                { label: "Manager role" },
+                ...(showAccountPortalRoleColumn
+                  ? [{ label: "Portal role" }]
+                  : []),
                 { label: "Actions", align: "right" as const },
               ]}
               hasItems={selectedAccountIds.size > 0}
               emptyLabel="No linked accounts yet."
               rows={(form.account_links ?? []).map((link) => {
                 const accountId = Number(link.account_id);
+                const label = accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`;
+                const accessErrorId = `group-account-access-${accountId}-error`;
+                const invalid = !hasAccountAccessRole(link);
+                const updateAccess = (value: AccountAccessGrant) =>
+                  updateAccountSelection(accountId, value);
                 return (
                   <tr key={accountId}>
                     <td className={adminAssociationTableLabelCellClass}>
-                      {accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}
+                      {label}
+                      <AccountAccessRoleValidationMessage
+                        id={accessErrorId}
+                        value={link}
+                        portalEnabled={showPortalRole}
+                      />
                     </td>
                     <td className={adminAssociationTableControlCellClass}>
-                      <UiSelect
-                        aria-label={`Access role for ${accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}`}
-                        size="compact"
-                        fieldClassName="w-52"
-                        value={normalizeAccountAccessRole(link.role)}
-                        onChange={(event) =>
-                          updateAccountSelection(accountId, { role: normalizeAccountAccessRole(event.target.value) })
-                        }
-                      >
-                        {getAccountAccessRoleOptions(
-                          showPortalRole,
-                          normalizeAccountAccessRole(link.role),
-                        ).map((option) => (
-                          <option
-                            key={option.value}
-                            value={option.value}
-                            disabled={option.disabled}
-                          >
-                            {option.label}
-                          </option>
-                        ))}
-                      </UiSelect>
-                    </td>
-                    <td className={adminAssociationTableActionCellClass}>
-                      <AdminAssociationAdvancedSettings
-                        targetLabel={accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}
-                        associationKind="account"
-                        allowManagerBrowserDataAccess={Boolean(link.allow_manager_browser_data_access)}
-                        onApply={(allowed) =>
-                          updateAccountSelection(accountId, {
-                            allow_manager_browser_data_access: allowed,
-                          })
-                        }
+                      <ManagerAccountRoleSelect
+                        label={label}
+                        value={link}
+                        onChange={updateAccess}
+                        showLabel={false}
+                        invalid={invalid}
+                        describedBy={invalid ? accessErrorId : undefined}
                       />
+                    </td>
+                    {showAccountPortalRoleColumn ? (
+                      <td className={adminAssociationTableControlCellClass}>
+                        <PortalAccountRoleSelect
+                          label={label}
+                          portalEnabled={showPortalRole}
+                          value={link}
+                          onChange={updateAccess}
+                          showLabel={false}
+                          invalid={invalid}
+                          describedBy={invalid ? accessErrorId : undefined}
+                        />
+                      </td>
+                    ) : null}
+                    <td className={adminAssociationTableActionCellClass}>
+                      {link.manager_role ? (
+                        <AdminAssociationAdvancedSettings
+                          targetLabel={label}
+                          associationKind="account"
+                          allowManagerBrowserDataAccess={Boolean(link.allow_manager_browser_data_access)}
+                          onApply={(allowed) =>
+                            updateAccountSelection(accountId, {
+                              allow_manager_browser_data_access: allowed,
+                            })
+                          }
+                        />
+                      ) : null}
                       <button
                         type="button"
                         className={tableDeleteActionClasses}
@@ -665,7 +698,16 @@ export default function GroupsPage() {
                     selectedCount={accountSelections.length}
                     loadingLabel="Loading accounts..."
                     emptyLabel="No accounts available."
-                    addDisabled={accountSelections.length === 0}
+                    addDisabled={
+                      accountSelections.length === 0 ||
+                      accountSelections.some(
+                        (accountId) =>
+                          !hasAccountAccessRole(
+                            accountAccessChoice[accountId] ??
+                              defaultAccountAccessGrant(showPortalRole),
+                          ),
+                      )
+                    }
                     onCancel={() => {
                       setShowAccountPicker(false);
                       setAccountSelections([]);
@@ -678,9 +720,8 @@ export default function GroupsPage() {
                           ...(current.account_links ?? []),
                           ...accountSelections.map((accountId) => ({
                             account_id: accountId,
-                            role: showPortalRole
-                              ? normalizeAccountAccessRole(accountPortalRoleChoice[accountId])
-                              : "account_administrator" as const,
+                            ...(accountAccessChoice[accountId] ??
+                              defaultAccountAccessGrant(showPortalRole)),
                             allow_manager_browser_data_access: false,
                           })),
                         ].sort((left, right) => Number(left.account_id) - Number(right.account_id)),
@@ -705,26 +746,20 @@ export default function GroupsPage() {
                             <span>{account.name}</span>
                           </label>
                           <div className="flex flex-wrap items-center gap-2">
-                            <UiSelect
-                              aria-label={`Access role for ${account.name}`}
-                              size="compact"
-                              fieldClassName="w-52"
+                            <AccountAccessRoleSelectors
+                              label={account.name}
+                              portalEnabled={showPortalRole}
                               value={
-                                showPortalRole
-                                  ? accountPortalRoleChoice[accountId] || "portal_user"
-                                  : "account_administrator"
+                                accountAccessChoice[accountId] ??
+                                defaultAccountAccessGrant(showPortalRole)
                               }
-                              onChange={(event) =>
-                                setAccountPortalRoleChoice((current) => ({
+                              onChange={(value) =>
+                                setAccountAccessChoice((current) => ({
                                   ...current,
-                                  [accountId]: normalizeAccountAccessRole(event.target.value),
+                                  [accountId]: value,
                                 }))
                               }
-                            >
-                              {getAccountAccessRoleOptions(showPortalRole).map((option) => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                              ))}
-                            </UiSelect>
+                            />
                           </div>
                         </div>
                       );
@@ -948,7 +983,8 @@ export default function GroupsPage() {
           accountDetailsById.get(accountId)?.name ??
           accountOptionsById.get(accountId)?.name ??
           `Account #${link.account_id}`,
-        role: link.role,
+        manager_role: link.manager_role,
+        portal_role: link.portal_role,
       };
     });
     const s3UserItems = (group.s3_user_links ?? []).map((link) => {
@@ -976,7 +1012,7 @@ export default function GroupsPage() {
         items: accountItems.map((account) => ({
           id: account.id,
           label: account.label,
-          role_labels: accountAssociationRoleLabels(account, showPortalRole),
+          role_labels: accountAssociationRoleLabels(account),
         })),
       },
       { id: "s3_users", label: "RGW users", itemLabel: "RGW user", items: s3UserItems },

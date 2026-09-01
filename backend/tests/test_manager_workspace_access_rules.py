@@ -9,7 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.db import (
-    AccountRole,
+    ManagerAccountRole, PortalAccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -141,8 +141,8 @@ def test_manager_membership_without_admin_is_forbidden():
     link = UserS3Account(
         user_id=1,
         account_id=1,
-        role=AccountRole.PORTAL_MANAGER.value,
-        is_root=False,
+        manager_role=None,
+        portal_role=PortalAccountRole.PORTAL_MANAGER.value,
     )
     with pytest.raises(HTTPException) as exc:
         manager_membership_capabilities(link)
@@ -171,8 +171,8 @@ def test_manager_workspace_rejects_portal_role_without_account_admin(db_session)
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            is_root=False,
-            role=AccountRole.PORTAL_MANAGER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_MANAGER.value,
         )
     )
     db_session.commit()
@@ -217,8 +217,8 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            is_root=False,
-            role=AccountRole.PORTAL_USER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -235,7 +235,7 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
     )
     monkeypatch.setattr(
         "app.services.portal_service.PortalService.get_portal_credentials",
-        lambda self, user_arg, account_arg, account_role: ("AK-PORTAL", "SK-PORTAL"),
+        lambda self, user_arg, account_arg, portal_role: ("AK-PORTAL", "SK-PORTAL"),
     )
     monkeypatch.setattr(
         "app.services.portal_service.PortalService.list_storage_spaces",
@@ -287,7 +287,8 @@ def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_sess
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.PORTAL_USER.value,
+            manager_role=None,
+            portal_role=PortalAccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -304,7 +305,7 @@ def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_sess
     )
     monkeypatch.setattr(
         "app.services.portal_service.PortalService.get_portal_credentials",
-        lambda self, user_arg, account_arg, account_role: ("AK-PORTAL", "SK-PORTAL"),
+        lambda self, user_arg, account_arg, portal_role: ("AK-PORTAL", "SK-PORTAL"),
     )
     monkeypatch.setattr(
         "app.services.portal_service.PortalService.list_storage_spaces",
@@ -379,8 +380,8 @@ def test_manager_membership_account_admin_uses_root_key_capabilities():
     link = UserS3Account(
         user_id=1,
         account_id=1,
-        role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-        is_root=False,
+        manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+        portal_role=None,
     )
     caps = manager_membership_capabilities(link)
     assert caps.using_root_key is True
@@ -412,8 +413,8 @@ def test_manager_context_ignores_legacy_access_mode_header(db_session):
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
-            is_root=False,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
         )
     )
     db_session.commit()
@@ -929,7 +930,8 @@ def test_browser_workspace_rejects_forged_account_and_shared_connection(db_sessi
             UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+                portal_role=None,
             ),
             UserS3Connection(user_id=user.id, s3_connection_id=shared_connection.id),
         ]

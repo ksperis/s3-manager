@@ -10,7 +10,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db import AccountRole, User, UserNotification, UserRole
+from app.db import PortalAccountRole, User, UserNotification, UserRole
 from app.models.user_notification import UserNotificationOut, UserNotificationsResponse
 from app.services.effective_access_service import EffectiveAccessService
 from app.utils.time import utcnow
@@ -129,7 +129,7 @@ class UserNotificationsService:
         alert_account_ids = {
             int(link.account_id)
             for link in access.account_links
-            if link.role in {AccountRole.PORTAL_MANAGER.value, AccountRole.ACCOUNT_ADMINISTRATOR.value}
+            if link.portal_role == PortalAccountRole.PORTAL_MANAGER.value
         }
         alert_s3_user_ids = {int(item) for item in access.s3_user_ids}
         global_watch = bool(

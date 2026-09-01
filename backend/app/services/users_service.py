@@ -34,6 +34,7 @@ from app.db import (
     is_admin_ui_role,
 )
 from app.models.user import (
+    AccountMembership,
     ManagerToolAccess,
     UiPreferences,
     UserAvatarPreference,
@@ -53,7 +54,7 @@ from app.services.portal_role_sync import (
 from app.services.user_associations_service import UserAssociationsService
 from app.services.user_avatar_service import UserAvatarService
 from app.services.user_output_service import UserOutputService
-from app.utils.account_roles import require_account_role
+from app.utils.account_roles import ManagerAccountRoleValue, PortalAccountRoleValue
 from app.utils.time import utcnow
 from app.utils.tagging import TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN, TAG_DOMAIN_BUCKET_UI_STORAGE_OPS
 
@@ -137,7 +138,6 @@ class UsersService:
             raise ValueError("User already exists")
         validate_password_policy(payload.password)
         role = payload.role or UserRole.UI_USER.value
-        is_root = bool(payload.is_root)
         can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(role) else False
         can_access_storage_ops = (
             bool(payload.can_access_storage_ops)
@@ -153,7 +153,6 @@ class UsersService:
             hashed_password=get_password_hash(payload.password),
             is_active=True,
             role=role,
-            is_root=is_root,
             can_access_ceph_admin=can_access_ceph_admin,
             can_access_storage_ops=can_access_storage_ops,
             can_create_manual_private_connections=(
@@ -205,8 +204,6 @@ class UsersService:
         if payload.is_active is not None:
             security_changed = security_changed or payload.is_active != user.is_active
             user.is_active = payload.is_active
-        if payload.is_root is not None:
-            user.is_root = payload.is_root
         return next_role, security_changed
 
     @staticmethod
@@ -562,9 +559,9 @@ class UsersService:
         self,
         user_id: int,
         account_id: int,
-        account_root: Optional[bool] = None,
         *,
-        role: Optional[str] = None,
+        manager_role: Optional[ManagerAccountRoleValue],
+        portal_role: Optional[PortalAccountRoleValue],
     ) -> User:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -584,26 +581,20 @@ class UsersService:
         )
         if user.role == UserRole.UI_NONE.value:
             user.role = UserRole.UI_USER.value
-        resolved_account_root = (
-            bool(link.is_root)
-            if account_root is None and link is not None
-            else bool(account_root)
+        membership = AccountMembership(
+            account_id=account.id,
+            manager_role=manager_role,
+            portal_role=portal_role,
         )
-        canonical_role = role
-        if resolved_account_root:
-            canonical_role = "account_administrator"
-        elif canonical_role is None and link is not None:
-            canonical_role = link.role
-        canonical_role = require_account_role(canonical_role)
         if not link:
             link = UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                is_root=resolved_account_root,
-                role=canonical_role,
+                manager_role=membership.manager_role,
+                portal_role=membership.portal_role,
             )
-        link.is_root = resolved_account_root
-        link.role = canonical_role
+        link.manager_role = membership.manager_role
+        link.portal_role = membership.portal_role
         link.updated_at = utcnow()
         self.db.add(link)
         self.db.add(user)
@@ -640,9 +631,6 @@ class UsersService:
         )
         if not link:
             raise ValueError("Account link not found")
-        if link.is_root:
-            raise ValueError("Cannot remove the root account link")
-
         before_roles = capture_effective_portal_roles(
             self.db,
             user_ids=[user.id],

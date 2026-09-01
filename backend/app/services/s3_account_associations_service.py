@@ -14,7 +14,6 @@ from app.db import (
     is_admin_ui_role,
 )
 from app.models.s3_account import AccountGroupLink, AccountUserLink, S3AccountUpdate
-from app.utils.account_roles import require_account_role
 from app.utils.time import utcnow
 
 
@@ -35,10 +34,7 @@ class S3AccountAssociationsService:
                 int(user_id)
                 for (user_id,) in (
                     self.db.query(UserS3Account.user_id)
-                    .filter(
-                        UserS3Account.account_id == account.id,
-                        UserS3Account.is_root.is_(False),
-                    )
+                    .filter(UserS3Account.account_id == account.id)
                     .all()
                 )
             )
@@ -69,16 +65,7 @@ class S3AccountAssociationsService:
         account: S3Account,
         links: list[AccountUserLink],
     ) -> None:
-        cleaned: dict[int, AccountUserLink] = {}
-        for link in links:
-            user_id = int(link.user_id)
-            cleaned[user_id] = AccountUserLink(
-                user_id=user_id,
-                role=require_account_role(link.role),
-                allow_manager_browser_data_access=bool(
-                    link.allow_manager_browser_data_access
-                ),
-            )
+        cleaned = {int(link.user_id): link for link in links}
 
         users_by_id: dict[int, User] = {}
         if cleaned:
@@ -90,10 +77,7 @@ class S3AccountAssociationsService:
 
         existing = (
             self.db.query(UserS3Account)
-            .filter(
-                UserS3Account.account_id == account.id,
-                UserS3Account.is_root.is_(False),
-            )
+            .filter(UserS3Account.account_id == account.id)
             .all()
         )
         existing_by_user = {int(link.user_id): link for link in existing}
@@ -111,13 +95,14 @@ class S3AccountAssociationsService:
                 row = UserS3Account(
                     user_id=user_id,
                     account_id=account.id,
-                    is_root=False,
-                    role=link.role,
+                    manager_role=link.manager_role,
+                    portal_role=link.portal_role,
                     allow_manager_browser_data_access=bool(
                         link.allow_manager_browser_data_access
                     ),
                 )
-            row.role = require_account_role(link.role)
+            row.manager_role = link.manager_role
+            row.portal_role = link.portal_role
             row.allow_manager_browser_data_access = bool(
                 link.allow_manager_browser_data_access
             )
@@ -129,16 +114,7 @@ class S3AccountAssociationsService:
         account: S3Account,
         links: list[AccountGroupLink],
     ) -> None:
-        cleaned: dict[int, AccountGroupLink] = {}
-        for link in links:
-            group_id = int(link.group_id)
-            cleaned[group_id] = AccountGroupLink(
-                group_id=group_id,
-                role=require_account_role(link.role),
-                allow_manager_browser_data_access=bool(
-                    link.allow_manager_browser_data_access
-                ),
-            )
+        cleaned = {int(link.group_id): link for link in links}
 
         if cleaned:
             found_ids = {
@@ -169,12 +145,14 @@ class S3AccountAssociationsService:
                 row = UiGroupS3Account(
                     group_id=group_id,
                     account_id=account.id,
-                    role=link.role,
+                    manager_role=link.manager_role,
+                    portal_role=link.portal_role,
                     allow_manager_browser_data_access=bool(
                         link.allow_manager_browser_data_access
                     ),
                 )
-            row.role = require_account_role(link.role)
+            row.manager_role = link.manager_role
+            row.portal_role = link.portal_role
             row.allow_manager_browser_data_access = bool(
                 link.allow_manager_browser_data_access
             )

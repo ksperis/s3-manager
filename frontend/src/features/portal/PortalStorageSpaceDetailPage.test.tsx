@@ -42,7 +42,7 @@ const mocks = vi.hoisted(() => ({
   hookResult: {
     accountIdForApi: "101",
     state: {
-      account_role: "portal_manager",
+      portal_role: "portal_manager",
       storage_space_version_cleanup_enabled: true,
     },
     selectedAccount: {
@@ -119,7 +119,7 @@ const accessSummaryFixture = {
     email: "manager@example.com",
     display_name: "Manager User",
     role: "Owner" as const,
-    account_role: "portal_manager" as const,
+    portal_role: "portal_manager" as const,
     access_source: "owner" as const,
   },
   effective_member_count: 4,
@@ -372,7 +372,7 @@ describe("PortalStorageSpaceDetailPage", () => {
         user_id: 12,
         email: "viewer@example.com",
         display_name: null,
-        account_role: "portal_user",
+        portal_role: "portal_user",
         access_source: "direct",
         already_shared: true,
       },
@@ -380,7 +380,7 @@ describe("PortalStorageSpaceDetailPage", () => {
         user_id: 13,
         email: "editor@example.com",
         display_name: "Editor User",
-        account_role: "portal_user",
+        portal_role: "portal_user",
         access_source: "group",
         already_shared: false,
       },
@@ -456,7 +456,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].quotaBytes = 10 * 1024 ** 3;
     mocks.hookResult.workspace.spaces[0].quotaObjects = 1000;
     mocks.hookResult.workspace.spaces[0].shareCount = 3;
-    mocks.hookResult.state.account_role = "portal_manager";
+    mocks.hookResult.state.portal_role = "portal_manager";
     mocks.hookResult.state.storage_space_version_cleanup_enabled = true;
     mocks.hookResult.refreshWorkspaceData.mockClear();
   });
@@ -810,7 +810,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   });
 
   it("reserves Storage Space icon configuration for Portal Managers", async () => {
-    mocks.hookResult.state.account_role = "portal_user";
+    mocks.hookResult.state.portal_role = "portal_user";
 
     await renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
 

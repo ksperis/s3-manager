@@ -4,28 +4,23 @@ from typing import Optional
 
 from pydantic import Field, field_validator
 
+from app.models.account_access import AccountAccessGrant
 from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 from app.models.ui_group import UiGroupAvatar
 from app.models.user import UserAvatar
-from app.utils.account_roles import CanonicalAccountRole
 from app.utils.rgw_identifiers import is_rgw_account_id, normalize_rgw_identifier
 
 
-class _CanonicalAccountLink(ApiModel):
-    role: CanonicalAccountRole
-    allow_manager_browser_data_access: bool = False
-
-
-class AccountUserLink(_CanonicalAccountLink):
+class AccountUserLink(AccountAccessGrant):
     user_id: int
     user_email: Optional[str] = None
     user_full_name: Optional[str] = None
     user_avatar: Optional[UserAvatar] = None
 
 
-class AccountGroupLink(_CanonicalAccountLink):
+class AccountGroupLink(AccountAccessGrant):
     group_id: int
     group_name: Optional[str] = None
     group_avatar: Optional[UiGroupAvatar] = None

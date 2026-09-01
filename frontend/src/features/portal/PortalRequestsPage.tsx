@@ -117,7 +117,7 @@ export default function PortalRequestsPage() {
   } | null>(null);
   const selectedAccountKey = accountIdForApi == null ? null : String(accountIdForApi);
   const summaryAllowsManagedRequests =
-    selectedAccount?.account_role === "portal_manager";
+    selectedAccount?.portal_role === "portal_manager";
   const stateAllowsManagedRequests =
     requestPermission?.accountId === selectedAccountKey
       ? requestPermission.canManage
@@ -141,7 +141,7 @@ export default function PortalRequestsPage() {
         setRequestPermission({
           accountId: selectedAccountKey,
           canManage:
-            state.account_role === "portal_manager" ||
+            state.portal_role === "portal_manager" ||
             state.can_manage_portal_users === true,
         });
       })
@@ -365,7 +365,7 @@ export default function PortalRequestsPage() {
     () =>
       collaborators.filter(
         (collaborator) =>
-          collaborator.account_role === "portal_user" &&
+          collaborator.portal_role === "portal_user" &&
           collaborator.access_source !== "group",
       ),
     [collaborators],

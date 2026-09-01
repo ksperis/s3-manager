@@ -5,9 +5,10 @@ from typing import Literal, Optional
 
 from pydantic import EmailStr, Field, field_validator
 
+from app.models.account_access import AccountAccessGrant
 from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
-from app.utils.account_roles import CanonicalAccountRole
+from app.utils.account_roles import ManagerAccountRoleValue, PortalAccountRoleValue
 
 UiLanguage = Literal["en", "fr", "de"]
 UiThemePreference = Literal["light", "dark"]
@@ -39,14 +40,8 @@ class LinkedUiGroup(ApiModel):
     name: str
 
 
-class AccountMembership(ApiModel):
+class AccountMembership(AccountAccessGrant):
     account_id: int
-    role: CanonicalAccountRole
-    allow_manager_browser_data_access: bool = False
-
-
-class AccountMembershipDetail(AccountMembership):
-    is_root: bool = False
 
 
 class S3UserMembership(ApiModel):
@@ -57,14 +52,18 @@ class S3UserMembership(ApiModel):
 class EffectiveAccountGroupSource(ApiModel):
     group_id: int
     group_name: str
-    role: str
-    determines_effective_role: bool = False
+    manager_role: Optional[ManagerAccountRoleValue] = None
+    portal_role: Optional[PortalAccountRoleValue] = None
+    determines_effective_manager_role: bool = False
+    determines_effective_portal_role: bool = False
     allow_manager_browser_data_access: bool = False
 
 
 class EffectiveAccountRoleProvenance(ApiModel):
-    direct_role: Optional[str] = None
-    direct_determines_effective_role: bool = False
+    direct_manager_role: Optional[ManagerAccountRoleValue] = None
+    direct_portal_role: Optional[PortalAccountRoleValue] = None
+    direct_determines_effective_manager_role: bool = False
+    direct_determines_effective_portal_role: bool = False
     direct_allow_manager_browser_data_access: bool = False
     groups: list[EffectiveAccountGroupSource] = Field(default_factory=list)
 
@@ -130,7 +129,6 @@ class User(ApiModel):
     avatar: Optional[UserAvatar] = None
     is_active: bool = True
     is_admin: bool = False
-    is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     can_create_manual_private_connections: bool = False
@@ -149,7 +147,6 @@ class UserCreate(ApiModel):
     password: str
     full_name: Optional[str] = None
     role: Optional[UiRole] = None
-    is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     can_create_manual_private_connections: bool = False
@@ -165,7 +162,6 @@ class UserUpdate(ApiModel):
     password: Optional[str] = None
     role: Optional[UiRole] = None
     is_active: Optional[bool] = None
-    is_root: Optional[bool] = None
     can_access_ceph_admin: Optional[bool] = None
     can_access_storage_ops: Optional[bool] = None
     can_create_manual_private_connections: Optional[bool] = None
@@ -213,7 +209,6 @@ class UserOut(ApiModel):
     is_active: bool = True
     is_admin: bool = False
     role: UiRole
-    is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     can_create_manual_private_connections: bool = False
@@ -224,7 +219,7 @@ class UserOut(ApiModel):
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
     ui_preferences: UiPreferences = Field(default_factory=UiPreferences)
-    account_links: list[AccountMembershipDetail] = []
+    account_links: list[AccountMembership] = []
     group_details: list[LinkedUiGroup] = []
     s3_user_links: list[S3UserMembership] = []
     s3_user_details: list[LinkedS3User] = []

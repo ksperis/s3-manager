@@ -38,9 +38,11 @@ not accept `is_shared`, `access_manager`, or `access_browser`; new connections
 are shared, Browser-disabled, and Manager-enabled. A migrated connection in
 remediation is enabled only through the explicit `activate_manager` action.
 
-Account-link creation requires canonical `role`; removed association fields are
-rejected. Removing a link deletes the association instead of retaining an
-empty-role row.
+Every account-link item requires both `manager_role` and `portal_role`.
+`state: present` requires at least one non-null value; `state: absent` requires
+both values to be `null`. The removed `role` and `is_root` fields are rejected.
+Removing one axis preserves the other; removing the last right deletes the
+association.
 
 ## Authentication
 

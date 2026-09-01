@@ -6,6 +6,7 @@ import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS, timeoutForRequestProfile } fro
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride } from "./appSettings";
 import type { BucketUsageStatsAggregateResponse, BucketUsageStatsSnapshot } from "./bucketUsageStats";
+import type { PortalAccountRole } from "./accountAccess";
 import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
 import type { ManagerUsageTrendsResponse } from "./stats";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "./usageHistory";
@@ -37,7 +38,7 @@ export type PortalAccount = {
   id: number;
   name: string;
   rgw_account_id: string;
-  account_role: "portal_user" | "portal_manager";
+  portal_role: PortalAccountRole;
   storage_endpoint_name: string;
   storage_endpoint_url: string;
   storage_endpoint_is_default: boolean;
@@ -59,7 +60,7 @@ export type PortalIAMUser = {
 };
 
 export type PortalState = {
-  account_role?: string | null;
+  portal_role?: PortalAccountRole | null;
   can_manage_buckets?: boolean;
   can_create_private_storage_spaces?: boolean;
   can_create_team_storage_spaces?: boolean;
@@ -341,7 +342,7 @@ export type PortalStorageSpaceAccessPerson = {
   email: string;
   display_name?: string | null;
   role: PortalStorageSpaceRole;
-  account_role?: string | null;
+  portal_role?: PortalAccountRole | null;
   access_source?: "owner" | "direct" | "group" | "direct_and_group" | null;
   avatar?: UserAvatarDescriptor | null;
 };
@@ -361,7 +362,7 @@ export type PortalStorageSpaceShareCandidate = {
   user_id: number;
   email: string;
   display_name?: string | null;
-  account_role: string;
+  portal_role: PortalAccountRole;
   access_source: "direct" | "group" | "direct_and_group";
   already_shared?: boolean;
   avatar?: UserAvatarDescriptor | null;
@@ -371,7 +372,7 @@ export type PortalCollaborator = {
   user_id: number;
   email: string;
   display_name?: string | null;
-  account_role: string;
+  portal_role: PortalAccountRole;
   access_source: "direct" | "group" | "direct_and_group";
   member_since?: string | null;
   avatar?: UserAvatarDescriptor | null;

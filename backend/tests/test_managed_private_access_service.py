@@ -10,7 +10,7 @@ import pytest
 
 from app.db import (
     AccountIAMUser,
-    AccountRole,
+    ManagerAccountRole,
     AuditLog,
     ManagedPrivateAccess,
     S3Account,
@@ -150,7 +150,8 @@ def _account(db_session, user, endpoint):
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
         )
     )
     db_session.commit()

@@ -66,6 +66,18 @@ describe("Modal", () => {
     expect(screen.getByRole("button", { name: "Fermer la fenêtre" })).toHaveTextContent("Fermer");
   });
 
+  it("does not inherit text alignment from its trigger context", () => {
+    render(
+      <div className="text-right">
+        <Modal title="Table action modal" onClose={() => undefined}>
+          <p>Modal content</p>
+        </Modal>
+      </div>
+    );
+
+    expect(screen.getByRole("dialog", { name: "Table action modal" })).toHaveClass("text-left");
+  });
+
   it("traps focus and restores focus on close", async () => {
     const user = userEvent.setup();
     render(<ModalHarness />);

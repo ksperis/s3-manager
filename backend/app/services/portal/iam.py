@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db import (
     AccountIAMUser,
-    AccountRole,
+    PortalAccountRole,
     S3Account,
     User,
 )
@@ -18,6 +18,7 @@ from app.models.portal import PortalAccessKey
 from app.services import s3_client
 from app.services.mappers.portal import portal_access_key_from_active_link, portal_access_key_from_iam_metadata
 from app.services.rgw_iam import RGWIAMService, get_iam_service
+from app.utils.account_roles import PortalAccountRoleValue
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_feature_flags
 
@@ -181,13 +182,13 @@ class PortalIamMixin:
         self,
         iam_service: RGWIAMService,
         iam_username: Optional[str],
-        account_role: Optional[str],
+        portal_role: Optional[PortalAccountRoleValue],
         *,
         account: Optional[S3Account] = None,
     ) -> None:
         if not iam_username:
             raise RuntimeError("IAM username missing for this portal user")
-        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+        if portal_role not in {PortalAccountRole.PORTAL_MANAGER.value, PortalAccountRole.PORTAL_USER.value}:
             for group in (self._manager_group_name, self._user_group_name):
                 try:
                     iam_service.remove_user_from_group(group, iam_username)
@@ -198,11 +199,11 @@ class PortalIamMixin:
         # The manager group grants account-wide S3 data access. Protect the
         # technical bucket before its policy is created or updated, then remove
         # a stale deny only after a manager has left the group.
-        if account is not None and account_role == AccountRole.PORTAL_MANAGER.value:
+        if account is not None and portal_role == PortalAccountRole.PORTAL_MANAGER.value:
             self._sync_portal_server_access_log_bucket_policy_if_present(account)
 
         self._ensure_portal_groups(iam_service)
-        target_group = self._manager_group_name if account_role == AccountRole.PORTAL_MANAGER.value else self._user_group_name
+        target_group = self._manager_group_name if portal_role == PortalAccountRole.PORTAL_MANAGER.value else self._user_group_name
         other_group = self._user_group_name if target_group == self._manager_group_name else self._manager_group_name
 
         other_members = iam_service.list_group_users(other_group)
@@ -216,7 +217,7 @@ class PortalIamMixin:
 
         if not remove_other_first and any(m.name == iam_username for m in other_members):
             iam_service.remove_user_from_group(other_group, iam_username)
-        if account is not None and account_role == AccountRole.PORTAL_USER.value:
+        if account is not None and portal_role == PortalAccountRole.PORTAL_USER.value:
             self._sync_portal_server_access_log_bucket_policy_if_present(account)
 
     def _existing_portal_link(self, user: User, account: S3Account) -> Optional[AccountIAMUser]:
@@ -235,17 +236,17 @@ class PortalIamMixin:
             raise RuntimeError("Active access key is missing for this portal user")
         return active.access_key_id, active.secret_access_key
 
-    def get_portal_credentials(self, user: User, account: S3Account, account_role: str) -> tuple[str, str]:
+    def get_portal_credentials(self, user: User, account: S3Account, portal_role: str) -> tuple[str, str]:
         """Expose portal IAM credentials for manager access."""
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(user, account, iam_service)
         self._sync_user_group_membership(
             iam_service,
             link.iam_username,
-            account_role,
+            portal_role,
             account=account,
         )
-        self._sync_user_storage_space_projection(user, account, account_role, iam_service, link.iam_username)
+        self._sync_user_storage_space_projection(user, account, portal_role, iam_service, link.iam_username)
         return self._active_credentials(link, iam_service)
 
     def _ensure_active_key(self, link: AccountIAMUser, iam_service: RGWIAMService) -> PortalAccessKey:

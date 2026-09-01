@@ -203,11 +203,13 @@ flows unless the pathway is explicit, authorized, and audited.
   exact-context authorization, workspace availability, and long-running
   workflow revalidation. Catalogue and execution must not implement separate
   policies.
-- Account links store one required canonical `role`: `portal_user`,
-  `portal_manager`, or `account_administrator`. API payloads and business
-  services must use only this canonical field.
-- Delete associations that grant no right. Do not preserve them as nullable
-  roles, sentinels, or hidden compatibility rows.
+- Account links store two independent nullable axes: `manager_role` accepts
+  only `account_administrator`, and `portal_role` accepts only `portal_user` or
+  `portal_manager`. API payloads require both fields and use `null` for an
+  absent right. Never convert a Manager role into a Portal role.
+- Delete associations when both axes are absent. Manager Browser account access
+  additionally requires `manager_role = account_administrator` and its data-
+  access flag on the same direct or group association.
 - Standard Browser accepts active, unexpired owned private connections with
   Browser access and explicit `portal_account` contexts enabled by the
   effective project Portal setting. Portal contexts must keep the Portal
@@ -219,8 +221,9 @@ flows unless the pathway is explicit, authorized, and audited.
   both Manager and Browser access. Shared connections and forged selections are
   rejected before credentials are resolved.
 - Portal, direct S3 sessions, and Ceph Admin Browser remain explicit separate
-  authorization branches. Portal always executes with the user's personal IAM
-  identity, including when an account administrator projects to Portal manager.
+  authorization branches. Portal always requires an explicit `portal_role` and
+  executes with the user's personal IAM identity; Manager administrators have
+  no implicit Portal access.
 - Admin and automation selectors for S3 connections must use the shared-only
   service scope and return `404` for private targets. Never expose private
   connection identifiers through Admin search, bulk actions, tags, or exports.

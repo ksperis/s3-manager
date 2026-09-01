@@ -818,7 +818,7 @@ export default function PortalStorageSpaceDetailPage() {
   const isArchived = space.status === "Archived";
   const canBrowse = Boolean(space.canBrowse) && !isArchived;
   const hasFullAccess = space.role === "Owner" || space.role === "Manager";
-  const canConfigureIcon = state?.account_role === "portal_manager";
+  const canConfigureIcon = state?.portal_role === "portal_manager";
   const canRename = hasFullAccess && space.nameEditable;
   const canModifyObjects = canBrowse && (hasFullAccess || space.role === "Editor");
   const lockedBucketName = space.internalName ?? space.id;
