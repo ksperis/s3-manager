@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CreateUserPayload,
   UpdateUserPayload,
@@ -65,17 +65,9 @@ import {
   clearAdminPrincipalEditRequest,
   readAdminPrincipalEditRequest,
 } from "./adminPrincipalEditLink";
-import {
-  AdminAssociationPickerPanel,
-  AdminAssociationLinkedTable,
-  adminAssociationCheckboxClass,
-  adminAssociationOptionLabelClass,
-  adminAssociationOptionRowClass,
-  adminAssociationTableActionCellClass,
-  adminAssociationTableLabelCellClass,
-} from "./AdminAssociationPicker";
 import UserAssociationsTabs, { type AssociationTab } from "./UserAssociationsTabs";
 import type { AccountSelection } from "./UserAccountAssociationsPanel";
+import UserGroupsSelector from "./UserGroupsSelector";
 
 type UserModalTab = "general" | "associations" | "groups" | "access" | "connections" | "browser" | "manager";
 type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
@@ -92,7 +84,6 @@ const userWorkflowTabs: Array<{ id: UserModalTab; label: string }> = [
 
 const userModalLabelClass = "ui-body font-medium text-[var(--ui-text)]";
 const userModalFieldClass = cx(uiInputClass, "px-3 py-2 ui-body");
-const associationOptionRowClass = adminAssociationOptionRowClass;
 const roleAccessHelpItems = [
   { role: "No Access", access: "No workspace access (profile only)" },
   { role: "User", access: "Non-admin workspaces only" },
@@ -457,115 +448,6 @@ export default function UsersPage() {
       { id: "connections", label: "S3 connections", itemLabel: "S3 connection", items: connectionItems },
     ];
     return <CompactAssociationSummary categories={categories} />;
-  };
-
-  const renderGroupsSelector = ({
-    selectedIds,
-    setSelectedIds,
-    search,
-    setSearch,
-    visibleGroups,
-    showPanel,
-    setShowPanel,
-    selections,
-    setSelections,
-  }: {
-    selectedIds: number[];
-    setSelectedIds: Dispatch<SetStateAction<number[]>>;
-    search: string;
-    setSearch: Dispatch<SetStateAction<string>>;
-    visibleGroups: UiGroupSummary[];
-    showPanel: boolean;
-    setShowPanel: Dispatch<SetStateAction<boolean>>;
-    selections: number[];
-    setSelections: Dispatch<SetStateAction<number[]>>;
-  }) => {
-    const limitedGroups = limitedOptions(visibleGroups);
-    const groupById = new Map(groups.map((group) => [group.id, group]));
-    return (
-      <AdminAssociationLinkedTable
-        title="Linked UI groups"
-        countLabel={`${selectedIds.length} linked`}
-        actionLabel={showPanel ? "Close" : "Add UI groups"}
-        onAction={() => setShowPanel((current) => !current)}
-        headers={[{ label: "Group" }, { label: "Actions", align: "right" }]}
-        hasItems={selectedIds.length > 0}
-        emptyLabel="No linked groups yet."
-        rows={selectedIds.map((groupId) => (
-          <tr key={groupId}>
-            <td className={adminAssociationTableLabelCellClass}>
-              {groupById.get(groupId)?.name ?? `Group #${groupId}`}
-            </td>
-            <td className={adminAssociationTableActionCellClass}>
-              <button
-                type="button"
-                className={tableDeleteActionClasses}
-                onClick={() => setSelectedIds((current) => current.filter((id) => id !== groupId))}
-              >
-                Remove
-              </button>
-            </td>
-          </tr>
-        ))}
-        picker={
-          showPanel ? (
-            <AdminAssociationPickerPanel
-              title="Add UI groups"
-              hint="(search by name)"
-              search={search}
-              onSearchChange={setSearch}
-              searchAriaLabel="Search UI groups"
-              loading={groupsLoading}
-              availableCount={visibleGroups.length}
-              maxVisibleOptions={MAX_VISIBLE_OPTIONS}
-              selectedCount={selections.length}
-              loadingLabel="Loading groups..."
-              emptyLabel={groupsLoaded ? "No UI groups available." : "No results."}
-              addDisabled={selections.length === 0}
-              onCancel={() => {
-                setShowPanel(false);
-                setSelections([]);
-                setSearch("");
-              }}
-              onAdd={() => {
-                setSelectedIds((current) => [...new Set([...current, ...selections])].sort((a, b) => a - b));
-                setShowPanel(false);
-                setSelections([]);
-                setSearch("");
-              }}
-            >
-              {limitedGroups.map((group) => {
-                const checked = selections.includes(group.id);
-                return (
-                  <label key={group.id} className={associationOptionRowClass(checked)}>
-                    <span className={adminAssociationOptionLabelClass}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setSelections((current) =>
-                            current.includes(group.id)
-                              ? current.filter((id) => id !== group.id)
-                              : [...current, group.id]
-                          )
-                        }
-                        className={adminAssociationCheckboxClass}
-                      />
-                      <span>{group.name}</span>
-                    </span>
-                    {group.description ? (
-                      <span className="max-w-md truncate ui-caption text-slate-500 dark:text-slate-400">
-                        {group.description}
-                      </span>
-                    ) : null}
-                  </label>
-                );
-              })}
-            </AdminAssociationPickerPanel>
-          ) : undefined
-        }
-      />
-    );
   };
 
   const toggleSort = (field: SortField) => {
@@ -1566,18 +1448,23 @@ export default function UsersPage() {
               />
             )}
 
-            {createModalTab === "groups" &&
-              renderGroupsSelector({
-                selectedIds: createSelectedGroups,
-                setSelectedIds: setCreateSelectedGroups,
-                search: createGroupSearch,
-                setSearch: setCreateGroupSearch,
-                visibleGroups: visibleCreateGroups,
-                showPanel: showCreateGroupPanel,
-                setShowPanel: setShowCreateGroupPanel,
-                selections: createGroupSelections,
-                setSelections: setCreateGroupSelections,
-              })}
+            {createModalTab === "groups" && (
+              <UserGroupsSelector
+                groups={groups}
+                groupsLoaded={groupsLoaded}
+                groupsLoading={groupsLoading}
+                maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                selectedIds={createSelectedGroups}
+                setSelectedIds={setCreateSelectedGroups}
+                search={createGroupSearch}
+                setSearch={setCreateGroupSearch}
+                visibleGroups={visibleCreateGroups}
+                showPanel={showCreateGroupPanel}
+                setShowPanel={setShowCreateGroupPanel}
+                selections={createGroupSelections}
+                setSelections={setCreateGroupSelections}
+              />
+            )}
             </WorkflowTabs>
 
             <WorkflowActions>
@@ -1914,18 +1801,23 @@ export default function UsersPage() {
               />
             )}
 
-            {editModalTab === "groups" &&
-              renderGroupsSelector({
-                selectedIds: editSelectedGroups,
-                setSelectedIds: setEditSelectedGroups,
-                search: editGroupSearch,
-                setSearch: setEditGroupSearch,
-                visibleGroups: visibleEditGroups,
-                showPanel: showEditGroupPanel,
-                setShowPanel: setShowEditGroupPanel,
-                selections: editGroupSelections,
-                setSelections: setEditGroupSelections,
-              })}
+            {editModalTab === "groups" && (
+              <UserGroupsSelector
+                groups={groups}
+                groupsLoaded={groupsLoaded}
+                groupsLoading={groupsLoading}
+                maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                selectedIds={editSelectedGroups}
+                setSelectedIds={setEditSelectedGroups}
+                search={editGroupSearch}
+                setSearch={setEditGroupSearch}
+                visibleGroups={visibleEditGroups}
+                showPanel={showEditGroupPanel}
+                setShowPanel={setShowEditGroupPanel}
+                selections={editGroupSelections}
+                setSelections={setEditGroupSelections}
+              />
+            )}
             </WorkflowTabs>
 
             <WorkflowActions>
