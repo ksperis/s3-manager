@@ -874,7 +874,7 @@ class KeyRotationService:
     ) -> tuple[Optional[str], Optional[str]]:
         if not response:
             return None, None
-        entries = admin._extract_keys(response)
+        entries = admin.extract_keys(response)
         if not entries:
             return None, None
         excluded = normalize_optional_string(exclude_access_key)

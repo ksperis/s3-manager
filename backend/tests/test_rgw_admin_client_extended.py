@@ -207,7 +207,7 @@ def test_get_user_tenant_fallback_to_composite_uid(monkeypatch):
     assert calls[1]["uid"] == "RGW1$alice"
 
 
-def test_extract_keys_prioritizes_secret_and_deduplicates():
+def testextract_keys_prioritizes_secret_and_deduplicates():
     client = _client()
     payload = {
         "keys": [
@@ -216,7 +216,7 @@ def test_extract_keys_prioritizes_secret_and_deduplicates():
             {"access_key": "AK-2", "secret_key": "SK-2"},
         ],
     }
-    keys = client._extract_keys(payload)
+    keys = client.extract_keys(payload)
     assert keys[0]["access_key"] == "AK-1"
     assert keys[0]["secret_key"] == "SK-1"
     assert len([item for item in keys if item.get("access_key") == "AK-1"]) == 1
@@ -378,9 +378,9 @@ def test_access_key_helpers_validation_and_tenant(monkeypatch):
     assert captured["params"]["active"] == "true"
 
 
-def test_extract_keys_nested_and_invalid_payload_types():
+def testextract_keys_nested_and_invalid_payload_types():
     client = _client()
-    assert client._extract_keys("invalid") == []
+    assert client.extract_keys("invalid") == []
 
     payload = {
         "user": {"keys": [{"access_key": "AK-NESTED", "secret_key": "SK-NESTED"}]},
@@ -388,13 +388,13 @@ def test_extract_keys_nested_and_invalid_payload_types():
         "secret_key": "SK-TOP",
         "status": "active",
     }
-    keys = client._extract_keys(payload)
+    keys = client.extract_keys(payload)
     assert keys[0]["access_key"] == "AK-TOP"
     assert keys[0]["status"] == "active"
     assert any(item.get("access_key") == "AK-NESTED" for item in keys)
 
 
-def test_extract_keys_merges_duplicate_metadata_for_same_access_key():
+def testextract_keys_merges_duplicate_metadata_for_same_access_key():
     client = _client()
     payload = {
         "keys": [
@@ -402,7 +402,7 @@ def test_extract_keys_merges_duplicate_metadata_for_same_access_key():
             {"access_key": "AK-1", "create_time": "2026-03-12T10:00:00Z", "status": "enabled"},
         ],
     }
-    keys = client._extract_keys(payload)
+    keys = client.extract_keys(payload)
     assert len(keys) == 1
     assert keys[0]["access_key"] == "AK-1"
     assert keys[0]["secret_key"] == "SK-1"
@@ -410,7 +410,7 @@ def test_extract_keys_merges_duplicate_metadata_for_same_access_key():
     assert keys[0]["status"] == "enabled"
 
 
-def test_extract_keys_top_level_key_preserves_timestamp_fields():
+def testextract_keys_top_level_key_preserves_timestamp_fields():
     client = _client()
     payload = {
         "access_key": "AK-TOP",
@@ -418,7 +418,7 @@ def test_extract_keys_top_level_key_preserves_timestamp_fields():
         "create_date": "2026-03-12T11:30:00Z",
         "status": "enabled",
     }
-    keys = client._extract_keys(payload)
+    keys = client.extract_keys(payload)
     assert len(keys) == 1
     assert keys[0]["access_key"] == "AK-TOP"
     assert keys[0]["create_date"] == "2026-03-12T11:30:00Z"
@@ -627,11 +627,11 @@ def test_create_and_delete_access_key_parameter_paths(monkeypatch):
     assert captured[1]["params"]["tenant"] == "RGW1"
 
 
-def test_extract_keys_with_list_and_empty_dict():
+def testextract_keys_with_list_and_empty_dict():
     client = _client()
-    keys = client._extract_keys([{"access_key": "AK-LIST", "secret_key": "SK-LIST"}])
+    keys = client.extract_keys([{"access_key": "AK-LIST", "secret_key": "SK-LIST"}])
     assert keys == [{"access_key": "AK-LIST", "secret_key": "SK-LIST"}]
-    assert client._extract_keys({}) == []
+    assert client.extract_keys({}) == []
 
 
 def test_create_update_delete_account_branches(monkeypatch):
@@ -800,7 +800,7 @@ def test_delete_user_passes_tenant(monkeypatch):
 
 def test_rgw_admin_remaining_small_branches(monkeypatch):
     client = _client()
-    assert client._extract_keys({"keys": []}) == []
+    assert client.extract_keys({"keys": []}) == []
 
     monkeypatch.setattr(client, "get_user", lambda *args, **kwargs: None)
     assert client.get_account_user("RGW1", "missing", allow_not_found=True) is None

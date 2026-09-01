@@ -381,7 +381,8 @@ class RGWAdminClient:
         if isinstance(response, dict) and response.get("not_implemented"):
             raise RGWAdminError("RGW does not support updating access key status")
 
-    def _extract_keys(self, data: Any) -> list[dict]:
+    def extract_keys(self, data: Any) -> list[dict]:
+        """Normalize access-key entries from the RGW response shapes we support."""
         if not data:
             return []
 
@@ -398,7 +399,7 @@ class RGWAdminClient:
             # Key data may be nested under "user"
             user_field = data.get("user")
             if isinstance(user_field, dict):
-                nested_keys = self._extract_keys(user_field)
+                nested_keys = self.extract_keys(user_field)
                 if nested_keys:
                     entries.extend(nested_keys)
 
@@ -822,7 +823,7 @@ class RGWAdminClient:
         payload = self.get_user(uid, tenant=tenant, allow_not_found=True)
         if not payload:
             return []
-        return self._extract_keys(payload)
+        return self.extract_keys(payload)
 
     def list_topics(self, account_id: Optional[str] = None) -> Optional[list[Dict[str, Any]]]:
         params: Dict[str, Any] = {"format": "json", "list": ""}

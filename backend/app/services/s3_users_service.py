@@ -185,7 +185,7 @@ class S3UsersService:
         if response.get("not_implemented"):
             raise ValueError("RGW user quota update is not supported on this cluster.")
 
-    def _extract_keys(
+    def extract_keys(
         self,
         admin: RGWAdminClient,
         response: Optional[dict],
@@ -194,7 +194,7 @@ class S3UsersService:
     ) -> tuple[Optional[str], Optional[str]]:
         if not response:
             return None, None
-        keys = admin._extract_keys(response)
+        keys = admin.extract_keys(response)
         if not keys:
             return None, None
 
@@ -478,13 +478,13 @@ class S3UsersService:
             )
         except RGWAdminError as exc:
             raise ValueError(f"RGW user creation failed: {exc}") from exc
-        access_key, secret_key = self._extract_keys(admin, response)
+        access_key, secret_key = self.extract_keys(admin, response)
         if not access_key or not secret_key:
             try:
                 key_response = admin.create_access_key(uid, tenant=None)
             except RGWAdminError as exc:
                 raise ValueError(f"Unable to obtain RGW access keys: {exc}") from exc
-            access_key, secret_key = self._extract_keys(admin, key_response)
+            access_key, secret_key = self.extract_keys(admin, key_response)
         if not access_key or not secret_key:
             raise ValueError("RGW did not return access credentials for the new user")
         s3_user = S3UserModel(
@@ -545,7 +545,7 @@ class S3UsersService:
                 key_resp = admin.create_access_key(uid, tenant=None)
             except RGWAdminError as exc:
                 raise ValueError(f"Unable to create access key for {uid}: {exc}") from exc
-            access_key, secret_key = self._extract_keys(admin, key_resp)
+            access_key, secret_key = self.extract_keys(admin, key_resp)
             if not access_key or not secret_key:
                 raise ValueError(f"RGW did not return access credentials for {uid}")
             name = payload.name or user_info.get("display_name") or uid
@@ -631,7 +631,7 @@ class S3UsersService:
             response = admin.create_access_key(s3_user.rgw_user_uid, tenant=None)
         except RGWAdminError as exc:
             raise ValueError(f"Unable to rotate keys: {exc}") from exc
-        access_key, secret_key = self._extract_keys(
+        access_key, secret_key = self.extract_keys(
             admin,
             response,
             exclude_access_key=previous_access_key,
@@ -686,7 +686,7 @@ class S3UsersService:
             raise ValueError(f"Unable to list keys: {exc}") from exc
         if not user_info or user_info.get("not_found"):
             raise ValueError("RGW user not found")
-        entries = admin._extract_keys(user_info)
+        entries = admin.extract_keys(user_info)
         result: list[S3UserAccessKey] = []
         for entry in entries:
             if not isinstance(entry, dict):
@@ -723,7 +723,7 @@ class S3UsersService:
                 allow_not_found=True,
             )
             if before_payload and not before_payload.get("not_found"):
-                for existing_entry in admin._extract_keys(before_payload):
+                for existing_entry in admin.extract_keys(before_payload):
                     if not isinstance(existing_entry, dict):
                         continue
                     existing_access = str(
@@ -738,7 +738,7 @@ class S3UsersService:
             response = admin.create_access_key(s3_user.rgw_user_uid, tenant=None)
         except RGWAdminError as exc:
             raise ValueError(f"Unable to create access key: {exc}") from exc
-        entries = admin._extract_keys(response)
+        entries = admin.extract_keys(response)
         if not entries:
             raise ValueError("RGW did not return access credentials")
 

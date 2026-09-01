@@ -33,7 +33,7 @@ from app.routers.ceph_admin.user_common import (
     split_tenant_uid,
 )
 from app.routers.ceph_admin.user_listing_cache import invalidate_users_listing_cache
-from app.services.rgw_admin import RGWAdminError
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.utils.normalize import normalize_optional_scalar
 from app.utils.quota_stats import extract_quota_limits
@@ -275,8 +275,11 @@ def _resolve_account_name(
     ) or payload_account_name
 
 
-def _extract_generated_key_from_payload(raw: Any, rgw_admin: Any) -> Optional[CephAdminRgwGeneratedAccessKey]:
-    entries = rgw_admin._extract_keys(raw) if hasattr(rgw_admin, "_extract_keys") else []
+def _extract_generated_key_from_payload(
+    raw: Any,
+    rgw_admin: RGWAdminClient,
+) -> Optional[CephAdminRgwGeneratedAccessKey]:
+    entries = rgw_admin.extract_keys(raw)
     for entry in entries:
         if not isinstance(entry, dict):
             continue

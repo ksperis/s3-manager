@@ -62,8 +62,8 @@ class FakeRGWAdmin:
     def __init__(self, registry: FakeRgwRegistry) -> None:
         self.registry = registry
 
-    def _extract_keys(self, data):  # noqa: ANN001
-        return RGWAdminClient._extract_keys(self, data)
+    def extract_keys(self, data):  # noqa: ANN001
+        return RGWAdminClient.extract_keys(self, data)
 
     def _serialize_payload(self, identity: dict) -> dict:
         return {

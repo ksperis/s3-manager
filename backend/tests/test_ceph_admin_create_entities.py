@@ -230,7 +230,7 @@ class FakeUsersAdmin:
         self.set_user_quota_calls: list[dict] = []
         self.get_account_calls = 0
 
-    def _extract_keys(self, raw):
+    def extract_keys(self, raw):
         if not isinstance(raw, dict):
             return []
         entries = raw.get("keys")

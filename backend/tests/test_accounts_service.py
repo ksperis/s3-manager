@@ -73,7 +73,7 @@ class FakeRGWAdmin:
         self.created_users.append(uid)
         return {"account_id": account_id, "keys": [{"access_key": "AKIA", "secret_key": "SECRET"}]}
 
-    def _extract_keys(self, data):
+    def extract_keys(self, data):
         return data.get("keys", [])
 
     def set_user_caps(self, uid: str, cap: str, tenant: Optional[str] = None):
@@ -237,7 +237,7 @@ class FakeRGWAdminImport:
     def create_access_key(self, *args, **kwargs):
         return {}
 
-    def _extract_keys(self, data):
+    def extract_keys(self, data):
         return data.get("keys", [])
 
 
@@ -283,7 +283,7 @@ class FakeRGWAdminImportCreatesRoot:
     def create_access_key(self, *args, **kwargs):
         return {}
 
-    def _extract_keys(self, data):
+    def extract_keys(self, data):
         return data.get("keys", [])
 
 

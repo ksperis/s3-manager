@@ -93,7 +93,7 @@ def create_rgw_user_key(
     except RGWAdminError as exc:
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     access_key = secret_key = None
-    for entry in ctx.rgw_admin._extract_keys(response):
+    for entry in ctx.rgw_admin.extract_keys(response):
         if not isinstance(entry, dict):
             continue
         access_key, secret_key = extract_access_key(entry)

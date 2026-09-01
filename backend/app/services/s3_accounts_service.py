@@ -472,7 +472,7 @@ class S3AccountsService:
 
     @staticmethod
     def _extract_complete_key_pair(admin: RGWAdminClient, payload: Any) -> tuple[Optional[str], Optional[str]]:
-        for entry in admin._extract_keys(payload or {}):
+        for entry in admin.extract_keys(payload or {}):
             if not isinstance(entry, dict):
                 continue
             access_key = entry.get("access_key")
@@ -649,7 +649,7 @@ class S3AccountsService:
             )
         except RGWAdminError as exc:
             raise ValueError(f"RGW root user creation failed: {exc}") from exc
-        root_keys = admin._extract_keys(root_user_resp)
+        root_keys = admin.extract_keys(root_user_resp)
         access_key = root_keys[0].get("access_key") if root_keys else None
         secret_key = root_keys[0].get("secret_key") if root_keys else None
         if not access_key or not secret_key:

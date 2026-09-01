@@ -33,7 +33,7 @@ class FakeRGWAdmin:
     ):
         return {"keys": [{"access_key": "AKIA", "secret_key": "SECRET"}]}
 
-    def _extract_keys(self, data):
+    def extract_keys(self, data):
         return data.get("keys", [])
 
     def set_user_quota(

@@ -44,8 +44,8 @@ class FakeRGWAdmin:
         self.bucket_payloads_by_uid: dict[str, dict] = {}
         self.bucket_list_calls: list[dict[str, object]] = []
 
-    def _extract_keys(self, data):  # noqa: ANN001
-        return RGWAdminClient._extract_keys(self, data)
+    def extract_keys(self, data):  # noqa: ANN001
+        return RGWAdminClient.extract_keys(self, data)
 
     def create_user(self, uid: str, display_name: str, email: str = "", tenant: Optional[str] = None):
         if tenant is not None:
