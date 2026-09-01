@@ -15,7 +15,6 @@ import {
   updateUser,
 } from "../../api/users";
 import {
-  ACCOUNT_ACCESS_ROLE_OPTIONS,
   normalizeAccountAccessRole,
   type AccountAccessRole,
 } from "../../api/accountRoles";
@@ -53,7 +52,6 @@ import {
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import UiButton from "../../components/ui/UiButton";
-import UiSelect from "../../components/ui/UiSelect";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -72,7 +70,6 @@ import {
   AdminAssociationPickerPanel,
   AdminAssociationLinkedTable,
   AdminAssociationSectionHeader,
-  adminAssociationAccountOptionRowClass,
   adminAssociationCheckboxClass,
   adminAssociationOptionLabelClass,
   adminAssociationOptionRowClass,
@@ -80,7 +77,6 @@ import {
   adminAssociationTableActionCellClass,
   adminAssociationTableBodyClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
-  adminAssociationTableControlCellClass,
   adminAssociationTableEmptyCellClass,
   adminAssociationTableHeaderClass,
   adminAssociationTableHeadClass,
@@ -88,6 +84,10 @@ import {
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
 import AdminAssociationAdvancedSettings from "./AdminAssociationAdvancedSettings";
+import UserAccountAssociationsPanel, {
+  type AccountSelection,
+  type UserAccountAssociationsState,
+} from "./UserAccountAssociationsPanel";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
 type UserModalTab = "general" | "associations" | "groups" | "access" | "connections" | "browser" | "manager";
@@ -103,13 +103,6 @@ const userWorkflowTabs: Array<{ id: UserModalTab; label: string }> = [
   { id: "manager", label: "Manager" },
 ];
 
-type AccountSelection = {
-  id: number;
-  role: AccountAccessRole;
-  allow_manager_browser_data_access?: boolean;
-  is_root?: boolean;
-};
-
 type Option = {
   id: number;
   label: string;
@@ -118,7 +111,6 @@ type Option = {
 const userModalLabelClass = "ui-body font-medium text-[var(--ui-text)]";
 const userModalFieldClass = cx(uiInputClass, "px-3 py-2 ui-body");
 const associationOptionRowClass = adminAssociationOptionRowClass;
-const associationAccountOptionRowClass = adminAssociationAccountOptionRowClass;
 const roleAccessHelpItems = [
   { role: "No Access", access: "No workspace access (profile only)" },
   { role: "User", access: "Non-admin workspaces only" },
@@ -187,23 +179,7 @@ type AssociationsTabsProps = {
   onTabChange: (tab: AssociationTab) => void;
   maxVisibleOptions: number;
   showPortalRole: boolean;
-  accounts: {
-    selected: AccountSelection[];
-    setSelected: Dispatch<SetStateAction<AccountSelection[]>>;
-    optionsById: Map<number, S3AccountSummary>;
-    available: Option[];
-    visible: Option[];
-    search: string;
-    setSearch: Dispatch<SetStateAction<string>>;
-    loading: boolean;
-    showPanel: boolean;
-    setShowPanel: Dispatch<SetStateAction<boolean>>;
-    selections: number[];
-    setSelections: Dispatch<SetStateAction<number[]>>;
-    portalRoleChoice: Record<number, AccountAccessRole>;
-    setPortalRoleChoice: Dispatch<SetStateAction<Record<number, AccountAccessRole>>>;
-    toggleSelection: (id: number) => void;
-  };
+  accounts: UserAccountAssociationsState;
   s3Users: {
     selected: S3UserMembership[];
     setSelected: Dispatch<SetStateAction<S3UserMembership[]>>;
@@ -262,172 +238,11 @@ const AssociationsTabs = ({
             id: "accounts",
             label: `Accounts (${accounts.selected.length})`,
             content: (
-              <div className="space-y-3">
-                <AdminAssociationSectionHeader
-                  title="Linked accounts"
-                  countLabel={`${accounts.selected.length} linked`}
-                  actionLabel={accounts.showPanel ? "Close" : "Add accounts"}
-                  onAction={() => accounts.setShowPanel((prev) => !prev)}
-                />
-                <div className={associationTableContainerClass}>
-                  <table className={associationTableClass}>
-                    <thead className={adminAssociationTableHeadClass}>
-                      <tr>
-                        <th className={adminAssociationTableHeaderClass}>
-                          Account
-                        </th>
-                        <th className={adminAssociationTableHeaderClass}>Access role</th>
-                        <th className={adminAssociationTableHeaderRightClass}>
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className={adminAssociationTableBodyClass}>
-                      {accounts.selected.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className={adminAssociationTableEmptyCellClass}>
-                            No account linked yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        accounts.selected.map((entry) => {
-                          const label =
-                            accounts.optionsById.get(Number(entry.id))?.name ?? `S3Account #${entry.id}`;
-                          return (
-                            <tr key={entry.id}>
-                              <td className={adminAssociationTableLabelCellClass}>{label}</td>
-                              <td className={adminAssociationTableControlCellClass}>
-                                <UiSelect
-                                  aria-label={`Access role for ${label}`}
-                                  size="compact"
-                                  fieldClassName="w-52"
-                                  value={normalizeAccountAccessRole(entry.role)}
-                                  disabled={Boolean(entry.is_root)}
-                                  onChange={(e) =>
-                                    accounts.setSelected((prev) =>
-                                      prev.map((item) =>
-                                        item.id === entry.id ? { ...item, role: normalizeAccountAccessRole(e.target.value) } : item
-                                      )
-                                    )
-                                  }
-                                >
-                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>{option.label}</option>
-                                  ))}
-                                </UiSelect>
-                              </td>
-                              <td className={adminAssociationTableActionCellClass}>
-                                <AdminAssociationAdvancedSettings
-                                  targetLabel={label}
-                                  associationKind="account"
-                                  allowManagerBrowserDataAccess={Boolean(entry.allow_manager_browser_data_access)}
-                                  onApply={(allowed) =>
-                                    accounts.setSelected((prev) =>
-                                      prev.map((item) =>
-                                        item.id === entry.id
-                                          ? { ...item, allow_manager_browser_data_access: allowed }
-                                          : item
-                                      )
-                                    )
-                                  }
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    accounts.setSelected((prev) => prev.filter((acc) => acc.id !== entry.id))
-                                  }
-                                  className={tableDeleteActionClasses}
-                                  disabled={Boolean(entry.is_root)}
-                                >
-                                  Remove
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                {accounts.showPanel && (
-                  <AdminAssociationPickerPanel
-                    title="Add accounts"
-                    hint="(search by name)"
-                    search={accounts.search}
-                    onSearchChange={accounts.setSearch}
-                    loading={accounts.loading}
-                    availableCount={accounts.available.length}
-                    maxVisibleOptions={maxVisibleOptions}
-                    selectedCount={accounts.selections.length}
-                    loadingLabel="Loading accounts..."
-                    addDisabled={accounts.selections.length === 0}
-                    onCancel={() => {
-                      accounts.setShowPanel(false);
-                      accounts.setSelections([]);
-                      accounts.setSearch("");
-                    }}
-                    onAdd={() => {
-                      if (accounts.selections.length === 0) return;
-                      const next = accounts.selections.map((accountId) => {
-                        const role = accounts.portalRoleChoice[accountId] ?? (
-                          showPortalRole ? "portal_user" : "account_administrator"
-                        );
-                        return {
-                          id: accountId,
-                          role,
-                          allow_manager_browser_data_access: false,
-                        };
-                      });
-                      accounts.setSelected((prev) => [...prev, ...next]);
-                      accounts.setSelections([]);
-                      accounts.setSearch("");
-                      accounts.setShowPanel(false);
-                    }}
-                  >
-                      {accounts.visible.map((opt) => {
-                        const accountId = Number(opt.id);
-                        const isSelected = accounts.selections.includes(accountId);
-                        const portalRole = accounts.portalRoleChoice[accountId] ?? (
-                          showPortalRole ? "portal_user" : "account_administrator"
-                        );
-                        return (
-                          <div
-                            key={opt.id}
-                            className={associationAccountOptionRowClass(isSelected)}
-                          >
-                            <label className={adminAssociationOptionLabelClass}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => accounts.toggleSelection(accountId)}
-                                className={adminAssociationCheckboxClass}
-                              />
-                              <span>{opt.label}</span>
-                            </label>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <UiSelect
-                                aria-label={`Access role for ${opt.label}`}
-                                size="compact"
-                                fieldClassName="w-52"
-                                value={portalRole}
-                                onChange={(event) =>
-                                  accounts.setPortalRoleChoice((prev) => ({
-                                    ...prev,
-                                    [accountId]: normalizeAccountAccessRole(event.target.value),
-                                  }))
-                                }
-                              >
-                                {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
-                                  <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                              </UiSelect>
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </AdminAssociationPickerPanel>
-                )}
-              </div>
+              <UserAccountAssociationsPanel
+                accounts={accounts}
+                maxVisibleOptions={maxVisibleOptions}
+                showPortalRole={showPortalRole}
+              />
             ),
           },
           {
