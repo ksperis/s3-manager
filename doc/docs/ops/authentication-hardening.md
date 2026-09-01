@@ -18,9 +18,9 @@ Browser requests must never send a Bearer token. A request containing both a UI 
 
 ## WebAuthn and recovery
 
-`ui_admin` and `ui_superadmin` accounts must enroll a passkey before receiving a full UI session. Any other user who voluntarily enrolls a passkey is challenged on subsequent logins as well. The RP ID and origin must exactly match `WEBAUTHN_RP_ID` and `WEBAUTHN_ORIGIN`; user verification is required, attestation is `none`, and challenges are single-use for five minutes.
+Passkey enrollment is controlled by `AppSettings.general`: `require_passkey_for_admins` defaults to `true` for `ui_admin` and `ui_superadmin`, while `require_passkey_for_users` defaults to `false` for `ui_user` and `ui_none`. Direct S3 sessions are excluded. Any user who voluntarily enrolls a passkey is challenged on subsequent logins as well. Enabling a requirement takes effect at the next authentication and does not terminate existing sessions. The RP ID and origin must exactly match `WEBAUTHN_RP_ID` and `WEBAUTHN_ORIGIN`; user verification is required, attestation is `none`, and challenges are single-use for five minutes.
 
-After enrollment, ten recovery codes are displayed once. Store them outside the browser. Each code is hashed in the database and can be consumed once. Passkey changes, recovery-code regeneration, API-token management, external-identity revocation or decisions, and administrative session revocation require a WebAuthn-authenticated session from the last `MFA_RECENT_MINUTES` (15 minutes by default). Revoking an external identity invalidates every UI session and API token owned by that user.
+After enrollment, ten recovery codes are displayed once. Store them outside the browser. Each code is hashed in the database and can be consumed once. When `require_passkey_for_admins` is enabled, API-token management, identity administration, MFA reset, and administrative session revocation require a WebAuthn-authenticated session from the last `MFA_RECENT_MINUTES` (15 minutes by default). When it is disabled, an authorized active Admin session is sufficient. Personal security actions use a recent primary authentication when no passkey is enrolled or required; an enrolled or required passkey keeps the WebAuthn step-up. Revoking an external identity invalidates every UI session and API token owned by that user.
 
 When that freshness window expires, the Profile Security and API tokens surfaces
 offer an in-session passkey verification. The challenge is bound to the current
@@ -36,7 +36,7 @@ cd backend
 python -m app.scripts.reset_last_superadmin_mfa --email exact-admin@example.com
 ```
 
-The command requires the exact typed confirmation, removes passkeys and recovery codes, increments `auth_version`, revokes every session and API token, and writes a secret-free audit event. The next login requires enrollment.
+The command requires the exact typed confirmation, removes passkeys, recovery codes, and pending challenges, increments `auth_version`, revokes every session and API token, and writes a secret-free audit event. The next login follows the current role policy. The sole active superadmin can be recovered only with this operator command.
 
 Prefer an explicitly issued one-time web bootstrap on an empty database:
 
@@ -66,7 +66,10 @@ administrator is a separate operator action.
 
 - OIDC always uses PKCE S256 and nonce. Discovery, authorization, token, JWKS, issuer, and optional UserInfo endpoints must be HTTPS and use an allowed host. ID tokens require a `kid`, an asymmetric signing key, an explicitly allowed algorithm (`RS256` by default), the configured issuer and audience, and `email_verified is true` before an email is used.
 - LDAP production providers require LDAPS or StartTLS, certificate verification, modern TLS, escaped filters, and bounded timeouts.
-- Email is never an automatic linking key. A collision creates an `external_identity_link_requests` row. A recently WebAuthn-verified superadmin must approve or reject it.
+- OIDC providers default to `linking_policy=manual`. In `trusted_email` mode, BucketReef links only a verified email in an exact configured domain to one active standard local-password account that has no active or revoked external identity. Privileged, inactive, already federated, unverified, out-of-domain, or unsafe matches remain manual. Unknown emails keep the existing JIT behavior and create a `ui_none` account.
+- Admins decide requests only for standard users; Superadmins can also decide requests for privileged accounts. The immutable mapping key remains `(provider_type, provider_id, subject)`. Subjects are not written to audit metadata.
+
+The canonical administration routes are `/api/admin/identity/link-requests`, `/api/admin/identity/sessions`, and `/api/admin/users/{id}/security`. The former global routes under `/api/auth` are not aliases.
 
 ## API-token scopes
 

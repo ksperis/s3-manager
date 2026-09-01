@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -14,7 +14,6 @@ from app.db import AuthSession, User, WebAuthnCredential, is_admin_ui_role
 from app.models.auth import (
     CurrentSessionResponse,
     ExternalIdentityInfo,
-    LinkDecisionRequest,
     RecentWebAuthnVerificationResponse,
     RefreshResponse,
     SessionInfo,
@@ -32,7 +31,6 @@ from app.routers.auth_session_guards import (
 from app.routers.dependencies import (
     get_audit_service,
     get_current_actor,
-    get_current_ui_superadmin,
     get_current_user,
 )
 from app.services.audit_service import AuditService
@@ -40,6 +38,10 @@ from app.services.auth_session_service import AuthSessionError, AuthSessionServi
 from app.services.external_identity_user_service import ExternalIdentityUserService
 from app.services.users_service import get_users_service
 from app.services.webauthn_service import WebAuthnSecurityError, WebAuthnService
+from app.services.app_settings_service import load_app_settings_for_db
+from app.services.identity_security_policy import (
+    require_self_service_security_action,
+)
 from app.utils.request_security import client_ip, require_trusted_origin
 
 
@@ -133,7 +135,7 @@ def revoke_session(
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    require_recent_mfa(request, db) if is_admin_ui_role(current_user.role) else None
+    require_self_service_security_action(request, db, current_user)
     current_id = current_auth_session(request, db).id
     row = db.query(AuthSession).filter(AuthSession.id == session_id, AuthSession.user_id == current_user.id).first()
     if not row:
@@ -206,8 +208,7 @@ def logout_all(
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    if is_admin_ui_role(current_user.role):
-        require_recent_mfa(request, db)
+    require_self_service_security_action(request, db, current_user)
     AuthSessionService(db).revoke_all_for_user(current_user, "global_logout")
     audit_service.record_action(
         user=current_user,
@@ -217,60 +218,6 @@ def logout_all(
         entity_id=str(current_user.id),
     )
     clear_auth_cookies(response)
-
-
-@router.get("/external-link-requests")
-def list_external_link_requests(
-    request: Request,
-    include_decided: bool = Query(False),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_ui_superadmin),
-) -> list[dict[str, Any]]:
-    require_recent_mfa(request, db)
-    rows = ExternalIdentityUserService(db).list_link_requests(include_decided=include_decided)
-    return [
-        {
-            "id": row.id,
-            "user_id": row.user_id,
-            "provider_type": row.provider_type,
-            "provider_id": row.provider_id,
-            "email": row.email,
-            "status": row.status,
-            "created_at": row.created_at,
-            "expires_at": row.expires_at,
-        }
-        for row in rows
-    ]
-
-
-@router.post("/external-link-requests/{request_id}")
-def decide_external_link_request(
-    request: Request,
-    request_id: str,
-    payload: LinkDecisionRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_ui_superadmin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> dict[str, str]:
-    require_recent_mfa(request, db)
-    try:
-        row = ExternalIdentityUserService(db).decide_link_request(
-            request_id,
-            superadmin=current_user,
-            approve=payload.approve,
-            reason=payload.reason,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="External identity request cannot be updated") from exc
-    audit_service.record_action(
-        user=current_user,
-        scope="security",
-        action="external_identity_link_decision",
-        entity_type="external_identity_link_request",
-        entity_id=row.id,
-        metadata={"decision": row.status, "provider_type": row.provider_type, "provider_id": row.provider_id},
-    )
-    return {"id": row.id, "status": row.status}
 
 
 @router.get("/security/webauthn/credentials", response_model=list[WebAuthnCredentialInfo])
@@ -374,15 +321,26 @@ def revoke_external_identity(
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    require_recent_mfa(request, db)
+    if not load_app_settings_for_db(db).general.allow_user_external_identity_unlink:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="External identity unlinking is disabled by the application administrator",
+        )
+    require_self_service_security_action(request, db, current_user)
+    service = ExternalIdentityUserService(db)
     identity = next(
-        (row for row in ExternalIdentityUserService(db).list_for_user(current_user.id) if row.id == identity_id),
+        (row for row in service.list_for_user(current_user.id) if row.id == identity_id),
         None,
     )
     if identity is None:
         raise HTTPException(status_code=404, detail="External identity not found")
     try:
-        ExternalIdentityUserService(db).revoke_identity(identity.id)
+        if not service.has_alternate_primary_login(current_user, excluding_identity_id=identity.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The last primary sign-in method cannot be removed",
+            )
+        service.revoke_identity(identity.id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="External identity not found") from exc
     audit_service.record_action(
@@ -453,7 +411,7 @@ def revoke_webauthn_credential(
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    require_recent_mfa(request, db)
+    require_self_service_security_action(request, db, current_user)
     try:
         WebAuthnService(db).revoke_credential(current_user, credential_id)
     except WebAuthnSecurityError as exc:
@@ -477,7 +435,7 @@ def regenerate_recovery_codes(
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, list[str]]:
-    require_recent_mfa(request, db)
+    require_self_service_security_action(request, db, current_user)
     codes = WebAuthnService(db).issue_recovery_codes(current_user)
     AuthSessionService(db).revoke_all_for_user(
         current_user,
@@ -493,36 +451,3 @@ def regenerate_recovery_codes(
     )
     clear_auth_cookies(response)
     return {"codes": codes}
-
-
-@router.get("/admin/sessions", response_model=list[SessionInfo])
-def list_all_sessions(
-    request: Request,
-    include_revoked: bool = Query(False),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_ui_superadmin),
-) -> list[SessionInfo]:
-    require_recent_mfa(request, db)
-    query = db.query(AuthSession)
-    if not include_revoked:
-        query = query.filter(AuthSession.revoked_at.is_(None))
-    return [_session_info(row) for row in query.order_by(AuthSession.created_at.desc()).all()]
-
-
-@router.delete("/admin/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-def admin_revoke_session(
-    request: Request,
-    session_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_ui_superadmin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> None:
-    require_recent_mfa(request, db)
-    AuthSessionService(db).revoke_session(session_id, "administrator_revoked")
-    audit_service.record_action(
-        user=current_user,
-        scope="security",
-        action="administrator_revoke_session",
-        entity_type="auth_session",
-        entity_id=session_id,
-    )

@@ -17,6 +17,11 @@ export type SecuritySession = {
   user_id?: number | null;
   s3_session_id?: string | null;
 };
+export type AdminSecuritySession = SecuritySession & {
+  user_email?: string | null;
+  user_full_name?: string | null;
+  user_role?: string | null;
+};
 export type ExternalIdentity = {
   id: string;
   provider_type: string;
@@ -29,12 +34,30 @@ export type ExternalIdentity = {
 export type ExternalLinkRequest = {
   id: string;
   user_id: number;
+  user_email: string;
+  user_role: string;
   provider_type: string;
   provider_id: string;
   email: string;
   status: string;
   created_at: string;
   expires_at: string;
+};
+export type AdminPasskey = SecurityCredential & { revoked_at?: string | null };
+export type AdminExternalIdentity = ExternalIdentity & {
+  subject: string;
+  link_source: string;
+  revoked_at?: string | null;
+};
+export type AdminUserSecurity = {
+  user_id: number;
+  email: string;
+  role: string;
+  has_local_password: boolean;
+  passkey_required: boolean;
+  passkeys: AdminPasskey[];
+  external_identities: AdminExternalIdentity[];
+  sessions: SecuritySession[];
 };
 type RecentWebAuthnVerification = { mfa_verified_at: string };
 
@@ -74,15 +97,53 @@ export async function listExternalIdentities(): Promise<ExternalIdentity[]> {
 export async function revokeExternalIdentity(id: string): Promise<void> {
   await client.delete(`/auth/security/external-identities/${encodeURIComponent(id)}`);
 }
-export async function listAdminSessions(): Promise<SecuritySession[]> {
-  return (await client.get<SecuritySession[]>("/auth/admin/sessions")).data;
+export async function listAdminSessions(): Promise<AdminSecuritySession[]> {
+  return (await client.get<AdminSecuritySession[]>("/admin/identity/sessions")).data;
 }
 export async function adminRevokeSession(id: string): Promise<void> {
-  await client.delete(`/auth/admin/sessions/${encodeURIComponent(id)}`);
+  await client.delete(`/admin/identity/sessions/${encodeURIComponent(id)}`);
 }
 export async function listExternalLinkRequests(): Promise<ExternalLinkRequest[]> {
-  return (await client.get<ExternalLinkRequest[]>("/auth/external-link-requests")).data;
+  return (await client.get<ExternalLinkRequest[]>("/admin/identity/link-requests")).data;
 }
 export async function decideExternalLinkRequest(id: string, approve: boolean): Promise<void> {
-  await client.post(`/auth/external-link-requests/${encodeURIComponent(id)}`, { approve });
+  await client.post(`/admin/identity/link-requests/${encodeURIComponent(id)}`, { approve });
+}
+
+export async function getAdminUserSecurity(userId: number): Promise<AdminUserSecurity> {
+  return (await client.get<AdminUserSecurity>(`/admin/users/${userId}/security`)).data;
+}
+
+export async function resetAdminUserMfa(userId: number): Promise<void> {
+  await client.post(`/admin/users/${userId}/mfa/reset`);
+}
+
+export async function setAdminUserPassword(userId: number, password: string): Promise<void> {
+  await client.put(`/admin/users/${userId}/security/password`, { password });
+}
+
+export async function addAdminExternalIdentity(
+  userId: number,
+  payload: {
+    provider_type: "oidc" | "ldap";
+    provider_id: string;
+    subject: string;
+    email?: string | null;
+    email_verified?: boolean;
+    restore?: boolean;
+  },
+): Promise<AdminExternalIdentity> {
+  return (await client.post<AdminExternalIdentity>(`/admin/users/${userId}/external-identities`, payload)).data;
+}
+
+export async function revokeAdminExternalIdentity(userId: number, identityId: string): Promise<void> {
+  await client.delete(`/admin/users/${userId}/external-identities/${encodeURIComponent(identityId)}`);
+}
+
+export async function restoreAdminExternalIdentity(userId: number, identityId: string): Promise<void> {
+  await client.post(`/admin/users/${userId}/external-identities/${encodeURIComponent(identityId)}/restore`);
+}
+
+export async function revokeAdminUserSession(userId: number, sessionId: string): Promise<void> {
+  await client.delete(`/admin/users/${userId}/security/sessions/${encodeURIComponent(sessionId)}`);
 }

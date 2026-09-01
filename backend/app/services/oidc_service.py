@@ -196,6 +196,7 @@ class OidcService:
 
         if not email and token_payload.get("access_token") and metadata.get("userinfo_endpoint"):
             email = self._fetch_userinfo_email(metadata["userinfo_endpoint"], token_payload["access_token"])
+            email_verified = bool(email)
 
         user, created = self.users_service.get_or_create_oidc_user(
             provider=provider_key,
@@ -203,6 +204,9 @@ class OidcService:
             email=email,
             full_name=full_name,
             picture_url=picture_url,
+            email_verified=email_verified is True,
+            linking_policy=provider.linking_policy,
+            trusted_email_domains=provider.trusted_email_domains,
         )
 
         user = self.users_service.mark_last_login(user)

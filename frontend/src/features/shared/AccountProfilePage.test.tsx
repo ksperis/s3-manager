@@ -19,8 +19,8 @@ vi.mock("./ProfilePage", () => ({
   ),
 }));
 
-vi.mock("../admin/ApiTokensPage", () => ({
-  default: () => <div>API tokens content</div>,
+vi.mock("./SecurityPage", () => ({
+  default: () => <div>Security content</div>,
 }));
 
 function LocationProbe() {
@@ -63,7 +63,9 @@ describe("AccountProfilePage", () => {
 
     expect(screen.getByText("Profile content")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Private S3 connections" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "API tokens" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Security" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "API tokens" })).not.toBeInTheDocument();
+    expect(screen.getByText("Manage your personal details, preferences, sign-in security, and private connections.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Private S3 connections" }));
     expect(screen.getByText("Connections content")).toBeInTheDocument();
@@ -76,6 +78,7 @@ describe("AccountProfilePage", () => {
 
     expect(screen.queryByRole("button", { name: "Private S3 connections" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "API tokens" })).not.toBeInTheDocument();
+    expect(screen.getByText("Manage your personal details, preferences, and sign-in security.")).toBeInTheDocument();
     expect(await screen.findByText("/profile?tab=profile")).toBeInTheDocument();
   });
 
@@ -100,7 +103,7 @@ describe("AccountProfilePage", () => {
     renderPage();
 
     await user.click(screen.getByRole("button", { name: "Make dirty" }));
-    await user.click(screen.getByRole("tab", { name: "API tokens" }));
+    await user.click(screen.getByRole("tab", { name: "Security" }));
 
     expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
     expect(screen.getByText("Profile content")).toBeInTheDocument();
@@ -109,10 +112,10 @@ describe("AccountProfilePage", () => {
     expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).not.toBeInTheDocument();
     expect(screen.getByText("Profile content")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "API tokens" }));
+    await user.click(screen.getByRole("tab", { name: "Security" }));
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(screen.getByText("API tokens content")).toBeInTheDocument();
-    expect(screen.getByText("/profile?tab=api-tokens")).toBeInTheDocument();
+    expect(screen.getByText("Security content")).toBeInTheDocument();
+    expect(screen.getByText("/profile?tab=security")).toBeInTheDocument();
   });
 
   it("uses the Browser breadcrumb on the standalone Browser profile route", () => {

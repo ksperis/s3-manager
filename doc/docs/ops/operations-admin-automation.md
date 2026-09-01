@@ -10,6 +10,7 @@ The Admin Automation API applies idempotent administrative changes.
 
 - Storage endpoints
 - UI users
+- External identities
 - S3 accounts
 - S3 users
 - S3 connections
@@ -20,6 +21,13 @@ The Admin Automation API applies idempotent administrative changes.
 - `dry_run` for simulation.
 - `continue_on_error` for batch behavior.
 - Response returns `changed`, `success`, summaries, and per-item details.
+
+`external_identities` identifies an immutable external subject with
+`provider_type`, `provider_id`, and `subject`, and selects the target UI user by
+ID or email. Applying `present` is idempotent. A revoked mapping requires
+`restore: true`; applying `absent` revokes it. A subject owned by another user
+is an explicit conflict. Dry-run responses and audit events never expose the
+subject.
 
 ## S3 connection boundary
 

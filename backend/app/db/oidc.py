@@ -53,5 +53,7 @@ class OidcProvider(Base):
     icon_url = Column(String, nullable=True)
     use_pkce = Column(Boolean, nullable=False, default=True)
     use_nonce = Column(Boolean, nullable=False, default=True)
+    linking_policy = Column(String, nullable=False, default="manual", server_default="manual")
+    trusted_email_domains_json = Column(Text, nullable=False, default="[]", server_default="[]")
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)

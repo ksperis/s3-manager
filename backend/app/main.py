@@ -39,6 +39,7 @@ from app.routers.admin import onboarding as admin_onboarding
 from app.routers.admin import automation as admin_automation
 from app.routers.admin import healthchecks as admin_healthchecks
 from app.routers.admin import portal_requests as admin_portal_requests
+from app.routers.admin import identity_security as admin_identity_security
 from app.routers.ceph_admin import endpoints as ceph_admin_endpoints
 from app.routers.ceph_admin import accounts as ceph_admin_accounts
 from app.routers.ceph_admin import account_profiles as ceph_admin_account_profiles
@@ -219,6 +220,7 @@ app.include_router(admin_onboarding.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_automation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_portal_requests.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_portal_enabled)])
+app.include_router(admin_identity_security.router, prefix=settings.api_v1_prefix)
 app.include_router(ceph_admin_endpoints.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(

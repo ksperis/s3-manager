@@ -36,6 +36,7 @@ describe("route snapshot", () => {
       "/admin/endpoint-status/:endpointId",
       "/admin/users",
       "/admin/groups",
+      "/admin/identity-security",
       "/admin/audit",
       "/admin/metrics",
       "/admin/portal-requests",

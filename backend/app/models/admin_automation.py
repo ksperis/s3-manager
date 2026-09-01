@@ -95,6 +95,36 @@ class UiUserApply(ApiModel):
     set_password: bool = False
 
 
+class ExternalIdentityMatch(ApiModel):
+    provider_type: Literal["oidc", "ldap"]
+    provider_id: str = Field(min_length=1, max_length=255)
+    subject: str = Field(min_length=1, max_length=2048)
+
+
+class ExternalIdentityUserRef(ApiModel):
+    id: Optional[int] = None
+    email: Optional[EmailStr] = None
+
+    @model_validator(mode="after")
+    def _ensure_match(self) -> "ExternalIdentityUserRef":
+        if _provided_reference_count(self.id, self.email) != 1:
+            raise ValueError("external_identities.user requires exactly one of id or email")
+        return self
+
+
+class ExternalIdentitySpec(ApiModel):
+    email: Optional[EmailStr] = None
+    email_verified: bool = False
+
+
+class ExternalIdentityApply(ApiModel):
+    state: ApplyState = "present"
+    match: ExternalIdentityMatch
+    user: ExternalIdentityUserRef
+    spec: Optional[ExternalIdentitySpec] = None
+    restore: bool = False
+
+
 class S3AccountMatch(ApiModel):
     id: Optional[int] = None
     name: Optional[str] = None
@@ -280,6 +310,7 @@ class AdminAutomationApplyRequest(ApiModel):
     continue_on_error: bool = False
     storage_endpoints: list[StorageEndpointApply] = Field(default_factory=list)
     ui_users: list[UiUserApply] = Field(default_factory=list)
+    external_identities: list[ExternalIdentityApply] = Field(default_factory=list)
     s3_accounts: list[S3AccountApply] = Field(default_factory=list)
     s3_users: list[S3UserApply] = Field(default_factory=list)
     s3_connections: list[S3ConnectionApply] = Field(default_factory=list)

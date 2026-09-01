@@ -80,6 +80,7 @@ export type User = {
   display_name?: string | null;
   picture_url?: string | null;
   avatar?: UserAvatarDescriptor | null;
+  has_local_password?: boolean;
   role: UiRole;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
@@ -116,6 +117,7 @@ export type UserSummary = {
 
 export type CreateUserPayload = {
   email: string;
+  full_name?: string | null;
   password: string;
   role?: UiRole;
   can_access_ceph_admin?: boolean;
@@ -129,6 +131,7 @@ export type CreateUserPayload = {
 
 export type UpdateUserPayload = {
   email?: string;
+  full_name?: string | null;
   password?: string;
   role?: UiRole;
   can_access_ceph_admin?: boolean;

@@ -202,6 +202,7 @@ class UserOutputService:
             display_name=user.display_name or user.full_name,
             picture_url=user.picture_url,
             avatar=UserAvatarService(self.db).descriptor(user),
+            has_local_password=bool(user.hashed_password),
             is_active=user.is_active,
             is_admin=is_admin_ui_role(user.role),
             role=user.role,

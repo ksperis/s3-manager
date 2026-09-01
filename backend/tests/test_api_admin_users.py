@@ -228,7 +228,7 @@ def test_admin_can_configure_manager_tool_access_on_update(client: TestClient, d
         full_name="Target Manager Tools",
         hashed_password="x",
         is_active=True,
-        role=UserRole.UI_ADMIN.value,
+        role=UserRole.UI_USER.value,
     )
     db_session.add(target)
     db_session.commit()
@@ -408,7 +408,7 @@ def test_admin_can_grant_and_revoke_storage_ops_on_update(client: TestClient, db
         full_name="Target Storage Ops",
         hashed_password="x",
         is_active=True,
-        role=UserRole.UI_ADMIN.value,
+        role=UserRole.UI_USER.value,
     )
     db_session.add(target)
     db_session.commit()

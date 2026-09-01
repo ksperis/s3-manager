@@ -1,8 +1,8 @@
-# User Profile, Private S3 Connections, and API Tokens
+# User Profile and Sign-in Security
 
 ## When to use
 
-Use this page when you need to adjust personal UI preferences, manage your own private S3 connections, or administer API tokens when your role allows it.
+Use this page when you need to adjust personal UI preferences, manage your sign-in security, or manage your own private S3 connections.
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ Use this page when you need to adjust personal UI preferences, manage your own p
 ## Steps
 
 1. Select **Profile** at the bottom of the sidebar, just above **Collapse**, or use the account menu in the topbar. The profile page opens inside your current workspace so its navigation and context remain available.
-2. Use the **Profile** tab to update identity and preferences:
+2. Use the **Profile** tab to update your avatar and preferences. The application administrator decides whether users may also edit their own full name.
    - choose your profile image source: automatic, Gravatar, or initials,
    - upload or remove a personal PNG or JPEG image up to 1 MiB,
    - choose language and theme,
@@ -27,8 +27,8 @@ Use this page when you need to adjust personal UI preferences, manage your own p
    - delete a **Server managed** connection from this inventory when you no
      longer need it; BucketReef first removes the remote key and dedicated IAM
      identity, when applicable, before removing the local connection.
-4. Use the **Security** tab to enroll or review passkeys, regenerate ten one-time recovery codes, inspect sessions and external identities, and revoke either. Store newly displayed recovery codes outside the browser. Revoking an external identity signs you out everywhere. Superadmins also see every active UI/S3 session and pending manual identity-link requests.
-5. Superadmins can use the **API tokens** tab for scoped automation tokens after recent passkey verification. Other users do not see this tab.
+4. Use the **Security** tab to change an existing local password, enroll or review passkeys, regenerate ten one-time recovery codes, inspect your sessions, and review your external identities. Store newly displayed recovery codes outside the browser. The application administrator decides whether users may unlink external identities; the last password, OIDC, or LDAP sign-in method can never be removed. A passkey does not count as that primary method.
+5. Administrators manage platform sessions and manual identity-link requests from **Platform > Identity security**. Superadmins manage scoped automation tokens from **Settings > API tokens**.
 
 ## Expected result
 

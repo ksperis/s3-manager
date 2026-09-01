@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from app.core.security import get_password_hash, verify_password
 from app.db import AccountRole, User, UserRole, UserS3Account
 from app.main import app
+from app.models.app_settings import AppSettings
 from app.routers import dependencies
 from uuid import uuid4
 from tests.s3_account_factory import make_s3_account
@@ -36,9 +37,12 @@ def _seed_user(db_session, *, hashed_password: str | None, role: str = UserRole.
     return user
 
 
-def test_update_users_me_updates_full_name(client, db_session):
+def test_update_users_me_updates_full_name(client, db_session, monkeypatch):
     user = _seed_user(db_session, hashed_password=get_password_hash("old-password"))
     app.dependency_overrides[dependencies.get_current_user] = lambda: user
+    settings = AppSettings()
+    settings.general.allow_user_profile_name_edit = True
+    monkeypatch.setattr("app.routers.users.load_app_settings_for_db", lambda _db: settings)
 
     response = client.put("/api/users/me", json={"full_name": "Nouveau Nom"})
     assert response.status_code == 200, response.text

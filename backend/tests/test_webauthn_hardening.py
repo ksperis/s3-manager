@@ -9,12 +9,14 @@ import pytest
 from webauthn.helpers import bytes_to_base64url
 
 from app.core.security import get_password_hash
-from app.db import AuditLog, AuthChallenge, AuthSession, RecoveryCode, User, UserRole, WebAuthnCredential
+from app.db import AppSetting, AuditLog, AuthChallenge, AuthSession, RecoveryCode, User, UserRole, WebAuthnCredential
+from app.models.app_settings import AppSettings
 from app.scripts import reset_last_superadmin_mfa as reset_last_superadmin_mfa_script
 from app.scripts.create_first_admin import FirstAdminError, create_first_admin
 from app.scripts.reset_last_superadmin_mfa import OperatorRecoveryError, reset_last_superadmin_mfa
 from app.core.config import get_settings
 from app.services.auth_session_service import AuthSessionService
+from app.services.app_settings_service import load_app_settings_for_db
 from app.services.webauthn_service import WebAuthnSecurityError, WebAuthnService
 
 
@@ -30,6 +32,53 @@ def _user(db_session, *, email: str, role: str = UserRole.UI_USER.value) -> User
     db_session.commit()
     db_session.refresh(row)
     return row
+
+
+def _set_passkey_policy(db_session, *, admins: bool = True, users: bool = False) -> None:
+    load_app_settings_for_db(db_session)
+    row = db_session.query(AppSetting).filter(AppSetting.key == "default").one()
+    settings = AppSettings.model_validate_json(row.payload_json)
+    settings.general.require_passkey_for_admins = admins
+    settings.general.require_passkey_for_users = users
+    row.payload_json = settings.model_dump_json(indent=2)
+    db_session.add(row)
+    db_session.commit()
+
+
+def _credential(user: User, credential_id: str) -> WebAuthnCredential:
+    return WebAuthnCredential(
+        id=credential_id,
+        user_id=user.id,
+        credential_id=f"{credential_id}-raw",
+        public_key="public-key",
+        sign_count=0,
+        transports_json="[]",
+        name="Passkey",
+    )
+
+
+def test_last_passkey_can_be_revoked_only_when_role_policy_allows_it(db_session):
+    standard = _user(db_session, email="optional-passkey@example.com")
+    optional = _credential(standard, "optional-passkey")
+    db_session.add(optional)
+    db_session.commit()
+    WebAuthnService(db_session).revoke_credential(standard, optional.id)
+    assert optional.revoked_at is not None
+
+    required_user = _user(db_session, email="required-passkey@example.com")
+    required = _credential(required_user, "required-passkey")
+    db_session.add(required)
+    db_session.commit()
+    _set_passkey_policy(db_session, users=True)
+    with pytest.raises(WebAuthnSecurityError, match="must keep"):
+        WebAuthnService(db_session).revoke_credential(required_user, required.id)
+
+    admin = _user(db_session, email="admin-required-passkey@example.com", role=UserRole.UI_ADMIN.value)
+    admin_credential = _credential(admin, "admin-required-passkey")
+    db_session.add(admin_credential)
+    db_session.commit()
+    with pytest.raises(WebAuthnSecurityError, match="must keep"):
+        WebAuthnService(db_session).revoke_credential(admin, admin_credential.id)
 
 
 def test_registration_options_require_user_verification_and_none_attestation(db_session):
@@ -239,7 +288,7 @@ def test_operator_reset_cli_prints_after_session_close(monkeypatch, db_session, 
 
     assert capsys.readouterr().out == (
         "This action removes passkeys and recovery codes and revokes every session.\n"
-        "MFA reset completed for cli-admin@example.com. A new passkey is required at next login.\n"
+        "MFA reset completed for cli-admin@example.com. The current passkey policy applies at next login.\n"
     )
 
 

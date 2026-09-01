@@ -34,6 +34,8 @@ class OIDCProviderSettings(BaseModel):
     icon_url: Optional[str] = None
     use_pkce: bool = True
     use_nonce: bool = True
+    linking_policy: Literal["manual", "trusted_email"] = "manual"
+    trusted_email_domains: list[str] = Field(default_factory=list)
     allowed_algorithms: list[str] = Field(default_factory=lambda: ["RS256"])
     allowed_hosts: list[str] = Field(default_factory=list)
 
@@ -52,7 +54,7 @@ class OIDCProviderSettings(BaseModel):
             return [item.strip() for item in text.split(",") if item.strip()]
         return value
 
-    @field_validator("allowed_algorithms", "allowed_hosts", mode="before")
+    @field_validator("allowed_algorithms", "allowed_hosts", "trusted_email_domains", mode="before")
     @classmethod
     def parse_security_lists(cls, value):
         if isinstance(value, str):
@@ -66,6 +68,13 @@ class OIDCProviderSettings(BaseModel):
                     raise ValueError("Unable to parse OIDC security list JSON") from exc
             return [item.strip() for item in text.split(",") if item.strip()]
         return value
+
+    @field_validator("trusted_email_domains")
+    @classmethod
+    def normalize_trusted_domains(cls, value: list[str]) -> list[str]:
+        from app.models.oidc import normalize_trusted_email_domains
+
+        return normalize_trusted_email_domains(value)
 
     @field_validator("allowed_algorithms")
     @classmethod

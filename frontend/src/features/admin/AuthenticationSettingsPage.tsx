@@ -45,7 +45,11 @@ const CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE =
 type AuthenticationToggleField =
   | "allow_login_access_keys"
   | "allow_login_endpoint_list"
-  | "allow_login_custom_endpoint";
+  | "allow_login_custom_endpoint"
+  | "require_passkey_for_admins"
+  | "require_passkey_for_users"
+  | "allow_user_profile_name_edit"
+  | "allow_user_external_identity_unlink";
 
 type OidcProviderFormMode = "create" | "edit" | "view";
 type LdapProviderFormMode = "create" | "edit" | "view";
@@ -64,6 +68,8 @@ type OidcProviderFormState = {
   use_nonce: boolean;
   client_secret: string;
   clear_client_secret: boolean;
+  linking_policy: "manual" | "trusted_email";
+  trustedEmailDomainsText: string;
 };
 
 type LdapProviderFormState = {
@@ -114,6 +120,8 @@ function emptyOidcForm(): OidcProviderFormState {
     use_nonce: true,
     client_secret: "",
     clear_client_secret: false,
+    linking_policy: "manual",
+    trustedEmailDomainsText: "",
   };
 }
 
@@ -132,6 +140,8 @@ function oidcProviderToForm(provider: OidcProviderAdminItem): OidcProviderFormSt
     use_nonce: provider.use_nonce,
     client_secret: "",
     clear_client_secret: false,
+    linking_policy: provider.linking_policy ?? "manual",
+    trustedEmailDomainsText: (provider.trusted_email_domains ?? []).join("\n"),
   };
 }
 
@@ -154,6 +164,11 @@ function oidcPayloadFromForm(form: OidcProviderFormState): OidcProviderAdminPayl
     use_nonce: form.use_nonce,
     client_secret: clientSecret || null,
     clear_client_secret: form.clear_client_secret,
+    linking_policy: form.linking_policy,
+    trusted_email_domains: form.trustedEmailDomainsText
+      .split(/[\n,]/)
+      .map((domain) => domain.trim().toLowerCase().replace(/^@/, ""))
+      .filter(Boolean),
   };
 }
 
@@ -317,6 +332,18 @@ export default function AuthenticationSettingsPage() {
   }, [loadLdapProviders, loadOidcProviders, setGeneralSettings]);
 
   const handleToggle = (field: AuthenticationToggleField, value: boolean) => {
+    if (field === "require_passkey_for_admins" && !value && settings?.general.require_passkey_for_admins) {
+      authenticationConfirmation.requestConfirmation({
+        title: "Disable required admin passkeys?",
+        description: "Administrator sessions will no longer require a recent passkey verification for sensitive actions.",
+        confirmLabel: "Disable protection",
+        tone: "danger",
+        impacts: ["Any active authorized Admin or Superadmin session will be sufficient for sensitive administration actions."],
+        warning: "This weakens protection for every administrator account.",
+        onConfirm: () => setSettings((prev) => (prev ? { ...prev, general: { ...prev.general, [field]: value } } : prev)),
+      });
+      return;
+    }
     setSettings((prev) => (prev ? { ...prev, general: { ...prev.general, [field]: value } } : prev));
   };
 
@@ -359,6 +386,10 @@ export default function AuthenticationSettingsPage() {
                 allow_login_access_keys: defaults.general.allow_login_access_keys,
                 allow_login_endpoint_list: defaults.general.allow_login_endpoint_list,
                 allow_login_custom_endpoint: defaults.general.allow_login_custom_endpoint,
+                require_passkey_for_admins: defaults.general.require_passkey_for_admins,
+                require_passkey_for_users: defaults.general.require_passkey_for_users,
+                allow_user_profile_name_edit: defaults.general.allow_user_profile_name_edit,
+                allow_user_external_identity_unlink: defaults.general.allow_user_external_identity_unlink,
               },
             }
           : defaults
@@ -420,7 +451,7 @@ export default function AuthenticationSettingsPage() {
 
   const oidcFormReadOnly = oidcFormMode === "view" || selectedOidcProvider?.editable === false;
 
-  const isOidcFieldLocked = (field: keyof OidcProviderFormState | "scopes") => {
+  const isOidcFieldLocked = (field: keyof OidcProviderFormState | "scopes" | "trusted_email_domains") => {
     if (oidcFormReadOnly) return true;
     if (field === "provider_id" && oidcFormMode === "edit") return true;
     const locks = selectedOidcProvider?.field_locks ?? {};
@@ -659,6 +690,33 @@ export default function AuthenticationSettingsPage() {
                 </p>
               )}
             </SettingsItem>
+          </SettingsSection>
+          <SettingsSection
+            title="IDENTITY SECURITY POLICY"
+            description="Choose which accounts require passkeys and which identity changes users may perform themselves."
+            layout="grid"
+            columns={1}
+          >
+            <SettingsItem
+              title="Require passkeys for administrators"
+              description="Require a passkey for Admin and Superadmin sign-in and recent WebAuthn verification for sensitive actions. Enabled by default."
+              action={<SettingsToggleAction checked={settings.general.require_passkey_for_admins} onChange={(value) => handleToggle("require_passkey_for_admins", value)} ariaLabel="Require passkeys for administrators" />}
+            />
+            <SettingsItem
+              title="Require passkeys for standard users"
+              description="Require a passkey for ui_user and ui_none accounts at their next sign-in. Disabled by default."
+              action={<SettingsToggleAction checked={settings.general.require_passkey_for_users} onChange={(value) => handleToggle("require_passkey_for_users", value)} ariaLabel="Require passkeys for standard users" />}
+            />
+            <SettingsItem
+              title="Allow users to edit their profile name"
+              description="Let users change their own display name. Disabled by default for enterprise-managed profiles."
+              action={<SettingsToggleAction checked={settings.general.allow_user_profile_name_edit} onChange={(value) => handleToggle("allow_user_profile_name_edit", value)} ariaLabel="Allow users to edit their profile name" />}
+            />
+            <SettingsItem
+              title="Allow users to unlink external identities"
+              description="Let users unlink an identity only when another primary sign-in method remains. Disabled by default."
+              action={<SettingsToggleAction checked={settings.general.allow_user_external_identity_unlink} onChange={(value) => handleToggle("allow_user_external_identity_unlink", value)} ariaLabel="Allow users to unlink external identities" />}
+            />
           </SettingsSection>
         </SettingsFormCard>
       )}
@@ -921,6 +979,35 @@ export default function AuthenticationSettingsPage() {
                   {oidcLockHint("icon_url")}
                 </label>
               </div>
+              <label className="block">
+                <span className={settingsLabelClassName}>Identity linking policy</span>
+                <select
+                  aria-label="Identity linking policy"
+                  className={settingsInputClassName}
+                  value={oidcForm.linking_policy}
+                  onChange={(event) => updateOidcFormField("linking_policy", event.target.value as "manual" | "trusted_email")}
+                  disabled={isOidcFieldLocked("linking_policy")}
+                >
+                  <option value="manual">Manual approval</option>
+                  <option value="trusted_email">Trusted verified email</option>
+                </select>
+                <p className={settingsHelperClassName}>Trusted email linking applies only to active standard local-password accounts without any prior external identity.</p>
+                {oidcLockHint("linking_policy")}
+              </label>
+              <label className="block">
+                <span className={settingsLabelClassName}>Trusted email domains</span>
+                <textarea
+                  aria-label="Trusted email domains"
+                  className={settingsInputClassName}
+                  value={oidcForm.trustedEmailDomainsText}
+                  onChange={(event) => updateOidcFormField("trustedEmailDomainsText", event.target.value)}
+                  disabled={isOidcFieldLocked("trusted_email_domains") || oidcForm.linking_policy !== "trusted_email"}
+                  rows={3}
+                  placeholder="example.com"
+                />
+                <p className={settingsHelperClassName}>Enter exact domains, one per line. Subdomains are not matched implicitly.</p>
+                {oidcLockHint("trusted_email_domains")}
+              </label>
               <label className="block md:col-span-2">
                 <span className={settingsLabelClassName}>Client secret</span>
                 <input

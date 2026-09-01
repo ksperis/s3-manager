@@ -74,6 +74,10 @@ from app.services.session_service import SessionIntrospectionError, SessionServi
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.services.users_service import UsersService, get_users_service
 from app.services.webauthn_service import WebAuthnSecurityError, WebAuthnService
+from app.services.identity_security_policy import (
+    passkey_required_for_role,
+    require_admin_sensitive_action,
+)
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.utils.request_security import client_ip, require_trusted_origin
 from app.utils.s3_endpoint import validate_custom_login_s3_endpoint
@@ -122,7 +126,7 @@ def _finish_user_primary_auth(
     redirect_path: Optional[str] = None,
 ) -> AuthenticationResponse:
     has_passkey = WebAuthnService(users_service.db).has_credentials(user.id)
-    if has_passkey or is_admin_ui_role(user.role):
+    if has_passkey or passkey_required_for_role(users_service.db, user.role):
         result_status = "mfa_required" if has_passkey else "mfa_enrollment_required"
         set_pre_auth_cookie(response, user, "mfa_authentication" if has_passkey else "mfa_enrollment")
         return AuthenticationResponse(status=result_status, user=users_service.user_to_out(user), redirect_path=redirect_path)
@@ -254,7 +258,7 @@ def register_admin(
     current_user: User = Depends(get_current_ui_superadmin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
-    require_recent_mfa(request, users_service.db)
+    require_admin_sensitive_action(request, users_service.db, current_user)
     try:
         user = users_service.create_super_admin(payload)
     except ValueError as exc:

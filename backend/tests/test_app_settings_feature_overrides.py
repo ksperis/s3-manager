@@ -209,6 +209,15 @@ def test_manager_ceph_s3_user_keys_flag_default_enabled():
     assert settings.general.manager_ceph_s3_user_keys_enabled is True
 
 
+def test_legacy_app_settings_payload_gets_restrictive_identity_security_defaults():
+    settings = AppSettings.model_validate({"general": {"manager_enabled": False}})
+
+    assert settings.general.require_passkey_for_admins is True
+    assert settings.general.require_passkey_for_users is False
+    assert settings.general.allow_user_profile_name_edit is False
+    assert settings.general.allow_user_external_identity_unlink is False
+
+
 def test_manager_rgw_usage_metrics_flag_default_enabled():
     settings = AppSettings()
     assert settings.manager.manager_rgw_usage_metrics_enabled is True

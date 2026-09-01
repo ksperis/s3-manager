@@ -226,8 +226,11 @@ class WebAuthnService:
             WebAuthnCredential.revoked_at.is_(None),
             WebAuthnCredential.id != row.id,
         ).first()
-        if user.role in {"ui_admin", "ui_superadmin"} and remaining is None:
-            raise WebAuthnSecurityError("Administrators must keep at least one passkey")
+        if remaining is None:
+            from app.services.identity_security_policy import passkey_required_for_role
+
+            if passkey_required_for_role(self.db, user.role):
+                raise WebAuthnSecurityError("This account must keep at least one passkey")
         row.revoked_at = utcnow()
         user.auth_version += 1
         self.db.add_all([row, user])

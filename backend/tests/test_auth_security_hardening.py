@@ -23,13 +23,15 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.db import AuthChallenge, AuthSession, ExternalIdentity, RefreshToken, S3Session, User, UserRole, WebAuthnCredential
+from app.db import AppSetting, AuthChallenge, AuthSession, ExternalIdentity, RefreshToken, S3Session, User, UserRole, WebAuthnCredential
 from app.db import AuditLog
 from app.main import app
+from app.models.app_settings import AppSettings
 from app.models.user import UserUpdate
 from app.routers import dependencies
 from app.routers import auth as auth_router
 from app.services.api_token_service import ApiTokenService
+from app.services.app_settings_service import load_app_settings_for_db
 from app.services.auth_session_service import AuthSessionError, AuthSessionService, RefreshReplayError
 from app.services.external_identity_user_service import ExternalIdentityLinkRequiredError
 from app.services.oidc_service import OIDCStateError
@@ -63,6 +65,16 @@ def _user(db_session, *, email: str = "security@example.com", role: str = UserRo
     db_session.commit()
     db_session.refresh(row)
     return row
+
+
+def _set_general_setting(db_session, field: str, value: bool) -> None:
+    load_app_settings_for_db(db_session)
+    row = db_session.query(AppSetting).filter(AppSetting.key == "default").one()
+    settings = AppSettings.model_validate_json(row.payload_json)
+    setattr(settings.general, field, value)
+    row.payload_json = settings.model_dump_json(indent=2)
+    db_session.add(row)
+    db_session.commit()
 
 
 def test_ui_jwt_is_strictly_typed_and_rejects_wrong_type_audience_and_legacy_token(db_session):
@@ -206,6 +218,37 @@ def test_enrolled_passkey_requires_mfa_for_a_non_admin_login(auth_client, db_ses
     assert "access_token" not in response.text
 
 
+@pytest.mark.parametrize(
+    ("role", "admin_required", "user_required", "expected_status"),
+    [
+        (UserRole.UI_ADMIN.value, True, False, "mfa_enrollment_required"),
+        (UserRole.UI_ADMIN.value, False, False, "authenticated"),
+        (UserRole.UI_USER.value, True, False, "authenticated"),
+        (UserRole.UI_USER.value, True, True, "mfa_enrollment_required"),
+    ],
+)
+def test_passkey_requirement_follows_role_policy(
+    auth_client,
+    db_session,
+    role,
+    admin_required,
+    user_required,
+    expected_status,
+):
+    user = _user(db_session, email=f"policy-{role}-{admin_required}-{user_required}@example.com", role=role)
+    _set_general_setting(db_session, "require_passkey_for_admins", admin_required)
+    _set_general_setting(db_session, "require_passkey_for_users", user_required)
+
+    response = auth_client.post(
+        "/api/auth/login",
+        data={"username": user.email, "password": "correct horse battery staple"},
+        headers={**trusted_origin_headers(), "Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == expected_status
+
+
 def test_profile_webauthn_step_up_renews_current_session_without_issuing_tokens(
     auth_client,
     db_session,
@@ -240,7 +283,7 @@ def test_profile_webauthn_step_up_renews_current_session_without_issuing_tokens(
         .all()
     }
 
-    denied = auth_client.get("/api/auth/admin/sessions")
+    denied = auth_client.get("/api/admin/identity/sessions")
     assert denied.status_code == 403
     assert denied.json()["detail"] == "Recent WebAuthn verification required"
 
@@ -275,7 +318,7 @@ def test_profile_webauthn_step_up_renews_current_session_without_issuing_tokens(
         .filter(RefreshToken.auth_session_id == credentials.session.id)
         .all()
     } == refresh_token_ids
-    assert auth_client.get("/api/auth/admin/sessions").status_code == 200
+    assert auth_client.get("/api/admin/identity/sessions").status_code == 200
     audit = db_session.query(AuditLog).filter(AuditLog.action == "webauthn_step_up_success").one()
     assert audit.entity_id == credentials.session.id
 
@@ -378,6 +421,14 @@ def test_external_identity_inventory_and_revocation_require_a_recent_passkey(aut
     assert inventory.json()[0]["provider_id"] == "company"
     assert "subject" not in inventory.json()[0]
 
+    denied = auth_client.delete(
+        f"/api/auth/security/external-identities/{identity.id}",
+        headers=trusted_origin_headers(csrf_token=credentials.csrf_token),
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == "External identity unlinking is disabled by the application administrator"
+
+    _set_general_setting(db_session, "allow_user_external_identity_unlink", True)
     response = auth_client.delete(
         f"/api/auth/security/external-identities/{identity.id}",
         headers=trusted_origin_headers(csrf_token=credentials.csrf_token),
@@ -387,6 +438,62 @@ def test_external_identity_inventory_and_revocation_require_a_recent_passkey(aut
     db_session.refresh(credentials.session)
     assert identity.revoked_at is not None
     assert credentials.session.revoked_at is not None
+
+
+def test_external_identity_cannot_remove_the_last_primary_sign_in_method(auth_client, db_session):
+    user = _user(db_session, email="last-primary@example.com")
+    user.hashed_password = None
+    identity = ExternalIdentity(
+        id="last-primary-identity",
+        user_id=user.id,
+        provider_type="oidc",
+        provider_id="company",
+        subject="last-primary-subject",
+        email=user.email,
+        email_verified=True,
+    )
+    db_session.add_all(
+        [
+            user,
+            identity,
+            WebAuthnCredential(
+                id="last-primary-passkey",
+                user_id=user.id,
+                credential_id="last-primary-passkey-id",
+                public_key="public-key",
+                sign_count=0,
+                transports_json="[]",
+                name="Passkey",
+            ),
+        ]
+    )
+    db_session.commit()
+    credentials = authenticate_ui_client(auth_client, db_session, user, mfa_verified=True)
+    _set_general_setting(db_session, "allow_user_external_identity_unlink", True)
+
+    response = auth_client.delete(
+        f"/api/auth/security/external-identities/{identity.id}",
+        headers=trusted_origin_headers(csrf_token=credentials.csrf_token),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "The last primary sign-in method cannot be removed"
+    db_session.refresh(identity)
+    assert identity.revoked_at is None
+
+
+def test_profile_name_edit_is_disabled_by_default_and_can_be_enabled(auth_client, db_session):
+    user = _user(db_session, email="profile-name-policy@example.com")
+    credentials = authenticate_ui_client(auth_client, db_session, user)
+    headers = trusted_origin_headers(csrf_token=credentials.csrf_token)
+
+    denied = auth_client.put("/api/users/me", json={"full_name": "New name"}, headers=headers)
+    assert denied.status_code == 403
+
+    _set_general_setting(db_session, "allow_user_profile_name_edit", True)
+    allowed = auth_client.put("/api/users/me", json={"full_name": "New name"}, headers=headers)
+    assert allowed.status_code == 200
+    assert allowed.json()["full_name"] == "New name"
 
 
 def test_recovery_code_regeneration_revokes_sessions_and_api_tokens(auth_client, db_session):
@@ -443,19 +550,33 @@ def test_superadmin_can_inventory_and_revoke_another_users_session(auth_client, 
         mfa_verified=False,
     )
 
-    inventory = auth_client.get("/api/auth/admin/sessions")
+    inventory = auth_client.get("/api/admin/identity/sessions")
     assert inventory.status_code == 200
     by_id = {row["id"]: row for row in inventory.json()}
     assert by_id[current.session.id]["user_id"] == superadmin.id
     assert by_id[other_credentials.session.id]["user_id"] == other.id
 
     response = auth_client.delete(
-        f"/api/auth/admin/sessions/{other_credentials.session.id}",
+        f"/api/admin/identity/sessions/{other_credentials.session.id}",
         headers=trusted_origin_headers(csrf_token=current.csrf_token),
     )
     assert response.status_code == 204
     db_session.refresh(other_credentials.session)
     assert other_credentials.session.revoked_at is not None
+
+
+def test_admin_sensitive_actions_skip_step_up_when_admin_passkeys_are_not_required(auth_client, db_session):
+    admin = _user(
+        db_session,
+        email="policy-disabled-admin@example.com",
+        role=UserRole.UI_ADMIN.value,
+    )
+    authenticate_ui_client(auth_client, db_session, admin, mfa_verified=False)
+    _set_general_setting(db_session, "require_passkey_for_admins", False)
+
+    response = auth_client.get("/api/admin/identity/sessions")
+
+    assert response.status_code == 200
 
 
 def test_refresh_replay_revokes_the_entire_family(db_session):

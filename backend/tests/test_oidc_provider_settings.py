@@ -59,6 +59,8 @@ def test_environment_oidc_provider_parses_security_lists_from_nested_env(monkeyp
             '["accounts.google.com","oauth2.googleapis.com","www.googleapis.com",'
             '"openidconnect.googleapis.com"]'
         ),
+        "OIDC_PROVIDERS__google__linking_policy": "trusted_email",
+        "OIDC_PROVIDERS__google__trusted_email_domains": '["Example.COM","example.com"]',
     }
     for name, value in variables.items():
         monkeypatch.setenv(name, value)
@@ -72,6 +74,8 @@ def test_environment_oidc_provider_parses_security_lists_from_nested_env(monkeyp
         "www.googleapis.com",
         "openidconnect.googleapis.com",
     ]
+    assert provider.linking_policy == "trusted_email"
+    assert provider.trusted_email_domains == ["example.com"]
 
 
 def _ui_provider(provider_id: str, *, enabled: bool = True, display_name: str | None = None) -> OidcProvider:
@@ -230,18 +234,25 @@ def test_admin_oidc_api_never_returns_secret_and_preserves_replaces_clears_it(cl
         "icon_url": "https://issuer.example.test/icon.svg",
         "use_pkce": True,
         "use_nonce": True,
+        "linking_policy": "trusted_email",
+        "trusted_email_domains": ["Example.COM"],
     }
     response = client.post("/api/admin/settings/oidc/providers", json=payload)
     assert response.status_code == 201, response.text
     body = response.json()
     assert "client_secret" not in body
     assert body["has_client_secret"] is True
+    assert body["linking_policy"] == "trusted_email"
+    assert body["trusted_email_domains"] == ["example.com"]
 
     raw_secret = db_session.execute(
         text("select client_secret from oidc_providers where provider_id = 'ui'")
     ).scalar_one()
     assert raw_secret != "first-secret"
     assert db_session.query(OidcProvider).filter(OidcProvider.provider_id == "ui").one().client_secret == "first-secret"
+    provider = db_session.query(OidcProvider).filter(OidcProvider.provider_id == "ui").one()
+    assert provider.linking_policy == "trusted_email"
+    assert provider.trusted_email_domains_json == '["example.com"]'
 
     listed = client.get("/api/admin/settings/oidc/providers")
     assert listed.status_code == 200, listed.text

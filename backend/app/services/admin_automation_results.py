@@ -12,7 +12,7 @@ class AdminAutomationResultFactory:
     def _created(
         resource: str,
         key: str,
-        entity_id: Optional[int] = None,
+        entity_id: Optional[int | str] = None,
         *,
         dry_run: bool,
     ) -> AdminAutomationItemResult:
@@ -29,7 +29,7 @@ class AdminAutomationResultFactory:
     def _updated(
         resource: str,
         key: str,
-        entity_id: Optional[int] = None,
+        entity_id: Optional[int | str] = None,
         diff: Optional[dict[str, dict[str, Any]]] = None,
         *,
         dry_run: bool,
@@ -48,7 +48,7 @@ class AdminAutomationResultFactory:
     def _deleted(
         resource: str,
         key: str,
-        entity_id: Optional[int] = None,
+        entity_id: Optional[int | str] = None,
         *,
         dry_run: bool,
     ) -> AdminAutomationItemResult:

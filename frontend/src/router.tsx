@@ -44,6 +44,7 @@ const S3AccountsPage = lazy(() => import("./features/admin/AccountsPage"));
 const AuditLogsPage = lazy(() => import("./features/admin/AuditLogsPage"));
 const UsersPage = lazy(() => import("./features/admin/UsersPage"));
 const GroupsPage = lazy(() => import("./features/admin/GroupsPage"));
+const IdentitySecurityPage = lazy(() => import("./features/admin/IdentitySecurityPage"));
 const AdminDashboard = lazy(() => import("./features/admin/AdminDashboard"));
 const AdminMetricsPage = lazy(() => import("./features/admin/AdminMetricsPage"));
 const AdminPortalRequestsPage = lazy(() => import("./features/admin/AdminPortalRequestsPage"));
@@ -124,6 +125,7 @@ const ADMIN_SETTINGS_PATHS = [
   "/admin/browser-settings",
   "/admin/portal-settings",
   "/admin/key-rotation",
+  "/admin/api-tokens",
 ];
 
 function isAdminSettingsPath(pathname: string): boolean {
@@ -154,6 +156,7 @@ export const buildAdminNav = (
       disabledHint: !portalEnabled ? "Portal feature is disabled in General settings." : undefined,
     },
     workspacePageLink(ADMIN_PAGE_CONTRACTS["key-rotation"]),
+    workspacePageLink(ADMIN_PAGE_CONTRACTS["api-tokens"]),
   ];
 
   return [
@@ -166,6 +169,7 @@ export const buildAdminNav = (
       links: [
         workspacePageLink(ADMIN_PAGE_CONTRACTS.users),
         workspacePageLink(ADMIN_PAGE_CONTRACTS.groups),
+        workspacePageLink(ADMIN_PAGE_CONTRACTS["identity-security"]),
       ],
     },
     {
@@ -283,6 +287,7 @@ export function createAppRoutes() {
             <Route path="endpoint-status/:endpointId" element={<AdminEndpointStatusDetailRoute />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="groups" element={<GroupsPage />} />
+            <Route path="identity-security" element={<IdentitySecurityPage />} />
             <Route path="audit" element={<AuditLogsPage />} />
             <Route path="metrics" element={<AdminMetricsPage />} />
             <Route path="portal-requests" element={<AdminPortalRequestsPage />} />

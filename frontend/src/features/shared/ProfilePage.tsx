@@ -152,8 +152,8 @@ export default function ProfilePage({
   const storedUser = useMemo<SessionUser | null>(() => readStoredUser(), []);
   const authType = storedUser?.authType ?? null;
   const isS3Session = authType === "s3_session";
-  const canChangePassword = authType !== "s3_session" && authType !== "oidc";
   const { generalSettings } = useGeneralSettings();
+  const canEditProfileName = !isS3Session && generalSettings.allow_user_profile_name_edit;
   const { theme, setTheme } = useTheme();
   const { languagePreference, setLanguagePreference } = useLanguage();
   const [profileLoading, setProfileLoading] = useState(false);
@@ -167,12 +167,6 @@ export default function ProfilePage({
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const [profileTouched, setProfileTouched] = useState(false);
   const [profileInitialSignature, setProfileInitialSignature] = useState(() => stableSignature({ fullName: "" }));
-  const [passwordSaving, setPasswordSaving] = useState(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
   const [preferencesMessageTone, setPreferencesMessageTone] = useState<"success" | "error">("success");
   const [preferencesTheme, setPreferencesTheme] = useState<"light" | "dark">(theme);
@@ -268,11 +262,9 @@ export default function ProfilePage({
       quotaAlertsGlobalWatch,
     ]
   );
-  const passwordHasUnsavedChanges = Boolean(currentPassword || newPassword || confirmPassword);
   const settingsHaveUnsavedChanges =
     showSettingsCards &&
     ((profileTouched && profileCurrentSignature !== profileInitialSignature) ||
-      passwordHasUnsavedChanges ||
       (preferencesTouched && preferencesCurrentSignature !== preferencesInitialSignature));
 
   useEffect(() => {
@@ -696,7 +688,7 @@ export default function ProfilePage({
 
   const handleProfileSave = async (event: FormEvent) => {
     event.preventDefault();
-    if (isS3Session) return;
+    if (!canEditProfileName) return;
     setProfileSaving(true);
     setProfileError(null);
     setProfileMessage(null);
@@ -779,37 +771,6 @@ export default function ProfilePage({
       setAvatarError(getErrorMessage(error, "Unable to remove profile image."));
     } finally {
       setAvatarBusy(false);
-    }
-  };
-
-  const handlePasswordSave = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!canChangePassword || isS3Session) return;
-    setPasswordError(null);
-    setPasswordMessage(null);
-    if (!currentPassword || !newPassword) {
-      setPasswordError("Enter the current password and the new password.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Password confirmation does not match.");
-      return;
-    }
-    setPasswordSaving(true);
-    try {
-      await updateCurrentUser({
-        current_password: currentPassword,
-        new_password: newPassword,
-      });
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setPasswordMessage("Password modifie.");
-    } catch (error) {
-      console.error(error);
-      setPasswordError(getErrorMessage(error, "Unable to change password."));
-    } finally {
-      setPasswordSaving(false);
     }
   };
 
@@ -1179,7 +1140,13 @@ export default function ProfilePage({
         <form onSubmit={handleProfileSave} className={cardClasses}>
           <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
             <h2 className={sectionHeadingClasses}>Identity</h2>
-            <p className={sectionDescriptionClasses}>Update the display name for your account.</p>
+            <p className={sectionDescriptionClasses}>
+              {isS3Session
+                ? "Review the identity assigned to this temporary session."
+                : canEditProfileName
+                  ? "Update the display name for your account."
+                  : "Review your account identity and profile image."}
+            </p>
           </div>
           <div className="space-y-4 px-5 py-5">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1197,8 +1164,8 @@ export default function ProfilePage({
                   setProfileTouched(true);
                   setFullName(event.target.value);
                 }}
-                disabled={isS3Session}
-                className={isS3Session ? "cursor-not-allowed opacity-70" : undefined}
+                disabled={!canEditProfileName}
+                className={!canEditProfileName ? "cursor-not-allowed opacity-70" : undefined}
                 placeholder="Your name"
               />
             </div>
@@ -1285,55 +1252,15 @@ export default function ProfilePage({
                 Temporary S3 session: user profile is not editable.
               </p>
             )}
+            {!isS3Session && !canEditProfileName && (
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                Your display name is managed by an application administrator.
+              </p>
+            )}
             {profileMessage && <UiInlineMessage tone="success">{profileMessage}</UiInlineMessage>}
             <div>
-              <UiButton type="submit" size="sm" disabled={profileSaving || isS3Session}>
+              <UiButton type="submit" size="sm" disabled={profileSaving || !canEditProfileName}>
                 {profileSaving ? "Saving..." : "Save profile"}
-              </UiButton>
-            </div>
-          </div>
-        </form>
-
-        <form onSubmit={handlePasswordSave} className={cardClasses}>
-          <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-            <h2 className={sectionHeadingClasses}>Password</h2>
-            <p className={sectionDescriptionClasses}>Update your sign-in password.</p>
-          </div>
-          <div className="space-y-4 px-5 py-5">
-            {!canChangePassword ? (
-              <PageBanner tone="info">
-                Password change is not available for this authentication mode.
-              </PageBanner>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <UiInput
-                  label="Current"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  autoComplete="current-password"
-                />
-                <UiInput
-                  label="New"
-                  type="password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  autoComplete="new-password"
-                />
-                <UiInput
-                  label="Confirm"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-            )}
-            {passwordError && <UiInlineMessage tone="error">{passwordError}</UiInlineMessage>}
-            {passwordMessage && <UiInlineMessage tone="success">{passwordMessage}</UiInlineMessage>}
-            <div>
-              <UiButton type="submit" size="sm" disabled={passwordSaving || !canChangePassword}>
-                {passwordSaving ? "Updating..." : "Change password"}
               </UiButton>
             </div>
           </div>

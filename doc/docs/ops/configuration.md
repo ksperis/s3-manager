@@ -115,7 +115,9 @@ Common environment fields:
 - `OIDC_PROVIDERS__<key>__REDIRECT_URI`
 - `OIDC_PROVIDERS__<key>__SCOPES`
 - optional behavior fields: `PROMPT`, `ENABLED`, `ICON_URL`, `USE_PKCE`,
-  `USE_NONCE`, `ALLOWED_ALGORITHMS`, and `ALLOWED_HOSTS`
+  `USE_NONCE`, `ALLOWED_ALGORITHMS`, `ALLOWED_HOSTS`, `LINKING_POLICY`, and
+  `TRUSTED_EMAIL_DOMAINS`. `trusted_email` is OIDC-only and requires exact,
+  normalized domains plus the verified-email eligibility rules.
 
 LDAP providers can be configured either from Admin **Settings > Authentication**
 or with nested environment variables:
@@ -145,7 +147,7 @@ Common environment fields:
 
 Provider keys must match `[a-z0-9_-]+`. `ALLOW_INSECURE=true`,
 `TLS_VERIFY=false`, and `ALLOW_LEGACY_TLS=true` are rejected when
-`APP_ENV=production`. Email collisions are never linked automatically.
+`APP_ENV=production`. LDAP email collisions are never linked automatically.
 
 LDAP only authenticates the UI identity. First LDAP login creates a user with
 `ui_none`; admins still grant roles and storage access in BucketReef.
@@ -165,7 +167,7 @@ persisted setting.
 Managed from Admin UI:
 
 - General feature toggles (`manager_enabled`, `portal_enabled`, `browser_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`, `billing_enabled`, `endpoint_status_enabled`).
-- Authentication settings (`allow_login_access_keys`, endpoint selection for access-key login, custom login endpoints, and private S3 connections for UI users).
+- Authentication settings (`allow_login_access_keys`, endpoint selection for access-key login, custom login endpoints, `require_passkey_for_admins`, `require_passkey_for_users`, `allow_user_profile_name_edit`, and `allow_user_external_identity_unlink`). The defaults require passkeys only for Admins and keep both self-service permissions disabled.
 - Quota supervision toggles (`quota_alerts_enabled`, `usage_history_enabled`).
 - Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`).
 - Portal settings (`portal`): standalone Browser access (`browser_access_enabled`, disabled by default), IAM key availability, private Storage Space creation, portal user access-key creation, server access log retention for newly created technical log buckets, max portal user keys, and bucket defaults. Portal settings can be overridden per account by a super-admin. The per-account `portal_settings_delegated` flag is disabled by default; when enabled, project Portal Managers can edit the same shared override from `/portal/settings`. Disabling delegation keeps the stored override effective but read-only in Portal. `bucket_defaults.noncurrent_version_expiration_days` is the internal key for **Version history retention**; it is a positive integer (90 by default) and applies only when provisioning a new Storage Space with the default lifecycle enabled. Existing buckets are not reconciled automatically.

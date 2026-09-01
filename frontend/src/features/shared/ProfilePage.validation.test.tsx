@@ -182,6 +182,15 @@ describe("ProfilePage live validation", () => {
     localStorage.clear();
   });
 
+  it("describes an administrator-managed identity as read-only", async () => {
+    render(<ProfilePage showPageHeader={false} showSettingsCards showConnectionsSection={false} />);
+
+    expect(await screen.findByText("Review your account identity and profile image.")).toBeInTheDocument();
+    expect(screen.getByText("Your display name is managed by an application administrator.")).toBeInTheDocument();
+    expect(screen.queryByText("Update the display name for your account.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save profile" })).toBeDisabled();
+  });
+
   it("selects an avatar source and explains identity-provider fallback", async () => {
     fetchCurrentUserMock.mockResolvedValue({
       full_name: "Admin User",

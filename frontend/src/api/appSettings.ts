@@ -70,6 +70,10 @@ export type GeneralSettings = {
   allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;
   allow_login_custom_endpoint: boolean;
+  require_passkey_for_admins: boolean;
+  require_passkey_for_users: boolean;
+  allow_user_profile_name_edit: boolean;
+  allow_user_external_identity_unlink: boolean;
 };
 
 export type GeneralFeatureLock = {

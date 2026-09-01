@@ -33,6 +33,8 @@ OIDC_PROVIDER_FIELDS = (
     "icon_url",
     "use_pkce",
     "use_nonce",
+    "linking_policy",
+    "trusted_email_domains",
     "client_secret",
 )
 
@@ -191,6 +193,8 @@ def _apply_payload(provider: OidcProvider, payload: OIDCProviderAdminPayload, *,
     provider.icon_url = payload.icon_url
     provider.use_pkce = bool(payload.use_pkce)
     provider.use_nonce = bool(payload.use_nonce)
+    provider.linking_policy = payload.linking_policy
+    provider.trusted_email_domains_json = _dump_string_list(payload.trusted_email_domains)
     if payload.clear_client_secret:
         provider.client_secret = None
     elif replace_secret or payload.client_secret is not None:
@@ -210,6 +214,8 @@ def _ui_provider_to_settings(provider: OidcProvider) -> OIDCProviderSettings:
         icon_url=provider.icon_url,
         use_pkce=bool(provider.use_pkce),
         use_nonce=bool(provider.use_nonce),
+        linking_policy=provider.linking_policy or "manual",
+        trusted_email_domains=_load_string_list(provider.trusted_email_domains_json),
     )
 
 
@@ -226,6 +232,8 @@ def _ui_provider_item(provider: OidcProvider) -> OIDCProviderAdminItem:
         icon_url=provider.icon_url,
         use_pkce=bool(provider.use_pkce),
         use_nonce=bool(provider.use_nonce),
+        linking_policy=provider.linking_policy or "manual",
+        trusted_email_domains=_load_string_list(provider.trusted_email_domains_json),
         source="ui",
         editable=True,
         has_client_secret=bool(provider.client_secret),
@@ -245,6 +253,8 @@ def _environment_provider_item(provider_id: str, provider: OIDCProviderSettings)
         icon_url=provider.icon_url,
         use_pkce=bool(provider.use_pkce),
         use_nonce=bool(provider.use_nonce),
+        linking_policy=provider.linking_policy,
+        trusted_email_domains=list(provider.trusted_email_domains or []),
         source="environment",
         editable=False,
         field_locks={
@@ -273,3 +283,14 @@ def _load_scopes(raw: str) -> list[str]:
 def _dump_scopes(scopes: list[str]) -> str:
     normalized = [item.strip() for item in scopes if isinstance(item, str) and item.strip()]
     return json.dumps(normalized or list(OIDC_PROVIDER_DEFAULT_SCOPES), separators=(",", ":"))
+
+
+def _load_string_list(raw: str) -> list[str]:
+    parsed = json.loads(raw or "[]")
+    if not isinstance(parsed, list) or any(not isinstance(item, str) for item in parsed):
+        raise ValueError("OIDC provider domains must be a JSON list of strings")
+    return [item for item in parsed if item]
+
+
+def _dump_string_list(values: list[str]) -> str:
+    return json.dumps(list(values or []), separators=(",", ":"))

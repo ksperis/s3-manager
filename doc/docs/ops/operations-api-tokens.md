@@ -5,11 +5,12 @@ Admin API tokens provide long-lived bearer authentication for automation.
 ## Key behavior
 
 - Managed via `/api/auth/api-tokens`.
+- The UI is available to Superadmins at **Settings > API tokens** (`/admin/api-tokens`), not on the personal Profile page.
 - Token value is shown once at creation.
 - Revocation is immediate.
 - Expiration is enforced server-side.
 - Default lifetime is 30 days and the hard maximum is 90 days.
-- Creation and revocation require recent WebAuthn verification.
+- Creation and revocation require recent WebAuthn verification when the global Admin passkey policy is enabled; otherwise an active authorized Admin session is sufficient.
 - The JWT and database row must contain the same scopes and `auth_version`.
 - Browser UI cookies cannot be combined with a Bearer token.
 

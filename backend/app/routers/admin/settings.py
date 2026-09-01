@@ -298,6 +298,8 @@ def _oidc_audit_metadata(payload: OIDCProviderAdminPayload, *, secret_action: st
             "icon_url",
             "use_pkce",
             "use_nonce",
+            "linking_policy",
+            "trusted_email_domains",
         ],
         "enabled": payload.enabled,
         "client_secret_action": secret_action,

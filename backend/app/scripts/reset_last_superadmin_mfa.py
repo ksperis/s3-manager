@@ -13,10 +13,11 @@ import argparse
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.db import AuthChallenge, RecoveryCode, User, WebAuthnCredential
+from app.db import User
 from app.db.enums import UserRole
 from app.services.audit_service import AuditService
-from app.services.auth_session_service import AuthSessionService
+from app.services.mfa_reset_service import MfaResetService
+from app.services.identity_security_policy import passkey_required_for_role
 
 
 class OperatorRecoveryError(ValueError):
@@ -39,18 +40,8 @@ def reset_last_superadmin_mfa(db: Session, *, email: str, confirmation: str) -> 
     if user.email.strip().lower() != normalized_email:
         raise OperatorRecoveryError("The supplied email does not match the sole active superadministrator")
 
-    db.query(WebAuthnCredential).filter(WebAuthnCredential.user_id == user.id).delete(synchronize_session=False)
-    db.query(RecoveryCode).filter(RecoveryCode.user_id == user.id).delete(synchronize_session=False)
-    db.query(AuthChallenge).filter(AuthChallenge.user_id == user.id).delete(synchronize_session=False)
-    user.auth_version += 1
-    db.add(user)
-    db.commit()
-
-    AuthSessionService(db).revoke_all_for_user(
-        user,
-        "operator_mfa_reset",
-        increment_version=False,
-    )
+    result = MfaResetService(db).reset(user, reason="operator_mfa_reset")
+    enrollment_required = passkey_required_for_role(db, user.role)
     AuditService(db).record_action(
         user=None,
         user_email=user.email,
@@ -59,7 +50,13 @@ def reset_last_superadmin_mfa(db: Session, *, email: str, confirmation: str) -> 
         action="operator_reset_last_superadmin_mfa",
         entity_type="user",
         entity_id=str(user.id),
-        metadata={"all_sessions_revoked": True, "passkey_enrollment_required": True},
+        metadata={
+            "all_sessions_revoked": True,
+            "passkey_enrollment_required": enrollment_required,
+            "passkeys_removed": result.passkeys_removed,
+            "recovery_codes_removed": result.recovery_codes_removed,
+            "challenges_removed": result.challenges_removed,
+        },
     )
     return user
 
@@ -78,7 +75,7 @@ def main() -> None:
         reset_email = user.email
     finally:
         db.close()
-    print(f"MFA reset completed for {reset_email}. A new passkey is required at next login.")
+    print(f"MFA reset completed for {reset_email}. The current passkey policy applies at next login.")
 
 
 if __name__ == "__main__":

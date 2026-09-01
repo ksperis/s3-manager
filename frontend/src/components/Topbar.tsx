@@ -12,7 +12,6 @@ import type { EffectiveUserAccess, UiRole, UserAvatarDescriptor } from "../api/u
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import {
   canAccessPrivateConnectionsSection,
-  isSuperAdminRole,
   readStoredUser,
   SESSION_USER_UPDATED_EVENT,
 } from "../utils/workspaces";
@@ -134,7 +133,6 @@ export default function Topbar({
   const isS3Session = storedUser?.authType === "s3_session";
   const canAccessPrivateConnections =
     !isS3Session && canAccessPrivateConnectionsSection(storedUser);
-  const canManageApiTokens = !isS3Session && isSuperAdminRole(storedUser?.role);
   const uiRoleLabel = useMemo(() => resolveUiRoleLabel(storedUser), [storedUser]);
 
   const isMobileViewport = useMediaQuery("(max-width: 767px)");
@@ -840,7 +838,7 @@ export default function Topbar({
                           User profile
                         </span>
                         <span className="shell-muted-text block ui-caption">
-                          Identity, password, preferences
+                          Personal details and preferences
                         </span>
                       </span>
                     </a>
@@ -860,26 +858,6 @@ export default function Topbar({
                           </span>
                           <span className="shell-muted-text block ui-caption">
                             Manage your endpoints and credentials
-                          </span>
-                        </span>
-                      </a>
-                    )}
-
-                    {canManageApiTokens && (
-                      <a
-                        href={`${profilePath}?tab=api-tokens`}
-                        role="menuitem"
-                        data-account-menu-item="true"
-                        onClick={() => setAccountMenuOpen(false)}
-                        className="shell-menu-item flex w-full items-start gap-2 rounded-md px-2.5 py-1.5 text-left transition"
-                      >
-                        <ApiKeyIcon className="shell-icon-muted mt-0.5 h-4 w-4" />
-                        <span>
-                          <span className="block ui-caption font-semibold text-[var(--shell-text)]">
-                            API tokens
-                          </span>
-                          <span className="shell-muted-text block ui-caption">
-                            Manage admin automation tokens
                           </span>
                         </span>
                       </a>
@@ -946,17 +924,6 @@ function LinkIcon(props: React.SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 14a4 4 0 0 1 0-5.66L12.34 6a4 4 0 0 1 5.66 5.66L16.5 13.2" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 10a4 4 0 0 1 0 5.66L11.66 18a4 4 0 0 1-5.66-5.66L7.5 10.8" />
-    </svg>
-  );
-}
-
-function ApiKeyIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <circle cx="8.5" cy="12" r="3" strokeWidth={1.5} />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.5 12h9" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 12v-2.5" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.25 12v-2" />
     </svg>
   );
 }

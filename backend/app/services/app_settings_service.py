@@ -127,12 +127,18 @@ def load_persisted_app_settings() -> AppSettings:
         return _load_persisted_settings_from_db(db)
 
 
+def load_app_settings_for_db(db) -> AppSettings:
+    """Load effective settings through an existing request transaction."""
+    return _apply_general_feature_overrides(_load_persisted_settings_from_db(db))
+
+
 def load_default_app_settings() -> AppSettings:
     return _apply_general_feature_overrides(AppSettings())
 
 
 def load_app_settings() -> AppSettings:
-    return _apply_general_feature_overrides(load_persisted_app_settings())
+    with _open_settings_session() as db:
+        return load_app_settings_for_db(db)
 
 
 def save_app_settings(settings: AppSettings) -> AppSettings:

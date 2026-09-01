@@ -78,6 +78,10 @@ function buildSettings(): AppSettings {
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,
+      require_passkey_for_admins: true,
+      require_passkey_for_users: false,
+      allow_user_profile_name_edit: false,
+      allow_user_external_identity_unlink: false,
     },
     manager: {
       manager_rgw_usage_metrics_enabled: true,
@@ -128,6 +132,8 @@ function buildOidcProvider(overrides: Partial<OidcProviderAdminItem> = {}): Oidc
     icon_url: null,
     use_pkce: true,
     use_nonce: true,
+    linking_policy: "manual",
+    trusted_email_domains: [],
     source: "ui",
     editable: true,
     field_locks: {},
@@ -150,6 +156,8 @@ function buildEnvOidcProvider(): OidcProviderAdminItem {
       "icon_url",
       "use_pkce",
       "use_nonce",
+      "linking_policy",
+      "trusted_email_domains",
       "client_secret",
     ].map((field) => [field, { forced: true, source: `OIDC_PROVIDERS__GOOGLE__${field.toUpperCase()}` }])
   );
@@ -285,7 +293,23 @@ describe("AuthenticationSettingsPage", () => {
     expect(screen.getByLabelText("Access-key login")).toBeInTheDocument();
     expect(screen.getByLabelText("Access-key endpoint list")).toBeInTheDocument();
     expect(screen.getByLabelText("Custom login endpoint")).toBeInTheDocument();
+    expect(screen.getByLabelText("Require passkeys for administrators")).toBeChecked();
+    expect(screen.getByLabelText("Require passkeys for standard users")).not.toBeChecked();
+    expect(screen.getByLabelText("Allow users to edit their profile name")).not.toBeChecked();
+    expect(screen.getByLabelText("Allow users to unlink external identities")).not.toBeChecked();
     expect(screen.queryByLabelText("Private S3 connections for UI users")).not.toBeInTheDocument();
+  });
+
+  it("warns explicitly before disabling required administrator passkeys", async () => {
+    const user = userEvent.setup();
+    render(<AuthenticationSettingsPage />);
+
+    await user.click(await screen.findByLabelText("Require passkeys for administrators"));
+
+    const dialog = screen.getByRole("dialog", { name: "Disable required admin passkeys?" });
+    expect(within(dialog).getByText(/weakens protection for every administrator account/i)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Disable protection" }));
+    expect(screen.getByLabelText("Require passkeys for administrators")).not.toBeChecked();
   });
 
   it("saves authentication changes and refreshes general settings context", async () => {
@@ -405,6 +429,8 @@ describe("AuthenticationSettingsPage", () => {
     await user.type(within(oidcSection).getByLabelText("Client ID"), "client-id");
     await user.type(within(oidcSection).getByLabelText("Redirect URI"), "https://app.example.test/auth/callback");
     await user.type(within(oidcSection).getByLabelText("Client secret"), "super-secret");
+    await user.selectOptions(within(oidcSection).getByLabelText("Identity linking policy"), "trusted_email");
+    await user.type(within(oidcSection).getByLabelText("Trusted email domains"), "Example.COM\ncorp.example.com");
     await user.click(within(oidcSection).getByRole("button", { name: "Save OIDC provider" }));
 
     await waitFor(() => {
@@ -414,6 +440,8 @@ describe("AuthenticationSettingsPage", () => {
     expect(payload.provider_id).toBe("google");
     expect(payload.client_secret).toBe("super-secret");
     expect(payload.scopes).toEqual(["openid", "email", "profile"]);
+    expect(payload.linking_policy).toBe("trusted_email");
+    expect(payload.trusted_email_domains).toEqual(["example.com", "corp.example.com"]);
     expect(screen.queryByDisplayValue("super-secret")).not.toBeInTheDocument();
   });
 

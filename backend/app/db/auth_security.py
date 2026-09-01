@@ -74,6 +74,7 @@ class ExternalIdentity(Base):
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     last_login_at = Column(UTCDateTime(), nullable=True)
     revoked_at = Column(UTCDateTime(), nullable=True, index=True)
+    link_source = Column(String, nullable=False, default="jit", server_default="jit")
 
     user = relationship("User", foreign_keys=[user_id])
 
@@ -98,6 +99,7 @@ class ExternalIdentityLinkRequest(Base):
     decided_at = Column(UTCDateTime(), nullable=True)
     decided_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     decision_reason = Column(String, nullable=True)
+    decision_source = Column(String, nullable=True)
 
 
 class WebAuthnCredential(Base):

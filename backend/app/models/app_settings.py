@@ -77,6 +77,10 @@ class GeneralSettings(ApiModel):
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False
+    require_passkey_for_admins: bool = True
+    require_passkey_for_users: bool = False
+    allow_user_profile_name_edit: bool = False
+    allow_user_external_identity_unlink: bool = False
 
 
 class GeneralFeatureLock(ApiModel):

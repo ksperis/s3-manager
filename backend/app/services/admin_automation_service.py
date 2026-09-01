@@ -24,6 +24,9 @@ from app.services.admin_automation_storage_endpoint_handler import (
     AdminAutomationStorageEndpointHandler,
 )
 from app.services.admin_automation_ui_user_handler import AdminAutomationUiUserHandler
+from app.services.admin_automation_external_identity_handler import (
+    AdminAutomationExternalIdentityHandler,
+)
 from app.services.audit_service import AuditService
 from app.services.s3_accounts_service import S3AccountsService
 from app.services.s3_connections_service import S3ConnectionsService
@@ -41,6 +44,7 @@ class AdminAutomationService(AdminAutomationResultFactory):
         )
         users = UsersService(db)
         self.ui_user_handler = AdminAutomationUiUserHandler(db, users)
+        self.external_identity_handler = AdminAutomationExternalIdentityHandler(db)
         self.account_link_handler = AdminAutomationAccountLinkHandler(db, users)
         self.s3_account_handler = AdminAutomationS3AccountHandler(
             db,
@@ -96,6 +100,19 @@ class AdminAutomationService(AdminAutomationResultFactory):
         if not should_stop():
             for item in payload.ui_users:
                 record(self.ui_user_handler.apply(item, payload.dry_run, current_user, audit_service))
+                if should_stop():
+                    break
+
+        if not should_stop():
+            for item in payload.external_identities:
+                record(
+                    self.external_identity_handler.apply(
+                        item,
+                        payload.dry_run,
+                        current_user,
+                        audit_service,
+                    )
+                )
                 if should_stop():
                     break
 

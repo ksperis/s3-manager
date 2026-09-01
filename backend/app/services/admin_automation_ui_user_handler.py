@@ -39,6 +39,7 @@ class AdminAutomationUiUserHandler(AdminAutomationResultFactory):
             if item.state == "absent":
                 if not user:
                     return self._skipped("ui_user", key, dry_run=dry_run)
+                self._ensure_target_management_allowed(user, current_user, deleting=True)
                 if dry_run:
                     return self._deleted("ui_user", key, user.id, dry_run=dry_run)
                 self.users.delete_user(user.id)
@@ -92,6 +93,8 @@ class AdminAutomationUiUserHandler(AdminAutomationResultFactory):
             diff = self._diff(user, item)
             if not diff:
                 return self._skipped("ui_user", key, dry_run=dry_run)
+            self._ensure_target_management_allowed(user, current_user)
+            self._ensure_superadmin_transition_safe(user, item, current_user)
             if dry_run:
                 return self._updated("ui_user", key, user.id, diff, dry_run=dry_run)
 
@@ -105,7 +108,7 @@ class AdminAutomationUiUserHandler(AdminAutomationResultFactory):
                 action="update_ui_user",
                 entity_type="ui_user",
                 entity_id=str(user.id),
-                metadata=update_payload.model_dump(exclude_unset=True, exclude_none=True),
+                metadata=self._safe_audit_metadata(update_payload),
             )
             return self._updated("ui_user", key, updated.id, diff, dry_run=dry_run)
         except Exception as exc:  # noqa: BLE001
@@ -196,10 +199,61 @@ class AdminAutomationUiUserHandler(AdminAutomationResultFactory):
 
     @staticmethod
     def _ensure_role_assignment_allowed(role: Optional[str], current_user: User) -> None:
-        if role == UserRole.UI_SUPERADMIN.value and not is_superadmin_ui_role(
+        if role in {UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value} and not is_superadmin_ui_role(
             current_user.role
         ):
-            raise ValueError("Only superadmin users can promote superadmins")
+            raise ValueError("Only superadmin users can assign administrator roles")
+
+    @staticmethod
+    def _safe_audit_metadata(payload: UserUpdate) -> dict[str, Any]:
+        metadata = payload.model_dump(exclude_unset=True, exclude_none=True)
+        if "password" in metadata:
+            metadata["password"] = "<redacted>"
+        return metadata
+
+    def _ensure_target_management_allowed(
+        self,
+        target: User,
+        current_user: User,
+        *,
+        deleting: bool = False,
+    ) -> None:
+        if not is_superadmin_ui_role(current_user.role) and target.role in {
+            UserRole.UI_ADMIN.value,
+            UserRole.UI_SUPERADMIN.value,
+        }:
+            raise ValueError("Administrators can manage only standard users")
+        if deleting and target.id == current_user.id:
+            raise ValueError("Administrators cannot delete their own account")
+        if deleting and target.role == UserRole.UI_SUPERADMIN.value and target.is_active:
+            active_count = self.db.query(User).filter(
+                User.role == UserRole.UI_SUPERADMIN.value,
+                User.is_active.is_(True),
+            ).count()
+            if active_count <= 1:
+                raise ValueError("The last active superadmin cannot be deleted")
+
+    def _ensure_superadmin_transition_safe(
+        self,
+        target: User,
+        item: UiUserApply,
+        current_user: User,
+    ) -> None:
+        spec = item.spec
+        if not spec or target.role != UserRole.UI_SUPERADMIN.value or not target.is_active:
+            return
+        next_role = spec.role or target.role
+        next_active = target.is_active if spec.is_active is None else bool(spec.is_active)
+        if next_role == UserRole.UI_SUPERADMIN.value and next_active:
+            return
+        if target.id == current_user.id:
+            raise ValueError("A superadmin cannot deactivate or demote their own account")
+        active_count = self.db.query(User).filter(
+            User.role == UserRole.UI_SUPERADMIN.value,
+            User.is_active.is_(True),
+        ).count()
+        if active_count <= 1:
+            raise ValueError("The last active superadmin cannot be deactivated or demoted")
 
     @staticmethod
     def _build_update(item: UiUserApply) -> UserUpdate:

@@ -56,10 +56,12 @@ API tokens; routes without an API-scope mapping reject it by default.
 
 The security inventory is exposed through `/api/auth/sessions`,
 `/api/auth/security/webauthn/credentials`, and
-`/api/auth/security/external-identities`. Mutating MFA and identity operations
-require recent WebAuthn verification. Superadmins use `/api/auth/admin/sessions`
-and `/api/auth/external-link-requests` to revoke sessions and decide manual
-federated-identity links.
+`/api/auth/security/external-identities`. Mutating personal security operations
+require recent WebAuthn when a passkey is enrolled or required, and recent
+primary authentication otherwise. Admins use `/api/admin/identity/sessions`
+and `/api/admin/identity/link-requests` within their role hierarchy to revoke
+sessions and decide manual federated-identity links; Admin step-up follows the
+global Admin passkey policy.
 
 An authenticated UI user can renew recent WebAuthn verification without
 creating a new session through

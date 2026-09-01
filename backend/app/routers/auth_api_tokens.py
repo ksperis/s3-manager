@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import ApiToken, User
 from app.models.api_token import ApiTokenCreateRequest, ApiTokenCreateResponse, ApiTokenInfo
-from app.routers.auth_session_guards import require_recent_mfa
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.api_token_service import ApiTokenError, ApiTokenNotFoundError, ApiTokenService
 from app.services.audit_service import AuditService
+from app.services.identity_security_policy import require_admin_sensitive_action
 from app.utils.http_errors import raise_http_exception_from_exception
 
 
@@ -39,7 +39,7 @@ def list_api_tokens(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
 ) -> list[ApiTokenInfo]:
-    require_recent_mfa(request, db)
+    require_admin_sensitive_action(request, db, current_user)
     return [
         _to_api_token_info(row)
         for row in ApiTokenService(db).list_for_user(current_user.id, include_revoked=include_revoked)
@@ -54,7 +54,7 @@ def create_api_token(
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> ApiTokenCreateResponse:
-    require_recent_mfa(request, db)
+    require_admin_sensitive_action(request, db, current_user)
     try:
         token, row = ApiTokenService(db).create_for_user(
             current_user,
@@ -83,7 +83,7 @@ def revoke_api_token(
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
-    require_recent_mfa(request, db)
+    require_admin_sensitive_action(request, db, current_user)
     try:
         row = ApiTokenService(db).revoke_for_user(user_id=current_user.id, token_id=token_id)
     except ApiTokenNotFoundError as exc:

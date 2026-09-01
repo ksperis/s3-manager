@@ -42,6 +42,7 @@ export type SessionUser = {
   full_name?: string | null;
   display_name?: string | null;
   avatar?: UserAvatarDescriptor | null;
+  has_local_password?: boolean | null;
   role?: UiRole | null;
   ui_language?: "en" | "fr" | "de" | null;
   ui_preferences?: UiPreferences | null;

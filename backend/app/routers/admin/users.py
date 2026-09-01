@@ -27,6 +27,10 @@ from app.services.user_associations_service import (
     get_user_associations_service,
 )
 from app.services.users_service import UsersService
+from app.services.identity_security_policy import (
+    ensure_actor_can_assign_role,
+    ensure_actor_can_manage_user,
+)
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
@@ -43,13 +47,63 @@ def _require_superadmin_for_privileged_change(
     role: Optional[str],
     can_access_ceph_admin: Optional[bool],
 ) -> None:
-    wants_superadmin = role == UserRole.UI_SUPERADMIN.value
+    wants_privileged_role = role in {
+        UserRole.UI_ADMIN.value,
+        UserRole.UI_SUPERADMIN.value,
+    }
     wants_ceph_admin_grant = can_access_ceph_admin is True
-    if (wants_superadmin or wants_ceph_admin_grant) and not is_superadmin_ui_role(current_user.role):
+    if (wants_privileged_role or wants_ceph_admin_grant) and not is_superadmin_ui_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only superadmin users can promote superadmins or grant privileged Ceph access",
+            detail="Only superadmin users can assign administrator roles or grant privileged Ceph access",
         )
+
+
+def _active_superadmin_count(users_service: UsersService, current_user: DbUser) -> int:
+    count = users_service.db.query(DbUser).filter(
+        DbUser.role == UserRole.UI_SUPERADMIN.value,
+        DbUser.is_active.is_(True),
+    ).count()
+    actor_is_persisted = users_service.db.query(DbUser.id).filter(DbUser.id == current_user.id).first()
+    if (
+        actor_is_persisted is None
+        and current_user.role == UserRole.UI_SUPERADMIN.value
+        and current_user.is_active
+    ):
+        count += 1
+    return count
+
+
+def _protect_superadmin_update(
+    current_user: DbUser,
+    target: DbUser,
+    payload: UserUpdate,
+    users_service: UsersService,
+) -> None:
+    next_role = payload.role or target.role
+    next_active = target.is_active if payload.is_active is None else payload.is_active
+    removes_active_superadmin = (
+        target.role == UserRole.UI_SUPERADMIN.value
+        and target.is_active
+        and (next_role != UserRole.UI_SUPERADMIN.value or not next_active)
+    )
+    if current_user.id == target.id and removes_active_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A superadmin cannot deactivate or demote their own account",
+        )
+    if removes_active_superadmin and _active_superadmin_count(users_service, current_user) <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The last active superadmin cannot be deactivated or demoted",
+        )
+
+
+def _safe_update_audit_metadata(payload: UserUpdate) -> dict:
+    metadata = payload.model_dump(exclude_unset=True, exclude_none=True)
+    if "password" in metadata:
+        metadata["password"] = "<redacted>"
+    return metadata
 
 
 def _require_superadmin_for_group_privileges(
@@ -107,6 +161,10 @@ def create_user(
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
+    ensure_actor_can_assign_role(
+        current_user,
+        payload.role or UserRole.UI_USER.value,
+    )
     _require_superadmin_for_privileged_change(
         current_user,
         role=payload.role,
@@ -145,6 +203,13 @@ def update_user(
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
+    target = users_service.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    ensure_actor_can_manage_user(current_user, target, allow_self=is_superadmin_ui_role(current_user.role))
+    if payload.role is not None:
+        ensure_actor_can_assign_role(current_user, payload.role)
+    _protect_superadmin_update(current_user, target, payload, users_service)
     _require_superadmin_for_privileged_change(
         current_user,
         role=payload.role,
@@ -163,7 +228,7 @@ def update_user(
             action="update_ui_user",
             entity_type="ui_user",
             entity_id=str(user_id),
-            metadata=payload.model_dump(exclude_unset=True, exclude_none=True),
+            metadata=_safe_update_audit_metadata(payload),
         )
         return users_service.user_to_out(user)
     except ValueError as exc:
@@ -181,6 +246,19 @@ def delete_user(
 ) -> None:
     if current_user.id == user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own user")
+    target = users_service.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    ensure_actor_can_manage_user(current_user, target)
+    if (
+        target.role == UserRole.UI_SUPERADMIN.value
+        and target.is_active
+        and _active_superadmin_count(users_service, current_user) <= 1
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The last active superadmin cannot be deleted",
+        )
     try:
         users_service.delete_user(user_id)
         audit_service.record_action(

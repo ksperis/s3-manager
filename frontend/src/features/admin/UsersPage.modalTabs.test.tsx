@@ -72,6 +72,10 @@ vi.mock("../../api/groups", () => ({
   listMinimalGroups: () => listMinimalGroupsMock(),
 }));
 
+vi.mock("./UserAuthenticationPanel", () => ({
+  default: () => <div>Authentication actions are applied immediately.</div>,
+}));
+
 describe("UsersPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -603,6 +607,7 @@ describe("UsersPage modal tabs", () => {
 
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "General",
+      "Authentication",
       "Groups",
       "Associations",
       "Workspaces",
@@ -621,6 +626,32 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getByText("Mass management workspaces")).toBeInTheDocument();
     expect(screen.getByText("Ceph Admin access")).toBeInTheDocument();
     expect(screen.getByText("Storage Ops access")).toBeInTheDocument();
+  });
+
+  it("uses a single Done action for the immediate Authentication workflow", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 9,
+          email: "edit.authentication@example.com",
+          role: "ui_user",
+          account_links: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Authentication" }));
+
+    expect(screen.getByText("Authentication actions are applied immediately.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
   it("shows Connections and Manager in create/edit and submits their permissions", async () => {

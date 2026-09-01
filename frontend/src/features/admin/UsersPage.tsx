@@ -68,8 +68,9 @@ import {
 import UserAssociationsTabs, { type AssociationTab } from "./UserAssociationsTabs";
 import type { AccountSelection } from "./UserAccountAssociationsPanel";
 import UserGroupsSelector from "./UserGroupsSelector";
+import UserAuthenticationPanel from "./UserAuthenticationPanel";
 
-type UserModalTab = "general" | "associations" | "groups" | "access" | "connections" | "browser" | "manager";
+type UserModalTab = "general" | "authentication" | "associations" | "groups" | "access" | "connections" | "browser" | "manager";
 type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 const userWorkflowTabs: Array<{ id: UserModalTab; label: string }> = [
@@ -80,6 +81,11 @@ const userWorkflowTabs: Array<{ id: UserModalTab; label: string }> = [
   { id: "connections", label: "Connections" },
   { id: "browser", label: "Browser" },
   { id: "manager", label: "Manager" },
+];
+const editUserWorkflowTabs: Array<{ id: UserModalTab; label: string }> = [
+  { id: "general", label: "General" },
+  { id: "authentication", label: "Authentication" },
+  ...userWorkflowTabs.filter((tab) => tab.id !== "general"),
 ];
 
 const userModalLabelClass = "ui-body font-medium text-[var(--ui-text)]";
@@ -181,6 +187,7 @@ export default function UsersPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const createFormTemplate = (): CreateUserPayload => ({
     email: "",
+    full_name: "",
     password: "",
     role: "ui_user",
     can_access_ceph_admin: false,
@@ -826,6 +833,7 @@ export default function UsersPage() {
     const role = form.role ?? "ui_user";
     const payload: CreateUserPayload = {
       email: form.email,
+      full_name: form.full_name?.trim() || null,
       password: form.password,
       role,
       can_access_ceph_admin:
@@ -881,10 +889,14 @@ export default function UsersPage() {
   };
 
   const startEdit = (user: User) => {
+    if (!currentIsSuperAdmin && (user.role === "ui_admin" || user.role === "ui_superadmin")) {
+      setActionError("Administrators can manage only standard users.");
+      return;
+    }
     const role = user.role;
     const nextEditForm = {
       email: user.email,
-      password: "",
+      full_name: user.full_name ?? "",
       role,
       can_access_ceph_admin:
         role === "ui_admin" || role === "ui_superadmin"
@@ -990,9 +1002,7 @@ export default function UsersPage() {
       if (editForm.email) {
         payload.email = editForm.email;
       }
-      if (editForm.password) {
-        payload.password = editForm.password;
-      }
+      payload.full_name = editForm.full_name?.trim() || null;
       if (editForm.role) {
         payload.role = nextRole;
       }
@@ -1096,6 +1106,7 @@ export default function UsersPage() {
         <button
           type="button"
           onClick={() => startEdit(user)}
+          disabled={!currentIsSuperAdmin && (user.role === "ui_admin" || user.role === "ui_superadmin")}
           className="max-w-full break-all text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
         >
           {user.email}
@@ -1140,17 +1151,18 @@ export default function UsersPage() {
       mobileRole: "actions",
       render: (user) => {
         const isCurrentUser = currentUserId !== null && user.id === currentUserId;
+        const canManage = currentIsSuperAdmin || (user.role !== "ui_admin" && user.role !== "ui_superadmin");
         return (
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => startEdit(user)} className={tableActionButtonClasses}>
+            <button type="button" onClick={() => startEdit(user)} className={tableActionButtonClasses} disabled={!canManage}>
               Edit
             </button>
             <button
               type="button"
               onClick={() => handleDeleteRequest(user)}
               className={tableDeleteActionClasses}
-              disabled={busyId === user.id || isCurrentUser}
-              title={isCurrentUser ? "You cannot delete your own user." : undefined}
+              disabled={busyId === user.id || isCurrentUser || !canManage}
+              title={isCurrentUser ? "You cannot delete your own user." : !canManage ? "Administrators can manage only standard users." : undefined}
             >
               {busyId === user.id ? "Deleting..." : "Delete"}
             </button>
@@ -1234,6 +1246,15 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
+                  <label className={userModalLabelClass}>Full name</label>
+                  <input
+                    className={userModalFieldClass}
+                    value={form.full_name ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+                    placeholder="Jane Doe"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
                   <RoleAccessHelp
                     open={createRoleHelpOpen}
                     onToggle={() => setCreateRoleHelpOpen((prev) => !prev)}
@@ -1264,7 +1285,7 @@ export default function UsersPage() {
                   >
                     <option value="ui_none">No access</option>
                     <option value="ui_user">User</option>
-                    <option value="ui_admin">Admin</option>
+                    <option value="ui_admin" disabled={!currentIsSuperAdmin}>Admin{currentIsSuperAdmin ? "" : " (restricted)"}</option>
                     <option value="ui_superadmin" disabled={!currentIsSuperAdmin}>
                       Superadmin{currentIsSuperAdmin ? "" : " (restricted)"}
                     </option>
@@ -1562,7 +1583,7 @@ export default function UsersPage() {
               onTabChange={setEditModalTab}
               ariaLabel="User configuration sections"
               idPrefix="admin-user-edit"
-              tabs={userWorkflowTabs}
+              tabs={editUserWorkflowTabs}
             >
 
             {editModalTab === "general" && (
@@ -1577,13 +1598,12 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className={userModalLabelClass}>New password</label>
+                  <label className={userModalLabelClass}>Full name</label>
                   <input
-                    type="password"
                     className={userModalFieldClass}
-                    value={editForm.password ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
-                    placeholder="Leave blank to keep current"
+                    value={editForm.full_name ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
+                    placeholder="Jane Doe"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -1617,13 +1637,20 @@ export default function UsersPage() {
                   >
                     <option value="ui_none">No access</option>
                     <option value="ui_user">User</option>
-                    <option value="ui_admin">Admin</option>
+                    <option value="ui_admin" disabled={!currentIsSuperAdmin}>Admin{currentIsSuperAdmin ? "" : " (restricted)"}</option>
                     <option value="ui_superadmin" disabled={!currentIsSuperAdmin}>
                       Superadmin{currentIsSuperAdmin ? "" : " (restricted)"}
                     </option>
                   </select>
                 </div>
               </div>
+            )}
+
+            {editModalTab === "authentication" && (
+              <UserAuthenticationPanel
+                userId={editingUser.id}
+                canMutate={currentUserId === null || currentUserId !== editingUser.id}
+              />
             )}
 
             {editModalTab === "access" && (
@@ -1821,15 +1848,23 @@ export default function UsersPage() {
             </WorkflowTabs>
 
             <WorkflowActions>
-              <UiButton variant="secondary" onClick={editCloseGuard.requestClose}>
-                Cancel
-              </UiButton>
-              <UiButton
-                type="submit"
-                disabled={busyId === editingUser.id}
-              >
-                {busyId === editingUser.id ? "Saving..." : "Save"}
-              </UiButton>
+              {editModalTab === "authentication" ? (
+                <UiButton variant="secondary" onClick={editCloseGuard.requestClose}>
+                  Done
+                </UiButton>
+              ) : (
+                <>
+                  <UiButton variant="secondary" onClick={editCloseGuard.requestClose}>
+                    Cancel
+                  </UiButton>
+                  <UiButton
+                    type="submit"
+                    disabled={busyId === editingUser.id}
+                  >
+                    {busyId === editingUser.id ? "Saving..." : "Save"}
+                  </UiButton>
+                </>
+              )}
             </WorkflowActions>
           </form>
           {editCloseGuard.confirmationDialog}

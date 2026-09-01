@@ -209,6 +209,7 @@ class UserOut(ApiModel):
     display_name: Optional[str] = None
     picture_url: Optional[str] = None
     avatar: UserAvatar
+    has_local_password: bool = False
     is_active: bool = True
     is_admin: bool = False
     role: UiRole

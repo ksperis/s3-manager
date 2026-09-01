@@ -39,6 +39,7 @@ export const ADMIN_PAGE_CONTRACTS = {
   metrics: { label: "Usage & Metrics", path: "/admin/metrics" },
   users: { label: "UI Users", path: "/admin/users" },
   groups: { label: "UI Groups", path: "/admin/groups" },
+  "identity-security": { label: "Identity Security", path: "/admin/identity-security" },
   accounts: { label: "RGW Accounts", path: "/admin/s3-accounts" },
   "rgw-users": { label: "RGW Users", path: "/admin/s3-users" },
   "shared-connections": { label: "Shared S3 Connections", path: "/admin/s3-connections" },

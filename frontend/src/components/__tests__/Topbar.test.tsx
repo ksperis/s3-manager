@@ -135,7 +135,7 @@ describe("Topbar account menu", () => {
     });
   });
 
-  it("shows API tokens menu action only for superadmin role", async () => {
+  it("keeps automation tokens out of the personal account menu", async () => {
     const user = userEvent.setup();
 
     const adminRender = render(<Topbar userEmail="admin@example.com" />);
@@ -148,20 +148,8 @@ describe("Topbar account menu", () => {
 
     render(<Topbar userEmail="superadmin@example.com" />);
     await user.click(resolveAccountTrigger());
-    expect(await screen.findByRole("menuitem", { name: /api tokens/i })).toBeInTheDocument();
-  });
-
-  it("links API tokens to the shared profile page", async () => {
-    const user = userEvent.setup();
-    setSessionUserCache({ role: "ui_superadmin", authType: "password" });
-
-    render(<Topbar userEmail="superadmin@example.com" />);
-    await user.click(resolveAccountTrigger());
-    expect(await screen.findByRole("menuitem", { name: /api tokens/i })).toHaveAttribute(
-      "href",
-      "/profile?tab=api-tokens"
-    );
-    expect(screen.queryByRole("dialog", { name: "API tokens" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("menu", { name: "Account actions" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /api tokens/i })).not.toBeInTheDocument();
   });
 
   it("links profile and private connections to the shared profile page", async () => {

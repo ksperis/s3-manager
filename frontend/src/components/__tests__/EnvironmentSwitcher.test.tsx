@@ -59,6 +59,10 @@ const baseSettings: GeneralSettings = {
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
+  require_passkey_for_admins: true,
+  require_passkey_for_users: false,
+  allow_user_profile_name_edit: false,
+  allow_user_external_identity_unlink: false,
 };
 
 function CurrentPathProbe() {
