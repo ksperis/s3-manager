@@ -166,6 +166,39 @@ def test_ceph_admin_bucket_listing_cache_is_reused_across_pages():
     assert rgw_admin.get_all_buckets_calls == 1
 
 
+def test_ceph_admin_bucket_listing_skips_owner_backfill_for_explicit_global_tenant():
+    payload = [{"name": "bucket-a", "tenant": "", "owner": "owner-a"}]
+    ctx, rgw_admin = _build_ctx(endpoint_id=18, payload=payload)
+
+    class EmptyBucketUiTagsService:
+        def get_tags_for_targets(self, *, domain_kind, actor_user_id, targets):  # noqa: ARG002
+            return {target: [] for target in targets}
+
+    response = bucket_listing_service.compute_ceph_admin_bucket_listing(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=True,
+        ui_tag_ids=[],
+        ui_tag_match="any",
+        bucket_ui_tags_service=EmptyBucketUiTagsService(),
+        actor_user_id=1,
+        ctx=ctx,
+    )
+
+    assert [(item.name, item.tenant, item.owner) for item in response.items] == [
+        ("bucket-a", None, "owner-a")
+    ]
+    assert response.items[0].ui_tags == []
+    assert "tenant_metadata_resolved" not in response.items[0].model_dump()
+    assert rgw_admin.get_all_buckets_calls == 1
+    assert rgw_admin.get_bucket_info_calls == 0
+
+
 def test_ceph_admin_rgw_bucket_payload_cache_coalesces_parallel_misses():
     payload = [{"name": "bucket-a", "owner": "owner-a"}]
     started = threading.Event()
@@ -1552,6 +1585,41 @@ def test_ceph_admin_bucket_listing_falls_back_without_stats_and_backfills_owner(
     ]
     assert rgw_admin.calls == [True, False]
     assert rgw_admin.info_calls == [("bucket-a", False), ("bucket-b", False)]
+
+
+def test_ceph_admin_bucket_listing_returns_gateway_timeout_without_fallback():
+    class TimingOutStatsAdmin:
+        def __init__(self):
+            self.calls: list[bool] = []
+
+        def get_all_buckets(self, with_stats: bool = True):
+            self.calls.append(with_stats)
+            raise RGWAdminError("RGW admin request failed: Read timed out. (read timeout=120.0)")
+
+    rgw_admin = TimingOutStatsAdmin()
+    ctx = SimpleNamespace(
+        endpoint=SimpleNamespace(id=190),
+        rgw_admin=rgw_admin,
+        access_key="AKIA_TEST",
+        secret_key="SECRET_TEST",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        buckets_router.list_buckets(
+            page=1,
+            page_size=25,
+            filter=None,
+            advanced_filter=None,
+            sort_by="name",
+            sort_dir="asc",
+            include=[],
+            with_stats=True,
+            ctx=ctx,
+        )
+
+    assert exc.value.status_code == 504
+    assert "timed out" in str(exc.value.detail).lower()
+    assert rgw_admin.calls == [True]
 
 
 def test_ceph_admin_bucket_listing_rejects_stats_sort_when_stats_fetch_fails():

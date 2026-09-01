@@ -246,6 +246,47 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
     expect(screen.getAllByText(/showing owner metadata without usage or quota values/i).length).toBeGreaterThan(0);
   });
 
+  it("does not restart stats after a successful no-stats response", async () => {
+    mocks.listCephAdminBuckets.mockImplementation((_endpointId, params) =>
+      Promise.resolve(
+        params?.with_stats
+          ? {
+              items: [{ name: "bucket-a", owner: "owner-a" }],
+              total: 1,
+              page: 1,
+              page_size: 25,
+              has_next: false,
+              stats_available: false,
+              stats_warning:
+                "Bucket stats are unavailable via Ceph Admin credentials on this endpoint. Showing owner metadata without usage or quota values.",
+            }
+          : {
+              items: [{ name: "bucket-a", owner: "owner-a" }],
+              total: 1,
+              page: 1,
+              page_size: 25,
+              has_next: false,
+              stats_available: true,
+            },
+      ),
+    );
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(mocks.listCephAdminBuckets.mock.calls.map((call) => call[1]?.with_stats)).toEqual([true, false]),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    expect(mocks.listCephAdminBuckets.mock.calls.map((call) => call[1]?.with_stats)).toEqual([true, false]);
+    fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
+    expect(await screen.findByText("Bucket stats unavailable")).toBeInTheDocument();
+  });
+
   it("falls back to plain listing when an exact quick filter payload is too large for streaming", async () => {
     mocks.listCephAdminBuckets.mockResolvedValue({
       items: [],

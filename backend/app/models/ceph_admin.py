@@ -189,6 +189,9 @@ class CephAdminRgwUserSummary(ApiModel):
 class CephAdminBucketSummary(ApiModel):
     name: str
     tenant: Optional[str] = None
+    # Internal listing state: an explicit empty RGW tenant means the global
+    # namespace, while a missing tenant still requires metadata backfill.
+    tenant_metadata_resolved: bool = Field(default=False, exclude=True, repr=False)
     owner: Optional[str] = None
     owner_name: Optional[str] = None
     owner_suspended: Optional[bool] = None

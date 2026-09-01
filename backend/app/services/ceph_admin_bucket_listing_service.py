@@ -59,6 +59,7 @@ from app.services.listing_progress import (
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.s3_execution_context import S3ExecutionContext
+from app.utils.http_errors import is_upstream_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +307,8 @@ class _CephAdminBucketSnapshotBuilder:
             entries = self._fetch_entries(self.request.with_stats, name_candidates)
         except RGWAdminError as exc:
             if not self.request.with_stats:
+                raise
+            if is_upstream_timeout(exc):
                 raise
             if self.request.stats_required:
                 raise RequiredBucketStatsUnavailableError(

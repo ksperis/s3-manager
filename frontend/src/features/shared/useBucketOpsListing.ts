@@ -151,8 +151,10 @@ export function useBucketOpsListing({
     setTotal(0);
     setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
     setError(null);
-    setStatsAvailable(null);
-    setStatsWarning(null);
+    if (baseRequiresStats) {
+      setStatsAvailable(null);
+      setStatsWarning(null);
+    }
 
     try {
       const baseParams = {
@@ -231,8 +233,12 @@ export function useBucketOpsListing({
       const baseItems = baseResponse.items ?? [];
       setItems(baseItems);
       setTotal(baseResponse.total ?? 0);
-      setStatsAvailable(baseResponse.stats_available !== false);
-      setStatsWarning(baseResponse.stats_warning ?? null);
+      if (baseRequiresStats) {
+        setStatsAvailable(baseResponse.stats_available !== false);
+        setStatsWarning(baseResponse.stats_warning ?? null);
+      } else if (baseResponse.stats_available === false) {
+        setStatsAvailable(false);
+      }
       setLoading(false);
       setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
 
@@ -269,8 +275,12 @@ export function useBucketOpsListing({
         if (requestId !== requestSeqRef.current) return;
 
         const detailsByKey = new Map((detailResponse.items ?? []).map((bucket) => [bucketRowKey(bucket), bucket]));
-        setStatsAvailable(detailResponse.stats_available !== false);
-        setStatsWarning(detailResponse.stats_warning ?? null);
+        if (detailWithStats) {
+          setStatsAvailable(detailResponse.stats_available !== false);
+          setStatsWarning(detailResponse.stats_warning ?? null);
+        } else if (detailResponse.stats_available === false) {
+          setStatsAvailable(false);
+        }
         setItems(baseItems.map((bucket) => detailsByKey.get(bucketRowKey(bucket)) ?? bucket));
       } finally {
         if (!requestAbort.signal.aborted && requestId === requestSeqRef.current) {

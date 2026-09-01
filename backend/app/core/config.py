@@ -311,7 +311,7 @@ class Settings(BaseSettings):
         description="HTTP timeout for explicit RGW Admin availability probes",
     )
     rgw_admin_bucket_list_stats_timeout_seconds: float = Field(
-        60.0,
+        120.0,
         gt=0,
         description=(
             "HTTP timeout for RGW Admin Ops bucket listing with stats in seconds "

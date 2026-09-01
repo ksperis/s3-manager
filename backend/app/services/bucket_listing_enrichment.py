@@ -586,20 +586,28 @@ def backfill_bucket_owner_metadata(
         bucket
         for bucket in buckets
         if not bucket.owner
-        or (include_tenant and bucket.tenant is None and owner_kind_from_owner(bucket.owner) != "account")
+        or (
+            include_tenant
+            and bucket.tenant is None
+            and not bucket.tenant_metadata_resolved
+            and owner_kind_from_owner(bucket.owner) != "account"
+        )
     ]
     if not pending:
         return buckets
 
-    def load_one(bucket: CephAdminBucketSummary) -> tuple[CephAdminBucketSummary, str | None, str | None]:
+    def load_one(
+        bucket: CephAdminBucketSummary,
+    ) -> tuple[CephAdminBucketSummary, str | None, str | None, bool]:
         try:
             payload = ctx.rgw_admin.get_bucket_info(bucket.name, stats=False, allow_not_found=True)
         except RGWAdminError:
-            return bucket, None, None
+            return bucket, None, None, False
         if not isinstance(payload, dict) or payload.get("not_found"):
-            return bucket, None, None
+            return bucket, None, None, False
         tenant, owner = extract_bucket_owner_scope(payload)
-        return bucket, tenant, owner
+        tenant_metadata_resolved = "tenant" in payload and payload.get("tenant") is not None
+        return bucket, tenant, owner, tenant_metadata_resolved
 
     max_workers = min(BUCKET_OWNER_LOOKUP_MAX_WORKERS, len(pending))
     total = len(pending)
@@ -629,11 +637,13 @@ def backfill_bucket_owner_metadata(
                 emit_progress(index)
                 invoke_cancel_check(cancel_check)
 
-    for bucket, tenant, owner in resolved:
+    for bucket, tenant, owner, tenant_metadata_resolved in resolved:
         if not bucket.owner and owner:
             bucket.owner = owner
         if include_tenant and bucket.tenant is None and tenant:
             bucket.tenant = tenant
+        if include_tenant and tenant_metadata_resolved:
+            bucket.tenant_metadata_resolved = True
     return buckets
 
 

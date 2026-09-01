@@ -75,6 +75,7 @@ def build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
     return CephAdminBucketSummary(
         name=bucket_name,
         tenant=tenant,
+        tenant_metadata_resolved="tenant" in entry and entry.get("tenant") is not None,
         owner=owner,
         used_bytes=usage_bytes,
         object_count=objects,
