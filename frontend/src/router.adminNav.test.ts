@@ -47,6 +47,19 @@ describe("buildAdminNav", () => {
     expect(authenticationLink?.to).toBe("/admin/authentication-settings");
   });
 
+  it("groups identity administration with a dedicated security icon", () => {
+    const identityAccess = buildAdminNav(true, true, false, false, false, true).find(
+      (section) => section.label === "Identity & Access"
+    );
+
+    expect(identityAccess?.links.map((link) => link.label)).toEqual([
+      "UI Users",
+      "UI Groups",
+      "Identity Security",
+    ]);
+    expect(identityAccess?.links.find((link) => link.label === "Identity Security")?.iconName).toBe("shield");
+  });
+
   it("keeps settings collapsed until the admin settings route asks for expansion", () => {
     const baseArgs = [true, true, false, false, false, true] as const;
 

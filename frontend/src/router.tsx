@@ -165,11 +165,14 @@ export const buildAdminNav = (
       links: [{ ...workspacePageLink(ADMIN_PAGE_CONTRACTS.dashboard), end: true }],
     },
     {
-      label: "Platform",
+      label: "Identity & Access",
       links: [
         workspacePageLink(ADMIN_PAGE_CONTRACTS.users),
         workspacePageLink(ADMIN_PAGE_CONTRACTS.groups),
-        workspacePageLink(ADMIN_PAGE_CONTRACTS["identity-security"]),
+        {
+          ...workspacePageLink(ADMIN_PAGE_CONTRACTS["identity-security"]),
+          iconName: "shield" as const,
+        },
       ],
     },
     {
