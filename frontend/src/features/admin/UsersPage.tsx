@@ -200,8 +200,6 @@ type AssociationsTabsProps = {
     setShowPanel: Dispatch<SetStateAction<boolean>>;
     selections: number[];
     setSelections: Dispatch<SetStateAction<number[]>>;
-    adminChoice: Record<number, boolean>;
-    setAdminChoice: Dispatch<SetStateAction<Record<number, boolean>>>;
     portalRoleChoice: Record<number, AccountAccessRole>;
     setPortalRoleChoice: Dispatch<SetStateAction<Record<number, AccountAccessRole>>>;
     toggleSelection: (id: number) => void;
@@ -724,7 +722,6 @@ export default function UsersPage() {
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
       pendingGroupSelections: [],
-      accountAdminChoice: {},
       accountPortalRoleChoice: {},
     })
   );
@@ -732,7 +729,6 @@ export default function UsersPage() {
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<S3UserMembership[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
   const [createSelectedGroups, setCreateSelectedGroups] = useState<number[]>([]);
-  const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [createAccountPortalRoleChoice, setCreateAccountPortalRoleChoice] = useState<
     Record<number, AccountAccessRole>
   >({});
@@ -763,7 +759,6 @@ export default function UsersPage() {
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
       pendingGroupSelections: [],
-      accountAdminChoice: {},
       accountPortalRoleChoice: {},
     })
   );
@@ -771,7 +766,6 @@ export default function UsersPage() {
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<S3UserMembership[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
   const [editSelectedGroups, setEditSelectedGroups] = useState<number[]>([]);
-  const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [editAccountPortalRoleChoice, setEditAccountPortalRoleChoice] = useState<
     Record<number, AccountAccessRole>
   >({});
@@ -1308,7 +1302,6 @@ export default function UsersPage() {
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
       pendingGroupSelections: [],
-      accountAdminChoice: {},
       accountPortalRoleChoice: {},
     });
 
@@ -1324,11 +1317,9 @@ export default function UsersPage() {
         pendingS3UserSelections: createS3UserSelections,
         pendingConnectionSelections: createConnectionSelections,
         pendingGroupSelections: createGroupSelections,
-        accountAdminChoice: createAccountAdminChoice,
         accountPortalRoleChoice: createAccountPortalRoleChoice,
       }),
     [
-      createAccountAdminChoice,
       createAccountPortalRoleChoice,
       createAccountSelections,
       createConnectionSelections,
@@ -1348,7 +1339,6 @@ export default function UsersPage() {
     setCreateSelectedS3Users([]);
     setCreateSelectedS3Connections([]);
     setCreateSelectedGroups([]);
-    setCreateAccountAdminChoice({});
     setCreateAccountPortalRoleChoice({});
     setCreateS3AccountSearch("");
     setCreateS3Search("");
@@ -1385,11 +1375,9 @@ export default function UsersPage() {
         pendingS3UserSelections: editS3UserSelections,
         pendingConnectionSelections: editConnectionSelections,
         pendingGroupSelections: editGroupSelections,
-        accountAdminChoice: editAccountAdminChoice,
         accountPortalRoleChoice: editAccountPortalRoleChoice,
       }),
     [
-      editAccountAdminChoice,
       editAccountPortalRoleChoice,
       editAccountSelections,
       editConnectionSelections,
@@ -1424,7 +1412,6 @@ export default function UsersPage() {
     setEditS3UserSelections([]);
     setEditConnectionSelections([]);
     setEditGroupSelections([]);
-    setEditAccountAdminChoice({});
     setEditAccountPortalRoleChoice({});
     setEditForm({});
     setEditRoleHelpOpen(false);
@@ -1439,7 +1426,6 @@ export default function UsersPage() {
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
         pendingGroupSelections: [],
-        accountAdminChoice: {},
         accountPortalRoleChoice: {},
       })
     );
@@ -1589,7 +1575,6 @@ export default function UsersPage() {
     setEditS3UserSelections([]);
     setEditConnectionSelections([]);
     setEditGroupSelections([]);
-    setEditAccountAdminChoice({});
     setEditAccountPortalRoleChoice({});
     setEditInitialSignature(
       stableSignature({
@@ -1602,7 +1587,6 @@ export default function UsersPage() {
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
         pendingGroupSelections: [],
-        accountAdminChoice: {},
         accountPortalRoleChoice: {},
       })
     );
@@ -2056,8 +2040,6 @@ export default function UsersPage() {
                   setShowPanel: setShowCreateAccountPanel,
                   selections: createAccountSelections,
                   setSelections: setCreateAccountSelections,
-                  adminChoice: createAccountAdminChoice,
-                  setAdminChoice: setCreateAccountAdminChoice,
                   portalRoleChoice: createAccountPortalRoleChoice,
                   setPortalRoleChoice: setCreateAccountPortalRoleChoice,
                   toggleSelection: toggleCreateAccountSelection,
@@ -2406,8 +2388,6 @@ export default function UsersPage() {
                   setShowPanel: setShowEditAccountPanel,
                   selections: editAccountSelections,
                   setSelections: setEditAccountSelections,
-                  adminChoice: editAccountAdminChoice,
-                  setAdminChoice: setEditAccountAdminChoice,
                   portalRoleChoice: editAccountPortalRoleChoice,
                   setPortalRoleChoice: setEditAccountPortalRoleChoice,
                   toggleSelection: toggleEditAccountSelection,
