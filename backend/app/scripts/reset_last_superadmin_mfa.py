@@ -75,9 +75,10 @@ def main() -> None:
     db = SessionLocal()
     try:
         user = reset_last_superadmin_mfa(db, email=normalized_email, confirmation=confirmation)
+        reset_email = user.email
     finally:
         db.close()
-    print(f"MFA reset completed for {user.email}. A new passkey is required at next login.")
+    print(f"MFA reset completed for {reset_email}. A new passkey is required at next login.")
 
 
 if __name__ == "__main__":

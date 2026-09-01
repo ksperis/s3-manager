@@ -10,6 +10,7 @@ from webauthn.helpers import bytes_to_base64url
 
 from app.core.security import get_password_hash
 from app.db import AuditLog, AuthChallenge, AuthSession, RecoveryCode, User, UserRole, WebAuthnCredential
+from app.scripts import reset_last_superadmin_mfa as reset_last_superadmin_mfa_script
 from app.scripts.create_first_admin import FirstAdminError, create_first_admin
 from app.scripts.reset_last_superadmin_mfa import OperatorRecoveryError, reset_last_superadmin_mfa
 from app.core.config import get_settings
@@ -216,6 +217,30 @@ def test_operator_reset_is_restricted_to_exact_sole_superadmin_and_revokes_every
     assert db_session.query(RecoveryCode).count() == 0
     audit = db_session.query(AuditLog).filter(AuditLog.action == "operator_reset_last_superadmin_mfa").one()
     assert user.email not in (audit.metadata_json or "")
+
+
+def test_operator_reset_cli_prints_after_session_close(monkeypatch, db_session, capsys):
+    _user(db_session, email="cli-admin@example.com", role=UserRole.UI_SUPERADMIN.value)
+    monkeypatch.setattr(reset_last_superadmin_mfa_script, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda _prompt: "RESET MFA cli-admin@example.com",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "reset_last_superadmin_mfa",
+            "--email",
+            "cli-admin@example.com",
+        ],
+    )
+
+    reset_last_superadmin_mfa_script.main()
+
+    assert capsys.readouterr().out == (
+        "This action removes passkeys and recovery codes and revokes every session.\n"
+        "MFA reset completed for cli-admin@example.com. A new passkey is required at next login.\n"
+    )
 
 
 def test_first_admin_command_requires_confirmation_and_minimum_password(db_session):
