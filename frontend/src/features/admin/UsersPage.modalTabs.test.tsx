@@ -260,14 +260,14 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getAllByRole("button", { name: "Edit" })[0].closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });
 
-  it("hides portal role labels when the portal feature is disabled", async () => {
+  it("preserves an existing portal role as a disabled option when Portal is disabled", async () => {
     listUsersMock.mockResolvedValue({
       items: [
         {
           id: 12,
           email: "assoc.summary@example.com",
           role: "ui_user",
-          account_links: [{ account_id: 1, role: "account_administrator" }],
+          account_links: [{ account_id: 1, role: "portal_manager" }],
         },
       ],
       total: 1,
@@ -280,14 +280,20 @@ describe("UsersPage modal tabs", () => {
 
     const associations = await screen.findByLabelText("1 linked association");
     expect(associations).toHaveAccessibleDescription(
-      "Linked associations (1)\nRGW account: acc-1 — Roles: Account administrator",
+      "Linked associations (1)\nRGW account: acc-1 — Roles: Portal manager",
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
 
-    expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
-    expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
+    const roleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Access role for acc-1",
+    });
+    expect(roleSelect).toHaveValue("portal_manager");
+    expect(Array.from(roleSelect.options).map((option) => [option.value, option.disabled])).toEqual([
+      ["portal_manager", true],
+      ["account_administrator", false],
+    ]);
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -299,7 +305,7 @@ describe("UsersPage modal tabs", () => {
             {
               account_id: 1,
               allow_manager_browser_data_access: false,
-              role: "account_administrator",
+              role: "portal_manager",
             },
           ],
         })
@@ -373,6 +379,12 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Add accounts" }));
+    const accountRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Access role for acc-1",
+    });
+    expect(Array.from(accountRoleSelect.options).map((option) => option.value)).toEqual([
+      "account_administrator",
+    ]);
     fireEvent.click(screen.getByRole("checkbox", { name: "acc-1" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -795,7 +807,15 @@ describe("UsersPage modal tabs", () => {
     if (!accountRow) {
       throw new Error("Account row not found");
     }
-    fireEvent.change(within(accountRow).getByRole("combobox", { name: "Access role for acc-1" }), {
+    const roleSelect = within(accountRow).getByRole<HTMLSelectElement>("combobox", {
+      name: "Access role for acc-1",
+    });
+    expect(Array.from(roleSelect.options).map((option) => option.value)).toEqual([
+      "portal_user",
+      "portal_manager",
+      "account_administrator",
+    ]);
+    fireEvent.change(roleSelect, {
       target: { value: "portal_manager" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));

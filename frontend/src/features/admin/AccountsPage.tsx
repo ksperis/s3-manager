@@ -23,7 +23,7 @@ import {
   updateS3Account,
 } from "../../api/accounts";
 import {
-  ACCOUNT_ACCESS_ROLE_OPTIONS,
+  getAccountAccessRoleOptions,
   normalizeAccountAccessRole,
   type AccountAccessRole,
 } from "../../api/accountRoles";
@@ -1709,8 +1709,14 @@ export default function S3AccountsPage() {
                                     }))
                                   }
                                 >
-                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                  {getAccountAccessRoleOptions(portalEnabled, u.role).map((option) => (
+                                    <option
+                                      key={option.value}
+                                      value={option.value}
+                                      disabled={option.disabled}
+                                    >
+                                      {option.label}
+                                    </option>
                                   ))}
                                 </UiSelect>
                               </td>
@@ -1770,7 +1776,9 @@ export default function S3AccountsPage() {
                         if (userSelections.length === 0) return;
                         const toAdd = userSelections.map((id) => ({
                           user_id: id,
-                          role: userPortalRoleChoice[id] ?? (portalEnabled ? "portal_user" as const : "account_administrator" as const),
+                          role: portalEnabled
+                            ? userPortalRoleChoice[id] ?? "portal_user" as const
+                            : "account_administrator" as const,
                           user_email: userLabelById.get(id) ?? undefined,
                           allow_manager_browser_data_access: false,
                         }));
@@ -1786,7 +1794,9 @@ export default function S3AccountsPage() {
                     >
                         {visibleAvailableUsers.map((u) => {
                           const isSelected = userSelections.includes(u.id);
-                          const portalRole = userPortalRoleChoice[u.id] ?? (portalEnabled ? "portal_user" : "account_administrator");
+                          const portalRole = portalEnabled
+                            ? userPortalRoleChoice[u.id] ?? "portal_user"
+                            : "account_administrator";
                           return (
                             <div
                               key={u.id}
@@ -1814,7 +1824,7 @@ export default function S3AccountsPage() {
                                     }))
                                   }
                                 >
-                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
+                                  {getAccountAccessRoleOptions(portalEnabled).map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                   ))}
                                 </UiSelect>
@@ -1878,8 +1888,14 @@ export default function S3AccountsPage() {
                                     }))
                                   }
                                 >
-                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                  {getAccountAccessRoleOptions(portalEnabled, group.role).map((option) => (
+                                    <option
+                                      key={option.value}
+                                      value={option.value}
+                                      disabled={option.disabled}
+                                    >
+                                      {option.label}
+                                    </option>
                                   ))}
                                 </UiSelect>
                               </td>
@@ -1941,7 +1957,9 @@ export default function S3AccountsPage() {
                           group_id: id,
                           group_name: groupLabelById.get(id) ?? undefined,
                           allow_manager_browser_data_access: false,
-                          role: groupPortalRoleChoice[id] ?? (portalEnabled ? "portal_user" as const : "account_administrator" as const),
+                          role: portalEnabled
+                            ? groupPortalRoleChoice[id] ?? "portal_user" as const
+                            : "account_administrator" as const,
                         }));
                         setEditForm((prev) => ({
                           ...prev,
@@ -1955,7 +1973,9 @@ export default function S3AccountsPage() {
                     >
                         {visibleAvailableGroups.map((group) => {
                           const isSelected = groupSelections.includes(group.id);
-                          const portalRole = groupPortalRoleChoice[group.id] ?? (portalEnabled ? "portal_user" : "account_administrator");
+                          const portalRole = portalEnabled
+                            ? groupPortalRoleChoice[group.id] ?? "portal_user"
+                            : "account_administrator";
                           return (
                             <div
                               key={group.id}
@@ -1983,7 +2003,7 @@ export default function S3AccountsPage() {
                                     }))
                                   }
                                 >
-                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
+                                  {getAccountAccessRoleOptions(portalEnabled).map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                   ))}
                                 </UiSelect>

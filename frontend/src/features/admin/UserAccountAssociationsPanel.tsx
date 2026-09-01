@@ -4,7 +4,7 @@
  */
 import type { Dispatch, SetStateAction } from "react";
 import {
-  ACCOUNT_ACCESS_ROLE_OPTIONS,
+  getAccountAccessRoleOptions,
   normalizeAccountAccessRole,
   type AccountAccessRole,
 } from "../../api/accountRoles";
@@ -123,8 +123,15 @@ export default function UserAccountAssociationsPanel({
                           )
                         }
                       >
-                        {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
+                        {getAccountAccessRoleOptions(
+                          showPortalRole,
+                          normalizeAccountAccessRole(entry.role),
+                        ).map((option) => (
+                          <option
+                            key={option.value}
+                            value={option.value}
+                            disabled={option.disabled}
+                          >
                             {option.label}
                           </option>
                         ))}
@@ -191,9 +198,9 @@ export default function UserAccountAssociationsPanel({
             if (accounts.selections.length === 0) return;
             const next = accounts.selections.map((accountId) => ({
               id: accountId,
-              role:
-                accounts.portalRoleChoice[accountId] ??
-                (showPortalRole ? "portal_user" : "account_administrator"),
+              role: showPortalRole
+                ? accounts.portalRoleChoice[accountId] ?? "portal_user"
+                : "account_administrator",
               allow_manager_browser_data_access: false,
             }));
             accounts.setSelected((current) => [...current, ...next]);
@@ -205,9 +212,9 @@ export default function UserAccountAssociationsPanel({
           {accounts.visible.map((option) => {
             const accountId = Number(option.id);
             const isSelected = accounts.selections.includes(accountId);
-            const role =
-              accounts.portalRoleChoice[accountId] ??
-              (showPortalRole ? "portal_user" : "account_administrator");
+            const role = showPortalRole
+              ? accounts.portalRoleChoice[accountId] ?? "portal_user"
+              : "account_administrator";
             return (
               <div
                 key={option.id}
@@ -235,7 +242,7 @@ export default function UserAccountAssociationsPanel({
                       }))
                     }
                   >
-                    {ACCOUNT_ACCESS_ROLE_OPTIONS.map((roleOption) => (
+                    {getAccountAccessRoleOptions(showPortalRole).map((roleOption) => (
                       <option key={roleOption.value} value={roleOption.value}>
                         {roleOption.label}
                       </option>

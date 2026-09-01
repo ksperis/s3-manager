@@ -25,7 +25,7 @@ import {
 } from "../../api/groups";
 import { AccountMembership, UserSummary, listMinimalUsers } from "../../api/users";
 import {
-  ACCOUNT_ACCESS_ROLE_OPTIONS,
+  getAccountAccessRoleOptions,
   normalizeAccountAccessRole,
 } from "../../api/accountRoles";
 import { S3AccountSummary, listMinimalS3Accounts } from "../../api/accounts";
@@ -608,8 +608,17 @@ export default function GroupsPage() {
                           updateAccountSelection(accountId, { role: normalizeAccountAccessRole(event.target.value) })
                         }
                       >
-                        {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
+                        {getAccountAccessRoleOptions(
+                          showPortalRole,
+                          normalizeAccountAccessRole(link.role),
+                        ).map((option) => (
+                          <option
+                            key={option.value}
+                            value={option.value}
+                            disabled={option.disabled}
+                          >
+                            {option.label}
+                          </option>
                         ))}
                       </UiSelect>
                     </td>
@@ -669,11 +678,9 @@ export default function GroupsPage() {
                           ...(current.account_links ?? []),
                           ...accountSelections.map((accountId) => ({
                             account_id: accountId,
-                            role: accountPortalRoleChoice[accountId]
+                            role: showPortalRole
                               ? normalizeAccountAccessRole(accountPortalRoleChoice[accountId])
-                              : showPortalRole
-                                ? "portal_user" as const
-                                : "account_administrator" as const,
+                              : "account_administrator" as const,
                             allow_manager_browser_data_access: false,
                           })),
                         ].sort((left, right) => Number(left.account_id) - Number(right.account_id)),
@@ -702,7 +709,11 @@ export default function GroupsPage() {
                               aria-label={`Access role for ${account.name}`}
                               size="compact"
                               fieldClassName="w-52"
-                              value={accountPortalRoleChoice[accountId] || (showPortalRole ? "portal_user" : "account_administrator")}
+                              value={
+                                showPortalRole
+                                  ? accountPortalRoleChoice[accountId] || "portal_user"
+                                  : "account_administrator"
+                              }
                               onChange={(event) =>
                                 setAccountPortalRoleChoice((current) => ({
                                   ...current,
@@ -710,7 +721,7 @@ export default function GroupsPage() {
                                 }))
                               }
                             >
-                              {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
+                              {getAccountAccessRoleOptions(showPortalRole).map((option) => (
                                 <option key={option.value} value={option.value}>{option.label}</option>
                               ))}
                             </UiSelect>

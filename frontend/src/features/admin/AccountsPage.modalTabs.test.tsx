@@ -302,9 +302,15 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
     expect(screen.getByRole("textbox", { name: "Search UI users" })).toHaveClass("ui-caption");
-    expect(screen.getByRole("combobox", { name: "Access role for ui7@example.com" })).toHaveValue(
+    const userRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Access role for ui7@example.com",
+    });
+    expect(userRoleSelect).toHaveValue(
       "account_administrator",
     );
+    expect(Array.from(userRoleSelect.options).map((option) => option.value)).toEqual([
+      "account_administrator",
+    ]);
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -340,6 +346,12 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
     expect(screen.getByRole("textbox", { name: "Search UI groups" })).toHaveClass("ui-caption");
+    const groupRoleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Access role for Research Group",
+    });
+    expect(Array.from(groupRoleSelect.options).map((option) => option.value)).toEqual([
+      "account_administrator",
+    ]);
     fireEvent.click(await screen.findByRole("checkbox", { name: "Research Group" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -413,7 +425,7 @@ describe("AccountsPage modal tabs", () => {
     );
   });
 
-  it("hides portal roles when portal is disabled without clearing existing account roles", async () => {
+  it("preserves an existing portal role as a disabled option when Portal is disabled", async () => {
     listS3AccountsMock.mockResolvedValueOnce({
       items: [
         {
@@ -424,7 +436,7 @@ describe("AccountsPage modal tabs", () => {
           storage_endpoint_id: 10,
           storage_endpoint_name: "ceph-main",
           storage_endpoint_url: "https://ceph.example.test",
-          user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "account_administrator" }],
+          user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "portal_manager" }],
           group_links: [],
         },
       ],
@@ -448,22 +460,27 @@ describe("AccountsPage modal tabs", () => {
       },
       quota_max_size_gb: null,
       quota_max_objects: null,
-      user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "account_administrator" }],
+      user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "portal_manager" }],
       group_links: [],
     });
 
     render(<AccountsPage />);
 
     expect(await screen.findByLabelText("1 linked principal")).toHaveAccessibleDescription(
-      "Linked principals (1)\nUI user: ui7@example.com — Roles: Account administrator",
+      "Linked principals (1)\nUI user: ui7@example.com — Roles: Portal manager",
     );
-    expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
 
-    expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
-    expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
+    const roleSelect = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Access role for ui7@example.com",
+    });
+    expect(roleSelect).toHaveValue("portal_manager");
+    expect(Array.from(roleSelect.options).map((option) => [option.value, option.disabled])).toEqual([
+      ["portal_manager", true],
+      ["account_administrator", false],
+    ]);
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
@@ -477,7 +494,7 @@ describe("AccountsPage modal tabs", () => {
         user_links: [
           expect.objectContaining({
             user_id: 7,
-            role: "account_administrator",
+            role: "portal_manager",
           }),
         ],
       })
