@@ -2,11 +2,9 @@
 
 The Admin Automation API applies idempotent administrative changes.
 
-## Main endpoint
+## Endpoint
 
 - `POST /api/admin/automation/apply`
-
-Single-resource endpoints also exist for targeted automation calls.
 
 ## Typical resources
 

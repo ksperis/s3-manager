@@ -311,32 +311,3 @@ class AdminAutomationApplyResponse(ApiModel):
     success: bool
     summary: AdminAutomationSummary
     results: list[AdminAutomationItemResult]
-
-
-class _AdminAutomationSingleRequest(ApiModel):
-    dry_run: bool = False
-    continue_on_error: bool = False
-
-
-class StorageEndpointApplyRequest(_AdminAutomationSingleRequest):
-    item: StorageEndpointApply
-
-
-class UiUserApplyRequest(_AdminAutomationSingleRequest):
-    item: UiUserApply
-
-
-class S3AccountApplyRequest(_AdminAutomationSingleRequest):
-    item: S3AccountApply
-
-
-class S3UserApplyRequest(_AdminAutomationSingleRequest):
-    item: S3UserApply
-
-
-class AccountLinkApplyRequest(_AdminAutomationSingleRequest):
-    item: AccountLinkApply
-
-
-class S3ConnectionApplyRequest(_AdminAutomationSingleRequest):
-    item: S3ConnectionApply

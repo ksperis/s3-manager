@@ -9,12 +9,6 @@ from app.db import User
 from app.models.admin_automation import (
     AdminAutomationApplyRequest,
     AdminAutomationApplyResponse,
-    AccountLinkApplyRequest,
-    S3AccountApplyRequest,
-    S3ConnectionApplyRequest,
-    S3UserApplyRequest,
-    StorageEndpointApplyRequest,
-    UiUserApplyRequest,
 )
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.admin_automation_service import AdminAutomationService, get_admin_automation_service
@@ -34,15 +28,6 @@ def apply_admin_automation(
     audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
-    return _apply_request(payload, current_user, audit_service, service)
-
-
-def _apply_request(
-    payload: AdminAutomationApplyRequest,
-    current_user,
-    audit_service: AuditService,
-    service: AdminAutomationService,
-) -> AdminAutomationApplyResponse:
     response = service.apply(payload, current_user=current_user, audit_service=audit_service)
     if not response.success and not payload.continue_on_error:
         return JSONResponse(
@@ -50,93 +35,3 @@ def _apply_request(
             content=response.model_dump(),
         )
     return response
-
-
-@router.post("/storage-endpoints/apply", response_model=AdminAutomationApplyResponse)
-def apply_storage_endpoint(
-    payload: StorageEndpointApplyRequest,
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-    service: AdminAutomationService = Depends(get_service),
-) -> AdminAutomationApplyResponse:
-    request = AdminAutomationApplyRequest(
-        dry_run=payload.dry_run,
-        continue_on_error=payload.continue_on_error,
-        storage_endpoints=[payload.item],
-    )
-    return _apply_request(request, current_user, audit_service, service)
-
-
-@router.post("/ui-users/apply", response_model=AdminAutomationApplyResponse)
-def apply_ui_user(
-    payload: UiUserApplyRequest,
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-    service: AdminAutomationService = Depends(get_service),
-) -> AdminAutomationApplyResponse:
-    request = AdminAutomationApplyRequest(
-        dry_run=payload.dry_run,
-        continue_on_error=payload.continue_on_error,
-        ui_users=[payload.item],
-    )
-    return _apply_request(request, current_user, audit_service, service)
-
-
-@router.post("/s3-accounts/apply", response_model=AdminAutomationApplyResponse)
-def apply_s3_account(
-    payload: S3AccountApplyRequest,
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-    service: AdminAutomationService = Depends(get_service),
-) -> AdminAutomationApplyResponse:
-    request = AdminAutomationApplyRequest(
-        dry_run=payload.dry_run,
-        continue_on_error=payload.continue_on_error,
-        s3_accounts=[payload.item],
-    )
-    return _apply_request(request, current_user, audit_service, service)
-
-
-@router.post("/s3-users/apply", response_model=AdminAutomationApplyResponse)
-def apply_s3_user(
-    payload: S3UserApplyRequest,
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-    service: AdminAutomationService = Depends(get_service),
-) -> AdminAutomationApplyResponse:
-    request = AdminAutomationApplyRequest(
-        dry_run=payload.dry_run,
-        continue_on_error=payload.continue_on_error,
-        s3_users=[payload.item],
-    )
-    return _apply_request(request, current_user, audit_service, service)
-
-
-@router.post("/account-links/apply", response_model=AdminAutomationApplyResponse)
-def apply_account_link(
-    payload: AccountLinkApplyRequest,
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-    service: AdminAutomationService = Depends(get_service),
-) -> AdminAutomationApplyResponse:
-    request = AdminAutomationApplyRequest(
-        dry_run=payload.dry_run,
-        continue_on_error=payload.continue_on_error,
-        account_links=[payload.item],
-    )
-    return _apply_request(request, current_user, audit_service, service)
-
-
-@router.post("/s3-connections/apply", response_model=AdminAutomationApplyResponse)
-def apply_s3_connection(
-    payload: S3ConnectionApplyRequest,
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-    service: AdminAutomationService = Depends(get_service),
-) -> AdminAutomationApplyResponse:
-    request = AdminAutomationApplyRequest(
-        dry_run=payload.dry_run,
-        continue_on_error=payload.continue_on_error,
-        s3_connections=[payload.item],
-    )
-    return _apply_request(request, current_user, audit_service, service)

@@ -57,18 +57,6 @@ def list_admin_portal_requests(
     )
 
 
-@router.get("/{request_id}", response_model=PortalAdminRequestOut)
-def get_admin_portal_request(
-    request_id: int,
-    _: User = Depends(get_current_super_admin),
-    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
-) -> PortalAdminRequestOut:
-    try:
-        return service.get_for_admin(request_id)
-    except PortalRequestNotFound as exc:
-        _raise_portal_request_error(exc)
-
-
 @router.post("/{request_id}/approve", response_model=PortalAdminRequestOut)
 def approve_admin_portal_request(
     request_id: int,

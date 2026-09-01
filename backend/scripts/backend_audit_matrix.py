@@ -26,7 +26,7 @@ SIGNAL_FIELDS = {
     "delegated_ceph_admin_bucket_ui_tags_audit": "CephAdminBucketUiTagsWorkflow = Depends(",
     "delegated_purge_stream": "stream_bucket_purge(",
     "delegated_integrity_stream": "stream_bucket_integrity_check(",
-    "delegated_admin_automation_audit": "_apply_request(",
+    "delegated_admin_automation_audit": "service.apply(",
     "delegated_portal_request_create_audit": "service.create_request(",
     "delegated_portal_request_approve_audit": "service.approve_request(",
     "delegated_portal_request_reject_audit": "service.reject_request(",

@@ -68,6 +68,16 @@ def _install_admin_override(admin: User) -> None:
     app.dependency_overrides[dependencies.require_portal_enabled] = lambda: None
 
 
+def test_admin_portal_request_openapi_omits_single_request_route():
+    paths = app.openapi()["paths"]
+
+    assert "/api/admin/portal-requests/{request_id}" not in paths
+    assert "/api/admin/portal-requests" in paths
+    assert "/api/admin/portal-requests/{request_id}/approve" in paths
+    assert "/api/admin/portal-requests/{request_id}/reject" in paths
+    assert "/api/admin/portal-requests/{request_id}/messages" in paths
+
+
 def test_portal_request_routes_create_and_isolate_by_requester(client: TestClient, db_session):
     account = _seed_account(db_session)
     requester = _seed_user(db_session, email="requester@example.org")

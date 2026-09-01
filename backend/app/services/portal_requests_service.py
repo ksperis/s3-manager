@@ -167,9 +167,6 @@ class PortalRequestsService:
         )
         return [self.to_out(row) for row in rows]
 
-    def get_for_admin(self, request_id: int) -> PortalAdminRequestOut:
-        return self.to_out(self._load_request(request_id))
-
     def add_admin_message(
         self,
         request_id: int,
