@@ -35,6 +35,10 @@ from app.services.portal_role_sync import (
 )
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.rgw_account_topics_resolver import (
+    RgwAccountTopicsResolver,
+    normalize_account_key,
+)
 from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
 from app.services.s3_account_associations_service import S3AccountAssociationsService
 from app.services.tags_service import TagsService
@@ -75,8 +79,7 @@ class S3AccountsService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.tags = TagsService(db)
-        self._topics_cache: dict[tuple[int, str], tuple[Optional[int], Optional[list[str]]]] = {}
-        self._topics_global_cache: dict[int, Optional[dict[str, list[str]]]] = {}
+        self.account_topics = RgwAccountTopicsResolver()
 
     def _endpoint_capabilities(self, endpoint: StorageEndpoint) -> dict[str, bool]:
         features = normalize_features_config(endpoint.provider, endpoint.features_config)
@@ -200,11 +203,6 @@ class S3AccountsService:
             extract_positive_limit(payload, "max_groups"),
         )
 
-    def _normalize_account_key(self, account_id: Optional[str]) -> Optional[str]:
-        if not account_id:
-            return None
-        return str(account_id).lower()
-
     def _root_uid(self, identifier: Any) -> str:
         value = str(identifier or "").strip()
         if not value:
@@ -218,109 +216,6 @@ class S3AccountsService:
         base = (account_name or account_identifier or "").strip()
         return base or "bucketreef admin user"
 
-    def _topic_entry_metadata(self, topic: Any) -> tuple[Optional[str], Optional[str]]:
-        name: Optional[str] = None
-        account: Optional[str] = None
-        arn: Optional[str] = None
-        if isinstance(topic, dict):
-            name = (
-                topic.get("topic")
-                or topic.get("name")
-                or topic.get("topic_name")
-                or topic.get("Topic")
-            )
-            arn = topic.get("arn") or topic.get("TopicArn") or topic.get("topic_arn")
-            account = topic.get("account") or topic.get("account_id") or topic.get("tenant")
-        else:
-            name = str(topic)
-        if arn and not account:
-            parts = str(arn).split(":")
-            if len(parts) >= 5:
-                account = parts[4] or account
-        if name and not account and ":" in name:
-            prefix = name.split(":", 1)[0]
-            if prefix.upper().startswith("RGW"):
-                account = prefix
-        if not name and arn:
-            name = arn
-        return (str(name) if name else None, str(account) if account else None)
-
-    def _topics_from_response(self, topics: Optional[list[Any]]) -> Optional[tuple[int, list[str]]]:
-        if topics is None:
-            return None
-        names: list[str] = []
-        for topic in topics:
-            name, _ = self._topic_entry_metadata(topic)
-            if name:
-                names.append(name)
-        deduped = sorted(set(names))
-        return (len(deduped), deduped)
-
-    def _all_topics_by_account(
-        self,
-        admin: RGWAdminClient,
-        storage_endpoint_id: int,
-    ) -> Optional[dict[str, list[str]]]:
-        if storage_endpoint_id in self._topics_global_cache:
-            return self._topics_global_cache[storage_endpoint_id]
-        try:
-            topics = admin.list_topics(None)
-        except RGWAdminError as exc:
-            logger.debug("Unable to list global topics: %s", exc)
-            self._topics_global_cache[storage_endpoint_id] = None
-            return None
-        if topics is None:
-            self._topics_global_cache[storage_endpoint_id] = None
-            return None
-        mapping: dict[str, list[str]] = {}
-        for topic in topics:
-            name, account = self._topic_entry_metadata(topic)
-            norm_key = self._normalize_account_key(account)
-            if not norm_key or not name:
-                continue
-            mapping.setdefault(norm_key, []).append(name)
-        for key in list(mapping.keys()):
-            mapping[key] = sorted(set(mapping[key]))
-        self._topics_global_cache[storage_endpoint_id] = mapping
-        return mapping
-
-    def _account_topics_info(
-        self,
-        account_identifier: Optional[str],
-        admin: Optional[RGWAdminClient],
-        storage_endpoint_id: int,
-    ) -> tuple[Optional[int], Optional[list[str]]]:
-        if not account_identifier or not admin:
-            return None, None
-        normalized_key = self._normalize_account_key(account_identifier)
-        if not normalized_key:
-            return None, None
-        cache_key = (storage_endpoint_id, normalized_key)
-        cached = self._topics_cache.get(cache_key)
-        if cached is not None:
-            return cached
-        topics_response: Optional[list[Any]]
-        topics_response = None
-        try:
-            topics_response = admin.list_topics(account_identifier)
-        except RGWAdminError as exc:
-            if any(code in str(exc).lower() for code in ("405", "methodnotallowed")):
-                logger.debug("Topic API unavailable for %s: treating as zero topics", account_identifier)
-                result = (0, [])
-                self._topics_cache[cache_key] = result
-                return result
-            logger.debug("Unable to list topics for account %s: %s", account_identifier, exc)
-        result = self._topics_from_response(topics_response)
-        if result is None:
-            global_topics = self._all_topics_by_account(admin, storage_endpoint_id)
-            if global_topics is not None:
-                names = list(global_topics.get(normalized_key, []))
-                result = (len(names), names)
-            else:
-                result = (0, [])
-        self._topics_cache[cache_key] = result
-        return result
-
     def _account_rgw_users(
         self,
         account_identifier: Optional[str],
@@ -328,7 +223,7 @@ class S3AccountsService:
         admin: Optional[RGWAdminClient],
         endpoint_capabilities: Optional[dict[str, bool]] = None,
     ) -> tuple[Optional[int], Optional[list[str]]]:
-        normalized_key = self._normalize_account_key(account_identifier)
+        normalized_key = normalize_account_key(account_identifier)
         if not normalized_key:
             return None, None
         if precomputed_users is not None:
@@ -484,7 +379,7 @@ class S3AccountsService:
                     admin,
                     endpoint_capabilities=endpoint_capabilities,
                 )
-                rgw_topic_count, rgw_topics = self._account_topics_info(
+                rgw_topic_count, rgw_topics = self.account_topics.resolve(
                     account_identifier,
                     admin,
                     acc.storage_endpoint_id,
@@ -552,7 +447,7 @@ class S3AccountsService:
                 admin,
                 endpoint_capabilities=endpoint_capabilities,
             )
-            rgw_topic_count, rgw_topics = self._account_topics_info(
+            rgw_topic_count, rgw_topics = self.account_topics.resolve(
                 account_identifier,
                 admin,
                 account.storage_endpoint_id,
@@ -913,7 +808,7 @@ class S3AccountsService:
             )
             if rgw_user_count is None:
                 raise ValueError("Unable to verify RGW users; cannot delete the RGW tenant.")
-            rgw_topic_count, _ = self._account_topics_info(
+            rgw_topic_count, _ = self.account_topics.resolve(
                 account_identifier,
                 admin,
                 account.storage_endpoint_id,

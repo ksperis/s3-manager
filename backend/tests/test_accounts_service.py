@@ -518,7 +518,7 @@ def test_delete_account_skips_rgw_when_flag_false(db_session, monkeypatch):
     svc = _build_service(db_session, monkeypatch, fake_admin)
     svc.get_account_usage = lambda acc: (0, 0, 0)  # type: ignore[method-assign]
     svc._account_rgw_users = lambda account_id, tenant, admin, **kwargs: (0, [])  # type: ignore[method-assign]
-    svc._account_topics_info = lambda account_id, admin, endpoint_id: (0, [])  # type: ignore[method-assign]
+    svc.account_topics.resolve = lambda account_id, admin, endpoint_id: (0, [])  # type: ignore[method-assign]
 
     svc.delete_account(account.id, delete_rgw=False)
 
@@ -574,7 +574,7 @@ def test_delete_account_calls_rgw_when_flag_true(db_session, monkeypatch):
     svc = _build_service(db_session, monkeypatch, fake_admin)
     svc.get_account_usage = lambda acc: (0, 0, 0)  # type: ignore[method-assign]
     svc._account_rgw_users = lambda account_id, tenant, admin, **kwargs: (0, [])  # type: ignore[method-assign]
-    svc._account_topics_info = lambda account_id, admin, endpoint_id: (0, [])  # type: ignore[method-assign]
+    svc.account_topics.resolve = lambda account_id, admin, endpoint_id: (0, [])  # type: ignore[method-assign]
 
     svc.delete_account(account.id, delete_rgw=True)
 

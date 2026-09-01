@@ -7,6 +7,7 @@ import pytest
 from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.models.s3_account import AccountUserLink, S3AccountUpdate
 from app.services.rgw_admin import RGWAdminError
+from app.services.rgw_account_topics_resolver import normalize_account_key
 from app.services.s3_accounts_service import S3AccountsService
 
 
@@ -19,10 +20,12 @@ class _FakeRGWAdmin:
         self.raise_topics: Exception | None = None
         self.raise_get_account: Exception | None = None
         self.get_account_calls = 0
+        self.list_topics_calls: list[str | None] = []
         self.account_api_supported: bool | None = None
         self.unsupported_account_api = False
 
     def list_topics(self, account_id: str | None = None):
+        self.list_topics_calls.append(account_id)
         if self.raise_topics:
             raise self.raise_topics
         return self.topics_by_account.get(account_id)
@@ -114,35 +117,39 @@ def test_resolve_storage_endpoint_errors_and_success(db_session):
         service._resolve_storage_endpoint(other.id, require_ceph=True)
 
 
-def test_topic_parsing_helpers_and_account_topics_fallbacks(db_session):
-    service, admin = _service(db_session)
+def test_account_identity_helpers(db_session):
+    service, _ = _service(db_session)
 
-    assert service._normalize_account_key("RGW1") == "rgw1"
+    assert normalize_account_key("RGW1") == "rgw1"
     assert service._root_uid("RGW99") == "rgw99-admin"
     assert service._root_display_name("My account", "RGW99") == "My account"
 
-    count, names = service._topics_from_response(
-        [
-            {"name": "topic-a", "account_id": "RGW1"},
-            {"TopicArn": "arn:aws:sns:region:RGW1:topic-b"},
-            "RGW1:topic-c",
-        ]
+
+def test_account_topics_resolver_parses_caches_and_falls_back(db_session):
+    service, admin = _service(db_session)
+    resolver = service.account_topics
+
+    admin.topics_by_account["RGW1"] = [
+        {"name": "topic-a", "account_id": "RGW1"},
+        {"TopicArn": "arn:aws:sns:region:RGW1:topic-b"},
+        "RGW1:topic-c",
+    ]
+    assert resolver.resolve("RGW1", admin, 1) == (
+        3,
+        ["RGW1:topic-c", "arn:aws:sns:region:RGW1:topic-b", "topic-a"],
     )
-    assert count == 3
-    assert names == ["RGW1:topic-c", "arn:aws:sns:region:RGW1:topic-b", "topic-a"]
 
     admin.raise_topics = RGWAdminError("405 methodNotAllowed")
-    assert service._account_topics_info("RGW1", admin, 1) == (0, [])
-    # Cache hit
-    assert service._account_topics_info("RGW1", admin, 1) == (0, [])
+    assert resolver.resolve("RGW405", admin, 1) == (0, [])
+    assert resolver.resolve("RGW405", admin, 1) == (0, [])
+    assert admin.list_topics_calls.count("RGW405") == 1
 
-    service._topics_cache.clear()
     admin.raise_topics = None
     admin.topics_by_account = {None: [{"TopicArn": "arn:aws:sns:region:RGW2:topic-z"}], "RGW2": None}
-    assert service._account_topics_info("RGW2", admin, 1) == (1, ["arn:aws:sns:region:RGW2:topic-z"])
+    assert resolver.resolve("RGW2", admin, 1) == (1, ["arn:aws:sns:region:RGW2:topic-z"])
 
     admin.topics_by_account = {None: [{"TopicArn": "arn:aws:sns:region:RGW2:topic-y"}], "RGW2": None}
-    assert service._account_topics_info("RGW2", admin, 2) == (1, ["arn:aws:sns:region:RGW2:topic-y"])
+    assert resolver.resolve("RGW2", admin, 2) == (1, ["arn:aws:sns:region:RGW2:topic-y"])
 
 
 def test_account_rgw_users_paths(db_session):
@@ -303,7 +310,7 @@ def test_delete_account_guardrails_and_success(db_session, monkeypatch):
 
     monkeypatch.setattr(service, "get_account_usage", lambda *args, **kwargs: (0, 0, 1))
     monkeypatch.setattr(service, "_account_rgw_users", lambda *args, **kwargs: (0, []))
-    monkeypatch.setattr(service, "_account_topics_info", lambda *args, **kwargs: (0, []))
+    monkeypatch.setattr(service.account_topics, "resolve", lambda *args, **kwargs: (0, []))
     monkeypatch.setattr(service, "_admin_for_account", lambda *args, **kwargs: admin)
     monkeypatch.setattr(service, "_delete_root_user", lambda *args, **kwargs: None)
 
