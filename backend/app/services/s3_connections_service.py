@@ -1,14 +1,11 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 
-from app.utils.time import utcnow
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 from app.db.s3_connection import ManagedPrivateAccess, S3Connection as DBS3Connection, UserS3Connection
-from app.db.ui_group import UiGroup, UiGroupS3Connection
-from app.db.user import User
 from app.models.s3_connection import (
     S3_CONNECTION_ENDPOINT_FIELDS,
     S3Connection,
@@ -20,6 +17,9 @@ from app.models.s3_connection_admin import (
     S3ConnectionAdminUpdate,
 )
 from app.services.mappers.s3_connection import s3_connection_from_db
+from app.services.s3_connection_associations_service import (
+    S3ConnectionAssociationsService,
+)
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connection_endpoint_planner import S3ConnectionEndpointPlanner
 from app.services.tags_service import TagsService
@@ -28,6 +28,7 @@ from app.utils.s3_connection_capabilities import (
     s3_connection_can_manage_iam,
 )
 from app.utils.name_ordering import name_order_by
+from app.utils.time import utcnow
 
 
 ACTIVE_MANAGED_SOURCE_DELETE_ERROR = (
@@ -52,6 +53,7 @@ class S3ConnectionsService:
     def __init__(self, db: Session):
         self.db = db
         self.tags = TagsService(db)
+        self.associations = S3ConnectionAssociationsService(db)
         self.endpoint_planner = S3ConnectionEndpointPlanner(db)
 
     def list_for_user(self, user_id: int) -> list[S3Connection]:
@@ -187,10 +189,11 @@ class S3ConnectionsService:
             row.credential_owner_identifier = payload.credential_owner_identifier
         if "tags" in payload_data:
             self.tags.replace_connection_tags(row, payload.tags)
-        if group_ids is not None:
-            self._sync_admin_shared_group_links(row.id, group_ids)
-        if user_ids is not None:
-            self._sync_admin_shared_user_links(row.id, user_ids)
+        self.associations.replace_links(
+            row.id,
+            group_ids=group_ids,
+            user_ids=user_ids,
+        )
         if payload.credentials is not None:
             row.access_key_id = payload.credentials.access_key_id
             row.secret_access_key = payload.credentials.secret_access_key
@@ -415,122 +418,15 @@ class S3ConnectionsService:
                 payload,
                 enforce_manual_endpoint_policy=False,
             )
-        group_ids = self._validated_admin_shared_group_ids(payload.group_ids)
-        user_ids = self._validated_admin_shared_user_ids(payload.user_ids)
+        group_ids, user_ids = self.associations.validate_updates(
+            group_ids=payload.group_ids,
+            user_ids=payload.user_ids,
+        )
         return endpoint_plan, group_ids, user_ids
-
-    def _validated_admin_shared_group_ids(
-        self,
-        group_ids: Optional[list[int]],
-    ) -> Optional[list[int]]:
-        if group_ids is None:
-            return None
-        cleaned_ids = sorted({int(group_id) for group_id in group_ids})
-        if not cleaned_ids:
-            return []
-        found = {
-            row[0]
-            for row in self.db.query(UiGroup.id)
-            .filter(UiGroup.id.in_(cleaned_ids))
-            .all()
-        }
-        missing = set(cleaned_ids) - found
-        if missing:
-            missing_str = ", ".join(str(group_id) for group_id in sorted(missing))
-            raise ValueError(f"UI groups not found: {missing_str}")
-        return cleaned_ids
-
-    def _sync_admin_shared_group_links(
-        self,
-        connection_id: int,
-        group_ids: list[int],
-    ) -> None:
-        existing = (
-            self.db.query(UiGroupS3Connection)
-            .filter(UiGroupS3Connection.s3_connection_id == connection_id)
-            .all()
-        )
-        existing_ids = {link.group_id for link in existing}
-        desired_ids = set(group_ids)
-        if existing_ids - desired_ids:
-            (
-                self.db.query(UiGroupS3Connection)
-                .filter(
-                    UiGroupS3Connection.s3_connection_id == connection_id,
-                    UiGroupS3Connection.group_id.in_(existing_ids - desired_ids),
-                )
-                .delete(synchronize_session=False)
-            )
-        for group_id in sorted(desired_ids - existing_ids):
-            self.db.add(
-                UiGroupS3Connection(
-                    group_id=group_id,
-                    s3_connection_id=connection_id,
-                )
-            )
-
-    def _validated_admin_shared_user_ids(
-        self,
-        user_ids: Optional[list[int]],
-    ) -> Optional[list[int]]:
-        if user_ids is None:
-            return None
-        cleaned_ids = sorted({int(user_id) for user_id in user_ids})
-        if not cleaned_ids:
-            return []
-        found = {
-            row[0]
-            for row in self.db.query(User.id)
-            .filter(User.id.in_(cleaned_ids))
-            .all()
-        }
-        missing = set(cleaned_ids) - found
-        if missing:
-            missing_str = ", ".join(str(user_id) for user_id in sorted(missing))
-            raise ValueError(f"UI users not found: {missing_str}")
-        return cleaned_ids
-
-    def _sync_admin_shared_user_links(
-        self,
-        connection_id: int,
-        user_ids: list[int],
-    ) -> None:
-        existing = (
-            self.db.query(UserS3Connection)
-            .filter(UserS3Connection.s3_connection_id == connection_id)
-            .all()
-        )
-        existing_ids = {link.user_id for link in existing}
-        desired_ids = set(user_ids)
-        if existing_ids - desired_ids:
-            (
-                self.db.query(UserS3Connection)
-                .filter(
-                    UserS3Connection.s3_connection_id == connection_id,
-                    UserS3Connection.user_id.in_(existing_ids - desired_ids),
-                )
-                .delete(synchronize_session=False)
-            )
-        for user_id in sorted(desired_ids - existing_ids):
-            self.db.add(
-                UserS3Connection(
-                    user_id=user_id,
-                    s3_connection_id=connection_id,
-                )
-            )
 
     def _delete_entry(self, row: DBS3Connection) -> None:
         domain_kind, _owner_user_id = self.tags.resolve_connection_domain(row)
-        (
-            self.db.query(UserS3Connection)
-            .filter(UserS3Connection.s3_connection_id == row.id)
-            .delete(synchronize_session=False)
-        )
-        (
-            self.db.query(UiGroupS3Connection)
-            .filter(UiGroupS3Connection.s3_connection_id == row.id)
-            .delete(synchronize_session=False)
-        )
+        self.associations.delete_links(row.id)
         self.db.delete(row)
         self.db.flush()
         self.tags.cleanup_orphan_definitions(domain_kinds=[domain_kind])
