@@ -15,14 +15,11 @@ import {
   portalStorageSpaceVersionCleanupConfirmationPhrase,
   revokePortalStorageSpaceShare,
   restorePortalStorageSpaceObject,
-  streamPortalDeletedPrefixRestore,
   streamPortalStorageSpaceVersionCleanup,
   takePortalStorageSpaceOwnership,
   updatePortalStorageSpace,
   updatePortalStorageSpaceSettings,
   updatePortalStorageSpaceShare,
-  type PortalDeletedPrefixRestoreProgress,
-  type PortalDeletedPrefixRestoreResult,
   type PortalStorageSpaceVersionCleanupProgress,
   type PortalStorageSpaceVersionCleanupResult,
   type PortalPublicLink,
@@ -46,7 +43,6 @@ import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
-import UiMeterBar from "../../components/ui/UiMeterBar";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import UiSelect from "../../components/ui/UiSelect";
 import {
@@ -84,11 +80,13 @@ import {
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
+import PortalDeletedPrefixRestoreWorkflow from "./PortalDeletedPrefixRestoreWorkflow";
 import PortalPublicLinkCreateDialog from "./PortalPublicLinkCreateDialog";
 import PortalPublicLinkRevokeDialog from "./PortalPublicLinkRevokeDialog";
 import PortalPublicLinksTable from "./PortalPublicLinksTable";
 import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
 import PortalStorageSpaceStatistics from "./PortalStorageSpaceStatistics";
+import PortalWorkflowMetricCard from "./PortalWorkflowMetricCard";
 import {
   PortalPageState,
   portalStorageSpaceStatusTone,
@@ -136,31 +134,6 @@ type SpaceDetailTab =
   | "statistics"
   | "settings";
 
-function ObjectMetricCard({
-  label,
-  value,
-  detail,
-  progress,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  progress?: number;
-}) {
-  return (
-    <UiCard bodyClassName="px-4 py-3">
-      <div className={cx("text-[11px] font-semibold", uiMutedTextClass)}>{label}</div>
-      <div className={cx("mt-2 text-[20px] font-bold leading-6", uiTitleTextClass)}>{value}</div>
-      <div className={cx("mt-1 text-[11px] font-medium", uiMutedTextClass)}>{detail}</div>
-      {progress != null ? (
-        <div className="mt-3">
-          <UiMeterBar value={progress} label={`${label} quota usage`} />
-        </div>
-      ) : null}
-    </UiCard>
-  );
-}
-
 function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === "AbortError";
 }
@@ -184,15 +157,6 @@ export default function PortalStorageSpaceDetailPage() {
   const [browserRefreshToken, setBrowserRefreshToken] = useState(0);
   const [deletedPrefixRestoreTarget, setDeletedPrefixRestoreTarget] =
     useState<BrowserObjectDetailsRouteTarget | null>(null);
-  const [deletedPrefixRestoreRunning, setDeletedPrefixRestoreRunning] =
-    useState(false);
-  const [deletedPrefixRestoreProgress, setDeletedPrefixRestoreProgress] =
-    useState<PortalDeletedPrefixRestoreProgress | null>(null);
-  const [deletedPrefixRestoreResult, setDeletedPrefixRestoreResult] =
-    useState<PortalDeletedPrefixRestoreResult | null>(null);
-  const [deletedPrefixRestoreError, setDeletedPrefixRestoreError] =
-    useState<string | null>(null);
-  const deletedPrefixRestoreAbortRef = useRef<AbortController | null>(null);
   const [metadataName, setMetadataName] = useState("");
   const [metadataDescription, setMetadataDescription] = useState("");
   const [metadataBusy, setMetadataBusy] = useState(false);
@@ -848,73 +812,6 @@ export default function PortalStorageSpaceDetailPage() {
     }
   };
 
-  const startDeletedPrefixRestore = async () => {
-    if (
-      !space ||
-      !accountIdForApi ||
-      !deletedPrefixRestoreTarget ||
-      deletedPrefixRestoreRunning
-    ) {
-      return;
-    }
-    const controller = new AbortController();
-    deletedPrefixRestoreAbortRef.current = controller;
-    setDeletedPrefixRestoreRunning(true);
-    setDeletedPrefixRestoreProgress(null);
-    setDeletedPrefixRestoreResult(null);
-    setDeletedPrefixRestoreError(null);
-    try {
-      const result = await streamPortalDeletedPrefixRestore(
-        accountIdForApi,
-        space.id,
-        deletedPrefixRestoreTarget.key,
-        {
-          signal: controller.signal,
-          onProgress: setDeletedPrefixRestoreProgress,
-        },
-      );
-      setDeletedPrefixRestoreResult(result);
-      setBrowserRefreshToken((current) => current + 1);
-      refreshWorkspaceData();
-    } catch (err) {
-      if (isAbortError(err) || controller.signal.aborted) {
-        setDeletedPrefixRestoreError(
-          t({
-            en: "Restoration stopped. Files already restored remain available.",
-            fr: "Restauration arrêtée. Les fichiers déjà restaurés restent disponibles.",
-            de: "Wiederherstellung gestoppt. Bereits wiederhergestellte Dateien bleiben verfügbar.",
-          }),
-        );
-        setBrowserRefreshToken((current) => current + 1);
-      } else {
-        console.error(err);
-        setDeletedPrefixRestoreError(
-          extractApiError(
-            err,
-            t({
-              en: "Unable to restore the deleted files in this folder.",
-              fr: "Impossible de restaurer les fichiers supprimés de ce dossier.",
-              de: "Gelöschte Dateien in diesem Ordner konnten nicht wiederhergestellt werden.",
-            }),
-          ),
-        );
-      }
-    } finally {
-      if (deletedPrefixRestoreAbortRef.current === controller) {
-        deletedPrefixRestoreAbortRef.current = null;
-      }
-      setDeletedPrefixRestoreRunning(false);
-    }
-  };
-
-  const closeDeletedPrefixRestore = () => {
-    if (deletedPrefixRestoreRunning) return;
-    setDeletedPrefixRestoreTarget(null);
-    setDeletedPrefixRestoreProgress(null);
-    setDeletedPrefixRestoreResult(null);
-    setDeletedPrefixRestoreError(null);
-  };
-
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
     loading,
@@ -997,23 +894,6 @@ export default function PortalStorageSpaceDetailPage() {
       ? 100
       : null
       : null;
-  const deletedPrefixRestoreProcessed =
-    (deletedPrefixRestoreProgress?.restored_objects ?? 0) +
-    (deletedPrefixRestoreProgress?.failed_objects ?? 0);
-  const deletedPrefixRestoreProgressPercent =
-    deletedPrefixRestoreProgress?.total_candidates_final &&
-    deletedPrefixRestoreProgress.restore_candidates > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (deletedPrefixRestoreProcessed /
-              deletedPrefixRestoreProgress.restore_candidates) *
-              100,
-          ),
-        )
-      : deletedPrefixRestoreProgress?.stage === "completed"
-        ? 100
-        : null;
   const pageDescription = space.description
     ? t({
         en: `${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`,
@@ -1499,12 +1379,7 @@ export default function PortalStorageSpaceDetailPage() {
                 ? setTrashRestoreTarget
                 : undefined,
               onRestorePrefix: canModifyObjects
-                ? (target) => {
-                    setDeletedPrefixRestoreTarget(target);
-                    setDeletedPrefixRestoreProgress(null);
-                    setDeletedPrefixRestoreResult(null);
-                    setDeletedPrefixRestoreError(null);
-                  }
+                ? setDeletedPrefixRestoreTarget
                 : undefined,
             }}
           />
@@ -2192,246 +2067,17 @@ export default function PortalStorageSpaceDetailPage() {
       ) : null}
 
       {deletedPrefixRestoreTarget ? (
-        <WorkflowPage
-          title={t({
-            en: "Restore deleted files",
-            fr: "Restaurer les fichiers supprimés",
-            de: "Gelöschte Dateien wiederherstellen",
-          })}
-          description={t({
-            en: "Restore recoverable files from this folder and its subfolders.",
-            fr: "Restaurez les fichiers récupérables de ce dossier et de ses sous-dossiers.",
-            de: "Stellen Sie wiederherstellbare Dateien aus diesem Ordner und seinen Unterordnern wieder her.",
-          })}
-          breadcrumbs={portalBreadcrumbs(
-            {
-              label: t({
-                en: "Spaces",
-                fr: "Espaces",
-                de: "Bereiche",
-              }),
-              to: "/portal/storage-spaces",
-            },
-            { label: space.name },
-            {
-              label: t({
-                en: "Restore folder",
-                fr: "Restaurer le dossier",
-                de: "Ordner wiederherstellen",
-              }),
-            },
-          )}
-          backLabel={t({
-            en: "Back to files",
-            fr: "Retour aux fichiers",
-            de: "Zurück zu Dateien",
-          })}
-          onBack={
-            deletedPrefixRestoreRunning
-              ? undefined
-              : closeDeletedPrefixRestore
+        <PortalDeletedPrefixRestoreWorkflow
+          accountId={accountIdForApi}
+          spaceId={space.id}
+          spaceName={space.name}
+          target={deletedPrefixRestoreTarget}
+          onClose={() => setDeletedPrefixRestoreTarget(null)}
+          onBrowserRefresh={() =>
+            setBrowserRefreshToken((current) => current + 1)
           }
-          width="standard"
-        >
-          <div className="space-y-4">
-            {deletedPrefixRestoreError ? (
-              <PageBanner tone="warning">
-                {deletedPrefixRestoreError}
-              </PageBanner>
-            ) : null}
-            <PageBanner tone="info">
-              {t({
-                en: "Only files that are currently deleted are restored. Existing files and version history are kept.",
-                fr: "Seuls les fichiers actuellement supprimés sont restaurés. Les fichiers existants et leur historique sont conservés.",
-                de: "Nur aktuell gelöschte Dateien werden wiederhergestellt. Vorhandene Dateien und der Versionsverlauf bleiben erhalten.",
-              })}
-            </PageBanner>
-            <dl className="grid gap-3 text-xs sm:grid-cols-2">
-              <div>
-                <dt className={cx("font-semibold uppercase", uiMutedTextClass)}>
-                  {t({ en: "Space", fr: "Espace", de: "Bereich" })}
-                </dt>
-                <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>
-                  {space.name}
-                </dd>
-              </div>
-              <div>
-                <dt className={cx("font-semibold uppercase", uiMutedTextClass)}>
-                  {t({
-                    en: "Folder",
-                    fr: "Dossier",
-                    de: "Ordner",
-                  })}
-                </dt>
-                <dd className={cx("mt-1 break-all font-mono", uiTitleTextClass)}>
-                  {deletedPrefixRestoreTarget.key}
-                </dd>
-              </div>
-            </dl>
-
-            {deletedPrefixRestoreProgress ? (
-              <div className="rounded-md border border-[color:var(--ui-border)] p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className={cx("ui-caption font-semibold", uiTitleTextClass)}>
-                    {deletedPrefixRestoreProgress.message ??
-                      deletedPrefixRestoreProgress.stage}
-                  </p>
-                  <p className={cx("ui-caption", uiMutedTextClass)}>
-                    {formatCompactNumber(deletedPrefixRestoreProcessed)} /{" "}
-                    {deletedPrefixRestoreProgress.total_candidates_final
-                      ? formatCompactNumber(
-                          deletedPrefixRestoreProgress.restore_candidates,
-                        )
-                      : t({
-                          en: "discovering",
-                          fr: "détection",
-                          de: "wird ermittelt",
-                        })}
-                  </p>
-                </div>
-                {deletedPrefixRestoreProgressPercent === null ? (
-                  <div
-                    className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--ui-surface-muted)]"
-                    role="progressbar"
-                    aria-label={t({
-                      en: "Deleted file restoration progress",
-                      fr: "Progression de la restauration",
-                      de: "Fortschritt der Wiederherstellung",
-                    })}
-                  >
-                    <div className="h-full w-full animate-pulse rounded-full bg-primary/70" />
-                  </div>
-                ) : (
-                  <UiProgressBar
-                    value={deletedPrefixRestoreProgressPercent}
-                    label={t({
-                      en: "Deleted file restoration progress",
-                      fr: "Progression de la restauration",
-                      de: "Fortschritt der Wiederherstellung",
-                    })}
-                    className="mt-2 h-2 bg-[var(--ui-surface-muted)]"
-                  />
-                )}
-                <p className={cx("mt-2 ui-caption", uiMutedTextClass)}>
-                  {t({
-                    en: `${formatCompactNumber(deletedPrefixRestoreProgress.scanned_versions)} versions and ${formatCompactNumber(deletedPrefixRestoreProgress.scanned_delete_markers)} deletion records scanned.`,
-                    fr: `${formatCompactNumber(deletedPrefixRestoreProgress.scanned_versions)} versions et ${formatCompactNumber(deletedPrefixRestoreProgress.scanned_delete_markers)} traces de suppression analysées.`,
-                    de: `${formatCompactNumber(deletedPrefixRestoreProgress.scanned_versions)} Versionen und ${formatCompactNumber(deletedPrefixRestoreProgress.scanned_delete_markers)} Löschvermerke geprüft.`,
-                  })}
-                </p>
-              </div>
-            ) : null}
-
-            {deletedPrefixRestoreResult ? (
-              <>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <ObjectMetricCard
-                    label={t({
-                      en: "Found",
-                      fr: "Trouvés",
-                      de: "Gefunden",
-                    })}
-                    value={formatCompactNumber(
-                      deletedPrefixRestoreResult.restore_candidates,
-                    )}
-                    detail={t({
-                      en: "recoverable files",
-                      fr: "fichiers récupérables",
-                      de: "wiederherstellbare Dateien",
-                    })}
-                  />
-                  <ObjectMetricCard
-                    label={t({
-                      en: "Restored",
-                      fr: "Restaurés",
-                      de: "Wiederhergestellt",
-                    })}
-                    value={formatCompactNumber(
-                      deletedPrefixRestoreResult.restored_objects,
-                    )}
-                    detail={t({
-                      en: "returned to their folders",
-                      fr: "replacés dans leurs dossiers",
-                      de: "in ihre Ordner zurückgelegt",
-                    })}
-                  />
-                  <ObjectMetricCard
-                    label={t({
-                      en: "Not restored",
-                      fr: "Non restaurés",
-                      de: "Nicht wiederhergestellt",
-                    })}
-                    value={formatCompactNumber(
-                      deletedPrefixRestoreResult.failed_objects,
-                    )}
-                    detail={t({
-                      en: "review below",
-                      fr: "à vérifier ci-dessous",
-                      de: "unten prüfen",
-                    })}
-                  />
-                </div>
-                {deletedPrefixRestoreResult.failures.length > 0 ? (
-                  <div className={uiPanelMutedClass}>
-                    <p className={cx("ui-caption font-semibold", uiTitleTextClass)}>
-                      {t({
-                        en: "Files requiring attention",
-                        fr: "Fichiers à vérifier",
-                        de: "Zu prüfende Dateien",
-                      })}
-                    </p>
-                    <ul className="mt-2 space-y-1 ui-caption">
-                      {deletedPrefixRestoreResult.failures.map((failure) => (
-                        <li key={failure.key} className="break-all">
-                          <span className="font-mono">{failure.key}</span>
-                          {" — "}
-                          {failure.detail}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-
-            <WorkflowActions>
-              {deletedPrefixRestoreRunning ? (
-                <UiButton
-                  variant="secondary"
-                  onClick={() =>
-                    deletedPrefixRestoreAbortRef.current?.abort()
-                  }
-                >
-                  {t({
-                    en: "Stop",
-                    fr: "Arrêter",
-                    de: "Stoppen",
-                  })}
-                </UiButton>
-              ) : deletedPrefixRestoreResult ? (
-                <UiButton onClick={closeDeletedPrefixRestore}>
-                  {t({ en: "Done", fr: "Terminer", de: "Fertig" })}
-                </UiButton>
-              ) : (
-                <>
-                  <UiButton
-                    variant="secondary"
-                    onClick={closeDeletedPrefixRestore}
-                  >
-                    {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
-                  </UiButton>
-                  <UiButton onClick={() => void startDeletedPrefixRestore()}>
-                    {t({
-                      en: "Restore files",
-                      fr: "Restaurer les fichiers",
-                      de: "Dateien wiederherstellen",
-                    })}
-                  </UiButton>
-                </>
-              )}
-            </WorkflowActions>
-          </div>
-        </WorkflowPage>
+          onWorkspaceRefresh={refreshWorkspaceData}
+        />
       ) : null}
 
       {historyCleanupDialogOpen ? (
@@ -2537,17 +2183,17 @@ export default function PortalStorageSpaceDetailPage() {
 
             {historyCleanupResult ? (
               <div className="grid gap-2 sm:grid-cols-3">
-                <ObjectMetricCard
+                <PortalWorkflowMetricCard
                   label={t({ en: "Space gained", fr: "Espace gagné", de: "Frei geworden" })}
                   value={formatBytes(historyCleanupResult.bytes_freed)}
                   detail={t({ en: "estimated", fr: "estimé", de: "geschätzt" })}
                 />
-                <ObjectMetricCard
+                <PortalWorkflowMetricCard
                   label={t({ en: "Versions deleted", fr: "Versions supprimées", de: "Versionen gelöscht" })}
                   value={formatCompactNumber(historyCleanupResult.deleted_versions)}
                   detail={t({ en: "historical", fr: "historiques", de: "historisch" })}
                 />
-                <ObjectMetricCard
+                <PortalWorkflowMetricCard
                   label={t({ en: "Markers removed", fr: "Markers retirés", de: "Marker entfernt" })}
                   value={formatCompactNumber(historyCleanupResult.deleted_delete_markers)}
                   detail={t({ en: "orphan delete markers", fr: "delete markers orphelins", de: "verwaiste Delete Marker" })}
