@@ -124,6 +124,54 @@ def test_browser_sts_status_and_credentials_share_cached_session(monkeypatch):
     assert credentials.endpoint == "https://ceph-sts.example.test"
 
 
+def test_browser_sts_credentials_are_partitioned_by_auth_session(monkeypatch):
+    browser_sts._STS_CACHE.clear()
+    account = _account_with_sts_endpoint()
+    calls = 0
+
+    def fake_get_session_token(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return (
+            f"sts-access-{calls}",
+            f"sts-secret-{calls}",
+            f"sts-token-{calls}",
+            datetime.now(tz=timezone.utc) + timedelta(minutes=15),
+        )
+
+    monkeypatch.setattr(browser_sts, "get_session_token", fake_get_session_token)
+    service = browser_service.BrowserService()
+
+    first = service.get_sts_credentials(account, cache_partition="auth-session:first")
+    same_session = service.get_sts_credentials(account, cache_partition="auth-session:first")
+    second = service.get_sts_credentials(account, cache_partition="auth-session:second")
+
+    assert calls == 2
+    assert first.access_key_id == same_session.access_key_id
+    assert second.access_key_id != first.access_key_id
+
+
+def test_browser_sts_requests_minimum_session_duration(monkeypatch):
+    browser_sts._STS_CACHE.clear()
+    account = _account_with_sts_endpoint()
+    captured = {}
+
+    def fake_get_session_token(session_name, duration_seconds, *args, **kwargs):
+        captured["duration_seconds"] = duration_seconds
+        return (
+            "sts-access",
+            "sts-secret",
+            "sts-token",
+            datetime.now(tz=timezone.utc) + timedelta(minutes=15),
+        )
+
+    monkeypatch.setattr(browser_sts, "get_session_token", fake_get_session_token)
+
+    browser_sts.request_browser_sts_session(account, cache_partition="auth-session:first")
+
+    assert captured["duration_seconds"] == 900
+
+
 def test_browser_sts_preserves_status_and_credentials_error_contracts(monkeypatch):
     browser_sts._STS_CACHE.clear()
     account = _account_with_sts_endpoint()

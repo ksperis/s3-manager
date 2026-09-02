@@ -26,9 +26,14 @@ class BrowserTransfersMixin:
             return StsStatus(available=False, error=str(exc))
         return StsStatus(available=True)
 
-    def get_sts_credentials(self, account: S3ExecutionTarget) -> BrowserStsCredentials:
+    def get_sts_credentials(
+        self,
+        account: S3ExecutionTarget,
+        *,
+        cache_partition: Optional[str] = None,
+    ) -> BrowserStsCredentials:
         try:
-            session = request_browser_sts_session(account)
+            session = request_browser_sts_session(account, cache_partition=cache_partition)
         except BrowserStsRequestError as exc:
             raise RuntimeError(f"Unable to request STS credentials: {exc}") from exc
         credentials = session.credentials

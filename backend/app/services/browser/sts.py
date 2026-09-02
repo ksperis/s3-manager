@@ -14,8 +14,8 @@ from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_s
 
 from ._shared import _normalize_expiration
 
-STS_SESSION_DURATION_SECONDS = 3600
-STS_CACHE_TTL_BUFFER = timedelta(minutes=5)
+STS_SESSION_DURATION_SECONDS = 900
+STS_CACHE_TTL_BUFFER = timedelta(minutes=2)
 
 
 @dataclass(frozen=True)
@@ -40,8 +40,9 @@ class BrowserStsSession:
     region: Optional[str]
 
 
-def _sts_cache_key(access_key: str, endpoint: str) -> str:
-    return f"{endpoint}::{access_key}"
+def _sts_cache_key(access_key: str, endpoint: str, cache_partition: Optional[str]) -> str:
+    partition = (cache_partition or "shared-runtime").strip() or "shared-runtime"
+    return f"{endpoint}::{access_key}::{partition}"
 
 
 def _get_cached_sts_credentials(cache_key: str) -> Optional[CachedStsCredentials]:
@@ -73,7 +74,11 @@ def browser_sts_enabled(account: S3ExecutionTarget) -> bool:
     return resolve_feature_flags(endpoint).sts_enabled
 
 
-def request_browser_sts_session(account: S3ExecutionTarget) -> BrowserStsSession:
+def request_browser_sts_session(
+    account: S3ExecutionTarget,
+    *,
+    cache_partition: Optional[str] = None,
+) -> BrowserStsSession:
     if not browser_sts_enabled(account):
         raise RuntimeError("STS is disabled for this endpoint")
 
@@ -86,7 +91,7 @@ def request_browser_sts_session(account: S3ExecutionTarget) -> BrowserStsSession
         raise RuntimeError("STS endpoint is not configured for this account")
 
     _, region, _, verify_tls = resolve_s3_client_options(account)
-    cache_key = _sts_cache_key(access_key, endpoint)
+    cache_key = _sts_cache_key(access_key, endpoint, cache_partition)
     cached = _get_cached_sts_credentials(cache_key)
     if cached:
         return BrowserStsSession(credentials=cached, region=region)

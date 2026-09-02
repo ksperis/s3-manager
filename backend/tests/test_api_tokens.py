@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,7 +9,9 @@ from app.core.config import get_settings
 from app.core.security import create_api_access_token, decode_typed_token, get_password_hash
 from app.db import User, UserRole
 from app.main import app
+from app.models.browser import BrowserStsCredentials
 from app.routers import dependencies
+from app.routers import browser as browser_router
 from tests.auth_test_utils import authenticate_ui_client, clear_ui_client, trusted_origin_headers
 
 
@@ -190,3 +192,67 @@ def test_api_token_scope_is_enforced_and_unmapped_routes_are_denied_by_default(a
     unmapped = auth_client.get("/api/auth/session", headers={"Authorization": f"Bearer {token}"})
     assert unmapped.status_code == 403
     assert unmapped.json()["detail"] == "API tokens are not allowed for this route"
+
+
+@pytest.mark.parametrize("scope", ["browser:read", "browser:write"])
+def test_api_tokens_cannot_export_browser_sts_credentials(auth_client, db_session, scope):
+    admin = _create_user(
+        db_session,
+        email=f"sts-{scope.replace(':', '-')}@example.com",
+        password="supersecret",
+        role=UserRole.UI_ADMIN.value,
+    )
+    credentials = authenticate_ui_client(auth_client, db_session, admin)
+    created = auth_client.post(
+        "/api/auth/api-tokens",
+        json={"name": "sts-denied", "expires_in_days": 30, "scopes": [scope]},
+        headers=trusted_origin_headers(csrf_token=credentials.csrf_token),
+    )
+    assert created.status_code == 201
+    token = created.json()["access_token"]
+    clear_ui_client(auth_client)
+
+    response = auth_client.get(
+        "/api/browser/sts/credentials",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "API tokens are not allowed for this route"
+
+
+def test_ui_session_can_export_partitioned_browser_sts_credentials_without_caching(auth_client, db_session):
+    admin = _create_user(
+        db_session,
+        email="sts-ui-session@example.com",
+        password="supersecret",
+        role=UserRole.UI_ADMIN.value,
+    )
+    credentials = authenticate_ui_client(auth_client, db_session, admin)
+    captured = {}
+
+    class FakeService:
+        def get_sts_credentials(self, account, *, cache_partition=None):
+            captured["account"] = account
+            captured["cache_partition"] = cache_partition
+            return BrowserStsCredentials(
+                access_key_id="sts-access",
+                secret_access_key="sts-secret",
+                session_token="sts-token",
+                expiration=datetime.now(tz=timezone.utc) + timedelta(minutes=15),
+                endpoint="https://s3.example.test",
+                region="us-east-1",
+            )
+
+    account = object()
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
+
+    response = auth_client.get("/api/browser/sts/credentials")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store, private"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.json()["secret_access_key"] == "sts-secret"
+    assert captured["account"] is account
+    assert captured["cache_partition"] == f"auth-session:{credentials.session.id}"

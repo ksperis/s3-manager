@@ -28,6 +28,8 @@ _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 def _required_api_scope(request: Request) -> Optional[str]:
     path = request.url.path
+    if path == f"{settings.api_v1_prefix}/browser/sts/credentials":
+        return None
     access = "read" if request.method in {"GET", "HEAD", "OPTIONS"} else "write"
     mappings = (
         (f"{settings.api_v1_prefix}/admin/", "admin"),

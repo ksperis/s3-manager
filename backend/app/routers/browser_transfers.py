@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
 from app.models.access_context import ManagerActor
 from app.models.browser import (
     BrowserStsCredentials,
@@ -24,6 +26,7 @@ from app.models.browser import (
 )
 from app.models.object import ObjectUploadResponse
 from app.routers.browser_common import require_sse_feature
+from app.routers.auth_session_guards import current_auth_session
 from app.routers.dependencies import (
     get_account_context,
     get_current_account_admin,
@@ -48,12 +51,22 @@ def get_sts_status(
 
 @router.get("/sts/credentials", response_model=BrowserStsCredentials)
 def get_sts_credentials(
+    request: Request,
+    response: Response,
     account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
+    db: Session = Depends(get_db),
     _: ManagerActor = Depends(get_current_account_admin),
 ) -> BrowserStsCredentials:
+    auth_session = current_auth_session(request, db)
     try:
-        return service.get_sts_credentials(account)
+        credentials = service.get_sts_credentials(
+            account,
+            cache_partition=f"auth-session:{auth_session.id}",
+        )
+        response.headers["Cache-Control"] = "no-store, private"
+        response.headers["Pragma"] = "no-cache"
+        return credentials
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
