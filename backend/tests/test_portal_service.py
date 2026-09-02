@@ -37,11 +37,11 @@ from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, Buc
 from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal import (
     PortalAlert,
-    PortalState,
     PortalStorageSpace,
     PortalStorageSpaceInitialShare,
     PortalStorageSpaceSummary,
 )
+from app.models.portal_context import PortalState
 from app.models.portal_access_keys import (
     PortalAccessKey,
     PortalAccessKeyCreate,

@@ -10,11 +10,8 @@ from app.core.database import get_db
 from app.db import PortalAccountRole, User
 from app.models.access_context import AccountAccess
 from app.models.app_settings import PortalSettingsOverride
-from app.models.portal import (
-    PortalAccount,
-    PortalProjectSettings,
-    PortalState,
-)
+from app.models.portal import PortalProjectSettings
+from app.models.portal_context import PortalAccount, PortalState
 from app.routers.dependencies import (
     get_audit_service,
     get_current_account_user,
