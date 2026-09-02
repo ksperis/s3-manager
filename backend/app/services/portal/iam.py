@@ -14,7 +14,7 @@ from app.db import (
     User,
 )
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
-from app.models.portal import PortalAccessKey
+from app.models.portal_access_keys import PortalAccessKey
 from app.services import s3_client
 from app.services.mappers.portal import portal_access_key_from_active_link, portal_access_key_from_iam_metadata
 from app.services.rgw_iam import RGWIAMService, get_iam_service

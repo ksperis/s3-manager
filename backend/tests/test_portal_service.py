@@ -36,16 +36,18 @@ from app.models.bucket import Bucket
 from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsSnapshot
 from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal import (
-    PortalAccessKey,
-    PortalAccessKeyCreate,
-    PortalAccessKeyStatusChange,
     PortalAlert,
-    PortalIAMUser,
     PortalState,
     PortalStorageSpace,
     PortalStorageSpaceInitialShare,
     PortalStorageSpaceSummary,
     PortalUsage,
+)
+from app.models.portal_access_keys import (
+    PortalAccessKey,
+    PortalAccessKeyCreate,
+    PortalAccessKeyStatusChange,
+    PortalIAMUser,
 )
 from app.models.portal_access_logs import PortalServerAccessLogFilterQuery, PortalServerAccessLogFilterRule
 from app.models.portal_sharing import PortalStorageSpaceShare

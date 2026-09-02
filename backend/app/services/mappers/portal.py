@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from app.db import AccountIAMUser, PortalExternalAccessCredential
-from app.models.portal import PortalAccessKey
+from app.models.portal_access_keys import PortalAccessKey
 
 
 def portal_access_key_is_active(status: Optional[str], *, default: bool = True) -> bool:
