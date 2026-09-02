@@ -5,8 +5,7 @@
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiCheckboxClass, uiPanelMutedClass } from "../../components/ui/styles";
-
-export type CephAdminQuotaUnit = "MiB" | "GiB" | "TiB";
+import type { CephAdminQuotaUnit } from "./quotaForm";
 
 const QUOTA_UNIT_OPTIONS: CephAdminQuotaUnit[] = ["MiB", "GiB", "TiB"];
 

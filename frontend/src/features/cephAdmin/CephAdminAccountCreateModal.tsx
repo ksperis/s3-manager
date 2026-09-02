@@ -15,8 +15,13 @@ import UiInput from "../../components/ui/UiInput";
 import { extractApiError } from "../../utils/apiError";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { stableSignature } from "../../utils/stableSignature";
-import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
+import CephAdminQuotaFields from "./CephAdminQuotaFields";
 import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
+import {
+  parseOptionalNonNegativeInteger,
+  parseQuotaBytes,
+  type CephAdminQuotaUnit,
+} from "./quotaForm";
 
 type Props = {
   endpointId: number;
@@ -24,29 +29,7 @@ type Props = {
   onCreated?: (detail: CephAdminRgwAccountDetail) => void;
 };
 
-const UNIT_FACTORS: Record<CephAdminQuotaUnit, number> = {
-  MiB: 1024 ** 2,
-  GiB: 1024 ** 3,
-  TiB: 1024 ** 4,
-};
-
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
-
-const parseOptionalInt = (value: string): number | null => {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  if (!Number.isInteger(parsed) || parsed < 0) return null;
-  return parsed;
-};
-
-const parseOptionalBytes = (value: string, unit: CephAdminQuotaUnit): number | null => {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return Math.round(parsed * UNIT_FACTORS[unit]);
-};
 
 export default function CephAdminAccountCreateModal({ endpointId, onClose, onCreated }: Props) {
   const [accountName, setAccountName] = useState("");
@@ -124,49 +107,53 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
       return;
     }
 
-    const parsedMaxUsers = maxUsers.trim() ? parseOptionalInt(maxUsers) : null;
+    const parsedMaxUsers = maxUsers.trim() ? parseOptionalNonNegativeInteger(maxUsers) : null;
     if (maxUsers.trim() && parsedMaxUsers == null) {
       setError("Max users must be a positive integer.");
       return;
     }
-    const parsedMaxBuckets = maxBuckets.trim() ? parseOptionalInt(maxBuckets) : null;
+    const parsedMaxBuckets = maxBuckets.trim() ? parseOptionalNonNegativeInteger(maxBuckets) : null;
     if (maxBuckets.trim() && parsedMaxBuckets == null) {
       setError("Max buckets must be a positive integer.");
       return;
     }
-    const parsedMaxRoles = maxRoles.trim() ? parseOptionalInt(maxRoles) : null;
+    const parsedMaxRoles = maxRoles.trim() ? parseOptionalNonNegativeInteger(maxRoles) : null;
     if (maxRoles.trim() && parsedMaxRoles == null) {
       setError("Max roles must be a positive integer.");
       return;
     }
-    const parsedMaxGroups = maxGroups.trim() ? parseOptionalInt(maxGroups) : null;
+    const parsedMaxGroups = maxGroups.trim() ? parseOptionalNonNegativeInteger(maxGroups) : null;
     if (maxGroups.trim() && parsedMaxGroups == null) {
       setError("Max groups must be a positive integer.");
       return;
     }
-    const parsedMaxAccessKeys = maxAccessKeys.trim() ? parseOptionalInt(maxAccessKeys) : null;
+    const parsedMaxAccessKeys = maxAccessKeys.trim() ? parseOptionalNonNegativeInteger(maxAccessKeys) : null;
     if (maxAccessKeys.trim() && parsedMaxAccessKeys == null) {
       setError("Max access keys must be a positive integer.");
       return;
     }
 
-    const parsedAccountQuotaBytes = accountQuotaEnabled ? parseOptionalBytes(accountQuotaSize, accountQuotaUnit) : null;
+    const parsedAccountQuotaBytes = accountQuotaEnabled ? parseQuotaBytes(accountQuotaSize, accountQuotaUnit) : null;
     if (accountQuotaEnabled && accountQuotaSize.trim() && parsedAccountQuotaBytes == null) {
       setError("Account quota size value is invalid.");
       return;
     }
-    const parsedAccountQuotaObjects = accountQuotaEnabled ? parseOptionalInt(accountQuotaObjects) : null;
+    const parsedAccountQuotaObjects = accountQuotaEnabled
+      ? parseOptionalNonNegativeInteger(accountQuotaObjects)
+      : null;
     if (accountQuotaEnabled && accountQuotaObjects.trim() && parsedAccountQuotaObjects == null) {
       setError("Account quota object value must be a positive integer.");
       return;
     }
 
-    const parsedBucketQuotaBytes = bucketQuotaEnabled ? parseOptionalBytes(bucketQuotaSize, bucketQuotaUnit) : null;
+    const parsedBucketQuotaBytes = bucketQuotaEnabled ? parseQuotaBytes(bucketQuotaSize, bucketQuotaUnit) : null;
     if (bucketQuotaEnabled && bucketQuotaSize.trim() && parsedBucketQuotaBytes == null) {
       setError("Bucket quota size value is invalid.");
       return;
     }
-    const parsedBucketQuotaObjects = bucketQuotaEnabled ? parseOptionalInt(bucketQuotaObjects) : null;
+    const parsedBucketQuotaObjects = bucketQuotaEnabled
+      ? parseOptionalNonNegativeInteger(bucketQuotaObjects)
+      : null;
     if (bucketQuotaEnabled && bucketQuotaObjects.trim() && parsedBucketQuotaObjects == null) {
       setError("Bucket quota object value must be a positive integer.");
       return;

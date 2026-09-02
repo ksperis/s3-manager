@@ -22,9 +22,10 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
-import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
+import CephAdminQuotaFields from "./CephAdminQuotaFields";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
 import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
+import { parseQuotaBytes, quotaBytesToForm, type CephAdminQuotaUnit } from "./quotaForm";
 
 type Props = {
   endpointId: number;
@@ -37,36 +38,6 @@ type Props = {
 type TabId = "overview" | "config" | "metrics";
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
-
-const UNIT_FACTORS: Record<CephAdminQuotaUnit, number> = {
-  MiB: 1024 ** 2,
-  GiB: 1024 ** 3,
-  TiB: 1024 ** 4,
-};
-
-const quotaBytesToForm = (bytes?: number | null): { value: string; unit: CephAdminQuotaUnit } => {
-  if (bytes == null || bytes <= 0) {
-    return { value: "", unit: "GiB" };
-  }
-  if (bytes % UNIT_FACTORS.TiB === 0) {
-    return { value: String(bytes / UNIT_FACTORS.TiB), unit: "TiB" };
-  }
-  if (bytes % UNIT_FACTORS.GiB === 0) {
-    return { value: String(bytes / UNIT_FACTORS.GiB), unit: "GiB" };
-  }
-  if (bytes % UNIT_FACTORS.MiB === 0) {
-    return { value: String(bytes / UNIT_FACTORS.MiB), unit: "MiB" };
-  }
-  return { value: String((bytes / UNIT_FACTORS.GiB).toFixed(2)), unit: "GiB" };
-};
-
-const formToQuotaBytes = (value: string, unit: CephAdminQuotaUnit): number | null => {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return Math.round(parsed * UNIT_FACTORS[unit]);
-};
 
 export default function CephAdminAccountEditModal({
   endpointId,
@@ -256,9 +227,9 @@ export default function CephAdminAccountEditModal({
     const parsedMaxRoles = maxRoles.trim() === "" ? null : Number(maxRoles);
     const parsedMaxGroups = maxGroups.trim() === "" ? null : Number(maxGroups);
     const parsedMaxAccessKeys = maxAccessKeys.trim() === "" ? null : Number(maxAccessKeys);
-    const parsedQuotaBytes = quotaEnabled ? formToQuotaBytes(quotaSize, quotaUnit) : null;
+    const parsedQuotaBytes = quotaEnabled ? parseQuotaBytes(quotaSize, quotaUnit) : null;
     const parsedQuotaObjects = quotaEnabled ? (quotaObjects.trim() === "" ? null : Number(quotaObjects)) : null;
-    const parsedBucketQuotaBytes = bucketQuotaEnabled ? formToQuotaBytes(bucketQuotaSize, bucketQuotaUnit) : null;
+    const parsedBucketQuotaBytes = bucketQuotaEnabled ? parseQuotaBytes(bucketQuotaSize, bucketQuotaUnit) : null;
     const parsedBucketQuotaObjects = bucketQuotaEnabled
       ? (bucketQuotaObjects.trim() === "" ? null : Number(bucketQuotaObjects))
       : null;

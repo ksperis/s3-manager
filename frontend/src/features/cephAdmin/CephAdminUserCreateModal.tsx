@@ -23,8 +23,13 @@ import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { canCreateManualPrivateConnections, readStoredUser } from "../../utils/workspaces";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
-import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
+import CephAdminQuotaFields from "./CephAdminQuotaFields";
 import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
+import {
+  parseOptionalNonNegativeInteger,
+  parseQuotaBytes,
+  type CephAdminQuotaUnit,
+} from "./quotaForm";
 
 type Props = {
   endpointId: number;
@@ -40,29 +45,7 @@ type AccountOption = {
   account_name?: string | null;
 };
 
-const UNIT_FACTORS: Record<CephAdminQuotaUnit, number> = {
-  MiB: 1024 ** 2,
-  GiB: 1024 ** 3,
-  TiB: 1024 ** 4,
-};
-
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
-
-const parseOptionalInt = (value: string): number | null => {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  if (!Number.isInteger(parsed) || parsed < 0) return null;
-  return parsed;
-};
-
-const parseOptionalBytes = (value: string, unit: CephAdminQuotaUnit): number | null => {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return Math.round(parsed * UNIT_FACTORS[unit]);
-};
 
 const capsTextToValues = (value: string): string[] =>
   Array.from(
@@ -211,19 +194,19 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
       return;
     }
 
-    const parsedMaxBuckets = maxBuckets.trim() ? parseOptionalInt(maxBuckets) : null;
+    const parsedMaxBuckets = maxBuckets.trim() ? parseOptionalNonNegativeInteger(maxBuckets) : null;
     if (maxBuckets.trim() && parsedMaxBuckets == null) {
       setError("Max buckets must be a positive integer.");
       return;
     }
 
-    const parsedQuotaBytes = quotaEnabled ? parseOptionalBytes(quotaSize, quotaUnit) : null;
+    const parsedQuotaBytes = quotaEnabled ? parseQuotaBytes(quotaSize, quotaUnit) : null;
     if (quotaEnabled && quotaSize.trim() && parsedQuotaBytes == null) {
       setError("Storage quota value is invalid.");
       return;
     }
 
-    const parsedQuotaObjects = quotaEnabled ? parseOptionalInt(quotaObjects) : null;
+    const parsedQuotaObjects = quotaEnabled ? parseOptionalNonNegativeInteger(quotaObjects) : null;
     if (quotaEnabled && quotaObjects.trim() && parsedQuotaObjects == null) {
       setError("Object quota must be a positive integer.");
       return;

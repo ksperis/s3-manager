@@ -37,9 +37,10 @@ import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
 import { canCreateManualPrivateConnections, readStoredUser } from "../../utils/workspaces";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
-import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
+import CephAdminQuotaFields from "./CephAdminQuotaFields";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
 import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
+import { parseQuotaBytes, quotaBytesToForm, type CephAdminQuotaUnit } from "./quotaForm";
 
 type Props = {
   endpointId: number;
@@ -55,36 +56,6 @@ type TabId = "overview" | "ceph" | "s3" | "metrics";
 type CapsMode = "replace" | "add" | "remove";
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
-
-const UNIT_FACTORS: Record<CephAdminQuotaUnit, number> = {
-  MiB: 1024 ** 2,
-  GiB: 1024 ** 3,
-  TiB: 1024 ** 4,
-};
-
-const quotaBytesToForm = (bytes?: number | null): { value: string; unit: CephAdminQuotaUnit } => {
-  if (bytes == null || bytes <= 0) {
-    return { value: "", unit: "GiB" };
-  }
-  if (bytes % UNIT_FACTORS.TiB === 0) {
-    return { value: String(bytes / UNIT_FACTORS.TiB), unit: "TiB" };
-  }
-  if (bytes % UNIT_FACTORS.GiB === 0) {
-    return { value: String(bytes / UNIT_FACTORS.GiB), unit: "GiB" };
-  }
-  if (bytes % UNIT_FACTORS.MiB === 0) {
-    return { value: String(bytes / UNIT_FACTORS.MiB), unit: "MiB" };
-  }
-  return { value: String((bytes / UNIT_FACTORS.GiB).toFixed(2)), unit: "GiB" };
-};
-
-const formToQuotaBytes = (value: string, unit: CephAdminQuotaUnit): number | null => {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return Math.round(parsed * UNIT_FACTORS[unit]);
-};
 
 const keyActive = (key: CephAdminRgwAccessKey): boolean => {
   if (key.is_active !== undefined && key.is_active !== null) return Boolean(key.is_active);
@@ -321,7 +292,7 @@ export default function CephAdminUserEditModal({
     const accountRootEnabled = Boolean(detail?.account_id);
 
     const parsedMaxBuckets = maxBuckets.trim() === "" ? null : Number(maxBuckets);
-    const parsedQuotaBytes = quotaEnabled ? formToQuotaBytes(quotaSize, quotaUnit) : null;
+    const parsedQuotaBytes = quotaEnabled ? parseQuotaBytes(quotaSize, quotaUnit) : null;
     const parsedQuotaObjects = quotaEnabled ? (quotaObjects.trim() === "" ? null : Number(quotaObjects)) : null;
 
     if (parsedMaxBuckets != null && (!Number.isInteger(parsedMaxBuckets) || parsedMaxBuckets < 0)) {
