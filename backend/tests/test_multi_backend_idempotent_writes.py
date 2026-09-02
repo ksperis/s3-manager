@@ -14,7 +14,7 @@ from app.db import (
     QuotaUsageHourly,
     UserNotification,
 )
-from app.services.billing_service import BillingCollector
+from app.services.billing_collection_service import BillingCollector
 from app.services.healthcheck_common import (
     DEFAULT_ROLLUP_RESOLUTION_SECONDS,
     HealthCheckResult,

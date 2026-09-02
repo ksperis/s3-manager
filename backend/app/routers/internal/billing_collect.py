@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.routers.billing_common import parse_billing_day
 from app.routers.dependencies import require_internal_cron_token
 from app.core.sensitive_data import sanitize_error_detail
-from app.services.billing_service import BillingCollector
+from app.services.billing_collection_service import BillingCollector
 from app.services.operation_lease_service import (
     OperationLeaseService,
     billing_daily_operation_name,

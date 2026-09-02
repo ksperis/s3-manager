@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.routers import dependencies
-from app.services.billing_service import BillingCollector
+from app.services.billing_collection_service import BillingCollector
 from app.services.healthcheck_service import HealthCheckService
 from app.services.operation_lease_service import (
     HEALTHCHECK_RUN_OPERATION,

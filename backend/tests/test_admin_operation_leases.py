@@ -6,7 +6,7 @@ from app.models.app_settings import AppSettings
 from app.routers.admin import billing as billing_router
 from app.routers.admin import healthchecks as healthchecks_router
 from app.routers.admin import usage_history as usage_history_router
-from app.services.billing_service import BillingCollector
+from app.services.billing_collection_service import BillingCollector
 from app.services.healthcheck_service import HealthCheckService
 from app.services.operation_lease_service import (
     HEALTHCHECK_RUN_OPERATION,
