@@ -5,12 +5,27 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from app.models.bucket import (
-    BucketEncryptionConfiguration,
     BucketLoggingConfiguration,
     BucketProperties,
     BucketWebsiteConfiguration,
 )
 from app.models.ceph_admin import CephAdminBucketFilterRule
+from app.services.bucket_feature_param_values import (
+    encryption_rule_entries,
+    extract_cors_rule_values,
+    extract_lifecycle_abort_days,
+    extract_lifecycle_expiration_days,
+    extract_lifecycle_noncurrent_expiration_days,
+    extract_lifecycle_transition_days,
+    extract_notification_eventbridge_present,
+    extract_notification_events,
+    extract_notification_filter_values,
+    extract_notification_rule_id,
+    extract_notification_topic_match_values,
+    extract_policy_statement_summary,
+    extract_sse_rule_values,
+    notification_rule_entries,
+)
 from app.services.bucket_listing_shared import coerce_filter_bool, coerce_filter_number
 from app.utils.normalize import normalize_text
 
@@ -70,13 +85,6 @@ _GROUPED_PARAMS_BY_FEATURE = {
     "notifications": _NOTIFICATION_ENTRY_PARAMS,
     "server_side_encryption": _SSE_PARAMS,
 }
-_NOTIFICATION_CONFIGURATION_SPECS = (
-    ("topic", "TopicConfigurations", "TopicArn"),
-    ("queue", "QueueConfigurations", "QueueArn"),
-    ("lambda", "LambdaFunctionConfigurations", "LambdaFunctionArn"),
-)
-
-
 def _match_text_value(left: str | None, op: str, right_raw: object) -> bool:
     if left is None:
         return False
@@ -151,60 +159,6 @@ def _extract_lifecycle_rule_status(rule_entry: dict) -> str | None:
         return None
     value = str(raw).strip()
     return value or None
-
-
-def extract_lifecycle_abort_days(rule_entry: dict) -> float | None:
-    raw = rule_entry.get("AbortIncompleteMultipartUpload")
-    if not isinstance(raw, dict):
-        return None
-    return coerce_filter_number(raw.get("DaysAfterInitiation"))
-
-
-def extract_lifecycle_expiration_days(rule_entry: dict) -> float | None:
-    expiration = rule_entry.get("Expiration")
-    if not isinstance(expiration, dict):
-        return None
-    return coerce_filter_number(expiration.get("Days"))
-
-
-def extract_lifecycle_noncurrent_expiration_days(rule_entry: dict) -> float | None:
-    noncurrent_expiration = rule_entry.get("NoncurrentVersionExpiration")
-    if not isinstance(noncurrent_expiration, dict):
-        return None
-    return coerce_filter_number(noncurrent_expiration.get("NoncurrentDays"))
-
-
-def extract_lifecycle_transition_days(rule_entry: dict) -> list[float]:
-    values: list[float] = []
-    transitions = rule_entry.get("Transitions")
-    if isinstance(transitions, list):
-        candidates = transitions
-    elif isinstance(rule_entry.get("Transition"), dict):
-        candidates = [rule_entry.get("Transition")]
-    else:
-        candidates = []
-    for item in candidates:
-        if not isinstance(item, dict):
-            continue
-        days = coerce_filter_number(item.get("Days"))
-        if days is not None:
-            values.append(days)
-    return values
-
-
-def dedupe_sorted_day_values(values: list[float]) -> list[int]:
-    normalized: list[int] = []
-    seen: set[int] = set()
-    for raw in values:
-        if raw is None:
-            continue
-        value = int(raw)
-        if value in seen:
-            continue
-        seen.add(value)
-        normalized.append(value)
-    normalized.sort()
-    return normalized
 
 
 def _extract_lifecycle_rule_types(rule_entry: dict) -> list[str]:
@@ -328,109 +282,6 @@ def _match_lifecycle_param_rules_all(
     return positive_ok and forbidden_ok
 
 
-def _string_or_none(value: object) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def _notification_rule_entries(configuration: object) -> list[tuple[str, dict]]:
-    if not isinstance(configuration, dict):
-        return []
-    entries: list[tuple[str, dict]] = []
-    for entry_type, config_key, _destination_key in _NOTIFICATION_CONFIGURATION_SPECS:
-        raw_entries = configuration.get(config_key)
-        if not isinstance(raw_entries, list):
-            continue
-        entries.extend((entry_type, entry) for entry in raw_entries if isinstance(entry, dict))
-    return entries
-
-
-def _extract_notification_rule_id(entry: dict) -> str | None:
-    for key in ("Id", "ID", "id"):
-        if (value := _string_or_none(entry.get(key))) is not None:
-            return value
-    return None
-
-
-def _last_notification_identifier(value: str) -> str:
-    tail = value.rsplit(":", 1)[-1]
-    return tail.rsplit("/", 1)[-1] or tail
-
-
-def _extract_notification_topic_display_name(entry: dict) -> str | None:
-    for key in ("Topic", "TopicName", "topic", "topic_name", "EndpointTopic"):
-        if (value := _string_or_none(entry.get(key))) is not None:
-            return value
-    topic_arn = _string_or_none(entry.get("TopicArn"))
-    if not topic_arn:
-        return None
-    return _last_notification_identifier(topic_arn)
-
-
-def _extract_notification_topic_match_values(entry: dict) -> list[str]:
-    values: list[str] = []
-    for key in ("Topic", "TopicName", "topic", "topic_name", "EndpointTopic"):
-        if (value := _string_or_none(entry.get(key))) is not None:
-            values.append(value)
-    topic_arn = _string_or_none(entry.get("TopicArn"))
-    if topic_arn:
-        values.append(topic_arn)
-        values.append(_last_notification_identifier(topic_arn))
-    return _dedupe_sorted_text_values(values)
-
-
-def _extract_notification_events(entry: dict) -> list[str]:
-    raw_events = entry.get("Events")
-    if not isinstance(raw_events, list):
-        raw_events = entry.get("events")
-    if isinstance(raw_events, list):
-        return [value for item in raw_events if (value := _string_or_none(item)) is not None]
-    value = _string_or_none(raw_events)
-    return [value] if value else []
-
-
-def _extract_notification_filter_values(entry: dict, filter_name: str) -> list[str]:
-    filters: list[dict] = []
-    raw_filter = entry.get("Filter")
-    if not isinstance(raw_filter, dict):
-        raw_filter = entry.get("filter")
-    key_filter = raw_filter.get("Key") if isinstance(raw_filter, dict) else None
-    if not isinstance(key_filter, dict) and isinstance(raw_filter, dict):
-        key_filter = raw_filter.get("key")
-    if isinstance(key_filter, dict):
-        raw_rules = key_filter.get("FilterRules")
-        if not isinstance(raw_rules, list):
-            raw_rules = key_filter.get("filterRules")
-        if isinstance(raw_rules, list):
-            filters.extend(item for item in raw_rules if isinstance(item, dict))
-    raw_rules = entry.get("FilterRules")
-    if not isinstance(raw_rules, list):
-        raw_rules = entry.get("filterRules")
-    if isinstance(raw_rules, list):
-        filters.extend(item for item in raw_rules if isinstance(item, dict))
-
-    values: list[str] = []
-    for item in filters:
-        name = _string_or_none(item.get("Name") or item.get("name"))
-        if name is None or name.lower() != filter_name:
-            continue
-        if (value := _string_or_none(item.get("Value") or item.get("value"))) is not None:
-            values.append(value)
-    return _dedupe_sorted_text_values(values)
-
-
-def _dedupe_sorted_text_values(values: list[str]) -> list[str]:
-    unique: dict[str, str] = {}
-    for value in values:
-        text = value.strip()
-        if not text:
-            continue
-        unique.setdefault(text.lower(), text)
-    return sorted(unique.values(), key=lambda item: item.lower())
-
-
 def _match_text_candidates(values: list[str], op: str, right_raw: object) -> bool:
     if op == "neq":
         return not any(_match_text_value(value, "eq", right_raw) for value in values)
@@ -445,36 +296,6 @@ def _match_presence_values(values: list[str], op: str, right_raw: object) -> boo
     return False
 
 
-def _text_list_from_keys(entry: dict, keys: tuple[str, ...]) -> list[str]:
-    for key in keys:
-        raw = entry.get(key)
-        if raw is None:
-            continue
-        if isinstance(raw, list):
-            return [value for item in raw if (value := _string_or_none(item)) is not None]
-        if (value := _string_or_none(raw)) is not None:
-            return [value]
-    return []
-
-
-def _extract_cors_rule_values(entry: dict, param: str) -> list[str]:
-    if param == "cors_allowed_method":
-        return _text_list_from_keys(entry, ("AllowedMethods", "allowedMethods", "allowed_methods", "AllowedMethod"))
-    if param == "cors_allowed_origin":
-        return _text_list_from_keys(entry, ("AllowedOrigins", "allowedOrigins", "allowed_origins", "AllowedOrigin"))
-    return []
-
-
-def extract_cors_allowed_values(rules: object, param: str) -> list[str]:
-    if not isinstance(rules, list):
-        return []
-    values: list[str] = []
-    for entry in rules:
-        if isinstance(entry, dict):
-            values.extend(_extract_cors_rule_values(entry, param))
-    return _dedupe_sorted_text_values(values)
-
-
 def _cors_rule_matches_param(
     entry: dict,
     rule: CephAdminBucketFilterRule,
@@ -484,7 +305,7 @@ def _cors_rule_matches_param(
     op = (rule.op or "").strip().lower()
     if force_presence_positive and op == "has_not":
         op = "has"
-    values = _extract_cors_rule_values(entry, rule.param or "")
+    values = extract_cors_rule_values(entry, rule.param or "")
     if op in {"has", "has_not"}:
         return _match_presence_values(values, op, rule.value)
     return _match_text_candidates(values, op, rule.value)
@@ -528,48 +349,13 @@ def _match_cors_param_rules_all(
     return positive_ok and forbidden_ok
 
 
-def _encryption_rule_entries(configuration: object) -> list[dict]:
-    if isinstance(configuration, BucketEncryptionConfiguration):
-        raw_rules = configuration.rules
-    elif isinstance(configuration, list):
-        raw_rules = configuration
-    else:
-        raw_rules = []
-    return [item for item in raw_rules if isinstance(item, dict)]
-
-
-def _extract_sse_default(entry: dict) -> dict:
-    raw = entry.get("ApplyServerSideEncryptionByDefault")
-    if not isinstance(raw, dict):
-        raw = entry.get("applyServerSideEncryptionByDefault")
-    if not isinstance(raw, dict):
-        raw = entry.get("apply_server_side_encryption_by_default")
-    return raw if isinstance(raw, dict) else {}
-
-
-def _extract_sse_rule_values(entry: dict, param: str) -> list[str]:
-    default = _extract_sse_default(entry)
-    if param == "sse_algorithm":
-        return _text_list_from_keys(default, ("SSEAlgorithm", "sseAlgorithm", "sse_algorithm"))
-    if param == "sse_kms_key_id":
-        return _text_list_from_keys(default, ("KMSMasterKeyID", "kmsMasterKeyID", "kms_master_key_id", "KMSKeyId"))
-    return []
-
-
-def extract_sse_values(configuration: object, param: str) -> list[str]:
-    values: list[str] = []
-    for entry in _encryption_rule_entries(configuration):
-        values.extend(_extract_sse_rule_values(entry, param))
-    return _dedupe_sorted_text_values(values)
-
-
 def _sse_rule_matches_param(entry: dict, rule: CephAdminBucketFilterRule) -> bool:
-    values = _extract_sse_rule_values(entry, rule.param or "")
+    values = extract_sse_rule_values(entry, rule.param or "")
     return _match_text_candidates(values, (rule.op or "").strip().lower(), rule.value)
 
 
 def _match_sse_param_rule_individual(rule: CephAdminBucketFilterRule, configuration: object) -> bool:
-    entries = _encryption_rule_entries(configuration)
+    entries = encryption_rule_entries(configuration)
     matched_any = any(_sse_rule_matches_param(item, rule) for item in entries)
     return matched_any if _feature_param_quantifier(rule) == "any" else (not matched_any)
 
@@ -578,7 +364,7 @@ def _match_sse_param_rules_all(
     rules: list[CephAdminBucketFilterRule],
     configuration: object,
 ) -> bool:
-    entries = _encryption_rule_entries(configuration)
+    entries = encryption_rule_entries(configuration)
     positive_rules: list[CephAdminBucketFilterRule] = []
     forbidden_rules: list[CephAdminBucketFilterRule] = []
     for rule in rules:
@@ -611,24 +397,24 @@ def _notification_rule_matches_param(
     if force_presence_positive and op == "has_not":
         op = "has"
     if param == "notification_rule_id":
-        return _match_text_value(_extract_notification_rule_id(entry), op, rule.value)
+        return _match_text_value(extract_notification_rule_id(entry), op, rule.value)
     if param == "notification_rule_type":
         return _match_presence_values([entry_type], op, rule.value)
     if param == "notification_topic_name":
         if entry_type != "topic":
             return False
-        return _match_text_candidates(_extract_notification_topic_match_values(entry), op, rule.value)
+        return _match_text_candidates(extract_notification_topic_match_values(entry), op, rule.value)
     if param == "notification_event":
-        return _match_presence_values(_extract_notification_events(entry), op, rule.value)
+        return _match_presence_values(extract_notification_events(entry), op, rule.value)
     if param == "notification_filter_prefix":
-        return _match_presence_values(_extract_notification_filter_values(entry, "prefix"), op, rule.value)
+        return _match_presence_values(extract_notification_filter_values(entry, "prefix"), op, rule.value)
     if param == "notification_filter_suffix":
-        return _match_presence_values(_extract_notification_filter_values(entry, "suffix"), op, rule.value)
+        return _match_presence_values(extract_notification_filter_values(entry, "suffix"), op, rule.value)
     return False
 
 
 def _match_notification_param_rule_individual(rule: CephAdminBucketFilterRule, configuration: object) -> bool:
-    entries = _notification_rule_entries(configuration)
+    entries = notification_rule_entries(configuration)
     op = (rule.op or "").strip().lower()
     if op == "has_not":
         return not any(
@@ -643,7 +429,7 @@ def _match_notification_param_rules_all(
     rules: list[CephAdminBucketFilterRule],
     configuration: object,
 ) -> bool:
-    entries = _notification_rule_entries(configuration)
+    entries = notification_rule_entries(configuration)
     positive_rules: list[CephAdminBucketFilterRule] = []
     forbidden_rules: list[CephAdminBucketFilterRule] = []
     for rule in rules:
@@ -677,42 +463,6 @@ def _match_notification_param_rules_all(
             forbidden_ok = False
             break
     return positive_ok and forbidden_ok
-
-
-def _extract_notification_eventbridge_present(configuration: object) -> bool | None:
-    if not isinstance(configuration, dict):
-        return None
-    eventbridge = configuration.get("EventBridgeConfiguration")
-    if eventbridge is None:
-        eventbridge = configuration.get("eventBridgeConfiguration")
-    return isinstance(eventbridge, dict)
-
-
-def extract_notification_topic_names(configuration: object) -> list[str]:
-    names: list[str] = []
-    for entry_type, entry in _notification_rule_entries(configuration):
-        if entry_type != "topic":
-            continue
-        if (name := _extract_notification_topic_display_name(entry)) is not None:
-            names.append(name)
-    return _dedupe_sorted_text_values(names)
-
-
-def extract_policy_statement_summary(policy: dict | None) -> tuple[int, bool]:
-    if not isinstance(policy, dict):
-        return 0, False
-    raw_statements = policy.get("Statement")
-    if isinstance(raw_statements, list):
-        statements = raw_statements
-    elif raw_statements is None:
-        statements = []
-    else:
-        statements = [raw_statements]
-    has_conditions = any(
-        isinstance(item, dict) and isinstance(item.get("Condition"), dict) and len(item.get("Condition", {}).keys()) > 0
-        for item in statements
-    )
-    return len(statements), has_conditions
 
 
 def _apply_scalar_quantifier(rule: CephAdminBucketFilterRule, result: bool) -> bool:
@@ -832,7 +582,7 @@ def _match_notification_scalar_param_rule(
 ) -> bool:
     if rule.param != "notification_eventbridge_present":
         return False
-    result = _match_bool_value(_extract_notification_eventbridge_present(source_data), op, rule.value)
+    result = _match_bool_value(extract_notification_eventbridge_present(source_data), op, rule.value)
     return _apply_scalar_quantifier(rule, result)
 
 

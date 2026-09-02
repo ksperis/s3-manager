@@ -11,7 +11,7 @@ from app.models.bucket import (
     BucketTag,
 )
 from app.models.ceph_admin import CephAdminBucketSummary
-from app.services.bucket_feature_param_matching import (
+from app.services.bucket_feature_param_values import (
     dedupe_sorted_day_values,
     extract_cors_allowed_values,
     extract_lifecycle_abort_days,
