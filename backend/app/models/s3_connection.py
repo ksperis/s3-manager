@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional, Self
 
 from pydantic import Field, model_validator
 
@@ -27,20 +27,22 @@ S3_CONNECTION_ENDPOINT_FIELDS = S3_CONNECTION_CUSTOM_ENDPOINT_FIELDS | {
 }
 
 
-def _reject_custom_fields_with_managed_endpoint(
-    model: ApiModel,
-    *,
-    scope: str,
-) -> None:
-    if getattr(model, "storage_endpoint_id", None) is None:
-        return
-    conflicting = sorted(
-        S3_CONNECTION_CUSTOM_ENDPOINT_FIELDS & model.model_fields_set
-    )
-    if conflicting:
-        raise ValueError(
-            f"{scope} custom endpoint fields cannot be combined with storage_endpoint_id"
+class _CanonicalEndpointPayload(ApiModel):
+    endpoint_conflict_scope: ClassVar[str]
+
+    @model_validator(mode="after")
+    def ensure_canonical_endpoint(self) -> Self:
+        if getattr(self, "storage_endpoint_id", None) is None:
+            return self
+        conflicting = sorted(
+            S3_CONNECTION_CUSTOM_ENDPOINT_FIELDS & self.model_fields_set
         )
+        if conflicting:
+            raise ValueError(
+                f"{self.endpoint_conflict_scope} custom endpoint fields cannot be combined "
+                "with storage_endpoint_id"
+            )
+        return self
 
 
 class S3Connection(ApiModel):
@@ -69,7 +71,9 @@ class S3Connection(ApiModel):
     last_used_at: Optional[datetime] = None
 
 
-class S3ConnectionCreate(ApiModel):
+class S3ConnectionCreate(_CanonicalEndpointPayload):
+    endpoint_conflict_scope = "S3 connection"
+
     name: str
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
@@ -85,16 +89,10 @@ class S3ConnectionCreate(ApiModel):
     verify_tls: bool = True
     tags: RequiredTagDefinitionList = Field(default_factory=list)
 
-    @model_validator(mode="after")
-    def ensure_canonical_endpoint(self) -> "S3ConnectionCreate":
-        _reject_custom_fields_with_managed_endpoint(
-            self,
-            scope="S3 connection",
-        )
-        return self
 
+class S3ConnectionUpdate(_CanonicalEndpointPayload):
+    endpoint_conflict_scope = "S3 connection"
 
-class S3ConnectionUpdate(ApiModel):
     name: Optional[str] = None
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
@@ -111,14 +109,6 @@ class S3ConnectionUpdate(ApiModel):
     verify_tls: Optional[bool] = None
     tags: OptionalTagDefinitionList = None
 
-    @model_validator(mode="after")
-    def ensure_canonical_endpoint(self) -> "S3ConnectionUpdate":
-        _reject_custom_fields_with_managed_endpoint(
-            self,
-            scope="S3 connection",
-        )
-        return self
-
 
 class S3ConnectionCredentialsUpdate(ApiModel):
     """Write-only credential rotation payload.
@@ -131,7 +121,9 @@ class S3ConnectionCredentialsUpdate(ApiModel):
     secret_access_key: str
 
 
-class S3ConnectionCredentialsValidationRequest(ApiModel):
+class S3ConnectionCredentialsValidationRequest(_CanonicalEndpointPayload):
+    endpoint_conflict_scope = "S3 credential validation"
+
     storage_endpoint_id: Optional[int] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
@@ -139,16 +131,6 @@ class S3ConnectionCredentialsValidationRequest(ApiModel):
     secret_access_key: str
     force_path_style: bool = False
     verify_tls: bool = True
-
-    @model_validator(mode="after")
-    def ensure_canonical_endpoint(
-        self,
-    ) -> "S3ConnectionCredentialsValidationRequest":
-        _reject_custom_fields_with_managed_endpoint(
-            self,
-            scope="S3 credential validation",
-        )
-        return self
 
 
 class S3ConnectionCredentialsValidationResult(ApiModel):
