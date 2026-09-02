@@ -56,7 +56,7 @@ class StorageOpsBucketUiTagTarget(ApiModel):
         return cleaned
 
 
-class _BucketUiTagCreateBase(ApiModel):
+class StorageOpsBucketUiTagCreate(ApiModel):
     label: str
     color_key: str = DEFAULT_TAG_COLOR_KEY
 
@@ -71,15 +71,11 @@ class _BucketUiTagCreateBase(ApiModel):
         return normalize_tag_color_key(value)
 
 
-class CephAdminBucketUiTagCreate(_BucketUiTagCreateBase):
+class CephAdminBucketUiTagCreate(StorageOpsBucketUiTagCreate):
     visibility: BucketUiTagVisibility = "private"
 
 
-class StorageOpsBucketUiTagCreate(_BucketUiTagCreateBase):
-    pass
-
-
-class _BucketUiTagDefinitionPatchBase(ApiModel):
+class StorageOpsBucketUiTagDefinitionPatch(ApiModel):
     color_key: str | None = None
 
     @field_validator("color_key", mode="before")
@@ -96,7 +92,7 @@ class _BucketUiTagDefinitionPatchBase(ApiModel):
         return self
 
 
-class CephAdminBucketUiTagDefinitionPatch(_BucketUiTagDefinitionPatchBase):
+class CephAdminBucketUiTagDefinitionPatch(StorageOpsBucketUiTagDefinitionPatch):
     visibility: BucketUiTagVisibility | None = None
 
     @field_validator("visibility", mode="before")
@@ -105,10 +101,6 @@ class CephAdminBucketUiTagDefinitionPatch(_BucketUiTagDefinitionPatchBase):
         if value is None or (isinstance(value, str) and not value.strip()):
             raise ValueError("tag visibility is required.")
         return value
-
-
-class StorageOpsBucketUiTagDefinitionPatch(_BucketUiTagDefinitionPatchBase):
-    pass
 
 
 class _BucketUiTagPatchBase(ApiModel):
