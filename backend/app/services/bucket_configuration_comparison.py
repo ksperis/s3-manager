@@ -4,7 +4,7 @@ import json
 from typing import Any, Optional, Protocol
 
 from app.models.bucket import BucketLoggingConfiguration, BucketProperties, BucketTag
-from app.models.ceph_admin import CephAdminBucketConfigDiff, CephAdminBucketConfigDiffSection
+from app.models.bucket_compare import BucketConfigDiff, BucketConfigDiffSection
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.jsonable import model_to_jsonable
 
@@ -27,7 +27,7 @@ def compare_bucket_configuration(
     target_account: S3ExecutionTarget,
     *,
     include_sections: Optional[set[str]] = None,
-) -> CephAdminBucketConfigDiff:
+) -> BucketConfigDiff:
     allowed_section_keys = {
         "versioning_status",
         "object_lock",
@@ -42,7 +42,7 @@ def compare_bucket_configuration(
         allowed_section_keys if include_sections is None else {key for key in include_sections if key in allowed_section_keys}
     )
     if not selected_section_keys:
-        return CephAdminBucketConfigDiff(changed=False, sections=[])
+        return BucketConfigDiff(changed=False, sections=[])
 
     needs_properties = bool(
         selected_section_keys & {"versioning_status", "object_lock", "public_access_block", "lifecycle_rules", "cors_rules"}
@@ -117,12 +117,12 @@ def compare_bucket_configuration(
         sections_data.append(("tags", "Tags", source_tags, target_tags))
 
     changed = False
-    sections: list[CephAdminBucketConfigDiffSection] = []
+    sections: list[BucketConfigDiffSection] = []
     for key, label, source_value, target_value in sections_data:
         section_changed = _stable_value(source_value) != _stable_value(target_value)
         changed = changed or section_changed
         sections.append(
-            CephAdminBucketConfigDiffSection(
+            BucketConfigDiffSection(
                 key=key,
                 label=label,
                 source=source_value,
@@ -131,7 +131,7 @@ def compare_bucket_configuration(
             )
         )
 
-    return CephAdminBucketConfigDiff(changed=changed, sections=sections)
+    return BucketConfigDiff(changed=changed, sections=sections)
 
 
 def _normalize_tags(tags: list[BucketTag]) -> list[dict[str, str]]:

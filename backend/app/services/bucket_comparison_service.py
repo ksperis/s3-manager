@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from app.models.ceph_admin import CephAdminBucketConfigDiff, CephAdminBucketContentDiff
+from app.models.bucket_compare import BucketConfigDiff, BucketContentDiff
 from app.services import (
     bucket_compare_remediation,
     bucket_configuration_comparison,
@@ -92,7 +92,7 @@ class BucketComparisonService:
         target_account: S3ExecutionTarget,
         *,
         ignore_modified_after: Optional[datetime] = None,
-    ) -> CephAdminBucketContentDiff:
+    ) -> BucketContentDiff:
         with TemporarySqliteStore(prefix="bucketreef-bucket-compare-") as store:
             index = bucket_content_comparison.BucketCompareObjectIndex(store.connection)
             source_indexed_count = index.add_objects(
@@ -185,7 +185,7 @@ class BucketComparisonService:
         target_account: S3ExecutionTarget,
         *,
         include_sections: Optional[set[str]] = None,
-    ) -> CephAdminBucketConfigDiff:
+    ) -> BucketConfigDiff:
         return bucket_configuration_comparison.compare_bucket_configuration(
             self._configuration_reader,
             source_bucket,

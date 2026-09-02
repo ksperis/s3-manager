@@ -7,11 +7,11 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.models.ceph_admin import (
-    CephAdminBucketCompareRequest,
-    CephAdminBucketConfigDiff,
-    CephAdminBucketContentDiff,
+from app.models.bucket_compare import (
+    BucketConfigDiff,
+    BucketContentDiff,
 )
+from app.models.ceph_admin import CephAdminBucketCompareRequest
 from app.routers.ceph_admin import bucket_tools as buckets_router
 from app.services.bucket_comparison_service import BucketComparisonService
 
@@ -60,7 +60,7 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         assert source_bucket == "bucket-a"
         assert target_bucket == "bucket-b"
         assert kwargs["ignore_modified_after"] == payload.ignore_modified_after
-        return CephAdminBucketContentDiff(
+        return BucketContentDiff(
             source_count=10,
             target_count=9,
             matched_count=8,
@@ -76,7 +76,7 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
     monkeypatch.setattr(
         BucketComparisonService,
         "compare_bucket_configuration",
-        lambda *_args, **_kwargs: CephAdminBucketConfigDiff(changed=False, sections=[]),
+        lambda *_args, **_kwargs: BucketConfigDiff(changed=False, sections=[]),
     )
 
     response = buckets_router.compare_bucket_pair(endpoint_id=1, payload=payload, db=SimpleNamespace(), ctx=_build_ctx(1))
@@ -101,7 +101,7 @@ def test_compare_bucket_pair_returns_no_diff(monkeypatch):
     monkeypatch.setattr(
         BucketComparisonService,
         "compare_bucket_content",
-        lambda *_args, **_kwargs: CephAdminBucketContentDiff(
+        lambda *_args, **_kwargs: BucketContentDiff(
             source_count=5,
             target_count=5,
             matched_count=5,
@@ -157,7 +157,7 @@ def test_compare_bucket_pair_supports_config_only(monkeypatch):
     monkeypatch.setattr(
         BucketComparisonService,
         "compare_bucket_configuration",
-        lambda *_args, **_kwargs: CephAdminBucketConfigDiff(changed=True, sections=[]),
+        lambda *_args, **_kwargs: BucketConfigDiff(changed=True, sections=[]),
     )
 
     response = buckets_router.compare_bucket_pair(endpoint_id=1, payload=payload, db=SimpleNamespace(), ctx=_build_ctx(1))
@@ -186,7 +186,7 @@ def test_compare_bucket_pair_forwards_selected_config_features(monkeypatch):
         captured["source_bucket"] = source_bucket
         captured["target_bucket"] = target_bucket
         captured["include_sections"] = kwargs.get("include_sections")
-        return CephAdminBucketConfigDiff(changed=False, sections=[])
+        return BucketConfigDiff(changed=False, sections=[])
 
     monkeypatch.setattr(BucketComparisonService, "compare_bucket_content", should_not_compare_content)
     monkeypatch.setattr(BucketComparisonService, "compare_bucket_configuration", fake_compare_config)

@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 import sqlite3
 from typing import Any, Callable, Iterable, Literal, Optional
 
-from app.models.ceph_admin import (
-    CephAdminBucketContentDiff,
-    CephAdminBucketObjectDetail,
-    CephAdminBucketObjectDiffEntry,
+from app.models.bucket_compare import (
+    BucketContentDiff,
+    BucketObjectDetail,
+    BucketObjectDiffEntry,
 )
 from app.services.object_diff_common import compare_object_entries
 
@@ -74,7 +74,7 @@ class BucketCompareObjectIndex:
         *,
         md5_resolver: Callable[[Optional[str]], Optional[str]],
         ignore_modified_after: Optional[datetime],
-    ) -> CephAdminBucketContentDiff:
+    ) -> BucketContentDiff:
         ignored_after_cutoff_count = self._exclude_modified_after(ignore_modified_after)
         source_count = self._count_side("source")
         target_count = self._count_side("target")
@@ -88,7 +88,7 @@ class BucketCompareObjectIndex:
 
         matched_count = 0
         different_count = 0
-        different_sample: list[CephAdminBucketObjectDiffEntry] = []
+        different_sample: list[BucketObjectDiffEntry] = []
         for row in self._iter_common_rows():
             source_entry = self._source_entry_from_joined_row(row)
             target_entry = self._target_entry_from_joined_row(row)
@@ -100,7 +100,7 @@ class BucketCompareObjectIndex:
             different_count += 1
             if len(different_sample) < BUCKET_COMPARE_DISPLAY_LIMIT:
                 different_sample.append(
-                    CephAdminBucketObjectDiffEntry(
+                    BucketObjectDiffEntry(
                         key=str(row["key"]),
                         source_size=comparison.source_size,
                         target_size=comparison.target_size,
@@ -122,7 +122,7 @@ class BucketCompareObjectIndex:
                     )
                 )
 
-        return CephAdminBucketContentDiff(
+        return BucketContentDiff(
             source_count=source_count,
             target_count=target_count,
             matched_count=matched_count,
@@ -238,9 +238,9 @@ class BucketCompareObjectIndex:
             """
         )
 
-    def _object_detail_from_row(self, row: sqlite3.Row) -> CephAdminBucketObjectDetail:
+    def _object_detail_from_row(self, row: sqlite3.Row) -> BucketObjectDetail:
         storage_class = row["storage_class"]
-        return CephAdminBucketObjectDetail(
+        return BucketObjectDetail(
             key=str(row["key"]),
             size=int(row["size"] or 0),
             etag=row["etag"] if isinstance(row["etag"], str) else None,
