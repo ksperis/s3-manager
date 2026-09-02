@@ -134,6 +134,34 @@ describe("GroupsPage", () => {
     expect(window.location.search).toBe("?search=ops-group");
   });
 
+  it("opens the group editor when a neutral row cell is clicked", async () => {
+    listGroupsMock.mockResolvedValue({
+      items: [
+        {
+          id: 50,
+          name: "ops-group",
+          description: null,
+          account_links: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<GroupsPage />);
+
+    const groupRow = (await screen.findByText("ops-group")).closest("tr");
+    expect(groupRow).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.click(within(groupRow!).getByText("No workspace/tool rights"));
+    });
+
+    expect(screen.getByRole("heading", { name: "Edit UI group" })).toBeInTheDocument();
+  });
+
   it("renders association names from group details without waiting for modal resources", async () => {
     generalSettingsState.portal_enabled = true;
     listGroupsMock.mockResolvedValue({
@@ -190,7 +218,8 @@ describe("GroupsPage", () => {
     });
     const table = screen.getByRole("table");
     expect(table).toHaveClass("responsive-data-table");
-    expect(within(table).getByRole("button", { name: "ops-group" }).closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).getByText("ops-group").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).queryByRole("button", { name: "ops-group" })).not.toBeInTheDocument();
     expect(within(table).getByText("No workspace/tool rights").closest("td")).toHaveAttribute("data-label", "Rights");
     expect(associations.closest("td")).toHaveAttribute("data-label", "Storage associations");
     const members = screen.getByLabelText("1 linked principal");

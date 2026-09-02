@@ -82,7 +82,10 @@ import {
 } from "./adminAccessConfig";
 import PageTabs from "../../components/PageTabs";
 import UiButton from "../../components/ui/UiButton";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
@@ -1044,11 +1047,7 @@ export default function GroupsPage() {
       primary: true,
       cellClassName: "align-top min-w-[14rem]",
       render: (group) => (
-        <button
-          type="button"
-          onClick={() => openEditModal(group)}
-          className="flex w-full items-center gap-2 text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
-        >
+        <div className="flex w-full items-center gap-2">
           <GroupAvatar avatar={group.avatar} name={group.name} size="md" decorative />
           <span className="min-w-0">
             <span className="block truncate">{group.name}</span>
@@ -1056,7 +1055,7 @@ export default function GroupsPage() {
               <span className="mt-0.5 block truncate ui-caption font-normal text-slate-500 dark:text-slate-400">{group.description}</span>
             )}
           </span>
-        </button>
+        </div>
       ),
     },
     {
@@ -1117,7 +1116,12 @@ export default function GroupsPage() {
       cellClassName: "align-top",
       render: (group) => (
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={() => openEditModal(group)} className={tableActionButtonClasses}>
+          <button
+            type="button"
+            onClick={() => openEditModal(group)}
+            className={tableActionButtonClasses}
+            {...dataTableDefaultActionProps}
+          >
             Edit
           </button>
           <button

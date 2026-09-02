@@ -17,7 +17,7 @@ vi.mock("./CephAdminAccountCreateModal", () => ({
 }));
 
 vi.mock("./CephAdminAccountEditModal", () => ({
-  default: () => null,
+  default: ({ accountId }: { accountId: string }) => <div>Editing account {accountId}</div>,
 }));
 
 vi.mock("../../api/cephAdmin", async () => {
@@ -92,6 +92,31 @@ describe("CephAdminAccountsPage", () => {
     fireEvent.click(screen.getByLabelText("More actions"));
     fireEvent.click(screen.getByRole("button", { name: "Delete account" }));
     expect(screen.getByRole("heading", { name: "Delete RGW Account" })).toBeInTheDocument();
+  });
+
+  it("opens account configuration when a neutral row cell is clicked", async () => {
+    useCephAdminEndpointMock.mockReturnValue({
+      loading: false,
+      selectedEndpointId: 7,
+      selectedEndpoint: { id: 7, name: "Ceph A", capabilities: {} },
+      selectedEndpointAccess: { can_metrics: true, can_accounts: true },
+      selectedEndpointAccessLoading: false,
+      selectedEndpointAccessError: null,
+    });
+    listCephAdminAccountsMock.mockResolvedValue({
+      items: [{ account_id: "RGW12345678901234567", account_name: "Analytics" }],
+      total: 1,
+    });
+
+    render(
+      <MemoryRouter>
+        <CephAdminAccountsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByText("RGW12345678901234567"));
+
+    expect(screen.getByText("Editing account RGW12345678901234567")).toBeInTheDocument();
   });
 
   it("shows an empty state without a page-level context strip when no endpoint is selected", async () => {

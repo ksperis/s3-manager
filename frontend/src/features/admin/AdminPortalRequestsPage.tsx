@@ -15,7 +15,10 @@ import {
   type PortalAdminRequestStatus,
   type PortalAdminRequestType,
 } from "../../api/portalRequests";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
@@ -236,7 +239,12 @@ export default function AdminPortalRequestsPage() {
         mobileRole: "actions",
         render: (request) => (
           <div className="flex flex-wrap justify-end gap-2">
-            <UiButton size="xs" variant="secondary" onClick={() => setExpandedId((current) => (current === request.id ? null : request.id))}>
+            <UiButton
+              size="xs"
+              variant="secondary"
+              onClick={() => setExpandedId((current) => (current === request.id ? null : request.id))}
+              {...dataTableDefaultActionProps}
+            >
               Details
             </UiButton>
             {request.status === "pending" ? (

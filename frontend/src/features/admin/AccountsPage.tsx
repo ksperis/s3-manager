@@ -55,7 +55,10 @@ import AccountAccessRoleSelectors, {
 } from "./AccountAccessRoleSelectors";
 import { PortalSettingsItem, PortalSettingsSection } from "../../components/PortalSettingsLayout";
 import StorageUsageCard from "../../components/StorageUsageCard";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -718,19 +721,7 @@ export default function S3AccountsPage() {
         const tagItems = buildUiTagItems(account.tags);
         return (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              {isSuperAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => startEditS3Account(account)}
-                  className="min-w-0 truncate text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
-                >
-                  {account.name}
-                </button>
-              ) : (
-                <span className="min-w-0 truncate">{account.name}</span>
-              )}
-            </div>
+            <span className="min-w-0 flex-1 truncate">{account.name}</span>
             {tagItems.length > 0 && (
               <UiTagBadgeList
                 items={tagItems}
@@ -777,7 +768,12 @@ export default function S3AccountsPage() {
         const deleteBusy = deletingS3AccountId === account.id;
         return isSuperAdmin ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" onClick={() => startEditS3Account(account)} className={tableActionButtonClasses}>
+            <button
+              type="button"
+              onClick={() => startEditS3Account(account)}
+              className={tableActionButtonClasses}
+              {...dataTableDefaultActionProps}
+            >
               Edit
             </button>
             <button

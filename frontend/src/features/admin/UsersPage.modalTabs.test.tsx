@@ -269,6 +269,7 @@ describe("UsersPage modal tabs", () => {
     });
     expect(table).toHaveClass("responsive-data-table");
     expect(screen.getByText("responsive.user@example.com").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).queryByRole("button", { name: "responsive.user@example.com" })).not.toBeInTheDocument();
     expect(screen.getByText("Superadmin").closest("td")).toHaveAttribute("data-label", "Role");
     expect(screen.getAllByRole("button", { name: "Edit" })[0].closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });

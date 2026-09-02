@@ -184,7 +184,7 @@ describe("StorageEndpointsPage tags", () => {
     expect(endpointRow.getByText("supervision-key")).toBeInTheDocument();
     expect(endpointRow.getByText("ceph-admin-key")).toBeInTheDocument();
     expect(endpointRow.getAllByText("(secret stored)")).toHaveLength(3);
-    expect(endpointRow.getByRole("button", { name: "Open endpoint Ceph Endpoint" })).toBeInTheDocument();
+    expect(endpointRow.queryByRole("button", { name: "Open endpoint Ceph Endpoint" })).not.toBeInTheDocument();
     expect(endpointRow.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     const actionCell = endpointRow.getByRole("button", { name: "Edit" }).closest("td");
     expect(actionCell).toHaveAttribute("data-mobile-actions", "true");
@@ -192,7 +192,7 @@ describe("StorageEndpointsPage tags", () => {
     expect(within(table).getByRole("columnheader", { name: "Actions" })).not.toHaveAttribute("data-table-actions");
     expect(endpointRow.getByRole("button", { name: "Delete" })).toBeInTheDocument();
 
-    fireEvent.click(endpointRow.getByRole("button", { name: "Open endpoint Ceph Endpoint" }));
+    fireEvent.click(endpointRow.getByText("https://ceph.example.test"));
     expect(await screen.findByRole("heading", { name: "Edit storage endpoint · Ceph Endpoint" })).toBeInTheDocument();
     expect(
       screen.getByText(

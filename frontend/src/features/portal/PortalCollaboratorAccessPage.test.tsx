@@ -85,6 +85,7 @@ function renderPage(userId = "13") {
     <MemoryRouter initialEntries={[`/portal/shares/${userId}`]}>
       <Routes>
         <Route path="/portal/shares/:userId" element={<PortalCollaboratorAccessPage />} />
+        <Route path="/portal/storage-spaces/:spaceId" element={<div>Storage space detail route</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -109,7 +110,21 @@ describe("PortalCollaboratorAccessPage", () => {
     expect(screen.getByText("Ownership")).toBeInTheDocument();
     expect(screen.getByText("Manager role")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Remove access" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Open" })).toHaveLength(4);
+    expect(screen.queryByRole("link", { name: "Direct Space" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to members" })).toHaveAttribute("href", "/portal/shares");
+  });
+
+  it("opens a Storage Space from a neutral access cell", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const directSpaceRow = (await screen.findByText("Direct Space")).closest("tr");
+    expect(directSpaceRow).not.toBeNull();
+
+    await user.click(within(directSpaceRow!).getByText("Editor"));
+
+    expect(screen.getByText("Storage space detail route")).toBeInTheDocument();
   });
 
   it("confirms and removes a direct restricted access", async () => {
@@ -123,8 +138,8 @@ describe("PortalCollaboratorAccessPage", () => {
 
     await waitFor(() => expect(mocks.revokeShare).toHaveBeenCalledWith("101", "direct-space", 13));
     expect(await screen.findByText("Access to Direct Space was removed.")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Direct Space" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Team Space" })).toBeInTheDocument();
+    expect(screen.queryByText("Direct Space")).not.toBeInTheDocument();
+    expect(screen.getByText("Team Space")).toBeInTheDocument();
   });
 
   it("moves the project removal request into the access review", async () => {

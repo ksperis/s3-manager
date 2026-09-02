@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -98,6 +98,23 @@ describe("PortalActivityPanel", () => {
       "class",
       tableActionButtonClasses,
     );
+  });
+
+  it("opens activity details when a neutral row cell is clicked", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const activityRow = screen.getByText("alice@example.com").closest("tr");
+    expect(activityRow).not.toBeNull();
+
+    await user.click(within(activityRow!).getByText("2m ago"));
+
+    expect(screen.getByText("IP address")).toBeInTheDocument();
+    expect(screen.getByText("192.0.2.10")).toBeInTheDocument();
+    expect(within(activityRow!).getByRole("button", { name: "Hide details" })).toBeInTheDocument();
+
+    await user.click(screen.getByText("192.0.2.10"));
+    expect(within(activityRow!).getByRole("button", { name: "Hide details" })).toBeInTheDocument();
   });
 
   it("points empty activity back to spaces", () => {

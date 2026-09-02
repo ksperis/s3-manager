@@ -20,8 +20,12 @@ import PageControlStrip from "../../components/PageControlStrip";
 import PageShell from "../../components/PageShell";
 import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import { extractApiError } from "../../utils/apiError";
 import {
   EndpointTimelineBar,
@@ -251,14 +255,10 @@ export default function EndpointStatusPage() {
         primary: true,
         cellClassName: "align-top min-w-[16rem]",
         render: (incident) => (
-          <button
-            type="button"
-            onClick={() => navigate(`/admin/endpoint-status/${incident.endpoint_id}`)}
-            className="max-w-full text-left hover:text-primary"
-          >
+          <span className="block max-w-full">
             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
             <p className="break-all ui-caption text-slate-500 dark:text-slate-400">{incident.endpoint_url || "-"}</p>
-          </button>
+          </span>
         ),
       },
       {
@@ -291,6 +291,22 @@ export default function EndpointStatusPage() {
         cellClassName: "align-top min-w-[14rem] ui-caption text-slate-500 dark:text-slate-400",
         render: (incident) =>
           `${(incident.check_type || "availability").toUpperCase()} · ${(incident.scope || "endpoint").toUpperCase()} · ${formatCheckMode(incident.check_mode)}`,
+      },
+      {
+        id: "actions",
+        label: "Actions",
+        align: "right",
+        mobileRole: "actions",
+        render: (incident) => (
+          <button
+            type="button"
+            className={tableActionButtonClasses}
+            onClick={() => navigate(`/admin/endpoint-status/${incident.endpoint_id}`)}
+            {...dataTableDefaultActionProps}
+          >
+            Open
+          </button>
+        ),
       },
     ],
     [navigate]

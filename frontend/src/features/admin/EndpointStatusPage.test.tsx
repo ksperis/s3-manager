@@ -142,6 +142,11 @@ describe("EndpointStatusPage incidents table", () => {
     expect(within(table).getByText("Down").closest("td")).toHaveAttribute("data-label", "Status");
     expect(within(table).getByText("Ongoing").closest("td")).toHaveAttribute("data-label", "End");
     expect(within(table).getByText("LATENCY · ENDPOINT · S3").closest("td")).toHaveAttribute("data-label", "Type");
+    expect(within(table).queryByRole("button", { name: "Ceph Paris" })).not.toBeInTheDocument();
+    expect(within(table).getAllByRole("button", { name: "Open" })[0].closest("td")).toHaveAttribute(
+      "data-mobile-actions",
+      "true",
+    );
 
     await user.click(screen.getByRole("button", { name: /Down\s+1/ }));
 

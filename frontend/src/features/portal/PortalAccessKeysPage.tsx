@@ -23,7 +23,10 @@ import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import ListPageSection from "../../components/list/ListPageSection";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -560,6 +563,7 @@ export default function PortalAccessKeysPage() {
                 className={tableActionButtonClasses}
                 disabled={Boolean(busy)}
                 aria-label={`${t({ en: "Connect", fr: "Connecter", de: "Verbinden" })} ${keyConnectionLabel(key, locale, t)}`}
+                {...dataTableDefaultActionProps}
               >
                 {t({ en: "Connect", fr: "Connecter", de: "Verbinden" })}
               </button>

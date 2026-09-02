@@ -25,7 +25,10 @@ import PageTabs from "../../components/PageTabs";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import ListPageSection from "../../components/list/ListPageSection";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
@@ -775,14 +778,7 @@ export default function StorageEndpointsPage() {
     return (
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="ui-body font-semibold text-primary hover:underline dark:text-primary-300"
-            onClick={() => startEdit(endpoint)}
-            aria-label={`Open endpoint ${endpoint.name}`}
-          >
-            {endpoint.name}
-          </button>
+          <span>{endpoint.name}</span>
           {endpoint.is_default && <StatusBadge label="Default" />}
           {envManaged && <LockBadge label="Env managed" />}
           {!envManaged && !endpoint.is_editable && <LockBadge label="Protected" />}
@@ -922,6 +918,7 @@ export default function StorageEndpointsPage() {
           className={tableActionButtonClasses}
           onClick={() => startEdit(endpoint)}
           type="button"
+          {...dataTableDefaultActionProps}
         >
           {readOnly ? "View" : "Edit"}
         </button>

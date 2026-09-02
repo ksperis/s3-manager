@@ -598,6 +598,12 @@ a:hover {
   max-width: 22rem;
 }
 
+.manager-table tbody tr:not([data-expanded-row="true"]):has(
+    [data-table-default-action="true"]:not(:disabled):not([aria-disabled="true"])
+  ) {
+  cursor: pointer;
+}
+
 /* Compact tables across admin/manager/browser */
 .manager-table th,
 .manager-table td,

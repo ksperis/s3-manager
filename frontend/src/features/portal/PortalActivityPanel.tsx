@@ -4,7 +4,10 @@
  */
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import PageEmptyState from "../../components/PageEmptyState";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import UiCard from "../../components/ui/UiCard";
@@ -121,6 +124,7 @@ export default function PortalActivityPanel({ workspace }: PortalActivityPanelPr
                 type="button"
                 onClick={() => setExpandedActivityId(expanded ? null : item.id)}
                 className={tableActionButtonClasses}
+                {...dataTableDefaultActionProps}
               >
                 {expanded ? t({ en: "Hide details", fr: "Masquer les détails", de: "Details ausblenden" }) : t({ en: "Show details", fr: "Afficher les détails", de: "Details anzeigen" })}
               </button>

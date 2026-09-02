@@ -23,6 +23,7 @@ import {
   type PortalStorageSpaceShareCandidate,
 } from "../../api/portal";
 import DataTableShell, {
+  dataTableDefaultActionProps,
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
 import Modal from "../../components/Modal";
@@ -246,15 +247,7 @@ export default function PortalStorageSpacesPage() {
               decorative
             />
             <div className="min-w-0">
-              <Link
-                to={storageSpacePath(space)}
-                className={cx(
-                  "font-bold hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-                  uiTitleTextClass,
-                )}
-              >
-                {space.name}
-              </Link>
+              <span className="block truncate">{space.name}</span>
               <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>
                 {space.description}
               </div>
@@ -338,6 +331,7 @@ export default function PortalStorageSpacesPage() {
             <Link
               to={storageSpacePath(space)}
               className={tableActionButtonClasses}
+              {...dataTableDefaultActionProps}
             >
               {t({ en: "Open", fr: "Ouvrir", de: "Öffnen" })}
             </Link>

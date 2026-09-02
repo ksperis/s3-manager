@@ -160,7 +160,8 @@ describe("S3UsersPage modal tabs", () => {
     );
 
     await screen.findByText("rgw-user-1");
-    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+    expect(screen.queryByRole("button", { name: "rgw-user-1" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     const generalPanel = await screen.findByRole("tabpanel", { name: "General" });
     expect(
@@ -312,7 +313,7 @@ describe("S3UsersPage modal tabs", () => {
     );
 
     await screen.findByText("rgw-user-1");
-    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Add a tag for this RGW user" })).toBeInTheDocument();
@@ -357,7 +358,7 @@ describe("S3UsersPage modal tabs", () => {
     );
 
     await screen.findByText("rgw-user-1");
-    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     fireEvent.click(await screen.findByRole("tab", { name: "Linked UI groups" }));
     expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
@@ -398,7 +399,7 @@ describe("S3UsersPage modal tabs", () => {
     );
 
     await screen.findByText("rgw-user-1");
-    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.click(await screen.findByRole("tab", { name: "Privileged access" }));
 
     expect(screen.getByText("Privileged Ceph access")).toBeInTheDocument();
@@ -444,7 +445,7 @@ describe("S3UsersPage modal tabs", () => {
     );
 
     await screen.findByText("rgw-user-1");
-    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.click(await screen.findByRole("tab", { name: "Privileged access" }));
 
     const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });

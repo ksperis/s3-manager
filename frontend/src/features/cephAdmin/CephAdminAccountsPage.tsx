@@ -13,7 +13,10 @@ import { workflowPageHostClass } from "../../components/WorkflowPage";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import { toolbarCompactButtonClasses } from "../../components/toolbarControlClasses";
 import { cx, uiButtonBaseClass, uiButtonVariants } from "../../components/ui/styles";
 import UiButton from "../../components/ui/UiButton";
@@ -942,6 +945,7 @@ export default function CephAdminAccountsPage() {
               <button
                 type="button"
                 className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
+                {...dataTableDefaultActionProps}
                 onClick={(event) => {
                   event.preventDefault();
                   setEditingAccountId(account.account_id);

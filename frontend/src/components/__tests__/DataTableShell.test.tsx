@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import DataTableShell, { type DataTableColumn } from "../list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../list/DataTableShell";
 
 type Row = {
   id: string;
@@ -96,6 +99,221 @@ describe("DataTableShell", () => {
 
     expect(screen.getByText("Archive").closest("tr")).toHaveClass("selected-row");
     expect(screen.getByText("Archive").closest("tr")).toHaveAttribute("aria-current", "true");
+  });
+
+  it("delegates a neutral cell click to the declared default action", async () => {
+    const user = userEvent.setup();
+    const onDefaultAction = vi.fn();
+
+    render(
+      <DataTableShell
+        columns={[
+          ...columns,
+          {
+            id: "actions",
+            label: "Actions",
+            render: () => (
+              <button type="button" onClick={onDefaultAction} {...dataTableDefaultActionProps}>
+                Open
+              </button>
+            ),
+          },
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+      />
+    );
+
+    const row = screen.getByText("Archive").closest("tr");
+    expect(row).not.toHaveAttribute("tabindex");
+    expect(row).not.toHaveAttribute("role", "button");
+
+    await user.click(screen.getByText("3"));
+    expect(onDefaultAction).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Open" }));
+    expect(onDefaultAction).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves secondary controls instead of triggering the row action", async () => {
+    const user = userEvent.setup();
+    const onDefaultAction = vi.fn();
+    const onSecondaryAction = vi.fn();
+
+    render(
+      <DataTableShell
+        columns={[
+          {
+            ...columns[0],
+            render: (row) => (
+              <label>
+                <input type="checkbox" aria-label={`Select ${row.name}`} />
+                {row.name}
+              </label>
+            ),
+          },
+          columns[1],
+          {
+            id: "actions",
+            label: "Actions",
+            render: () => (
+              <div>
+                <button type="button" onClick={onDefaultAction} {...dataTableDefaultActionProps}>
+                  Open
+                </button>
+                <button type="button" onClick={onSecondaryAction}>
+                  Delete
+                </button>
+              </div>
+            ),
+          },
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+      />
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Archive" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(onDefaultAction).not.toHaveBeenCalled();
+    expect(onSecondaryAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not activate disabled or unmarked row actions", async () => {
+    const user = userEvent.setup();
+    const onDisabledAction = vi.fn();
+    const onUnmarkedAction = vi.fn();
+
+    const { rerender } = render(
+      <DataTableShell
+        columns={[
+          ...columns,
+          {
+            id: "actions",
+            label: "Actions",
+            render: () => (
+              <button type="button" disabled onClick={onDisabledAction} {...dataTableDefaultActionProps}>
+                Open
+              </button>
+            ),
+          },
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+      />
+    );
+
+    await user.click(screen.getByText("3"));
+    expect(onDisabledAction).not.toHaveBeenCalled();
+
+    rerender(
+      <DataTableShell
+        columns={[
+          ...columns,
+          {
+            id: "actions",
+            label: "Actions",
+            render: () => (
+              <button type="button" onClick={onUnmarkedAction}>
+                Open
+              </button>
+            ),
+          },
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+      />
+    );
+
+    await user.click(screen.getByText("3"));
+    expect(onUnmarkedAction).not.toHaveBeenCalled();
+  });
+
+  it("ignores neutral clicks while text is selected, including in responsive cards", async () => {
+    const user = userEvent.setup();
+    const onDefaultAction = vi.fn();
+    const selectionSpy = vi.spyOn(window, "getSelection").mockReturnValue({ isCollapsed: false } as Selection);
+
+    render(
+      <DataTableShell
+        columns={[
+          ...columns,
+          {
+            id: "actions",
+            label: "Actions",
+            mobileRole: "actions",
+            render: () => (
+              <button type="button" onClick={onDefaultAction} {...dataTableDefaultActionProps}>
+                Open
+              </button>
+            ),
+          },
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        responsiveCards
+      />
+    );
+
+    await user.click(screen.getByText("3"));
+    expect(onDefaultAction).not.toHaveBeenCalled();
+    selectionSpy.mockRestore();
+  });
+
+  it("delegates neutral cell clicks in responsive cards", async () => {
+    const user = userEvent.setup();
+    const onDefaultAction = vi.fn();
+
+    render(
+      <DataTableShell
+        columns={[
+          ...columns,
+          {
+            id: "actions",
+            label: "Actions",
+            mobileRole: "actions",
+            render: () => (
+              <button type="button" onClick={onDefaultAction} {...dataTableDefaultActionProps}>
+                Open
+              </button>
+            ),
+          },
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        responsiveCards
+      />
+    );
+
+    await user.click(screen.getByText("3"));
+
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(onDefaultAction).toHaveBeenCalledTimes(1);
   });
 
   it("renders empty state messages in the table body", () => {

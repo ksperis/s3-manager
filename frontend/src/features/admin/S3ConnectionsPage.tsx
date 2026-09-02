@@ -10,7 +10,10 @@ import Modal from "../../components/Modal";
 import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import WorkflowTabs from "../../components/WorkflowTabs";
 import PageBanner from "../../components/PageBanner";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
@@ -996,6 +999,7 @@ export default function S3ConnectionsPage() {
               type="button"
               className={tableActionButtonClasses}
               onClick={() => openEdit(connection)}
+              {...dataTableDefaultActionProps}
             >
               Edit
             </button>

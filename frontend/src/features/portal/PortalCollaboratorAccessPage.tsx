@@ -13,11 +13,17 @@ import {
 } from "../../api/portal";
 import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageShell from "../../components/PageShell";
-import { tableDeleteActionClasses } from "../../components/tableActionClasses";
+import {
+  tableActionButtonClasses,
+  tableDeleteActionClasses,
+} from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
 import UserAvatar from "../../components/UserAvatar";
@@ -147,14 +153,7 @@ export default function PortalCollaboratorAccessPage() {
         id: "space",
         label: t({ en: "Storage Space", fr: "Storage Space", de: "Storage Space" }),
         primary: true,
-        render: (access) => (
-          <Link
-            to={`/portal/storage-spaces/${encodeURIComponent(access.storage_space_id)}`}
-            className="font-semibold text-primary hover:underline dark:text-primary-200"
-          >
-            {access.storage_space_name}
-          </Link>
-        ),
+        render: (access) => <span className="block truncate">{access.storage_space_name}</span>,
       },
       {
         id: "role",
@@ -182,19 +181,27 @@ export default function PortalCollaboratorAccessPage() {
         label: t({ en: "Action", fr: "Action", de: "Aktion" }),
         align: "right",
         mobileRole: "actions",
-        render: (access) =>
-          access.can_revoke ? (
-            <button
-              type="button"
-              className={tableDeleteActionClasses}
-              disabled={busy}
-              onClick={() => setPendingAction({ type: "revoke-access", access })}
+        render: (access) => (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Link
+              to={`/portal/storage-spaces/${encodeURIComponent(access.storage_space_id)}`}
+              className={tableActionButtonClasses}
+              {...dataTableDefaultActionProps}
             >
-              {t({ en: "Remove access", fr: "Retirer l'accès", de: "Zugriff entfernen" })}
-            </button>
-          ) : (
-            <span className={uiMutedTextClass}>-</span>
-          ),
+              {t({ en: "Open", fr: "Ouvrir", de: "Öffnen" })}
+            </Link>
+            {access.can_revoke ? (
+              <button
+                type="button"
+                className={tableDeleteActionClasses}
+                disabled={busy}
+                onClick={() => setPendingAction({ type: "revoke-access", access })}
+              >
+                {t({ en: "Remove access", fr: "Retirer l'accès", de: "Zugriff entfernen" })}
+              </button>
+            ) : null}
+          </div>
+        ),
       },
     ],
     [busy, sourceDescription, t],

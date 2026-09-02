@@ -267,6 +267,7 @@ describe("AccountsPage modal tabs", () => {
     expect(table).toHaveClass("responsive-data-table");
     const accountName = await within(table).findByText("acc-1");
     expect(accountName.closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).queryByRole("button", { name: "acc-1" })).not.toBeInTheDocument();
     expect(within(table).getByText("RGW000000000000001").closest("td")).toHaveAttribute("data-label", "RGW ID");
     expect(within(table).getByText("ceph-main").closest("td")).toHaveAttribute("data-label", "Endpoint");
     const associations = screen.getByLabelText("2 linked principals");

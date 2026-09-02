@@ -34,7 +34,10 @@ import WorkflowPage, {
 } from "../../components/WorkflowPage";
 import WorkflowTabs from "../../components/WorkflowTabs";
 import PageBanner from "../../components/PageBanner";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import StorageUsageCard from "../../components/StorageUsageCard";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
@@ -752,13 +755,7 @@ export default function S3UsersPage() {
         const tagItems = buildUiTagItems(user.tags);
         return (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <button
-              type="button"
-              onClick={() => openEditModal(user)}
-              className="min-w-0 flex-1 truncate text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
-            >
-              {user.name}
-            </button>
+            <span className="min-w-0 flex-1 truncate">{user.name}</span>
             {tagItems.length > 0 && (
               <UiTagBadgeList
                 items={tagItems}
@@ -805,7 +802,12 @@ export default function S3UsersPage() {
         const deleteBusy = deleteBusyId === user.id;
         return (
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" onClick={() => openEditModal(user)} className={tableActionButtonClasses}>
+            <button
+              type="button"
+              onClick={() => openEditModal(user)}
+              className={tableActionButtonClasses}
+              {...dataTableDefaultActionProps}
+            >
               Edit
             </button>
             <Link to={`/admin/s3-users/${user.id}/keys`} className={tableActionButtonClasses}>

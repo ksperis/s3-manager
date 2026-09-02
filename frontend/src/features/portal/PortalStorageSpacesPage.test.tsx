@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LanguageProvider } from "../../components/language";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import PortalStorageSpacesPage from "./PortalStorageSpacesPage";
@@ -256,10 +256,7 @@ describe("PortalStorageSpacesPage", () => {
     expect(
       screen.queryByRole("columnheader", { name: "Status" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Research Data" })).toHaveAttribute(
-      "href",
-      "/portal/storage-spaces/research-data",
-    );
+    expect(screen.queryByRole("link", { name: "Research Data" })).not.toBeInTheDocument();
     const openLink = screen.getByRole("link", { name: "Open" });
     expect(openLink).toHaveAttribute(
       "href",
@@ -276,6 +273,27 @@ describe("PortalStorageSpacesPage", () => {
       screen.getByRole("button", { name: "Add existing space" }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
+  });
+
+  it("opens a space when a neutral row cell is clicked", () => {
+    render(
+      <MemoryRouter initialEntries={["/portal/storage-spaces"]}>
+        <Routes>
+          <Route path="/portal/storage-spaces" element={<PortalStorageSpacesPage />} />
+          <Route
+            path="/portal/storage-spaces/:spaceId"
+            element={<div>Storage space detail route</div>}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const researchRow = screen.getByText("Research Data").closest("tr");
+    expect(researchRow).not.toBeNull();
+
+    fireEvent.click(within(researchRow!).getByText("12"));
+
+    expect(screen.getByText("Storage space detail route")).toBeInTheDocument();
   });
 
   it("shows only the team badge for account-wide spaces", () => {

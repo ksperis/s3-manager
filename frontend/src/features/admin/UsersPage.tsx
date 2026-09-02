@@ -53,7 +53,10 @@ import {
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
@@ -1127,16 +1130,7 @@ export default function UsersPage() {
       label: "Email",
       field: "email",
       primary: true,
-      render: (user) => (
-        <button
-          type="button"
-          onClick={() => startEdit(user)}
-          disabled={!currentIsSuperAdmin && (user.role === "ui_admin" || user.role === "ui_superadmin")}
-          className="max-w-full break-all text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
-        >
-          {user.email}
-        </button>
-      ),
+      render: (user) => <span className="block max-w-full break-all">{user.email}</span>,
     },
     {
       id: "role",
@@ -1179,7 +1173,13 @@ export default function UsersPage() {
         const canManage = currentIsSuperAdmin || (user.role !== "ui_admin" && user.role !== "ui_superadmin");
         return (
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => startEdit(user)} className={tableActionButtonClasses} disabled={!canManage}>
+            <button
+              type="button"
+              onClick={() => startEdit(user)}
+              className={tableActionButtonClasses}
+              disabled={!canManage}
+              {...dataTableDefaultActionProps}
+            >
               Edit
             </button>
             <button

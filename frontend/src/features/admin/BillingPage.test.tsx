@@ -160,9 +160,14 @@ describe("BillingPage", () => {
 
     const table = screen.getByRole("table");
     expect(table).toHaveClass("responsive-data-table");
-    expect(within(table).getByRole("button", { name: "View billing detail for Tenant A" }).closest("td")).toHaveAttribute(
+    expect(within(table).getByText("Tenant A").closest("td")).toHaveAttribute(
       "data-mobile-primary",
       "true"
+    );
+    expect(within(table).queryByRole("button", { name: "View billing detail for Tenant A" })).not.toBeInTheDocument();
+    expect(within(table).getByRole("button", { name: "View" }).closest("td")).toHaveAttribute(
+      "data-mobile-actions",
+      "true",
     );
     expect(within(table).getByText("2.0 KB").closest("td")).toHaveAttribute("data-label", "Storage avg");
     expect(within(table).getByText("250").closest("td")).toHaveAttribute("data-label", "Requests");
@@ -171,7 +176,7 @@ describe("BillingPage", () => {
     expect(await screen.findByText("Tenant B")).toBeInTheDocument();
     await waitFor(() => expect(mocks.getBillingSubjects).toHaveBeenLastCalledWith("2026-07", 7, "account", 2, 25, "name", "asc"));
 
-    fireEvent.click(screen.getByRole("button", { name: "View billing detail for Tenant B" }));
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
     await waitFor(() => expect(mocks.getBillingSubjectDetail).toHaveBeenCalledWith("2026-07", 7, "account", 43));
     expect(await screen.findByText("This subject has partial source coverage: Storage 1d · Usage 2d.")).toBeInTheDocument();
 
@@ -198,7 +203,7 @@ describe("BillingPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    const subjectButton = await screen.findByRole("button", { name: "View billing detail for Tenant A" });
+    const subjectButton = await screen.findByRole("button", { name: "View" });
     subjectButton.focus();
     await user.keyboard("{Enter}");
 

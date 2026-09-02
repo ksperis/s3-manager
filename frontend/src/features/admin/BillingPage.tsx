@@ -14,7 +14,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageShell from "../../components/PageShell";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
@@ -23,6 +26,7 @@ import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
 import StatCards from "../../components/StatCards";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -439,15 +443,10 @@ export default function BillingPage() {
       field: "name",
       primary: true,
       render: (subject) => (
-        <button
-          type="button"
-          className="text-left"
-          onClick={() => void handleRowClick(subject)}
-          aria-label={`View billing detail for ${subject.name}`}
-        >
-          <span className={cx("block font-medium", uiTitleTextClass)}>{subject.name}</span>
+        <span>
+          <span className="block">{subject.name}</span>
           <span className={cx("block ui-caption", uiMutedTextClass)}>{subject.rgw_identifier ?? "No RGW identifier"}</span>
-        </button>
+        </span>
       ),
     },
     {
@@ -478,6 +477,22 @@ export default function BillingPage() {
       label: "Cost",
       field: "cost",
       render: (subject) => (subject.cost?.total_cost != null ? formatCurrency(subject.cost.total_cost, subject.cost.currency) : "-"),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (subject) => (
+        <button
+          type="button"
+          className={tableActionButtonClasses}
+          onClick={() => void handleRowClick(subject)}
+          {...dataTableDefaultActionProps}
+        >
+          View
+        </button>
+      ),
     },
   ];
 

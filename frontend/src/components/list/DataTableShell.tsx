@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Fragment, type HTMLAttributes, type ReactNode } from "react";
+import { Fragment, type HTMLAttributes, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 
 import PaginationControls from "../PaginationControls";
 import SortableHeader from "../SortableHeader";
@@ -12,6 +12,59 @@ import { cx } from "../ui/styles";
 import type { ListTableStatus } from "./listTableStatus";
 
 type SortDirection = "asc" | "desc";
+
+export const dataTableDefaultActionProps = {
+  "data-table-default-action": "true",
+} as const;
+
+const interactiveRowTargetSelector = [
+  "a[href]",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "label",
+  "summary",
+  "[contenteditable='true']",
+  "[data-table-row-click-ignore='true']",
+  "[role='button']",
+  "[role='link']",
+  "[role='checkbox']",
+  "[role='switch']",
+  "[role='menuitem']",
+  "[role='menuitemcheckbox']",
+  "[role='menuitemradio']",
+  "[role='option']",
+  "[role='radio']",
+  "[role='tab']",
+  "[role='textbox']",
+  "[role='searchbox']",
+  "[role='treeitem']",
+  "[role='combobox']",
+  "[role='scrollbar']",
+  "[role='slider']",
+  "[role='spinbutton']",
+  "[aria-controls]",
+  "[aria-expanded]",
+  "[aria-haspopup]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function handleDefaultRowAction(event: ReactMouseEvent<HTMLTableSectionElement>) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest(interactiveRowTargetSelector)) return;
+
+  const selection = typeof window === "undefined" ? null : window.getSelection();
+  if (selection && !selection.isCollapsed) return;
+
+  const row = target.closest("tr");
+  if (!row || row.dataset.expandedRow === "true" || !event.currentTarget.contains(row)) return;
+
+  const action = row.querySelector<HTMLElement>("[data-table-default-action='true']");
+  if (!action || action.matches(":disabled, [aria-disabled='true']")) return;
+  action.click();
+}
 
 export type DataTableColumn<Row, SortField extends string = string> = {
   id: string;
@@ -143,7 +196,10 @@ export default function DataTableShell<Row, SortField extends string = string>({
               ))}
             </tr>
           </thead>
-          <tbody className={cx("divide-y divide-slate-200 dark:divide-slate-800", tbodyClassName)}>
+          <tbody
+            className={cx("divide-y divide-slate-200 dark:divide-slate-800", tbodyClassName)}
+            onClick={handleDefaultRowAction}
+          >
             {status === "loading" && <TableEmptyState colSpan={columns.length} message={loadingMessage} />}
             {status === "error" && <TableEmptyState colSpan={columns.length} message={errorMessage} tone="error" />}
             {status === "empty" && <TableEmptyState colSpan={columns.length} message={emptyMessage} />}
