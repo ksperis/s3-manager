@@ -61,6 +61,11 @@ npm run dev
 
 ## Manual UI smoke test
 
+AI agents that need repeatable authenticated Admin or Browser access should use
+[Authenticated UI access for AI agents](authenticated-ui-ai-agents.md). The
+commands below remain useful for a human-driven route check or a local instance
+whose existing data is intentionally in scope.
+
 For a quick browser check of a real development route, run the backend and
 frontend with explicit loopback addresses and ports:
 

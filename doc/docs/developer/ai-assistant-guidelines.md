@@ -250,8 +250,11 @@ When a frontend change affects a real workspace route, do a browser-level smoke
 test whenever runtime behavior matters. Starting Vite, passing type checks, or
 passing unit tests alone does not prove that the route renders.
 
-Use the workflow in [Local development](local-development.md#manual-ui-smoke-test)
-for exact commands, login notes, and test-option tradeoffs. During validation,
+Use [Authenticated UI access for AI agents](authenticated-ui-ai-agents.md) for
+the isolated Admin/Browser harness, exact Playwright CLI commands, live-instance
+boundaries, and authentication troubleshooting. Use
+[Local development](local-development.md#manual-ui-smoke-test) for the underlying
+manual server workflow and other test-option tradeoffs. During validation,
 check visible route content, key DOM state, and browser console errors. Do not
 commit Playwright reports, temporary screenshots, traces, videos, tokens, or
 copied secrets.

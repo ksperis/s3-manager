@@ -160,6 +160,7 @@ nav:
           - Workspace surface separation: developer/workspace-surface-separation.md
       - Contribution:
           - Local development: developer/local-development.md
+          - Authenticated UI for AI agents: developer/authenticated-ui-ai-agents.md
           - First contribution: developer/first-contribution.md
           - Contributing: developer/contributing.md
           - AI assistant guidelines: developer/ai-assistant-guidelines.md
