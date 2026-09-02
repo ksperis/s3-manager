@@ -5,7 +5,7 @@
 export const tableActionButtonClasses =
   "inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:opacity-60 disabled:hover:border-slate-200 disabled:hover:text-slate-400 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:border-slate-700 dark:disabled:text-slate-500 dark:disabled:hover:border-slate-700 dark:disabled:hover:text-slate-500";
 
-export const tableActionColumnClasses = "w-px whitespace-nowrap md:[&>*]:!flex-nowrap";
+export const tableActionColumnClasses = "whitespace-nowrap md:[&>*]:!flex-nowrap";
 
 export const tableCompactIconActionButtonClasses =
   "inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white px-0 py-0 text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";

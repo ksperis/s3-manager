@@ -55,7 +55,16 @@ describe("DataTableShell", () => {
   it("can preserve the fixed layout used by manager inventories", () => {
     render(
       <DataTableShell
-        columns={columns}
+        columns={[
+          ...columns,
+          {
+            id: "actions",
+            label: "Actions",
+            align: "right",
+            mobileRole: "actions",
+            render: () => <button type="button">Open</button>,
+          },
+        ]}
         rows={rows}
         rowKey={(row) => row.id}
         status="ready"
@@ -68,6 +77,11 @@ describe("DataTableShell", () => {
 
     expect(screen.getByRole("table")).toHaveClass("manager-table", "min-w-full");
     expect(screen.getByRole("table")).not.toHaveClass("!table-auto", "!w-max");
+    expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveClass("w-64");
+    expect(screen.getByRole("columnheader", { name: "Actions" })).not.toHaveClass("w-px");
+    const actionCell = screen.getByRole("button", { name: "Open" }).closest("td");
+    expect(actionCell).toHaveClass("w-64");
+    expect(actionCell).not.toHaveClass("w-px");
   });
 
   it("passes custom page-size options to the shared pagination controls", async () => {

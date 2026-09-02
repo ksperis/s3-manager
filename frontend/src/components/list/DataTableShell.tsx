@@ -154,6 +154,10 @@ export default function DataTableShell<Row, SortField extends string = string>({
     : overflowXHidden
       ? "overflow-x-hidden"
       : "overflow-x-auto";
+  const actionColumnClasses = cx(
+    tableActionColumnClasses,
+    tableLayout === "fixed" ? "w-64" : "w-px"
+  );
 
   return (
     <>
@@ -175,7 +179,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
                     data-table-actions={stickyActions && column.mobileRole === "actions" ? "true" : undefined}
                     className={cx(
                       "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
-                      column.mobileRole === "actions" && tableActionColumnClasses,
+                      column.mobileRole === "actions" && actionColumnClasses,
                       (column.align ?? "left") === "right" ? "text-right" : "text-left",
                       column.headerClassName
                     )}
@@ -227,7 +231,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
                           className={cx(
                             cellBase,
                             textClass,
-                            mobileRole === "actions" && tableActionColumnClasses,
+                            mobileRole === "actions" && actionColumnClasses,
                             column.cellClassName
                           )}
                           data-label={responsiveCards && !mobileRole && !column.mobileHidden ? mobileLabel : undefined}
