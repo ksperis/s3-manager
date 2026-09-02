@@ -21,10 +21,20 @@ spec:
             app.kubernetes.io/component: quota-monitor-cron
         spec:
           restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            {{- toYaml .Values.cronJobs.podSecurityContext | nindent 12 }}
           containers:
             - name: quota-monitor-runner
               image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
               imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.cronJobs.containerSecurityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.cronJobs.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               env:
                 - name: QUOTA_MONITOR_API_BASE
                   value: {{ printf "http://%s-backend:%d" (include "bucketreef.fullname" .) (.Values.service.backend.port | int) | quote }}
@@ -52,7 +62,10 @@ spec:
                       sys.exit(1)
                   url = f"{base}/api/internal/quota-monitor/run"
                   resp = requests.post(url, headers={"X-Internal-Token": token}, timeout=30)
-                  print(resp.status_code, resp.text)
+                  print(f"Quota monitor returned HTTP {resp.status_code}")
                   resp.raise_for_status()
                   PY
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}

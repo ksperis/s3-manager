@@ -42,7 +42,7 @@ def _request(path: str, headers: dict | None = None, method: str = "GET"):
 def _custom_endpoint(name: str) -> str:
     return json.dumps(
         {
-            "endpoint_url": f"https://{name}.example.test",
+            "endpoint_url": f"https://93.184.216.34/{name}",
             "force_path_style": False,
             "provider": None,
             "region": None,

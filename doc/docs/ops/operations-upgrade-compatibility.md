@@ -1,5 +1,36 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-09 least-privilege containers and strict network policy
+
+The application images now run with fixed non-root identities and a read-only
+root filesystem. nginx moved from container port `80` to `8080`; Compose host
+port `8080` and the Helm frontend Service port `80` are unchanged. Replace the
+old runtime-installing Compose scheduler with the matching dedicated scheduler
+image. Preserve the backend `/data` volume and provide a writable `/tmp` only;
+do not make the image root writable to work around startup failures.
+
+Before the first rootless Compose start, stop the old backend and inspect the
+existing named volume ownership. If its files were created by root, perform a
+single controlled ownership migration to UID/GID `10001:10001` using the exact
+volume name from `docker volume ls`; back up the volume first. Do not recreate
+or replace it, because it contains the SQLite database and historical encrypted
+credentials.
+
+Helm enables the strict NetworkPolicy profile by default and intentionally
+refuses incomplete values. Before upgrading, inventory the namespace/pod labels
+of the ingress controller and DNS service, the exact proxy pod CIDRs, every
+external database CIDR, and all private storage or webhook target CIDRs and
+ports. Configure `networkPolicy.ingressController`, `networkPolicy.dns`,
+`networkPolicy.publicHttpsEgress`, and any required
+`networkPolicy.privateEgress` entries. Public HTTPS ranges must explicitly
+exclude private, loopback, link-local, metadata, multicast, and reserved
+networks. Render and review the resulting policies before applying them.
+
+This is a breaking deployment boundary: old Helm values that lack selectors or
+egress rules no longer render in the strict profile. Disabling the profile is
+reserved for an isolated migration validation; production operators must
+complete the inventory rather than leave it disabled.
+
 ## 2026-09 trusted proxy boundary is mandatory
 
 Production startup now refuses an empty `TRUSTED_PROXY_CIDRS`. The Helm chart

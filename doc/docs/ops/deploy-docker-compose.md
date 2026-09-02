@@ -52,6 +52,12 @@ proxy. Never trust the entire private range merely because the proxy currently
 has a private address. Direct deployments without a proxy should remain in the
 development profile; production deliberately refuses an empty trust boundary.
 
+The Compose services run with fixed non-root identities, drop every capability,
+disable privilege escalation, mount the image filesystem read-only, and use a
+dedicated in-memory `/tmp`. Keep `/data` as the backend's only persistent
+writable location. The host frontend port remains `8080`; nginx now listens on
+`8080` inside the container as well.
+
 ## Default endpoints
 
 - Frontend: `http://localhost:8080`
@@ -67,6 +73,12 @@ not activate it. A complete deployment starts it explicitly:
 export INTERNAL_CRON_TOKEN="$(openssl rand -hex 48)"
 docker compose --profile operations up -d
 ```
+
+The scheduler uses the dedicated rootless
+`ghcr.io/ksperis/bucketreef-scheduler` image. Supercronic is pinned and checksum
+verified at image build time; no package manager runs when the service starts.
+When overriding backend/frontend images from an internal registry, also set
+`BUCKETREEF_SCHEDULER_IMAGE` to the matching scheduler repository.
 
 The scheduler triggers:
 

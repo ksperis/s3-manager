@@ -31,6 +31,14 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     volumes:
       - backend-data:/data
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777,uid=10001,gid=10001
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "${BUCKETREEF_BIND_ADDRESS:-127.0.0.1}:${BUCKETREEF_BACKEND_PORT:-8000}:8000"
     healthcheck:
@@ -42,20 +50,28 @@ services:
   frontend:
     image: ${BUCKETREEF_FRONTEND_IMAGE:-ghcr.io/ksperis/bucketreef-frontend}:${BUCKETREEF_TAG:-latest}
     ports:
-      - "${BUCKETREEF_BIND_ADDRESS:-127.0.0.1}:${BUCKETREEF_FRONTEND_PORT:-8080}:80"
+      - "${BUCKETREEF_BIND_ADDRESS:-127.0.0.1}:${BUCKETREEF_FRONTEND_PORT:-8080}:8080"
+    user: "101:101"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777,uid=101,gid=101
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       backend:
         condition: service_healthy
     environment:
       CSP_CONNECT_SRC: "${CSP_CONNECT_SRC:-'self'}"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/setup/first-admin || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/setup/first-admin || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 24
       start_period: 5s
   scheduler:
-    image: alpine:3.20
+    image: ${BUCKETREEF_SCHEDULER_IMAGE:-ghcr.io/ksperis/bucketreef-scheduler}:${BUCKETREEF_TAG:-latest}
     profiles: ["operations"]
     depends_on:
       backend:
@@ -69,25 +85,15 @@ services:
       USAGE_HISTORY_CRON_SCHEDULE: ${USAGE_HISTORY_CRON_SCHEDULE:-0 3 * * *}
       BILLING_DAY_OFFSET: ${BILLING_DAY_OFFSET:-1}
       CRON_HTTP_TIMEOUT_SECONDS: ${CRON_HTTP_TIMEOUT_SECONDS:-30}
-      SCHEDULER_RUNTIME_ENV_FILE: /tmp/bucketreef-scheduler.env
       TZ: ${TZ:-UTC}
-    volumes:
-      - ./ops/cron:/opt/cron:ro
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -eu
-        apk add --no-cache curl coreutils tzdata
-        printf 'BACKEND_API_BASE=%s\nINTERNAL_CRON_TOKEN=%s\nBILLING_DAY_OFFSET=%s\nCRON_HTTP_TIMEOUT_SECONDS=%s\n' "$$BACKEND_API_BASE" "$$INTERNAL_CRON_TOKEN" "$$BILLING_DAY_OFFSET" "$$CRON_HTTP_TIMEOUT_SECONDS" > "$$SCHEDULER_RUNTIME_ENV_FILE"
-        {
-          echo 'SHELL=/bin/sh'
-          echo 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-          echo "$$HEALTHCHECK_CRON_SCHEDULE /bin/sh /opt/cron/run-healthcheck.sh >> /proc/1/fd/1 2>&1"
-          echo "$$BILLING_CRON_SCHEDULE /bin/sh /opt/cron/run-billing.sh >> /proc/1/fd/1 2>&1"
-          echo "$$QUOTA_MONITOR_CRON_SCHEDULE /bin/sh /opt/cron/run-quota-monitor.sh >> /proc/1/fd/1 2>&1"
-          echo "$$USAGE_HISTORY_CRON_SCHEDULE /bin/sh /opt/cron/run-usage-history.sh >> /proc/1/fd/1 2>&1"
-        } > /etc/crontabs/root
-        exec crond -f -l 8
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777,uid=10001,gid=10001
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 volumes:
   backend-data:

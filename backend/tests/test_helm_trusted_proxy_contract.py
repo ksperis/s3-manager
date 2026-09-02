@@ -26,5 +26,5 @@ def test_ci_covers_positive_and_negative_trusted_proxy_rendering():
     pipeline = repository_root.joinpath(".gitlab-ci.yml").read_text(encoding="utf-8")
 
     assert "expected missing trusted proxy CIDRs to fail" in pipeline
-    assert pipeline.count("backend.trustedProxyCidrs") >= 5
+    assert pipeline.count("backend.trustedProxyCidrs") >= 2
     assert "name: TRUSTED_PROXY_CIDRS" in pipeline

@@ -334,7 +334,7 @@ def test_compose_defaults_are_safe_and_services_have_healthchecks():
             "${BUCKETREEF_BIND_ADDRESS:-127.0.0.1}:${BUCKETREEF_BACKEND_PORT:-8000}:8000"
         ]
         assert services["frontend"]["ports"] == [
-            "${BUCKETREEF_BIND_ADDRESS:-127.0.0.1}:${BUCKETREEF_FRONTEND_PORT:-8080}:80"
+            "${BUCKETREEF_BIND_ADDRESS:-127.0.0.1}:${BUCKETREEF_FRONTEND_PORT:-8080}:8080"
         ]
         assert services["frontend"]["environment"]["CSP_CONNECT_SRC"] == (
             "${CSP_CONNECT_SRC:-'self'}"

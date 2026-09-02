@@ -1,0 +1,185 @@
+{{- if .Values.networkPolicy.strict }}
+{{- if empty .Values.networkPolicy.ingressController.namespaceSelector.matchLabels }}
+{{- fail "networkPolicy.ingressController.namespaceSelector.matchLabels is required by the strict security profile." }}
+{{- end }}
+{{- if empty .Values.networkPolicy.ingressController.podSelector.matchLabels }}
+{{- fail "networkPolicy.ingressController.podSelector.matchLabels is required by the strict security profile." }}
+{{- end }}
+{{- if empty .Values.networkPolicy.dns.namespaceSelector.matchLabels }}
+{{- fail "networkPolicy.dns.namespaceSelector.matchLabels is required by the strict security profile." }}
+{{- end }}
+{{- if empty .Values.networkPolicy.dns.podSelector.matchLabels }}
+{{- fail "networkPolicy.dns.podSelector.matchLabels is required by the strict security profile." }}
+{{- end }}
+{{- if empty .Values.networkPolicy.publicHttpsEgress }}
+{{- fail "networkPolicy.publicHttpsEgress is required by the strict security profile; declare public CIDRs and private/metadata exclusions explicitly." }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "bucketreef.fullname" . }}-frontend
+  labels:
+    {{- include "bucketreef.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: frontend
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.ingressController.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.ingressController.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: backend
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.backend.port }}
+    - to:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.dns.podSelector | nindent 12 }}
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "bucketreef.fullname" . }}-backend
+  labels:
+    {{- include "bucketreef.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: backend
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.ingressController.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.ingressController.podSelector | nindent 12 }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: frontend
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/instance
+                operator: In
+                values: [{{ .Release.Name | quote }}]
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [billing-cron, healthcheck-cron, quota-monitor-cron, usage-history-cron]
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.backend.port }}
+  egress:
+    - to:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.dns.podSelector | nindent 12 }}
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: postgresql
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgresql.service.port }}
+    {{- range .Values.networkPolicy.publicHttpsEgress }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr | quote }}
+            {{- with .except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    {{- range .Values.networkPolicy.privateEgress }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr | quote }}
+      ports:
+        {{- toYaml .ports | nindent 8 }}
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "bucketreef.fullname" . }}-cronjobs
+  labels:
+    {{- include "bucketreef.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ .Release.Name | quote }}]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [billing-cron, healthcheck-cron, quota-monitor-cron, usage-history-cron]
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: backend
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.backend.port }}
+    - to:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.dns.podSelector | nindent 12 }}
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+{{- if .Values.postgresql.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "bucketreef.fullname" . }}-postgresql
+  labels:
+    {{- include "bucketreef.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: postgresql
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: backend
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgresql.service.port }}
+  egress: []
+{{- end }}
+{{- end }}

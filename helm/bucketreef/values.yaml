@@ -48,12 +48,50 @@ backend:
     size: 1Gi
     storageClass: ""
     accessMode: ReadWriteOnce
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
 frontend:
   replicas: 1
   env:
     CSP_CONNECT_SRC: "'self'"
   extraEnv: []
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 service:
   backend:
@@ -79,6 +117,62 @@ postgresql:
     enabled: true
     size: 5Gi
     storageClass: ""
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 70
+    runAsGroup: 70
+    fsGroup: 70
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+cronJobs:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# The strict profile is intentionally fail-closed. Operators must identify the
+# real ingress and DNS pods and explicitly declare permitted outbound networks.
+networkPolicy:
+  strict: true
+  ingressController:
+    namespaceSelector:
+      matchLabels: {}
+    podSelector:
+      matchLabels: {}
+  dns:
+    namespaceSelector:
+      matchLabels: {}
+    podSelector:
+      matchLabels: {}
+  publicHttpsEgress: []
+  privateEgress: []
 
 ingress:
   enabled: true

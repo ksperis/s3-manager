@@ -3,7 +3,9 @@ FROM python:3.11-slim
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
+    TMPDIR=/tmp
 
 COPY requirements.txt ./
 RUN apt-get update \
@@ -15,6 +17,13 @@ RUN apt-get update \
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
+
+RUN groupadd --gid 10001 bucketreef \
+    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /tmp --shell /usr/sbin/nologin bucketreef \
+    && mkdir -p /data /tmp \
+    && chown -R 10001:10001 /app /data /tmp
+
+USER 10001:10001
 
 EXPOSE 8000
 

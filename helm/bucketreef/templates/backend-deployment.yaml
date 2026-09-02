@@ -45,10 +45,17 @@ spec:
         {{- include "bucketreef.labels" . | nindent 8 }}
         app.kubernetes.io/component: backend
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.backend.podSecurityContext | nindent 8 }}
       containers:
         - name: backend
           image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
           imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.backend.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
           ports:
             - containerPort: 8000
               name: http
@@ -98,8 +105,10 @@ spec:
             - name: {{ .name }}
               value: {{ .value | quote }}
             {{- end }}
-          {{- if .Values.backend.persistence.enabled }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          {{- if .Values.backend.persistence.enabled }}
             - name: data
               mountPath: /data
           {{- end }}
@@ -121,8 +130,10 @@ spec:
                   value: {{ .Values.ingress.host | quote }}
             initialDelaySeconds: 5
             periodSeconds: 5
-      {{- if .Values.backend.persistence.enabled }}
       volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- if .Values.backend.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "bucketreef.fullname" . }}-backend

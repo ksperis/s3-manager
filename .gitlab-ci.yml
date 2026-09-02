@@ -24,6 +24,7 @@ variables:
   GHCR_NAMESPACE: "ksperis"
   GHCR_BACKEND_IMAGE: "ghcr.io/ksperis/bucketreef-backend"
   GHCR_FRONTEND_IMAGE: "ghcr.io/ksperis/bucketreef-frontend"
+  GHCR_SCHEDULER_IMAGE: "ghcr.io/ksperis/bucketreef-scheduler"
 
 .trivy-job:
   image:
@@ -69,18 +70,23 @@ helm-contract:
       when: never
     - when: on_success
   script:
-    - helm lint helm/bucketreef --set backend.existingSecret=bucketreef-auth --set-json 'backend.trustedProxyCidrs=["10.42.0.0/16"]'
-    - if helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth > /tmp/bucketreef-invalid.yaml 2>/tmp/bucketreef-invalid.err; then echo "expected missing trusted proxy CIDRs to fail"; exit 1; fi
+    - helm lint helm/bucketreef -f ops/ci/helm-secure-values.yaml --set backend.existingSecret=bucketreef-auth
+    - if helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth --set networkPolicy.strict=false > /tmp/bucketreef-invalid.yaml 2>/tmp/bucketreef-invalid.err; then echo "expected missing trusted proxy CIDRs to fail"; exit 1; fi
     - grep -q 'backend.trustedProxyCidrs is required' /tmp/bucketreef-invalid.err
-    - helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth --set-json 'backend.trustedProxyCidrs=["10.42.0.0/16"]' > /tmp/bucketreef-rendered.yaml
+    - if helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth --set-json 'backend.trustedProxyCidrs=["10.42.0.0/16"]' > /tmp/bucketreef-network-invalid.yaml 2>/tmp/bucketreef-network-invalid.err; then echo "expected missing strict NetworkPolicy selectors to fail"; exit 1; fi
+    - grep -q 'networkPolicy.ingressController.namespaceSelector.matchLabels is required' /tmp/bucketreef-network-invalid.err
+    - helm template bucketreef helm/bucketreef -f ops/ci/helm-secure-values.yaml --set backend.existingSecret=bucketreef-auth > /tmp/bucketreef-rendered.yaml
     - test -s /tmp/bucketreef-rendered.yaml
     - grep -q 'name: TRUSTED_PROXY_CIDRS' /tmp/bucketreef-rendered.yaml
     - grep -q '\["10.42.0.0/16"\]' /tmp/bucketreef-rendered.yaml
     - grep -q 'ghcr.io/ksperis/bucketreef-backend:0.2.1' /tmp/bucketreef-rendered.yaml
     - grep -q 'ghcr.io/ksperis/bucketreef-frontend:0.2.1' /tmp/bucketreef-rendered.yaml
-    - helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth --set-json 'backend.trustedProxyCidrs=["10.42.0.0/16"]' --set backend.replicas=2 --set backend.persistence.enabled=false > /tmp/bucketreef-multi-backend.yaml
+    - grep -q 'kind: NetworkPolicy' /tmp/bucketreef-rendered.yaml
+    - grep -q 'readOnlyRootFilesystem: true' /tmp/bucketreef-rendered.yaml
+    - grep -q 'automountServiceAccountToken: false' /tmp/bucketreef-rendered.yaml
+    - helm template bucketreef helm/bucketreef -f ops/ci/helm-secure-values.yaml --set backend.existingSecret=bucketreef-auth --set backend.replicas=2 --set backend.persistence.enabled=false > /tmp/bucketreef-multi-backend.yaml
     - test -s /tmp/bucketreef-multi-backend.yaml
-    - helm template bucketreef helm/bucketreef --set backend.existingSecret=bucketreef-auth --set-json 'backend.trustedProxyCidrs=["10.42.0.0/16"]' --set-string image.backend.repository="$CI_REGISTRY_IMAGE/backend" --set-string image.backend.tag="$CI_COMMIT_SHA" --set-string image.frontend.repository="$CI_REGISTRY_IMAGE/frontend" --set-string image.frontend.tag="$CI_COMMIT_SHA" > /tmp/bucketreef-commit-images.yaml
+    - helm template bucketreef helm/bucketreef -f ops/ci/helm-secure-values.yaml --set backend.existingSecret=bucketreef-auth --set-string image.backend.repository="$CI_REGISTRY_IMAGE/backend" --set-string image.backend.tag="$CI_COMMIT_SHA" --set-string image.frontend.repository="$CI_REGISTRY_IMAGE/frontend" --set-string image.frontend.tag="$CI_COMMIT_SHA" > /tmp/bucketreef-commit-images.yaml
     - grep -q "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" /tmp/bucketreef-commit-images.yaml
     - grep -q "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" /tmp/bucketreef-commit-images.yaml
 
@@ -103,6 +109,9 @@ compose-contract:
         rendered="$(INTERNAL_CRON_TOKEN=test docker compose --file "$compose_file" config --format json)"
         test "$(printf '%s' "$rendered" | jq -r '.services.frontend.environment.CSP_CONNECT_SRC')" = "'self'"
         printf '%s' "$rendered" | jq -e '.services.backend.healthcheck.test and .services.frontend.healthcheck.test' >/dev/null
+        printf '%s' "$rendered" | jq -e '.services.backend.read_only and .services.frontend.read_only and .services.scheduler.read_only' >/dev/null
+        test "$(printf '%s' "$rendered" | jq -r '.services.frontend.ports[0].target')" = "8080"
+        test "$(printf '%s' "$rendered" | jq -r '.services.scheduler.user')" = "10001:10001"
       done
 
 .promote-internal-image:
@@ -536,7 +545,7 @@ build-backend:
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build -t "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" backend
-    - docker run --rm --entrypoint python "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" -c "from pathlib import Path; import app.scripts.issue_first_admin_bootstrap; assert Path('/app/alembic/versions/0119_first_admin_bootstrap.py').is_file()"
+    - docker run --rm --read-only --tmpfs /tmp --entrypoint python "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" -c "from pathlib import Path; import os, app.scripts.issue_first_admin_bootstrap; assert os.getuid() == 10001; assert Path('/app/alembic/versions/0119_first_admin_bootstrap.py').is_file()"
     - docker push "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
 
 build-frontend:
@@ -556,10 +565,10 @@ build-frontend:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build --build-arg VITE_API_URL="$VITE_API_URL" -t "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" frontend
     - |
-      smoke_container="$(docker run --detach "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA")"
+      smoke_container="$(docker run --detach --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA")"
       trap 'docker rm --force "$smoke_container" >/dev/null 2>&1 || true' EXIT
       for attempt in $(seq 1 30); do
-        if docker exec "$smoke_container" wget -q -O /dev/null http://127.0.0.1/setup/first-admin; then
+        if docker exec "$smoke_container" wget -q -O /dev/null http://127.0.0.1:8080/setup/first-admin; then
           break
         fi
         if [ "$attempt" -eq 30 ]; then
@@ -568,10 +577,29 @@ build-frontend:
         fi
         sleep 1
       done
-      docker exec "$smoke_container" grep -F "connect-src 'self'" /etc/nginx/conf.d/default.conf
+      docker exec "$smoke_container" grep -F "connect-src 'self'" /tmp/nginx.conf
       docker rm --force "$smoke_container" >/dev/null
       trap - EXIT
     - docker push "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
+
+build-scheduler:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -f scheduler/Dockerfile -t "$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHA" .
+    - test "$(docker run --rm --read-only --tmpfs /tmp --entrypoint id "$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHA" -u)" = "10001"
+    - docker push "$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHA"
 
 helm-kind-onboarding-smoke:
   stage: security
@@ -624,7 +652,7 @@ release-source-images-ready:
     RELEASE_SOURCE_IMAGE_RETRY_SECONDS: "30"
   script:
     - |
-      for source_image in "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"; do
+      for source_image in "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHA"; do
         attempt=1
         while [ "$attempt" -le "$RELEASE_SOURCE_IMAGE_RETRIES" ]; do
           if skopeo inspect --creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" "docker://$source_image" >/dev/null 2>&1; then
@@ -773,6 +801,50 @@ frontend-image-vuln-scan:
       - gl-security-reports/frontend-image-trivy.json
       - gl-security-reports/frontend-image-sbom.cdx.json
 
+scheduler-image-vuln-scan:
+  extends: .trivy-job
+  stage: security
+  needs:
+    - build-scheduler
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
+  script:
+    - |
+      trivy image \
+        --scanners vuln \
+        --pkg-types os,library \
+        --exit-code 1 \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format json \
+        --output gl-security-reports/scheduler-image-trivy.json \
+        "$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHA" || scan_exit=$?
+    - |
+      trivy image \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format cyclonedx \
+        --output gl-security-reports/scheduler-image-sbom.cdx.json \
+        "$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHA"
+    - test -z "${scan_exit:-}"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-security-reports/scheduler-image-trivy.json
+      - gl-security-reports/scheduler-image-sbom.cdx.json
+
 backend-release-image-vuln-scan:
   extends: .trivy-job
   stage: security
@@ -867,6 +939,40 @@ frontend-release-image-vuln-scan:
     paths:
       - gl-security-reports/frontend-release-image-trivy.json
 
+scheduler-release-image-vuln-scan:
+  extends: .trivy-job
+  stage: security
+  needs:
+    - release-source-images-ready
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: on_success
+    - when: never
+  script:
+    - |
+      trivy image \
+        --scanners vuln \
+        --pkg-types os,library \
+        --exit-code 1 \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format json \
+        --output gl-security-reports/scheduler-release-image-trivy.json \
+        "$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHA" || scan_exit=$?
+    - test -z "${scan_exit:-}"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-security-reports/scheduler-release-image-trivy.json
+
 promote-backend-dev:
   extends: .promote-internal-image
   rules:
@@ -890,6 +996,18 @@ promote-frontend-dev:
   variables:
     SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
     TARGET_GITLAB_IMAGE: "$CI_REGISTRY_IMAGE/frontend"
+
+promote-scheduler-dev:
+  extends: .promote-internal-image
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH'
+      when: on_success
+    - when: never
+  variables:
+    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHA"
+    TARGET_GITLAB_IMAGE: "$CI_REGISTRY_IMAGE/scheduler"
 
 promote-backend-release:
   extends: .promote-public-image
@@ -924,3 +1042,20 @@ promote-frontend-release:
     PROMOTION_KIND: "release"
     SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
     TARGET_GHCR_IMAGE: "$GHCR_FRONTEND_IMAGE"
+
+promote-scheduler-release:
+  extends: .promote-public-image
+  needs:
+    - job: release-tag-metadata
+      artifacts: true
+    - scheduler-release-image-vuln-scan
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: on_success
+    - when: never
+  variables:
+    PROMOTION_KIND: "release"
+    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/scheduler:$CI_COMMIT_SHA"
+    TARGET_GHCR_IMAGE: "$GHCR_SCHEDULER_IMAGE"

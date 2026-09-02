@@ -113,7 +113,7 @@ def _pre_auth_user(db: Session, token: Optional[str], *, purposes: set[str]) -> 
 
 
 def _request_context(request: Request) -> tuple[str, Optional[str], Optional[str]]:
-    return client_ip(request), request.headers.get("user-agent"), request.headers.get("x-request-id")
+    return client_ip(request, settings), request.headers.get("user-agent"), request.headers.get("x-request-id")
 
 
 def _finish_user_primary_auth(

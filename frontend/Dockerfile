@@ -17,7 +17,13 @@ FROM nginx:stable-alpine
 ENV CSP_CONNECT_SRC="'self'" \
     BACKEND_UPSTREAM="backend:8000"
 RUN apk upgrade --no-cache
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY nginx.conf.template /etc/nginx/bucketreef.conf.template
+COPY docker-entrypoint.sh /usr/local/bin/bucketreef-entrypoint
 COPY --from=build /app/dist /usr/share/nginx/html
+RUN chmod 0755 /usr/local/bin/bucketreef-entrypoint
 
-EXPOSE 80
+USER 101:101
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/bucketreef-entrypoint"]

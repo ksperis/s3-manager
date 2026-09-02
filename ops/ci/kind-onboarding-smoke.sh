@@ -137,6 +137,7 @@ helm upgrade --install "$RELEASE" helm/bucketreef \
   --namespace "$NAMESPACE" \
   --set-string backend.existingSecret="${RELEASE}-auth" \
   --set-json 'backend.trustedProxyCidrs=["10.244.0.0/16"]' \
+  --set networkPolicy.strict=false \
   --set-string image.backend.repository="$BACKEND_IMAGE_REPOSITORY" \
   --set-string image.backend.tag="$IMAGE_TAG" \
   --set image.backend.pullPolicy=Never \

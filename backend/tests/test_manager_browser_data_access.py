@@ -216,7 +216,7 @@ def test_private_connection_requires_both_flags_and_shared_is_always_denied(db_s
         secret_access_key="PRIVATE-SK",
         custom_endpoint_config=json.dumps(
             {
-                "endpoint_url": "https://private.example.test",
+                "endpoint_url": "https://93.184.216.34/private",
                 "region": None,
                 "force_path_style": False,
                 "verify_tls": True,

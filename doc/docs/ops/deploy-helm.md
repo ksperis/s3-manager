@@ -16,8 +16,8 @@ and give both images the exact same immutable `dev-<short-sha>` tag.
 
 ```bash
 helm install bucketreef helm/bucketreef \
+  --values production-security-values.yaml \
   --set backend.existingSecret=bucketreef-auth \
-  --set-json 'backend.trustedProxyCidrs=["10.244.2.0/24"]' \
   --set image.backend.repository=ghcr.io/ksperis/bucketreef-backend \
   --set image.frontend.repository=ghcr.io/ksperis/bucketreef-frontend
 ```
@@ -67,6 +67,74 @@ Kubernetes network configuration before choosing this value. Do not copy the
 example blindly and do not use `0.0.0.0/0`, `::/0`, or a broad corporate CIDR.
 Requests from peers outside this boundary ignore `X-Forwarded-For`.
 
+## Strict NetworkPolicy profile
+
+The strict profile is enabled by default and deliberately has no generic
+network selectors. Supply a values file that identifies the actual ingress and
+DNS pods and explicitly describes public HTTPS egress with private, loopback,
+link-local, multicast, and metadata ranges excluded. For example:
+
+```yaml
+backend:
+  trustedProxyCidrs:
+    - 10.244.2.0/24
+networkPolicy:
+  ingressController:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: ingress-nginx
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: ingress-nginx
+  dns:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: kube-system
+    podSelector:
+      matchLabels:
+        k8s-app: kube-dns
+  publicHttpsEgress:
+    - cidr: 0.0.0.0/0
+      except:
+        - 0.0.0.0/8
+        - 10.0.0.0/8
+        - 100.64.0.0/10
+        - 127.0.0.0/8
+        - 169.254.0.0/16
+        - 172.16.0.0/12
+        - 192.0.0.0/24
+        - 192.0.2.0/24
+        - 192.88.99.0/24
+        - 192.168.0.0/16
+        - 198.18.0.0/15
+        - 198.51.100.0/24
+        - 203.0.113.0/24
+        - 224.0.0.0/4
+        - 240.0.0.0/4
+    - cidr: ::/0
+      except: ["::/128", "::1/128", "::ffff:0:0/96", "64:ff9b::/96", "100::/64", "2001:db8::/32", "fc00::/7", "fe80::/10", "ff00::/8"]
+```
+
+Add each required private destination under `networkPolicy.privateEgress` with
+its narrow CIDR and ports. This includes an external private database, private
+administrator-managed S3 endpoints, or private webhooks. The bundled
+PostgreSQL service is allowed automatically. Render the chart and inspect every
+`NetworkPolicy` before upgrading; never copy the CI example selectors without
+checking the labels in the target cluster.
+
+All application Deployments and CronJobs run non-root with RuntimeDefault
+seccomp, a read-only root filesystem, no Linux capabilities, no service-account
+token, explicit resources, and writable `emptyDir` mounts limited to runtime
+temporary paths. The frontend Service still exposes port `80`; nginx listens on
+container port `8080`.
+
+Requests/limits and contexts remain operator-overridable through
+`backend.resources`, `frontend.resources`, `postgresql.resources`,
+`cronJobs.resources`, and the adjacent `podSecurityContext` /
+`containerSecurityContext` blocks. Overrides must preserve non-root execution,
+RuntimeDefault seccomp, read-only roots, disabled privilege escalation, and
+`capabilities.drop: [ALL]`.
+
 ## Create the first administrator
 
 After the backend pod is ready, explicitly issue a one-time setup URL:
@@ -111,8 +179,10 @@ Published images:
 
 - `ghcr.io/ksperis/bucketreef-backend`
 - `ghcr.io/ksperis/bucketreef-frontend`
+- `ghcr.io/ksperis/bucketreef-scheduler` (Docker Compose operations profile)
 
-These images are built, tested, scanned, and published by GitLab CI.
+These three images are built, tested, scanned, assigned SBOM artifacts, and
+published by GitLab CI.
 GitHub is treated as a code mirror and release metadata surface, not as a
 second image build pipeline.
 

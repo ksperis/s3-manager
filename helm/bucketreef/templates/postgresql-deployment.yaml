@@ -18,10 +18,17 @@ spec:
         {{- include "bucketreef.labels" . | nindent 8 }}
         app.kubernetes.io/component: postgresql
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.postgresql.podSecurityContext | nindent 8 }}
       containers:
         - name: postgresql
           image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
           imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.postgresql.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
           ports:
             - containerPort: 5432
               name: postgres
@@ -41,11 +48,15 @@ spec:
                 secretKeyRef:
                   name: {{ include "bucketreef.fullname" . }}-postgresql
                   key: database
-          {{- if .Values.postgresql.persistence.enabled }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
-          {{- end }}
+            - name: tmp
+              mountPath: /tmp
+            - name: run
+              mountPath: /var/run/postgresql
           livenessProbe:
             tcpSocket:
               port: postgres
@@ -56,10 +67,16 @@ spec:
               port: postgres
             initialDelaySeconds: 5
             periodSeconds: 5
-      {{- if .Values.postgresql.persistence.enabled }}
       volumes:
         - name: data
+      {{- if .Values.postgresql.persistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ include "bucketreef.fullname" . }}-postgresql
+      {{- else }}
+          emptyDir: {}
       {{- end }}
+        - name: tmp
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
 {{- end }}
