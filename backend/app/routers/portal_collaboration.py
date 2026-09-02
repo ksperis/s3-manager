@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db import User
 from app.models.access_context import AccountAccess
-from app.models.portal import (
-    PortalActivityItem,
+from app.models.portal import PortalActivityItem
+from app.models.portal_sharing import (
     PortalCollaboratorAccessReview,
     PortalCollaboratorsResponse,
 )

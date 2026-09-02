@@ -12,7 +12,6 @@ from app.db import User
 from app.models.access_context import AccountAccess
 from app.models.portal import (
     PortalStorageSpace,
-    PortalStorageSpaceAccessSummary,
     PortalStorageSpaceCreate,
     PortalStorageSpaceIcon,
     PortalStorageSpaceIconChoice,
@@ -20,6 +19,7 @@ from app.models.portal import (
     PortalStorageSpaceSummary,
     PortalStorageSpaceUpdate,
 )
+from app.models.portal_sharing import PortalStorageSpaceAccessSummary
 from app.models.portal_versions import PortalStorageSpaceSettings, PortalStorageSpaceSettingsUpdate
 from app.routers.dependencies import (
     get_audit_service,

@@ -8,7 +8,7 @@ from sqlalchemy import Column, Integer, MetaData, Table, create_engine, select
 from sqlalchemy.exc import StatementError
 
 from app.db.utc_datetime import UTCDateTime
-from app.models.portal import PortalPublicLinkCreate
+from app.models.portal_sharing import PortalPublicLinkCreate
 from app.utils.time import assume_utc, normalize_utc, utcnow
 
 

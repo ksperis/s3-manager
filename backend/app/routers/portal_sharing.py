@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
-from app.models.portal import (
+from app.models.portal_sharing import (
     PortalPublicLink,
     PortalPublicLinkCreate,
     PortalStorageSpaceShare,

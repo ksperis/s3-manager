@@ -18,6 +18,15 @@ from app.db import (
     UserUiGroup,
 )
 from app.models.portal import (
+    PortalStorageSpaceCollaboratorPreview,
+    PortalStorageSpaceGrantRole,
+    PortalStorageSpaceInitialShare,
+    PortalStorageSpaceRole,
+    PortalStorageSpaceShareScope,
+    PortalStorageSpaceSummary,
+    PortalStorageSpaceVisibility,
+)
+from app.models.portal_sharing import (
     PortalCollaborator,
     PortalCollaboratorAccessReview,
     PortalCollaboratorStorageSpaceAccess,
@@ -26,15 +35,8 @@ from app.models.portal import (
     PortalCollaboratorsResponse,
     PortalStorageSpaceAccessPerson,
     PortalStorageSpaceAccessSummary,
-    PortalStorageSpaceCollaboratorPreview,
-    PortalStorageSpaceGrantRole,
-    PortalStorageSpaceInitialShare,
-    PortalStorageSpaceRole,
     PortalStorageSpaceShare,
     PortalStorageSpaceShareCandidate,
-    PortalStorageSpaceShareScope,
-    PortalStorageSpaceSummary,
-    PortalStorageSpaceVisibility,
 )
 from app.services.user_avatar_service import UserAvatarService
 from app.utils.time import utcnow

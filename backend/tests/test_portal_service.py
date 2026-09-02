@@ -44,11 +44,11 @@ from app.models.portal import (
     PortalState,
     PortalStorageSpace,
     PortalStorageSpaceInitialShare,
-    PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
     PortalUsage,
 )
 from app.models.portal_access_logs import PortalServerAccessLogFilterQuery, PortalServerAccessLogFilterRule
+from app.models.portal_sharing import PortalStorageSpaceShare
 from app.models.portal_versions import (
     PortalStorageObjectRestoreRequest,
     PortalStorageObjectRestoreResponse,
