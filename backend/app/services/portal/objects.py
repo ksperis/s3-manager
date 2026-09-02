@@ -10,7 +10,7 @@ from typing import Optional, TYPE_CHECKING
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import S3Account, User
-from app.models.portal import PortalStorageObjectDetail
+from app.models.portal_objects import PortalStorageObjectDetail
 from app.models.portal_storage_spaces import PortalStorageSpaceRole
 from app.models.portal_versions import (
     PortalStorageObjectRestoreResponse,

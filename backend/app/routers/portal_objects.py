@@ -11,10 +11,7 @@ from fastapi.responses import StreamingResponse
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
-from app.models.portal import (
-    PortalStorageObjectDeleteResponse,
-    PortalStorageObjectDetail,
-)
+from app.models.portal_objects import PortalStorageObjectDeleteResponse, PortalStorageObjectDetail
 from app.models.portal_versions import (
     PortalDeletedPrefixRestoreRequest,
     PortalStorageObjectRestoreRequest,
