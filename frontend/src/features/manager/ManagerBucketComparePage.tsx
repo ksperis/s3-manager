@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { type Bucket, listBuckets } from "../../api/buckets";
-import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
@@ -17,6 +16,7 @@ import { extractApiError } from "../../utils/apiError";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 import ManagerBucketSelectionPanel from "./ManagerBucketSelectionPanel";
 import { useS3AccountContext } from "./S3AccountContext";
+import { useManagerContexts } from "./useManagerContexts";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 function extractError(error: unknown): string {
@@ -27,9 +27,7 @@ export default function ManagerBucketComparePage() {
   const { selectedS3AccountId, requiresS3AccountSelection, managerBrowserEnabled } = useS3AccountContext();
   const { generalSettings } = useGeneralSettings();
   const sourceContextId = selectedS3AccountId ?? "";
-  const [contexts, setContexts] = useState<ExecutionContext[]>([]);
-  const [contextsLoading, setContextsLoading] = useState(true);
-  const [contextsError, setContextsError] = useState<string | null>(null);
+  const { contexts, contextsLoading, contextsError } = useManagerContexts();
   const [sourceBuckets, setSourceBuckets] = useState<Bucket[]>([]);
   const [bucketsLoading, setBucketsLoading] = useState(false);
   const [bucketsError, setBucketsError] = useState<string | null>(null);
@@ -41,27 +39,6 @@ export default function ManagerBucketComparePage() {
     () => contexts.find((context) => context.id === sourceContextId) ?? null,
     [contexts, sourceContextId]
   );
-
-  useEffect(() => {
-    let canceled = false;
-    setContextsLoading(true);
-    setContextsError(null);
-    listExecutionContexts("manager")
-      .then((items) => {
-        if (canceled) return;
-        setContexts(items);
-      })
-      .catch((error) => {
-        if (canceled) return;
-        setContextsError(extractError(error));
-      })
-      .finally(() => {
-        if (!canceled) setContextsLoading(false);
-      });
-    return () => {
-      canceled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!sourceContextId) {

@@ -26,8 +26,11 @@ vi.mock("../../../api/managerMigrations", async () => {
 });
 
 vi.mock("./hooks", () => ({
-  useManagerContexts: () => mockUseManagerContexts(),
   useManagerMigrationDetail: (migrationId: number | null) => mockUseManagerMigrationDetail(migrationId),
+}));
+
+vi.mock("../useManagerContexts", () => ({
+  useManagerContexts: () => mockUseManagerContexts(),
 }));
 
 function buildDetail() {

@@ -8,8 +8,11 @@ const mockUseManagerContexts = vi.fn();
 const mockUseManagerMigrationsList = vi.fn();
 
 vi.mock("./hooks", () => ({
-  useManagerContexts: () => mockUseManagerContexts(),
   useManagerMigrationsList: (sourceContextId: string) => mockUseManagerMigrationsList(sourceContextId),
+}));
+
+vi.mock("../useManagerContexts", () => ({
+  useManagerContexts: () => mockUseManagerContexts(),
 }));
 
 vi.mock("../S3AccountContext", () => ({

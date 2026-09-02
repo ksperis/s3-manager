@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { listBuckets, type Bucket } from "../../../api/buckets";
-import { listExecutionContexts, type ExecutionContext } from "../../../api/executionContexts";
+import { type ExecutionContext } from "../../../api/executionContexts";
 import {
   getManagerMigration,
   listManagerMigrations,
@@ -14,49 +14,6 @@ import {
   type BucketMigrationView,
 } from "../../../api/managerMigrations";
 import { extractError, isFinalMigrationStatus, normalizeEndpointUrl } from "./shared";
-
-export function useManagerContexts() {
-  const [contexts, setContexts] = useState<ExecutionContext[]>([]);
-  const [contextsLoading, setContextsLoading] = useState(true);
-  const [contextsError, setContextsError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let canceled = false;
-    setContextsLoading(true);
-    setContextsError(null);
-    listExecutionContexts("manager")
-      .then((items) => {
-        if (canceled) return;
-        setContexts(items);
-      })
-      .catch((error) => {
-        if (canceled) return;
-        setContextsError(extractError(error));
-      })
-      .finally(() => {
-        if (!canceled) setContextsLoading(false);
-      });
-
-    return () => {
-      canceled = true;
-    };
-  }, []);
-
-  const contextLabelById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const context of contexts) {
-      map.set(context.id, context.display_name);
-    }
-    return map;
-  }, [contexts]);
-
-  return {
-    contexts,
-    contextLabelById,
-    contextsLoading,
-    contextsError,
-  };
-}
 
 export function useManagerSourceBuckets(sourceContextId: string) {
   const [sourceBuckets, setSourceBuckets] = useState<Bucket[]>([]);

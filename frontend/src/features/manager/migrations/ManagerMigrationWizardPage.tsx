@@ -22,7 +22,8 @@ import {
 import ManagerBucketSelectionPanel from "../ManagerBucketSelectionPanel";
 import { useS3AccountContext } from "../S3AccountContext";
 import { managerPageBreadcrumbs } from "../managerBreadcrumbs";
-import { useCrossEndpointSelection, useManagerContexts, useManagerSourceBuckets } from "./hooks";
+import { useManagerContexts } from "../useManagerContexts";
+import { useCrossEndpointSelection, useManagerSourceBuckets } from "./hooks";
 import { buildPlannedSteps, extractError, isMigrationPrecheckPassed } from "./shared";
 
 type WizardStep = 0 | 1 | 2 | 3;

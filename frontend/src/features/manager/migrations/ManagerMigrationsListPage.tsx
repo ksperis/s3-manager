@@ -12,7 +12,8 @@ import PageShell from "../../../components/PageShell";
 import { type BucketMigrationStatus } from "../../../api/managerMigrations";
 import { useS3AccountContext } from "../S3AccountContext";
 import { managerPageBreadcrumbs } from "../managerBreadcrumbs";
-import { useManagerContexts, useManagerMigrationsList } from "./hooks";
+import { useManagerContexts } from "../useManagerContexts";
+import { useManagerMigrationsList } from "./hooks";
 import {
   computeProgress,
   formatDateTime,

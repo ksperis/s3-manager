@@ -25,8 +25,9 @@ import {
   type BucketMigrationItemView,
   type BucketMigrationPrecheckReport,
 } from "../../../api/managerMigrations";
-import { useManagerContexts, useManagerMigrationDetail } from "./hooks";
+import { useManagerMigrationDetail } from "./hooks";
 import { managerPageBreadcrumbs } from "../managerBreadcrumbs";
+import { useManagerContexts } from "../useManagerContexts";
 import {
   canOfferFullRollback,
   computeItemCopyProgressPercent,
