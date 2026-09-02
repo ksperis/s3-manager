@@ -10,12 +10,12 @@ from app.core.database import get_db
 from app.db import QuotaUsageDaily, S3Account, User
 from app.models.access_context import AccountAccess
 from app.models.bucket_usage_stats import BucketUsageStatsAggregateResponse
-from app.models.usage_trends import UsageTrendsResponse
-from app.models.portal import (
+from app.models.portal_usage import (
     PortalStorageSpaceUsageStatsResponse,
     PortalStorageSpaceUsageStatsSnapshot,
     PortalUsage,
 )
+from app.models.usage_trends import UsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 from app.routers.dependencies import get_portal_account_access
 from app.routers.portal_common import (

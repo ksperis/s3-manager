@@ -41,7 +41,6 @@ from app.models.portal import (
     PortalStorageSpace,
     PortalStorageSpaceInitialShare,
     PortalStorageSpaceSummary,
-    PortalUsage,
 )
 from app.models.portal_access_keys import (
     PortalAccessKey,
@@ -51,6 +50,7 @@ from app.models.portal_access_keys import (
 )
 from app.models.portal_access_logs import PortalServerAccessLogFilterQuery, PortalServerAccessLogFilterRule
 from app.models.portal_sharing import PortalStorageSpaceShare
+from app.models.portal_usage import PortalUsage
 from app.models.portal_versions import (
     PortalStorageObjectRestoreRequest,
     PortalStorageObjectRestoreResponse,
