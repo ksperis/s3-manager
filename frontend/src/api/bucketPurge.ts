@@ -4,7 +4,11 @@
  */
 import type { S3AccountSelector } from "./accountParams";
 import type { BucketOperationTarget } from "./bucketOperation";
-import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
+import {
+  buildJsonPostRequestInit,
+  resolveApiBaseUrl,
+  streamBucketsWithSse,
+} from "./sseBucketsStream";
 
 export type BucketPurgePayload = {
   buckets?: string[];
@@ -82,16 +86,6 @@ type BucketPurgeStreamOptions = {
   onProgress?: (event: BucketPurgeProgress) => void;
 };
 
-function buildJsonPostInit(payload: BucketPurgePayload): RequestInit {
-  return {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  };
-}
-
 export function streamManagerBucketPurge(
   contextId: S3AccountSelector,
   payload: BucketPurgePayload,
@@ -102,7 +96,7 @@ export function streamManagerBucketPurge(
   return streamBucketsWithSse<BucketPurgeProgress, BucketPurgeResult>({
     url: `${baseUrl}/manager/bucket-purge/stream?${query.toString()}`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket purge stream failed",
     missingResultMessage: "Bucket purge stream ended without a result payload",
   });
@@ -119,7 +113,7 @@ export function streamManagerBucketDeleteWithPurge(
   return streamBucketsWithSse<BucketPurgeProgress, BucketPurgeResult>({
     url: `${baseUrl}/manager/buckets/${encodeURIComponent(bucketName)}/delete/stream?${query.toString()}`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket deletion stream failed",
     missingResultMessage: "Bucket deletion stream ended without a result payload",
   });
@@ -134,7 +128,7 @@ export function streamCephAdminBucketPurge(
   return streamBucketsWithSse<BucketPurgeProgress, BucketPurgeResult>({
     url: `${baseUrl}/ceph-admin/endpoints/${endpointId}/buckets/purge/stream`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket purge stream failed",
     missingResultMessage: "Bucket purge stream ended without a result payload",
   });
@@ -148,7 +142,7 @@ export function streamStorageOpsBucketPurge(
   return streamBucketsWithSse<BucketPurgeProgress, BucketPurgeResult>({
     url: `${baseUrl}/storage-ops/buckets/purge/stream`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket purge stream failed",
     missingResultMessage: "Bucket purge stream ended without a result payload",
   });

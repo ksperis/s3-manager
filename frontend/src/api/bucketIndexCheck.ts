@@ -2,7 +2,11 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
+import {
+  buildJsonPostRequestInit,
+  resolveApiBaseUrl,
+  streamBucketsWithSse,
+} from "./sseBucketsStream";
 
 export type BucketIndexCheckTarget = {
   name: string;
@@ -62,10 +66,6 @@ export async function streamCephAdminBucketIndexChecks(
     options,
     streamFailedLabel: "Bucket index check failed",
     missingResultMessage: "Bucket index check stream ended without a result",
-    requestInit: {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
+    requestInit: buildJsonPostRequestInit(payload),
   });
 }

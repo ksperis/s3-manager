@@ -4,7 +4,11 @@
  */
 import type { S3AccountSelector } from "./accountParams";
 import type { BucketOperationTarget } from "./bucketOperation";
-import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
+import {
+  buildJsonPostRequestInit,
+  resolveApiBaseUrl,
+  streamBucketsWithSse,
+} from "./sseBucketsStream";
 
 export type BucketIntegrityCheckMode = "head" | "get";
 
@@ -72,16 +76,6 @@ type BucketIntegrityStreamOptions = {
   onProgress?: (event: BucketIntegrityProgress) => void;
 };
 
-function buildJsonPostInit(payload: BucketIntegrityCheckPayload): RequestInit {
-  return {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  };
-}
-
 export function streamManagerBucketIntegrityCheck(
   contextId: S3AccountSelector,
   payload: BucketIntegrityCheckPayload,
@@ -92,7 +86,7 @@ export function streamManagerBucketIntegrityCheck(
   return streamBucketsWithSse<BucketIntegrityProgress, BucketIntegrityResult>({
     url: `${baseUrl}/manager/bucket-integrity/stream?${query.toString()}`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket integrity check stream failed",
     missingResultMessage: "Bucket integrity check stream ended without a result payload",
   });
@@ -107,7 +101,7 @@ export function streamCephAdminBucketIntegrityCheck(
   return streamBucketsWithSse<BucketIntegrityProgress, BucketIntegrityResult>({
     url: `${baseUrl}/ceph-admin/endpoints/${endpointId}/buckets/integrity-check/stream`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket integrity check stream failed",
     missingResultMessage: "Bucket integrity check stream ended without a result payload",
   });
@@ -121,7 +115,7 @@ export function streamStorageOpsBucketIntegrityCheck(
   return streamBucketsWithSse<BucketIntegrityProgress, BucketIntegrityResult>({
     url: `${baseUrl}/storage-ops/buckets/integrity-check/stream`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket integrity check stream failed",
     missingResultMessage: "Bucket integrity check stream ended without a result payload",
   });

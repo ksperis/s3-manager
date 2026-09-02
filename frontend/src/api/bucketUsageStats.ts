@@ -6,7 +6,11 @@ import type { S3AccountSelector } from "./accountParams";
 import type { BucketOperationTarget } from "./bucketOperation";
 import { withS3AccountParam } from "./accountParams";
 import client from "./client";
-import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
+import {
+  buildJsonPostRequestInit,
+  resolveApiBaseUrl,
+  streamBucketsWithSse,
+} from "./sseBucketsStream";
 
 export type BucketUsageStatsPayload = {
   buckets?: string[];
@@ -128,16 +132,6 @@ type BucketUsageStatsStreamOptions = {
   onProgress?: (event: BucketUsageStatsProgress) => void;
 };
 
-function buildJsonPostInit(payload: BucketUsageStatsPayload | BucketUsageStatsScopePayload): RequestInit {
-  return {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  };
-}
-
 export async function getManagerUsageStatsAggregate(
   contextId: S3AccountSelector
 ): Promise<BucketUsageStatsAggregateResponse> {
@@ -198,7 +192,7 @@ export function streamManagerUsageStatsAggregate(
   return streamBucketsWithSse<BucketUsageStatsProgress, BucketUsageStatsResult>({
     url: `${baseUrl}/manager/usage-stats/stream?${query.toString()}`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket usage stats stream failed",
     missingResultMessage: "Bucket usage stats stream ended without a result payload",
   });
@@ -214,7 +208,7 @@ export function streamManagerBucketUsageStatsForBucket(
   return streamBucketsWithSse<BucketUsageStatsProgress, BucketUsageStatsResult>({
     url: `${baseUrl}/manager/buckets/${encodeURIComponent(bucketName)}/usage-stats/stream?${query.toString()}`,
     options,
-    requestInit: buildJsonPostInit({ buckets: [bucketName], parallelism: 1 }),
+    requestInit: buildJsonPostRequestInit({ buckets: [bucketName], parallelism: 1 }),
     streamFailedLabel: "Bucket usage stats stream failed",
     missingResultMessage: "Bucket usage stats stream ended without a result payload",
   });
@@ -229,7 +223,7 @@ export function streamCephAdminBucketUsageStats(
   return streamBucketsWithSse<BucketUsageStatsProgress, BucketUsageStatsResult>({
     url: `${baseUrl}/ceph-admin/endpoints/${endpointId}/bucket-usage-stats/stream`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket usage stats stream failed",
     missingResultMessage: "Bucket usage stats stream ended without a result payload",
   });
@@ -244,7 +238,7 @@ export function streamCephAdminUsageStatsAggregate(
   return streamBucketsWithSse<BucketUsageStatsProgress, BucketUsageStatsResult>({
     url: `${baseUrl}/ceph-admin/endpoints/${endpointId}/usage-stats/stream`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket usage stats stream failed",
     missingResultMessage: "Bucket usage stats stream ended without a result payload",
   });
@@ -260,7 +254,7 @@ export function streamAdminUsageStatsAggregate(
   return streamBucketsWithSse<BucketUsageStatsProgress, BucketUsageStatsResult>({
     url: `${baseUrl}/admin/usage-stats/stream?${query.toString()}`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket usage stats stream failed",
     missingResultMessage: "Bucket usage stats stream ended without a result payload",
   });
@@ -275,7 +269,7 @@ export function streamCephAdminBucketUsageStatsForBucket(
   return streamBucketsWithSse<BucketUsageStatsProgress, BucketUsageStatsResult>({
     url: `${baseUrl}/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/usage-stats/stream`,
     options,
-    requestInit: buildJsonPostInit({ buckets: [bucketName], parallelism: 1 }),
+    requestInit: buildJsonPostRequestInit({ buckets: [bucketName], parallelism: 1 }),
     streamFailedLabel: "Bucket usage stats stream failed",
     missingResultMessage: "Bucket usage stats stream ended without a result payload",
   });
@@ -289,7 +283,7 @@ export function streamStorageOpsBucketUsageStats(
   return streamBucketsWithSse<BucketUsageStatsProgress, BucketUsageStatsResult>({
     url: `${baseUrl}/storage-ops/buckets/usage-stats/stream`,
     options,
-    requestInit: buildJsonPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Bucket usage stats stream failed",
     missingResultMessage: "Bucket usage stats stream ended without a result payload",
   });

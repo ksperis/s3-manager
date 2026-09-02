@@ -20,6 +20,16 @@ export function resolveApiBaseUrl(): string {
   return base.endsWith("/") ? base.slice(0, -1) : base;
 }
 
+export function buildJsonPostRequestInit(payload: unknown): RequestInit {
+  return {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  };
+}
+
 function isCancelledError(err: unknown): boolean {
   if (err instanceof DOMException && err.name === "AbortError") return true;
   if (typeof err !== "object" || err === null) return false;

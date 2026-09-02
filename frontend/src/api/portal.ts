@@ -7,7 +7,11 @@ import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride } from "./appSettings";
 import type { BucketUsageStatsAggregateResponse, BucketUsageStatsSnapshot } from "./bucketUsageStats";
 import type { PortalAccountRole } from "./accountAccess";
-import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
+import {
+  buildJsonPostRequestInit,
+  resolveApiBaseUrl,
+  streamBucketsWithSse,
+} from "./sseBucketsStream";
 import type { ManagerUsageTrendsResponse } from "./stats";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "./usageHistory";
 import type { UserAvatarDescriptor } from "./users";
@@ -932,11 +936,7 @@ export function streamPortalDeletedPrefixRestore(
   >({
     url: `${baseUrl}/portal/storage-spaces/${encodeURIComponent(spaceId)}/trash/restore-prefix/stream${suffix}`,
     options,
-    requestInit: {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prefix }),
-    },
+    requestInit: buildJsonPostRequestInit({ prefix }),
     streamFailedLabel: "Deleted folder restoration stream failed",
     missingResultMessage:
       "Deleted folder restoration stream ended without a result payload",
@@ -956,16 +956,6 @@ export async function deletePortalStorageSpaceObject(
 
 export function portalStorageSpaceVersionCleanupConfirmationPhrase(spaceName: string): string {
   return `CLEAN HISTORY ${spaceName.toUpperCase()}`;
-}
-
-function buildPortalVersionCleanupPostInit(payload: { confirmation: string }): RequestInit {
-  return {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  };
 }
 
 export function streamPortalStorageSpaceVersionCleanup(
@@ -989,7 +979,7 @@ export function streamPortalStorageSpaceVersionCleanup(
   >({
     url: `${baseUrl}/portal/storage-spaces/${encodeURIComponent(spaceId)}/versions/cleanup/stream${suffix}`,
     options,
-    requestInit: buildPortalVersionCleanupPostInit(payload),
+    requestInit: buildJsonPostRequestInit(payload),
     streamFailedLabel: "Storage Space history cleanup stream failed",
     missingResultMessage: "Storage Space history cleanup stream ended without a result payload",
   });
