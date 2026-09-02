@@ -10,6 +10,7 @@ from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User
 from app.routers.dependencies import get_current_super_admin
 from app.core.sensitive_data import sanitized_error_log_detail
 from app.services.admin_metrics_service import AdminMetricsService
+from app.services.auth_session_service import AuthSessionService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import TrafficWindow
 from app.services.rgw_supervision import get_supervision_rgw_client
@@ -114,14 +115,16 @@ def _load_principal_bucket_stats(rgw_admin: RGWAdminClient, uid: str) -> dict:
 
 @router.get("/summary")
 def summary_stats(
-    _: User = Depends(get_current_super_admin),
+    actor: User = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     """
     Lightweight counts-only endpoint used by the admin dashboard.
     Avoids RGW calls to keep the page responsive.
     """
-    return AdminMetricsService.build_summary_payload(db)
+    payload = AdminMetricsService.build_summary_payload(db)
+    payload["total_active_sessions"] = AuthSessionService(db).count_for_admin(actor)
+    return payload
 
 
 @router.get("/account")

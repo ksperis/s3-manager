@@ -18,7 +18,8 @@ from app.core.security import (
     create_ui_access_token,
     hash_refresh_token,
 )
-from app.db import ApiToken, AuthSession, RefreshToken, S3Session, User
+from app.db import ApiToken, AuthSession, RefreshToken, S3Session, User, is_superadmin_ui_role
+from app.services.identity_security_policy import STANDARD_UI_ROLES
 from app.utils.time import utcnow
 
 
@@ -309,6 +310,16 @@ class AuthSessionService:
             .all()
         )
 
+    def list_for_admin(self, actor: User, *, include_revoked: bool = False) -> list[AuthSession]:
+        return (
+            self._admin_inventory_query(actor, include_revoked=include_revoked)
+            .order_by(AuthSession.created_at.desc())
+            .all()
+        )
+
+    def count_for_admin(self, actor: User, *, include_revoked: bool = False) -> int:
+        return self._admin_inventory_query(actor, include_revoked=include_revoked).count()
+
     def cleanup_expired(self) -> int:
         """Revoke expired rows and irreversibly erase dormant S3 credentials."""
         now = utcnow()
@@ -397,6 +408,15 @@ class AuthSessionService:
 
     def _idle_minutes(self, session: AuthSession) -> int:
         return self.settings.s3_session_idle_minutes if session.principal_type == "s3" else self.settings.ui_session_idle_minutes
+
+    def _admin_inventory_query(self, actor: User, *, include_revoked: bool):
+        query = self.db.query(AuthSession)
+        if not include_revoked:
+            query = query.filter(AuthSession.revoked_at.is_(None))
+        if not is_superadmin_ui_role(actor.role):
+            standard_user_ids = self.db.query(User.id).filter(User.role.in_(STANDARD_UI_ROLES))
+            query = query.filter(AuthSession.user_id.in_(standard_user_ids))
+        return query
 
     @staticmethod
     def _is_session_active(session: Optional[AuthSession], now) -> bool:

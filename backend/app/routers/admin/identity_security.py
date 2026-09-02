@@ -402,13 +402,7 @@ def list_global_sessions(
     actor: User = Depends(get_current_super_admin),
 ) -> list[AdminSessionInfo]:
     require_admin_sensitive_action(request, db, actor)
-    query = db.query(AuthSession)
-    if not include_revoked:
-        query = query.filter(AuthSession.revoked_at.is_(None))
-    if not is_superadmin_ui_role(actor.role):
-        standard_ids = db.query(User.id).filter(User.role.in_(STANDARD_UI_ROLES))
-        query = query.filter(AuthSession.user_id.in_(standard_ids))
-    rows = query.order_by(AuthSession.created_at.desc()).all()
+    rows = AuthSessionService(db).list_for_admin(actor, include_revoked=include_revoked)
     user_ids = {row.user_id for row in rows if row.user_id is not None}
     users = {row.id: row for row in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
     return [

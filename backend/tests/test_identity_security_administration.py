@@ -190,6 +190,10 @@ def test_admin_global_session_inventory_filters_privileged_accounts(auth_client,
     assert payload[0]["user_full_name"] == standard.full_name
     assert payload[0]["user_role"] == UserRole.UI_USER.value
 
+    summary = auth_client.get("/api/admin/stats/summary")
+    assert summary.status_code == 200
+    assert summary.json()["total_active_sessions"] == len(payload)
+
 
 def test_admin_link_request_queue_is_filtered_by_role_hierarchy(auth_client, db_session):
     _set_admin_passkey_policy(db_session, False)

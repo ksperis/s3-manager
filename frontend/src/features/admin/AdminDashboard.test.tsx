@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneralSettings } from "../../api/appSettings";
 import AdminDashboard from "./AdminDashboard";
@@ -78,12 +78,17 @@ function buildGeneralSettings(overrides: Partial<GeneralSettings> = {}): General
   };
 }
 
+function CurrentLocation() {
+  return <output data-testid="current-location">{useLocation().pathname}</output>;
+}
+
 async function renderDashboard(role: SessionUser["role"] = "ui_superadmin") {
   setSessionUserCache({ role });
 
   render(
     <MemoryRouter>
       <AdminDashboard />
+      <CurrentLocation />
     </MemoryRouter>
   );
 
@@ -101,6 +106,7 @@ describe("AdminDashboard feature summary", () => {
       assigned_s3_users: 0,
       total_accounts: 0,
       total_admins: 0,
+      total_active_sessions: 0,
       total_ceph_endpoints: 0,
       total_connections: 0,
       total_endpoints: 0,
@@ -421,6 +427,7 @@ describe("AdminDashboard feature summary", () => {
       assigned_s3_users: 12,
       total_accounts: 124,
       total_admins: 1,
+      total_active_sessions: 7,
       total_ceph_endpoints: 8,
       total_connections: 3,
       total_endpoints: 9,
@@ -437,6 +444,13 @@ describe("AdminDashboard feature summary", () => {
     await renderDashboard();
 
     expect(screen.getByRole("heading", { name: "Admin overview" })).toBeInTheDocument();
+    const activeSessionsCard = screen.getByRole("link", { name: /Active Sessions.*7.*Within admin scope/i });
+    expect(activeSessionsCard).toHaveAttribute(
+      "href",
+      "/admin/identity-security",
+    );
+    fireEvent.click(activeSessionsCard);
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/admin/identity-security");
     expect(screen.getByRole("heading", { name: "Endpoint Health" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Ongoing / Recent Incidents" })).toBeInTheDocument();
     expect(await screen.findByText("Ongoing incidents and incidents ended in the last 7 days.")).toBeInTheDocument();

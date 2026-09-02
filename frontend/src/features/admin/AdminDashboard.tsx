@@ -62,6 +62,7 @@ import {
   OpenIcon,
   RefreshIcon,
   SettingsIcon,
+  ShieldIcon,
 } from "../browser/browserIcons";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
@@ -928,6 +929,15 @@ export default function AdminDashboard() {
         to: "/admin/users",
         tone: "indigo",
         icon: <InfoIcon className="h-5 w-5" />,
+      },
+      {
+        id: "active-sessions",
+        label: "Active Sessions",
+        value: summary?.total_active_sessions ?? 0,
+        hint: "Within admin scope",
+        to: "/admin/identity-security",
+        tone: "blue",
+        icon: <ShieldIcon className="h-5 w-5" />,
       },
       {
         id: "accounts-primary",

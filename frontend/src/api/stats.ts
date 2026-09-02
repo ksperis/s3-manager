@@ -164,6 +164,7 @@ export type AdminSummary = {
   total_users: number;
   total_admins: number;
   total_none_users: number;
+  total_active_sessions: number;
   total_s3_users: number;
   assigned_accounts: number;
   unassigned_accounts: number;
