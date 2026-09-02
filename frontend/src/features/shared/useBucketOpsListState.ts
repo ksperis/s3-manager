@@ -239,7 +239,7 @@ export function useBucketOpsListState(options: UseBucketOpsListStateOptions) {
     ],
   );
 
-  useEffect(() => {
+  const persistCurrentListState = useCallback(() => {
     if (
       state.scopeIdentity !== scopeIdentity ||
       options.selectedScopeId === null
@@ -258,6 +258,10 @@ export function useBucketOpsListState(options: UseBucketOpsListStateOptions) {
     scopeIdentity,
     state.scopeIdentity,
   ]);
+
+  useEffect(() => {
+    persistCurrentListState();
+  }, [persistCurrentListState]);
 
   useEffect(() => {
     setState((previous) => {
@@ -310,26 +314,6 @@ export function useBucketOpsListState(options: UseBucketOpsListStateOptions) {
     options.snsFeatureEnabled,
     options.sseFeatureEnabled,
     options.staticWebsiteFeatureEnabled,
-    state.scopeIdentity,
-  ]);
-
-  const persistCurrentListState = useCallback(() => {
-    if (
-      state.scopeIdentity !== scopeIdentity ||
-      options.selectedScopeId === null
-    ) {
-      return;
-    }
-    persistBucketListState(
-      options.bucketsStateStorageKey,
-      options.selectedScopeId,
-      persistedState,
-    );
-  }, [
-    options.bucketsStateStorageKey,
-    options.selectedScopeId,
-    persistedState,
-    scopeIdentity,
     state.scopeIdentity,
   ]);
 

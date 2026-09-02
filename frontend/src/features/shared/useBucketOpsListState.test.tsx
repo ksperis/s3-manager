@@ -179,6 +179,22 @@ describe("useBucketOpsListState", () => {
     });
   });
 
+  it("exposes the same current-scope persistence used by the automatic effect", () => {
+    const { result } = renderHook(() =>
+      useBucketOpsListState(createOptions()),
+    );
+
+    act(() => result.current.setPageSize(100));
+    localStorage.removeItem(bucketsStateStorageKey);
+    expect(loadBucketListState(bucketsStateStorageKey, 7)).toBeNull();
+
+    act(() => result.current.persistCurrentListState());
+
+    expect(loadBucketListState(bucketsStateStorageKey, 7)).toMatchObject({
+      pageSize: 100,
+    });
+  });
+
   it("removes unsupported feature filters and columns", () => {
     const advancedApplied: AdvancedFilterState = {
       ...defaultAdvancedFilter,
