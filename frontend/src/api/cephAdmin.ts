@@ -812,7 +812,7 @@ export type CephAdminBucketCompareConfigFeature =
   | "access_logging"
   | "tags";
 
-export type CephAdminBucketObjectDetail = {
+type CephAdminBucketObjectDetail = {
   key: string;
   size?: number | null;
   etag?: string | null;

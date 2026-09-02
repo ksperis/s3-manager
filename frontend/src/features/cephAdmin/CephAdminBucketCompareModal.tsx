@@ -15,7 +15,6 @@ import { runWithConcurrencySettled } from "../../utils/concurrency";
 import {
   CephAdminBucketCompareResult,
   CephAdminEndpoint,
-  CephAdminBucketObjectDetail,
   compareCephAdminBucketPair,
   listCephAdminBuckets,
   type CephAdminBucketCompareConfigFeature,
@@ -33,6 +32,7 @@ import {
   bucketCompareMappingTargetCellClass,
   bucketComparisonCancelledMessage,
   buildBucketCompareMappingModel,
+  compareObjectDetailsFromKeys,
   copyCompareObjectKeysToClipboard,
   extractCompareError,
   formatCompareDisplayLimitMessage,
@@ -47,6 +47,8 @@ import {
   renderCompareObjectDetails,
   renderDiffLines,
   resolveBucketCompareRunSettlement,
+  sourceCompareObjectDetailFromDiff,
+  targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
 } from "../shared/bucketCompareShared";
@@ -91,42 +93,6 @@ const CONFIG_FEATURE_OPTIONS: Array<{ key: CephAdminBucketCompareConfigFeature; 
   }));
 
 const ALL_CONFIG_FEATURE_KEYS = CONFIG_FEATURE_OPTIONS.map((option) => option.key);
-
-function detailsFromKeys(keys: string[]): CephAdminBucketObjectDetail[] {
-  return keys.map((key) => ({ key }));
-}
-
-function sourceDetailFromDifferent(diff: {
-  key: string;
-  source_size?: number | null;
-  source_etag?: string | null;
-  source_last_modified?: string | null;
-  source_storage_class?: string | null;
-}): CephAdminBucketObjectDetail {
-  return {
-    key: diff.key,
-    size: diff.source_size,
-    etag: diff.source_etag,
-    last_modified: diff.source_last_modified,
-    storage_class: diff.source_storage_class,
-  };
-}
-
-function targetDetailFromDifferent(diff: {
-  key: string;
-  target_size?: number | null;
-  target_etag?: string | null;
-  target_last_modified?: string | null;
-  target_storage_class?: string | null;
-}): CephAdminBucketObjectDetail {
-  return {
-    key: diff.key,
-    size: diff.target_size,
-    etag: diff.target_etag,
-    last_modified: diff.target_last_modified,
-    storage_class: diff.target_storage_class,
-  };
-}
 
 export default function CephAdminBucketCompareModal({
   sourceEndpointId,
@@ -927,16 +893,16 @@ export default function CephAdminBucketCompareModal({
                 ? (() => {
                     const onlySourceDetails =
                       content.only_source_count > 0
-                        ? (content.only_source_details?.length ? content.only_source_details : detailsFromKeys(content.only_source_sample))
+                        ? (content.only_source_details?.length ? content.only_source_details : compareObjectDetailsFromKeys(content.only_source_sample))
                         : [];
                     const onlyTargetDetails =
                       content.only_target_count > 0
-                        ? (content.only_target_details?.length ? content.only_target_details : detailsFromKeys(content.only_target_sample))
+                        ? (content.only_target_details?.length ? content.only_target_details : compareObjectDetailsFromKeys(content.only_target_sample))
                         : [];
                     const differentSourceDetails =
-                      content.different_count > 0 ? content.different_sample.map((diff) => sourceDetailFromDifferent(diff)) : [];
+                      content.different_count > 0 ? content.different_sample.map(sourceCompareObjectDetailFromDiff) : [];
                     const differentTargetDetails =
-                      content.different_count > 0 ? content.different_sample.map((diff) => targetDetailFromDifferent(diff)) : [];
+                      content.different_count > 0 ? content.different_sample.map(targetCompareObjectDetailFromDiff) : [];
                     const onlySourceHiddenCount = getCompareHiddenCount(
                       content.only_source_count,
                       onlySourceDetails.length,

@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   bucketComparisonCancelledMessage,
   buildBucketCompareMappingModel,
+  compareObjectDetailsFromKeys,
   resolveBucketCompareRunSettlement,
+  sourceCompareObjectDetailFromDiff,
+  targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
 } from "./bucketCompareShared";
@@ -142,5 +145,40 @@ describe("bucket comparison run settlement", () => {
         failed
       )
     ).toEqual({ completed: 1, total: 2, failed: 1, cancelled: 0 });
+  });
+});
+
+describe("bucket comparison object detail projection", () => {
+  it("builds fallback and side-specific object details", () => {
+    const diff = {
+      key: "folder/object.txt",
+      source_size: 12,
+      target_size: 14,
+      source_etag: "source-etag",
+      target_etag: "target-etag",
+      source_last_modified: "2026-01-01T00:00:00Z",
+      target_last_modified: "2026-01-02T00:00:00Z",
+      source_storage_class: "STANDARD",
+      target_storage_class: "GLACIER",
+    };
+
+    expect(compareObjectDetailsFromKeys(["a", "b"])).toEqual([
+      { key: "a" },
+      { key: "b" },
+    ]);
+    expect(sourceCompareObjectDetailFromDiff(diff)).toEqual({
+      key: "folder/object.txt",
+      size: 12,
+      etag: "source-etag",
+      last_modified: "2026-01-01T00:00:00Z",
+      storage_class: "STANDARD",
+    });
+    expect(targetCompareObjectDetailFromDiff(diff)).toEqual({
+      key: "folder/object.txt",
+      size: 14,
+      etag: "target-etag",
+      last_modified: "2026-01-02T00:00:00Z",
+      storage_class: "GLACIER",
+    });
   });
 });

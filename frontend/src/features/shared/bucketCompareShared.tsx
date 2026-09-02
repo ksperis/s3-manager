@@ -42,6 +42,18 @@ type CompareObjectDetailLike = {
   storage_class?: string | null;
 };
 
+type CompareObjectDiffLike = {
+  key: string;
+  source_size?: number | null;
+  target_size?: number | null;
+  source_etag?: string | null;
+  target_etag?: string | null;
+  source_last_modified?: string | null;
+  target_last_modified?: string | null;
+  source_storage_class?: string | null;
+  target_storage_class?: string | null;
+};
+
 export type CompareVisibleKeysCopyFeedback = {
   tone: "success" | "danger";
   message: string;
@@ -165,6 +177,30 @@ export const getObjectParentPrefix = (key: string): string => {
   if (index < 0) return "";
   return key.slice(0, index + 1);
 };
+
+export const compareObjectDetailsFromKeys = (
+  keys: string[]
+): CompareObjectDetailLike[] => keys.map((key) => ({ key }));
+
+export const sourceCompareObjectDetailFromDiff = (
+  diff: CompareObjectDiffLike
+): CompareObjectDetailLike => ({
+  key: diff.key,
+  size: diff.source_size,
+  etag: diff.source_etag,
+  last_modified: diff.source_last_modified,
+  storage_class: diff.source_storage_class,
+});
+
+export const targetCompareObjectDetailFromDiff = (
+  diff: CompareObjectDiffLike
+): CompareObjectDetailLike => ({
+  key: diff.key,
+  size: diff.target_size,
+  etag: diff.target_etag,
+  last_modified: diff.target_last_modified,
+  storage_class: diff.target_storage_class,
+});
 
 export const getVisibleCompareObjectKeys = (rows: CompareObjectDetailLike[]): string[] => {
   const keys: string[] = [];
