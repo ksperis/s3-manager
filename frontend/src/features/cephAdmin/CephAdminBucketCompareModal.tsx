@@ -39,14 +39,12 @@ import {
   matchesBucketCompareRunFilters,
   renderCompareObjectDetails,
   renderDiffLines,
-  resolveBucketCompareRunSettlement,
   sourceCompareObjectDetailFromDiff,
   summarizeBucketCompareRun,
   targetCompareObjectDetailFromDiff,
-  updateBucketCompareRunItem,
-  updateBucketCompareRunProgress,
   useBucketCompareConfigFeatures,
   useBucketCompareManualMappingState,
+  useBucketCompareRunState,
   useCompareVisibleKeysClipboard,
 } from "../shared/bucketCompareShared";
 import {
@@ -112,8 +110,6 @@ export default function CephAdminBucketCompareModal({
   const [running, setRunning] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
-  const [progress, setProgress] = useState({ completed: 0, total: 0, failed: 0, cancelled: 0 });
-  const [items, setItems] = useState<CompareRunItem[]>([]);
   const [pendingExplore, setPendingExplore] = useState<PendingExploreNavigation | null>(null);
   const [resultSearch, setResultSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CompareRunItem["status"]>("all");
@@ -138,7 +134,14 @@ export default function CephAdminBucketCompareModal({
   } = useBucketCompareConfigFeatures<CephAdminBucketCompareConfigFeature>(
     ALL_CONFIG_FEATURE_KEYS
   );
-  const cancelRequestedRef = useRef(false);
+  const {
+    cancelRequestedRef,
+    items,
+    progress,
+    setItems,
+    setProgress,
+    settleRunItem,
+  } = useBucketCompareRunState<CephAdminBucketCompareResult, CompareRunItem>();
   const requestControllersRef = useRef(new Set<AbortController>());
   const { copyFeedback, copyVisibleKeys } = useCompareVisibleKeysClipboard();
   const controlClass = uiInputClass;
@@ -346,18 +349,7 @@ export default function CephAdminBucketCompareModal({
           requestControllersRef.current.delete(controller);
         }
       },
-      (result, index) => {
-        const settlement = resolveBucketCompareRunSettlement(
-          result,
-          cancelRequestedRef.current
-        );
-        setProgress((prev) => updateBucketCompareRunProgress(prev, settlement));
-        setItems((prev) =>
-          prev.map((item, itemIdx) =>
-            itemIdx === index ? updateBucketCompareRunItem(item, settlement) : item
-          )
-        );
-      }
+      settleRunItem
     );
     requestControllersRef.current.forEach((controller) => controller.abort());
     requestControllersRef.current.clear();
@@ -400,7 +392,7 @@ export default function CephAdminBucketCompareModal({
           : item
       )
     );
-  }, [running]);
+  }, [cancelRequestedRef, running, setItems]);
 
   const handleClose = useCallback(() => {
     stopComparison();
@@ -414,7 +406,7 @@ export default function CephAdminBucketCompareModal({
       requestControllers.forEach((controller) => controller.abort());
       requestControllers.clear();
     };
-  }, []);
+  }, [cancelRequestedRef]);
 
   const exportGlobalDiff = () => {
     if (items.length === 0) return;

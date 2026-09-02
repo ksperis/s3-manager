@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { cx, type UiTone } from "../../components/ui/styles";
 import { extractApiError, isCancelledError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
@@ -267,6 +267,41 @@ export const updateBucketCompareRunItem = <
     return { ...item, status: "success" as const, result: settlement.result };
   }
   return { ...item, status: settlement.status, error: settlement.error };
+};
+
+export const useBucketCompareRunState = <
+  TResult,
+  TItem extends BucketCompareSettledRunItem<TResult>,
+>() => {
+  const [progress, setProgress] = useState<BucketCompareRunProgress>({
+    completed: 0,
+    total: 0,
+    failed: 0,
+    cancelled: 0,
+  });
+  const [items, setItems] = useState<TItem[]>([]);
+  const cancelRequestedRef = useRef(false);
+  const settleRunItem = useCallback((result: PromiseSettledResult<TResult>, index: number) => {
+    const settlement = resolveBucketCompareRunSettlement(
+      result,
+      cancelRequestedRef.current
+    );
+    setProgress((current) => updateBucketCompareRunProgress(current, settlement));
+    setItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? updateBucketCompareRunItem(item, settlement) : item
+      )
+    );
+  }, []);
+
+  return {
+    cancelRequestedRef,
+    items,
+    progress,
+    setItems,
+    setProgress,
+    settleRunItem,
+  };
 };
 
 export const formatUnknown = (value: unknown) => {

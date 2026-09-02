@@ -44,14 +44,12 @@ import {
   matchesBucketCompareRunFilters,
   renderCompareObjectDetails,
   renderDiffLines,
-  resolveBucketCompareRunSettlement,
   sourceCompareObjectDetailFromDiff,
   summarizeBucketCompareRun,
   targetCompareObjectDetailFromDiff,
-  updateBucketCompareRunItem,
-  updateBucketCompareRunProgress,
   useBucketCompareConfigFeatures,
   useBucketCompareManualMappingState,
+  useBucketCompareRunState,
   useCompareVisibleKeysClipboard,
 } from "../shared/bucketCompareShared";
 import {
@@ -178,8 +176,6 @@ export default function ManagerBucketCompareModal({
   const [running, setRunning] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
-  const [progress, setProgress] = useState({ completed: 0, total: 0, failed: 0, cancelled: 0 });
-  const [items, setItems] = useState<CompareRunItem[]>([]);
   const [lastRunOptions, setLastRunOptions] = useState<CompareRunOptionsSnapshot | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingRemediationAction | null>(null);
   const [downloadFeedback, setDownloadFeedback] = useState<(CompareVisibleKeysCopyFeedback & { id: string }) | null>(null);
@@ -207,7 +203,14 @@ export default function ManagerBucketCompareModal({
   } = useBucketCompareConfigFeatures<ManagerBucketCompareConfigFeature>(
     ALL_CONFIG_FEATURE_KEYS
   );
-  const cancelRequestedRef = useRef(false);
+  const {
+    cancelRequestedRef,
+    items,
+    progress,
+    setItems,
+    setProgress,
+    settleRunItem,
+  } = useBucketCompareRunState<ManagerBucketCompareResult, CompareRunItem>();
   const requestControllersRef = useRef(new Set<AbortController>());
   const { copyFeedback, copyVisibleKeys } = useCompareVisibleKeysClipboard();
   const controlClass = uiInputClass;
@@ -422,18 +425,7 @@ export default function ManagerBucketCompareModal({
             requestControllersRef.current.delete(controller);
           }
         },
-        (result, index) => {
-          const settlement = resolveBucketCompareRunSettlement(
-            result,
-            cancelRequestedRef.current
-          );
-          setProgress((prev) => updateBucketCompareRunProgress(prev, settlement));
-          setItems((prev) =>
-            prev.map((item, itemIdx) =>
-              itemIdx === index ? updateBucketCompareRunItem(item, settlement) : item
-            )
-          );
-        }
+        settleRunItem
       );
     } catch (err) {
       const error = extractError(err);
@@ -495,7 +487,7 @@ export default function ManagerBucketCompareModal({
           : item
       )
     );
-  }, [running]);
+  }, [cancelRequestedRef, running, setItems]);
 
   const handleClose = useCallback(() => {
     stopComparison();
@@ -509,7 +501,7 @@ export default function ManagerBucketCompareModal({
       controllers.forEach((controller) => controller.abort());
       controllers.clear();
     };
-  }, []);
+  }, [cancelRequestedRef]);
 
   const exportGlobalDiff = () => {
     if (items.length === 0) return;
@@ -683,7 +675,7 @@ export default function ManagerBucketCompareModal({
         );
       }
     },
-    [ignoreModifiedAfterIso, items, lastRunOptions, parallelism, sourceContextId, targetContextId]
+    [ignoreModifiedAfterIso, items, lastRunOptions, parallelism, setItems, sourceContextId, targetContextId]
   );
 
   const openRemediationConfirm = useCallback(

@@ -17,6 +17,7 @@ import {
   updateBucketCompareConfigFeatures,
   useBucketCompareConfigFeatures,
   useBucketCompareManualMappingState,
+  useBucketCompareRunState,
 } from "./bucketCompareShared";
 
 const buildModel = (
@@ -218,6 +219,45 @@ describe("bucket comparison run settlement", () => {
         settlement
       )
     ).toEqual({ completed: 2, total: 3, failed: 0, cancelled: 0 });
+  });
+
+  it("owns run progress, items, and cancellation interpretation", () => {
+    const { result } = renderHook(() =>
+      useBucketCompareRunState<
+        { has_differences: boolean },
+        {
+          sourceBucket: string;
+          targetBucket: string;
+          status: "pending" | "running" | "success" | "failed" | "cancelled";
+          result?: { has_differences: boolean };
+          error?: string;
+        }
+      >()
+    );
+
+    act(() => {
+      result.current.setProgress({ completed: 0, total: 1, failed: 0, cancelled: 0 });
+      result.current.setItems([
+        { sourceBucket: "alpha", targetBucket: "bravo", status: "running" },
+      ]);
+    });
+    act(() => {
+      result.current.settleRunItem(
+        { status: "fulfilled", value: { has_differences: true } },
+        0
+      );
+    });
+
+    expect(result.current.progress).toEqual({
+      completed: 1,
+      total: 1,
+      failed: 0,
+      cancelled: 0,
+    });
+    expect(result.current.items[0]).toMatchObject({
+      status: "success",
+      result: { has_differences: true },
+    });
   });
 
   it("normalizes rejected and explicitly cancelled comparisons", () => {
