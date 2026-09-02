@@ -1791,7 +1791,7 @@ export default function ProfilePage({
           breadcrumbs={[{ label: "Profile", to: "/profile" }, { label: "Private connections", to: "/profile?view=connections" }, { label: "Edit" }]}
           backLabel="Back to connections"
           onBack={editConnectionCloseGuard.requestClose}
-          width="wide"
+          width="standard"
         >
           {connectionsError && (
             <UiInlineMessage tone="error" className="mb-3">

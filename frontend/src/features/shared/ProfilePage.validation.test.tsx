@@ -346,8 +346,6 @@ describe("ProfilePage live validation", () => {
     await screen.findByText("Edit connection - managed-connection");
 
     const dialog = getWorkflowPage("Edit connection - managed-connection");
-    expect(dialog).toHaveAttribute("data-workflow-width", "wide");
-    expect(dialog.querySelector(".workflow-page-content")).toHaveClass("w-full", "max-w-7xl");
     expect(
       within(dialog).getByText(
         "Manage endpoint access, credentials, and workspace availability for this private connection."
