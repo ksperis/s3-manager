@@ -69,6 +69,7 @@ describe("useManagerBucketSelection", () => {
 
     act(() => result.current.selectAllFiltered());
     expect([...result.current.selectedBuckets]).toEqual(["alpha"]);
+    expect(result.current.selectedBucketList).toEqual(["alpha"]);
     expect(result.current.selectedTargets).toEqual([
       {
         bucketName: "alpha",

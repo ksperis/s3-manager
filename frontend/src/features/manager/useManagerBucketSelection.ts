@@ -113,6 +113,7 @@ export function useManagerBucketSelection() {
     filteredBuckets,
     loading,
     requiresS3AccountSelection,
+    selectedBucketList,
     selectedBuckets,
     selectedTargets,
     selectAllFiltered,
