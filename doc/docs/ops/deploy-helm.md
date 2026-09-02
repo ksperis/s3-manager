@@ -8,7 +8,7 @@ Use Helm for Kubernetes deployments.
 - Values: `helm/bucketreef/values.yaml`
 
 The chart defaults remain pinned to the latest stable application release
-(`0.2.1`). They do not automatically follow an unpublished source checkout.
+(`0.2.2`). They do not automatically follow an unpublished source checkout.
 To validate checkout changes, override both backend and frontend repositories
 and give both images the exact same immutable `dev-<short-sha>` tag.
 
@@ -196,15 +196,15 @@ Tag conventions:
 - lab and rolling internal validation: `dev`
 - pinned lab validation build: `dev-<short-sha>`
 - latest stable release: `latest`
-- stable image release: plain semver such as `0.2.1`
+- stable image release: plain semver such as `0.2.2`
 - stable minor series alias: `0.2` for the latest `0.2.x` release
-- Git release tag: `v0.2.1`
+- Git release tag: `v0.2.2`
 
 ## Which image tag should I use?
 
 | Use case | Tag |
 |---|---|
-| Stable production-like deployment | plain semver such as `0.2.1` |
+| Stable production-like deployment | plain semver such as `0.2.2` |
 | Track the latest stable release | `latest` |
 | Stay on the latest patch of a minor line | minor alias such as `0.2` |
 | Internal lab validation | `dev` from the GitLab Container Registry |
@@ -223,9 +223,9 @@ helm upgrade --install bucketreef helm/bucketreef \
 ```bash
 helm upgrade --install bucketreef helm/bucketreef \
   --set image.backend.repository=ghcr.io/ksperis/bucketreef-backend \
-  --set image.backend.tag=0.2.1 \
+  --set image.backend.tag=0.2.2 \
   --set image.frontend.repository=ghcr.io/ksperis/bucketreef-frontend \
-  --set image.frontend.tag=0.2.1
+  --set image.frontend.tag=0.2.2
 ```
 
 ```bash

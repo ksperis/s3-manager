@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.2.2 - 2026-09-02
+
+### Added
+
+- Added an Admin Identity Security workspace for policy management, user-factor administration, active-session visibility, and guided last-passkey recovery.
+- Added a global control for managed private S3 provisioning and an authenticated Admin/Browser harness for repeatable agent UI smoke tests.
+- Added canonical full-name identity listings, richer session-type summaries, and primary-action navigation from shared data-table rows.
+
+### Changed
+
+- Split account access into independent Manager administrator and Portal roles across direct and group associations, execution contexts, automations, and Portal IAM synchronization.
+- Hardened Compose and Helm workloads with fixed non-root identities, read-only root filesystems, a dedicated scheduler image, explicit resources, and fail-closed NetworkPolicies.
+- Consolidated Portal models, bucket listings and comparisons, RGW parsing, Admin associations, streaming APIs, and shared frontend state into narrower reusable contracts.
+
+### Fixed/Security
+
+- Required explicit trusted-proxy CIDRs in production and prevented untrusted forwarded addresses from selecting rate-limit identities.
+- Restricted user-controlled S3 endpoints and migration webhooks to configured host allowlists, sanitized external error logging, and prevented API tokens from exporting temporary STS credentials.
+- Made bucket UI-tag cleanup transactional, made partial SQLite role migration recoverable, and stabilized Ceph listings, Browser selection, Manager row navigation, modal sizing, and table action columns.
+
+### Breaking changes
+
+- Migration `0122_split_account_access_roles` replaces association `role` and root flags with `manager_role` and `portal_role`. Deploy the migration, backend, frontend, and automation clients together; legacy role fields are rejected.
+- Rootless images use fixed identities, the frontend container listens on port `8080`, and existing root-owned backend volume files may require a one-time ownership migration to UID/GID `10001:10001` after backup.
+- Helm's strict NetworkPolicy profile now requires ingress/DNS selectors, explicit egress rules, and `backend.trustedProxyCidrs`; production startup rejects an empty trusted-proxy boundary.
+- Production user-supplied S3 endpoints and migration webhooks now fail closed unless their hosts are covered by `USER_SUPPLIED_S3_ENDPOINT_ALLOWED_HOSTS` and `BUCKET_MIGRATION_WEBHOOK_ALLOWED_HOSTS`.
+
+### Tests
+
+- Expanded backend, frontend, migration, deployment-security, Helm, Compose, authenticated browser, and contract coverage for the new identity and access model.
+- Retained CI validation for project naming, vulnerability and secret scans, immutable SHA images, rootless runtime smoke tests, and the advisory Ceph functional suite.
+
 ## 0.2.1 - 2026-08-28
 
 ### Added

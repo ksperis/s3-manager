@@ -21,7 +21,7 @@ BUCKETREEF_TAG=latest docker compose up -d backend frontend
 | Use case | Tag |
 |---|---|
 | Quick stable validation | `latest` |
-| Reproducible validation | a plain semver tag such as `0.2.1` |
+| Reproducible validation | a plain semver tag such as `0.2.2` |
 | Internal rolling lab | `dev` from the internal GitLab registry |
 | Debugging a specific internal build | `dev-<short-sha>` from the internal GitLab registry |
 
