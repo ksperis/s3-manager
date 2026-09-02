@@ -2,117 +2,36 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
-import { type Bucket, listBuckets } from "../../api/buckets";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import { workflowPageHostClass } from "../../components/WorkflowPage";
-import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiButton from "../../components/ui/UiButton";
-import { extractApiError } from "../../utils/apiError";
 import BucketPurgeRunModal from "../shared/BucketPurgeRunModal";
 import ManagerBucketSelectionPanel from "./ManagerBucketSelectionPanel";
-import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
+import { useManagerBucketSelection } from "./useManagerBucketSelection";
 
 export default function ManagerBucketPurgePage() {
-  const { accounts, selectedS3AccountId, requiresS3AccountSelection } = useS3AccountContext();
-  const sourceContextId = selectedS3AccountId ?? "";
-  const [buckets, setBuckets] = useState<Bucket[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
-  const [selectedBuckets, setSelectedBuckets] = useState<Set<string>>(new Set());
-  const [showPurgeModal, setShowPurgeModal] = useState(false);
-
-  const sourceContext = useMemo(
-    () => accounts.find((context) => context.id === sourceContextId) ?? null,
-    [accounts, sourceContextId]
-  );
-
-  useEffect(() => {
-    if (!sourceContextId) {
-      setBuckets([]);
-      setSelectedBuckets(new Set());
-      return;
-    }
-    let canceled = false;
-    setLoading(true);
-    setError(null);
-    listBuckets(sourceContextId, { with_stats: false })
-      .then((items) => {
-        if (canceled) return;
-        const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
-        setBuckets(sorted);
-        setSelectedBuckets((current) => {
-          const availableNames = new Set(sorted.map((bucket) => bucket.name));
-          return new Set([...current].filter((bucketName) => availableNames.has(bucketName)));
-        });
-      })
-      .catch((err) => {
-        if (canceled) return;
-        setError(extractApiError(err, "Unable to load buckets."));
-        setBuckets([]);
-      })
-      .finally(() => {
-        if (!canceled) setLoading(false);
-      });
-    return () => {
-      canceled = true;
-    };
-  }, [sourceContextId]);
-
-  const filteredBuckets = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (!needle) return buckets;
-    return buckets.filter((bucket) => bucket.name.toLowerCase().includes(needle));
-  }, [buckets, filter]);
-
-  const selectedBucketList = useMemo(() => {
-    return [...selectedBuckets].sort((a, b) => a.localeCompare(b));
-  }, [selectedBuckets]);
-
-  const selectedTargets = useMemo(
-    () =>
-      selectedBucketList.map((bucketName) => ({
-        bucketName,
-        contextId: sourceContextId,
-        contextName: sourceContext?.display_name ?? sourceContextId,
-      })),
-    [selectedBucketList, sourceContext?.display_name, sourceContextId]
-  );
-
-  const toggleBucket = (bucketName: string) => {
-    setSelectedBuckets((current) => {
-      const next = new Set(current);
-      if (next.has(bucketName)) {
-        next.delete(bucketName);
-      } else {
-        next.add(bucketName);
-      }
-      return next;
-    });
-  };
-
-  const selectAllFiltered = () => {
-    setSelectedBuckets((current) => {
-      const next = new Set(current);
-      filteredBuckets.forEach((bucket) => next.add(bucket.name));
-      return next;
-    });
-  };
-
-  const clearSelection = () => {
-    setSelectedBuckets(new Set());
-  };
-
-  const tableStatus = resolveListTableStatus({
-    loading,
+  const {
+    clearSelection,
     error,
-    rowCount: filteredBuckets.length,
-  });
+    filter,
+    filteredBuckets,
+    loading,
+    requiresS3AccountSelection,
+    selectedBuckets,
+    selectedTargets,
+    selectAllFiltered,
+    setFilter,
+    sourceContext,
+    sourceContextId,
+    tableStatus,
+    toggleBucket,
+  } = useManagerBucketSelection();
+  const [showPurgeModal, setShowPurgeModal] = useState(false);
 
   return (
     <div className={workflowPageHostClass(showPurgeModal)}>
