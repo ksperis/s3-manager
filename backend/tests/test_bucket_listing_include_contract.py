@@ -5,9 +5,7 @@ from app.services.bucket_listing_enrichment import (
     BUCKET_LISTING_INCLUDES,
     COLUMN_DETAIL_KEYS,
 )
-from app.services.ceph_admin_bucket_listing_service import (
-    _CephAdminBucketListingRequest,
-)
+from app.services.ceph_admin_bucket_listing_request import CephAdminBucketListingRequest
 from app.services.storage_ops_bucket_listing_service import (
     _prepare_storage_ops_listing_query,
 )
@@ -16,7 +14,7 @@ from app.services.storage_ops_bucket_listing_service import (
 def test_bucket_listing_include_contract_is_shared_across_surfaces() -> None:
     includes = ["tags", "versioning", "object_lock_mode", "unknown"]
 
-    ceph_admin = _CephAdminBucketListingRequest.parse(
+    ceph_admin = CephAdminBucketListingRequest.parse(
         raw_filter=None,
         raw_advanced_filter=None,
         sort_by="name",
