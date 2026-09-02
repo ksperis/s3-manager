@@ -12,6 +12,12 @@ def normalize_optional_string(value: object) -> str | None:
     return normalized or None
 
 
+def normalize_optional_string_field(value: object) -> object:
+    if isinstance(value, str):
+        return normalize_optional_string(value)
+    return value or None
+
+
 def normalize_optional_scalar(value: object) -> str | None:
     if value is None:
         return None

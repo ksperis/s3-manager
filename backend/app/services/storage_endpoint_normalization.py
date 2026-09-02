@@ -13,7 +13,11 @@ from app.models.storage_endpoint import (
     StorageEndpointCreate,
     StorageEndpointUpdate,
 )
-from app.utils.normalize import normalize_optional_string, normalize_storage_provider
+from app.utils.normalize import (
+    normalize_optional_string,
+    normalize_optional_string_field,
+    normalize_storage_provider,
+)
 from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.storage_endpoint_features import (
     AWS_DEFAULT_REGION,
@@ -63,12 +67,9 @@ class EnvStorageEndpoint(ApiModel):
     features: Optional[dict[str, dict[str, object]]] = None
     is_default: bool = False
 
-    @field_validator("name", "endpoint_url", "region", mode="before")
-    @classmethod
-    def trim_strings(_cls, value: Optional[str]) -> Optional[str]:
-        if isinstance(value, str):
-            value = value.strip()
-        return value or None
+    normalize_string_fields = field_validator("name", "endpoint_url", "region", mode="before")(
+        normalize_optional_string_field
+    )
 
     @field_validator("latitude")
     @classmethod

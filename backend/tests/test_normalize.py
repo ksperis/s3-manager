@@ -4,7 +4,11 @@
 import pytest
 
 from app.db import StorageProvider
-from app.utils.normalize import normalize_optional_string, normalize_storage_provider
+from app.utils.normalize import (
+    normalize_optional_string,
+    normalize_optional_string_field,
+    normalize_storage_provider,
+)
 
 
 @pytest.mark.parametrize(
@@ -21,6 +25,21 @@ from app.utils.normalize import normalize_optional_string, normalize_storage_pro
 )
 def test_normalize_optional_string(value, expected):
     assert normalize_optional_string(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("  value  ", "value"),
+        ("   ", None),
+        (None, None),
+        (0, None),
+        (12, 12),
+        (False, None),
+    ],
+)
+def test_normalize_optional_string_field_preserves_invalid_non_string_values(value, expected):
+    assert normalize_optional_string_field(value) == expected
 
 
 @pytest.mark.parametrize(

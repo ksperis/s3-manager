@@ -9,6 +9,7 @@ from pydantic import ConfigDict, Field, field_validator
 from app.models.base import ApiModel
 from app.db import StorageProvider
 from app.models.tagging import RequiredTagDefinitionList, TagDefinitionSummary
+from app.utils.normalize import normalize_optional_string_field
 
 
 class StorageEndpointFeature(ApiModel):
@@ -60,12 +61,9 @@ class StorageEndpointCreate(ApiModel):
     latitude: Optional[float] = Field(default=None)
     longitude: Optional[float] = Field(default=None)
 
-    @field_validator("name", "endpoint_url", "region", mode="before")
-    @classmethod
-    def trim_str_fields(cls, value: Optional[str]) -> Optional[str]:
-        if isinstance(value, str):
-            value = value.strip()
-        return value or None
+    normalize_string_fields = field_validator("name", "endpoint_url", "region", mode="before")(
+        normalize_optional_string_field
+    )
 
     @field_validator("latitude")
     @classmethod
@@ -103,12 +101,9 @@ class StorageEndpointUpdate(ApiModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-    @field_validator("name", "endpoint_url", "region", mode="before")
-    @classmethod
-    def trim_optional_str_fields(cls, value: Optional[str]) -> Optional[str]:
-        if isinstance(value, str):
-            value = value.strip()
-        return value or None
+    normalize_string_fields = field_validator("name", "endpoint_url", "region", mode="before")(
+        normalize_optional_string_field
+    )
 
     @field_validator("latitude")
     @classmethod
@@ -172,7 +167,7 @@ class StorageEndpointFeatureDetectionRequest(ApiModel):
     supervision_access_key: Optional[str] = None
     supervision_secret_key: Optional[str] = None
 
-    @field_validator(
+    normalize_string_fields = field_validator(
         "endpoint_url",
         "admin_endpoint",
         "region",
@@ -181,12 +176,7 @@ class StorageEndpointFeatureDetectionRequest(ApiModel):
         "supervision_access_key",
         "supervision_secret_key",
         mode="before",
-    )
-    @classmethod
-    def trim_detection_str_fields(cls, value: Optional[str]) -> Optional[str]:
-        if isinstance(value, str):
-            value = value.strip()
-        return value or None
+    )(normalize_optional_string_field)
 
 
 class StorageEndpointFeatureDetectionResult(ApiModel):
