@@ -9,11 +9,13 @@ from threading import Barrier
 
 import pytest
 import sqlalchemy as sa
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from app.db import AuditLog, FirstAdminBootstrap, User
+from app.services import database_initialization
 from app.services.first_admin_bootstrap_service import (
     FIRST_ADMIN_BOOTSTRAP_ID,
     FirstAdminBootstrapService,
@@ -22,7 +24,6 @@ from app.services.first_admin_bootstrap_service import (
 
 
 PASSWORD = "correct horse battery staple"
-EXPECTED_ALEMBIC_HEAD = "0120_bucket_ui_tag_definition_settings"
 
 
 def _postgresql_url() -> str:
@@ -34,15 +35,22 @@ def _postgresql_url() -> str:
     return url
 
 
+def _expected_alembic_head() -> str:
+    head = ScriptDirectory.from_config(database_initialization._alembic_config()).get_current_head()
+    assert head is not None
+    return head
+
+
 def test_postgresql_migration_rotation_rollback_and_concurrent_consumption(monkeypatch):
     engine = create_engine(_postgresql_url(), pool_pre_ping=True)
     session_factory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
     with engine.begin() as connection:
+        expected_head = _expected_alembic_head()
         revision = connection.scalar(sa.text("SELECT version_num FROM alembic_version"))
-        assert revision == EXPECTED_ALEMBIC_HEAD
+        assert revision == expected_head
         version_column = sa.inspect(connection).get_columns("alembic_version")[0]
-        assert version_column["type"].length >= len(EXPECTED_ALEMBIC_HEAD)
+        assert version_column["type"].length >= len(expected_head)
         columns = {
             column["name"]: column
             for column in sa.inspect(connection).get_columns("first_admin_bootstrap")

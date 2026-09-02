@@ -10,11 +10,12 @@ import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 
 from app.db import TagDefinition, User, UserRole
+from app.services import database_initialization
 
 
-EXPECTED_ALEMBIC_HEAD = "0120_bucket_ui_tag_definition_settings"
 INDEX_NAME = "uq_tag_definitions_bucket_ui_ceph_admin_label"
 
 
@@ -25,6 +26,12 @@ def _postgresql_url() -> str:
     if not url.startswith(("postgresql://", "postgresql+psycopg2://")):
         pytest.fail("POSTGRES_TEST_DATABASE_URL must target PostgreSQL")
     return url
+
+
+def _expected_alembic_head() -> str:
+    head = ScriptDirectory.from_config(database_initialization._alembic_config()).get_current_head()
+    assert head is not None
+    return head
 
 
 def _load_migration():
@@ -52,7 +59,7 @@ def test_postgresql_bucket_ui_tag_definition_settings_migration():
     with engine.begin() as connection:
         assert (
             connection.scalar(sa.text("SELECT version_num FROM alembic_version"))
-            == EXPECTED_ALEMBIC_HEAD
+            == _expected_alembic_head()
         )
         migration = _load_migration()
         migration.op = Operations(MigrationContext.configure(connection))

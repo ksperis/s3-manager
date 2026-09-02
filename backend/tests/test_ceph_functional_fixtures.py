@@ -45,7 +45,8 @@ def test_grant_account_root_access_preserves_existing_account_links() -> None:
                         "account_links": [
                             {
                                 "account_id": 11,
-                                "role": "account_administrator",
+                                "manager_role": "account_administrator",
+                                "portal_role": "portal_user",
                                 "allow_manager_browser_data_access": True,
                             }
                         ],
@@ -66,18 +67,21 @@ def test_grant_account_root_access_preserves_existing_account_links() -> None:
             "account_links": [
                 {
                     "account_id": 11,
-                    "role": "account_administrator",
+                    "manager_role": "account_administrator",
+                    "portal_role": "portal_user",
                     "allow_manager_browser_data_access": True,
                 },
                 {
                     "account_id": 12,
-                    "role": "account_administrator",
+                    "manager_role": "account_administrator",
+                    "portal_role": None,
                     "allow_manager_browser_data_access": True,
                 },
             ]
         },
         200,
     )
+
 
 def test_grant_account_access_to_user_preserves_existing_account_links() -> None:
     class StubAdminSession:
@@ -94,7 +98,8 @@ def test_grant_account_access_to_user_preserves_existing_account_links() -> None
                         "account_links": [
                             {
                                 "account_id": 21,
-                                "role": "account_administrator",
+                                "manager_role": "account_administrator",
+                                "portal_role": "portal_manager",
                                 "allow_manager_browser_data_access": False,
                             }
                         ],
@@ -119,12 +124,14 @@ def test_grant_account_access_to_user_preserves_existing_account_links() -> None
             "account_links": [
                 {
                     "account_id": 21,
-                    "role": "account_administrator",
+                    "manager_role": "account_administrator",
+                    "portal_role": "portal_manager",
                     "allow_manager_browser_data_access": False,
                 },
                 {
                     "account_id": 22,
-                    "role": "account_administrator",
+                    "manager_role": "account_administrator",
+                    "portal_role": None,
                     "allow_manager_browser_data_access": True,
                 },
             ]

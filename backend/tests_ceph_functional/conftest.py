@@ -262,7 +262,8 @@ def _grant_account_access_to_user(
     account_links = [
         {
             "account_id": int(link["account_id"]),
-            "role": link["role"],
+            "manager_role": link.get("manager_role"),
+            "portal_role": link.get("portal_role"),
             "allow_manager_browser_data_access": bool(link.get("allow_manager_browser_data_access")),
         }
         for link in user.get("account_links", [])
@@ -271,7 +272,8 @@ def _grant_account_access_to_user(
     account_links.append(
         {
             "account_id": account_id,
-            "role": "account_administrator",
+            "manager_role": "account_administrator",
+            "portal_role": None,
             "allow_manager_browser_data_access": True,
         }
     )
@@ -382,7 +384,8 @@ def _provision_account(
             "account_links": [
                 {
                     "account_id": account_id,
-                    "role": "account_administrator",
+                    "manager_role": "account_administrator",
+                    "portal_role": None,
                     "allow_manager_browser_data_access": True,
                 }
             ]
