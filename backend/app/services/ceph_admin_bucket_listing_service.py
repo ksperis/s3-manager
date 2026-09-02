@@ -17,12 +17,7 @@ from app.services import rgw_bucket_metadata
 from app.services.bucket_listing_enrichment import (
     BUCKET_FEATURE_INCLUDES,
     COLUMN_DETAIL_KEYS,
-    EXPENSIVE_FIELD_RULES,
     enrich_buckets,
-    extract_name_candidates,
-    match_bucket_feature_rule,
-    match_bucket_field_rule,
-    request_requires_bucket_stats,
 )
 from app.services.bucket_listing_owner_metadata import (
     OWNER_QUOTA_FIELDS,
@@ -36,6 +31,13 @@ from app.services.bucket_listing_owner_metadata import (
     request_requires_owner_metadata,
     request_requires_tenant_metadata,
     resolve_owner_names_for_buckets,
+)
+from app.services.bucket_listing_rule_matching import (
+    EXPENSIVE_FIELD_RULES,
+    extract_name_candidates,
+    match_bucket_feature_rule,
+    match_bucket_field_rule,
+    request_requires_bucket_stats,
 )
 from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
 from app.utils.tagging import TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN

@@ -15,8 +15,6 @@ from app.services.bucket_listing_cache import get_cached_bucket_listing_for_acco
 from app.services.bucket_listing_enrichment import (
     BUCKET_LISTING_INCLUDES,
     enrich_buckets,
-    match_bucket_feature_rule,
-    match_bucket_field_rule,
 )
 from app.services.bucket_listing_owner_metadata import (
     OWNER_DETAIL_FIELDS,
@@ -24,6 +22,10 @@ from app.services.bucket_listing_owner_metadata import (
     OWNER_STATUS_FIELDS,
     OWNER_USAGE_FIELDS,
     OWNER_USAGE_PERCENT_FIELDS,
+)
+from app.services.bucket_listing_rule_matching import (
+    match_bucket_feature_rule,
+    match_bucket_field_rule,
 )
 from app.services.bucket_feature_param_matching import match_bucket_feature_param_rules
 from app.services.bucket_feature_param_snapshot_loader import load_bucket_feature_param_snapshots
