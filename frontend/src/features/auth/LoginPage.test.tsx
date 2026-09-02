@@ -122,6 +122,8 @@ describe("LoginPage LDAP", () => {
     expect(container.querySelector('img[src="/brand/bucketreef-mark-256.png"]')).toHaveClass("h-7", "w-7");
     expect(container.querySelector('img[src="/brand/bucketreef-mark-256.png"]')).toHaveAttribute("alt", "");
     expect(screen.getByRole("heading", { name: "S3-compatible object storage management" })).toBeInTheDocument();
+    expect(emailInput).not.toHaveAttribute("placeholder");
+    expect(passwordInput).not.toHaveAttribute("placeholder");
     expect(emailInput).toHaveAttribute("autocomplete", "username");
     expect(passwordInput).toHaveAttribute("autocomplete", "current-password");
   });
@@ -164,6 +166,7 @@ describe("LoginPage LDAP", () => {
     renderLoginPage();
 
     await user.click(await screen.findByRole("button", { name: "Directory" }));
+    expect(screen.getByLabelText("Password")).not.toHaveAttribute("placeholder");
     await user.type(screen.getByLabelText("Username"), "jane");
     await user.type(screen.getByLabelText("Password"), "secret-password");
     await user.click(screen.getByRole("button", { name: "Sign in with directory" }));
@@ -174,5 +177,23 @@ describe("LoginPage LDAP", () => {
     });
     expect(window.localStorage.getItem("token")).toBeNull();
     expect(window.localStorage.getItem("user")).toBeNull();
+  });
+
+  it("keeps the S3 secret key field visually empty", async () => {
+    const user = userEvent.setup();
+    mocks.fetchLoginSettings.mockResolvedValueOnce({
+      allow_login_access_keys: true,
+      allow_login_endpoint_list: false,
+      allow_login_custom_endpoint: false,
+      default_endpoint_url: null,
+      endpoints: [],
+      login_logo_url: null,
+    });
+    renderLoginPage();
+
+    await user.click(await screen.findByRole("button", { name: "S3 access keys" }));
+
+    expect(screen.getByLabelText("Secret key")).not.toHaveAttribute("placeholder");
+    expect(screen.getByLabelText("Secret key")).toHaveAttribute("autocomplete", "current-password");
   });
 });

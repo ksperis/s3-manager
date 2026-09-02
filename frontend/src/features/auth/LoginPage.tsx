@@ -559,7 +559,6 @@ export default function LoginPage() {
                     value={ldapPassword}
                     onChange={(e) => setLdapPassword(e.target.value)}
                     className={inputClasses}
-                    placeholder="••••••••"
                     required
                   />
                 </div>
@@ -581,7 +580,6 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className={inputClasses}
-                    placeholder="admin@example.com"
                     required
                   />
                 </div>
@@ -594,7 +592,6 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className={inputClasses}
-                    placeholder="••••••••"
                     required
                   />
                 </div>
@@ -629,7 +626,6 @@ export default function LoginPage() {
                     value={secretKey}
                     onChange={(e) => setSecretKey(e.target.value)}
                     className={inputClasses}
-                    placeholder="••••••••"
                     required
                   />
                 </div>
