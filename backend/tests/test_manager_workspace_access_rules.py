@@ -1018,6 +1018,7 @@ def test_manager_context_exposes_managed_private_access_without_ceph_key_invento
 ):
     settings = AppSettings()
     settings.general.manager_ceph_s3_user_keys_enabled = True
+    settings.general.managed_private_connection_provisioning_enabled = True
     monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
     monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
 
@@ -1035,12 +1036,33 @@ def test_manager_context_exposes_managed_private_access_without_ceph_key_invento
     assert payload.manager_private_access_enabled is True
 
 
+def test_manager_context_hides_managed_private_access_when_global_flag_is_disabled(
+    db_session,
+    monkeypatch,
+):
+    settings = AppSettings()
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
+
+    endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-managed-global-off")
+    user, account = _build_linked_s3_user_context(
+        db_session,
+        endpoint=endpoint,
+        email="manager-managed-global-off@example.com",
+        managed_private_access=True,
+    )
+
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.manager_private_access_enabled is False
+
+
 def test_manager_context_does_not_infer_managed_private_access_from_ceph_key_inventory(
     db_session,
     monkeypatch,
 ):
     settings = AppSettings()
     settings.general.manager_ceph_s3_user_keys_enabled = True
+    settings.general.managed_private_connection_provisioning_enabled = True
     monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
     monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
 

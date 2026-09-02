@@ -38,6 +38,7 @@ function buildSettings(): AppSettings {
       bucket_usage_stats_enabled: true,
       bucket_quota_management_enabled: true,
       manager_ceph_s3_user_keys_enabled: false,
+      managed_private_connection_provisioning_enabled: false,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,
@@ -103,6 +104,24 @@ describe("ManagerSettingsPage", () => {
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
     expect(payload.general.manager_ceph_s3_user_keys_enabled).toBe(true);
+  });
+
+  it("saves managed private connection provisioning from an experimental default-off toggle", async () => {
+    const user = userEvent.setup();
+    render(<ManagerSettingsPage />);
+
+    const toggle = (await screen.findByLabelText("Provision managed private connections")) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.general.managed_private_connection_provisioning_enabled).toBe(true);
+    expect(screen.getAllByText("Experimental")).toHaveLength(2);
   });
 
   it("saves RGW metrics independently from bucket composition statistics", async () => {
@@ -199,6 +218,25 @@ describe("ManagerSettingsPage", () => {
     });
   });
 
+  it("resets managed private connection provisioning from defaults", async () => {
+    const user = userEvent.setup();
+    const current = buildSettings();
+    current.general.managed_private_connection_provisioning_enabled = true;
+    fetchAppSettingsMock.mockResolvedValue(current);
+
+    render(<ManagerSettingsPage />);
+
+    const toggle = (await screen.findByLabelText("Provision managed private connections")) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+    await user.click(screen.getByRole("button", { name: "Load defaults" }));
+
+    await waitFor(() => {
+      expect(toggle.checked).toBe(false);
+    });
+  });
+
   it("resets RGW metrics and bucket composition from their independent defaults", async () => {
     const user = userEvent.setup();
     const current = buildSettings();
@@ -269,7 +307,7 @@ describe("ManagerSettingsPage", () => {
     render(<ManagerSettingsPage />);
 
     await screen.findByLabelText("Bucket migration tool");
-    expect(screen.getByText("Experimental")).toBeInTheDocument();
+    expect(screen.getAllByText("Experimental")).toHaveLength(2);
   });
 
   it("groups global usage and Manager tools without workspace policy wording", async () => {
@@ -286,6 +324,7 @@ describe("ManagerSettingsPage", () => {
       "RGW traffic and usage metrics",
       "Bucket quota management",
       "Ceph S3 User access-key management",
+      "Provision managed private connections",
       "Bucket migration tool",
       "Bucket compare tool",
       "Bucket integrity check tool",

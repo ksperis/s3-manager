@@ -1388,12 +1388,18 @@ export default function GroupsPage() {
                       title: "Provision managed private connections",
                       description: "Allow server-side IAM or RGW credential provisioning without revealing generated secrets.",
                       checked: Boolean(form.can_provision_managed_private_connections),
+                      disabled: !generalSettings.managed_private_connection_provisioning_enabled,
                       onChange: (value) =>
                         setForm((current) => ({
                           ...current,
                           can_provision_managed_private_connections: value,
                         })),
                       ariaLabel: "Allow managed private connection provisioning",
+                      badge: {
+                        visible: !generalSettings.managed_private_connection_provisioning_enabled,
+                        label: "Disabled globally",
+                        tone: "neutral",
+                      },
                     },
                   ]}
                 />

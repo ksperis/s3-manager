@@ -33,6 +33,7 @@ const generalSettingsState = {
   bucket_integrity_check_enabled: true,
   bucket_quota_management_enabled: true,
   manager_ceph_s3_user_keys_enabled: true,
+  managed_private_connection_provisioning_enabled: true,
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
@@ -82,6 +83,7 @@ describe("UsersPage modal tabs", () => {
     window.history.replaceState({}, "", "/admin/users");
 
     generalSettingsState.portal_enabled = false;
+    generalSettingsState.managed_private_connection_provisioning_enabled = true;
     setSessionUserCache({ id: 1, role: "ui_superadmin" });
 
     listUsersMock.mockResolvedValue({
@@ -812,6 +814,45 @@ describe("UsersPage modal tabs", () => {
           bucket_purge: false,
           feature_rules: false,
         },
+      })
+    );
+  });
+
+  it("preserves a managed private provisioning grant while the feature is disabled globally", async () => {
+    generalSettingsState.managed_private_connection_provisioning_enabled = false;
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 10,
+          email: "managed.disabled@example.com",
+          role: "ui_user",
+          can_provision_managed_private_connections: true,
+          account_links: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Manager" }));
+
+    const toggle = screen.getByRole("checkbox", {
+      name: "Allow managed private connection provisioning",
+    });
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeDisabled();
+    expect(within(toggle.parentElement?.parentElement as HTMLElement).getByText("Disabled globally")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updateUserMock).toHaveBeenCalledTimes(1));
+    expect(updateUserMock).toHaveBeenCalledWith(
+      10,
+      expect.objectContaining({
+        can_provision_managed_private_connections: true,
       })
     );
   });

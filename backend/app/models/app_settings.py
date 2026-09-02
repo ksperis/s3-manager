@@ -74,6 +74,7 @@ class GeneralSettings(ApiModel):
     bucket_purge_enabled: bool = False
     bucket_quota_management_enabled: bool = True
     manager_ceph_s3_user_keys_enabled: bool = True
+    managed_private_connection_provisioning_enabled: bool = False
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False

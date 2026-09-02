@@ -9,6 +9,7 @@ import {
   type ManagerToolKey,
   normalizeManagerToolAccess,
 } from "./adminAccessConfig";
+import type { UiTone } from "../../components/ui/styles";
 
 const adminModalSettingsGroupClass =
   "rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-4";
@@ -23,6 +24,11 @@ type WorkspaceAccessToggle = {
   description: string;
   ariaLabel: string;
   onChange: (value: boolean) => void;
+  badge?: {
+    visible?: boolean;
+    label: string;
+    tone?: UiTone;
+  };
 };
 
 export function AdminAccessToggleSection({
@@ -51,6 +57,7 @@ export function AdminAccessToggleSection({
                   disabled={disabled}
                   onChange={item.onChange}
                   ariaLabel={item.ariaLabel}
+                  badge={item.badge}
                 />
               }
             />

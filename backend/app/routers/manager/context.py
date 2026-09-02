@@ -184,13 +184,21 @@ def _manager_private_access_enabled(
         return False
     if resolved_access is None:
         raise RuntimeError("UI user effective access was not resolved")
+    managed_private_access = ManagedPrivateAccessService(db)
     if getattr(account, "s3_user_id", None) is not None:
-        return ManagedPrivateAccessService(db).rgw_user_provisioning_available(actor, account)
+        return managed_private_access.rgw_user_provisioning_available(
+            actor,
+            account,
+            resolved=resolved_access,
+        )
 
     capabilities = getattr(account, "manager_capabilities", None)
     endpoint = getattr(account, "storage_endpoint", None)
     return bool(
-        resolved_access.can_provision_managed_private_connections
+        managed_private_access.managed_provisioning_allowed(
+            actor,
+            resolved=resolved_access,
+        )
         and capabilities
         and capabilities.can_manage_iam
         and (endpoint is None or resolve_feature_flags(endpoint).iam_enabled)

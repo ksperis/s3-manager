@@ -67,6 +67,7 @@ export type GeneralSettings = {
   bucket_usage_stats_enabled: boolean;
   bucket_quota_management_enabled: boolean;
   manager_ceph_s3_user_keys_enabled: boolean;
+  managed_private_connection_provisioning_enabled: boolean;
   allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;
   allow_login_custom_endpoint: boolean;

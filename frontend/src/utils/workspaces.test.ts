@@ -23,6 +23,7 @@ const baseSettings: GeneralSettings = {
   bucket_integrity_check_enabled: false,
   bucket_quota_management_enabled: true,
   manager_ceph_s3_user_keys_enabled: false,
+  managed_private_connection_provisioning_enabled: false,
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,

@@ -17,8 +17,9 @@ from app.models.managed_private_access import (
 )
 from app.models.s3_connection import CredentialOwnerType
 from app.core.sensitive_data import sanitize_error_detail, sanitized_error_log_detail
+from app.services import app_settings_service
 from app.services.audit_service import AuditService
-from app.services.effective_access_service import EffectiveAccessService
+from app.services.effective_access_service import EffectiveAccessService, ResolvedUserAccess
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import S3ConnectionsService
@@ -395,23 +396,44 @@ class ManagedPrivateAccessService:
             return "account", account_id
         return None
 
-    def managed_provisioning_allowed(self, user: User) -> bool:
-        return self.access.resolve_user(user).can_provision_managed_private_connections
+    def managed_provisioning_allowed(
+        self,
+        user: User,
+        *,
+        resolved: ResolvedUserAccess | None = None,
+    ) -> bool:
+        if not (
+            app_settings_service.load_app_settings()
+            .general.managed_private_connection_provisioning_enabled
+        ):
+            return False
+        effective = resolved or self.access.resolve_user(user)
+        return effective.can_provision_managed_private_connections
 
     def rgw_user_provisioning_available(
         self,
         user: User,
         account: S3ExecutionTarget,
+        *,
+        resolved: ResolvedUserAccess | None = None,
     ) -> bool:
         try:
-            self._ensure_managed_private_connection_provisioning_allowed(user)
+            self._ensure_managed_private_connection_provisioning_allowed(
+                user,
+                resolved=resolved,
+            )
             self._resolve_rgw_user_source(user, account)
         except ManagedPrivateAccessError:
             return False
         return True
 
-    def _ensure_managed_private_connection_provisioning_allowed(self, user: User) -> None:
-        if not self.managed_provisioning_allowed(user):
+    def _ensure_managed_private_connection_provisioning_allowed(
+        self,
+        user: User,
+        *,
+        resolved: ResolvedUserAccess | None = None,
+    ) -> None:
+        if not self.managed_provisioning_allowed(user, resolved=resolved):
             raise ManagedPrivateAccessForbidden(
                 "Managed private S3 connection provisioning is not allowed for this user"
             )

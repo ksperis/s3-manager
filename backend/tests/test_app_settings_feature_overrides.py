@@ -209,6 +209,11 @@ def test_manager_ceph_s3_user_keys_flag_default_enabled():
     assert settings.general.manager_ceph_s3_user_keys_enabled is True
 
 
+def test_managed_private_connection_provisioning_flag_default_disabled():
+    settings = AppSettings()
+    assert settings.general.managed_private_connection_provisioning_enabled is False
+
+
 def test_legacy_app_settings_payload_gets_restrictive_identity_security_defaults():
     settings = AppSettings.model_validate({"general": {"manager_enabled": False}})
 
@@ -324,6 +329,27 @@ def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path, db_sessi
     assert saved.general.manager_ceph_s3_user_keys_enabled is True
     assert loaded.general.manager_ceph_s3_user_keys_enabled is True
     assert raw["general"]["manager_ceph_s3_user_keys_enabled"] is True
+
+
+def test_managed_private_connection_provisioning_flag_persists(monkeypatch, tmp_path, db_session):
+    settings_path = tmp_path / "app_settings.json"
+    monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
+    _use_settings_db(monkeypatch, db_session)
+    monkeypatch.setattr(
+        app_settings_service,
+        "get_settings",
+        lambda: _runtime_settings(),
+    )
+
+    payload = AppSettings()
+    payload.general.managed_private_connection_provisioning_enabled = True
+    saved = app_settings_service.save_app_settings(payload)
+    loaded = app_settings_service.load_app_settings()
+    raw = _raw_db_settings(db_session)
+
+    assert saved.general.managed_private_connection_provisioning_enabled is True
+    assert loaded.general.managed_private_connection_provisioning_enabled is True
+    assert raw["general"]["managed_private_connection_provisioning_enabled"] is True
 
 
 def test_manager_rgw_usage_metrics_flag_persists(monkeypatch, tmp_path, db_session):

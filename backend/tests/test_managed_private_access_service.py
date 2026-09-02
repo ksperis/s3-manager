@@ -27,6 +27,7 @@ from app.db import (
     UserUiGroup,
 )
 from app.models.iam import AccessKey, IAMGroup, IAMUser
+from app.models.app_settings import AppSettings
 from app.models.managed_private_access import (
     ManagedIAMPrivateAccessRequest,
     ManagedRGWUserPrivateAccessRequest,
@@ -40,6 +41,7 @@ from app.services.managed_private_access_service import (
     ManagedPrivateAccessForbidden,
     ManagedPrivateAccessService,
 )
+from app.services import app_settings_service
 from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_execution_context import S3ExecutionContext
 
@@ -98,6 +100,13 @@ class FakeIAM:
 
     def delete_user(self, username):
         self.deleted_users.append(username)
+
+
+@pytest.fixture(autouse=True)
+def _enable_managed_private_connection_provisioning(monkeypatch):
+    settings = AppSettings()
+    settings.general.managed_private_connection_provisioning_enabled = True
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
 
 def _user(db_session, *, email="owner@example.test", managed=True):
@@ -342,6 +351,41 @@ def test_managed_connection_permission_is_required_before_remote_calls(db_sessio
         lambda _account: (_ for _ in ()).throw(AssertionError("IAM must not be contacted")),
     )
 
+    with pytest.raises(ManagedPrivateAccessForbidden, match="not allowed"):
+        service.provision_iam(user=user, account=account, payload=_payload())
+
+
+@pytest.mark.parametrize("grant_source", ["direct", "group"])
+def test_global_flag_is_required_before_remote_calls(
+    db_session,
+    monkeypatch,
+    grant_source,
+):
+    settings = AppSettings()
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
+    user = _user(
+        db_session,
+        email=f"private-global-disabled-{grant_source}@example.test",
+        managed=grant_source == "direct",
+    )
+    if grant_source == "group":
+        group = UiGroup(
+            name="private-global-disabled",
+            can_provision_managed_private_connections=True,
+        )
+        db_session.add(group)
+        db_session.flush()
+        db_session.add(UserUiGroup(user_id=user.id, group_id=group.id))
+        db_session.commit()
+    account = _account(db_session, user, _endpoint(db_session))
+    service = ManagedPrivateAccessService(db_session)
+    monkeypatch.setattr(
+        service,
+        "_iam_service_for_account",
+        lambda _account: (_ for _ in ()).throw(AssertionError("IAM must not be contacted")),
+    )
+
+    assert service.managed_provisioning_allowed(user) is False
     with pytest.raises(ManagedPrivateAccessForbidden, match="not allowed"):
         service.provision_iam(user=user, account=account, payload=_payload())
 
@@ -665,6 +709,8 @@ def test_managed_iam_connection_delete_cleans_remote_resources_before_local_rows
 
     user.can_provision_managed_private_connections = False
     db_session.commit()
+    settings = AppSettings()
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     deleted = service.delete_owned_connection(user=user, connection_id=result.connection.id)
 

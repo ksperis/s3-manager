@@ -124,6 +124,20 @@ export default function ManagerSettingsPage() {
     );
   };
 
+  const handleToggleManagedPrivateConnectionProvisioning = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              managed_private_connection_provisioning_enabled: value,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleToggleBucketQuotaManagement = (value: boolean) => {
     setSettings((prev) =>
       prev
@@ -226,6 +240,8 @@ export default function ManagerSettingsPage() {
                     bucket_usage_stats_enabled: defaults.general.bucket_usage_stats_enabled,
                     bucket_quota_management_enabled: defaults.general.bucket_quota_management_enabled,
                     manager_ceph_s3_user_keys_enabled: defaults.general.manager_ceph_s3_user_keys_enabled,
+                    managed_private_connection_provisioning_enabled:
+                      defaults.general.managed_private_connection_provisioning_enabled,
                   },
                 }
               : defaults
@@ -330,6 +346,18 @@ export default function ManagerSettingsPage() {
                       checked={Boolean(settings.general.manager_ceph_s3_user_keys_enabled)}
                       onChange={(value) => handleToggleManagerCephS3UserKeys(value)}
                       ariaLabel="Ceph S3 User access-key management"
+                    />
+                  }
+                />
+                <SettingsItem
+                  title="Provision managed private connections"
+                  description="Enables server-side IAM or RGW credential provisioning for eligible UI users without revealing generated secrets."
+                  action={
+                    <SettingsToggleAction
+                      checked={Boolean(settings.general.managed_private_connection_provisioning_enabled)}
+                      onChange={(value) => handleToggleManagedPrivateConnectionProvisioning(value)}
+                      ariaLabel="Provision managed private connections"
+                      badge={{ visible: true, label: "Experimental", tone: "warning" }}
                     />
                   }
                 />
