@@ -346,40 +346,32 @@ def _match_cors_param_rules_all(
     )
 
 
-def _sse_rule_matches_param(entry: dict, rule: CephAdminBucketFilterRule) -> bool:
+def _sse_rule_matches_param(
+    entry: dict,
+    rule: CephAdminBucketFilterRule,
+    _force_presence_positive: bool = False,
+) -> bool:
     values = extract_sse_rule_values(entry, rule.param or "")
     return _match_text_candidates(values, (rule.op or "").strip().lower(), rule.value)
 
 
 def _match_sse_param_rule_individual(rule: CephAdminBucketFilterRule, configuration: object) -> bool:
-    entries = encryption_rule_entries(configuration)
-    matched_any = any(_sse_rule_matches_param(item, rule) for item in entries)
-    return matched_any if _feature_param_quantifier(rule) == "any" else (not matched_any)
+    return _match_grouped_entry_rule_individual(
+        rule,
+        encryption_rule_entries(configuration),
+        _sse_rule_matches_param,
+    )
 
 
 def _match_sse_param_rules_all(
     rules: list[CephAdminBucketFilterRule],
     configuration: object,
 ) -> bool:
-    entries = encryption_rule_entries(configuration)
-    positive_rules: list[CephAdminBucketFilterRule] = []
-    forbidden_rules: list[CephAdminBucketFilterRule] = []
-    for rule in rules:
-        if _feature_param_quantifier(rule) == "none":
-            forbidden_rules.append(rule)
-        else:
-            positive_rules.append(rule)
-
-    positive_ok = True
-    if positive_rules:
-        positive_ok = any(all(_sse_rule_matches_param(item, rule) for rule in positive_rules) for item in entries)
-
-    forbidden_ok = True
-    for rule in forbidden_rules:
-        if any(_sse_rule_matches_param(item, rule) for item in entries):
-            forbidden_ok = False
-            break
-    return positive_ok and forbidden_ok
+    return _match_grouped_entry_rules_all(
+        rules,
+        encryption_rule_entries(configuration),
+        _sse_rule_matches_param,
+    )
 
 
 def _notification_rule_matches_param(

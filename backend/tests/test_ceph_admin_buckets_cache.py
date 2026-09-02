@@ -2523,6 +2523,51 @@ def test_ceph_admin_bucket_listing_sse_combined_filters_match_same_rule(monkeypa
     assert [item.name for item in response.items] == ["bucket-b"]
 
 
+def test_ceph_admin_bucket_listing_sse_filter_supports_quantifier_none(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=210, payload=payload)
+
+    def fake_get_bucket_encryption(self, name: str, account):  # noqa: ARG001
+        algorithm = "aws:kms" if name == "bucket-a" else "AES256"
+        return BucketEncryptionConfiguration(
+            rules=[{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": algorithm}}]
+        )
+
+    monkeypatch.setattr(BucketConfigurationService, "get_bucket_encryption", fake_get_bucket_encryption)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "server_side_encryption",
+                    "param": "sse_algorithm",
+                    "op": "eq",
+                    "value": "aws:kms",
+                    "quantifier": "none",
+                }
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-b"]
+
+
 def test_ceph_admin_bucket_listing_includes_audit_feature_column_details(monkeypatch: pytest.MonkeyPatch):
     payload = [{"name": "bucket-a", "owner": "owner-a"}]
     ctx, _ = _build_ctx(endpoint_id=208, payload=payload)
