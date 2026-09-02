@@ -131,10 +131,10 @@ def delete_bucket(
     )
     if response.status_code == status.HTTP_200_OK:
         tag_service = BucketUiTagsService(db)
-        tag_service.remove_all_namespaces_for_bucket(
-            PhysicalBucketTarget.create(ctx.endpoint.id, tenant, bucket)
-        )
-        tag_service.commit()
+        with tag_service.transaction():
+            tag_service.remove_all_namespaces_for_bucket(
+                PhysicalBucketTarget.create(ctx.endpoint.id, tenant, bucket)
+            )
     return response
 
 

@@ -198,6 +198,29 @@ def test_bucket_delete_returns_rgw_error_status_and_keeps_cache(monkeypatch):
     assert audit.calls[-1]["status"] == "failed"
 
 
+def test_successful_bucket_delete_cleans_ui_tags(monkeypatch, db_session):
+    admin = FakeAdmin()
+    ctx, audit = _context(admin)
+    invalidated: list[int] = []
+    monkeypatch.setattr(bucket_admin_ops, "invalidate_all_admin_ops_caches", invalidated.append)
+
+    response = bucket_admin_ops.delete_bucket(
+        "bucket-a",
+        CephAdminBucketDeleteRequest(
+            confirmation="PURGE AND DELETE BUCKET tenant-a/bucket-a",
+            purge_objects=True,
+        ),
+        tenant="tenant-a",
+        ctx=ctx,
+        db=db_session,
+    )
+
+    assert response.status_code == 200
+    assert _body(response)["success"] is True
+    assert invalidated == [91]
+    assert audit.calls[-1]["status"] == "success"
+
+
 def test_bucket_delete_requires_purge_before_bypass_gc():
     with pytest.raises(ValidationError, match="bypass_gc requires purge_objects"):
         CephAdminBucketDeleteRequest(

@@ -168,14 +168,14 @@ def delete_bucket_config(
     endpoint_id = int(getattr(account, "storage_endpoint_id", 0) or 0)
     if endpoint_id > 0:
         tag_service = BucketUiTagsService(audit_service.db)
-        tag_service.remove_all_namespaces_for_bucket(
-            PhysicalBucketTarget.create(
-                endpoint_id,
-                resolve_storage_ops_context_tenant(account),
-                bucket_name,
+        with tag_service.transaction():
+            tag_service.remove_all_namespaces_for_bucket(
+                PhysicalBucketTarget.create(
+                    endpoint_id,
+                    resolve_storage_ops_context_tenant(account),
+                    bucket_name,
+                )
             )
-        )
-        tag_service.commit()
     return response
 
 
