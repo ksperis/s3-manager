@@ -4,6 +4,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Outlet } from "react-router-dom";
+import AccountControlIcon from "../../components/AccountControlIcon";
 import Layout from "../../components/Layout";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -196,17 +197,6 @@ function BrowserShell() {
         )}
       </Layout>
     </BrowserSidebarSlotContext.Provider>
-  );
-}
-
-function AccountControlIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <rect x="3" y="5" width="18" height="14" rx="2.5" strokeWidth={1.5} />
-      <path strokeLinecap="round" strokeWidth={1.5} d="M3 10h18" />
-      <circle cx="8.5" cy="14.2" r="1.1" strokeWidth={1.4} />
-      <path strokeLinecap="round" strokeWidth={1.5} d="M12 14.2h6" />
-    </svg>
   );
 }
 
