@@ -3,11 +3,11 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models.ceph_admin import CephAdminBucketFilterRule
+from app.models.bucket_filter import BucketFilterRule
 
 
 def test_feature_param_rule_defaults_to_any_quantifier():
-    rule = CephAdminBucketFilterRule.model_validate(
+    rule = BucketFilterRule.model_validate(
         {
             "feature": "lifecycle_rules",
             "param": "lifecycle_abort_multipart_present",
@@ -19,7 +19,7 @@ def test_feature_param_rule_defaults_to_any_quantifier():
 
 
 def test_feature_param_rule_preserves_none_quantifier():
-    rule = CephAdminBucketFilterRule.model_validate(
+    rule = BucketFilterRule.model_validate(
         {
             "feature": "notifications",
             "param": "notification_event",
@@ -74,4 +74,4 @@ def test_feature_param_rule_preserves_none_quantifier():
 )
 def test_feature_param_rule_rejects_contract_violations(payload, message):
     with pytest.raises(ValidationError, match=message.replace(".", r"\.")):
-        CephAdminBucketFilterRule.model_validate(payload)
+        BucketFilterRule.model_validate(payload)

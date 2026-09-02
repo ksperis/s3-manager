@@ -2,11 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.models.ceph_admin import (
-    CephAdminBucketFilterQuery,
-    CephAdminBucketFilterRule,
-    CephAdminBucketSummary,
-)
+from app.models.bucket_filter import BucketFilterQuery, BucketFilterRule
+from app.models.ceph_admin import CephAdminBucketSummary
 from app.services.bucket_listing_owner_metadata import (
     OWNER_DETAIL_FIELDS,
     normalize_owner_kind,
@@ -28,7 +25,7 @@ from app.utils.usage_stats import compute_usage_ratio_percent
 EXPENSIVE_FIELD_RULES = {"tag"} | OWNER_DETAIL_FIELDS
 
 
-def extract_name_candidates(query: CephAdminBucketFilterQuery | None) -> list[str] | None:
+def extract_name_candidates(query: BucketFilterQuery | None) -> list[str] | None:
     if not query:
         return None
     candidates: set[str] | None = None
@@ -88,7 +85,7 @@ def _match_tag_expression(tag_key: str, tag_value: str, expression: str, op: str
     return key == expr or value == expr
 
 
-def _match_tag_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
+def _match_tag_rule(bucket: CephAdminBucketSummary, rule: BucketFilterRule) -> bool:
     tags = bucket.tags or []
     if not tags:
         return False
@@ -119,7 +116,7 @@ def _match_tag_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterR
     return matched
 
 
-def match_bucket_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
+def match_bucket_field_rule(bucket: CephAdminBucketSummary, rule: BucketFilterRule) -> bool:
     field = rule.field
     op = rule.op
     if not field or not op:
@@ -185,7 +182,7 @@ def match_bucket_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucke
     )
 
 
-def match_bucket_feature_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
+def match_bucket_feature_rule(bucket: CephAdminBucketSummary, rule: BucketFilterRule) -> bool:
     feature = rule.feature
     desired = (rule.state or "").strip().lower()
     if not feature or not desired:
@@ -228,5 +225,5 @@ def match_bucket_feature_rule(bucket: CephAdminBucketSummary, rule: CephAdminBuc
     return False
 
 
-def request_requires_bucket_stats(query: CephAdminBucketFilterQuery | None, sort_by: str) -> bool:
+def request_requires_bucket_stats(query: BucketFilterQuery | None, sort_by: str) -> bool:
     return sort_by in {"used_bytes", "object_count"} or filter_requires_stats(query)

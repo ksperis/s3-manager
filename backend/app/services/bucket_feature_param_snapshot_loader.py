@@ -5,7 +5,8 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
-from app.models.ceph_admin import CephAdminBucketFilterRule, CephAdminBucketSummary
+from app.models.bucket_filter import BucketFilterRule
+from app.models.ceph_admin import CephAdminBucketSummary
 from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.bucket_feature_param_matching import (
     FEATURE_PARAM_UNAVAILABLE,
@@ -78,7 +79,7 @@ def _load_feature_param_snapshot_for_bucket(
 
 def load_bucket_feature_param_snapshots(
     buckets: list[CephAdminBucketSummary],
-    rules: list[CephAdminBucketFilterRule],
+    rules: list[BucketFilterRule],
     service: BucketConfigurationService,
     account: S3ExecutionTarget,
     *,

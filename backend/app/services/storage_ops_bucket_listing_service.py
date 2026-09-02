@@ -8,7 +8,7 @@ import json
 import logging
 from typing import Callable, Iterable
 
-from app.models.ceph_admin import CephAdminBucketFilterQuery
+from app.models.bucket_filter import BucketFilterQuery
 from app.models.execution_context import ExecutionContext
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary, StorageOpsContextKind
 from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
@@ -130,7 +130,7 @@ def build_storage_ops_context_refs(contexts: Iterable[ExecutionContext]) -> list
 
 
 def _split_rules(
-    parsed_filter: CephAdminBucketFilterQuery | None,
+    parsed_filter: BucketFilterQuery | None,
 ) -> tuple[list, list, list, str]:
     if not parsed_filter or not parsed_filter.rules:
         return [], [], [], "all"
@@ -158,7 +158,7 @@ def _context_probe_bucket(ref: StorageOpsContextRef) -> StorageOpsBucketSummary:
 
 def _filter_context_refs_by_advanced_filter(
     refs: list[StorageOpsContextRef],
-    parsed_filter: CephAdminBucketFilterQuery | None,
+    parsed_filter: BucketFilterQuery | None,
 ) -> list[StorageOpsContextRef]:
     if not refs or not parsed_filter or not parsed_filter.rules:
         return refs
@@ -192,8 +192,8 @@ def _filter_context_refs_by_advanced_filter(
 
 
 def _build_cheap_field_prefilter(
-    parsed_filter: CephAdminBucketFilterQuery | None,
-) -> tuple[CephAdminBucketFilterQuery | None, bool]:
+    parsed_filter: BucketFilterQuery | None,
+) -> tuple[BucketFilterQuery | None, bool]:
     if not parsed_filter or not parsed_filter.rules:
         return None, False
 
@@ -234,7 +234,7 @@ def _match_storage_ops_field_rule(bucket: StorageOpsBucketSummary, rule) -> bool
 
 def apply_storage_ops_advanced_filter(
     buckets: list[StorageOpsBucketSummary],
-    parsed_filter: CephAdminBucketFilterQuery | None,
+    parsed_filter: BucketFilterQuery | None,
     *,
     service: BucketConfigurationService,
     account,
@@ -429,7 +429,7 @@ def list_storage_ops_context_buckets(
     needs_stats: bool,
     requested_features: set[str],
     include_tags: bool,
-    parsed_filter: CephAdminBucketFilterQuery | None,
+    parsed_filter: BucketFilterQuery | None,
     normalized_search: str,
     filter_requires_owner_name: bool,
     filter_requires_owner_suspended: bool,

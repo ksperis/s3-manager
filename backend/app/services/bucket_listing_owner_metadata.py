@@ -6,7 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Literal, Protocol
 
 from app.db import StorageEndpoint
-from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketSummary
+from app.models.bucket_filter import BucketFilterQuery
+from app.models.ceph_admin import CephAdminBucketSummary
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService, BucketOwnerUsage
 from app.services.listing_progress import (
     ListingProgressEmitter,
@@ -57,7 +58,7 @@ def normalize_owner_kind_scalar(raw: object) -> str | None:
 
 
 def determine_owner_name_lookup_scope(
-    query: CephAdminBucketFilterQuery | None,
+    query: BucketFilterQuery | None,
 ) -> Literal["any", "account", "user"]:
     if not query or query.match != "all":
         return "any"
@@ -213,14 +214,14 @@ def apply_owner_enrichment(
     return service.enrich_buckets(buckets, **kwargs)
 
 
-def _filter_requires_owner_metadata(query: CephAdminBucketFilterQuery | None) -> bool:
+def _filter_requires_owner_metadata(query: BucketFilterQuery | None) -> bool:
     if not query:
         return False
     owner_related_fields = {"owner", "owner_kind", "tenant"} | OWNER_DETAIL_FIELDS
     return any(rule.field in owner_related_fields for rule in query.rules)
 
 
-def _filter_requires_tenant_metadata(query: CephAdminBucketFilterQuery | None) -> bool:
+def _filter_requires_tenant_metadata(query: BucketFilterQuery | None) -> bool:
     if not query:
         return False
     if any(rule.field == "tenant" for rule in query.rules):
@@ -230,7 +231,7 @@ def _filter_requires_tenant_metadata(query: CephAdminBucketFilterQuery | None) -
     return False
 
 
-def filter_requires_owner_usage(query: CephAdminBucketFilterQuery | None) -> bool:
+def filter_requires_owner_usage(query: BucketFilterQuery | None) -> bool:
     if not query:
         return False
     owner_usage_fields = OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS
@@ -238,7 +239,7 @@ def filter_requires_owner_usage(query: CephAdminBucketFilterQuery | None) -> boo
 
 
 def request_requires_owner_metadata(
-    query: CephAdminBucketFilterQuery | None,
+    query: BucketFilterQuery | None,
     sort_by: str,
     simple_filter: str | None,
 ) -> bool:
@@ -246,7 +247,7 @@ def request_requires_owner_metadata(
 
 
 def request_requires_tenant_metadata(
-    query: CephAdminBucketFilterQuery | None,
+    query: BucketFilterQuery | None,
     sort_by: str,
     simple_filter: str | None,
 ) -> bool:

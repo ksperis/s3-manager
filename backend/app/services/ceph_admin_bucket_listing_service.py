@@ -7,11 +7,8 @@ import logging
 from typing import Any, Callable, Protocol
 
 from app.db import StorageEndpoint
-from app.models.ceph_admin import (
-    CephAdminBucketFilterRule,
-    CephAdminBucketSummary,
-    PaginatedCephAdminBucketsResponse,
-)
+from app.models.bucket_filter import BucketFilterRule
+from app.models.ceph_admin import CephAdminBucketSummary, PaginatedCephAdminBucketsResponse
 from app.services import rgw_bucket_metadata
 from app.services.bucket_listing_enrichment import enrich_buckets
 from app.services.bucket_listing_owner_metadata import (
@@ -358,7 +355,7 @@ class _CephAdminBucketSnapshotBuilder:
     @staticmethod
     def _partition_cheap_matches(
         results: list[CephAdminBucketSummary],
-        rules: list[CephAdminBucketFilterRule],
+        rules: list[BucketFilterRule],
     ) -> tuple[list[CephAdminBucketSummary], list[CephAdminBucketSummary]]:
         matched: list[CephAdminBucketSummary] = []
         unresolved: list[CephAdminBucketSummary] = []

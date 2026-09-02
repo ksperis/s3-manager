@@ -12,7 +12,8 @@ from fastapi import HTTPException
 
 from app.db import S3Account, S3Connection, User, UserRole
 from app.models.bucket import Bucket, BucketEncryptionConfiguration, BucketLifecycleConfig, BucketNotificationConfiguration
-from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketSummary
+from app.models.bucket_filter import BucketFilterQuery
+from app.models.ceph_admin import CephAdminBucketSummary
 from app.models.execution_context import ExecutionContextCapabilities
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
 from app.routers import dependencies
@@ -586,7 +587,7 @@ def test_storage_ops_feature_param_filter_prefilters_base_candidates(monkeypatch
             owner_name=None,
         ),
     ]
-    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+    parsed_filter = BucketFilterQuery.model_validate(
         {
             "match": "all",
             "rules": [
@@ -606,7 +607,7 @@ def test_storage_ops_feature_param_filter_prefilters_base_candidates(monkeypatch
 
 
 def test_storage_ops_advanced_filter_parsing_accepts_context_fields():
-    parsed = CephAdminBucketFilterQuery.model_validate(
+    parsed = BucketFilterQuery.model_validate(
         {
             "match": "all",
             "rules": [
@@ -666,7 +667,7 @@ def test_storage_ops_bucket_identity_is_endpoint_scoped_and_shared_across_contex
             owner_name=None,
         ),
     ]
-    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+    parsed_filter = BucketFilterQuery.model_validate(
         {"match": "all", "rules": [{"field": "bucket_identity", "op": "in", "value": [primary_identity]}]}
     )
 
@@ -705,7 +706,7 @@ def test_storage_ops_context_filters_match_context_kind_and_endpoint():
             owner_name=None,
         ),
     ]
-    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+    parsed_filter = BucketFilterQuery.model_validate(
         {
             "match": "all",
             "rules": [
@@ -749,7 +750,7 @@ def test_storage_ops_context_filters_match_context_id():
             owner_name=None,
         ),
     ]
-    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+    parsed_filter = BucketFilterQuery.model_validate(
         {
             "match": "all",
             "rules": [
@@ -791,7 +792,7 @@ def test_storage_ops_lifecycle_rule_status_filter_uses_context_lifecycle_lookup(
             owner_name=None,
         ),
     ]
-    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+    parsed_filter = BucketFilterQuery.model_validate(
         {
             "match": "all",
             "rules": [
@@ -848,7 +849,7 @@ def test_storage_ops_sse_detail_filter_uses_context_encryption_lookup():
             owner_name=None,
         ),
     ]
-    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+    parsed_filter = BucketFilterQuery.model_validate(
         {
             "match": "all",
             "rules": [
@@ -901,7 +902,7 @@ def test_storage_ops_context_filters_match_s3_user_kind():
             owner_name=None,
         ),
     ]
-    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+    parsed_filter = BucketFilterQuery.model_validate(
         {
             "match": "all",
             "rules": [
@@ -1247,7 +1248,7 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
 
 def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
     captured: dict[str, object] = {}
-    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+    parsed_filter = BucketFilterQuery.model_validate(
         {
             "match": "all",
             "rules": [
@@ -1323,7 +1324,7 @@ def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
 
 
 def test_storage_ops_notification_param_filter_uses_shared_snapshot_matching(monkeypatch):
-    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+    parsed_filter = BucketFilterQuery.model_validate(
         {
             "match": "all",
             "rules": [

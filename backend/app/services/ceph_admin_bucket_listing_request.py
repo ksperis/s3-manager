@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketFilterRule
+from app.models.bucket_filter import BucketFilterQuery, BucketFilterRule
 from app.services.bucket_listing_enrichment import BUCKET_FEATURE_INCLUDES, COLUMN_DETAIL_KEYS
 from app.services.bucket_listing_owner_metadata import (
     OWNER_QUOTA_FIELDS,
@@ -26,7 +26,7 @@ from app.services.ceph_admin_bucket_listing_cache import CephAdminBucketListCach
 @dataclass(frozen=True)
 class CephAdminBucketListingRequest:
     simple_filter: str | None
-    advanced_filter: CephAdminBucketFilterQuery | None
+    advanced_filter: BucketFilterQuery | None
     sort_by: str
     sort_dir: str
     with_stats: bool
@@ -122,12 +122,12 @@ class CephAdminBucketListingRequest:
 
 @dataclass(frozen=True)
 class CephAdminAdvancedFilterPlan:
-    query: CephAdminBucketFilterQuery
-    field_rules: list[CephAdminBucketFilterRule]
-    feature_state_rules: list[CephAdminBucketFilterRule]
-    feature_param_rules: list[CephAdminBucketFilterRule]
-    expensive_field_rules: list[CephAdminBucketFilterRule]
-    cheap_field_rules: list[CephAdminBucketFilterRule]
+    query: BucketFilterQuery
+    field_rules: list[BucketFilterRule]
+    feature_state_rules: list[BucketFilterRule]
+    feature_param_rules: list[BucketFilterRule]
+    expensive_field_rules: list[BucketFilterRule]
+    cheap_field_rules: list[BucketFilterRule]
     filter_features: set[str]
     requires_tag_lookup: bool
     requires_owner_name_lookup: bool
@@ -136,7 +136,7 @@ class CephAdminAdvancedFilterPlan:
     requires_owner_usage_lookup: bool
 
     @classmethod
-    def from_query(cls, query: CephAdminBucketFilterQuery) -> CephAdminAdvancedFilterPlan:
+    def from_query(cls, query: BucketFilterQuery) -> CephAdminAdvancedFilterPlan:
         field_rules = [rule for rule in query.rules if rule.field]
         feature_state_rules = [rule for rule in query.rules if rule.feature and rule.state is not None]
         feature_param_rules = [rule for rule in query.rules if rule.feature and rule.param is not None]

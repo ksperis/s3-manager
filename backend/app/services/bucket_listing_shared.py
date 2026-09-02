@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from app.core.sensitive_data import sanitize_error_detail
-from app.models.ceph_admin import CephAdminBucketFilterQuery
+from app.models.bucket_filter import BucketFilterQuery
 
 
 class BucketListingFilterError(ValueError):
@@ -85,7 +85,7 @@ def is_advanced_filter_stream_payload(raw_advanced_filter: str | None) -> bool:
     return "rules" in payload or "match" in payload
 
 
-def parse_filter(raw: str | None) -> tuple[str | None, CephAdminBucketFilterQuery | None]:
+def parse_filter(raw: str | None) -> tuple[str | None, BucketFilterQuery | None]:
     if raw is None:
         return None, None
     text = raw.strip()
@@ -98,13 +98,13 @@ def parse_filter(raw: str | None) -> tuple[str | None, CephAdminBucketFilterQuer
             return text, None
         if isinstance(parsed, dict) and ("rules" in parsed or "match" in parsed):
             try:
-                return None, CephAdminBucketFilterQuery.model_validate(parsed)
+                return None, BucketFilterQuery.model_validate(parsed)
             except ValidationError as exc:
                 raise BucketListingFilterError(str(sanitize_error_detail(str(exc)))) from exc
     return text, None
 
 
-def filter_requires_stats(query: CephAdminBucketFilterQuery | None) -> bool:
+def filter_requires_stats(query: BucketFilterQuery | None) -> bool:
     if not query:
         return False
     for rule in query.rules:

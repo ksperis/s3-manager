@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.models.ceph_admin import CephAdminBucketFilterQuery
+from app.models.bucket_filter import BucketFilterQuery
 from app.services.bucket_listing_enrichment import BUCKET_LISTING_INCLUDES
 from app.services.bucket_listing_owner_metadata import (
     OWNER_QUOTA_FIELDS,
@@ -17,7 +17,7 @@ from app.utils.normalize import normalize_text
 
 @dataclass(frozen=True)
 class StorageOpsBucketListingRequest:
-    parsed_filter: CephAdminBucketFilterQuery | None
+    parsed_filter: BucketFilterQuery | None
     normalized_search: str
     requested_features: set[str]
     include_tags: bool
@@ -32,7 +32,7 @@ class StorageOpsBucketListingRequest:
     wants_owner_quota_usage: bool
 
 
-def _collect_filter_fields(parsed_filter: CephAdminBucketFilterQuery | None) -> set[str]:
+def _collect_filter_fields(parsed_filter: BucketFilterQuery | None) -> set[str]:
     if not parsed_filter or not parsed_filter.rules:
         return set()
     return {rule.field for rule in parsed_filter.rules if rule.field}
@@ -47,7 +47,7 @@ def prepare_storage_ops_bucket_listing_request(
     sort_by: str,
 ) -> StorageOpsBucketListingRequest:
     simple_filter: str | None = None
-    parsed_filter: CephAdminBucketFilterQuery | None = None
+    parsed_filter: BucketFilterQuery | None = None
     if advanced_filter:
         simple_filter, parsed_filter = parse_filter(advanced_filter)
     elif filter:

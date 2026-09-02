@@ -9,7 +9,7 @@ from app.models.bucket import (
     BucketProperties,
     BucketWebsiteConfiguration,
 )
-from app.models.ceph_admin import CephAdminBucketFilterRule
+from app.models.bucket_filter import BucketFilterRule
 from app.services.bucket_feature_param_values import (
     encryption_rule_entries,
     extract_cors_rule_values,
@@ -194,16 +194,16 @@ def _extract_lifecycle_rule_types(rule_entry: dict) -> list[str]:
     return types
 
 
-def _feature_param_quantifier(rule: CephAdminBucketFilterRule) -> str:
+def _feature_param_quantifier(rule: BucketFilterRule) -> str:
     return "none" if (rule.quantifier or "").strip().lower() == "none" else "any"
 
 
 _GroupedEntry = TypeVar("_GroupedEntry")
-_GroupedEntryMatcher = Callable[[_GroupedEntry, CephAdminBucketFilterRule, bool], bool]
+_GroupedEntryMatcher = Callable[[_GroupedEntry, BucketFilterRule, bool], bool]
 
 
 def _match_grouped_entry_rule_individual(
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     entries: list[_GroupedEntry],
     matcher: _GroupedEntryMatcher[_GroupedEntry],
 ) -> bool:
@@ -215,12 +215,12 @@ def _match_grouped_entry_rule_individual(
 
 
 def _match_grouped_entry_rules_all(
-    rules: list[CephAdminBucketFilterRule],
+    rules: list[BucketFilterRule],
     entries: list[_GroupedEntry],
     matcher: _GroupedEntryMatcher[_GroupedEntry],
 ) -> bool:
-    positive_rules: list[CephAdminBucketFilterRule] = []
-    forbidden_rules: list[CephAdminBucketFilterRule] = []
+    positive_rules: list[BucketFilterRule] = []
+    forbidden_rules: list[BucketFilterRule] = []
     for rule in rules:
         op = (rule.op or "").strip().lower()
         if op == "has_not" or _feature_param_quantifier(rule) == "none":
@@ -243,7 +243,7 @@ def _match_grouped_entry_rules_all(
 
 def _lifecycle_rule_matches_param(
     lifecycle_rule: dict,
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     force_presence_positive: bool = False,
 ) -> bool:
     param = rule.param
@@ -280,7 +280,7 @@ def _lifecycle_rule_matches_param(
     return False
 
 
-def _match_lifecycle_param_rule_individual(rule: CephAdminBucketFilterRule, lifecycle_rules: list[dict]) -> bool:
+def _match_lifecycle_param_rule_individual(rule: BucketFilterRule, lifecycle_rules: list[dict]) -> bool:
     return _match_grouped_entry_rule_individual(
         rule,
         lifecycle_rules,
@@ -289,7 +289,7 @@ def _match_lifecycle_param_rule_individual(rule: CephAdminBucketFilterRule, life
 
 
 def _match_lifecycle_param_rules_all(
-    rules: list[CephAdminBucketFilterRule],
+    rules: list[BucketFilterRule],
     lifecycle_rules: list[dict],
 ) -> bool:
     return _match_grouped_entry_rules_all(
@@ -315,7 +315,7 @@ def _match_presence_values(values: list[str], op: str, right_raw: object) -> boo
 
 def _cors_rule_matches_param(
     entry: dict,
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     force_presence_positive: bool = False,
 ) -> bool:
     op = (rule.op or "").strip().lower()
@@ -327,7 +327,7 @@ def _cors_rule_matches_param(
     return _match_text_candidates(values, op, rule.value)
 
 
-def _match_cors_param_rule_individual(rule: CephAdminBucketFilterRule, cors_rules: list[dict]) -> bool:
+def _match_cors_param_rule_individual(rule: BucketFilterRule, cors_rules: list[dict]) -> bool:
     return _match_grouped_entry_rule_individual(
         rule,
         cors_rules,
@@ -336,7 +336,7 @@ def _match_cors_param_rule_individual(rule: CephAdminBucketFilterRule, cors_rule
 
 
 def _match_cors_param_rules_all(
-    rules: list[CephAdminBucketFilterRule],
+    rules: list[BucketFilterRule],
     cors_rules: list[dict],
 ) -> bool:
     return _match_grouped_entry_rules_all(
@@ -348,14 +348,14 @@ def _match_cors_param_rules_all(
 
 def _sse_rule_matches_param(
     entry: dict,
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     _force_presence_positive: bool = False,
 ) -> bool:
     values = extract_sse_rule_values(entry, rule.param or "")
     return _match_text_candidates(values, (rule.op or "").strip().lower(), rule.value)
 
 
-def _match_sse_param_rule_individual(rule: CephAdminBucketFilterRule, configuration: object) -> bool:
+def _match_sse_param_rule_individual(rule: BucketFilterRule, configuration: object) -> bool:
     return _match_grouped_entry_rule_individual(
         rule,
         encryption_rule_entries(configuration),
@@ -364,7 +364,7 @@ def _match_sse_param_rule_individual(rule: CephAdminBucketFilterRule, configurat
 
 
 def _match_sse_param_rules_all(
-    rules: list[CephAdminBucketFilterRule],
+    rules: list[BucketFilterRule],
     configuration: object,
 ) -> bool:
     return _match_grouped_entry_rules_all(
@@ -376,7 +376,7 @@ def _match_sse_param_rules_all(
 
 def _notification_rule_matches_param(
     notification_entry: tuple[str, dict],
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     force_presence_positive: bool = False,
 ) -> bool:
     entry_type, entry = notification_entry
@@ -401,7 +401,7 @@ def _notification_rule_matches_param(
     return False
 
 
-def _match_notification_param_rule_individual(rule: CephAdminBucketFilterRule, configuration: object) -> bool:
+def _match_notification_param_rule_individual(rule: BucketFilterRule, configuration: object) -> bool:
     entries = notification_rule_entries(configuration)
     return _match_grouped_entry_rule_individual(
         rule,
@@ -411,7 +411,7 @@ def _match_notification_param_rule_individual(rule: CephAdminBucketFilterRule, c
 
 
 def _match_notification_param_rules_all(
-    rules: list[CephAdminBucketFilterRule],
+    rules: list[BucketFilterRule],
     configuration: object,
 ) -> bool:
     entries = notification_rule_entries(configuration)
@@ -422,12 +422,12 @@ def _match_notification_param_rules_all(
     )
 
 
-def _apply_scalar_quantifier(rule: CephAdminBucketFilterRule, result: bool) -> bool:
+def _apply_scalar_quantifier(rule: BucketFilterRule, result: bool) -> bool:
     return result if _feature_param_quantifier(rule) == "any" else not result
 
 
 def _match_properties_param_rule(
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     source_data: object,
     op: str,
 ) -> bool:
@@ -465,7 +465,7 @@ def _match_properties_param_rule(
 
 
 def _match_logging_param_rule(
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     source_data: object,
     op: str,
 ) -> bool:
@@ -485,7 +485,7 @@ def _match_logging_param_rule(
 
 
 def _match_website_param_rule(
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     source_data: object,
     op: str,
 ) -> bool:
@@ -517,7 +517,7 @@ def _match_website_param_rule(
 
 
 def _match_policy_param_rule(
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     source_data: object,
     op: str,
 ) -> bool:
@@ -533,7 +533,7 @@ def _match_policy_param_rule(
 
 
 def _match_notification_scalar_param_rule(
-    rule: CephAdminBucketFilterRule,
+    rule: BucketFilterRule,
     source_data: object,
     op: str,
 ) -> bool:
@@ -543,7 +543,7 @@ def _match_notification_scalar_param_rule(
     return _apply_scalar_quantifier(rule, result)
 
 
-_SCALAR_SOURCE_MATCHERS: dict[str, Callable[[CephAdminBucketFilterRule, object, str], bool]] = {
+_SCALAR_SOURCE_MATCHERS: dict[str, Callable[[BucketFilterRule, object, str], bool]] = {
     "props": _match_properties_param_rule,
     "logging": _match_logging_param_rule,
     "website": _match_website_param_rule,
@@ -552,7 +552,7 @@ _SCALAR_SOURCE_MATCHERS: dict[str, Callable[[CephAdminBucketFilterRule, object, 
 }
 
 
-def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[str, object]) -> bool:
+def _match_feature_param_rule(rule: BucketFilterRule, snapshot: dict[str, object]) -> bool:
     param = rule.param
     op = (rule.op or "").strip().lower()
     if not rule.feature or not param or not op:
@@ -598,8 +598,8 @@ def _identity_group_source(source_data: object) -> object:
     return source_data
 
 
-_GroupedRulesMatcher = Callable[[list[CephAdminBucketFilterRule], Any], bool]
-_GroupedRuleMatcher = Callable[[CephAdminBucketFilterRule, Any], bool]
+_GroupedRulesMatcher = Callable[[list[BucketFilterRule], Any], bool]
+_GroupedRuleMatcher = Callable[[BucketFilterRule, Any], bool]
 _GroupedRuleSpec = tuple[
     str,
     Callable[[object], object],
@@ -635,7 +635,7 @@ _GROUPED_RULE_SPECS: dict[str, _GroupedRuleSpec] = {
 
 
 def _match_grouped_param_rules(
-    rules: list[CephAdminBucketFilterRule],
+    rules: list[BucketFilterRule],
     match_mode: str,
     source_data: object,
     normalize_source: Callable[[object], object],
@@ -653,16 +653,16 @@ def _match_grouped_param_rules(
 
 
 def match_bucket_feature_param_rules(
-    rules: list[CephAdminBucketFilterRule],
+    rules: list[BucketFilterRule],
     match_mode: str,
     snapshot: dict[str, object],
 ) -> bool:
     if not rules:
         return True
-    grouped_rules: dict[str, list[CephAdminBucketFilterRule]] = {
+    grouped_rules: dict[str, list[BucketFilterRule]] = {
         feature: [] for feature in _GROUPED_RULE_SPECS
     }
-    non_grouped_rules: list[CephAdminBucketFilterRule] = []
+    non_grouped_rules: list[BucketFilterRule] = []
     for rule in rules:
         feature = rule.feature or ""
         grouped_params = _GROUPED_PARAMS_BY_FEATURE.get(feature)
@@ -689,7 +689,7 @@ def match_bucket_feature_param_rules(
     return all(results) if match_mode == "all" else any(results)
 
 
-def required_feature_param_sources(rules: list[CephAdminBucketFilterRule]) -> set[str]:
+def required_feature_param_sources(rules: list[BucketFilterRule]) -> set[str]:
     required: set[str] = set()
     for rule in rules:
         if not rule.param:
