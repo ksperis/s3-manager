@@ -3,11 +3,15 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
 from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
-from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
+from app.models.tagging import (
+    OptionalTagDefinitionList,
+    RequiredTagDefinitionList,
+    TagDefinitionSummary,
+)
 from app.models.ui_group import UiGroupAvatar
 from app.models.user import UserAvatar
 
@@ -56,12 +60,7 @@ class S3UserCreate(ApiModel):
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
     storage_endpoint_id: int
-    tags: list[TagDefinitionInput] = Field(default_factory=list)
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def normalize_tags(cls, value: object) -> list[dict[str, str]]:
-        return validate_tag_definition_list(value, allow_none=False) or []
+    tags: RequiredTagDefinitionList = Field(default_factory=list)
 
 
 class S3UserImport(ApiModel):
@@ -79,15 +78,10 @@ class S3UserUpdate(ApiModel):
     quota_max_size_gb: Optional[float] = None
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
-    tags: Optional[list[TagDefinitionInput]] = None
+    tags: OptionalTagDefinitionList = None
     allow_bucket_quota_management: Optional[bool] = None
     allow_access_key_management: Optional[bool] = None
     allow_managed_private_connection_provisioning: Optional[bool] = None
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def normalize_optional_tags(cls, value: object) -> Optional[list[dict[str, str]]]:
-        return validate_tag_definition_list(value, allow_none=True)
 
 class S3UserAccessKey(ApiModel):
     access_key_id: str

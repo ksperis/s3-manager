@@ -7,7 +7,11 @@ from pydantic import Field, field_validator
 from app.models.account_access import AccountAccessGrant
 from app.models.base import ApiModel
 from app.models.pagination import PaginatedResponse
-from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
+from app.models.tagging import (
+    OptionalTagDefinitionList,
+    RequiredTagDefinitionList,
+    TagDefinitionSummary,
+)
 from app.models.ui_group import UiGroupAvatar
 from app.models.user import UserAvatar
 from app.utils.rgw_identifiers import is_rgw_account_id, normalize_rgw_identifier
@@ -58,12 +62,7 @@ class S3AccountCreate(ApiModel):
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
     storage_endpoint_id: int
-    tags: list[TagDefinitionInput] = Field(default_factory=list)
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def normalize_tags(cls, value: object) -> list[dict[str, str]]:
-        return validate_tag_definition_list(value, allow_none=False) or []
+    tags: RequiredTagDefinitionList = Field(default_factory=list)
 
 
 class S3AccountImport(ApiModel):
@@ -90,13 +89,8 @@ class S3AccountUpdate(ApiModel):
     name: Optional[str] = None
     email: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
-    tags: Optional[list[TagDefinitionInput]] = None
+    tags: OptionalTagDefinitionList = None
     allow_bucket_quota_management: Optional[bool] = None
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def normalize_optional_tags(cls, value: object) -> Optional[list[dict[str, str]]]:
-        return validate_tag_definition_list(value, allow_none=True)
 
     @field_validator("storage_endpoint_id", mode="before")
     @classmethod

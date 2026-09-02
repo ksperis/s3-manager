@@ -2,9 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import BeforeValidator, Field, field_validator
 
 from app.models.base import ApiModel
 from app.utils.tagging import (
@@ -45,9 +45,25 @@ class TagDefinitionInput(ApiModel):
         return normalize_tag_scope(value)
 
 
+def _normalize_required_tag_definitions(value: object) -> list[dict[str, str]]:
+    return normalize_tag_items_input(value, allow_none=False) or []
+
+
+def _normalize_optional_tag_definitions(
+    value: object,
+) -> list[dict[str, str]] | None:
+    return normalize_tag_items_input(value, allow_none=True)
+
+
+RequiredTagDefinitionList = Annotated[
+    list[TagDefinitionInput],
+    BeforeValidator(_normalize_required_tag_definitions),
+]
+OptionalTagDefinitionList = Annotated[
+    list[TagDefinitionInput] | None,
+    BeforeValidator(_normalize_optional_tag_definitions),
+]
+
+
 class TagDefinitionListResponse(ApiModel):
     items: list[TagDefinitionSummary] = Field(default_factory=list)
-
-
-def validate_tag_definition_list(value: object, *, allow_none: bool = False) -> Optional[list[dict[str, str]]]:
-    return normalize_tag_items_input(value, allow_none=allow_none)

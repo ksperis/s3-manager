@@ -8,7 +8,7 @@ from pydantic import ConfigDict, Field, field_validator
 
 from app.models.base import ApiModel
 from app.db import StorageProvider
-from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
+from app.models.tagging import RequiredTagDefinitionList, TagDefinitionSummary
 
 
 class StorageEndpointFeature(ApiModel):
@@ -126,12 +126,7 @@ class StorageEndpointUpdate(ApiModel):
 
 
 class StorageEndpointTagsUpdate(ApiModel):
-    tags: list[TagDefinitionInput] = Field(default_factory=list)
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def normalize_tags(cls, value: object) -> list[dict[str, str]]:
-        return validate_tag_definition_list(value, allow_none=False) or []
+    tags: RequiredTagDefinitionList = Field(default_factory=list)
 
 
 class StorageEndpoint(StorageEndpointBase):

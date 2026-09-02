@@ -8,10 +8,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
 from app.models.base import ApiModel
-from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
+from app.models.tagging import (
+    OptionalTagDefinitionList,
+    RequiredTagDefinitionList,
+    TagDefinitionSummary,
+)
 from app.models.s3_connection import (
     CredentialOwnerType,
     S3ConnectionCredentialsUpdate,
@@ -74,12 +78,7 @@ class S3ConnectionAdminCreate(ApiModel):
     secret_access_key: str
     force_path_style: bool = False
     verify_tls: bool = True
-    tags: list[TagDefinitionInput] = Field(default_factory=list)
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def normalize_tags(cls, value: object) -> list[dict[str, str]]:
-        return validate_tag_definition_list(value, allow_none=False) or []
+    tags: RequiredTagDefinitionList = Field(default_factory=list)
 
 
 class S3ConnectionAdminUpdate(ApiModel):
@@ -96,13 +95,8 @@ class S3ConnectionAdminUpdate(ApiModel):
     region: Optional[str] = None
     force_path_style: Optional[bool] = None
     verify_tls: Optional[bool] = None
-    tags: Optional[list[TagDefinitionInput]] = None
+    tags: OptionalTagDefinitionList = None
     credentials: Optional[S3ConnectionCredentialsUpdate] = None
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def normalize_optional_tags(cls, value: object) -> Optional[list[dict[str, str]]]:
-        return validate_tag_definition_list(value, allow_none=True)
 
 
 class PaginatedS3ConnectionsResponse(ApiModel):
