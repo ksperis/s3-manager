@@ -15,7 +15,7 @@ import {
   listIamUsers,
 } from "../../api/managerIamUsers";
 import { IAMGroup, listIamGroups } from "../../api/managerIamGroups";
-import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
+import { IamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
 import ListPageSection from "../../components/list/ListPageSection";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -32,9 +32,10 @@ import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
-import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
+import InlinePolicyDraftEditor from "./InlinePolicyDraftEditor";
 import ManagerToolbarSearch from "./ManagerToolbarSearch";
 import CreateManagedPrivateAccessModal from "./CreateManagedPrivateAccessModal";
+import { useInlinePolicyDraftEditor } from "./useInlinePolicyDraftEditor";
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
@@ -55,6 +56,23 @@ export default function ManagerUsersPage() {
   const [users, setUsers] = useState<IAMUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const {
+    inlineDraftMode,
+    inlineDraftName,
+    inlineDrafts,
+    inlinePolicyText,
+    selectedInlineDraftName,
+    showInlinePolicyOptions,
+    setInlineDraftName,
+    setInlinePolicyText,
+    setShowInlinePolicyOptions,
+    handleAddInlineDraft,
+    handleClearInlineDrafts,
+    handleCreateInlineDraft,
+    handleRemoveInlineDraft,
+    handleSelectInlineDraft,
+    resetInlinePolicyDraftEditor,
+  } = useInlinePolicyDraftEditor(setError);
   const [advancedName, setAdvancedName] = useState("");
   const [createKey, setCreateKey] = useState(true);
   const [createdKey, setCreatedKey] = useState<AccessKey | null>(null);
@@ -66,12 +84,6 @@ export default function ManagerUsersPage() {
   const [policies, setPolicies] = useState<IamPolicy[]>([]);
   const [selectedPolicies, setSelectedPolicies] = useState<string[]>([]);
   const [policySearch, setPolicySearch] = useState("");
-  const [inlineDraftName, setInlineDraftName] = useState("");
-  const [inlinePolicyText, setInlinePolicyText] = useState("");
-  const [inlineDrafts, setInlineDrafts] = useState<InlinePolicy[]>([]);
-  const [selectedInlineDraftName, setSelectedInlineDraftName] = useState<string | null>(null);
-  const [inlineDraftMode, setInlineDraftMode] = useState<InlinePolicyDraftEditorMode>("create");
-  const [showInlinePolicyOptions, setShowInlinePolicyOptions] = useState(false);
   const [showPrivateAccessModal, setShowPrivateAccessModal] = useState(false);
   const [filter, setFilter] = useState("");
   const [showGroupOptions, setShowGroupOptions] = useState(false);
@@ -140,13 +152,16 @@ export default function ManagerUsersPage() {
     setPolicySearch("");
     setShowGroupOptions(false);
     setShowPolicyOptions(false);
-    setInlineDrafts([]);
-    setSelectedInlineDraftName(null);
-    setInlineDraftName("");
-    setInlinePolicyText("");
-    setInlineDraftMode("create");
-    setShowInlinePolicyOptions(false);
-  }, [accountIdForApi, accessMode, load, loadGroups, loadPolicies, needsS3AccountSelection]);
+    resetInlinePolicyDraftEditor();
+  }, [
+    accountIdForApi,
+    accessMode,
+    load,
+    loadGroups,
+    loadPolicies,
+    needsS3AccountSelection,
+    resetInlinePolicyDraftEditor,
+  ]);
 
   useEffect(() => {
     setSelectedPolicies((prev) => prev.filter((arn) => policies.some((p) => p.arn === arn)));
@@ -243,12 +258,7 @@ export default function ManagerUsersPage() {
       setPolicySearch("");
       setShowGroupOptions(false);
       setShowPolicyOptions(false);
-      setInlineDrafts([]);
-      setSelectedInlineDraftName(null);
-      setInlineDraftName("");
-      setInlinePolicyText("");
-      setInlineDraftMode("create");
-      setShowInlinePolicyOptions(false);
+      resetInlinePolicyDraftEditor();
       setShowAdvancedModal(false);
       if (createKey && created.access_key) {
         setCreatedKey(created.access_key);
@@ -300,13 +310,8 @@ export default function ManagerUsersPage() {
     setPolicySearch("");
     setShowGroupOptions(false);
     setShowPolicyOptions(false);
-    setInlineDrafts([]);
+    resetInlinePolicyDraftEditor();
     setShowAdvancedModal(true);
-    setSelectedInlineDraftName(null);
-    setInlineDraftName("");
-    setInlinePolicyText("");
-    setInlineDraftMode("create");
-    setShowInlinePolicyOptions(false);
     setAdvancedInitialSignature(
       stableSignature({
         advancedName: "",
@@ -329,12 +334,7 @@ export default function ManagerUsersPage() {
     setPolicySearch("");
     setShowGroupOptions(false);
     setShowPolicyOptions(false);
-    setInlineDrafts([]);
-    setSelectedInlineDraftName(null);
-    setInlineDraftName("");
-    setInlinePolicyText("");
-    setInlineDraftMode("create");
-    setShowInlinePolicyOptions(false);
+    resetInlinePolicyDraftEditor();
   };
 
   const advancedCloseGuard = useUnsavedChangesGuard({
@@ -342,80 +342,6 @@ export default function ManagerUsersPage() {
     onClose: closeAdvancedModal,
     disabled: busy !== null,
   });
-
-  const handleAddInlineDraft = () => {
-    const trimmedName = inlineDraftName.trim();
-    if (!trimmedName) {
-      setError("Inline policy name is required.");
-      return;
-    }
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = inlinePolicyText.trim() ? JSON.parse(inlinePolicyText) : {};
-    } catch {
-      setError("Inline policy must be valid JSON.");
-      return;
-    }
-    setInlineDrafts((prev) => {
-      const filtered = prev.filter((policy) => policy.name !== trimmedName && policy.name !== selectedInlineDraftName);
-      return [...filtered, { name: trimmedName, document: parsed }];
-    });
-    setSelectedInlineDraftName(trimmedName);
-    setInlineDraftName(trimmedName);
-    setInlinePolicyText(JSON.stringify(parsed, null, 2));
-    setInlineDraftMode("edit");
-    setError(null);
-  };
-
-  const handleSelectInlineDraft = (name: string | null) => {
-    if (!name) {
-      setSelectedInlineDraftName(null);
-      setInlineDraftName("");
-      setInlinePolicyText("");
-      setInlineDraftMode(inlineDrafts.length > 0 ? "idle" : "create");
-      setError(null);
-      return;
-    }
-    const draft = inlineDrafts.find((policy) => policy.name === name);
-    if (!draft) return;
-    try {
-      setInlinePolicyText(JSON.stringify(draft.document ?? {}, null, 2));
-    } catch {
-      setInlinePolicyText("");
-    }
-    setSelectedInlineDraftName(draft.name);
-    setInlineDraftName(draft.name);
-    setInlineDraftMode("edit");
-    setError(null);
-  };
-
-  const handleRemoveInlineDraft = (name: string) => {
-    setInlineDrafts((prev) => prev.filter((policy) => policy.name !== name));
-    if (selectedInlineDraftName === name || inlineDraftName === name) {
-      setSelectedInlineDraftName(null);
-      setInlineDraftName("");
-      setInlinePolicyText("");
-      setInlineDraftMode(inlineDrafts.length > 1 ? "idle" : "create");
-    }
-    setError(null);
-  };
-
-  const handleCreateInlineDraft = () => {
-    setSelectedInlineDraftName(null);
-    setInlineDraftName("");
-    setInlinePolicyText("");
-    setInlineDraftMode("create");
-    setError(null);
-  };
-
-  const handleClearInlineDrafts = () => {
-    setInlineDrafts([]);
-    setSelectedInlineDraftName(null);
-    setInlineDraftName("");
-    setInlinePolicyText("");
-    setInlineDraftMode("create");
-    setError(null);
-  };
 
   const userTableColumns: Array<DataTableColumn<IAMUser, SortField>> = [
     {
