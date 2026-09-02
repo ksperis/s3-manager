@@ -12,9 +12,11 @@ from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
 from app.models.portal import (
-    PortalDeletedPrefixRestoreRequest,
     PortalStorageObjectDeleteResponse,
     PortalStorageObjectDetail,
+)
+from app.models.portal_versions import (
+    PortalDeletedPrefixRestoreRequest,
     PortalStorageObjectRestoreRequest,
     PortalStorageObjectRestoreResponse,
     PortalStorageObjectVersionsResponse,

@@ -11,7 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
-from app.models.portal import (
+from app.models.portal_versions import (
     PortalDeletedPrefixRestoreFailure,
     PortalDeletedPrefixRestoreProgress,
     PortalDeletedPrefixRestoreResult,

@@ -17,11 +17,10 @@ from app.models.portal import (
     PortalStorageSpaceIcon,
     PortalStorageSpaceIconChoice,
     PortalStorageSpaceImport,
-    PortalStorageSpaceSettings,
-    PortalStorageSpaceSettingsUpdate,
     PortalStorageSpaceSummary,
     PortalStorageSpaceUpdate,
 )
+from app.models.portal_versions import PortalStorageSpaceSettings, PortalStorageSpaceSettingsUpdate
 from app.routers.dependencies import (
     get_audit_service,
     get_portal_account_access,

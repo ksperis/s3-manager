@@ -9,7 +9,7 @@ from typing import Any, Callable, TYPE_CHECKING
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import User
-from app.models.portal import (
+from app.models.portal_versions import (
     PortalStorageSpaceVersionCleanupStage,
     PortalStorageSpaceVersionCleanupProgress,
     PortalStorageSpaceVersionCleanupResult,

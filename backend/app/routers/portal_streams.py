@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from app.core.sensitive_data import sanitized_error_log_detail
 from app.db import User
 from app.models.access_context import AccountAccess
-from app.models.portal import PortalDeletedPrefixRestoreProgress, PortalStorageSpaceVersionCleanupProgress
+from app.models.portal_versions import PortalDeletedPrefixRestoreProgress, PortalStorageSpaceVersionCleanupProgress
 from app.routers.sse_worker import SseMessageSender, format_sse_event, stream_cancellable_worker
 from app.services.audit_service import AuditService
 from app.services.bucket_purge_service import BucketPurgeCancelled

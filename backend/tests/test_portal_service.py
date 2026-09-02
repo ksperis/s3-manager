@@ -42,16 +42,18 @@ from app.models.portal import (
     PortalAlert,
     PortalIAMUser,
     PortalState,
-    PortalStorageObjectRestoreRequest,
-    PortalStorageObjectRestoreResponse,
     PortalStorageSpace,
     PortalStorageSpaceInitialShare,
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
     PortalUsage,
-    portal_storage_space_version_cleanup_confirmation_phrase,
 )
 from app.models.portal_access_logs import PortalServerAccessLogFilterQuery, PortalServerAccessLogFilterRule
+from app.models.portal_versions import (
+    PortalStorageObjectRestoreRequest,
+    PortalStorageObjectRestoreResponse,
+    portal_storage_space_version_cleanup_confirmation_phrase,
+)
 from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router

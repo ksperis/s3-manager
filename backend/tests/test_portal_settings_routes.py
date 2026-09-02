@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.db import ManagerAccountRole, PortalAccountRole, AuditLog, S3Account, User, UserRole, UserS3Account
 from app.main import app
-from app.models.portal import PortalStorageSpaceSettings
+from app.models.portal_versions import PortalStorageSpaceSettings
 from app.routers import dependencies
 from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities

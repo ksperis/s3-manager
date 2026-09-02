@@ -12,10 +12,12 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.db import S3Account, User
 from app.models.portal import (
     PortalStorageObjectDetail,
+    PortalStorageSpaceRole,
+)
+from app.models.portal_versions import (
     PortalStorageObjectRestoreResponse,
     PortalStorageObjectVersion,
     PortalStorageObjectVersionsResponse,
-    PortalStorageSpaceRole,
     PortalTrashItem,
     PortalTrashResponse,
 )

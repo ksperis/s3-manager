@@ -6,7 +6,7 @@ import logging
 from typing import Optional, TYPE_CHECKING
 
 from app.db import PortalAccountRole, S3Account, User
-from app.models.portal import PortalStorageSpaceSettings, PortalStorageSpaceSettingsUpdate
+from app.models.portal_versions import PortalStorageSpaceSettings, PortalStorageSpaceSettingsUpdate
 from app.services import s3_bucket_metadata, s3_client
 
 if TYPE_CHECKING:
