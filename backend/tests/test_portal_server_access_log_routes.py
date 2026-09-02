@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.db import PortalAccountRole, S3Account, User, UserRole
 from app.main import app
-from app.models.portal import PortalServerAccessLogPage
+from app.models.portal_access_logs import PortalServerAccessLogPage
 from app.routers import dependencies
 from app.routers import portal as portal_router
 from app.routers.portal_common import get_portal_service_dependency

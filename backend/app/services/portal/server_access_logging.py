@@ -19,12 +19,12 @@ from app.db import (
     User,
 )
 from app.models.app_settings import PortalSettings
-from app.models.portal import (
+from app.models.portal import PortalStorageSpaceSummary
+from app.models.portal_access_logs import (
     PortalServerAccessLogEntry,
     PortalServerAccessLogFilterQuery,
     PortalServerAccessLogPage,
     PortalServerAccessRequesterIdentity,
-    PortalStorageSpaceSummary,
 )
 from app.services import s3_bucket_access, s3_bucket_metadata, s3_client
 from app.services.portal.server_access_log_records import (

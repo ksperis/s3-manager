@@ -41,8 +41,6 @@ from app.models.portal import (
     PortalAccessKeyStatusChange,
     PortalAlert,
     PortalIAMUser,
-    PortalServerAccessLogFilterQuery,
-    PortalServerAccessLogFilterRule,
     PortalState,
     PortalStorageObjectRestoreRequest,
     PortalStorageObjectRestoreResponse,
@@ -53,6 +51,7 @@ from app.models.portal import (
     PortalUsage,
     portal_storage_space_version_cleanup_confirmation_phrase,
 )
+from app.models.portal_access_logs import PortalServerAccessLogFilterQuery, PortalServerAccessLogFilterRule
 from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router
