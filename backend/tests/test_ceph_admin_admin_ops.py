@@ -9,12 +9,12 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from app.main import app
 from app.models.ceph_admin import (
-    CephAdminAccountDeleteRequest,
+    CephAdminAdminOpsConfirmation,
     CephAdminBucketDeleteRequest,
     CephAdminBucketIndexCheckRequest,
     CephAdminBucketLinkRequest,
-    CephAdminBucketUnlinkRequest,
     CephAdminUserDeleteRequest,
 )
 from app.routers.ceph_admin import admin_ops, bucket_admin_ops, bucket_index_ops, identity_admin_ops
@@ -120,7 +120,7 @@ def test_account_delete_requires_exact_confirmation_and_does_not_audit_phrase():
     with pytest.raises(HTTPException) as raised:
         identity_admin_ops.delete_account(
             "RGW12345678901234567",
-            CephAdminAccountDeleteRequest(confirmation="DELETE ACCOUNT wrong"),
+            CephAdminAdminOpsConfirmation(confirmation="DELETE ACCOUNT wrong"),
             ctx=ctx,
         )
 
@@ -273,7 +273,7 @@ def test_bucket_unlink_derives_current_owner(monkeypatch):
 
     response = bucket_admin_ops.unlink_bucket(
         "bucket-a",
-        CephAdminBucketUnlinkRequest(confirmation="UNLINK BUCKET tenant-a/bucket-a"),
+        CephAdminAdminOpsConfirmation(confirmation="UNLINK BUCKET tenant-a/bucket-a"),
         tenant="tenant-a",
         ctx=ctx,
     )
@@ -351,7 +351,7 @@ def test_network_error_returns_structured_502_and_null_rgw_status():
 
     response = identity_admin_ops.delete_account(
         "RGW12345678901234567",
-        CephAdminAccountDeleteRequest(confirmation="DELETE ACCOUNT RGW12345678901234567"),
+        CephAdminAdminOpsConfirmation(confirmation="DELETE ACCOUNT RGW12345678901234567"),
         ctx=ctx,
     )
     body = _body(response)
@@ -360,3 +360,18 @@ def test_network_error_returns_structured_502_and_null_rgw_status():
     assert body["rgw_status_code"] is None
     assert "hidden" not in body["message"]
     assert audit.calls[-1]["status"] == "failed"
+
+
+def test_simple_admin_ops_share_confirmation_openapi_contract():
+    paths = app.openapi()["paths"]
+    expected_schema = {"$ref": "#/components/schemas/CephAdminAdminOpsConfirmation"}
+
+    account_delete = paths["/api/ceph-admin/endpoints/{endpoint_id}/accounts/{account_id}"]["delete"]
+    bucket_unlink = paths["/api/ceph-admin/endpoints/{endpoint_id}/buckets/{bucket}/unlink"]["post"]
+
+    assert account_delete["requestBody"]["content"]["application/json"]["schema"] == expected_schema
+    assert bucket_unlink["requestBody"]["content"]["application/json"]["schema"] == expected_schema
+
+    schemas = app.openapi()["components"]["schemas"]
+    assert "CephAdminAccountDeleteRequest" not in schemas
+    assert "CephAdminBucketUnlinkRequest" not in schemas

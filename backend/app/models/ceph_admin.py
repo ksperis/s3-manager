@@ -52,10 +52,6 @@ class CephAdminAdminOpsConfirmation(ApiModel):
     confirmation: str = Field(min_length=1, max_length=512)
 
 
-class CephAdminAccountDeleteRequest(CephAdminAdminOpsConfirmation):
-    pass
-
-
 class CephAdminUserDeleteRequest(CephAdminAdminOpsConfirmation):
     purge_data: bool = False
 
@@ -69,10 +65,6 @@ class CephAdminBucketDeleteRequest(CephAdminAdminOpsConfirmation):
         if self.bypass_gc and not self.purge_objects:
             raise ValueError("bypass_gc requires purge_objects.")
         return self
-
-
-class CephAdminBucketUnlinkRequest(CephAdminAdminOpsConfirmation):
-    pass
 
 
 class CephAdminBucketLinkRequest(CephAdminAdminOpsConfirmation):

@@ -13,7 +13,7 @@ from app.models.ceph_admin import (
     CephAdminAdminOpsResult,
     CephAdminBucketDeleteRequest,
     CephAdminBucketLinkRequest,
-    CephAdminBucketUnlinkRequest,
+    CephAdminAdminOpsConfirmation,
 )
 from app.routers.ceph_admin.admin_ops_common import (
     admin_ops_network_failure as _network_failure,
@@ -141,7 +141,7 @@ def delete_bucket(
 @router.post("/buckets/{bucket}/unlink", response_model=CephAdminAdminOpsResult)
 def unlink_bucket(
     bucket: str,
-    payload: CephAdminBucketUnlinkRequest,
+    payload: CephAdminAdminOpsConfirmation,
     tenant: Optional[str] = Query(default=None),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> JSONResponse:

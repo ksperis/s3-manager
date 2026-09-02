@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from app.models.ceph_admin import (
-    CephAdminAccountDeleteRequest,
+    CephAdminAdminOpsConfirmation,
     CephAdminAdminOpsResult,
     CephAdminUserDeleteRequest,
 )
@@ -30,7 +30,7 @@ router = APIRouter()
 @router.delete("/accounts/{account_id}", response_model=CephAdminAdminOpsResult)
 def delete_account(
     account_id: str,
-    payload: CephAdminAccountDeleteRequest,
+    payload: CephAdminAdminOpsConfirmation,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> JSONResponse:
     operation = "delete_account"
