@@ -2,15 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 
 from app.main import app
-from app.models import portal as legacy_portal_models
 from app.models.portal_storage_spaces import PortalStorageSpace, PortalStorageSpaceSummary
 
 
 def test_portal_storage_space_models_have_a_single_canonical_module() -> None:
     assert PortalStorageSpace.__module__ == "app.models.portal_storage_spaces"
     assert PortalStorageSpaceSummary.__module__ == "app.models.portal_storage_spaces"
-    assert not hasattr(legacy_portal_models, "PortalStorageSpace")
-    assert not hasattr(legacy_portal_models, "PortalStorageSpaceSummary")
 
 
 def test_portal_storage_space_routes_preserve_their_openapi_contracts() -> None:

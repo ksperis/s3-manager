@@ -1,10 +1,14 @@
-# Copyright (c) 2025 Laurent Barbe
+# Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+
+"""Portal activity and alert API contracts."""
+
 from datetime import datetime
 from typing import Literal, Optional
 
 from app.models.base import ApiModel
-from app.models.app_settings import PortalSettings, PortalSettingsOverride
+
+
 PortalAlertTone = Literal["info", "warning", "danger"]
 
 
@@ -28,16 +32,3 @@ class PortalAlert(ApiModel):
     severity_label: str
     storage_space_id: Optional[str] = None
     created_at: Optional[datetime] = None
-
-
-class PortalAccountSettings(ApiModel):
-    effective: PortalSettings
-    admin_override: PortalSettingsOverride
-    delegated_to_portal_managers: bool = False
-
-
-class PortalProjectSettings(ApiModel):
-    effective: PortalSettings
-    project_override: PortalSettingsOverride
-    delegated_to_portal_managers: bool = False
-    can_update: bool = False

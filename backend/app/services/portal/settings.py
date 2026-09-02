@@ -12,7 +12,7 @@ from app.models.app_settings import (
     PortalSettings,
     PortalSettingsOverride,
 )
-from app.models.portal import PortalAccountSettings, PortalProjectSettings
+from app.models.portal_settings import PortalAccountSettings, PortalProjectSettings
 from app.services.app_settings_service import load_app_settings
 
 

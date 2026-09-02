@@ -2,15 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 
 from app.main import app
-from app.models import portal as legacy_portal_models
 from app.models.portal_access_keys import PortalAccessKey, PortalAccessKeysState
 
 
 def test_portal_access_key_models_have_a_single_canonical_module() -> None:
     assert PortalAccessKey.__module__ == "app.models.portal_access_keys"
     assert PortalAccessKeysState.__module__ == "app.models.portal_access_keys"
-    assert not hasattr(legacy_portal_models, "PortalAccessKey")
-    assert not hasattr(legacy_portal_models, "PortalAccessKeysState")
 
 
 def test_portal_access_key_routes_preserve_their_openapi_contracts() -> None:

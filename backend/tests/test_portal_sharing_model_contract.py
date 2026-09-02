@@ -2,15 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 
 from app.main import app
-from app.models import portal as legacy_portal_models
 from app.models.portal_sharing import PortalPublicLink, PortalStorageSpaceAccessSummary
 
 
 def test_portal_sharing_models_have_a_single_canonical_module() -> None:
     assert PortalPublicLink.__module__ == "app.models.portal_sharing"
     assert PortalStorageSpaceAccessSummary.__module__ == "app.models.portal_sharing"
-    assert not hasattr(legacy_portal_models, "PortalPublicLink")
-    assert not hasattr(legacy_portal_models, "PortalStorageSpaceAccessSummary")
 
 
 def test_portal_sharing_routes_preserve_their_openapi_contracts() -> None:

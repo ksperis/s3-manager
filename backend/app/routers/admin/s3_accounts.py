@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import S3Account as S3AccountDb, User
 from app.models.app_settings import PortalSettingsAdminUpdate, PortalSettingsOverride
-from app.models.portal import PortalAccountSettings
+from app.models.portal_settings import PortalAccountSettings
 from app.models.s3_account import (
     PaginatedS3AccountsResponse,
     S3Account,

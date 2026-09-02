@@ -2,15 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 
 from app.main import app
-from app.models import portal as legacy_portal_models
 from app.models.portal_usage import PortalStorageSpaceUsageStatsResponse, PortalUsage
 
 
 def test_portal_usage_models_have_a_single_canonical_module() -> None:
     assert PortalUsage.__module__ == "app.models.portal_usage"
     assert PortalStorageSpaceUsageStatsResponse.__module__ == "app.models.portal_usage"
-    assert not hasattr(legacy_portal_models, "PortalUsage")
-    assert not hasattr(legacy_portal_models, "PortalStorageSpaceUsageStatsResponse")
 
 
 def test_portal_usage_routes_preserve_their_openapi_contracts() -> None:
