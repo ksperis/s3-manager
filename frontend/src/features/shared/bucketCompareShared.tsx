@@ -94,15 +94,123 @@ export const BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS = [
   { key: "tags", label: "Tags" },
 ] as const;
 
-export const bucketCompareMappingTableContainerClass =
+const bucketCompareMappingTableContainerClass =
   "max-h-[240px] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800";
-export const bucketCompareMappingTableClass = "min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800";
-export const bucketCompareMappingTableHeadClass = "bg-slate-100 dark:bg-slate-900/60";
-export const bucketCompareMappingTableBodyClass = "divide-y divide-slate-200 dark:divide-slate-800";
-export const bucketCompareMappingTableHeaderClass =
+const bucketCompareMappingTableClass = "min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800";
+const bucketCompareMappingTableHeadClass = "bg-slate-100 dark:bg-slate-900/60";
+const bucketCompareMappingTableBodyClass = "divide-y divide-slate-200 dark:divide-slate-800";
+const bucketCompareMappingTableHeaderClass =
   "px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
-export const bucketCompareMappingSourceCellClass = "px-3 py-2 font-semibold text-slate-900 dark:text-slate-100";
-export const bucketCompareMappingTargetCellClass = "space-y-1 px-3 py-2";
+const bucketCompareMappingSourceCellClass = "px-3 py-2 font-semibold text-slate-900 dark:text-slate-100";
+const bucketCompareMappingTargetCellClass = "space-y-1 px-3 py-2";
+
+type BucketCompareManualMappingEditorProps = {
+  rawMappingText: string;
+  onRawMappingTextChange: (value: string) => void;
+  parsedRawMapping: ParsedRawMappingResult;
+  sourceBuckets: string[];
+  resolvedManualMapping: ReadonlyMap<string, string>;
+  manualMapping: Readonly<Record<string, string>>;
+  onManualMappingChange: (sourceBucket: string, targetBucket: string) => void;
+  availableTargetBucketNames: string[];
+  disabled: boolean;
+  controlClass: string;
+  compactControlClass: string;
+};
+
+export function BucketCompareManualMappingEditor({
+  rawMappingText,
+  onRawMappingTextChange,
+  parsedRawMapping,
+  sourceBuckets,
+  resolvedManualMapping,
+  manualMapping,
+  onManualMappingChange,
+  availableTargetBucketNames,
+  disabled,
+  controlClass,
+  compactControlClass,
+}: BucketCompareManualMappingEditorProps) {
+  const targetOptionsId = useId();
+
+  return (
+    <div className="space-y-3">
+      <details className="rounded-lg border border-slate-200 dark:border-slate-800">
+        <summary className="cursor-pointer list-none px-3 py-2 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Raw mapping (priority)
+        </summary>
+        <div className="space-y-2 border-t border-slate-200 px-3 py-2 dark:border-slate-800">
+          <textarea
+            value={rawMappingText}
+            onChange={(event) => onRawMappingTextChange(event.target.value)}
+            disabled={disabled}
+            rows={6}
+            placeholder={"source-bucket-a => target-bucket-a\nsource-bucket-b -> target-bucket-b"}
+            className={`${controlClass} font-mono text-xs`}
+          />
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
+            Accepted formats per line: <code>source =&gt; target</code>, <code>source -&gt; target</code>, <code>source = target</code>.
+          </p>
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
+            Parsed entries: {parsedRawMapping.mapping.size}. Invalid lines: {parsedRawMapping.invalidLines.length}.
+          </p>
+          {parsedRawMapping.invalidLines.length > 0 && (
+            <pre className="whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+              {parsedRawMapping.invalidLines.map((line) => `- ${line}`).join("\n")}
+            </pre>
+          )}
+        </div>
+      </details>
+      <div className={bucketCompareMappingTableContainerClass}>
+        <table className={bucketCompareMappingTableClass}>
+          <thead className={bucketCompareMappingTableHeadClass}>
+            <tr>
+              <th className={bucketCompareMappingTableHeaderClass}>Source</th>
+              <th className={bucketCompareMappingTableHeaderClass}>Target</th>
+            </tr>
+          </thead>
+          <tbody className={bucketCompareMappingTableBodyClass}>
+            {sourceBuckets.map((sourceBucket) => {
+              const rawTarget = parsedRawMapping.mapping.get(sourceBucket);
+              const effectiveTarget = resolvedManualMapping.get(sourceBucket) ?? "";
+              return (
+                <tr key={sourceBucket} className="align-top">
+                  <td className={bucketCompareMappingSourceCellClass}>{sourceBucket}</td>
+                  <td className={bucketCompareMappingTargetCellClass}>
+                    <input
+                      type="text"
+                      list={targetOptionsId}
+                      value={rawTarget ?? (manualMapping[sourceBucket] ?? "")}
+                      onChange={(event) => onManualMappingChange(sourceBucket, event.target.value)}
+                      disabled={disabled || Boolean(rawTarget)}
+                      className={compactControlClass}
+                      placeholder="target bucket"
+                    />
+                    {rawTarget && (
+                      <p className="ui-caption text-amber-700 dark:text-amber-200">
+                        Overridden by raw mapping.
+                      </p>
+                    )}
+                    {!rawTarget && !manualMapping[sourceBucket] && effectiveTarget && (
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Fallback 1:1 applied: {effectiveTarget}
+                      </p>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <datalist id={targetOptionsId}>
+          {availableTargetBucketNames.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </div>
+    </div>
+  );
+}
 
 export const extractCompareError = (err: unknown): string => {
   return extractApiError(err, "Bucket comparison failed.");

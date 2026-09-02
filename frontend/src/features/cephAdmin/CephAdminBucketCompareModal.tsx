@@ -22,14 +22,8 @@ import {
 import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,
+  BucketCompareManualMappingEditor,
   CompareVisibleKeysCopyFeedback,
-  bucketCompareMappingSourceCellClass,
-  bucketCompareMappingTableBodyClass,
-  bucketCompareMappingTableClass,
-  bucketCompareMappingTableContainerClass,
-  bucketCompareMappingTableHeadClass,
-  bucketCompareMappingTableHeaderClass,
-  bucketCompareMappingTargetCellClass,
   bucketComparisonCancelledMessage,
   buildBucketCompareMappingModel,
   compareObjectDetailsFromKeys,
@@ -717,88 +711,21 @@ export default function CephAdminBucketCompareModal({
           </details>
         )}
         {mappingMode === "manual" && (
-          <div className="space-y-3">
-            <details className="rounded-lg border border-slate-200 dark:border-slate-800">
-              <summary className="cursor-pointer list-none px-3 py-2 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Raw mapping (priority)
-              </summary>
-              <div className="space-y-2 border-t border-slate-200 px-3 py-2 dark:border-slate-800">
-                <textarea
-                  value={rawMappingText}
-                  onChange={(event) => setRawMappingText(event.target.value)}
-                  disabled={running}
-                  rows={6}
-                  placeholder={"source-bucket-a => target-bucket-a\nsource-bucket-b -> target-bucket-b"}
-                  className={`${controlClass} font-mono text-xs`}
-                />
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Accepted formats per line: <code>source =&gt; target</code>, <code>source -&gt; target</code>, <code>source = target</code>.
-                  </p>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Parsed entries: {parsedRawMapping.mapping.size}. Invalid lines: {parsedRawMapping.invalidLines.length}.
-                </p>
-                {parsedRawMapping.invalidLines.length > 0 && (
-                  <pre className="whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-                    {parsedRawMapping.invalidLines.map((line) => `- ${line}`).join("\n")}
-                  </pre>
-                )}
-              </div>
-            </details>
-            <div className={bucketCompareMappingTableContainerClass}>
-              <table className={bucketCompareMappingTableClass}>
-                <thead className={bucketCompareMappingTableHeadClass}>
-                  <tr>
-                    <th className={bucketCompareMappingTableHeaderClass}>
-                      Source
-                    </th>
-                    <th className={bucketCompareMappingTableHeaderClass}>
-                      Target
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className={bucketCompareMappingTableBodyClass}>
-                  {sortedSourceBuckets.map((sourceBucket) => {
-                    const rawTarget = parsedRawMapping.mapping.get(sourceBucket);
-                    const effectiveTarget = resolvedManualMapping.get(sourceBucket) ?? "";
-                    return (
-                      <tr key={sourceBucket} className="align-top">
-                        <td className={bucketCompareMappingSourceCellClass}>{sourceBucket}</td>
-                        <td className={bucketCompareMappingTargetCellClass}>
-                          <input
-                            type="text"
-                            list="bucket-compare-target-options"
-                            value={rawTarget ?? (manualMapping[sourceBucket] ?? "")}
-                            onChange={(event) =>
-                              setManualMapping((prev) => ({
-                                ...prev,
-                                [sourceBucket]: event.target.value,
-                              }))
-                            }
-                            disabled={running || Boolean(rawTarget)}
-                            className={compactControlClass}
-                            placeholder="target bucket"
-                          />
-                          {rawTarget && (
-                            <p className="ui-caption text-amber-700 dark:text-amber-200">
-                              Overridden by raw mapping.
-                            </p>
-                          )}
-                          {!rawTarget && !manualMapping[sourceBucket] && effectiveTarget && (
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">Fallback 1:1 applied: {effectiveTarget}</p>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <datalist id="bucket-compare-target-options">
-                {availableTargetBucketNames.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
-            </div>
-          </div>
+          <BucketCompareManualMappingEditor
+            rawMappingText={rawMappingText}
+            onRawMappingTextChange={setRawMappingText}
+            parsedRawMapping={parsedRawMapping}
+            sourceBuckets={sortedSourceBuckets}
+            resolvedManualMapping={resolvedManualMapping}
+            manualMapping={manualMapping}
+            onManualMappingChange={(sourceBucket, targetBucket) =>
+              setManualMapping((prev) => ({ ...prev, [sourceBucket]: targetBucket }))
+            }
+            availableTargetBucketNames={availableTargetBucketNames}
+            disabled={running}
+            controlClass={controlClass}
+            compactControlClass={compactControlClass}
+          />
         )}
         {runError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{runError}</p>}
         {(running || progress.total > 0) && (
