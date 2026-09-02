@@ -11,7 +11,6 @@ from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
 from app.models.portal_storage_spaces import (
-    PortalStorageSpace,
     PortalStorageSpaceCreate,
     PortalStorageSpaceIcon,
     PortalStorageSpaceIconChoice,
@@ -66,13 +65,13 @@ def portal_storage_spaces(
         raise_bad_gateway_from_runtime(exc)
 
 
-@router.post("/storage-spaces", response_model=PortalStorageSpace, status_code=status.HTTP_201_CREATED)
+@router.post("/storage-spaces", response_model=PortalStorageSpaceSummary, status_code=status.HTTP_201_CREATED)
 def create_portal_storage_space(
     payload: PortalStorageSpaceCreate,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(get_portal_service_dependency),
-) -> PortalStorageSpace:
+) -> PortalStorageSpaceSummary:
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
@@ -111,13 +110,13 @@ def create_portal_storage_space(
         raise_portal_storage_runtime(exc)
 
 
-@router.post("/storage-spaces/import", response_model=PortalStorageSpace, status_code=status.HTTP_201_CREATED)
+@router.post("/storage-spaces/import", response_model=PortalStorageSpaceSummary, status_code=status.HTTP_201_CREATED)
 def import_portal_storage_space(
     payload: PortalStorageSpaceImport,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(get_portal_service_dependency),
-) -> PortalStorageSpace:
+) -> PortalStorageSpaceSummary:
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
@@ -155,14 +154,14 @@ def import_portal_storage_space(
         raise_portal_storage_runtime(exc)
 
 
-@router.patch("/storage-spaces/{space_id}", response_model=PortalStorageSpace)
+@router.patch("/storage-spaces/{space_id}", response_model=PortalStorageSpaceSummary)
 def update_portal_storage_space(
     space_id: str,
     payload: PortalStorageSpaceUpdate,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(get_portal_service_dependency),
-) -> PortalStorageSpace:
+) -> PortalStorageSpaceSummary:
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
@@ -208,13 +207,13 @@ def update_portal_storage_space(
         raise_portal_storage_runtime(exc)
 
 
-@router.post("/storage-spaces/{space_id}/take-ownership", response_model=PortalStorageSpace)
+@router.post("/storage-spaces/{space_id}/take-ownership", response_model=PortalStorageSpaceSummary)
 def take_portal_storage_space_ownership(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(get_portal_service_dependency),
-) -> PortalStorageSpace:
+) -> PortalStorageSpaceSummary:
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
@@ -462,12 +461,12 @@ def update_portal_storage_space_settings(
     return updated
 
 
-@router.get("/storage-spaces/{space_id}", response_model=PortalStorageSpace)
+@router.get("/storage-spaces/{space_id}", response_model=PortalStorageSpaceSummary)
 def portal_storage_space_detail(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
     service: PortalService = Depends(get_portal_service_dependency),
-) -> PortalStorageSpace:
+) -> PortalStorageSpaceSummary:
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")

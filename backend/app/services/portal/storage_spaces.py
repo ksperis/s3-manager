@@ -20,7 +20,6 @@ from app.db import (
 )
 from app.models.bucket import Bucket
 from app.models.portal_storage_spaces import (
-    PortalStorageSpace,
     PortalStorageSpaceCollaboratorPreview,
     PortalStorageSpaceIcon,
     PortalStorageSpaceIconPreset,
@@ -440,7 +439,7 @@ class PortalStorageSpacesMixin:
         user: User,
         access: "AccountAccess",
         space_id: str,
-    ) -> Optional[PortalStorageSpace]:
+    ) -> Optional[PortalStorageSpaceSummary]:
         if not space_id:
             return None
         visible_spaces = self.list_storage_spaces(user, access, include_archived=True)
@@ -478,7 +477,7 @@ class PortalStorageSpacesMixin:
             can_delete=summary.can_delete,
             metadata=metadata,
         )
-        return PortalStorageSpace(**merged.model_dump())
+        return PortalStorageSpaceSummary(**merged.model_dump())
 
     def create_storage_space(
         self,
@@ -494,7 +493,7 @@ class PortalStorageSpacesMixin:
         initial_shares: Optional[list[PortalStorageSpaceInitialShare]] = None,
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
-    ) -> PortalStorageSpace:
+    ) -> PortalStorageSpaceSummary:
         portal_settings = self._effective_portal_settings(access.account)
         allow_private_create = portal_settings.allow_private_storage_space_create
         is_portal_user = access.portal_role == PortalAccountRole.PORTAL_USER.value
@@ -584,7 +583,7 @@ class PortalStorageSpacesMixin:
         initial_shares: Optional[list[PortalStorageSpaceInitialShare]] = None,
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
-    ) -> PortalStorageSpace:
+    ) -> PortalStorageSpaceSummary:
         cleaned_bucket_name = (bucket_name or "").strip()
         if not cleaned_bucket_name:
             raise RuntimeError("Bucket name requis.")
@@ -671,7 +670,7 @@ class PortalStorageSpacesMixin:
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
         archived: Optional[bool] = None,
-    ) -> PortalStorageSpace:
+    ) -> PortalStorageSpaceSummary:
         bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id, include_archived=True)
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
@@ -730,7 +729,7 @@ class PortalStorageSpacesMixin:
         user: User,
         access: "AccountAccess",
         space_id: str,
-    ) -> PortalStorageSpace:
+    ) -> PortalStorageSpaceSummary:
         if access.portal_role != PortalAccountRole.PORTAL_MANAGER.value:
             raise RuntimeError("Only project managers can take ownership of a private Storage Space.")
         bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id, include_archived=True)

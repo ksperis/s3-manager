@@ -37,7 +37,6 @@ from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, Buc
 from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal_monitoring import PortalAlert
 from app.models.portal_storage_spaces import (
-    PortalStorageSpace,
     PortalStorageSpaceInitialShare,
     PortalStorageSpaceSummary,
 )
@@ -2149,7 +2148,7 @@ def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeyp
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name="Research Data",
             role="Owner",
@@ -2202,7 +2201,7 @@ def test_create_storage_space_configures_server_access_logging(monkeypatch, db_s
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name="Research Data",
             role="Owner",
@@ -2370,7 +2369,7 @@ def test_portal_user_can_create_storage_space_when_setting_is_enabled(monkeypatc
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name="Research Data",
             role="Owner",
@@ -2489,7 +2488,7 @@ def test_create_restricted_storage_space_persists_initial_shares_atomically(monk
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name="Restricted Research",
             role="Owner",
@@ -2637,7 +2636,7 @@ def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monke
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name="Research Data",
             role="Owner",
@@ -2707,7 +2706,7 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name=bucket_name,
             role="Owner",
@@ -2756,7 +2755,7 @@ def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name=bucket_name,
             role="Owner",
@@ -2809,7 +2808,7 @@ def test_update_storage_space_locked_names_reject_rename_but_accept_description(
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name=metadata.display_name or bucket_name,
             role="Owner",
@@ -2851,7 +2850,7 @@ def test_update_storage_space_allows_rename_when_name_is_editable(monkeypatch, d
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name=metadata.display_name or bucket_name,
             role="Owner",
@@ -2904,7 +2903,7 @@ def test_update_storage_space_restores_archived_space_without_deleting_links(mon
     monkeypatch.setattr(
         service,
         "get_storage_space",
-        lambda _user, _access, bucket_name: PortalStorageSpace(
+        lambda _user, _access, bucket_name: PortalStorageSpaceSummary(
             id=bucket_name,
             name=metadata.display_name or bucket_name,
             role="Owner",

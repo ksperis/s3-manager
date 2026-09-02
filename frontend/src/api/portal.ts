@@ -143,8 +143,6 @@ export type PortalStorageSpaceSummary = {
   icon?: StorageSpaceIconDescriptor | null;
 };
 
-type PortalStorageSpace = PortalStorageSpaceSummary;
-
 export type PortalStorageSpaceUsageStatsSnapshot = Omit<
   BucketUsageStatsSnapshot,
   "scope_kind" | "scope_id" | "scope_name" | "bucket_name" | "warnings"
@@ -743,8 +741,8 @@ export async function listPortalStorageSpaces(
 export async function createPortalStorageSpace(
   accountId: S3AccountSelector,
   payload: PortalStorageSpaceCreate
-): Promise<PortalStorageSpace> {
-  const { data } = await client.post<PortalStorageSpace>("/portal/storage-spaces", payload, {
+): Promise<PortalStorageSpaceSummary> {
+  const { data } = await client.post<PortalStorageSpaceSummary>("/portal/storage-spaces", payload, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
@@ -753,8 +751,8 @@ export async function createPortalStorageSpace(
 export async function importPortalStorageSpace(
   accountId: S3AccountSelector,
   payload: PortalStorageSpaceImport
-): Promise<PortalStorageSpace> {
-  const { data } = await client.post<PortalStorageSpace>("/portal/storage-spaces/import", payload, {
+): Promise<PortalStorageSpaceSummary> {
+  const { data } = await client.post<PortalStorageSpaceSummary>("/portal/storage-spaces/import", payload, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
@@ -764,8 +762,8 @@ export async function updatePortalStorageSpace(
   accountId: S3AccountSelector,
   spaceId: string,
   payload: PortalStorageSpaceUpdate
-): Promise<PortalStorageSpace> {
-  const { data } = await client.patch<PortalStorageSpace>(
+): Promise<PortalStorageSpaceSummary> {
+  const { data } = await client.patch<PortalStorageSpaceSummary>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
@@ -828,8 +826,8 @@ export async function uploadPortalStorageSpaceIcon(
 export async function takePortalStorageSpaceOwnership(
   accountId: S3AccountSelector,
   spaceId: string
-): Promise<PortalStorageSpace> {
-  const { data } = await client.post<PortalStorageSpace>(
+): Promise<PortalStorageSpaceSummary> {
+  const { data } = await client.post<PortalStorageSpaceSummary>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/take-ownership`,
     undefined,
     { params: withS3AccountParam(undefined, accountId) }

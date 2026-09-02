@@ -74,10 +74,6 @@ class PortalStorageSpaceSummary(ApiModel):
     icon: PortalStorageSpaceIcon = Field(default_factory=PortalStorageSpaceIcon)
 
 
-class PortalStorageSpace(PortalStorageSpaceSummary):
-    pass
-
-
 class PortalStorageSpaceInitialShare(ApiModel):
     user_id: int
     role: PortalStorageSpaceGrantRole
