@@ -79,7 +79,11 @@ import PortalDeletedPrefixRestoreWorkflow from "./PortalDeletedPrefixRestoreWork
 import PortalPublicLinkCreateDialog from "./PortalPublicLinkCreateDialog";
 import PortalPublicLinkRevokeDialog from "./PortalPublicLinkRevokeDialog";
 import PortalPublicLinksTable from "./PortalPublicLinksTable";
-import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
+import {
+  decodePortalRouteValue,
+  storageSpaceObjectPath,
+  storageSpacePath,
+} from "./portalWorkspaceModel";
 import PortalStorageSpaceStatistics from "./PortalStorageSpaceStatistics";
 import PortalStorageSpaceHistoryCleanupWorkflow from "./PortalStorageSpaceHistoryCleanupWorkflow";
 import {
@@ -96,15 +100,6 @@ import {
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import { usePortalPublicLinkActions } from "./usePortalPublicLinkActions";
 import StorageSpaceIconPickerModal from "./StorageSpaceIconPickerModal";
-
-function decodeRouteValue(value?: string): string {
-  if (!value) return "";
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
 
 type PendingAccessChange = {
   mode: PortalAccessMode;
@@ -209,7 +204,7 @@ export default function PortalStorageSpaceDetailPage() {
     includeArchived: true,
     includeUsage: activeTab === "statistics",
   });
-  const decodedSpaceId = decodeRouteValue(spaceId);
+  const decodedSpaceId = decodePortalRouteValue(spaceId);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
   const {
     busyLinkId: busyExternalLinkId,

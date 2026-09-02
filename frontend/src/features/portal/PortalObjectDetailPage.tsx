@@ -36,7 +36,11 @@ import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import PortalPublicLinkCreateDialog from "./PortalPublicLinkCreateDialog";
 import PortalPublicLinkRevokeDialog from "./PortalPublicLinkRevokeDialog";
 import PortalPublicLinksTable from "./PortalPublicLinksTable";
-import { storageSpacePath } from "./portalWorkspaceModel";
+import {
+  decodePortalObjectPath,
+  decodePortalRouteValue,
+  storageSpacePath,
+} from "./portalWorkspaceModel";
 import {
   PortalPageState,
   resolvePortalWorkspacePageState,
@@ -51,23 +55,6 @@ type PendingObjectAction =
   | { type: "delete-object" }
   | { type: "restore-version"; version: PortalStorageObjectVersion }
   | { type: "revoke-public-link"; link: PortalPublicLink };
-
-function decodeRouteValue(value?: string): string {
-  if (!value) return "";
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function decodeObjectPath(value?: string): string {
-  if (!value) return "";
-  return value
-    .split("/")
-    .map((part) => decodeRouteValue(part))
-    .join("/");
-}
 
 function objectName(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -166,8 +153,8 @@ export default function PortalObjectDetailPage() {
   const [objectLoading, setObjectLoading] = useState(false);
   const [objectError, setObjectError] = useState<string | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
-  const decodedSpaceId = decodeRouteValue(params.spaceId);
-  const objectPath = decodeObjectPath(params["*"]);
+  const decodedSpaceId = decodePortalRouteValue(params.spaceId);
+  const objectPath = decodePortalObjectPath(params["*"]);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
   const {
     busyLinkId: busyPublicLinkId,

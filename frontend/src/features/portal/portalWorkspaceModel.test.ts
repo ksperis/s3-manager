@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { buildPortalWorkspaceModel } from "./portalWorkspaceModel";
+import {
+  buildPortalWorkspaceModel,
+  decodePortalObjectPath,
+  decodePortalRouteValue,
+} from "./portalWorkspaceModel";
+
+describe("portal route decoding", () => {
+  it("decodes route values and preserves malformed input", () => {
+    expect(decodePortalRouteValue("Research%20Data")).toBe("Research Data");
+    expect(decodePortalRouteValue("invalid%2")).toBe("invalid%2");
+    expect(decodePortalRouteValue()).toBe("");
+  });
+
+  it("decodes object paths segment by segment", () => {
+    expect(decodePortalObjectPath("reports/2026%20Q3/summary%25.csv")).toBe(
+      "reports/2026 Q3/summary%.csv",
+    );
+  });
+});
 
 describe("buildPortalWorkspaceModel", () => {
   it("uses canonical storage spaces as the workspace source", () => {

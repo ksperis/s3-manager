@@ -146,6 +146,23 @@ export function storageSpacePath(space: Pick<PortalWorkspaceSpace, "id">): strin
   return `/portal/storage-spaces/${encodeURIComponent(space.id)}`;
 }
 
+export function decodePortalRouteValue(value?: string): string {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+export function decodePortalObjectPath(value?: string): string {
+  if (!value) return "";
+  return value
+    .split("/")
+    .map((part) => decodePortalRouteValue(part))
+    .join("/");
+}
+
 export function storageSpaceObjectPath(space: Pick<PortalWorkspaceSpace, "id">, objectPath: string): string {
   const encodedObjectPath = objectPath
     .split("/")
