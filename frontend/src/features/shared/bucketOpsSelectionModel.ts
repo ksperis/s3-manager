@@ -16,6 +16,21 @@ export type BucketOperationUiTarget = {
   contextName?: string | null;
 };
 
+export function buildStorageOpsBucketTargets(
+  targets: readonly BucketOperationUiTarget[],
+): Array<{ context_id: string; bucket_name: string }> {
+  return targets.map((target) => {
+    const contextId = target.contextId?.trim();
+    if (!contextId) {
+      throw new Error(`Missing context for bucket ${target.bucketName}.`);
+    }
+    return {
+      context_id: contextId,
+      bucket_name: target.bucketName,
+    };
+  });
+}
+
 type BucketOpsSelectionProjectionInput = {
   allFilteredBucketNames: readonly string[] | null;
   allFilteredBucketNamesKey: string | null;

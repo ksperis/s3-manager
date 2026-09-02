@@ -25,7 +25,10 @@ import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 import { formatCompactNumber, formatNumber } from "../../utils/format";
 import { BucketOperationSummaryStat } from "./bucketOperationRunUi";
-import type { BucketOperationUiTarget } from "./bucketOpsSelectionModel";
+import {
+  buildStorageOpsBucketTargets,
+  type BucketOperationUiTarget,
+} from "./bucketOpsSelectionModel";
 import {
   CEPH_ADMIN_PAGE_CONTRACTS,
   MANAGER_PAGE_CONTRACTS,
@@ -173,17 +176,7 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
       include_versions: true,
     };
     if (props.mode === "storage-ops") {
-      const targets = props.targets.map((target) => {
-        const contextId = target.contextId?.trim();
-        if (!contextId) {
-          throw new Error(`Missing context for bucket ${target.bucketName}.`);
-        }
-        return {
-          context_id: contextId,
-          bucket_name: target.bucketName,
-        };
-      });
-      return { ...purgePayload, targets };
+      return { ...purgePayload, targets: buildStorageOpsBucketTargets(props.targets) };
     }
     return {
       ...purgePayload,

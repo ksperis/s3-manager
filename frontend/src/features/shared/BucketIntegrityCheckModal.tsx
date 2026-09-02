@@ -26,7 +26,10 @@ import UiSelect from "../../components/ui/UiSelect";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { BucketOperationSummaryStat } from "./bucketOperationRunUi";
-import type { BucketOperationUiTarget } from "./bucketOpsSelectionModel";
+import {
+  buildStorageOpsBucketTargets,
+  type BucketOperationUiTarget,
+} from "./bucketOpsSelectionModel";
 import {
   CEPH_ADMIN_PAGE_CONTRACTS,
   MANAGER_PAGE_CONTRACTS,
@@ -171,17 +174,7 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
       max_mb_per_object: checkMode === "get" ? maxMbPerObject || undefined : undefined,
     };
     if (props.mode === "storage-ops") {
-      const targets = props.targets.map((target) => {
-        const contextId = target.contextId?.trim();
-        if (!contextId) {
-          throw new Error(`Missing context for bucket ${target.bucketName}.`);
-        }
-        return {
-          context_id: contextId,
-          bucket_name: target.bucketName,
-        };
-      });
-      return { ...basePayload, targets };
+      return { ...basePayload, targets: buildStorageOpsBucketTargets(props.targets) };
     }
     return {
       ...basePayload,

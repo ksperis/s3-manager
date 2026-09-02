@@ -28,7 +28,10 @@ import {
   bucketOperationTableHeaderClass,
   bucketOperationTableHeaderRightClass,
 } from "./bucketOperationRunUi";
-import type { BucketOperationUiTarget } from "./bucketOpsSelectionModel";
+import {
+  buildStorageOpsBucketTargets,
+  type BucketOperationUiTarget,
+} from "./bucketOpsSelectionModel";
 import {
   CEPH_ADMIN_PAGE_CONTRACTS,
   STORAGE_OPS_PAGE_CONTRACTS,
@@ -83,17 +86,7 @@ export default function BucketUsageStatsRunModal(props: BucketUsageStatsRunModal
       parallelism: Math.max(1, Math.min(32, Math.trunc(parallelism || 8))),
     };
     if (props.mode === "storage-ops") {
-      const targets = props.targets.map((target) => {
-        const contextId = target.contextId?.trim();
-        if (!contextId) {
-          throw new Error(`Missing context for bucket ${target.bucketName}.`);
-        }
-        return {
-          context_id: contextId,
-          bucket_name: target.bucketName,
-        };
-      });
-      return { ...basePayload, targets };
+      return { ...basePayload, targets: buildStorageOpsBucketTargets(props.targets) };
     }
     return {
       ...basePayload,

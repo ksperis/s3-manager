@@ -5,7 +5,10 @@
 import { describe, expect, it } from "vitest";
 import type { CephAdminBucket } from "../../api/cephAdmin";
 import type { BucketUiTagDefinition } from "../../api/bucketUiTags";
-import { buildBucketOpsSelectionProjection } from "./bucketOpsSelectionModel";
+import {
+  buildBucketOpsSelectionProjection,
+  buildStorageOpsBucketTargets,
+} from "./bucketOpsSelectionModel";
 
 const tag = (id: number, label: string): BucketUiTagDefinition => ({
   id,
@@ -130,5 +133,25 @@ describe("buildBucketOpsSelectionProjection", () => {
       },
       { bucketName: "bravo", contextId: "context-b" },
     ]);
+  });
+});
+
+describe("buildStorageOpsBucketTargets", () => {
+  it("projects UI targets to the backend contract and trims context IDs", () => {
+    expect(
+      buildStorageOpsBucketTargets([
+        { bucketName: "alpha", contextId: " context-a " },
+        { bucketName: "bravo", contextId: "context-b", contextName: "Account B" },
+      ]),
+    ).toEqual([
+      { bucket_name: "alpha", context_id: "context-a" },
+      { bucket_name: "bravo", context_id: "context-b" },
+    ]);
+  });
+
+  it("rejects targets without an execution context", () => {
+    expect(() =>
+      buildStorageOpsBucketTargets([{ bucketName: "alpha", contextId: " " }]),
+    ).toThrow("Missing context for bucket alpha.");
   });
 });
