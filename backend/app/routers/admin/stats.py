@@ -123,7 +123,12 @@ def summary_stats(
     Avoids RGW calls to keep the page responsive.
     """
     payload = AdminMetricsService.build_summary_payload(db)
-    payload["total_active_sessions"] = AuthSessionService(db).count_for_admin(actor)
+    session_counts = AuthSessionService(db).counts_by_principal_type_for_admin(actor)
+    payload["total_active_sessions"] = sum(session_counts.values())
+    payload["active_sessions_by_type"] = {
+        "ui": session_counts.get("user", 0),
+        "s3": session_counts.get("s3", 0),
+    }
     return payload
 
 

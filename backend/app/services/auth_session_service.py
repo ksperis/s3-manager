@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
-from sqlalchemy import or_, update
+from sqlalchemy import func, or_, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -317,8 +317,19 @@ class AuthSessionService:
             .all()
         )
 
-    def count_for_admin(self, actor: User, *, include_revoked: bool = False) -> int:
-        return self._admin_inventory_query(actor, include_revoked=include_revoked).count()
+    def counts_by_principal_type_for_admin(
+        self,
+        actor: User,
+        *,
+        include_revoked: bool = False,
+    ) -> dict[str, int]:
+        rows = (
+            self._admin_inventory_query(actor, include_revoked=include_revoked)
+            .with_entities(AuthSession.principal_type, func.count(AuthSession.id))
+            .group_by(AuthSession.principal_type)
+            .all()
+        )
+        return {str(principal_type): int(count) for principal_type, count in rows}
 
     def cleanup_expired(self) -> int:
         """Revoke expired rows and irreversibly erase dormant S3 credentials."""

@@ -934,7 +934,7 @@ export default function AdminDashboard() {
         id: "active-sessions",
         label: "Active Sessions",
         value: summary?.total_active_sessions ?? 0,
-        hint: "Within admin scope",
+        hint: `UI: ${summary?.active_sessions_by_type?.ui ?? 0} · S3: ${summary?.active_sessions_by_type?.s3 ?? 0}`,
         to: "/admin/identity-security",
         tone: "blue",
         icon: <ShieldIcon className="h-5 w-5" />,

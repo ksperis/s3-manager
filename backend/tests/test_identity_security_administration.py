@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 
 import pytest
@@ -14,6 +15,7 @@ from app.db import (
     ExternalIdentity,
     ExternalIdentityLinkRequest,
     RecoveryCode,
+    S3Session,
     User,
     UserRole,
     WebAuthnCredential,
@@ -193,6 +195,47 @@ def test_admin_global_session_inventory_filters_privileged_accounts(auth_client,
     summary = auth_client.get("/api/admin/stats/summary")
     assert summary.status_code == 200
     assert summary.json()["total_active_sessions"] == len(payload)
+    assert summary.json()["active_sessions_by_type"] == {"ui": len(payload), "s3": 0}
+
+
+def test_superadmin_session_summary_groups_ui_and_s3_sessions(auth_client, db_session):
+    superadmin = _user(db_session, email="summary-superadmin@example.com", role=UserRole.UI_SUPERADMIN.value)
+    standard = _user(db_session, email="summary-standard@example.com", role=UserRole.UI_USER.value)
+    authenticate_ui_client(auth_client, db_session, superadmin, mfa_verified=True)
+    AuthSessionService(db_session).create_for_user(
+        standard,
+        auth_type="password",
+        ip_address="192.0.2.12",
+        user_agent="pytest-standard",
+        mfa_verified=False,
+    )
+    now = utcnow()
+    s3_session = S3Session(
+        id="summary-s3-session",
+        access_key_enc="ACCESS",
+        secret_key_enc="SECRET",
+        access_key_hash="summary-hash",
+        actor_type="s3_account",
+        role=UserRole.UI_USER.value,
+        capabilities=json.dumps({"access_browser": True}),
+        created_at=now,
+        last_used_at=now,
+        idle_expires_at=now + timedelta(minutes=30),
+        absolute_expires_at=now + timedelta(hours=8),
+    )
+    db_session.add(s3_session)
+    db_session.commit()
+    AuthSessionService(db_session).create_for_s3_session(
+        s3_session,
+        ip_address="192.0.2.13",
+        user_agent="pytest-s3",
+    )
+
+    summary = auth_client.get("/api/admin/stats/summary")
+
+    assert summary.status_code == 200
+    assert summary.json()["total_active_sessions"] == 3
+    assert summary.json()["active_sessions_by_type"] == {"ui": 2, "s3": 1}
 
 
 def test_admin_link_request_queue_is_filtered_by_role_hierarchy(auth_client, db_session):

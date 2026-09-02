@@ -107,6 +107,7 @@ describe("AdminDashboard feature summary", () => {
       total_accounts: 0,
       total_admins: 0,
       total_active_sessions: 0,
+      active_sessions_by_type: { ui: 0, s3: 0 },
       total_ceph_endpoints: 0,
       total_connections: 0,
       total_endpoints: 0,
@@ -428,6 +429,7 @@ describe("AdminDashboard feature summary", () => {
       total_accounts: 124,
       total_admins: 1,
       total_active_sessions: 7,
+      active_sessions_by_type: { ui: 4, s3: 3 },
       total_ceph_endpoints: 8,
       total_connections: 3,
       total_endpoints: 9,
@@ -444,7 +446,7 @@ describe("AdminDashboard feature summary", () => {
     await renderDashboard();
 
     expect(screen.getByRole("heading", { name: "Admin overview" })).toBeInTheDocument();
-    const activeSessionsCard = screen.getByRole("link", { name: /Active Sessions.*7.*Within admin scope/i });
+    const activeSessionsCard = screen.getByRole("link", { name: /Active Sessions.*7.*UI: 4 · S3: 3/i });
     expect(activeSessionsCard).toHaveAttribute(
       "href",
       "/admin/identity-security",

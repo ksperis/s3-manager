@@ -165,6 +165,10 @@ export type AdminSummary = {
   total_admins: number;
   total_none_users: number;
   total_active_sessions: number;
+  active_sessions_by_type?: {
+    ui: number;
+    s3: number;
+  };
   total_s3_users: number;
   assigned_accounts: number;
   unassigned_accounts: number;
