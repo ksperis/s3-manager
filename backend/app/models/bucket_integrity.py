@@ -20,12 +20,8 @@ BucketIntegrityFailureStage = Literal["list", "head", "get"]
 BucketIntegrityProgressStage = Literal["prepare", "list", "verify", "completed"]
 
 
-class BucketIntegrityTarget(BucketOperationTarget):
-    pass
-
-
 class BucketIntegrityCheckRequest(ExclusiveBucketOperationRequest):
-    targets: list[BucketIntegrityTarget] = Field(default_factory=list, max_length=200)
+    targets: list[BucketOperationTarget] = Field(default_factory=list, max_length=200)
     parallelism: int = Field(default=10, ge=1, le=64)
     all_versions: bool = False
     check_mode: BucketIntegrityCheckMode = "head"

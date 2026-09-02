@@ -18,12 +18,8 @@ BucketUsageStatsStatus = Literal["completed", "completed_with_warnings", "failed
 BucketUsageStatsScanMode = Literal["versions", "current_only"]
 
 
-class BucketUsageStatsTarget(BucketOperationTarget):
-    pass
-
-
 class BucketUsageStatsRequest(ExclusiveBucketOperationRequest):
-    targets: list[BucketUsageStatsTarget] = Field(default_factory=list, max_length=200)
+    targets: list[BucketOperationTarget] = Field(default_factory=list, max_length=200)
     parallelism: int = Field(default=8, ge=1, le=32)
 
 class BucketUsageStatsDistributionEntry(ApiModel):

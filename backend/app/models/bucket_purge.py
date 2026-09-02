@@ -18,12 +18,8 @@ BucketPurgeStatus = Literal["completed", "completed_with_errors", "failed", "can
 BucketPurgeStage = Literal["prepare", "list", "delete", "versions", "delete_bucket", "completed"]
 
 
-class BucketPurgeTarget(BucketOperationTarget):
-    pass
-
-
 class BucketPurgeRequest(BucketOperationRequest):
-    targets: list[BucketPurgeTarget] = Field(default_factory=list, max_length=200)
+    targets: list[BucketOperationTarget] = Field(default_factory=list, max_length=200)
     parallelism: int = Field(default=10, ge=1, le=64)
     include_versions: bool = True
     confirmation: str = ""

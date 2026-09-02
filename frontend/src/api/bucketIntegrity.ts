@@ -3,18 +3,14 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { S3AccountSelector } from "./accountParams";
+import type { BucketOperationTarget } from "./bucketOperation";
 import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
-
-export type BucketIntegrityTarget = {
-  context_id: string;
-  bucket_name: string;
-};
 
 export type BucketIntegrityCheckMode = "head" | "get";
 
 export type BucketIntegrityCheckPayload = {
   buckets?: string[];
-  targets?: BucketIntegrityTarget[];
+  targets?: BucketOperationTarget[];
   parallelism?: number;
   all_versions?: boolean;
   check_mode?: BucketIntegrityCheckMode;

@@ -3,18 +3,14 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { S3AccountSelector } from "./accountParams";
+import type { BucketOperationTarget } from "./bucketOperation";
 import { withS3AccountParam } from "./accountParams";
 import client from "./client";
 import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
 
-export type BucketUsageStatsTarget = {
-  context_id: string;
-  bucket_name: string;
-};
-
 export type BucketUsageStatsPayload = {
   buckets?: string[];
-  targets?: BucketUsageStatsTarget[];
+  targets?: BucketOperationTarget[];
   parallelism?: number;
 };
 
