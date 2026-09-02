@@ -2,7 +2,6 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { isApiError } from "../../api/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
 import WorkflowPage from "../../components/WorkflowPage";
@@ -51,6 +50,9 @@ import {
   parseRawMappingText,
   renderCompareObjectDetails,
   renderDiffLines,
+  resolveBucketCompareRunSettlement,
+  updateBucketCompareRunItem,
+  updateBucketCompareRunProgress,
 } from "../shared/bucketCompareShared";
 import {
   formatDownloadTimestamp,
@@ -510,49 +512,16 @@ export default function ManagerBucketCompareModal({
           }
         },
         (result, index) => {
-          const cancelled =
-            cancelRequestedRef.current ||
-            (result.status === "rejected" && isApiError(result.reason) && result.reason.code === "ERR_CANCELED") ||
-            (result.status === "rejected" && result.reason instanceof DOMException && result.reason.name === "AbortError");
-          setProgress((prev) => ({
-            completed: prev.completed + 1,
-            total: prev.total,
-            failed: prev.failed + (!cancelled && result.status === "rejected" ? 1 : 0),
-            cancelled: prev.cancelled + (cancelled ? 1 : 0),
-          }));
-          if (result.status === "fulfilled" && !cancelRequestedRef.current) {
-            setItems((prev) =>
-              prev.map((item, itemIdx) => (itemIdx === index ? { ...item, status: "success", result: result.value } : item))
-            );
-            return;
-          }
-          if (cancelled) {
-            setItems((prev) =>
-              prev.map((item, itemIdx) =>
-                itemIdx === index
-                  ? {
-                      ...item,
-                      status: "cancelled",
-                      error: bucketComparisonCancelledMessage,
-                    }
-                  : item
-              )
-            );
-            return;
-          }
-          if (result.status === "rejected") {
-            setItems((prev) =>
-              prev.map((item, itemIdx) =>
-                itemIdx === index
-                  ? {
-                      ...item,
-                      status: "failed",
-                      error: extractError(result.reason),
-                    }
-                  : item
-              )
-            );
-          }
+          const settlement = resolveBucketCompareRunSettlement(
+            result,
+            cancelRequestedRef.current
+          );
+          setProgress((prev) => updateBucketCompareRunProgress(prev, settlement));
+          setItems((prev) =>
+            prev.map((item, itemIdx) =>
+              itemIdx === index ? updateBucketCompareRunItem(item, settlement) : item
+            )
+          );
         }
       );
     } catch (err) {

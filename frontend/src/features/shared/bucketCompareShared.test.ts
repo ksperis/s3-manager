@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBucketCompareMappingModel } from "./bucketCompareShared";
+import {
+  bucketComparisonCancelledMessage,
+  buildBucketCompareMappingModel,
+  resolveBucketCompareRunSettlement,
+  updateBucketCompareRunItem,
+  updateBucketCompareRunProgress,
+} from "./bucketCompareShared";
 
 const buildModel = (
   overrides: Partial<Parameters<typeof buildBucketCompareMappingModel>[0]> = {}
@@ -78,5 +84,63 @@ describe("bucket comparison mapping model", () => {
         sameTargetSelected: true,
       }).comparePlan.error
     ).toBe("Same-endpoint comparison requires manual mapping.");
+  });
+});
+
+describe("bucket comparison run settlement", () => {
+  it("turns fulfilled comparisons into successful run items", () => {
+    const settlement = resolveBucketCompareRunSettlement(
+      { status: "fulfilled", value: { has_differences: false } },
+      false
+    );
+
+    expect(
+      updateBucketCompareRunItem(
+        { status: "running" as const, sourceBucket: "source", actionRunning: null },
+        settlement
+      )
+    ).toEqual({
+      status: "success",
+      sourceBucket: "source",
+      actionRunning: null,
+      result: { has_differences: false },
+    });
+    expect(
+      updateBucketCompareRunProgress(
+        { completed: 1, total: 3, failed: 0, cancelled: 0 },
+        settlement
+      )
+    ).toEqual({ completed: 2, total: 3, failed: 0, cancelled: 0 });
+  });
+
+  it("normalizes rejected and explicitly cancelled comparisons", () => {
+    const failed = resolveBucketCompareRunSettlement(
+      { status: "rejected", reason: new Error("Backend comparison failed") },
+      false
+    );
+    const aborted = resolveBucketCompareRunSettlement(
+      { status: "rejected", reason: new DOMException("Aborted", "AbortError") },
+      false
+    );
+    const cancelledAfterSuccess = resolveBucketCompareRunSettlement(
+      { status: "fulfilled", value: { has_differences: true } },
+      true
+    );
+
+    expect(failed).toEqual({ status: "failed", error: "Backend comparison failed" });
+    expect(aborted).toEqual({
+      status: "cancelled",
+      error: bucketComparisonCancelledMessage,
+    });
+    expect(cancelledAfterSuccess).toEqual({
+      status: "cancelled",
+      error: bucketComparisonCancelledMessage,
+    });
+    expect(
+      updateBucketCompareRunProgress(
+        { completed: 0, total: 2, failed: 0, cancelled: 0 },
+        failed
+      )
+    ).toEqual({ completed: 1, total: 2, failed: 1, cancelled: 0 });
   });
 });

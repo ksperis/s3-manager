@@ -4,7 +4,7 @@
  */
 import { useId, useState, type ReactNode } from "react";
 import { cx, type UiTone } from "../../components/ui/styles";
-import { extractApiError } from "../../utils/apiError";
+import { extractApiError, isCancelledError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 
 type ParsedRawMappingResult = {
@@ -54,6 +54,23 @@ type RunStatusItem = {
   result?: { has_differences?: boolean } | null;
 };
 
+type BucketCompareRunSettlement<TResult> =
+  | { status: "success"; result: TResult }
+  | { status: "failed" | "cancelled"; error: string };
+
+type BucketCompareRunProgress = {
+  completed: number;
+  total: number;
+  failed: number;
+  cancelled: number;
+};
+
+type BucketCompareSettledRunItem<TResult> = {
+  status: RunItemStatus;
+  result?: TResult;
+  error?: string;
+};
+
 export const BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS = [
   { key: "versioning_status", label: "Versioning" },
   { key: "object_lock", label: "Object lock" },
@@ -81,6 +98,44 @@ export const extractCompareError = (err: unknown): string => {
 
 export const bucketComparisonCancelledMessage =
   "Comparison cancelled in this browser. The backend may still be finishing; verify the current state before retrying.";
+
+export const resolveBucketCompareRunSettlement = <TResult,>(
+  result: PromiseSettledResult<TResult>,
+  cancellationRequested: boolean
+): BucketCompareRunSettlement<TResult> => {
+  if (result.status === "fulfilled") {
+    return cancellationRequested
+      ? { status: "cancelled", error: bucketComparisonCancelledMessage }
+      : { status: "success", result: result.value };
+  }
+  if (cancellationRequested || isCancelledError(result.reason)) {
+    return { status: "cancelled", error: bucketComparisonCancelledMessage };
+  }
+  return { status: "failed", error: extractCompareError(result.reason) };
+};
+
+export const updateBucketCompareRunProgress = <TResult,>(
+  progress: BucketCompareRunProgress,
+  settlement: BucketCompareRunSettlement<TResult>
+): BucketCompareRunProgress => ({
+  completed: progress.completed + 1,
+  total: progress.total,
+  failed: progress.failed + (settlement.status === "failed" ? 1 : 0),
+  cancelled: progress.cancelled + (settlement.status === "cancelled" ? 1 : 0),
+});
+
+export const updateBucketCompareRunItem = <
+  TResult,
+  TItem extends BucketCompareSettledRunItem<TResult>,
+>(
+  item: TItem,
+  settlement: BucketCompareRunSettlement<TResult>
+) => {
+  if (settlement.status === "success") {
+    return { ...item, status: "success" as const, result: settlement.result };
+  }
+  return { ...item, status: settlement.status, error: settlement.error };
+};
 
 export const formatUnknown = (value: unknown) => {
   if (value === null || value === undefined) return "-";
