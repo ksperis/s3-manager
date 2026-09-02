@@ -18,6 +18,7 @@ from app.models.key_rotation import (
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
+from app.services.rgw_user_key_parser import RgwUserKeyParser
 from app.utils.normalize import (
     normalize_optional_string,
     normalize_storage_provider,
@@ -805,9 +806,8 @@ class KeyRotationService:
     ) -> tuple[str, str, Optional[str], Optional[str]]:
         old_access_key = normalize_optional_string(previous_access_key)
         response, active_tenant = self._create_access_key_with_fallback(admin, uid=uid, tenant=tenant)
-        new_access_key, new_secret_key = self._extract_new_key_pair(
-            admin,
-            response,
+        new_access_key, new_secret_key = RgwUserKeyParser.select_credentials(
+            admin.extract_keys(response),
             exclude_access_key=old_access_key,
         )
         if not new_access_key or not new_secret_key:
@@ -864,50 +864,6 @@ class KeyRotationService:
             admin.delete_access_key(uid, candidate, tenant=tenant)
         except RGWAdminError:
             logger.warning("Unable to clean up newly created key '%s' for '%s'", candidate, uid)
-
-    def _extract_new_key_pair(
-        self,
-        admin: RGWAdminClient,
-        response: Optional[dict],
-        *,
-        exclude_access_key: Optional[str] = None,
-    ) -> tuple[Optional[str], Optional[str]]:
-        if not response:
-            return None, None
-        entries = admin.extract_keys(response)
-        if not entries:
-            return None, None
-        excluded = normalize_optional_string(exclude_access_key)
-
-        def _access(entry: dict) -> Optional[str]:
-            return normalize_optional_string(entry.get("access_key") or entry.get("access-key"))
-
-        def _secret(entry: dict) -> Optional[str]:
-            return normalize_optional_string(entry.get("secret_key") or entry.get("secret-key"))
-
-        for require_secret in (True, False):
-            for entry in entries:
-                if not isinstance(entry, dict):
-                    continue
-                access_key = _access(entry)
-                secret_key = _secret(entry)
-                if not access_key:
-                    continue
-                if excluded and access_key == excluded:
-                    continue
-                if require_secret and not secret_key:
-                    continue
-                return access_key, secret_key
-
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            access_key = _access(entry)
-            secret_key = _secret(entry)
-            if access_key and secret_key:
-                return access_key, secret_key
-
-        return None, None
 
     def _resolve_identity_from_access_key(
         self,
