@@ -37,7 +37,7 @@ def _create_legacy_schema(connection) -> None:
         "user_s3_accounts",
         metadata,
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("account_id", sa.Integer(), nullable=False),
         sa.Column("role", sa.String(), nullable=False),
         sa.Column("is_root", sa.Boolean(), nullable=False, server_default=sa.false()),
@@ -156,6 +156,37 @@ def test_upgrade_splits_roles_removes_root_flags_and_enforces_constraints(monkey
             "manager_role = 'account_administrator'"
         )
         assert connection.exec_driver_sql("PRAGMA ignore_check_constraints").scalar_one() == 0
+
+
+def test_upgrade_drops_user_root_flag_with_sqlite_foreign_keys_enabled(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+    with engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
+        connection.commit()
+        with connection.begin():
+            _create_legacy_schema(connection)
+            connection.execute(
+                sa.text("INSERT INTO users (id, is_root) VALUES (1, 1)")
+            )
+            connection.execute(
+                sa.text(
+                    "INSERT INTO user_s3_accounts "
+                    "(id, user_id, account_id, role, is_root, "
+                    "allow_manager_browser_data_access) "
+                    "VALUES (1, 1, 1, 'account_administrator', 1, 1)"
+                )
+            )
+            migration = _load_migration()
+            _install_operations(monkeypatch, migration, connection)
+
+            migration.upgrade()
+
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            assert connection.execute(sa.text("SELECT id FROM users")).all() == [(1,)]
+            assert "is_root" not in {
+                column["name"]
+                for column in sa.inspect(connection).get_columns("users")
+            }
 
 
 def test_upgrade_resumes_after_sqlite_added_split_columns_without_version_stamp(

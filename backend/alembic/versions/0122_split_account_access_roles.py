@@ -131,8 +131,13 @@ def upgrade() -> None:
     _add_split_roles("user_s3_accounts", has_root_flag=True)
     _add_split_roles("ui_group_s3_accounts", has_root_flag=False)
     if "is_root" in _column_names("users"):
-        with op.batch_alter_table("users", schema=None) as batch_op:
-            batch_op.drop_column("is_root")
+        if op.get_bind().dialect.name == "sqlite":
+            # Recreating this parent table fails when application connections
+            # enforce foreign keys and any child row references a user.
+            op.drop_column("users", "is_root")
+        else:
+            with op.batch_alter_table("users", schema=None) as batch_op:
+                batch_op.drop_column("is_root")
 
 
 def _assert_no_combined_roles(table_name: str) -> None:
