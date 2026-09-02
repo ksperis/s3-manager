@@ -14,6 +14,7 @@ from app.models.bucket_usage_stats import BucketUsageStatsProgress, BucketUsageS
 from app.routers.ceph_admin.listing_common import normalize_http_error_detail
 from app.routers.sse_worker import (
     SseMessageSender,
+    build_sse_progress_callback,
     format_sse_event,
     stream_cancellable_worker,
 )
@@ -29,9 +30,7 @@ def stream_bucket_usage_stats(
     request_id = uuid.uuid4().hex
 
     def worker(push_message: SseMessageSender, cancel_event: threading.Event) -> None:
-        def progress_callback(progress: BucketUsageStatsProgress) -> None:
-            payload = progress.model_copy(update={"request_id": request_id}).model_dump(mode="json")
-            push_message(format_sse_event("progress", payload))
+        progress_callback = build_sse_progress_callback(push_message, request_id=request_id)
 
         def cancel_check() -> None:
             if cancel_event.is_set():

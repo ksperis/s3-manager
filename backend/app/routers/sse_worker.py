@@ -7,9 +7,11 @@ from collections.abc import Callable
 import json
 import logging
 import threading
+from typing import TypeVar
 
 from fastapi import Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
 SSE_RESPONSE_HEADERS = {
@@ -19,6 +21,7 @@ SSE_RESPONSE_HEADERS = {
 }
 SseMessageSender = Callable[[str], None]
 SseWorker = Callable[[SseMessageSender, threading.Event], None]
+_ProgressModelT = TypeVar("_ProgressModelT", bound=BaseModel)
 
 
 def format_sse_event(event: str, payload: dict[str, object]) -> str:
@@ -32,6 +35,18 @@ def format_sse_event(event: str, payload: dict[str, object]) -> str:
     lines.extend(f"data: {line}" for line in payload_json.splitlines() or [payload_json])
     lines.append("")
     return "\n".join(lines) + "\n"
+
+
+def build_sse_progress_callback(
+    push_message: SseMessageSender,
+    *,
+    request_id: str,
+) -> Callable[[_ProgressModelT], None]:
+    def progress_callback(progress: _ProgressModelT) -> None:
+        payload = progress.model_copy(update={"request_id": request_id}).model_dump(mode="json")
+        push_message(format_sse_event("progress", payload))
+
+    return progress_callback
 
 
 async def wait_for_cancellable_worker(

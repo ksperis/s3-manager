@@ -12,8 +12,12 @@ from fastapi.responses import StreamingResponse
 from app.core.sensitive_data import sanitized_error_log_detail
 from app.db import User
 from app.models.access_context import AccountAccess
-from app.models.portal_versions import PortalDeletedPrefixRestoreProgress, PortalStorageSpaceVersionCleanupProgress
-from app.routers.sse_worker import SseMessageSender, format_sse_event, stream_cancellable_worker
+from app.routers.sse_worker import (
+    SseMessageSender,
+    build_sse_progress_callback,
+    format_sse_event,
+    stream_cancellable_worker,
+)
 from app.services.audit_service import AuditService
 from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.portal.trash_restore import PortalDeletedPrefixRestoreTarget
@@ -41,9 +45,7 @@ def stream_portal_storage_space_version_cleanup(
     }
 
     def worker(push_message: SseMessageSender, cancel_event: threading.Event) -> None:
-        def progress_callback(progress: PortalStorageSpaceVersionCleanupProgress) -> None:
-            payload = progress.model_copy(update={"request_id": request_id}).model_dump(mode="json")
-            push_message(format_sse_event("progress", payload))
+        progress_callback = build_sse_progress_callback(push_message, request_id=request_id)
 
         def cancel_check() -> None:
             if cancel_event.is_set():
@@ -138,9 +140,7 @@ def stream_portal_deleted_prefix_restore(
     }
 
     def worker(push_message: SseMessageSender, cancel_event: threading.Event) -> None:
-        def progress_callback(progress: PortalDeletedPrefixRestoreProgress) -> None:
-            payload = progress.model_copy(update={"request_id": request_id}).model_dump(mode="json")
-            push_message(format_sse_event("progress", payload))
+        progress_callback = build_sse_progress_callback(push_message, request_id=request_id)
 
         def cancel_check() -> None:
             if cancel_event.is_set():
