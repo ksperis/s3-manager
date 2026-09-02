@@ -53,6 +53,18 @@ class RgwUserKeyParser:
         return cls._access_key(chosen_entry), cls._secret_key(chosen_entry)
 
     @classmethod
+    def select_complete_credentials(
+        cls,
+        entries: list[dict],
+    ) -> tuple[Optional[str], Optional[str]]:
+        for entry in entries:
+            access_key = cls._access_key(entry)
+            secret_key = cls._secret_key(entry)
+            if access_key and secret_key:
+                return access_key, secret_key
+        return None, None
+
+    @classmethod
     def access_key_ids(cls, entries: list[dict]) -> set[str]:
         return {
             access_key

@@ -25,7 +25,6 @@ from app.routers.ceph_admin.listing_common import fields_set, parse_int
 from app.routers.ceph_admin.profile_common import nullable_update, raise_if_unsupported
 from app.routers.ceph_admin.user_common import (
     coerce_bool,
-    extract_access_key,
     load_user_payload,
     optional_account_lookup_enabled,
     parse_suspended,
@@ -34,6 +33,7 @@ from app.routers.ceph_admin.user_common import (
 )
 from app.routers.ceph_admin.user_listing_cache import invalidate_users_listing_cache
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.rgw_user_key_parser import RgwUserKeyParser
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.utils.normalize import normalize_optional_scalar
 from app.utils.quota_stats import extract_quota_limits
@@ -279,14 +279,15 @@ def _extract_generated_key_from_payload(
     raw: Any,
     rgw_admin: RGWAdminClient,
 ) -> Optional[CephAdminRgwGeneratedAccessKey]:
-    entries = rgw_admin.extract_keys(raw)
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        access_key, secret_key = extract_access_key(entry)
-        if access_key and secret_key:
-            return CephAdminRgwGeneratedAccessKey(access_key=access_key, secret_key=secret_key)
-    return None
+    access_key, secret_key = RgwUserKeyParser.select_complete_credentials(
+        rgw_admin.extract_keys(raw)
+    )
+    if not access_key or not secret_key:
+        return None
+    return CephAdminRgwGeneratedAccessKey(
+        access_key=access_key,
+        secret_key=secret_key,
+    )
 
 
 def _apply_caps_update(

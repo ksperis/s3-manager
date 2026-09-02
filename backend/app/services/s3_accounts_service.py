@@ -40,6 +40,7 @@ from app.services.rgw_account_topics_resolver import (
     normalize_account_key,
 )
 from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
+from app.services.rgw_user_key_parser import RgwUserKeyParser
 from app.services.s3_account_associations_service import S3AccountAssociationsService
 from app.services.tags_service import TagsService
 from app.utils.tagging import TAG_DOMAIN_ADMIN_MANAGED
@@ -472,17 +473,6 @@ class S3AccountsService:
         )
 
     @staticmethod
-    def _extract_complete_key_pair(admin: RGWAdminClient, payload: Any) -> tuple[Optional[str], Optional[str]]:
-        for entry in admin.extract_keys(payload or {}):
-            if not isinstance(entry, dict):
-                continue
-            access_key = entry.get("access_key")
-            secret_key = entry.get("secret_key")
-            if access_key and secret_key:
-                return str(access_key), str(secret_key)
-        return None, None
-
-    @staticmethod
     def _load_existing_root_user(
         admin: RGWAdminClient,
         root_uid: str,
@@ -547,7 +537,9 @@ class S3AccountsService:
         item = prepared.source
         admin = prepared.admin
         existing_root = self._load_existing_root_user(admin, prepared.root_uid, item.rgw_account_id)
-        access_key, secret_key = self._extract_complete_key_pair(admin, existing_root)
+        access_key, secret_key = RgwUserKeyParser.select_complete_credentials(
+            admin.extract_keys(existing_root or {})
+        )
         if not access_key or not secret_key:
             if not existing_root:
                 resp = admin.create_user_with_account_id(
@@ -556,7 +548,9 @@ class S3AccountsService:
                     display_name=prepared.root_display_name,
                     account_root=True,
                 )
-                access_key, secret_key = self._extract_complete_key_pair(admin, resp)
+                access_key, secret_key = RgwUserKeyParser.select_complete_credentials(
+                    admin.extract_keys(resp)
+                )
                 if not access_key or not secret_key:
                     try:
                         existing_root = admin.get_user(
@@ -566,7 +560,9 @@ class S3AccountsService:
                         )
                     except RGWAdminError:
                         existing_root = None
-                    access_key, secret_key = self._extract_complete_key_pair(admin, existing_root)
+                    access_key, secret_key = RgwUserKeyParser.select_complete_credentials(
+                        admin.extract_keys(existing_root or {})
+                    )
             if not access_key or not secret_key:
                 try:
                     resp = admin.create_access_key(
@@ -574,7 +570,9 @@ class S3AccountsService:
                         tenant=item.rgw_account_id,
                         key_name="bucketreef",
                     )
-                    access_key, secret_key = self._extract_complete_key_pair(admin, resp)
+                    access_key, secret_key = RgwUserKeyParser.select_complete_credentials(
+                        admin.extract_keys(resp)
+                    )
                 except RGWAdminError:
                     pass
         if not access_key or not secret_key:
@@ -650,9 +648,9 @@ class S3AccountsService:
             )
         except RGWAdminError as exc:
             raise ValueError(f"RGW root user creation failed: {exc}") from exc
-        root_keys = admin.extract_keys(root_user_resp)
-        access_key = root_keys[0].get("access_key") if root_keys else None
-        secret_key = root_keys[0].get("secret_key") if root_keys else None
+        access_key, secret_key = RgwUserKeyParser.select_complete_credentials(
+            admin.extract_keys(root_user_resp)
+        )
         if not access_key or not secret_key:
             raise ValueError("Unable to obtain root access/secret keys for account")
 

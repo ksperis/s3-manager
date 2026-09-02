@@ -17,9 +17,10 @@ from app.models.ceph_admin import (
 )
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
-from app.routers.ceph_admin.user_common import extract_access_key, load_user_payload, serialize_access_keys
+from app.routers.ceph_admin.user_common import load_user_payload, serialize_access_keys
 from app.services.managed_private_access_service import ManagedPrivateAccessService
 from app.services.rgw_admin import RGWAdminError
+from app.services.rgw_user_key_parser import RgwUserKeyParser
 from app.utils.http_errors import raise_http_exception_from_exception
 
 router = APIRouter()
@@ -92,13 +93,9 @@ def create_rgw_user_key(
         response = ctx.rgw_admin.create_access_key(uid, tenant=tenant)
     except RGWAdminError as exc:
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-    access_key = secret_key = None
-    for entry in ctx.rgw_admin.extract_keys(response):
-        if not isinstance(entry, dict):
-            continue
-        access_key, secret_key = extract_access_key(entry)
-        if access_key and secret_key:
-            break
+    access_key, secret_key = RgwUserKeyParser.select_complete_credentials(
+        ctx.rgw_admin.extract_keys(response)
+    )
     if not access_key or not secret_key:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

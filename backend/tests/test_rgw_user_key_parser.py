@@ -35,6 +35,16 @@ def test_access_key_ids_normalizes_supported_field_names():
     ) == {"FIRST", "SECOND"}
 
 
+def test_select_complete_credentials_skips_partial_entries():
+    assert RgwUserKeyParser.select_complete_credentials(
+        [
+            {"access_key": "PARTIAL"},
+            {"access-key": " COMPLETE ", "secret-key": " SECRET "},
+        ]
+    ) == ("COMPLETE", "SECRET")
+    assert RgwUserKeyParser.select_complete_credentials([]) == (None, None)
+
+
 def test_to_access_keys_maps_status_dates_and_ui_managed_key():
     keys = RgwUserKeyParser.to_access_keys(
         [

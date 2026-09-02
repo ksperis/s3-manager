@@ -59,10 +59,6 @@ def coerce_bool(value: object) -> bool | None:
     return None
 
 
-def extract_access_key(payload: dict) -> tuple[Optional[str], Optional[str]]:
-    return payload.get("access_key"), payload.get("secret_key")
-
-
 def serialize_access_keys(entries: list[dict]) -> list[CephAdminRgwAccessKey]:
     results: list[CephAdminRgwAccessKey] = []
     seen: set[str] = set()
