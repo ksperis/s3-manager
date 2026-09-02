@@ -58,4 +58,30 @@ describe("useDismissibleLayer", () => {
     expect(latestDismiss).toHaveBeenCalledWith("escape");
     expect(event.defaultPrevented).toBe(true);
   });
+
+  it("can preserve outside-only dismissal semantics", () => {
+    const onDismiss = vi.fn();
+    renderHook(() =>
+      useDismissibleLayer({
+        open: true,
+        insideRefs: [],
+        onDismiss,
+        dismissOnEscape: false,
+        preventEscapeDefault: true,
+      }),
+    );
+
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Escape",
+    });
+    document.dispatchEvent(event);
+
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+
+    fireEvent.mouseDown(document.body);
+    expect(onDismiss).toHaveBeenCalledWith("outside");
+  });
 });

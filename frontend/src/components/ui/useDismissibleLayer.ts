@@ -10,6 +10,7 @@ type UseDismissibleLayerOptions = {
   open: boolean;
   insideRefs: readonly RefObject<Element | null>[];
   onDismiss: (reason: DismissibleLayerReason) => void;
+  dismissOnEscape?: boolean;
   preventEscapeDefault?: boolean;
 };
 
@@ -17,6 +18,7 @@ export function useDismissibleLayer({
   open,
   insideRefs,
   onDismiss,
+  dismissOnEscape = true,
   preventEscapeDefault = false,
 }: UseDismissibleLayerOptions) {
   const insideRefsRef = useRef(insideRefs);
@@ -42,10 +44,14 @@ export function useDismissibleLayer({
     };
 
     document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
+    if (dismissOnEscape) {
+      document.addEventListener("keydown", handleKeyDown);
+    }
     return () => {
       document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
+      if (dismissOnEscape) {
+        document.removeEventListener("keydown", handleKeyDown);
+      }
     };
-  }, [open, preventEscapeDefault]);
+  }, [dismissOnEscape, open, preventEscapeDefault]);
 }

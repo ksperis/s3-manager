@@ -40,6 +40,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiMeterBar from "../../components/ui/UiMeterBar";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactButtonClasses } from "../../components/toolbarControlClasses";
+import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
@@ -612,19 +613,12 @@ export default function BucketsPage() {
     });
   }, [quotaFeatureEnabled, snsFeatureEnabled, staticWebsiteFeatureEnabled]);
 
-  useEffect(() => {
-    if (!showColumnPicker) return;
-    const handler = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (!columnPickerRef.current) return;
-      if (!columnPickerRef.current.contains(target)) {
-        setShowColumnPicker(false);
-      }
-    };
-    window.addEventListener("mousedown", handler);
-    return () => window.removeEventListener("mousedown", handler);
-  }, [showColumnPicker]);
+  useDismissibleLayer({
+    open: showColumnPicker,
+    insideRefs: [columnPickerRef],
+    onDismiss: () => setShowColumnPicker(false),
+    dismissOnEscape: false,
+  });
 
   const filteredBuckets = useMemo(() => {
     const q = filter.trim().toLowerCase();

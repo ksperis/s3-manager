@@ -19,6 +19,7 @@ import DataTableShell, {
 } from "../../components/list/DataTableShell";
 import { toolbarCompactButtonClasses } from "../../components/toolbarControlClasses";
 import { cx, uiButtonBaseClass, uiButtonVariants } from "../../components/ui/styles";
+import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import UiButton from "../../components/ui/UiButton";
 import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers, streamCephAdminUsers } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
@@ -318,19 +319,12 @@ export default function CephAdminUsersPage() {
     persistVisibleColumns(visibleColumns);
   }, [visibleColumns]);
 
-  useEffect(() => {
-    if (!showColumnPicker) return;
-    const handler = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (!columnPickerRef.current) return;
-      if (!columnPickerRef.current.contains(target)) {
-        setShowColumnPicker(false);
-      }
-    };
-    window.addEventListener("mousedown", handler);
-    return () => window.removeEventListener("mousedown", handler);
-  }, [showColumnPicker]);
+  useDismissibleLayer({
+    open: showColumnPicker,
+    insideRefs: [columnPickerRef],
+    onDismiss: () => setShowColumnPicker(false),
+    dismissOnEscape: false,
+  });
 
   useEffect(() => {
     const handle = window.setTimeout(() => {

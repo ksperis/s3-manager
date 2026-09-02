@@ -2,10 +2,11 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import { toolbarCompactButtonClasses } from "../../components/toolbarControlClasses";
 import { cx, uiMenuClass } from "../../components/ui/styles";
+import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import type { FeatureKey } from "./bucketOpsAdvancedFilterModel";
 import {
   BUCKET_CORE_COLUMN_OPTIONS,
@@ -40,17 +41,12 @@ export default function BucketOpsColumnControls({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const handleMouseDown = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (target && rootRef.current && !rootRef.current.contains(target)) {
-        setOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", handleMouseDown);
-    return () => window.removeEventListener("mousedown", handleMouseDown);
-  }, [open]);
+  useDismissibleLayer({
+    open,
+    insideRefs: [rootRef],
+    onDismiss: () => setOpen(false),
+    dismissOnEscape: false,
+  });
 
   const columnsCustomized = useMemo(() => {
     if (visibleColumns.length !== defaultVisibleColumns.length) return true;
