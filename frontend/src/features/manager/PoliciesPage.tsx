@@ -11,11 +11,7 @@ import ListPageSection from "../../components/list/ListPageSection";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import ManagerTable, {
-  managerTableCellClass,
-  managerTablePrimaryCellClass,
-  type ManagerTableColumn,
-} from "../../components/list/ManagerTable";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
@@ -32,10 +28,10 @@ const DEFAULT_POLICY_DOCUMENT = JSON.stringify(
   2
 );
 
-const policyTableColumns: ManagerTableColumn[] = [
-  { key: "name", label: "Name", mobileRole: "primary" },
-  { key: "arn", label: "ARN" },
-  { key: "version", label: "Version" },
+const policyTableColumns: Array<DataTableColumn<IamPolicy>> = [
+  { id: "name", label: "Name", primary: true, mobileRole: "primary", render: (policy) => policy.name },
+  { id: "arn", label: "ARN", render: (policy) => policy.arn },
+  { id: "version", label: "Version", render: (policy) => policy.default_version_id ?? "-" },
 ];
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
@@ -188,26 +184,17 @@ export default function PoliciesPage() {
               />
             }
         >
-          <ManagerTable
+          <DataTableShell
             columns={policyTableColumns}
-            listState={{
-              status: filteredTableStatus,
-              loadingMessage: "Loading policies...",
-              errorMessage: "Unable to load policies.",
-              emptyMessage: "No policies.",
-            }}
+            rows={filteredPolicies}
+            rowKey={(policy) => policy.arn}
+            status={filteredTableStatus}
+            loadingMessage="Loading policies..."
+            errorMessage="Unable to load policies."
+            emptyMessage="No policies."
             responsiveCards
-          >
-            {filteredPolicies.map((p) => (
-              <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                <td className={managerTablePrimaryCellClass}>
-                  <span>{p.name}</span>
-                </td>
-                <td className={managerTableCellClass}>{p.arn}</td>
-                <td className={managerTableCellClass}>{p.default_version_id ?? "-"}</td>
-              </tr>
-            ))}
-          </ManagerTable>
+            tableLayout="fixed"
+          />
         </ListPageSection>
       )}
 

@@ -21,13 +21,7 @@ import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import ManagerTable, {
-  managerTableActionCellClass,
-  managerTableCellClass,
-  managerTablePrimaryCellClass,
-  managerTableWideCellClass,
-  type ManagerTableColumn,
-} from "../../components/list/ManagerTable";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -98,14 +92,6 @@ export default function ManagerUsersPage() {
     field: "name",
     direction: "asc",
   });
-
-  const userTableColumns: Array<ManagerTableColumn<SortField>> = [
-    { key: "name", label: "Name", sortField: "name", mobileRole: "primary" },
-    { key: "arn", label: "ARN", sortField: "arn" },
-    { key: "groups", label: "Groups" },
-    { key: "policies", label: "Policies" },
-    { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
-  ];
 
   const load = useCallback(async (accountId: S3AccountSelector) => {
     setLoading(true);
@@ -431,6 +417,133 @@ export default function ManagerUsersPage() {
     setError(null);
   };
 
+  const userTableColumns: Array<DataTableColumn<IAMUser, SortField>> = [
+    {
+      id: "name",
+      label: "Name",
+      field: "name",
+      primary: true,
+      mobileRole: "primary",
+      render: (user) => {
+        const lacksGroupOrPolicy =
+          (user.groups?.length ?? 0) === 0 &&
+          (user.policies?.length ?? 0) === 0 &&
+          (user.inline_policies?.length ?? 0) === 0;
+        const lacksKeys = user.has_keys === false;
+        const showWarning = lacksGroupOrPolicy || lacksKeys;
+        const warningTitle = lacksGroupOrPolicy && lacksKeys
+          ? "No groups/policies or access keys assigned"
+          : lacksGroupOrPolicy
+            ? "No groups or policies assigned"
+            : "No access keys registered";
+
+        return (
+          <div className="flex items-center gap-2">
+            <span>{user.name}</span>
+            {user.is_private_access_managed && (
+              <span
+                className="rounded border border-primary-200 bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary-700 dark:border-primary-900/50 dark:bg-primary-950/50 dark:text-primary-100"
+                title="Managed private access identity"
+              >
+                Private access
+              </span>
+            )}
+            {showWarning && (
+              <span
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100"
+                title={warningTitle}
+                role="img"
+                aria-label="Warning: user might lack necessary permissions"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M12 4 3 20h18L12 4z" />
+                  <path d="M12 9v5" />
+                  <path d="M12 17h.01" strokeWidth={2.4} />
+                </svg>
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    { id: "arn", label: "ARN", field: "arn", render: (user) => user.arn ?? "-" },
+    {
+      id: "groups",
+      label: "Groups",
+      cellClassName: "manager-table-cell-wide",
+      render: (user) =>
+        user.groups && user.groups.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {user.groups.map((group) => (
+              <span
+                key={group}
+                className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                {group}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+        ),
+    },
+    {
+      id: "policies",
+      label: "Policies",
+      cellClassName: "manager-table-cell-wide",
+      render: (user) =>
+        user.policies && user.policies.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {user.policies.map((policy) => (
+              <span
+                key={policy}
+                className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                title={policy}
+              >
+                {policy.split("/").pop()}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+        ),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (user) => (
+        <div className="flex flex-wrap justify-end gap-2">
+          <Link to={`/manager/users/${encodeURIComponent(user.name)}/keys`} className={tableActionButtonClasses}>
+            Keys
+          </Link>
+          <Link to={`/manager/users/${encodeURIComponent(user.name)}/policies`} className={tableActionButtonClasses}>
+            Policies
+          </Link>
+          <button
+            onClick={() => handleDelete(user.name)}
+            className={tableDeleteActionClasses}
+            disabled={busy === user.name || user.is_private_access_managed}
+            title={user.is_private_access_managed ? "Delete the linked private connection instead" : undefined}
+          >
+            {busy === user.name ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className={workflowPageHostClass(showAdvancedModal || showPrivateAccessModal)}>
       <PageHeader
@@ -504,129 +617,18 @@ export default function ManagerUsersPage() {
               />
             }
         >
-          <ManagerTable
+          <DataTableShell
             columns={userTableColumns}
-            listState={{
-              status: tableStatus,
-              loadingMessage: "Loading users...",
-              errorMessage: "Unable to load users.",
-              emptyMessage: "No users.",
-            }}
+            rows={filteredUsers}
+            rowKey={(user) => user.name}
+            status={tableStatus}
+            loadingMessage="Loading users..."
+            errorMessage="Unable to load users."
+            emptyMessage="No users."
             responsiveCards
             sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
-          >
-            {filteredUsers.map((u) => {
-              const hasGroups = (u.groups?.length ?? 0) > 0;
-              const hasPolicies = (u.policies?.length ?? 0) > 0;
-              const hasInlinePolicies = (u.inline_policies?.length ?? 0) > 0;
-              const lacksGroupOrPolicy = !hasGroups && !hasPolicies && !hasInlinePolicies;
-              const lacksKeys = u.has_keys === false;
-              const showWarning = lacksGroupOrPolicy || lacksKeys;
-              const warningTitle = (() => {
-                if (lacksGroupOrPolicy && lacksKeys) {
-                  return "No groups/policies or access keys assigned";
-                }
-                if (lacksGroupOrPolicy) {
-                  return "No groups or policies assigned";
-                }
-                return "No access keys registered";
-              })();
-
-              return (
-                <tr key={u.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className={managerTablePrimaryCellClass}>
-                    <div className="flex items-center gap-2">
-                      <span>{u.name}</span>
-                      {u.is_private_access_managed && (
-                        <span
-                          className="rounded border border-primary-200 bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary-700 dark:border-primary-900/50 dark:bg-primary-950/50 dark:text-primary-100"
-                          title="Managed private access identity"
-                        >
-                          Private access
-                        </span>
-                      )}
-                      {showWarning && (
-                        <span
-                          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100"
-                          title={warningTitle}
-                          role="img"
-                          aria-label="Warning: user might lack necessary permissions"
-                        >
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="h-3.5 w-3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={1.6}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                            focusable="false"
-                          >
-                            <path d="M12 4 3 20h18L12 4z" />
-                            <path d="M12 9v5" />
-                            <path d="M12 17h.01" strokeWidth={2.4} />
-                          </svg>
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className={managerTableCellClass}>{u.arn ?? "-"}</td>
-                  <td className={managerTableWideCellClass}>
-                    {hasGroups ? (
-                      <div className="flex flex-wrap gap-2">
-                        {u.groups?.map((g) => (
-                          <span
-                            key={g}
-                            className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                          >
-                            {g}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                    )}
-                  </td>
-                  <td className={managerTableWideCellClass}>
-                    {hasPolicies ? (
-                      <div className="flex flex-wrap gap-2">
-                        {u.policies?.map((p) => (
-                          <span
-                            key={p}
-                            className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                            title={p}
-                          >
-                            {p.split("/").pop()}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                    )}
-                  </td>
-                  <td className={managerTableActionCellClass}>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Link to={`/manager/users/${encodeURIComponent(u.name)}/keys`} className={tableActionButtonClasses}>
-                        Keys
-                      </Link>
-                      <Link to={`/manager/users/${encodeURIComponent(u.name)}/policies`} className={tableActionButtonClasses}>
-                        Policies
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(u.name)}
-                        className={tableDeleteActionClasses}
-                        disabled={busy === u.name || u.is_private_access_managed}
-                        title={u.is_private_access_managed ? "Delete the linked private connection instead" : undefined}
-                      >
-                        {busy === u.name ? "Deleting..." : "Delete"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </ManagerTable>
+            tableLayout="fixed"
+          />
         </ListPageSection>
       )}
 

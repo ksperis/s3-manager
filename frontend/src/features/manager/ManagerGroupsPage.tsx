@@ -13,13 +13,7 @@ import ListPageSection from "../../components/list/ListPageSection";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import ManagerTable, {
-  managerTableActionCellClass,
-  managerTableCellClass,
-  managerTablePrimaryCellClass,
-  managerTableWideCellClass,
-  type ManagerTableColumn,
-} from "../../components/list/ManagerTable";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -31,13 +25,6 @@ import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
 import ManagerToolbarSearch from "./ManagerToolbarSearch";
-
-const groupTableColumns: ManagerTableColumn[] = [
-  { key: "name", label: "Name", mobileRole: "primary" },
-  { key: "arn", label: "ARN" },
-  { key: "policies", label: "Policies" },
-  { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
-];
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
@@ -333,6 +320,54 @@ export default function ManagerGroupsPage() {
     error,
     rowCount: filteredGroups.length,
   });
+  const groupTableColumns: Array<DataTableColumn<IAMGroup>> = [
+    { id: "name", label: "Name", primary: true, mobileRole: "primary", render: (group) => group.name },
+    { id: "arn", label: "ARN", render: (group) => group.arn ?? "-" },
+    {
+      id: "policies",
+      label: "Policies",
+      cellClassName: "manager-table-cell-wide",
+      render: (group) =>
+        group.policies && group.policies.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {group.policies.map((policy) => (
+              <span
+                key={policy}
+                className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                title={policy}
+              >
+                {policy.split("/").pop()}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+        ),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (group) => (
+        <div className="flex flex-wrap justify-end gap-2">
+          <Link to={`/manager/groups/${encodeURIComponent(group.name)}/users`} className={tableActionButtonClasses}>
+            Members
+          </Link>
+          <Link to={`/manager/groups/${encodeURIComponent(group.name)}/policies`} className={tableActionButtonClasses}>
+            Policies
+          </Link>
+          <button
+            onClick={() => handleDelete(group.name)}
+            className={tableDeleteActionClasses}
+            disabled={busy === group.name}
+          >
+            {busy === group.name ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className={workflowPageHostClass(showAdvancedModal)}>
@@ -382,59 +417,17 @@ export default function ManagerGroupsPage() {
               />
             }
         >
-          <ManagerTable
+          <DataTableShell
             columns={groupTableColumns}
-            listState={{
-              status: filteredTableStatus,
-              loadingMessage: "Loading groups...",
-              errorMessage: "Unable to load groups.",
-              emptyMessage: "No groups.",
-            }}
+            rows={filteredGroups}
+            rowKey={(group) => group.name}
+            status={filteredTableStatus}
+            loadingMessage="Loading groups..."
+            errorMessage="Unable to load groups."
+            emptyMessage="No groups."
             responsiveCards
-          >
-            {filteredGroups.map((g) => (
-              <tr key={g.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                <td className={managerTablePrimaryCellClass}>
-                  <span>{g.name}</span>
-                </td>
-                <td className={managerTableCellClass}>{g.arn ?? "-"}</td>
-                <td className={managerTableWideCellClass}>
-                  {g.policies && g.policies.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {g.policies.map((p) => (
-                        <span
-                          key={p}
-                          className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                          title={p}
-                        >
-                          {p.split("/").pop()}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                  )}
-                </td>
-                <td className={managerTableActionCellClass}>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <Link to={`/manager/groups/${encodeURIComponent(g.name)}/users`} className={tableActionButtonClasses}>
-                      Members
-                    </Link>
-                    <Link to={`/manager/groups/${encodeURIComponent(g.name)}/policies`} className={tableActionButtonClasses}>
-                      Policies
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(g.name)}
-                      className={tableDeleteActionClasses}
-                      disabled={busy === g.name}
-                    >
-                      {busy === g.name ? "Deleting..." : "Delete"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </ManagerTable>
+            tableLayout="fixed"
+          />
         </ListPageSection>
       )}
 

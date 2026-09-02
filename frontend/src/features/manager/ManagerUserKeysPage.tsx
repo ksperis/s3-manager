@@ -18,12 +18,7 @@ import ListPageSection from "../../components/list/ListPageSection";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageShell from "../../components/PageShell";
-import ManagerTable, {
-  managerTableActionCellClass,
-  managerTableCellClass,
-  managerTableMutedRowClass,
-  managerTablePrimaryCellClass,
-} from "../../components/list/ManagerTable";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { cx } from "../../components/ui/styles";
@@ -181,6 +176,62 @@ export default function ManagerUserKeysPage() {
     error,
     rowCount: keys.length,
   });
+  const keyTableColumns: Array<DataTableColumn<AccessKey>> = [
+    {
+      id: "access-key",
+      label: "Access key",
+      primary: true,
+      mobileRole: "primary",
+      cellClassName: "font-mono",
+      render: (key) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <span>{key.access_key_id}</span>
+          {key.is_private_access_managed && (
+            <span className="rounded border px-1.5 py-0.5 text-[10px] font-semibold">Private access</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      label: "Status",
+      cellClassName: "text-slate-700 dark:text-slate-200",
+      render: (key) => key.status ?? (isKeyActive(key) ? "Active" : "Inactive"),
+    },
+    { id: "created", label: "Created on", render: (key) => formatDate(key.created_at) },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (key) => {
+        const active = isKeyActive(key);
+        const managed = Boolean(key.is_private_access_managed);
+        return (
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => handleToggleKey(key.access_key_id, !active)}
+              className={tableActionButtonClasses}
+              disabled={Boolean(busy) || managed}
+              title={managed ? "Update the linked private connection instead" : undefined}
+            >
+              {busy === `toggle:${key.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteKey(key.access_key_id)}
+              className={tableDeleteActionClasses}
+              disabled={Boolean(busy) || managed}
+              title={managed ? "Delete the linked private connection instead" : undefined}
+            >
+              {busy === `delete:${key.access_key_id}` ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
 
   if (isS3User) {
     return (
@@ -246,62 +297,20 @@ export default function ManagerUserKeysPage() {
           description="IAM access keys for this user."
           countLabel={`${keys.length} key${keys.length === 1 ? "" : "s"}`}
       >
-        <ManagerTable
+        <DataTableShell
           responsiveCards
-          columns={[
-            { key: "access-key", label: "Access key", mobileRole: "primary" },
-            { key: "status", label: "Status" },
-            { key: "created", label: "Created on" },
-            { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
-          ]}
-          listState={{
-            status: tableStatus,
-            loadingMessage: "Loading keys...",
-            errorMessage: "Unable to load keys.",
-            emptyMessage: "No keys for this user.",
-          }}
-        >
-          {keys.map((k) => {
-            const active = isKeyActive(k);
-            const managed = Boolean(k.is_private_access_managed);
-            return (
-              <tr key={k.access_key_id} className={cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !active && managerTableMutedRowClass)}>
-                <td className={cx(managerTablePrimaryCellClass, "font-mono")}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span>{k.access_key_id}</span>
-                    {managed && <span className="rounded border px-1.5 py-0.5 text-[10px] font-semibold">Private access</span>}
-                  </div>
-                </td>
-                <td className={cx(managerTableCellClass, "text-slate-700 dark:text-slate-200")}>
-                  {k.status ?? (active ? "Active" : "Inactive")}
-                </td>
-                <td className={managerTableCellClass}>{formatDate(k.created_at)}</td>
-                <td className={managerTableActionCellClass}>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleKey(k.access_key_id, !active)}
-                      className={tableActionButtonClasses}
-                      disabled={Boolean(busy) || managed}
-                      title={managed ? "Update the linked private connection instead" : undefined}
-                    >
-                      {busy === `toggle:${k.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteKey(k.access_key_id)}
-                      className={tableDeleteActionClasses}
-                      disabled={Boolean(busy) || managed}
-                      title={managed ? "Delete the linked private connection instead" : undefined}
-                    >
-                      {busy === `delete:${k.access_key_id}` ? "Deleting..." : "Delete"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </ManagerTable>
+          columns={keyTableColumns}
+          rows={keys}
+          rowKey={(key) => key.access_key_id}
+          rowClassName={(key) =>
+            cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !isKeyActive(key) && "bg-slate-50/70 dark:bg-slate-900/40")
+          }
+          status={tableStatus}
+          loadingMessage="Loading keys..."
+          errorMessage="Unable to load keys."
+          emptyMessage="No keys for this user."
+          tableLayout="fixed"
+        />
       </ListPageSection>
 
       {keyConfirmation.confirmationDialog}

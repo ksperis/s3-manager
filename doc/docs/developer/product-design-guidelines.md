@@ -49,7 +49,7 @@ workspace-specific visual themes when a shared product pattern fits.
 
 4. Reuse shared primitives before styling locally.
    Start from `PageHeader`, `PageTabs`, `ListToolbar`, `PageControlStrip`,
-   `ActiveFiltersBar`, `ManagerTable`, `WorkflowPage`, `Modal`, `UiButton`, and
+   `ActiveFiltersBar`, `DataTableShell`, `WorkflowPage`, `Modal`, `UiButton`, and
    the shared `ui-*` classes before adding page-specific class chains.
 
 5. Prefer progressive disclosure over busy first screens.
@@ -72,7 +72,7 @@ workspace-specific visual themes when a shared product pattern fits.
 | --- | --- | --- | --- | --- |
 | `/portal` | End-user storage workspace for files, shares, governance activity, usage, and personal settings. | Approachable, compact, user-facing, and bounded to visible Storage Spaces. | `PageHeader`, `WorkspaceDashboardKit`, `PageTabs variant="line"`, `PortalSettingsLayout`, locked `BrowserEmbed` with the `portal-basic` profile. | IAM jargon, ARNs, principals, policy JSON, bucket diagnostics, lifecycle, replication, versioning, `/portal/browser`, fake production data. |
 | `/browser` | Advanced object explorer and object-operation workspace. | Task-first, technical, and explicit about selected execution context. | `BrowserPage`, `BrowserEmbed`, compact embedded profiles, advanced root profile only when access allows it. | Duplicate browser implementations, hidden context switching, advanced chrome for simple embedded surfaces. |
-| `/manager` | S3 and IAM configuration console for accounts, connections, users, groups, roles, policies, buckets, and bucket features. | Dense, accurate, and native to S3/IAM semantics. | `PageHeader`, `PageTabs`, `ManagerTable`, `ListToolbar`, `BucketFeatureCard`, shared metrics and dashboard components. | Hiding native S3/IAM meaning, Portal wording, platform-governance settings that belong in Admin. |
+| `/manager` | S3 and IAM configuration console for accounts, connections, users, groups, roles, policies, buckets, and bucket features. | Dense, accurate, and native to S3/IAM semantics. | `PageHeader`, `PageTabs`, `DataTableShell`, `ListToolbar`, `BucketFeatureCard`, shared metrics and dashboard components. | Hiding native S3/IAM meaning, Portal wording, platform-governance settings that belong in Admin. |
 | `/admin` | Platform governance for UI users, endpoints, accounts, feature flags, audit, billing, health, and global settings. | Administrative, auditable, and oriented around platform state. | `PageHeader`, settings panels, `WorkflowTabs`, shared association summaries, shared metrics cards. | Generic S3 object workflows, tenant operations without explicit governance context, local-only visual patterns. |
 | `/ceph-admin` | Ceph RGW cluster administration for authorized operators. | High-signal, risk-aware, and explicit about endpoint-wide impact. | Ceph Admin shell, compact operational tables, risk acknowledgement for endpoint-wide Browser use. | Regular tenant file work, hiding owner/executor ambiguity, Portal or Manager shortcuts. |
 | `/storage-ops` | Operational bucket tooling and cross-account maintenance. | Deterministic, compact, and action-oriented. | Shared bucket workbench, advanced filter drawer, selection action bar, progress cards. | Decorative cards, hidden filters that change backend semantics, UI-only filters without backend support. |
@@ -83,7 +83,7 @@ workspace-specific visual themes when a shared product pattern fits.
 | --- | --- | --- |
 | Page title, description, breadcrumbs, and primary actions | `PageHeader` | Keep primary actions top-level only when they start the main workflow for the page. |
 | Sibling page modes or metric sections | `PageTabs variant="line"` | Use the shared line baseline for top-level page navigation. Keep `bar` for compact embedded controls and `card` when the tab content is a contained tool. |
-| Lists and inventory pages | `ManagerTable`, `ui-data-table`, `uiTableContainerClass` | Keep tables compact. Use explicit empty and unavailable states. |
+| Lists and inventory pages | `DataTableShell`, `ui-data-table`, `uiTableContainerClass` | Keep tables compact. Use explicit empty and unavailable states. |
 | Search, filters, and column controls | `ListToolbar`, `PageControlStrip`, `ActiveFiltersBar`, shared compact toolbar classes | Advanced filters should not introduce frontend-only behavior unless the backend data is already present and bounded. |
 | Cards, panels, and page sections | `uiCardClass`, `uiPanelClass`, `uiCardMutedClass`, `uiPanelMutedClass` | Standard cards use 8px radius and soft/no shadows. Avoid decorative nesting. |
 | Forms and settings | `ui-control`, `uiLabelClass`, `UiCheckboxField`, `UiDetails`, settings panels | Compute dirty state from saveable fields only. |

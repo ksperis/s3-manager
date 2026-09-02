@@ -108,6 +108,7 @@ type DataTableShellProps<Row, SortField extends string = string> = {
   sort?: DataTableSort<SortField>;
   pagination?: DataTablePagination;
   primaryColumnId?: string;
+  tableLayout?: "auto" | "fixed";
   tableClassName?: string;
   containerClassName?: string;
   tbodyClassName?: string;
@@ -131,6 +132,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
   sort,
   pagination,
   primaryColumnId,
+  tableLayout = "auto",
   tableClassName,
   containerClassName,
   tbodyClassName,
@@ -158,7 +160,8 @@ export default function DataTableShell<Row, SortField extends string = string>({
       <div className={cx(containerOverflowClass, containerClassName)}>
         <table
           className={cx(
-            "manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800",
+            "manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800",
+            tableLayout === "auto" && "!table-auto !w-max",
             responsiveCards && "responsive-data-table",
             tableClassName
           )}

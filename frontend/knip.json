@@ -8,6 +8,7 @@
   ],
   "playwright": {
     "config": [
+      "playwright.agent.config.ts",
       "playwright.e2e.config.ts",
       "playwright.docs.config.ts"
     ]

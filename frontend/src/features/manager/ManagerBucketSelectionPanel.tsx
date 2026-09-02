@@ -6,7 +6,7 @@ import { ReactNode } from "react";
 
 import { type Bucket } from "../../api/buckets";
 import ListToolbar from "../../components/ListToolbar";
-import ManagerTable, { managerTableCheckboxCellClass, managerTablePrimaryCellClass } from "../../components/list/ManagerTable";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { ListTableStatus } from "../../components/list/listTableStatus";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
@@ -49,6 +49,27 @@ export default function ManagerBucketSelectionPanel({
   errorMessage,
   emptyMessage,
 }: ManagerBucketSelectionPanelProps) {
+  const columns: Array<DataTableColumn<Bucket>> = [
+    {
+      id: "select",
+      label: "Select",
+      header: <span className="sr-only">Select</span>,
+      headerClassName: "w-12",
+      cellClassName: "w-12",
+      mobileLabel: "Select",
+      render: (bucket) => (
+        <input
+          aria-label={`Select ${bucket.name}`}
+          type="checkbox"
+          checked={selectedBuckets.has(bucket.name)}
+          onChange={() => onToggleBucket(bucket.name)}
+          className={uiCheckboxClass}
+        />
+      ),
+    },
+    { id: "bucket", label: "Bucket", primary: true, mobileRole: "primary", render: (bucket) => bucket.name },
+  ];
+
   return (
     <div className={className}>
       <ListToolbar
@@ -91,34 +112,17 @@ export default function ManagerBucketSelectionPanel({
         }
         actions={action}
       />
-      <ManagerTable
+      <DataTableShell
         responsiveCards
-        columns={[
-          { key: "select", label: "Select", className: "w-12", hideLabel: true, mobileLabel: "Select" },
-          { key: "bucket", label: "Bucket", mobileRole: "primary" },
-        ]}
-        listState={{
-          status: tableStatus,
-          loadingMessage,
-          errorMessage,
-          emptyMessage,
-        }}
-      >
-        {buckets.map((bucket) => (
-          <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-            <td className={managerTableCheckboxCellClass}>
-              <input
-                aria-label={`Select ${bucket.name}`}
-                type="checkbox"
-                checked={selectedBuckets.has(bucket.name)}
-                onChange={() => onToggleBucket(bucket.name)}
-                className={uiCheckboxClass}
-              />
-            </td>
-            <td className={managerTablePrimaryCellClass}>{bucket.name}</td>
-          </tr>
-        ))}
-      </ManagerTable>
+        columns={columns}
+        rows={buckets}
+        rowKey={(bucket) => bucket.name}
+        status={tableStatus}
+        loadingMessage={loadingMessage}
+        errorMessage={errorMessage}
+        emptyMessage={emptyMessage}
+        tableLayout="fixed"
+      />
     </div>
   );
 }

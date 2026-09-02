@@ -17,12 +17,7 @@ import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageShell from "../../components/PageShell";
-import ManagerTable, {
-  managerTableActionCellClass,
-  managerTableCellClass,
-  managerTableMutedRowClass,
-  managerTablePrimaryCellClass,
-} from "../../components/list/ManagerTable";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { cx } from "../../components/ui/styles";
@@ -179,6 +174,72 @@ export default function ManagerCephKeysPage() {
     return key.access_key_id.toLowerCase().includes(needle) || statusLabel.includes(needle);
   });
   const tableStatus = resolveListTableStatus({ loading, error, rowCount: filteredKeys.length });
+  const keyTableColumns: Array<DataTableColumn<ManagerCephAccessKey>> = [
+    {
+      id: "access-key",
+      label: "Access key",
+      primary: true,
+      mobileRole: "primary",
+      cellClassName: "font-mono",
+      render: (key) => {
+        const managedPrivate = Boolean(key.is_private_access_managed);
+        const locked = Boolean(key.is_ui_managed || managedPrivate);
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            <span>{key.access_key_id}</span>
+            {locked && (
+              <span
+                className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                title={managedPrivate ? "Managed private access key" : "Portal key (locked)"}
+              >
+                {managedPrivate ? "Private access" : "KLO"}
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "status",
+      label: "Status",
+      cellClassName: "text-slate-700 dark:text-slate-200",
+      render: (key) => (key.is_active ? "Active" : "Inactive"),
+    },
+    { id: "created", label: "Created on", render: (key) => formatDate(key.created_at) },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (key) => {
+        const active = key.is_active;
+        const managedPrivate = Boolean(key.is_private_access_managed);
+        const locked = Boolean(key.is_ui_managed || managedPrivate);
+        return (
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => handleToggleKey(key)}
+              className={tableActionButtonClasses}
+              disabled={Boolean(busy) || locked}
+              title={locked ? (managedPrivate ? "Update the linked private connection instead" : "Portal key is locked") : undefined}
+            >
+              {busy === `toggle:${key.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteKey(key)}
+              className={tableDeleteActionClasses}
+              disabled={Boolean(busy) || locked}
+              title={locked ? (managedPrivate ? "Delete the linked private connection instead" : "Portal key is locked") : undefined}
+            >
+              {busy === `delete:${key.access_key_id}` ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <PageShell
@@ -263,70 +324,20 @@ export default function ManagerCephKeysPage() {
             />
           }
         >
-          <ManagerTable
+          <DataTableShell
             responsiveCards
-            columns={[
-              { key: "access-key", label: "Access key", mobileRole: "primary" },
-              { key: "status", label: "Status" },
-              { key: "created", label: "Created on" },
-              { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
-            ]}
-            listState={{
-              status: tableStatus,
-              loadingMessage: "Loading keys...",
-              errorMessage: "Unable to load keys.",
-              emptyMessage: "No keys.",
-            }}
-          >
-            {filteredKeys.map((key) => {
-              const active = key.is_active;
-              const managedPrivate = Boolean(key.is_private_access_managed);
-              const locked = Boolean(key.is_ui_managed || managedPrivate);
-              return (
-                <tr key={key.access_key_id} className={cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !active && managerTableMutedRowClass)}>
-                  <td className={cx(managerTablePrimaryCellClass, "font-mono")}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span>{key.access_key_id}</span>
-                      {locked && (
-                        <span
-                          className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-                          title={managedPrivate ? "Managed private access key" : "Portal key (locked)"}
-                        >
-                          {managedPrivate ? "Private access" : "KLO"}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className={cx(managerTableCellClass, "text-slate-700 dark:text-slate-200")}>
-                    {active ? "Active" : "Inactive"}
-                  </td>
-                  <td className={managerTableCellClass}>{formatDate(key.created_at)}</td>
-                  <td className={managerTableActionCellClass}>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleKey(key)}
-                        className={tableActionButtonClasses}
-                        disabled={Boolean(busy) || locked}
-                        title={locked ? (managedPrivate ? "Update the linked private connection instead" : "Portal key is locked") : undefined}
-                      >
-                        {busy === `toggle:${key.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteKey(key)}
-                        className={tableDeleteActionClasses}
-                        disabled={Boolean(busy) || locked}
-                        title={locked ? (managedPrivate ? "Delete the linked private connection instead" : "Portal key is locked") : undefined}
-                      >
-                        {busy === `delete:${key.access_key_id}` ? "Deleting..." : "Delete"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </ManagerTable>
+            columns={keyTableColumns}
+            rows={filteredKeys}
+            rowKey={(key) => key.access_key_id}
+            rowClassName={(key) =>
+              cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !key.is_active && "bg-slate-50/70 dark:bg-slate-900/40")
+            }
+            status={tableStatus}
+            loadingMessage="Loading keys..."
+            errorMessage="Unable to load keys."
+            emptyMessage="No keys."
+            tableLayout="fixed"
+          />
         </ListPageSection>
       )}
       {keyConfirmation.confirmationDialog}

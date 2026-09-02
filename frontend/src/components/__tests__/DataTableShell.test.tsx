@@ -39,8 +39,9 @@ describe("DataTableShell", () => {
       />
     );
 
-    expect(screen.getByRole("table")).toHaveClass("manager-table");
+    expect(screen.getByRole("table")).toHaveClass("manager-table", "!table-auto", "!w-max");
     expect(screen.getByText("Archive")).toHaveClass("font-semibold");
+    expect(screen.getByRole("columnheader", { name: "Name" })).toHaveAttribute("aria-sort", "ascending");
     expect(screen.getByRole("columnheader", { name: "Count" })).toHaveClass("text-right");
     expect(screen.getByRole("button", { name: /Name/ })).toHaveClass("uppercase");
 
@@ -49,6 +50,24 @@ describe("DataTableShell", () => {
 
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
+  it("can preserve the fixed layout used by manager inventories", () => {
+    render(
+      <DataTableShell
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        tableLayout="fixed"
+      />
+    );
+
+    expect(screen.getByRole("table")).toHaveClass("manager-table", "min-w-full");
+    expect(screen.getByRole("table")).not.toHaveClass("!table-auto", "!w-max");
   });
 
   it("passes custom page-size options to the shared pagination controls", async () => {

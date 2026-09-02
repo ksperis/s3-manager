@@ -4,7 +4,6 @@
  */
 import { isApiError } from "../../api/client";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListPageSection from "../../components/list/ListPageSection";
@@ -33,7 +32,7 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
-import ManagerTable, { type ManagerTableColumn } from "../../components/list/ManagerTable";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiMeterBar from "../../components/ui/UiMeterBar";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -337,13 +336,7 @@ export default function BucketsPage() {
     [usageFeatureEnabled, visibleColumns, quotaFeatureEnabled]
   );
 
-  type ColumnDef = {
-    id: string;
-    label: string;
-    field?: SortField | null;
-    align?: "left" | "right";
-    render: (bucket: BucketListRow) => ReactNode;
-  };
+  type ColumnDef = DataTableColumn<BucketListRow, SortField>;
 
   const quotaConfigured = (bucket: BucketListRow) =>
     Boolean((bucket.quota_max_size_bytes ?? 0) > 0 || (bucket.quota_max_objects ?? 0) > 0);
@@ -772,6 +765,8 @@ export default function BucketsPage() {
         id: "name",
         label: "Name",
         field: "name",
+        primary: true,
+        mobileRole: "primary",
         render: (bucket) => (
           <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className="hover:text-primary-700 dark:hover:text-primary-200">
             {bucket.name}
@@ -861,6 +856,9 @@ export default function BucketsPage() {
       label: "Actions",
       field: null,
       align: "right",
+      headerClassName: "min-w-[13rem]",
+      cellClassName: "min-w-[13rem]",
+      mobileRole: "actions",
       render: (bucket) => {
         const objectCount = bucket.object_count;
         const containsObjects = (objectCount ?? 0) > 0;
@@ -868,7 +866,6 @@ export default function BucketsPage() {
           containsObjects && !canDeleteBucketWithPurge
             ? "Bucket is not empty. Empty it first, or enable bucket purge access to delete it from Manager."
             : null;
-        const deleteDisabledLabel = deleteDisabledReason ? "Not empty" : null;
         const deleteLabel = containsObjects && canDeleteBucketWithPurge ? "Purge and Delete" : "Delete";
         const deleteButton = (
           <button
@@ -880,21 +877,14 @@ export default function BucketsPage() {
           </button>
         );
         return (
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex flex-nowrap justify-end gap-2">
-              <Link
-                to={`/manager/buckets/${encodeURIComponent(bucket.name)}`}
-                className={`${tableActionButtonClasses} whitespace-nowrap`}
-              >
-                Configure
-              </Link>
-              {deleteDisabledReason ? <span title={deleteDisabledReason}>{deleteButton}</span> : deleteButton}
-            </div>
-            {deleteDisabledLabel && (
-              <span className="ui-caption text-slate-500 dark:text-slate-400" title={deleteDisabledReason ?? undefined}>
-                {deleteDisabledLabel}
-              </span>
-            )}
+          <div className="flex flex-nowrap justify-end gap-2">
+            <Link
+              to={`/manager/buckets/${encodeURIComponent(bucket.name)}`}
+              className={`${tableActionButtonClasses} whitespace-nowrap`}
+            >
+              Configure
+            </Link>
+            {deleteDisabledReason ? <span title={deleteDisabledReason}>{deleteButton}</span> : deleteButton}
           </div>
         );
       },
@@ -902,16 +892,6 @@ export default function BucketsPage() {
 
     return cols;
   })();
-  const managerBucketTableColumns: Array<ManagerTableColumn<SortField>> = bucketTableColumns.map((col) => ({
-    key: col.id,
-    label: col.label,
-    align: col.align ?? (col.id === "actions" ? "right" : "left"),
-    sortField: col.field ?? null,
-    mobileRole: col.id === "name" ? "primary" : col.id === "actions" ? "actions" : undefined,
-    mobileLabel: col.label,
-    className: col.id === "actions" ? "min-w-[13rem]" : undefined,
-  }));
-
   const stepTitles = ["General", "Protection"];
   const isBucketNameValid = !bucketForm.name || isValidS3BucketName(bucketForm.name);
   const wizardCurrentSignature = useMemo(
@@ -1072,41 +1052,19 @@ export default function BucketsPage() {
               </>
             }
         >
-          <ManagerTable
-            columns={managerBucketTableColumns}
+          <DataTableShell
+            columns={bucketTableColumns}
+            rows={filteredBuckets}
+            rowKey={(bucket) => bucket.name}
             responsiveCards
-            className="w-full min-w-[760px]"
+            tableClassName="w-full min-w-[760px]"
+            tableLayout="fixed"
             sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
-            listState={{
-              status: tableStatus,
-              loadingMessage: "Loading buckets...",
-              errorMessage: "Unable to load buckets.",
-              emptyMessage: "No buckets.",
-            }}
-          >
-            {filteredBuckets.map((bucket) => (
-              <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                {bucketTableColumns.map((col) => {
-                  const align = col.align ?? (col.id === "actions" ? "right" : "left");
-                  const cellBase =
-                    col.id === "actions"
-                      ? "min-w-[13rem] px-6 py-4 text-right align-top"
-                      : align === "right"
-                        ? "px-6 py-4 text-right"
-                        : "px-6 py-4";
-                  const textClass =
-                    col.id === "name"
-                      ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
-                      : "ui-body text-slate-600 dark:text-slate-300";
-                  return (
-                    <td key={`${bucket.name}:${col.id}`} className={`${cellBase} ${textClass}`}>
-                      {col.render(bucket)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </ManagerTable>
+            status={tableStatus}
+            loadingMessage="Loading buckets..."
+            errorMessage="Unable to load buckets."
+            emptyMessage="No buckets."
+          />
         </ListPageSection>
       )}
 

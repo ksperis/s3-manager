@@ -1455,8 +1455,13 @@ describe("manager shell pages", () => {
 
     const bucketRow = (await screen.findByText("bucket-filled")).closest("tr");
     expect(bucketRow).not.toBeNull();
-    expect(within(bucketRow!).getByRole("button", { name: "Delete" })).toBeDisabled();
-    expect(within(bucketRow!).getByText("Not empty")).toBeInTheDocument();
+    const deleteButton = within(bucketRow!).getByRole("button", { name: "Delete" });
+    expect(deleteButton).toBeDisabled();
+    expect(deleteButton.parentElement).toHaveAttribute(
+      "title",
+      "Bucket is not empty. Empty it first, or enable bucket purge access to delete it from Manager."
+    );
+    expect(within(bucketRow!).queryByText("Not empty")).not.toBeInTheDocument();
     expect(
       within(bucketRow!).queryByText("Bucket is not empty. Empty it first, or enable bucket purge access to delete it from Manager.")
     ).not.toBeInTheDocument();

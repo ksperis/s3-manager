@@ -3,25 +3,13 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import ListPageSection from "../../components/list/ListPageSection";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageShell from "../../components/PageShell";
-import PropertySummaryChip from "../../components/PropertySummaryChip";
 import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
-import ManagerTable, {
-  managerTableActionCellClass,
-  managerTableCellClass,
-  managerTableErrorCellClass,
-  managerTableMutedCellClass,
-  managerTableMutedRowClass,
-  managerTablePrimaryCellClass,
-  managerTableWideCellClass,
-} from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import {
@@ -34,6 +22,7 @@ import {
 import { S3AccountSelector } from "../../api/accountParams";
 import { extractApiError } from "../../utils/apiError";
 import { useS3AccountContext } from "./S3AccountContext";
+import FeatureRulesTable from "./FeatureRulesTable";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 type StatusFilter = "all" | FeatureRuleInventoryStatus;
@@ -57,18 +46,6 @@ const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "empty", label: "Empty" },
   { value: "unavailable", label: "Unavailable" },
 ];
-
-const statusTone: Record<FeatureRuleInventoryStatus, "active" | "inactive" | "unknown"> = {
-  configured: "active",
-  empty: "inactive",
-  unavailable: "unknown",
-};
-
-const statusLabel: Record<FeatureRuleInventoryStatus, string> = {
-  configured: "Configured",
-  empty: "No rules",
-  unavailable: "Unavailable",
-};
 
 function extractError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
@@ -218,112 +195,19 @@ export default function ManagerFeatureRulesPage() {
             }
         >
 
-          <ManagerTable
-            columns={[
-              { key: "bucket", label: "Bucket" },
-              { key: "status", label: "Status" },
-              { key: "rule", label: feature === "tags" ? "Tag" : "Rule" },
-              { key: "summary", label: feature === "tags" ? "Value" : "Summary" },
-              { key: "json", label: "JSON", align: "right" },
-            ]}
-            listState={{
-              status: tableStatus,
-              loadingMessage: `Loading ${selectedFeatureLabel.toLowerCase()}...`,
-              errorMessage: "Unable to load buckets.",
-              emptyMessage: "No buckets match the current filters.",
-            }}
-          >
-            {filteredItems.flatMap((item) => {
-                const bucketRow = (
-                  <tr key={`${item.bucket_name}:bucket`} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className={managerTablePrimaryCellClass}>
-                      <Link
-                        to={`/manager/buckets/${encodeURIComponent(item.bucket_name)}`}
-                        className="hover:text-primary-700 dark:hover:text-primary-200"
-                      >
-                        {item.bucket_name}
-                      </Link>
-                    </td>
-                    <td className={managerTableCellClass}>
-                      <PropertySummaryChip compact state={statusLabel[item.status]} tone={statusTone[item.status]} />
-                    </td>
-                    <td className={managerTableMutedCellClass}>
-                      {item.rules.length > 0 ? `${item.rules.length} ${selectedItemLabel}` : "-"}
-                    </td>
-                    <td className={managerTableMutedCellClass}>
-                      {item.status === "unavailable" ? item.error || readErrorFallback : selectedFeatureLabel}
-                    </td>
-                    <td className={managerTableActionCellClass} />
-                  </tr>
-                );
-
-                if (item.status === "empty") {
-                  return [
-                    bucketRow,
-                    <tr key={`${item.bucket_name}:empty`} className={managerTableMutedRowClass}>
-                      <td className={managerTableMutedCellClass} />
-                      <td className={managerTableMutedCellClass} />
-                      <td colSpan={3} className={managerTableMutedCellClass}>
-                        {emptyRulesLabel}
-                      </td>
-                    </tr>,
-                  ];
-                }
-
-                if (item.status === "unavailable") {
-                  return [
-                    bucketRow,
-                    <tr key={`${item.bucket_name}:unavailable`} className={managerTableMutedRowClass}>
-                      <td className={managerTableMutedCellClass} />
-                      <td className={managerTableMutedCellClass} />
-                      <td colSpan={3} className={managerTableErrorCellClass}>
-                        {item.error || readErrorFallback}
-                      </td>
-                    </tr>,
-                  ];
-                }
-
-                return [
-                  bucketRow,
-                  ...item.rules.map((rule) => (
-                    <tr key={`${item.bucket_name}:${rule.type}:${rule.id}`} className={managerTableMutedRowClass}>
-                      <td className={managerTableMutedCellClass} />
-                      <td className={managerTableMutedCellClass} />
-                      <td className={`${managerTableCellClass} max-w-xs font-semibold text-slate-800 dark:text-slate-100`}>
-                        <div className="truncate" title={rule.title}>
-                          {rule.title}
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {rule.chips.slice(0, 3).map((chip) => (
-                            <span
-                              key={chip}
-                              className="max-w-[12rem] truncate rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                              title={chip}
-                            >
-                              {chip}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className={`${managerTableWideCellClass} max-w-2xl text-slate-700 dark:text-slate-200`}>
-                        <div className="truncate" title={rule.summary}>
-                          {rule.summary}
-                        </div>
-                      </td>
-                      <td className={managerTableActionCellClass}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedRule({ bucketName: item.bucket_name, rule })}
-                          className={tableActionButtonClasses}
-                        >
-                          JSON
-                        </button>
-                      </td>
-                    </tr>
-                  )),
-                ];
-              })}
-          </ManagerTable>
+          <FeatureRulesTable
+            emptyMessage="No buckets match the current filters."
+            emptyRulesLabel={emptyRulesLabel}
+            errorMessage="Unable to load buckets."
+            feature={feature}
+            featureLabel={selectedFeatureLabel}
+            items={filteredItems}
+            itemLabel={selectedItemLabel}
+            loadingMessage={`Loading ${selectedFeatureLabel.toLowerCase()}...`}
+            onOpenRule={(bucketName, rule) => setSelectedRule({ bucketName, rule })}
+            readErrorFallback={readErrorFallback}
+            status={tableStatus}
+          />
         </ListPageSection>
       )}
 

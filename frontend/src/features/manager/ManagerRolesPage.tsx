@@ -22,13 +22,7 @@ import ListPageSection from "../../components/list/ListPageSection";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import ManagerTable, {
-  managerTableActionCellClass,
-  managerTableCellClass,
-  managerTablePrimaryCellClass,
-  managerTableWideCellClass,
-  type ManagerTableColumn,
-} from "../../components/list/ManagerTable";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -55,14 +49,6 @@ const DEFAULT_ASSUME_ROLE_DOCUMENT = JSON.stringify(
   2
 );
 const DEFAULT_ROLE_PATH = "/";
-
-const roleTableColumns: ManagerTableColumn[] = [
-  { key: "name", label: "Name", mobileRole: "primary" },
-  { key: "path", label: "Path" },
-  { key: "arn", label: "ARN" },
-  { key: "policies", label: "Policies" },
-  { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
-];
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
@@ -494,6 +480,59 @@ export default function ManagerRolesPage() {
     error,
     rowCount: filteredRoles.length,
   });
+  const roleTableColumns: Array<DataTableColumn<IAMRole>> = [
+    { id: "name", label: "Name", primary: true, mobileRole: "primary", render: (role) => role.name },
+    { id: "path", label: "Path", render: (role) => role.path ?? "-" },
+    { id: "arn", label: "ARN", render: (role) => role.arn ?? "-" },
+    {
+      id: "policies",
+      label: "Policies",
+      cellClassName: "manager-table-cell-wide",
+      render: (role) =>
+        role.policies && role.policies.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {role.policies.map((policy) => (
+              <span
+                key={policy}
+                className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                title={policy}
+              >
+                {policy.split("/").pop()}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+        ),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (role) => (
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            onClick={() => openEditModal(role.name)}
+            className={tableActionButtonClasses}
+            disabled={loadingRoleDetails && editingRole?.name === role.name}
+          >
+            Edit
+          </button>
+          <Link to={`/manager/roles/${encodeURIComponent(role.name)}/policies`} className={tableActionButtonClasses}>
+            Policies
+          </Link>
+          <button
+            onClick={() => handleDelete(role.name)}
+            className={tableDeleteActionClasses}
+            disabled={deletingRole === role.name}
+          >
+            {deletingRole === role.name ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className={workflowPageHostClass(showAdvancedModal || showEditModal)}>
@@ -543,64 +582,17 @@ export default function ManagerRolesPage() {
               />
             }
         >
-          <ManagerTable
+          <DataTableShell
             columns={roleTableColumns}
-            listState={{
-              status: filteredTableStatus,
-              loadingMessage: "Loading roles...",
-              errorMessage: "Unable to load roles.",
-              emptyMessage: "No roles.",
-            }}
+            rows={filteredRoles}
+            rowKey={(role) => role.name}
+            status={filteredTableStatus}
+            loadingMessage="Loading roles..."
+            errorMessage="Unable to load roles."
+            emptyMessage="No roles."
             responsiveCards
-          >
-            {filteredRoles.map((r) => (
-              <tr key={r.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                <td className={managerTablePrimaryCellClass}>
-                  <span>{r.name}</span>
-                </td>
-                <td className={managerTableCellClass}>{r.path ?? "-"}</td>
-                <td className={managerTableCellClass}>{r.arn ?? "-"}</td>
-                <td className={managerTableWideCellClass}>
-                  {r.policies && r.policies.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {r.policies.map((p) => (
-                        <span
-                          key={p}
-                          className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                          title={p}
-                        >
-                          {p.split("/").pop()}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                  )}
-                </td>
-                <td className={managerTableActionCellClass}>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <button
-                      onClick={() => openEditModal(r.name)}
-                      className={tableActionButtonClasses}
-                      disabled={loadingRoleDetails && editingRole?.name === r.name}
-                    >
-                      Edit
-                    </button>
-                    <Link to={`/manager/roles/${encodeURIComponent(r.name)}/policies`} className={tableActionButtonClasses}>
-                      Policies
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(r.name)}
-                      className={tableDeleteActionClasses}
-                      disabled={deletingRole === r.name}
-                    >
-                      {deletingRole === r.name ? "Deleting..." : "Delete"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </ManagerTable>
+            tableLayout="fixed"
+          />
         </ListPageSection>
       )}
 
