@@ -1,3 +1,4 @@
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,6 +15,8 @@ import {
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
   updateBucketCompareConfigFeatures,
+  useBucketCompareConfigFeatures,
+  useBucketCompareManualMappingState,
 } from "./bucketCompareShared";
 
 const buildModel = (
@@ -107,12 +110,12 @@ describe("bucket comparison configuration state", () => {
     ).toEqual({ alpha: "custom-alpha", beta: "beta" });
     expect(
       reconcileBucketCompareManualMapping({
-        previous: {},
-        sourceBuckets: ["alpha"],
-        targetBuckets: ["alpha"],
+        previous: { alpha: "beta", beta: "external" },
+        sourceBuckets: ["alpha", "beta"],
+        targetBuckets: ["alpha", "beta", "external"],
         sameTargetSelected: true,
       })
-    ).toEqual({});
+    ).toEqual({ beta: "external" });
   });
 
   it("merges raw mappings only for selected sources and preserves identity when unchanged", () => {
@@ -145,6 +148,49 @@ describe("bucket comparison configuration state", () => {
         false
       )
     ).toEqual(["policy"]);
+  });
+
+  it("owns manual and raw mapping transitions for comparison consumers", async () => {
+    const sourceBuckets = ["alpha", "beta"];
+    const targetBuckets = ["alpha", "beta", "archive"];
+    const { result, rerender } = renderHook(
+      ({ sameTargetSelected }) =>
+        useBucketCompareManualMappingState({
+          mappingMode: "manual",
+          sourceBuckets,
+          targetBuckets,
+          sameTargetSelected,
+        }),
+      { initialProps: { sameTargetSelected: false } }
+    );
+
+    await waitFor(() => {
+      expect(result.current.manualMapping).toEqual({ alpha: "alpha", beta: "beta" });
+    });
+
+    act(() => result.current.setRawMappingText("alpha => archive"));
+    await waitFor(() => {
+      expect(result.current.manualMapping).toEqual({ alpha: "archive", beta: "beta" });
+    });
+
+    rerender({ sameTargetSelected: true });
+    await waitFor(() => {
+      expect(result.current.manualMapping).toEqual({ alpha: "archive" });
+    });
+  });
+
+  it("owns canonically ordered configuration feature selection", () => {
+    const orderedFeatures = ["versioning", "policy", "tags"] as const;
+    const { result } = renderHook(() =>
+      useBucketCompareConfigFeatures(orderedFeatures)
+    );
+
+    act(() => result.current.toggleConfigFeature("policy", false));
+    expect(result.current.selectedConfigFeatures).toEqual(["versioning", "tags"]);
+
+    act(() => result.current.setSelectedConfigFeatures(["tags"]));
+    act(() => result.current.toggleConfigFeature("policy", true));
+    expect(result.current.selectedConfigFeatures).toEqual(["policy", "tags"]);
   });
 });
 

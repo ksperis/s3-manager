@@ -42,9 +42,6 @@ import {
   getRunStatusTone,
   getVisibleCompareObjectKeys,
   matchesBucketCompareRunFilters,
-  mergeRawBucketCompareMappings,
-  parseRawMappingText,
-  reconcileBucketCompareManualMapping,
   renderCompareObjectDetails,
   renderDiffLines,
   resolveBucketCompareRunSettlement,
@@ -53,7 +50,8 @@ import {
   targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
-  updateBucketCompareConfigFeatures,
+  useBucketCompareConfigFeatures,
+  useBucketCompareManualMappingState,
   useCompareVisibleKeysClipboard,
 } from "../shared/bucketCompareShared";
 import {
@@ -167,20 +165,14 @@ export default function ManagerBucketCompareModal({
   onClose,
 }: ManagerBucketCompareModalProps) {
   const sortedSourceBuckets = useMemo(() => [...sourceBuckets].sort((a, b) => a.localeCompare(b)), [sourceBuckets]);
-  const sourceBucketNameSet = useMemo(() => new Set(sortedSourceBuckets), [sortedSourceBuckets]);
   const targetContextOptions = useMemo(() => contexts, [contexts]);
   const [targetContextId, setTargetContextId] = useState<string | null>(null);
   const [targetBucketNames, setTargetBucketNames] = useState<string[]>([]);
   const [targetBucketsLoading, setTargetBucketsLoading] = useState(false);
   const [targetBucketsError, setTargetBucketsError] = useState<string | null>(null);
   const [mappingMode, setMappingMode] = useState<"by_name" | "manual">("by_name");
-  const [manualMapping, setManualMapping] = useState<Record<string, string>>({});
-  const [rawMappingText, setRawMappingText] = useState("");
   const [includeContent, setIncludeContent] = useState(true);
   const [includeConfig, setIncludeConfig] = useState(false);
-  const [selectedConfigFeatures, setSelectedConfigFeatures] = useState<ManagerBucketCompareConfigFeature[]>(
-    () => [...ALL_CONFIG_FEATURE_KEYS]
-  );
   const [ignoreModifiedAfter, setIgnoreModifiedAfter] = useState("");
   const [parallelism, setParallelism] = useState(4);
   const [running, setRunning] = useState(false);
@@ -196,7 +188,25 @@ export default function ManagerBucketCompareModal({
   const [statusFilter, setStatusFilter] = useState<"all" | CompareRunItem["status"]>("all");
   const [diffFilter, setDiffFilter] = useState<"all" | "with_diff" | "no_diff">("all");
   const sameContextSelected = targetContextId === sourceContextId;
-  const parsedRawMapping = useMemo(() => parseRawMappingText(rawMappingText), [rawMappingText]);
+  const {
+    manualMapping,
+    parsedRawMapping,
+    rawMappingText,
+    setManualMapping,
+    setRawMappingText,
+  } = useBucketCompareManualMappingState({
+    mappingMode,
+    sourceBuckets: sortedSourceBuckets,
+    targetBuckets: targetBucketNames,
+    sameTargetSelected: sameContextSelected,
+  });
+  const {
+    selectedConfigFeatures,
+    setSelectedConfigFeatures,
+    toggleConfigFeature,
+  } = useBucketCompareConfigFeatures<ManagerBucketCompareConfigFeature>(
+    ALL_CONFIG_FEATURE_KEYS
+  );
   const cancelRequestedRef = useRef(false);
   const requestControllersRef = useRef(new Set<AbortController>());
   const { copyFeedback, copyVisibleKeys } = useCompareVisibleKeysClipboard();
@@ -248,18 +258,6 @@ export default function ManagerBucketCompareModal({
           .sort((a, b) => a.localeCompare(b));
         if (cancelled) return;
         setTargetBucketNames(names);
-        setManualMapping((prev) => {
-          const next: Record<string, string> = {};
-          Object.entries(prev).forEach(([sourceBucket, targetBucket]) => {
-            const normalized = (targetBucket ?? "").trim();
-            if (!normalized) return;
-            if (targetContextId === sourceContextId && sourceBucketNameSet.has(normalized)) {
-              return;
-            }
-            next[sourceBucket] = targetBucket;
-          });
-          return next;
-        });
         setTargetBucketsError(null);
       } catch (err) {
         if (cancelled) return;
@@ -275,31 +273,7 @@ export default function ManagerBucketCompareModal({
     return () => {
       cancelled = true;
     };
-  }, [sourceBucketNameSet, sourceContextId, targetContextId]);
-
-  useEffect(() => {
-    if (mappingMode !== "manual") return;
-    setManualMapping((previous) =>
-      reconcileBucketCompareManualMapping({
-        previous,
-        sourceBuckets: sortedSourceBuckets,
-        targetBuckets: targetBucketNames,
-        sameTargetSelected: sameContextSelected,
-      })
-    );
-  }, [mappingMode, sameContextSelected, sortedSourceBuckets, targetBucketNames]);
-
-  useEffect(() => {
-    if (mappingMode !== "manual") return;
-    if (parsedRawMapping.mapping.size === 0) return;
-    setManualMapping((previous) =>
-      mergeRawBucketCompareMappings(
-        previous,
-        sortedSourceBuckets,
-        parsedRawMapping.mapping
-      )
-    );
-  }, [mappingMode, parsedRawMapping.mapping, sortedSourceBuckets]);
+  }, [sourceContextId, targetContextId]);
 
   const {
     availableTargetBucketNames,
@@ -363,17 +337,6 @@ export default function ManagerBucketCompareModal({
   const managerBrowserDisabledReason = managerBrowserEnabled
     ? null
     : "Manager Browser is disabled for this surface.";
-
-  const toggleConfigFeature = (feature: ManagerBucketCompareConfigFeature, enabled: boolean) => {
-    setSelectedConfigFeatures((current) =>
-      updateBucketCompareConfigFeatures(
-        current,
-        ALL_CONFIG_FEATURE_KEYS,
-        feature,
-        enabled
-      )
-    );
-  };
 
   const runCompare = async () => {
     if (!targetContextId) {

@@ -37,9 +37,6 @@ import {
   getRunStatusTone,
   getVisibleCompareObjectKeys,
   matchesBucketCompareRunFilters,
-  mergeRawBucketCompareMappings,
-  parseRawMappingText,
-  reconcileBucketCompareManualMapping,
   renderCompareObjectDetails,
   renderDiffLines,
   resolveBucketCompareRunSettlement,
@@ -48,7 +45,8 @@ import {
   targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
-  updateBucketCompareConfigFeatures,
+  useBucketCompareConfigFeatures,
+  useBucketCompareManualMappingState,
   useCompareVisibleKeysClipboard,
 } from "../shared/bucketCompareShared";
 import {
@@ -101,20 +99,14 @@ export default function CephAdminBucketCompareModal({
   onClose,
 }: CephAdminBucketCompareModalProps) {
   const sortedSourceBuckets = useMemo(() => [...sourceBuckets].sort((a, b) => a.localeCompare(b)), [sourceBuckets]);
-  const sourceBucketNameSet = useMemo(() => new Set(sortedSourceBuckets), [sortedSourceBuckets]);
   const targetEndpointOptions = useMemo(() => endpoints, [endpoints]);
   const [targetEndpointId, setTargetEndpointId] = useState<number | null>(null);
   const [targetBucketNames, setTargetBucketNames] = useState<string[]>([]);
   const [targetBucketsLoading, setTargetBucketsLoading] = useState(false);
   const [targetBucketsError, setTargetBucketsError] = useState<string | null>(null);
   const [mappingMode, setMappingMode] = useState<"by_name" | "manual">("by_name");
-  const [manualMapping, setManualMapping] = useState<Record<string, string>>({});
-  const [rawMappingText, setRawMappingText] = useState("");
   const [includeContent, setIncludeContent] = useState(true);
   const [includeConfig, setIncludeConfig] = useState(false);
-  const [selectedConfigFeatures, setSelectedConfigFeatures] = useState<CephAdminBucketCompareConfigFeature[]>(
-    () => [...ALL_CONFIG_FEATURE_KEYS]
-  );
   const [ignoreModifiedAfter, setIgnoreModifiedAfter] = useState("");
   const [parallelism, setParallelism] = useState(4);
   const [running, setRunning] = useState(false);
@@ -127,7 +119,25 @@ export default function CephAdminBucketCompareModal({
   const [statusFilter, setStatusFilter] = useState<"all" | CompareRunItem["status"]>("all");
   const [diffFilter, setDiffFilter] = useState<"all" | "with_diff" | "no_diff">("all");
   const sameEndpointSelected = targetEndpointId === sourceEndpointId;
-  const parsedRawMapping = useMemo(() => parseRawMappingText(rawMappingText), [rawMappingText]);
+  const {
+    manualMapping,
+    parsedRawMapping,
+    rawMappingText,
+    setManualMapping,
+    setRawMappingText,
+  } = useBucketCompareManualMappingState({
+    mappingMode,
+    sourceBuckets: sortedSourceBuckets,
+    targetBuckets: targetBucketNames,
+    sameTargetSelected: sameEndpointSelected,
+  });
+  const {
+    selectedConfigFeatures,
+    setSelectedConfigFeatures,
+    toggleConfigFeature,
+  } = useBucketCompareConfigFeatures<CephAdminBucketCompareConfigFeature>(
+    ALL_CONFIG_FEATURE_KEYS
+  );
   const cancelRequestedRef = useRef(false);
   const requestControllersRef = useRef(new Set<AbortController>());
   const { copyFeedback, copyVisibleKeys } = useCompareVisibleKeysClipboard();
@@ -188,18 +198,6 @@ export default function CephAdminBucketCompareModal({
         if (cancelled) return;
         names.sort((a, b) => a.localeCompare(b));
         setTargetBucketNames(names);
-        setManualMapping((prev) => {
-          const next: Record<string, string> = {};
-          Object.entries(prev).forEach(([sourceBucket, targetBucket]) => {
-            const normalized = (targetBucket ?? "").trim();
-            if (!normalized) return;
-            if (targetEndpointId === sourceEndpointId && sourceBucketNameSet.has(normalized)) {
-              return;
-            }
-            next[sourceBucket] = targetBucket;
-          });
-          return next;
-        });
         setTargetBucketsError(null);
       } catch (err) {
         if (cancelled) return;
@@ -215,31 +213,7 @@ export default function CephAdminBucketCompareModal({
     return () => {
       cancelled = true;
     };
-  }, [sourceBucketNameSet, sourceEndpointId, targetEndpointId]);
-
-  useEffect(() => {
-    if (mappingMode !== "manual") return;
-    setManualMapping((previous) =>
-      reconcileBucketCompareManualMapping({
-        previous,
-        sourceBuckets: sortedSourceBuckets,
-        targetBuckets: targetBucketNames,
-        sameTargetSelected: sameEndpointSelected,
-      })
-    );
-  }, [mappingMode, sameEndpointSelected, sortedSourceBuckets, targetBucketNames]);
-
-  useEffect(() => {
-    if (mappingMode !== "manual") return;
-    if (parsedRawMapping.mapping.size === 0) return;
-    setManualMapping((previous) =>
-      mergeRawBucketCompareMappings(
-        previous,
-        sortedSourceBuckets,
-        parsedRawMapping.mapping
-      )
-    );
-  }, [mappingMode, parsedRawMapping.mapping, sortedSourceBuckets]);
+  }, [sourceEndpointId, targetEndpointId]);
 
   const {
     availableTargetBucketNames,
@@ -298,17 +272,6 @@ export default function CephAdminBucketCompareModal({
     if (prefix) params.set("prefix", prefix);
     return `/ceph-admin/browser?${params.toString()}`;
   }, []);
-
-  const toggleConfigFeature = (feature: CephAdminBucketCompareConfigFeature, enabled: boolean) => {
-    setSelectedConfigFeatures((current) =>
-      updateBucketCompareConfigFeatures(
-        current,
-        ALL_CONFIG_FEATURE_KEYS,
-        feature,
-        enabled
-      )
-    );
-  };
 
   const runCompare = async () => {
     if (!targetEndpointId) {

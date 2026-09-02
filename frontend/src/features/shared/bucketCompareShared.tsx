@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useId, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { cx, type UiTone } from "../../components/ui/styles";
 import { extractApiError, isCancelledError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
@@ -643,12 +643,14 @@ export const reconcileBucketCompareManualMapping = ({
   targetBuckets: string[];
   sameTargetSelected: boolean;
 }): Record<string, string> => {
+  const knownSources = new Set(sourceBuckets);
   const knownTargets = new Set(targetBuckets);
   const next: Record<string, string> = {};
 
   sourceBuckets.forEach((sourceBucket) => {
     const previousTarget = (previous[sourceBucket] ?? "").trim();
     if (previousTarget) {
+      if (sameTargetSelected && knownSources.has(previousTarget)) return;
       next[sourceBucket] = previousTarget;
       return;
     }
@@ -689,6 +691,71 @@ export const updateBucketCompareConfigFeatures = <TFeature extends string>(
     next.delete(feature);
   }
   return orderedFeatures.filter((key) => next.has(key));
+};
+
+export const useBucketCompareManualMappingState = ({
+  mappingMode,
+  sourceBuckets,
+  targetBuckets,
+  sameTargetSelected,
+}: {
+  mappingMode: "by_name" | "manual";
+  sourceBuckets: string[];
+  targetBuckets: string[];
+  sameTargetSelected: boolean;
+}) => {
+  const [manualMapping, setManualMapping] = useState<Record<string, string>>({});
+  const [rawMappingText, setRawMappingText] = useState("");
+  const parsedRawMapping = useMemo(() => parseRawMappingText(rawMappingText), [rawMappingText]);
+
+  useEffect(() => {
+    if (mappingMode !== "manual") return;
+    setManualMapping((previous) =>
+      reconcileBucketCompareManualMapping({
+        previous,
+        sourceBuckets,
+        targetBuckets,
+        sameTargetSelected,
+      })
+    );
+  }, [mappingMode, sameTargetSelected, sourceBuckets, targetBuckets]);
+
+  useEffect(() => {
+    if (mappingMode !== "manual" || parsedRawMapping.mapping.size === 0) return;
+    setManualMapping((previous) =>
+      mergeRawBucketCompareMappings(previous, sourceBuckets, parsedRawMapping.mapping)
+    );
+  }, [mappingMode, parsedRawMapping.mapping, sourceBuckets]);
+
+  return {
+    manualMapping,
+    parsedRawMapping,
+    rawMappingText,
+    setManualMapping,
+    setRawMappingText,
+  };
+};
+
+export const useBucketCompareConfigFeatures = <TFeature extends string>(
+  orderedFeatures: readonly TFeature[]
+) => {
+  const [selectedConfigFeatures, setSelectedConfigFeatures] = useState<TFeature[]>(
+    () => [...orderedFeatures]
+  );
+  const toggleConfigFeature = useCallback(
+    (feature: TFeature, enabled: boolean) => {
+      setSelectedConfigFeatures((current) =>
+        updateBucketCompareConfigFeatures(current, orderedFeatures, feature, enabled)
+      );
+    },
+    [orderedFeatures]
+  );
+
+  return {
+    selectedConfigFeatures,
+    setSelectedConfigFeatures,
+    toggleConfigFeature,
+  };
 };
 
 export const buildBucketCompareMappingModel = ({
