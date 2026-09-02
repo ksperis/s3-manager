@@ -15,8 +15,8 @@ from app.services.bucket_usage_stats_service import (
     BucketUsageStatsService,
     _load_distribution_entries,
     _load_warnings,
-    classify_data_type,
 )
+from app.services.bucket_usage_stats_scan import classify_data_type
 
 
 class FakePaginator:
