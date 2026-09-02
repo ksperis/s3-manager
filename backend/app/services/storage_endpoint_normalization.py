@@ -10,7 +10,6 @@ from pydantic import ValidationError, field_validator
 from app.db import StorageEndpoint, StorageProvider
 from app.models.base import ApiModel
 from app.models.storage_endpoint import (
-    StorageEndpointBase,
     StorageEndpointCreate,
     StorageEndpointUpdate,
 )
@@ -74,12 +73,12 @@ class EnvStorageEndpoint(ApiModel):
     @field_validator("latitude")
     @classmethod
     def validate_latitude(_cls, value: Optional[float]) -> Optional[float]:
-        return StorageEndpointBase.validate_latitude(value)
+        return StorageEndpointCreate.validate_latitude(value)
 
     @field_validator("longitude")
     @classmethod
     def validate_longitude(_cls, value: Optional[float]) -> Optional[float]:
-        return StorageEndpointBase.validate_longitude(value)
+        return StorageEndpointCreate.validate_longitude(value)
 
 
 @dataclass(frozen=True)

@@ -43,7 +43,7 @@ class StorageEndpointAdminOpsPermissions(ApiModel):
     accounts_write: bool = False
 
 
-class StorageEndpointBase(ApiModel):
+class StorageEndpointCreate(ApiModel):
     name: str
     endpoint_url: str
     region: Optional[str] = None
@@ -86,10 +86,6 @@ class StorageEndpointBase(ApiModel):
         return value
 
 
-class StorageEndpointCreate(StorageEndpointBase):
-    pass
-
-
 class StorageEndpointUpdate(ApiModel):
     name: Optional[str] = None
     endpoint_url: Optional[str] = None
@@ -117,19 +113,19 @@ class StorageEndpointUpdate(ApiModel):
     @field_validator("latitude")
     @classmethod
     def validate_optional_latitude(cls, value: Optional[float]) -> Optional[float]:
-        return StorageEndpointBase.validate_latitude(value)
+        return StorageEndpointCreate.validate_latitude(value)
 
     @field_validator("longitude")
     @classmethod
     def validate_optional_longitude(cls, value: Optional[float]) -> Optional[float]:
-        return StorageEndpointBase.validate_longitude(value)
+        return StorageEndpointCreate.validate_longitude(value)
 
 
 class StorageEndpointTagsUpdate(ApiModel):
     tags: RequiredTagDefinitionList = Field(default_factory=list)
 
 
-class StorageEndpoint(StorageEndpointBase):
+class StorageEndpoint(StorageEndpointCreate):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
