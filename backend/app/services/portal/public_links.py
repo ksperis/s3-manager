@@ -10,7 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
 from app.db import PortalPublicLink as DBPortalPublicLink, S3Account, User
-from app.models.portal import PortalStorageSpaceSummary
+from app.models.portal_storage_spaces import PortalStorageSpaceSummary
 from app.models.portal_sharing import PortalPublicLink
 from app.services.s3_client import get_s3_client
 from app.utils.s3_endpoint import resolve_s3_client_options

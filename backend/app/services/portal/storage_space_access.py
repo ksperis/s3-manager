@@ -16,7 +16,7 @@ from app.db import (
     UserS3Account,
     UserUiGroup,
 )
-from app.models.portal import (
+from app.models.portal_storage_spaces import (
     PortalStorageSpaceRole,
     PortalStorageSpaceShareScope,
     PortalStorageSpaceVisibility,

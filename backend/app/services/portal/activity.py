@@ -6,7 +6,8 @@ from datetime import timedelta, timezone
 from typing import Any, Optional, TYPE_CHECKING
 
 from app.db import AuditLog, PortalAccountRole, PortalPublicLink as DBPortalPublicLink, User
-from app.models.portal import PortalActivityItem, PortalAlert, PortalStorageSpaceSummary
+from app.models.portal import PortalActivityItem, PortalAlert
+from app.models.portal_storage_spaces import PortalStorageSpaceSummary
 from app.services.audit_service import parse_audit_metadata
 from app.services.audit_policy import NON_PERSISTED_AUDIT_ACTIONS
 from app.utils.time import utcnow

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
-from app.models.portal import (
+from app.models.portal_storage_spaces import (
     PortalStorageSpace,
     PortalStorageSpaceCreate,
     PortalStorageSpaceIcon,

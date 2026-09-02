@@ -10,7 +10,7 @@ from pydantic import AwareDatetime, Field
 
 from app.db import PortalAccountRole
 from app.models.base import ApiModel
-from app.models.portal import (
+from app.models.portal_storage_spaces import (
     PortalStorageSpaceAccountMemberRole,
     PortalStorageSpaceGrantRole,
     PortalStorageSpaceRole,

@@ -19,7 +19,7 @@ from app.db import (
     User,
 )
 from app.models.bucket import Bucket
-from app.models.portal import (
+from app.models.portal_storage_spaces import (
     PortalStorageSpace,
     PortalStorageSpaceCollaboratorPreview,
     PortalStorageSpaceIcon,

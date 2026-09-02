@@ -10,7 +10,7 @@ from typing import Optional, TYPE_CHECKING
 from app.db import PortalExternalAccessCredential, PortalStorageSpaceMetadata, S3Account, User
 from app.models.app_settings import PortalSettings
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
-from app.models.portal import PortalStorageSpaceRole
+from app.models.portal_storage_spaces import PortalStorageSpaceRole
 from app.models.portal_access_keys import (
     PortalAccessKey,
     PortalAccessKeyCreate,

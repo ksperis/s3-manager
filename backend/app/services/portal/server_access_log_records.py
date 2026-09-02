@@ -11,7 +11,7 @@ from datetime import datetime, time as time_cls, timedelta, timezone
 from typing import Any, Optional
 from urllib.parse import unquote
 
-from app.models.portal import PortalStorageSpaceSummary
+from app.models.portal_storage_spaces import PortalStorageSpaceSummary
 from app.models.portal_access_logs import (
     PortalServerAccessLogEntry,
     PortalServerAccessLogFilterQuery,

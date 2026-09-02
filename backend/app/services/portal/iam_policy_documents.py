@@ -6,7 +6,7 @@ import copy
 from typing import Any, Optional
 
 from app.db import PortalStorageSpaceMetadata, S3Account
-from app.models.portal import PortalStorageSpaceRole
+from app.models.portal_storage_spaces import PortalStorageSpaceRole
 
 
 class PortalIamPolicyDocumentsMixin:

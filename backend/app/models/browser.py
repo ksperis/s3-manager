@@ -6,7 +6,7 @@ from typing import Optional, Literal
 from pydantic import Field
 
 from app.models.base import ApiModel
-from app.models.portal import PortalStorageSpaceIcon
+from app.models.portal_storage_spaces import PortalStorageSpaceIcon
 
 
 class BrowserBucket(ApiModel):

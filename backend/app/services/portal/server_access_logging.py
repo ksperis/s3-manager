@@ -19,7 +19,7 @@ from app.db import (
     User,
 )
 from app.models.app_settings import PortalSettings
-from app.models.portal import PortalStorageSpaceSummary
+from app.models.portal_storage_spaces import PortalStorageSpaceSummary
 from app.models.portal_access_logs import (
     PortalServerAccessLogEntry,
     PortalServerAccessLogFilterQuery,

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.db import S3Account, StorageEndpoint
-from app.models.portal import PortalStorageSpaceIcon
+from app.models.portal_storage_spaces import PortalStorageSpaceIcon
 from app.services.browser import _shared as browser_shared
 from app.services.browser import sorted_listing
 from app.services.browser_service import BrowserService
