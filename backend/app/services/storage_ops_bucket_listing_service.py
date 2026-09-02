@@ -12,28 +12,18 @@ from app.models.ceph_admin import CephAdminBucketFilterQuery
 from app.models.execution_context import ExecutionContext
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary, StorageOpsContextKind
 from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
-from app.services.bucket_listing_enrichment import (
-    BUCKET_LISTING_INCLUDES,
-    enrich_buckets,
-)
-from app.services.bucket_listing_owner_metadata import (
-    OWNER_DETAIL_FIELDS,
-    OWNER_QUOTA_FIELDS,
-    OWNER_STATUS_FIELDS,
-    OWNER_USAGE_FIELDS,
-    OWNER_USAGE_PERCENT_FIELDS,
-)
+from app.services.bucket_listing_enrichment import enrich_buckets
+from app.services.bucket_listing_owner_metadata import OWNER_DETAIL_FIELDS
 from app.services.bucket_listing_rule_matching import (
     match_bucket_feature_rule,
     match_bucket_field_rule,
 )
 from app.services.bucket_feature_param_matching import match_bucket_feature_param_rules
 from app.services.bucket_feature_param_snapshot_loader import load_bucket_feature_param_snapshots
-from app.services.bucket_listing_shared import (
-    filter_requires_stats,
-    listing_sort_key,
-    parse_filter,
-    parse_includes,
+from app.services.bucket_listing_shared import listing_sort_key
+from app.services.storage_ops_bucket_listing_request import (
+    StorageOpsBucketListingRequest,
+    prepare_storage_ops_bucket_listing_request,
 )
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService
 from app.services.buckets_service import BucketsService
@@ -77,23 +67,6 @@ class StorageOpsResolvedContext:
 class _StorageOpsContextOwner:
     owner: str | None
     tenant: str | None = None
-
-
-@dataclass(frozen=True)
-class _StorageOpsListingQuery:
-    parsed_filter: CephAdminBucketFilterQuery | None
-    normalized_search: str
-    requested_features: set[str]
-    include_tags: bool
-    needs_stats: bool
-    filter_requires_owner_name: bool
-    filter_requires_owner_suspended: bool
-    filter_requires_owner_quota: bool
-    owner_usage_required: bool
-    wants_owner_name: bool
-    wants_owner_suspended: bool
-    wants_owner_quota: bool
-    wants_owner_quota_usage: bool
 
 
 def _encode_bucket_ref(context_id: str, bucket_name: str) -> str:
@@ -381,12 +354,6 @@ def resolve_storage_ops_contexts(
     return resolved
 
 
-def _collect_filter_fields(parsed_filter: CephAdminBucketFilterQuery | None) -> set[str]:
-    if not parsed_filter or not parsed_filter.rules:
-        return set()
-    return {rule.field for rule in parsed_filter.rules if rule.field}
-
-
 def _resolve_context_owner(account: S3ExecutionContext) -> _StorageOpsContextOwner:
     account_id = str(getattr(account, "rgw_account_id", "") or "").strip()
     if account_id:
@@ -578,65 +545,6 @@ def list_storage_ops_context_buckets(
     return context_buckets
 
 
-def _prepare_storage_ops_listing_query(
-    *,
-    filter: str | None,
-    advanced_filter: str | None,
-    include: list[str],
-    with_stats: bool,
-    sort_by: str,
-) -> _StorageOpsListingQuery:
-    simple_filter: str | None = None
-    parsed_filter: CephAdminBucketFilterQuery | None = None
-    if advanced_filter:
-        simple_filter, parsed_filter = parse_filter(advanced_filter)
-    elif filter:
-        simple_filter, parsed_filter = parse_filter(filter)
-
-    include_set = parse_includes(include)
-    filter_fields = _collect_filter_fields(parsed_filter)
-    wants_owner_quota_usage = "owner_quota_usage" in include_set
-    rules = parsed_filter.rules if parsed_filter and parsed_filter.rules else []
-    required_feature_include = {
-        rule.feature
-        for rule in rules
-        if rule.feature and rule.state is not None
-    }
-    include_tags = "tags" in include_set or any(
-        rule.field == "tag" for rule in rules
-    )
-    requested_features = (include_set | required_feature_include) & BUCKET_LISTING_INCLUDES
-    needs_stats = bool(
-        with_stats
-        or filter_requires_stats(parsed_filter)
-        or sort_by in {"used_bytes", "object_count"}
-    )
-    owner_usage_required = bool(
-        needs_stats
-        and (
-            bool(filter_fields & (OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS))
-            or wants_owner_quota_usage
-        )
-    )
-    return _StorageOpsListingQuery(
-        parsed_filter=parsed_filter,
-        normalized_search=normalize_text(simple_filter or ""),
-        requested_features=requested_features,
-        include_tags=include_tags,
-        needs_stats=needs_stats,
-        filter_requires_owner_name="owner_name" in filter_fields,
-        filter_requires_owner_suspended="owner_suspended" in filter_fields,
-        filter_requires_owner_quota=bool(
-            filter_fields & (OWNER_QUOTA_FIELDS | OWNER_USAGE_PERCENT_FIELDS)
-        ),
-        owner_usage_required=owner_usage_required,
-        wants_owner_name="owner_name" in include_set,
-        wants_owner_suspended="owner_suspended" in include_set,
-        wants_owner_quota="owner_quota" in include_set,
-        wants_owner_quota_usage=wants_owner_quota_usage,
-    )
-
-
 class _StorageOpsBucketListingPipeline:
     def __init__(
         self,
@@ -687,7 +595,7 @@ class _StorageOpsBucketListingPipeline:
             force=True,
         )
         invoke_cancel_check(self.cancel_check)
-        query = _prepare_storage_ops_listing_query(
+        query = prepare_storage_ops_bucket_listing_request(
             filter=self.filter,
             advanced_filter=self.advanced_filter,
             include=self.include,
@@ -746,7 +654,7 @@ class _StorageOpsBucketListingPipeline:
 
     def _resolve_contexts(
         self,
-        query: _StorageOpsListingQuery,
+        query: StorageOpsBucketListingRequest,
     ) -> list[StorageOpsResolvedContext]:
         refs = self.load_context_refs()
         self.progress.emit(
@@ -787,7 +695,7 @@ class _StorageOpsBucketListingPipeline:
     def _list_contexts(
         self,
         contexts: list[StorageOpsResolvedContext],
-        query: _StorageOpsListingQuery,
+        query: StorageOpsBucketListingRequest,
     ) -> list[StorageOpsBucketSummary]:
         total = len(contexts)
         self.progress.emit(
@@ -805,7 +713,7 @@ class _StorageOpsBucketListingPipeline:
     def _list_context_buckets(
         self,
         context: StorageOpsResolvedContext,
-        query: _StorageOpsListingQuery,
+        query: StorageOpsBucketListingRequest,
     ) -> list[StorageOpsBucketSummary]:
         return list_storage_ops_context_buckets(
             context=context,
@@ -824,7 +732,7 @@ class _StorageOpsBucketListingPipeline:
     def _list_contexts_serially(
         self,
         contexts: list[StorageOpsResolvedContext],
-        query: _StorageOpsListingQuery,
+        query: StorageOpsBucketListingRequest,
     ) -> list[StorageOpsBucketSummary]:
         results: list[StorageOpsBucketSummary] = []
         total = len(contexts)
@@ -838,7 +746,7 @@ class _StorageOpsBucketListingPipeline:
     def _list_contexts_concurrently(
         self,
         contexts: list[StorageOpsResolvedContext],
-        query: _StorageOpsListingQuery,
+        query: StorageOpsBucketListingRequest,
     ) -> list[StorageOpsBucketSummary]:
         results: list[StorageOpsBucketSummary] = []
         total = len(contexts)
@@ -902,7 +810,7 @@ class _StorageOpsBucketListingPipeline:
         self,
         page_items: list[StorageOpsBucketSummary],
         contexts: list[StorageOpsResolvedContext],
-        query: _StorageOpsListingQuery,
+        query: StorageOpsBucketListingRequest,
     ) -> list[StorageOpsBucketSummary]:
         wants_owner_metadata = bool(
             query.wants_owner_name

@@ -6,8 +6,8 @@ from app.services.bucket_listing_enrichment import (
     COLUMN_DETAIL_KEYS,
 )
 from app.services.ceph_admin_bucket_listing_request import CephAdminBucketListingRequest
-from app.services.storage_ops_bucket_listing_service import (
-    _prepare_storage_ops_listing_query,
+from app.services.storage_ops_bucket_listing_request import (
+    prepare_storage_ops_bucket_listing_request,
 )
 
 
@@ -22,7 +22,7 @@ def test_bucket_listing_include_contract_is_shared_across_surfaces() -> None:
         include=includes,
         with_stats=False,
     )
-    storage_ops = _prepare_storage_ops_listing_query(
+    storage_ops = prepare_storage_ops_bucket_listing_request(
         filter=None,
         advanced_filter=None,
         include=includes,
