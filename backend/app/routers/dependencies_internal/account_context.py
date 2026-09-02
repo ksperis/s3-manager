@@ -18,7 +18,12 @@ from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
-from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_endpoint
+from app.utils.s3_connection_endpoint import resolve_connection_details
+from app.utils.s3_endpoint import (
+    normalize_s3_endpoint,
+    resolve_s3_endpoint,
+    validate_user_supplied_s3_endpoint,
+)
 
 from .auth_session import get_current_actor, settings
 from .ceph_admin_context import _resolve_default_endpoint
@@ -162,6 +167,21 @@ def _resolve_connection_context(
     )
     if not allowed:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Connection is not authorized in this workspace")
+
+    user_supplied_manual_endpoint = (
+        not conn.is_shared
+        and not conn.server_managed
+        and conn.storage_endpoint_id is None
+    )
+    if user_supplied_manual_endpoint:
+        try:
+            details = resolve_connection_details(conn)
+            validate_user_supplied_s3_endpoint(details.endpoint_url or "", field_name="Endpoint URL")
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Custom S3 endpoint is not allowed by outbound policy",
+            ) from exc
 
     # Keep a minimal usage signal for UX (recently used sorting / hints).
     if touch_usage:

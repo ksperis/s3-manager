@@ -236,6 +236,13 @@ class Settings(BaseSettings):
     public_origin: str = Field("http://localhost:5173", description="Canonical browser origin")
     allowed_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "testserver"])
     trusted_proxy_cidrs: list[str] = Field(default_factory=list)
+    user_supplied_s3_endpoint_allowed_hosts: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Production allow-list for user-supplied S3 endpoint hosts; subdomains require an explicit wildcard "
+            "(USER_SUPPLIED_S3_ENDPOINT_ALLOWED_HOSTS)"
+        ),
+    )
     require_registered_s3_login_endpoints: bool = False
     webauthn_rp_id: str = "localhost"
     webauthn_rp_name: str = "BucketReef"
@@ -524,9 +531,13 @@ class Settings(BaseSettings):
     def normalize_database_url(cls, value):
         return _normalize_sqlite_database_url(value)
 
-    @field_validator("bucket_migration_webhook_allowed_hosts", mode="before")
+    @field_validator(
+        "bucket_migration_webhook_allowed_hosts",
+        "user_supplied_s3_endpoint_allowed_hosts",
+        mode="before",
+    )
     @classmethod
-    def parse_webhook_host_list(cls, value):
+    def parse_outbound_host_list(cls, value):
         if value is None:
             return []
         if isinstance(value, str):
@@ -537,9 +548,9 @@ class Settings(BaseSettings):
                 try:
                     parsed = json.loads(text)
                 except json.JSONDecodeError as exc:
-                    raise ValueError("Unable to parse webhook hosts JSON") from exc
+                    raise ValueError("Unable to parse outbound allowed hosts JSON") from exc
                 if not isinstance(parsed, list):
-                    raise ValueError("bucket_migration_webhook_allowed_hosts must be a list")
+                    raise ValueError("Outbound allowed hosts must be a list")
                 return [str(item).strip().lower() for item in parsed if str(item).strip()]
             return [item.strip().lower() for item in text.split(",") if item.strip()]
         if isinstance(value, list):

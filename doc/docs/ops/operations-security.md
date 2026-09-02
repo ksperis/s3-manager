@@ -35,7 +35,17 @@
 - Configure `CORS_ORIGINS` with explicit trusted UI origins. Avoid `*` for authenticated deployments, and enable `REFRESH_TOKEN_COOKIE_SECURE=true` for non-local origins.
 - Trust `X-Forwarded-For` only from direct peers listed in `TRUSTED_PROXY_CIDRS`; Uvicorn runs with implicit proxy trust disabled.
 - Keep internal endpoints protected with `INTERNAL_CRON_TOKEN` and private network exposure.
-- End-user custom S3 endpoints are restricted to public `https://` targets. Only admin-managed endpoint flows may keep `http://` endpoints when an internal deployment explicitly requires them.
+- End-user custom S3 endpoints are restricted to operator-approved public
+  `https://` targets in production through
+  `USER_SUPPLIED_S3_ENDPOINT_ALLOWED_HOSTS`. Exact entries do not include
+  subdomains; use an explicit `*.example.com` wildcard when intended. An empty
+  list disables user-supplied endpoints. Admin-managed endpoint flows are
+  exempt and may keep private or `http://` endpoints when an internal
+  deployment explicitly requires them.
+- Production migration webhooks require an exact or explicit wildcard entry in
+  `BUCKET_MIGRATION_WEBHOOK_ALLOWED_HOSTS`. HTTPS is mandatory unless private
+  targets are explicitly enabled; the destination is DNS-revalidated before
+  every delivery and redirects stay disabled.
 
 ## Audit and traceability
 

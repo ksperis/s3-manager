@@ -49,6 +49,14 @@ Key areas:
   `CREDENTIAL_KEYS`, access/session lifetimes, secure host-only cookie settings,
   `PUBLIC_ORIGIN`, `ALLOWED_HOSTS`, `TRUSTED_PROXY_CIDRS`, WebAuthn, and
   OIDC/LDAP environment providers.
+- Outbound targets: `USER_SUPPLIED_S3_ENDPOINT_ALLOWED_HOSTS` and
+  `BUCKET_MIGRATION_WEBHOOK_ALLOWED_HOSTS`. In production, an empty list blocks
+  the corresponding user-controlled destinations. Entries match only the exact
+  hostname; use an explicit `*.example.com` entry for subdomains. The wildcard
+  does not include the apex hostname. User-supplied S3 endpoints remain HTTPS
+  and public. Webhooks remain HTTPS by default; private HTTP webhooks require
+  both `BUCKET_MIGRATION_WEBHOOK_ALLOW_PRIVATE_TARGETS=true` and an explicit
+  host allowlist entry.
 - Database: `DATABASE_URL` (SQLite defaults to `backend/app.db`; relative SQLite paths are normalized against `backend/`). Multi-backend deployments require PostgreSQL.
 - CORS: `CORS_ORIGINS`.
 - Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_PORTAL_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
@@ -67,6 +75,18 @@ Key areas:
   `3`) while ordinary Admin Ops and bucket-statistics calls keep their separate
   `RGW_ADMIN_TIMEOUT_SECONDS` and `RGW_ADMIN_BUCKET_LIST_STATS_TIMEOUT_SECONDS`
   budgets.
+
+Before enabling the production profile, inventory persisted destinations
+without printing URLs or credentials:
+
+```bash
+cd backend
+python -m app.scripts.preflight_outbound_targets
+```
+
+The command reports only uncovered hostnames and exits non-zero while an
+existing user-created S3 connection or migration webhook is outside its
+allowlist. Admin-registered storage endpoints are intentionally excluded.
 
 ## First-administrator bootstrap
 

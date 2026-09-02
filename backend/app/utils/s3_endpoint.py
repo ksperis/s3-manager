@@ -47,6 +47,11 @@ def validate_user_supplied_s3_endpoint(value: str, *, field_name: str = "Endpoin
         field_name=field_name,
         allowed_schemes=("https",),
         scheme_label="https",
+        allowed_hosts=(
+            set(settings.user_supplied_s3_endpoint_allowed_hosts)
+            if settings.app_env == "production"
+            else None
+        ),
     )
     return cleaned
 

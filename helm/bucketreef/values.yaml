@@ -27,6 +27,9 @@ backend:
     PUBLIC_ORIGIN: https://bucketreef.local
     CORS_ORIGINS: '["https://bucketreef.local"]'
     ALLOWED_HOSTS: '["bucketreef.local"]'
+    USER_SUPPLIED_S3_ENDPOINT_ALLOWED_HOSTS: '[]'
+    BUCKET_MIGRATION_WEBHOOK_ALLOWED_HOSTS: '[]'
+    BUCKET_MIGRATION_WEBHOOK_ALLOW_PRIVATE_TARGETS: "false"
     REFRESH_TOKEN_COOKIE_SECURE: "true"
     REQUIRE_REGISTERED_S3_LOGIN_ENDPOINTS: "true"
     WEBAUTHN_ORIGIN: https://bucketreef.local

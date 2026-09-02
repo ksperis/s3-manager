@@ -64,7 +64,7 @@ export default function S3ConnectionEndpointFields({
       <div>
         <p className={uiLabelClass}>Endpoint</p>
         <p className={cx("ui-caption", uiMutedTextClass)}>
-          Choose a configured endpoint or enter a public HTTPS custom endpoint.
+          Choose a configured endpoint or enter an operator-approved public HTTPS custom endpoint.
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

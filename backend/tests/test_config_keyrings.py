@@ -75,6 +75,25 @@ def test_settings_load_json_keyrings(monkeypatch):
     assert settings.credential_keys == ["credential-primary", "credential-previous"]
 
 
+def test_settings_parse_outbound_host_allowlists(monkeypatch):
+    monkeypatch.setenv(
+        "USER_SUPPLIED_S3_ENDPOINT_ALLOWED_HOSTS",
+        '["s3.example.test", "*.storage.example.test"]',
+    )
+    monkeypatch.setenv("BUCKET_MIGRATION_WEBHOOK_ALLOWED_HOSTS", '["hooks.example.test", "*.events.example.test"]')
+
+    settings = Settings(_env_file=None)
+
+    assert settings.user_supplied_s3_endpoint_allowed_hosts == [
+        "s3.example.test",
+        "*.storage.example.test",
+    ]
+    assert settings.bucket_migration_webhook_allowed_hosts == [
+        "hooks.example.test",
+        "*.events.example.test",
+    ]
+
+
 @pytest.mark.parametrize("variable", ["JWT_KEYS", "CREDENTIAL_KEYS"])
 def test_settings_reject_empty_keyrings(monkeypatch, variable):
     monkeypatch.setenv(variable, "[]")

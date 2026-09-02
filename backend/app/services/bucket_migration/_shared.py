@@ -262,12 +262,14 @@ def _serialize_event_metadata(metadata: Optional[dict[str, Any]]) -> Optional[st
 
 
 def _validate_webhook_target_url(webhook_url: str) -> None:
+    production = settings.app_env == "production"
+    allow_http = not production or _WEBHOOK_ALLOW_PRIVATE_TARGETS
     validate_outbound_url(
         webhook_url,
         field_name="webhook_url",
-        allowed_schemes=("http", "https"),
-        scheme_label="http(s)",
-        allowed_hosts=_WEBHOOK_ALLOWED_HOSTS or None,
+        allowed_schemes=("http", "https") if allow_http else ("https",),
+        scheme_label="http(s)" if allow_http else "https",
+        allowed_hosts=_WEBHOOK_ALLOWED_HOSTS if production else (_WEBHOOK_ALLOWED_HOSTS or None),
         allow_private_targets=_WEBHOOK_ALLOW_PRIVATE_TARGETS,
         private_target_hint="; set BUCKET_MIGRATION_WEBHOOK_ALLOW_PRIVATE_TARGETS=true to allow it",
     )

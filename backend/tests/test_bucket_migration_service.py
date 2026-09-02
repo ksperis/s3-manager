@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import io
+import ipaddress
 import json
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -28,6 +30,7 @@ from app.db import (
     UserS3User,
 )
 from app.models.bucket_migration import BucketMigrationBucketMapping, BucketMigrationCreateRequest
+from app.services.bucket_migration import _shared as migration_shared
 from app.services.bucket_migration._shared import (
     _BucketVersionEntry,
     _DB_ERROR_MESSAGE_MAX_CHARS,
@@ -3829,6 +3832,43 @@ def test_update_migration_rejects_private_webhook_target(db_session):
         assert False, "Expected private webhook target to be rejected on update"
     except ValueError as exc:
         assert "private or local network" in str(exc)
+
+
+def test_production_webhook_requires_explicit_allowed_host(monkeypatch):
+    monkeypatch.setattr(migration_shared.settings, "app_env", "production")
+    monkeypatch.setattr(migration_shared, "_WEBHOOK_ALLOWED_HOSTS", set())
+    monkeypatch.setattr(migration_shared, "_WEBHOOK_ALLOW_PRIVATE_TARGETS", False)
+
+    with pytest.raises(ValueError, match="host is not allowed by policy"):
+        migration_shared._validate_webhook_target_url("https://hooks.example.test/migration")
+
+
+def test_production_webhook_accepts_approved_https_target(monkeypatch):
+    monkeypatch.setattr(migration_shared.settings, "app_env", "production")
+    monkeypatch.setattr(migration_shared, "_WEBHOOK_ALLOWED_HOSTS", {"hooks.example.test"})
+    monkeypatch.setattr(migration_shared, "_WEBHOOK_ALLOW_PRIVATE_TARGETS", False)
+    monkeypatch.setattr(
+        "app.utils.network_targets.resolve_hostname_ips",
+        lambda _host: {ipaddress.ip_address("93.184.216.34")},
+    )
+
+    migration_shared._validate_webhook_target_url("https://hooks.example.test/migration")
+
+
+def test_production_private_http_webhook_needs_private_option_and_allowlist(monkeypatch):
+    monkeypatch.setattr(migration_shared.settings, "app_env", "production")
+    monkeypatch.setattr(migration_shared, "_WEBHOOK_ALLOWED_HOSTS", {"hooks.internal.example.test"})
+    monkeypatch.setattr(
+        "app.utils.network_targets.resolve_hostname_ips",
+        lambda _host: {ipaddress.ip_address("10.0.0.12")},
+    )
+
+    monkeypatch.setattr(migration_shared, "_WEBHOOK_ALLOW_PRIVATE_TARGETS", False)
+    with pytest.raises(ValueError, match="valid https URL"):
+        migration_shared._validate_webhook_target_url("http://hooks.internal.example.test/migration")
+
+    monkeypatch.setattr(migration_shared, "_WEBHOOK_ALLOW_PRIVATE_TARGETS", True)
+    migration_shared._validate_webhook_target_url("http://hooks.internal.example.test/migration")
 
 
 def test_add_event_notifies_webhook_when_configured(db_session):

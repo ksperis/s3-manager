@@ -1,5 +1,27 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-09 outbound target allowlists
+
+Production now fails closed for user-controlled outbound destinations. Populate
+`USER_SUPPLIED_S3_ENDPOINT_ALLOWED_HOSTS` for user-created S3 connections and
+`BUCKET_MIGRATION_WEBHOOK_ALLOWED_HOSTS` for migration callbacks before the
+upgrade. A plain entry authorizes only that exact hostname; subdomains require
+an explicit `*.example.com` entry, which does not authorize the apex.
+
+Run the preflight against the existing database before deploying:
+
+```bash
+cd backend
+python -m app.scripts.preflight_outbound_targets
+```
+
+The command prints only uncovered hostnames. Existing user-created manual
+connections outside the allowlist remain stored but cannot be used until the
+operator updates the allowlist. Admin-registered storage endpoints remain
+available. Existing webhook URLs outside the webhook allowlist cannot be saved
+or delivered. Production webhooks use HTTPS unless the private-target option
+and an explicit host allowlist entry are both configured.
+
 ## 2026-09 Manager and Portal account-role split
 
 Migration `0122_split_account_access_roles` replaces the single association

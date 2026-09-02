@@ -57,7 +57,7 @@ def validate_outbound_url(
         raise ValueError(f"{field_name} must not include user credentials")
 
     host = parsed.hostname.strip().lower().rstrip(".")
-    if allowed_hosts and not _host_allowed(host, allowed_hosts):
+    if allowed_hosts is not None and not host_matches_allowlist(host, allowed_hosts):
         raise ValueError(f"{field_name} host is not allowed by policy")
 
     try:
@@ -71,7 +71,8 @@ def validate_outbound_url(
         raise ValueError(f"{field_name} resolves to a private or local network address{private_target_hint or ''}")
 
 
-def _host_allowed(host: str, allowed_hosts: set[str]) -> bool:
+def host_matches_allowlist(host: str, allowed_hosts: Iterable[str]) -> bool:
+    """Match an exact hostname or an explicitly declared ``*.example.com`` wildcard."""
     normalized_host = str(host or "").strip().lower().rstrip(".")
     if not normalized_host:
         return False
@@ -79,6 +80,11 @@ def _host_allowed(host: str, allowed_hosts: set[str]) -> bool:
         normalized_allowed = str(allowed or "").strip().lower().rstrip(".")
         if not normalized_allowed:
             continue
-        if normalized_host == normalized_allowed or normalized_host.endswith(f".{normalized_allowed}"):
+        if normalized_allowed.startswith("*."):
+            wildcard_suffix = normalized_allowed[2:]
+            if wildcard_suffix and normalized_host.endswith(f".{wildcard_suffix}"):
+                return True
+            continue
+        if normalized_host == normalized_allowed:
             return True
     return False

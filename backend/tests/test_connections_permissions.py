@@ -10,7 +10,9 @@ from app.db import S3Connection, StorageEndpoint, UiGroup, User, UserRole, UserU
 from app.main import app
 from app.routers import dependencies
 from app.routers.connections import _ensure_manual_private_connection_creation_allowed
+from app.routers.dependencies_internal.account_context import _resolve_connection_context
 from app.services.effective_access_service import EffectiveAccessService
+from app.utils.s3_connection_endpoint import build_custom_endpoint_config
 
 
 def _user(db_session, role: str = UserRole.UI_USER.value, **permissions) -> User:
@@ -221,6 +223,72 @@ def test_registered_endpoint_catalog_accepts_group_inherited_manual_permission(d
         }
     ]
     assert "MUST-NOT-LEAK" not in response.text
+
+
+def test_existing_private_manual_connection_is_revalidated_before_use(db_session, monkeypatch):
+    user = _user(db_session)
+    connection = S3Connection(
+        created_by_user_id=user.id,
+        name="persisted manual endpoint",
+        is_shared=False,
+        is_active=True,
+        access_manager=True,
+        access_browser=True,
+        custom_endpoint_config=build_custom_endpoint_config(
+            "https://blocked.example.test",
+            "eu-west-3",
+            False,
+            True,
+        ),
+        access_key_id="PERSISTED-AK",
+        secret_access_key="PERSISTED-SK",
+    )
+    db_session.add(connection)
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "app.routers.dependencies_internal.account_context.validate_user_supplied_s3_endpoint",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("blocked")),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        _resolve_connection_context(db_session, user, connection.id, surface="browser")
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Custom S3 endpoint is not allowed by outbound policy"
+
+
+def test_registered_admin_endpoint_is_exempt_from_user_endpoint_allowlist(db_session, monkeypatch):
+    user = _user(db_session)
+    endpoint = StorageEndpoint(
+        name="operator managed",
+        endpoint_url="https://private.operator.example.test",
+        provider="other",
+    )
+    db_session.add(endpoint)
+    db_session.flush()
+    connection = S3Connection(
+        created_by_user_id=user.id,
+        name="registered endpoint connection",
+        is_shared=False,
+        is_active=True,
+        access_manager=True,
+        access_browser=True,
+        storage_endpoint_id=endpoint.id,
+        access_key_id="REGISTERED-AK",
+        secret_access_key="REGISTERED-SK",
+    )
+    db_session.add(connection)
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "app.routers.dependencies_internal.account_context.validate_user_supplied_s3_endpoint",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must stay exempt")),
+    )
+
+    context = _resolve_connection_context(db_session, user, connection.id, surface="browser")
+
+    assert context.source_connection.id == connection.id
 
 
 def test_manual_connection_creation_supports_direct_free_url_and_group_registered_endpoint(
