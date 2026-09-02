@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.models.admin_automation import AdminAutomationItemResult
 
 
@@ -78,6 +79,6 @@ class AdminAutomationResultFactory:
             key=key,
             action="failed",
             changed=False,
-            error=str(exc),
+            error=sanitized_error_log_detail(exc),
             dry_run=dry_run,
         )

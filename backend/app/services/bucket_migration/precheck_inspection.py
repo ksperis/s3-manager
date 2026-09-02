@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.utils.aws_errors import aws_error_code
 from app.utils.storage_endpoint_features import features_to_capabilities, normalize_features_config
 
@@ -167,7 +168,7 @@ class _BucketFeatureProbe:
                     feature,
                     state="unavailable",
                     capability=capability,
-                    reason=str(exc),
+                    reason=sanitized_error_log_detail(exc),
                 )
                 return default
             raise

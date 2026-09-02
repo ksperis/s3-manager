@@ -12,7 +12,7 @@ import requests
 from requests_aws4auth import AWS4Auth
 
 from app.core.config import get_settings
-from app.core.sensitive_data import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail, sanitized_error_log_detail
 from app.utils.quota_stats import extract_quota_limits
 
 settings = get_settings()
@@ -115,14 +115,15 @@ class RGWAdminClient:
                 (perf_counter() - start) * 1000,
             )
         except requests.RequestException as exc:
+            safe_detail = sanitized_error_log_detail(exc)
             logger.warning(
                 "RGW request failed method=%s path=%s duration_ms=%.2f error=%s",
                 method.upper(),
                 path,
                 (perf_counter() - start) * 1000,
-                exc,
+                safe_detail,
             )
-            raise RGWAdminError(f"RGW admin request failed: {exc}") from exc
+            raise RGWAdminError(f"RGW admin request failed: {safe_detail}") from exc
         return resp
 
     def _request(
@@ -143,22 +144,59 @@ class RGWAdminClient:
             data=data,
             timeout=timeout,
         )
+        handled_error = (
+            (resp.status_code == 409 and allow_conflict)
+            or (resp.status_code == 404 and allow_not_found)
+            or (resp.status_code in (405, 501) and allow_not_implemented)
+            or resp.status_code >= 400
+        )
+        error_code: Optional[str] = None
+        safe_detail = "Upstream service error."
+        if handled_error:
+            error_code, safe_detail = self._safe_response_error_details(resp)
         if resp.status_code == 409 and allow_conflict:
             # Return minimal info; caller should handle fetching details
-            return {"conflict": True, "status_code": resp.status_code, "text": resp.text}
+            return {
+                "conflict": True,
+                "status_code": resp.status_code,
+                "error_code": error_code,
+                "detail": safe_detail,
+            }
         if resp.status_code == 404 and allow_not_found:
-            return {"not_found": True, "status_code": resp.status_code, "text": resp.text}
+            return {
+                "not_found": True,
+                "status_code": resp.status_code,
+                "error_code": error_code,
+                "detail": safe_detail,
+            }
         if resp.status_code in (405, 501) and allow_not_implemented:
-            return {"not_implemented": True, "status_code": resp.status_code, "text": resp.text}
+            return {
+                "not_implemented": True,
+                "status_code": resp.status_code,
+                "error_code": error_code,
+                "detail": safe_detail,
+            }
         if resp.status_code >= 400:
-            logger.warning("RGW admin error %s: %s", resp.status_code, resp.text)
-            raise RGWAdminError(f"RGW admin error {resp.status_code}: {resp.text}")
-        if not resp.text:
+            logger.warning(
+                "RGW admin error status=%s code=%s detail=%s",
+                resp.status_code,
+                error_code or "unknown",
+                safe_detail,
+            )
+            raise RGWAdminError(
+                f"RGW admin error {resp.status_code} "
+                f"code={error_code or 'unknown'} detail={safe_detail}"
+            )
+        if not self._response_has_body(resp):
             return {}
         try:
             return resp.json()
         except ValueError:
-            raise RGWAdminError(f"Unexpected RGW admin response format: {resp.text}")
+            _, safe_detail = self._safe_response_error_details(resp)
+            raise RGWAdminError(
+                f"Unexpected RGW admin response format status={resp.status_code} "
+                f"detail={safe_detail}"
+            )
 
     @staticmethod
     def _xml_tag(value: str) -> str:
@@ -184,7 +222,7 @@ class RGWAdminClient:
 
     @classmethod
     def _parse_operation_payload(cls, resp: requests.Response) -> Any:
-        if not resp.content and not resp.text:
+        if not cls._response_has_body(resp):
             return None
         try:
             return sanitize_error_detail(resp.json())
@@ -200,6 +238,10 @@ class RGWAdminClient:
             except ET.ParseError:
                 pass
         return sanitize_error_detail(raw_text)
+
+    @staticmethod
+    def _response_has_body(resp: requests.Response) -> bool:
+        return bool(getattr(resp, "content", b"") or getattr(resp, "text", ""))
 
     @staticmethod
     def _operation_error_details(payload: Any) -> tuple[Optional[str], Optional[str]]:
@@ -228,6 +270,16 @@ class RGWAdminClient:
             str(raw_code).strip() if raw_code is not None else None,
             str(raw_message).strip() if raw_message is not None else None,
         )
+
+    @classmethod
+    def _safe_response_error_details(
+        cls,
+        resp: requests.Response,
+    ) -> tuple[Optional[str], str]:
+        payload = cls._parse_operation_payload(resp)
+        error_code, upstream_message = cls._operation_error_details(payload)
+        detail_source = upstream_message or payload or "Upstream service error."
+        return error_code, sanitized_error_log_detail(detail_source)
 
     def _request_operation(
         self,

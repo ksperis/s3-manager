@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Optional
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.sts_service import get_session_token
 from app.utils.s3_endpoint import resolve_s3_client_options
@@ -108,7 +109,7 @@ def request_browser_sts_session(
             verify_tls=verify_tls,
         )
     except RuntimeError as exc:
-        raise BrowserStsRequestError(str(exc)) from exc
+        raise BrowserStsRequestError(sanitized_error_log_detail(exc)) from exc
 
     credentials = CachedStsCredentials(
         access_key_id=access,

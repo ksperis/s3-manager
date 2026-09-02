@@ -58,7 +58,11 @@
 - Give every person a dedicated IAM identity or owned private connection.
   Multiple keys are allowed only for rotation and must never be shared.
 - LDAP login success, failure, rate-limit, and provider configuration failures are audited without recording submitted passwords.
-- Backend HTTP 5xx details are sanitized before being returned or logged by the HTTP exception handler. Do not bypass the shared error helpers when exposing upstream S3/RGW/IAM failures.
+- Backend logs and exception traces use the central sensitive-data formatter;
+  healthcheck, migration, and asynchronous-task failures are sanitized before
+  persistence. Backend HTTP 5xx details are sanitized before return. Do not
+  bypass the shared error helpers when exposing upstream S3/RGW/IAM failures,
+  and never log upstream response bodies directly.
 
 ## CI security gates
 

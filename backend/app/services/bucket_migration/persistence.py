@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.db import BucketMigration, User
 from app.services.effective_access_service import EffectiveAccessService
 from app.utils.time import utcnow
@@ -96,4 +97,4 @@ class BucketMigrationPersistenceMixin:
         try:
             _validate_webhook_target_url(webhook_url)
         except ValueError as exc:
-            raise ValueError(str(exc)) from exc
+            raise ValueError(sanitized_error_log_detail(exc)) from exc

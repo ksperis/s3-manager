@@ -9,6 +9,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal
+from app.core.logging_security import configure_secure_logging
 from app.core.security import (
     clear_credential_keys_override,
     decrypt_secret,
@@ -91,7 +92,7 @@ def main() -> None:
     parser.add_argument("--new-key", required=True, help="New credential key to use for encryption.")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    configure_secure_logging(level="INFO")
     updated = rotate_credentials(new_key=args.new_key)
     logger.info("Re-encrypted %s credential field(s). Update CREDENTIAL_KEYS accordingly.", updated)
 

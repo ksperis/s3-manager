@@ -3929,6 +3929,53 @@ def test_add_event_notifies_webhook_when_configured(db_session):
     assert payload["event"]["metadata"]["copied"] == 12
 
 
+def test_add_event_sanitizes_exception_text_before_persistence(db_session):
+    user = _create_user(db_session)
+    source = _create_account(
+        db_session,
+        name="source",
+        endpoint_url="https://source.example.test",
+        account_id="RGW001",
+    )
+    target = _create_account(
+        db_session,
+        name="target",
+        endpoint_url="https://target.example.test",
+        account_id="RGW002",
+    )
+    db_session.commit()
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            mode="one_shot",
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+        ),
+        user,
+    )
+
+    service._add_event(
+        migration,
+        level="error",
+        message=(
+            "request failed password=migration-secret "
+            "https://rgw.example.test/path?X-Amz-Signature=deadbeef"
+        ),
+        metadata={"token": "metadata-secret", "error": "access_key_id=AKIA1234567890ABCDEF"},
+    )
+    db_session.flush()
+
+    event = db_session.query(BucketMigrationEvent).order_by(BucketMigrationEvent.id.desc()).first()
+    assert event is not None
+    persisted = f"{event.message} {event.metadata_json}"
+    assert "migration-secret" not in persisted
+    assert "metadata-secret" not in persisted
+    assert "AKIA1234567890ABCDEF" not in persisted
+    assert "rgw.example.test" not in persisted
+    assert "deadbeef" not in persisted
+
+
 def test_add_event_webhook_queue_full_does_not_break_migration_events(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")

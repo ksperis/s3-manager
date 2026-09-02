@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.core.config import get_settings
+from app.core.logging_security import configure_secure_logging
 from app.core.database import SessionLocal, engine
 from app.services.database_initialization import init_db
 from app.db import ManagerAccountRole, S3Account, StorageEndpoint, StorageProvider
@@ -604,10 +605,7 @@ def main() -> None:
     if args.quota_ratio < 0 or args.quota_ratio > 1:
         logger.warning("quota-ratio should be between 0 and 1; clamping.")
         args.quota_ratio = max(0.0, min(1.0, args.quota_ratio))
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(message)s",
-    )
+    configure_secure_logging(level="INFO")
     if args.seed is not None:
         random.seed(args.seed)
     config = load_yaml_config(args.config)

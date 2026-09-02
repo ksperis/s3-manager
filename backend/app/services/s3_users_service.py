@@ -7,6 +7,7 @@ from typing import Any, Optional
 from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.db import (
     S3UserTag,
     S3User as S3UserModel,
@@ -169,7 +170,7 @@ class S3UsersService:
         try:
             max_size_bytes = size_to_bytes(max_size_gb, max_size_unit)
         except ValueError as exc:
-            raise ValueError(str(exc)) from exc
+            raise ValueError(sanitized_error_log_detail(exc)) from exc
         enabled = max_size_bytes is not None or max_objects is not None
         try:
             response = admin.set_user_quota(

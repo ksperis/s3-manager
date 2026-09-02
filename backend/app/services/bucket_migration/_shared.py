@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from app.core.config import get_settings
+from app.core.sensitive_data import sanitize_error_detail, sanitize_log_text
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.network_targets import validate_outbound_url
 
@@ -200,7 +201,7 @@ def _json_loads(value: Optional[str]) -> Any:
 def _truncate_db_text(value: Any, *, max_chars: int) -> str:
     if max_chars <= 0:
         return ""
-    text = "" if value is None else str(value)
+    text = "" if value is None else sanitize_log_text(value)
     if len(text) <= max_chars:
         return text
     omitted = len(text) - max_chars

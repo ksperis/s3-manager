@@ -78,6 +78,33 @@ def test_request_wraps_network_errors(monkeypatch):
         client._request("GET", "/admin/info")
 
 
+def test_request_never_logs_or_raises_raw_rgw_error_body(monkeypatch, caplog):
+    client = _client()
+    response = _Resp(
+        status_code=500,
+        payload={
+            "Code": "AccessDenied",
+            "Message": (
+                "password=body-secret access_key_id=AKIA1234567890ABCDEF "
+                "https://rgw.example.test/path?X-Amz-Signature=deadbeef"
+            ),
+        },
+    )
+    monkeypatch.setattr(client.session, "request", lambda *args, **kwargs: response)
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(RGWAdminError) as raised:
+            client._request("GET", "/admin/info")
+
+    rendered = f"{raised.value} {caplog.text}"
+    assert "AccessDenied" in rendered
+    assert "500" in rendered
+    assert "body-secret" not in rendered
+    assert "AKIA1234567890ABCDEF" not in rendered
+    assert "rgw.example.test" not in rendered
+    assert "deadbeef" not in rendered
+
+
 def test_admin_ops_transport_preserves_empty_status_and_parses_json_xml_text(monkeypatch):
     client = _client()
 

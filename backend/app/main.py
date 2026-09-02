@@ -14,6 +14,7 @@ from sqlalchemy.exc import DatabaseError
 
 from app.core.config import collect_secret_warnings, get_settings, has_non_local_cors_origins, has_wildcard_cors_origin
 from app.core.database import SessionLocal, engine, is_sqlite_malformed_database_error, is_sqlite_url
+from app.core.logging_security import configure_secure_logging
 from app.services.database_initialization import init_db
 from app.core.sensitive_data import sanitize_error_detail, sanitized_error_log_detail
 from app.routers import auth, users, settings as public_settings, browser as user_browser
@@ -91,10 +92,7 @@ from app.utils.aws_errors import aws_error_code
 
 settings = get_settings()
 
-logging.basicConfig(
-    level=settings.log_level,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+configure_secure_logging(level=settings.log_level)
 for noisy_logger in ("boto3", "botocore", "s3transfer", "urllib3"):
     logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)

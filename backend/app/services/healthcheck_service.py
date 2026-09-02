@@ -13,6 +13,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.db import (
     EndpointHealthCheck,
     HealthCheckStatus,
@@ -79,7 +80,9 @@ class HealthCheckService:
                                 checked_at=utcnow(),
                                 latency_ms=None,
                                 http_status=None,
-                                error_message=f"Healthcheck worker failure: {exc}",
+                                error_message=(
+                                    f"Healthcheck worker failure: {sanitized_error_log_detail(exc)}"
+                                ),
                                 check_mode=profiles[endpoint_id].mode,
                             )
                         )
@@ -170,7 +173,7 @@ class HealthCheckService:
             return response.status_code, None
         except requests.RequestException as exc:
             logger.warning("HTTP healthcheck failed for %s: %s", url, exc)
-            return None, str(exc)
+            return None, sanitized_error_log_detail(exc)
 
     def _s3_probe(self, target: EndpointCheckTarget, url: str) -> tuple[Optional[int], Optional[str]]:
         access_key = (target.supervision_access_key or target.admin_access_key or "").strip() or None
@@ -195,11 +198,11 @@ class HealthCheckService:
             status_code = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") if hasattr(exc, "response") else None
             if status_code is None:
                 logger.warning("S3 healthcheck failed for %s: %s", url, exc)
-                return None, str(exc)
+                return None, sanitized_error_log_detail(exc)
             return int(status_code), None
         except BotoCoreError as exc:
             logger.warning("S3 healthcheck failed for %s: %s", url, exc)
-            return None, str(exc)
+            return None, sanitized_error_log_detail(exc)
 
     def _check_endpoint(
         self,

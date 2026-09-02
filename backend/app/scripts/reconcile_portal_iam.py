@@ -9,6 +9,7 @@ import json
 import logging
 
 from app.core.database import SessionLocal
+from app.core.logging_security import configure_secure_logging
 from app.db import AccountIAMUser, S3Account, User
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.portal_service import PortalService
@@ -94,7 +95,7 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true", help="Apply changes. Without this flag, only a dry-run is performed.")
     parser.add_argument("--account-id", type=int, help="Limit reconciliation to one database account id.")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    configure_secure_logging(level="INFO")
     summaries = reconcile_portal_iam(dry_run=not args.apply, account_id=args.account_id)
     logger.info("mode=%s", "apply" if args.apply else "dry-run")
     for summary in summaries:

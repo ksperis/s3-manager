@@ -12,6 +12,7 @@ from sqlalchemy import exists, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.core.security import get_password_hash
 from app.db import FirstAdminBootstrap, User
 from app.db.enums import UserRole
@@ -66,7 +67,7 @@ class FirstAdminBootstrapService:
         try:
             validate_password_policy(password)
         except ValueError as exc:
-            raise FirstAdminBootstrapError(str(exc)) from exc
+            raise FirstAdminBootstrapError(sanitized_error_log_detail(exc)) from exc
 
     @staticmethod
     def _empty_users_predicate():

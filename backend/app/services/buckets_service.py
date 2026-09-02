@@ -3,6 +3,7 @@
 from typing import Any, List, Optional
 import logging
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.s3_execution_client import (
     require_s3_execution_credentials,
@@ -39,9 +40,11 @@ class BucketsService:
         try:
             return get_supervision_rgw_client(endpoint)
         except ValueError as exc:
-            raise RuntimeError(str(exc)) from exc
+            raise RuntimeError(sanitized_error_log_detail(exc)) from exc
         except RGWAdminError as exc:
-            raise RuntimeError(f"Unable to initialize admin client: {exc}") from exc
+            raise RuntimeError(
+                f"Unable to initialize admin client: {sanitized_error_log_detail(exc)}"
+            ) from exc
 
     def _admin_bucket_list(self, account: S3ExecutionTarget, with_stats: bool = True) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
@@ -51,7 +54,9 @@ class BucketsService:
         try:
             payload = rgw_admin.get_all_buckets(uid=uid, with_stats=with_stats)
         except RGWAdminError as exc:
-            raise RuntimeError(f"Unable to list buckets via admin API: {exc}") from exc
+            raise RuntimeError(
+                f"Unable to list buckets via admin API: {sanitized_error_log_detail(exc)}"
+            ) from exc
         return extract_bucket_list(payload)
 
     def _account_credentials(self, account: S3ExecutionTarget) -> tuple[str, str]:

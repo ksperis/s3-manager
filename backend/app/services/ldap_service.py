@@ -18,6 +18,7 @@ from ldap3.utils.conv import escape_filter_chars
 from sqlalchemy.orm import Session
 
 from app.core.config import LDAPProviderSettings, Settings, get_settings
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.db import User
 from app.services.external_identity_user_service import ExternalIdentityLinkRequiredError
 from app.services.ldap_provider_settings_service import resolve_ldap_provider_map
@@ -91,7 +92,7 @@ class LDAPAuthService:
         except ExternalIdentityLinkRequiredError:
             raise
         except ValueError as exc:
-            raise LDAPUserConflictError(str(exc)) from exc
+            raise LDAPUserConflictError(sanitized_error_log_detail(exc)) from exc
         if not user.is_active:
             raise LDAPUserConflictError("User is inactive")
         user = self.users_service.mark_last_login(user)

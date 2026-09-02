@@ -10,6 +10,7 @@ from urllib.parse import unquote
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.models.browser import BrowserStsCredentials, SseCustomerContext, StsStatus
 from app.services.s3_execution_context import S3ExecutionTarget
 from ._shared import _resolve_endpoint
@@ -23,7 +24,7 @@ class BrowserTransfersMixin:
         try:
             request_browser_sts_session(account)
         except RuntimeError as exc:
-            return StsStatus(available=False, error=str(exc))
+            return StsStatus(available=False, error=sanitized_error_log_detail(exc))
         return StsStatus(available=True)
 
     def get_sts_credentials(

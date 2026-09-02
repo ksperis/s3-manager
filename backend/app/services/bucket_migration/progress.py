@@ -7,6 +7,7 @@ from datetime import timedelta
 from typing import Any, Optional
 
 from app.core.config import get_settings
+from app.core.sensitive_data import sanitize_error_detail
 from app.db import BucketMigration, BucketMigrationEvent, BucketMigrationItem
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.time import utcnow
@@ -394,7 +395,7 @@ class BucketMigrationProgressMixin:
         safe_message = _truncate_db_text(message, max_chars=_DB_EVENT_MESSAGE_MAX_CHARS)
         safe_metadata: Optional[dict[str, Any]] = None
         if metadata is not None:
-            normalized_metadata = _sanitize_event_metadata(metadata)
+            normalized_metadata = _sanitize_event_metadata(sanitize_error_detail(metadata))
             if isinstance(normalized_metadata, dict):
                 safe_metadata = normalized_metadata
             else:

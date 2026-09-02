@@ -9,6 +9,7 @@ _REDACTED = "<redacted>"
 _REDACTED_URL = "<redacted-url>"
 _TRUNCATED = "... <truncated>"
 _MAX_ERROR_DETAIL_LENGTH = 1200
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 _HTTP_POOL_ENDPOINT_RE = re.compile(
@@ -123,6 +124,7 @@ def _sanitize_sensitive_text(value: str, *, redact_urls: bool, truncate: bool) -
     text = _AUTH_SCHEME_RE.sub(lambda match: f"{match.group(1)} {_REDACTED}", text)
     text = _SENSITIVE_ASSIGNMENT_RE.sub(_redact_assignment, text)
     text = _AWS_ACCESS_KEY_ID_RE.sub(_REDACTED, text)
+    text = _CONTROL_CHAR_RE.sub("", text).replace("\r", "\\r")
     return _truncate_error_text(text) if truncate else text
 
 
@@ -159,6 +161,24 @@ def sanitize_error_detail(value: object) -> object:
 def sanitized_error_log_detail(value: object) -> str:
     detail = sanitize_error_detail(value)
     return detail if isinstance(detail, str) else str(detail)
+
+
+def sanitize_log_text(value: object) -> str:
+    """Redact a fully rendered log message without truncating its traceback."""
+    return _sanitize_sensitive_text(str(value), redact_urls=True, truncate=False)
+
+
+def sanitize_persisted_error(value: object, *, max_chars: int = _MAX_ERROR_DETAIL_LENGTH) -> str:
+    """Redact and bound exception-derived text before database persistence."""
+    sanitized = sanitize_log_text(value)
+    if max_chars <= 0:
+        return ""
+    if len(sanitized) <= max_chars:
+        return sanitized
+    suffix = _TRUNCATED
+    if len(suffix) >= max_chars:
+        return suffix[:max_chars]
+    return f"{sanitized[: max_chars - len(suffix)].rstrip()}{suffix}"
 
 
 def sanitize_audit_metadata(value: object) -> object:

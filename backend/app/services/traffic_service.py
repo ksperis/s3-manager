@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.rgw_supervision import get_supervision_rgw_client
@@ -408,7 +409,7 @@ class TrafficService:
         try:
             return get_supervision_rgw_client(endpoint)
         except RGWAdminError as exc:
-            raise ValueError(str(exc)) from exc
+            raise ValueError(sanitized_error_log_detail(exc)) from exc
 
     def get_traffic(
         self,

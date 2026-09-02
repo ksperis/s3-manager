@@ -9,6 +9,7 @@ from typing import Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.models.browser import (
     BrowserObjectSortBy,
     BrowserObjectSortDir,
@@ -271,7 +272,7 @@ class BrowserContextMixin:
             code = aws_error_code(exc)
             if code in {"NoSuchCORSConfiguration", "NoSuchCORS"}:
                 return BucketCorsStatus(enabled=False, rules=[])
-            return BucketCorsStatus(enabled=False, rules=[], error=str(exc))
+            return BucketCorsStatus(enabled=False, rules=[], error=sanitized_error_log_detail(exc))
         rules = []
         raw_rules = resp.get("CORSRules", []) or []
         enabled = bool(raw_rules)

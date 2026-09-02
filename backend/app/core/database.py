@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import ConnectionPoolEntry
 
 from .config import get_settings
+from .sensitive_data import sanitized_error_log_detail
 
 settings = get_settings()
 _SQLITE_BUSY_TIMEOUT_MS = 30_000
@@ -58,7 +59,7 @@ def sqlite_integrity_status(engine: Engine) -> tuple[bool, str]:
         with engine.connect() as connection:
             result = connection.exec_driver_sql("PRAGMA quick_check;").scalar()
     except DatabaseError as exc:
-        return False, str(exc)
+        return False, sanitized_error_log_detail(exc)
     text = str(result or "").strip() or "unknown"
     return text.lower() == "ok", text
 

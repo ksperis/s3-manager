@@ -3,6 +3,7 @@
 from typing import Any, Optional
 import logging
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.s3_execution_client import (
     require_s3_execution_credentials,
@@ -329,7 +330,7 @@ class BucketConfigurationService:
             try:
                 max_size_bytes = size_to_bytes(payload.max_size_gb, payload.max_size_unit)
             except ValueError as exc:
-                raise ValueError(str(exc)) from exc
+                raise ValueError(sanitized_error_log_detail(exc)) from exc
         enabled = max_size_bytes is not None or payload.max_objects is not None
         try:
             response = client.set_bucket_quota(

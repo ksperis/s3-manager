@@ -7,6 +7,7 @@ from typing import Protocol
 
 from sqlalchemy.exc import IntegrityError
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
     BucketUiTagDefinitionSummary,
@@ -97,7 +98,7 @@ class CephAdminBucketUiTagsWorkflow:
                 allow_not_found=True,
             )
         except RGWAdminError as exc:
-            raise CephAdminBucketUiTagUpstreamError(str(exc)) from exc
+            raise CephAdminBucketUiTagUpstreamError(sanitized_error_log_detail(exc)) from exc
         return isinstance(payload, dict) and bool(payload) and not payload.get("not_found")
 
     def _validate_targets(
@@ -169,7 +170,7 @@ class CephAdminBucketUiTagsWorkflow:
             if shared_mutation:
                 self.record_shared_mutation(len(set(targets)))
         except BucketUiTagNameConflictError as exc:
-            raise CephAdminBucketUiTagConflictError(str(exc)) from exc
+            raise CephAdminBucketUiTagConflictError(sanitized_error_log_detail(exc)) from exc
         except IntegrityError as exc:
             raise CephAdminBucketUiTagConflictError(
                 "A Ceph Admin UI tag already reserves this name."
@@ -191,7 +192,7 @@ class CephAdminBucketUiTagsWorkflow:
                     visibility=payload.visibility,
                 )
         except BucketUiTagDefinitionNotFoundError as exc:
-            raise CephAdminBucketUiTagNotFoundError(str(exc)) from exc
+            raise CephAdminBucketUiTagNotFoundError(sanitized_error_log_detail(exc)) from exc
         except IntegrityError as exc:
             raise CephAdminBucketUiTagConflictError(
                 "A Ceph Admin UI tag already reserves this name."

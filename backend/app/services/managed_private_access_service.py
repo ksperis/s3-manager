@@ -16,7 +16,7 @@ from app.models.managed_private_access import (
     ManagedRGWUserPrivateAccessRequest,
 )
 from app.models.s3_connection import CredentialOwnerType
-from app.core.sensitive_data import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail, sanitized_error_log_detail
 from app.services.audit_service import AuditService
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.rgw_iam import RGWIAMService, get_iam_service
@@ -510,7 +510,7 @@ class ManagedPrivateAccessService:
                 field_name="Endpoint URL",
             )
         except ValueError as exc:
-            raise ManagedPrivateAccessError(str(exc)) from exc
+            raise ManagedPrivateAccessError(sanitized_error_log_detail(exc)) from exc
         if not details.verify_tls:
             raise ManagedPrivateAccessError("Managed private access requires TLS verification")
         return _Destination(

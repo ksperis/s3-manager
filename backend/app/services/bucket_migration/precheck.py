@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from app.core.sensitive_data import sanitized_error_log_detail
+
 from .precheck_inspection import BucketMigrationInspector
 
 
@@ -886,10 +888,13 @@ class BucketMigrationPrecheckPlanner:
                     severity="error",
                     blocking=True,
                     scope="migration",
-                    message=f"Unable to resolve migration contexts: {exc}",
+                    message=(
+                        "Unable to resolve migration contexts: "
+                        f"{sanitized_error_log_detail(exc)}"
+                    ),
                 )
             )
-            report["contexts_error"] = str(exc)
+            report["contexts_error"] = sanitized_error_log_detail(exc)
             report["capabilities"] = self._global_capabilities(
                 same_endpoint=False,
                 same_endpoint_copy_requested=bool(

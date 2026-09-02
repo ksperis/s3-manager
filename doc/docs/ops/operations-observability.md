@@ -14,6 +14,14 @@ Collect backend logs centrally and include:
 - selected context/endpoint when relevant
 - backend errors (including upstream storage denials)
 
+The backend logging formatter removes credentials, authentication tokens, AWS
+access keys, signatures, sensitive URLs, and control characters from rendered
+messages and exception tracebacks. Healthcheck and migration errors are also
+sanitized before database persistence. RGW failures retain only the HTTP
+status, a recognized provider error code, and a cleaned bounded detail. Treat
+this formatter as defense in depth: callers must still use the shared error
+helpers and must never intentionally log request bodies or credentials.
+
 Collect S3 provider access logs separately for object requests. These logs may
 be delayed and their evidence window depends on activation, delivery, and
 retention. Application `audit_logs` intentionally contains only control-plane,

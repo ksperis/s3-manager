@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 
 from sqlalchemy.exc import IntegrityError
 
+from app.core.sensitive_data import sanitized_error_log_detail
 from app.models.bucket_ui_tags import (
     BucketUiTagCatalogResponse,
     BucketUiTagDefinitionSummary,
@@ -87,7 +88,7 @@ class StorageOpsBucketUiTagsWorkflow:
         try:
             listed = buckets.list_buckets(account, include=None, with_stats=False)
         except RuntimeError as exc:
-            raise StorageOpsBucketUiTagUpstreamError(str(exc)) from exc
+            raise StorageOpsBucketUiTagUpstreamError(sanitized_error_log_detail(exc)) from exc
         inventory = (account, {str(bucket.name) for bucket in listed})
         self.resolved[context_id] = inventory
         return inventory
@@ -173,5 +174,5 @@ class StorageOpsBucketUiTagsWorkflow:
                     color_key=payload.color_key,
                 )
         except BucketUiTagDefinitionNotFoundError as exc:
-            raise StorageOpsBucketUiTagNotFoundError(str(exc)) from exc
+            raise StorageOpsBucketUiTagNotFoundError(sanitized_error_log_detail(exc)) from exc
         return result.definition

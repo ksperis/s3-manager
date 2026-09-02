@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.sensitive_data import sanitize_persisted_error
 from app.db import (
     EndpointHealthCheck,
     EndpointHealthLatest,
@@ -36,6 +37,11 @@ class HealthCheckPersistenceService:
 
     def record_results(self, results: list[HealthCheckResult]) -> None:
         for result in results:
+            safe_error = (
+                sanitize_persisted_error(result.error_message)
+                if result.error_message is not None
+                else None
+            )
             self.db.add(
                 EndpointHealthCheck(
                     storage_endpoint_id=result.endpoint_id,
@@ -44,7 +50,7 @@ class HealthCheckPersistenceService:
                     latency_ms=result.latency_ms,
                     check_mode=result.check_mode,
                     status=result.status.value,
-                    error_message=result.error_message,
+                    error_message=safe_error,
                 )
             )
         self.db.commit()
@@ -130,7 +136,11 @@ class HealthCheckPersistenceService:
         entry.status = result.status.value
         entry.latency_ms = result.latency_ms
         entry.http_status = result.http_status
-        entry.error_message = result.error_message
+        entry.error_message = (
+            sanitize_persisted_error(result.error_message)
+            if result.error_message is not None
+            else None
+        )
         entry.min_latency_ms = min(latencies) if latencies else None
         entry.avg_latency_ms = int(round(sum(latencies) / len(latencies))) if latencies else None
         entry.max_latency_ms = max(latencies) if latencies else None
@@ -325,4 +335,3 @@ class HealthCheckPersistenceService:
                 deleted_segments,
             )
         self.db.commit()
-
