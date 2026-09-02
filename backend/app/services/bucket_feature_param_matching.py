@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
 
 from app.models.bucket import (
     BucketLoggingConfiguration,
@@ -198,10 +198,52 @@ def _feature_param_quantifier(rule: CephAdminBucketFilterRule) -> str:
     return "none" if (rule.quantifier or "").strip().lower() == "none" else "any"
 
 
+_GroupedEntry = TypeVar("_GroupedEntry")
+_GroupedEntryMatcher = Callable[[_GroupedEntry, CephAdminBucketFilterRule, bool], bool]
+
+
+def _match_grouped_entry_rule_individual(
+    rule: CephAdminBucketFilterRule,
+    entries: list[_GroupedEntry],
+    matcher: _GroupedEntryMatcher[_GroupedEntry],
+) -> bool:
+    force_presence_positive = (rule.op or "").strip().lower() == "has_not"
+    matched_any = any(matcher(entry, rule, force_presence_positive) for entry in entries)
+    if force_presence_positive:
+        return not matched_any
+    return matched_any if _feature_param_quantifier(rule) == "any" else not matched_any
+
+
+def _match_grouped_entry_rules_all(
+    rules: list[CephAdminBucketFilterRule],
+    entries: list[_GroupedEntry],
+    matcher: _GroupedEntryMatcher[_GroupedEntry],
+) -> bool:
+    positive_rules: list[CephAdminBucketFilterRule] = []
+    forbidden_rules: list[CephAdminBucketFilterRule] = []
+    for rule in rules:
+        op = (rule.op or "").strip().lower()
+        if op == "has_not" or _feature_param_quantifier(rule) == "none":
+            forbidden_rules.append(rule)
+        else:
+            positive_rules.append(rule)
+
+    if positive_rules and not any(
+        all(matcher(entry, rule, False) for rule in positive_rules)
+        for entry in entries
+    ):
+        return False
+
+    for rule in forbidden_rules:
+        force_presence_positive = (rule.op or "").strip().lower() == "has_not"
+        if any(matcher(entry, rule, force_presence_positive) for entry in entries):
+            return False
+    return True
+
+
 def _lifecycle_rule_matches_param(
     lifecycle_rule: dict,
     rule: CephAdminBucketFilterRule,
-    *,
     force_presence_positive: bool = False,
 ) -> bool:
     param = rule.param
@@ -239,47 +281,22 @@ def _lifecycle_rule_matches_param(
 
 
 def _match_lifecycle_param_rule_individual(rule: CephAdminBucketFilterRule, lifecycle_rules: list[dict]) -> bool:
-    op = (rule.op or "").strip().lower()
-    if op == "has_not":
-        return not any(_lifecycle_rule_matches_param(item, rule, force_presence_positive=True) for item in lifecycle_rules)
-    matched_any = any(_lifecycle_rule_matches_param(item, rule) for item in lifecycle_rules)
-    return matched_any if _feature_param_quantifier(rule) == "any" else (not matched_any)
+    return _match_grouped_entry_rule_individual(
+        rule,
+        lifecycle_rules,
+        _lifecycle_rule_matches_param,
+    )
 
 
 def _match_lifecycle_param_rules_all(
     rules: list[CephAdminBucketFilterRule],
     lifecycle_rules: list[dict],
 ) -> bool:
-    positive_rules: list[CephAdminBucketFilterRule] = []
-    forbidden_rules: list[CephAdminBucketFilterRule] = []
-    for rule in rules:
-        op = (rule.op or "").strip().lower()
-        if op == "has_not" or _feature_param_quantifier(rule) == "none":
-            forbidden_rules.append(rule)
-        else:
-            positive_rules.append(rule)
-
-    positive_ok = True
-    if positive_rules:
-        positive_ok = any(
-            all(_lifecycle_rule_matches_param(item, rule) for rule in positive_rules)
-            for item in lifecycle_rules
-        )
-
-    forbidden_ok = True
-    for rule in forbidden_rules:
-        op = (rule.op or "").strip().lower()
-        if op == "has_not":
-            forbidden_match = any(
-                _lifecycle_rule_matches_param(item, rule, force_presence_positive=True)
-                for item in lifecycle_rules
-            )
-        else:
-            forbidden_match = any(_lifecycle_rule_matches_param(item, rule) for item in lifecycle_rules)
-        if forbidden_match:
-            forbidden_ok = False
-            break
-    return positive_ok and forbidden_ok
+    return _match_grouped_entry_rules_all(
+        rules,
+        lifecycle_rules,
+        _lifecycle_rule_matches_param,
+    )
 
 
 def _match_text_candidates(values: list[str], op: str, right_raw: object) -> bool:
@@ -299,7 +316,6 @@ def _match_presence_values(values: list[str], op: str, right_raw: object) -> boo
 def _cors_rule_matches_param(
     entry: dict,
     rule: CephAdminBucketFilterRule,
-    *,
     force_presence_positive: bool = False,
 ) -> bool:
     op = (rule.op or "").strip().lower()
@@ -312,41 +328,22 @@ def _cors_rule_matches_param(
 
 
 def _match_cors_param_rule_individual(rule: CephAdminBucketFilterRule, cors_rules: list[dict]) -> bool:
-    op = (rule.op or "").strip().lower()
-    if op == "has_not":
-        return not any(_cors_rule_matches_param(item, rule, force_presence_positive=True) for item in cors_rules)
-    matched_any = any(_cors_rule_matches_param(item, rule) for item in cors_rules)
-    return matched_any if _feature_param_quantifier(rule) == "any" else (not matched_any)
+    return _match_grouped_entry_rule_individual(
+        rule,
+        cors_rules,
+        _cors_rule_matches_param,
+    )
 
 
 def _match_cors_param_rules_all(
     rules: list[CephAdminBucketFilterRule],
     cors_rules: list[dict],
 ) -> bool:
-    positive_rules: list[CephAdminBucketFilterRule] = []
-    forbidden_rules: list[CephAdminBucketFilterRule] = []
-    for rule in rules:
-        op = (rule.op or "").strip().lower()
-        if op == "has_not" or _feature_param_quantifier(rule) == "none":
-            forbidden_rules.append(rule)
-        else:
-            positive_rules.append(rule)
-
-    positive_ok = True
-    if positive_rules:
-        positive_ok = any(all(_cors_rule_matches_param(item, rule) for rule in positive_rules) for item in cors_rules)
-
-    forbidden_ok = True
-    for rule in forbidden_rules:
-        op = (rule.op or "").strip().lower()
-        if op == "has_not":
-            forbidden_match = any(_cors_rule_matches_param(item, rule, force_presence_positive=True) for item in cors_rules)
-        else:
-            forbidden_match = any(_cors_rule_matches_param(item, rule) for item in cors_rules)
-        if forbidden_match:
-            forbidden_ok = False
-            break
-    return positive_ok and forbidden_ok
+    return _match_grouped_entry_rules_all(
+        rules,
+        cors_rules,
+        _cors_rule_matches_param,
+    )
 
 
 def _sse_rule_matches_param(entry: dict, rule: CephAdminBucketFilterRule) -> bool:
@@ -386,12 +383,11 @@ def _match_sse_param_rules_all(
 
 
 def _notification_rule_matches_param(
-    entry_type: str,
-    entry: dict,
+    notification_entry: tuple[str, dict],
     rule: CephAdminBucketFilterRule,
-    *,
     force_presence_positive: bool = False,
 ) -> bool:
+    entry_type, entry = notification_entry
     param = rule.param
     op = (rule.op or "").strip().lower()
     if force_presence_positive and op == "has_not":
@@ -415,14 +411,11 @@ def _notification_rule_matches_param(
 
 def _match_notification_param_rule_individual(rule: CephAdminBucketFilterRule, configuration: object) -> bool:
     entries = notification_rule_entries(configuration)
-    op = (rule.op or "").strip().lower()
-    if op == "has_not":
-        return not any(
-            _notification_rule_matches_param(entry_type, entry, rule, force_presence_positive=True)
-            for entry_type, entry in entries
-        )
-    matched_any = any(_notification_rule_matches_param(entry_type, entry, rule) for entry_type, entry in entries)
-    return matched_any if _feature_param_quantifier(rule) == "any" else (not matched_any)
+    return _match_grouped_entry_rule_individual(
+        rule,
+        entries,
+        _notification_rule_matches_param,
+    )
 
 
 def _match_notification_param_rules_all(
@@ -430,39 +423,11 @@ def _match_notification_param_rules_all(
     configuration: object,
 ) -> bool:
     entries = notification_rule_entries(configuration)
-    positive_rules: list[CephAdminBucketFilterRule] = []
-    forbidden_rules: list[CephAdminBucketFilterRule] = []
-    for rule in rules:
-        op = (rule.op or "").strip().lower()
-        if op == "has_not" or _feature_param_quantifier(rule) == "none":
-            forbidden_rules.append(rule)
-        else:
-            positive_rules.append(rule)
-
-    positive_ok = True
-    if positive_rules:
-        positive_ok = any(
-            all(_notification_rule_matches_param(entry_type, entry, rule) for rule in positive_rules)
-            for entry_type, entry in entries
-        )
-
-    forbidden_ok = True
-    for rule in forbidden_rules:
-        op = (rule.op or "").strip().lower()
-        if op == "has_not":
-            forbidden_match = any(
-                _notification_rule_matches_param(entry_type, entry, rule, force_presence_positive=True)
-                for entry_type, entry in entries
-            )
-        else:
-            forbidden_match = any(
-                _notification_rule_matches_param(entry_type, entry, rule)
-                for entry_type, entry in entries
-            )
-        if forbidden_match:
-            forbidden_ok = False
-            break
-    return positive_ok and forbidden_ok
+    return _match_grouped_entry_rules_all(
+        rules,
+        entries,
+        _notification_rule_matches_param,
+    )
 
 
 def _apply_scalar_quantifier(rule: CephAdminBucketFilterRule, result: bool) -> bool:
