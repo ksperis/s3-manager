@@ -66,6 +66,18 @@ type RunStatusItem = {
   result?: { has_differences?: boolean } | null;
 };
 
+type BucketCompareRunPresentationItem = RunStatusItem & {
+  sourceBucket: string;
+  targetBucket: string;
+  error?: string;
+};
+
+type BucketCompareRunFilters = {
+  search: string;
+  status: "all" | RunItemStatus;
+  differences: "all" | "with_diff" | "no_diff";
+};
+
 type BucketCompareRunSettlement<TResult> =
   | { status: "success"; result: TResult }
   | { status: "failed" | "cancelled"; error: string };
@@ -534,6 +546,37 @@ export const getRunStatusLabel = (item: RunStatusItem): string => {
     return "Done";
   }
   return item.status;
+};
+
+export const summarizeBucketCompareRun = (items: RunStatusItem[]) =>
+  items.reduce(
+    (summary, item) => ({
+      success: summary.success + (item.status === "success" ? 1 : 0),
+      failed: summary.failed + (item.status === "failed" ? 1 : 0),
+      cancelled: summary.cancelled + (item.status === "cancelled" ? 1 : 0),
+      withDiff: summary.withDiff + (item.result?.has_differences ? 1 : 0),
+    }),
+    { success: 0, failed: 0, cancelled: 0, withDiff: 0 }
+  );
+
+export const matchesBucketCompareRunFilters = (
+  item: BucketCompareRunPresentationItem,
+  filters: BucketCompareRunFilters
+): boolean => {
+  if (filters.status !== "all" && item.status !== filters.status) return false;
+  if (filters.differences === "with_diff" && !item.result?.has_differences) {
+    return false;
+  }
+  if (filters.differences === "no_diff") {
+    if (item.status !== "success") return false;
+    if (item.result?.has_differences) return false;
+  }
+
+  const search = filters.search.trim().toLowerCase();
+  if (!search) return true;
+  return [item.sourceBucket, item.targetBucket, item.error ?? ""].some((value) =>
+    value.toLowerCase().includes(search)
+  );
 };
 
 export const getChangedTone = (changed: boolean): UiTone => (changed ? "warning" : "neutral");

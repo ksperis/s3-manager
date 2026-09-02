@@ -4,8 +4,10 @@ import {
   bucketComparisonCancelledMessage,
   buildBucketCompareMappingModel,
   compareObjectDetailsFromKeys,
+  matchesBucketCompareRunFilters,
   resolveBucketCompareRunSettlement,
   sourceCompareObjectDetailFromDiff,
+  summarizeBucketCompareRun,
   targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
@@ -145,6 +147,90 @@ describe("bucket comparison run settlement", () => {
         failed
       )
     ).toEqual({ completed: 1, total: 2, failed: 1, cancelled: 0 });
+  });
+});
+
+describe("bucket comparison run presentation", () => {
+  const items = [
+    {
+      sourceBucket: "Source Alpha",
+      targetBucket: "archive",
+      status: "success" as const,
+      result: { has_differences: true },
+    },
+    {
+      sourceBucket: "beta",
+      targetBucket: "Target Beta",
+      status: "success" as const,
+      result: { has_differences: false },
+    },
+    {
+      sourceBucket: "gamma",
+      targetBucket: "archive",
+      status: "success" as const,
+    },
+    {
+      sourceBucket: "delta",
+      targetBucket: "archive",
+      status: "failed" as const,
+      error: "Permission denied",
+    },
+    {
+      sourceBucket: "epsilon",
+      targetBucket: "archive",
+      status: "cancelled" as const,
+    },
+  ];
+
+  it("summarizes terminal statuses and results in one shared model", () => {
+    expect(summarizeBucketCompareRun(items)).toEqual({
+      success: 3,
+      failed: 1,
+      cancelled: 1,
+      withDiff: 1,
+    });
+  });
+
+  it("matches status, difference, and case-insensitive text filters", () => {
+    expect(
+      items.filter((item) =>
+        matchesBucketCompareRunFilters(item, {
+          search: "  permission ",
+          status: "failed",
+          differences: "all",
+        })
+      )
+    ).toEqual([items[3]]);
+    expect(
+      items.filter((item) =>
+        matchesBucketCompareRunFilters(item, {
+          search: "TARGET BETA",
+          status: "all",
+          differences: "no_diff",
+        })
+      )
+    ).toEqual([items[1]]);
+    expect(
+      items.filter((item) =>
+        matchesBucketCompareRunFilters(item, {
+          search: "source alpha",
+          status: "all",
+          differences: "with_diff",
+        })
+      )
+    ).toEqual([items[0]]);
+  });
+
+  it("keeps successful results without an explicit difference flag in no-diff results", () => {
+    expect(
+      items.filter((item) =>
+        matchesBucketCompareRunFilters(item, {
+          search: "",
+          status: "all",
+          differences: "no_diff",
+        })
+      )
+    ).toEqual([items[1], items[2]]);
   });
 });
 

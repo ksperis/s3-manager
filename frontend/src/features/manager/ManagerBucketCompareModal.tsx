@@ -42,11 +42,13 @@ import {
   getRunStatusLabel,
   getRunStatusTone,
   getVisibleCompareObjectKeys,
+  matchesBucketCompareRunFilters,
   parseRawMappingText,
   renderCompareObjectDetails,
   renderDiffLines,
   resolveBucketCompareRunSettlement,
   sourceCompareObjectDetailFromDiff,
+  summarizeBucketCompareRun,
   targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
@@ -507,31 +509,18 @@ export default function ManagerBucketCompareModal({
     }
   };
 
-  const resultSummary = useMemo(() => {
-    const success = items.filter((item) => item.status === "success").length;
-    const failed = items.filter((item) => item.status === "failed").length;
-    const cancelled = items.filter((item) => item.status === "cancelled").length;
-    const withDiff = items.filter((item) => item.result?.has_differences).length;
-    return { success, failed, cancelled, withDiff };
-  }, [items]);
+  const resultSummary = useMemo(() => summarizeBucketCompareRun(items), [items]);
 
   const filteredItems = useMemo(() => {
-    const search = resultSearch.trim().toLowerCase();
     return items
       .map((item, index) => ({ item, index }))
-      .filter(({ item }) => {
-        if (statusFilter !== "all" && item.status !== statusFilter) return false;
-        if (diffFilter === "with_diff" && !item.result?.has_differences) return false;
-        if (diffFilter === "no_diff") {
-          if (item.status !== "success") return false;
-          if (item.result?.has_differences) return false;
-        }
-        if (!search) return true;
-        const source = item.sourceBucket.toLowerCase();
-        const target = item.targetBucket.toLowerCase();
-        const error = (item.error ?? "").toLowerCase();
-        return source.includes(search) || target.includes(search) || error.includes(search);
-      });
+      .filter(({ item }) =>
+        matchesBucketCompareRunFilters(item, {
+          search: resultSearch,
+          status: statusFilter,
+          differences: diffFilter,
+        })
+      );
   }, [diffFilter, items, resultSearch, statusFilter]);
 
   const resetResultFilters = () => {
