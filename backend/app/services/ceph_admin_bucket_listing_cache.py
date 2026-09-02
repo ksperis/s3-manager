@@ -10,7 +10,7 @@ from time import monotonic
 from typing import Callable, Protocol
 
 from app.db import StorageEndpoint
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.bucket_listing import BucketListingSummary
 from app.services.bucket_owner_enrichment import BucketOwnerUsage
 from app.services.rgw_admin import RGWAdminClient
 from app.utils.cache import prune_expired_lru_cache
@@ -40,7 +40,7 @@ class CephAdminBucketListCacheKey:
 
 @dataclass
 class CephAdminBucketListingSnapshot:
-    items: list[CephAdminBucketSummary]
+    items: list[BucketListingSummary]
     stats_available: bool = True
     stats_warning: str | None = None
     owner_usage_by_key: dict[str, BucketOwnerUsage] | None = None
@@ -75,7 +75,7 @@ _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS: dict[int, Lock] = {}
 _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS_LOCK = Lock()
 
 
-def clone_ceph_admin_bucket_list(items: list[CephAdminBucketSummary]) -> list[CephAdminBucketSummary]:
+def clone_ceph_admin_bucket_list(items: list[BucketListingSummary]) -> list[BucketListingSummary]:
     return [item.model_copy(deep=True) for item in items]
 
 

@@ -11,7 +11,7 @@ from typing import Callable, Literal, Optional
 
 from app.db import StorageEndpoint, StorageProvider
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.bucket_listing import BucketListingSummary
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
 from app.utils.cache import prune_expired_lru_cache
@@ -116,7 +116,7 @@ def owner_identity_key(tenant: str | None, owner: str | None) -> str | None:
 
 
 def compute_bucket_owner_usage(
-    buckets: list[CephAdminBucketSummary],
+    buckets: list[BucketListingSummary],
 ) -> dict[str, BucketOwnerUsage]:
     totals_bytes: dict[str, int] = {}
     totals_objects: dict[str, int] = {}
@@ -142,9 +142,9 @@ def compute_bucket_owner_usage(
 
 
 def apply_bucket_owner_usage_map(
-    buckets: list[CephAdminBucketSummary],
+    buckets: list[BucketListingSummary],
     usage_by_key: dict[str, BucketOwnerUsage],
-) -> list[CephAdminBucketSummary]:
+) -> list[BucketListingSummary]:
     for bucket in buckets:
         owner_key = owner_identity_key(bucket.tenant, bucket.owner)
         usage = usage_by_key.get(owner_key) if owner_key else None
@@ -264,14 +264,14 @@ class BucketOwnerMetadataService:
 
     def enrich_buckets(
         self,
-        buckets: list[CephAdminBucketSummary],
+        buckets: list[BucketListingSummary],
         *,
         include_name: bool = False,
         include_suspended: bool = False,
         include_quota: bool = False,
         include_usage: bool = False,
         usage_by_key: dict[str, BucketOwnerUsage] | None = None,
-    ) -> list[CephAdminBucketSummary]:
+    ) -> list[BucketListingSummary]:
         if not buckets:
             return buckets
         if include_usage:

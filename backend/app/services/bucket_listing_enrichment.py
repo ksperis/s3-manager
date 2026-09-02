@@ -10,7 +10,7 @@ from app.models.bucket import (
     BucketFeatureStatus,
     BucketTag,
 )
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.bucket_listing import BucketListingSummary
 from app.services.bucket_feature_param_values import (
     dedupe_sorted_day_values,
     extract_cors_allowed_values,
@@ -111,7 +111,7 @@ def _mark_details_unavailable(column_details: dict[str, Any], detail_keys: set[s
 
 
 def _enrich_website_configuration(
-    bucket: CephAdminBucketSummary,
+    bucket: BucketListingSummary,
     service: BucketConfigurationService,
     account: S3ExecutionTarget,
     *,
@@ -154,7 +154,7 @@ def _enrich_website_configuration(
 
 
 def _enrich_policy_configuration(
-    bucket: CephAdminBucketSummary,
+    bucket: BucketListingSummary,
     service: BucketConfigurationService,
     account: S3ExecutionTarget,
     *,
@@ -184,7 +184,7 @@ def _enrich_policy_configuration(
 
 
 def _enrich_logging_configuration(
-    bucket: CephAdminBucketSummary,
+    bucket: BucketListingSummary,
     service: BucketConfigurationService,
     account: S3ExecutionTarget,
     *,
@@ -213,7 +213,7 @@ def _enrich_logging_configuration(
 
 
 def _enrich_notification_configuration(
-    bucket: CephAdminBucketSummary,
+    bucket: BucketListingSummary,
     service: BucketConfigurationService,
     account: S3ExecutionTarget,
     *,
@@ -248,7 +248,7 @@ def _enrich_notification_configuration(
 
 
 def _enrich_encryption_configuration(
-    bucket: CephAdminBucketSummary,
+    bucket: BucketListingSummary,
     service: BucketConfigurationService,
     account: S3ExecutionTarget,
     *,
@@ -428,7 +428,7 @@ class _BucketEnricher:
         self.service = service
         self.account = account
 
-    def enrich(self, bucket: CephAdminBucketSummary) -> CephAdminBucketSummary:
+    def enrich(self, bucket: BucketListingSummary) -> BucketListingSummary:
         tags = self._load_tags(bucket)
         feature_map: dict[str, BucketFeatureStatus] = {}
         column_details: dict[str, Any] = {}
@@ -444,7 +444,7 @@ class _BucketEnricher:
 
     def _load_tags(
         self,
-        bucket: CephAdminBucketSummary,
+        bucket: BucketListingSummary,
     ) -> list[BucketTag] | None:
         if not self.plan.include_tags:
             return None
@@ -484,7 +484,7 @@ class _BucketEnricher:
 
     def _enrich_configuration_features(
         self,
-        bucket: CephAdminBucketSummary,
+        bucket: BucketListingSummary,
         feature_map: dict[str, BucketFeatureStatus],
         column_details: dict[str, Any],
     ) -> None:
@@ -542,11 +542,11 @@ class _BucketEnricher:
 
     @staticmethod
     def _project_bucket(
-        bucket: CephAdminBucketSummary,
+        bucket: BucketListingSummary,
         tags: list[BucketTag] | None,
         feature_map: dict[str, BucketFeatureStatus],
         column_details: dict[str, Any],
-    ) -> CephAdminBucketSummary:
+    ) -> BucketListingSummary:
         update: dict[str, Any] = {}
         if tags is not None:
             update["tags"] = tags
@@ -556,7 +556,7 @@ class _BucketEnricher:
             update["column_details"] = column_details
         if not update:
             return bucket
-        return CephAdminBucketSummary(
+        return BucketListingSummary(
             **{
                 **bucket.model_dump(),
                 **update,
@@ -565,7 +565,7 @@ class _BucketEnricher:
 
 
 def enrich_buckets(
-    buckets: list[CephAdminBucketSummary],
+    buckets: list[BucketListingSummary],
     requested: set[str],
     include_tags: bool,
     service: BucketConfigurationService,
@@ -577,7 +577,7 @@ def enrich_buckets(
     progress_start: int = 75,
     progress_end: int = 88,
     cancel_check: Callable[[], None] | None = None,
-) -> list[CephAdminBucketSummary]:
+) -> list[BucketListingSummary]:
     if not buckets or (not requested and not include_tags):
         return buckets
     plan = _BucketEnrichmentPlan.build(
@@ -617,7 +617,7 @@ def enrich_buckets(
             executor.submit(enricher.enrich, bucket): index
             for index, bucket in enumerate(buckets)
         }
-        enriched: list[CephAdminBucketSummary | None] = [None] * len(buckets)
+        enriched: list[BucketListingSummary | None] = [None] * len(buckets)
         for processed, future in enumerate(as_completed(futures), start=1):
             invoke_cancel_check(cancel_check)
             enriched[futures[future]] = future.result()

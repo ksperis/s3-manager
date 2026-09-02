@@ -21,7 +21,8 @@ from app.models.bucket import (
     BucketWebsiteConfiguration,
     BucketWebsiteRedirectAllRequestsTo,
 )
-from app.models.ceph_admin import CephAdminBucketSummary, PaginatedCephAdminBucketsResponse
+from app.models.bucket_listing import BucketListingSummary
+from app.models.ceph_admin import PaginatedCephAdminBucketsResponse
 from app.main import app
 from app.routers import dependencies
 from app.services import ceph_admin_bucket_listing_cache as bucket_listing_cache
@@ -842,23 +843,23 @@ def test_ceph_admin_bucket_listing_any_mixed_filter_prefers_bulk_field_rules(mon
     captured: dict[str, object] = {}
 
     def fake_enrich(
-        buckets: list[CephAdminBucketSummary],
+        buckets: list[BucketListingSummary],
         requested: set[str],
         include_tags: bool,
         service,
         account,
-    ) -> list[CephAdminBucketSummary]:
+    ) -> list[BucketListingSummary]:
         captured["names"] = [bucket.name for bucket in buckets]
         captured["requested"] = requested
         captured["include_tags"] = include_tags
-        enriched: list[CephAdminBucketSummary] = []
+        enriched: list[BucketListingSummary] = []
         for bucket in buckets:
             base = bucket.model_dump()
             if bucket.name == "bucket-b":
                 base["features"] = {"versioning": BucketFeatureStatus(state="Enabled", tone="active")}
             else:
                 base["features"] = {"versioning": BucketFeatureStatus(state="Disabled", tone="inactive")}
-            enriched.append(CephAdminBucketSummary(**base))
+            enriched.append(BucketListingSummary(**base))
         return enriched
 
     monkeypatch.setattr(bucket_listing_service, "enrich_buckets", fake_enrich)
@@ -1097,22 +1098,22 @@ def test_ceph_admin_bucket_listing_tag_filter_matches_s3_tags(monkeypatch: pytes
     ctx, _ = _build_ctx(endpoint_id=171, payload=payload)
 
     def fake_enrich(
-        buckets: list[CephAdminBucketSummary],
+        buckets: list[BucketListingSummary],
         requested: set[str],
         include_tags: bool,
         service,
         account,
-    ) -> list[CephAdminBucketSummary]:
+    ) -> list[BucketListingSummary]:
         assert requested == set()
         assert include_tags is True
-        enriched: list[CephAdminBucketSummary] = []
+        enriched: list[BucketListingSummary] = []
         for bucket in buckets:
             base = bucket.model_dump()
             if bucket.name == "bucket-a":
                 base["tags"] = [{"key": "env", "value": "prod"}]
             else:
                 base["tags"] = [{"key": "env", "value": "dev"}]
-            enriched.append(CephAdminBucketSummary(**base))
+            enriched.append(BucketListingSummary(**base))
         return enriched
 
     monkeypatch.setattr(bucket_listing_service, "enrich_buckets", fake_enrich)
@@ -1149,20 +1150,20 @@ def test_ceph_admin_bucket_listing_any_tag_filter_prefers_bulk_field_rules(monke
     captured: dict[str, object] = {}
 
     def fake_enrich(
-        buckets: list[CephAdminBucketSummary],
+        buckets: list[BucketListingSummary],
         requested: set[str],
         include_tags: bool,
         service,
         account,
-    ) -> list[CephAdminBucketSummary]:
+    ) -> list[BucketListingSummary]:
         captured["names"] = [bucket.name for bucket in buckets]
         captured["requested"] = requested
         captured["include_tags"] = include_tags
-        enriched: list[CephAdminBucketSummary] = []
+        enriched: list[BucketListingSummary] = []
         for bucket in buckets:
             base = bucket.model_dump()
             base["tags"] = [{"key": "env", "value": "prod"}] if bucket.name == "bucket-c" else [{"key": "env", "value": "dev"}]
-            enriched.append(CephAdminBucketSummary(**base))
+            enriched.append(BucketListingSummary(**base))
         return enriched
 
     monkeypatch.setattr(bucket_listing_service, "enrich_buckets", fake_enrich)
@@ -2800,7 +2801,7 @@ def test_ceph_admin_bucket_stream_emits_progress_result_and_done(monkeypatch: py
                 )
             )
         return PaginatedCephAdminBucketsResponse(
-            items=[CephAdminBucketSummary(name="bucket-a", tenant=None, owner="owner-a")],
+            items=[BucketListingSummary(name="bucket-a", tenant=None, owner="owner-a")],
             total=1,
             page=page,
             page_size=page_size,

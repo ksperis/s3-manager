@@ -3,14 +3,14 @@
 from typing import Literal, Optional
 
 from app.models.base import ApiModel
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.bucket_listing import BucketListingSummary
 from app.models.pagination import PaginatedResponse
 
 
 StorageOpsContextKind = Literal["account", "connection", "s3_user"]
 
 
-class StorageOpsBucketSummary(CephAdminBucketSummary):
+class StorageOpsBucketSummary(BucketListingSummary):
     context_id: str
     context_name: str
     context_kind: StorageOpsContextKind

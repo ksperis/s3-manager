@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.models.bucket_filter import BucketFilterQuery, BucketFilterRule
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.bucket_listing import BucketListingSummary
 from app.services.bucket_listing_owner_metadata import (
     OWNER_DETAIL_FIELDS,
     normalize_owner_kind,
@@ -85,7 +85,7 @@ def _match_tag_expression(tag_key: str, tag_value: str, expression: str, op: str
     return key == expr or value == expr
 
 
-def _match_tag_rule(bucket: CephAdminBucketSummary, rule: BucketFilterRule) -> bool:
+def _match_tag_rule(bucket: BucketListingSummary, rule: BucketFilterRule) -> bool:
     tags = bucket.tags or []
     if not tags:
         return False
@@ -116,7 +116,7 @@ def _match_tag_rule(bucket: CephAdminBucketSummary, rule: BucketFilterRule) -> b
     return matched
 
 
-def match_bucket_field_rule(bucket: CephAdminBucketSummary, rule: BucketFilterRule) -> bool:
+def match_bucket_field_rule(bucket: BucketListingSummary, rule: BucketFilterRule) -> bool:
     field = rule.field
     op = rule.op
     if not field or not op:
@@ -182,7 +182,7 @@ def match_bucket_field_rule(bucket: CephAdminBucketSummary, rule: BucketFilterRu
     )
 
 
-def match_bucket_feature_rule(bucket: CephAdminBucketSummary, rule: BucketFilterRule) -> bool:
+def match_bucket_feature_rule(bucket: BucketListingSummary, rule: BucketFilterRule) -> bool:
     feature = rule.feature
     desired = (rule.state or "").strip().lower()
     if not feature or not desired:

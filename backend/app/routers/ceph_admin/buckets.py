@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
-from app.models.ceph_admin import CephAdminBucketListingRequest, PaginatedCephAdminBucketsResponse
+from app.models.bucket_listing import BucketListingRequest
+from app.models.ceph_admin import PaginatedCephAdminBucketsResponse
 from app.routers.ceph_admin import bucket_config, bucket_tools
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.ceph_admin.listing_common import stream_listing_response
@@ -64,7 +65,7 @@ def list_buckets(
 
 @router.post("/query", response_model=PaginatedCephAdminBucketsResponse)
 def query_buckets(
-    payload: CephAdminBucketListingRequest,
+    payload: BucketListingRequest,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
     db: Session = Depends(get_db),
 ) -> PaginatedCephAdminBucketsResponse:

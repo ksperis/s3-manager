@@ -8,7 +8,8 @@ from typing import Any, Callable, Protocol
 
 from app.db import StorageEndpoint
 from app.models.bucket_filter import BucketFilterRule
-from app.models.ceph_admin import CephAdminBucketSummary, PaginatedCephAdminBucketsResponse
+from app.models.bucket_listing import BucketListingSummary
+from app.models.ceph_admin import PaginatedCephAdminBucketsResponse
 from app.services import rgw_bucket_metadata
 from app.services.bucket_listing_enrichment import enrich_buckets
 from app.services.bucket_listing_owner_metadata import (
@@ -202,7 +203,7 @@ class _CephAdminBucketSnapshotBuilder:
             if rgw_bucket_metadata.extract_bucket_name(entry) in allowed_names
         ]
 
-    def _build_summaries(self, loaded: _LoadedBucketEntries) -> list[CephAdminBucketSummary]:
+    def _build_summaries(self, loaded: _LoadedBucketEntries) -> list[BucketListingSummary]:
         entries = loaded.entries
         self.progress.emit(
             percent=15,
@@ -212,7 +213,7 @@ class _CephAdminBucketSnapshotBuilder:
             message="RGW bucket payload loaded",
             force=True,
         )
-        results: list[CephAdminBucketSummary] = []
+        results: list[BucketListingSummary] = []
         total_entries = len(entries)
         for index, entry in enumerate(entries, start=1):
             invoke_cancel_check(self.cancel_check)
@@ -245,8 +246,8 @@ class _CephAdminBucketSnapshotBuilder:
 
     def _backfill_owner_metadata(
         self,
-        results: list[CephAdminBucketSummary],
-    ) -> list[CephAdminBucketSummary]:
+        results: list[BucketListingSummary],
+    ) -> list[BucketListingSummary]:
         if not self.request.needs_owner_metadata or not results:
             return results
         self.progress.emit(
@@ -274,9 +275,9 @@ class _CephAdminBucketSnapshotBuilder:
 
     def _apply_advanced_filter(
         self,
-        results: list[CephAdminBucketSummary],
+        results: list[BucketListingSummary],
         owner_usage_by_key: dict[str, BucketOwnerUsage] | None,
-    ) -> list[CephAdminBucketSummary]:
+    ) -> list[BucketListingSummary]:
         if not self.request.advanced_filter or not self.request.advanced_filter.rules:
             self.progress.emit(
                 percent=90,
@@ -307,9 +308,9 @@ class _CephAdminBucketSnapshotBuilder:
 
     @staticmethod
     def _apply_cheap_field_rules(
-        results: list[CephAdminBucketSummary],
+        results: list[BucketListingSummary],
         plan: CephAdminAdvancedFilterPlan,
-    ) -> list[CephAdminBucketSummary]:
+    ) -> list[BucketListingSummary]:
         if not plan.cheap_field_rules:
             return results
         if plan.query.match == "all":
@@ -328,11 +329,11 @@ class _CephAdminBucketSnapshotBuilder:
 
     def _apply_expensive_rules(
         self,
-        results: list[CephAdminBucketSummary],
+        results: list[BucketListingSummary],
         plan: CephAdminAdvancedFilterPlan,
         owner_usage_by_key: dict[str, BucketOwnerUsage] | None,
-    ) -> list[CephAdminBucketSummary]:
-        field_matched: list[CephAdminBucketSummary] = []
+    ) -> list[BucketListingSummary]:
+        field_matched: list[BucketListingSummary] = []
         candidates = results
         if not plan.feature_param_rules and plan.query.match == "any" and plan.cheap_field_rules:
             field_matched, candidates = self._partition_cheap_matches(results, plan.cheap_field_rules)
@@ -354,11 +355,11 @@ class _CephAdminBucketSnapshotBuilder:
 
     @staticmethod
     def _partition_cheap_matches(
-        results: list[CephAdminBucketSummary],
+        results: list[BucketListingSummary],
         rules: list[BucketFilterRule],
-    ) -> tuple[list[CephAdminBucketSummary], list[CephAdminBucketSummary]]:
-        matched: list[CephAdminBucketSummary] = []
-        unresolved: list[CephAdminBucketSummary] = []
+    ) -> tuple[list[BucketListingSummary], list[BucketListingSummary]]:
+        matched: list[BucketListingSummary] = []
+        unresolved: list[BucketListingSummary] = []
         for bucket in results:
             target = matched if any(match_bucket_field_rule(bucket, rule) for rule in rules) else unresolved
             target.append(bucket)
@@ -366,12 +367,12 @@ class _CephAdminBucketSnapshotBuilder:
 
     def _enrich_expensive_candidates(
         self,
-        candidates: list[CephAdminBucketSummary],
+        candidates: list[BucketListingSummary],
         plan: CephAdminAdvancedFilterPlan,
         owner_usage_by_key: dict[str, BucketOwnerUsage] | None,
         service: BucketConfigurationService,
         account: S3ExecutionContext,
-    ) -> list[CephAdminBucketSummary]:
+    ) -> list[BucketListingSummary]:
         if plan.requires_owner_name_lookup and candidates:
             self._enrich_owner_names(candidates)
         if (
@@ -416,7 +417,7 @@ class _CephAdminBucketSnapshotBuilder:
             ),
         )
 
-    def _enrich_owner_names(self, candidates: list[CephAdminBucketSummary]) -> None:
+    def _enrich_owner_names(self, candidates: list[BucketListingSummary]) -> None:
         owner_scope = determine_owner_name_lookup_scope(self.request.advanced_filter)
         owner_name_by_key = resolve_owner_names_for_buckets(
             self.ctx,
@@ -432,11 +433,11 @@ class _CephAdminBucketSnapshotBuilder:
 
     def _filter_feature_param_candidates(
         self,
-        candidates: list[CephAdminBucketSummary],
+        candidates: list[BucketListingSummary],
         plan: CephAdminAdvancedFilterPlan,
         service: BucketConfigurationService,
         account: S3ExecutionContext,
-    ) -> list[CephAdminBucketSummary]:
+    ) -> list[BucketListingSummary]:
         if candidates:
             self.progress.emit(
                 percent=82,
@@ -469,7 +470,7 @@ class _CephAdminBucketSnapshotBuilder:
 
     @staticmethod
     def _matches_feature_param_candidate(
-        bucket: CephAdminBucketSummary,
+        bucket: BucketListingSummary,
         plan: CephAdminAdvancedFilterPlan,
         snapshots: dict[str, dict[str, object]],
         available_keys: set[str],
@@ -512,9 +513,9 @@ class _CephAdminBucketSnapshotBuilder:
 
     @staticmethod
     def _filter_nonparam_candidates(
-        candidates: list[CephAdminBucketSummary],
+        candidates: list[BucketListingSummary],
         plan: CephAdminAdvancedFilterPlan,
-    ) -> list[CephAdminBucketSummary]:
+    ) -> list[BucketListingSummary]:
         if plan.query.match == "all":
             return [
                 bucket
@@ -546,13 +547,13 @@ class _CephAdminBucketSnapshotBuilder:
         ]
 
     @staticmethod
-    def _clear_transient_enrichment(results: list[CephAdminBucketSummary]) -> None:
+    def _clear_transient_enrichment(results: list[BucketListingSummary]) -> None:
         for bucket in results:
             bucket.features = None
             bucket.tags = None
             bucket.column_details = None
 
-    def _sort_value(self, bucket: CephAdminBucketSummary) -> str | int | None:
+    def _sort_value(self, bucket: BucketListingSummary) -> str | int | None:
         if self.request.sort_by == "tenant":
             value: str | int | None = bucket.tenant or ""
         elif self.request.sort_by == "owner":
@@ -567,10 +568,10 @@ class _CephAdminBucketSnapshotBuilder:
 
     def _sort_results(
         self,
-        results: list[CephAdminBucketSummary],
-    ) -> list[CephAdminBucketSummary]:
-        sortable: list[tuple[object, CephAdminBucketSummary]] = []
-        missing_values: list[CephAdminBucketSummary] = []
+        results: list[BucketListingSummary],
+    ) -> list[BucketListingSummary]:
+        sortable: list[tuple[object, BucketListingSummary]] = []
+        missing_values: list[BucketListingSummary] = []
         for bucket in results:
             value = self._sort_value(bucket)
             if value is None:
@@ -643,8 +644,8 @@ class _CephAdminBucketPageBuilder:
 
     def _apply_ui_tags(
         self,
-        results: list[CephAdminBucketSummary],
-    ) -> list[CephAdminBucketSummary]:
+        results: list[BucketListingSummary],
+    ) -> list[BucketListingSummary]:
         if self.bucket_ui_tags_service is None or self.actor_user_id is None:
             return results
         results = clone_ceph_admin_bucket_list(results)
@@ -658,7 +659,7 @@ class _CephAdminBucketPageBuilder:
             targets=targets,
         )
         requested = set(self.request.ui_tag_ids)
-        matched: list[CephAdminBucketSummary] = []
+        matched: list[BucketListingSummary] = []
         for bucket, target in zip(results, targets):
             bucket.ui_tags = list(tags_by_target.get(target, []))
             if not requested:
@@ -672,8 +673,8 @@ class _CephAdminBucketPageBuilder:
 
     def _apply_simple_filter(
         self,
-        results: list[CephAdminBucketSummary],
-    ) -> list[CephAdminBucketSummary]:
+        results: list[BucketListingSummary],
+    ) -> list[BucketListingSummary]:
         if not self.request.simple_filter:
             return results
         filter_value = self.request.simple_filter.lower()
@@ -689,8 +690,8 @@ class _CephAdminBucketPageBuilder:
 
     def _backfill_owner_metadata(
         self,
-        page_items: list[CephAdminBucketSummary],
-    ) -> list[CephAdminBucketSummary]:
+        page_items: list[BucketListingSummary],
+    ) -> list[BucketListingSummary]:
         if not page_items:
             return page_items
         self.progress.emit(
@@ -723,8 +724,8 @@ class _CephAdminBucketPageBuilder:
 
     def _enrich_bucket_details(
         self,
-        page_items: list[CephAdminBucketSummary],
-    ) -> list[CephAdminBucketSummary]:
+        page_items: list[BucketListingSummary],
+    ) -> list[BucketListingSummary]:
         requested = set(self.request.requested_features) | set(self.request.requested_detail_fields)
         if not requested and not self.request.include_tags:
             return page_items
@@ -753,7 +754,7 @@ class _CephAdminBucketPageBuilder:
             ),
         )
 
-    def _enrich_owner_names(self, page_items: list[CephAdminBucketSummary]) -> None:
+    def _enrich_owner_names(self, page_items: list[BucketListingSummary]) -> None:
         if not self.request.wants_owner_name or not page_items:
             return
         owner_name_by_key = resolve_owner_names_for_buckets(self.ctx, page_items, owner_scope="any")
@@ -766,8 +767,8 @@ class _CephAdminBucketPageBuilder:
 
     def _enrich_owner_attributes(
         self,
-        page_items: list[CephAdminBucketSummary],
-    ) -> list[CephAdminBucketSummary]:
+        page_items: list[BucketListingSummary],
+    ) -> list[BucketListingSummary]:
         if not page_items or not (
             self.request.wants_owner_suspended
             or self.request.wants_owner_quota

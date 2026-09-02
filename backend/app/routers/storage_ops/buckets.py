@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
-from app.models.ceph_admin import CephAdminBucketListingRequest
+from app.models.bucket_listing import BucketListingRequest
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse
 from app.routers.ceph_admin.listing_common import stream_listing_response
 from app.routers.dependencies import (
@@ -174,7 +174,7 @@ def list_storage_ops_buckets(
 
 @router.post("/query", response_model=PaginatedStorageOpsBucketsResponse)
 def query_storage_ops_buckets(
-    payload: CephAdminBucketListingRequest,
+    payload: BucketListingRequest,
     request: Request,
     user: User = Depends(get_current_storage_ops_admin),
     db: Session = Depends(get_db),

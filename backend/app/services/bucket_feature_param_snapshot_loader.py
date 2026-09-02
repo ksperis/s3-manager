@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from app.models.bucket_filter import BucketFilterRule
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.bucket_listing import BucketListingSummary
 from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.bucket_feature_param_matching import (
     FEATURE_PARAM_UNAVAILABLE,
@@ -23,12 +23,12 @@ from app.services.s3_execution_context import S3ExecutionTarget
 BUCKET_FEATURE_PARAM_MAX_WORKERS = 6
 
 
-def bucket_identity_key(bucket: CephAdminBucketSummary) -> str:
+def bucket_identity_key(bucket: BucketListingSummary) -> str:
     return f"{bucket.tenant or ''}:{bucket.name}"
 
 
 def _load_feature_param_snapshot_for_bucket(
-    bucket: CephAdminBucketSummary,
+    bucket: BucketListingSummary,
     required_sources: set[str],
     service: BucketConfigurationService,
     account: S3ExecutionTarget,
@@ -78,7 +78,7 @@ def _load_feature_param_snapshot_for_bucket(
 
 
 def load_bucket_feature_param_snapshots(
-    buckets: list[CephAdminBucketSummary],
+    buckets: list[BucketListingSummary],
     rules: list[BucketFilterRule],
     service: BucketConfigurationService,
     account: S3ExecutionTarget,
@@ -98,7 +98,7 @@ def load_bucket_feature_param_snapshots(
         available = {bucket_identity_key(bucket) for bucket in buckets}
         return snapshots, available
 
-    def load_one(bucket: CephAdminBucketSummary) -> tuple[str, dict[str, object]]:
+    def load_one(bucket: BucketListingSummary) -> tuple[str, dict[str, object]]:
         snapshot = _load_feature_param_snapshot_for_bucket(
             bucket,
             required_sources,

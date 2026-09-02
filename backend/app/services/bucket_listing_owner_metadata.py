@@ -7,7 +7,7 @@ from typing import Any, Callable, Literal, Protocol
 
 from app.db import StorageEndpoint
 from app.models.bucket_filter import BucketFilterQuery
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.bucket_listing import BucketListingSummary
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService, BucketOwnerUsage
 from app.services.listing_progress import (
     ListingProgressEmitter,
@@ -156,7 +156,7 @@ def _resolve_owner_name(
 
 def resolve_owner_names_for_buckets(
     ctx: BucketListingAdminContext,
-    buckets: list[CephAdminBucketSummary],
+    buckets: list[BucketListingSummary],
     owner_scope: Literal["any", "account", "user"] = "any",
 ) -> dict[str, str | None]:
     owner_targets: dict[str, tuple[str | None, str]] = {}
@@ -190,13 +190,13 @@ def resolve_owner_names_for_buckets(
 
 def apply_owner_enrichment(
     ctx: BucketListingAdminContext,
-    buckets: list[CephAdminBucketSummary],
+    buckets: list[BucketListingSummary],
     *,
     include_suspended: bool = False,
     include_quota: bool = False,
     include_usage: bool = False,
     usage_by_key: dict[str, BucketOwnerUsage] | None = None,
-) -> list[CephAdminBucketSummary]:
+) -> list[BucketListingSummary]:
     if not buckets or (not include_suspended and not include_quota and not include_usage):
         return buckets
     service = BucketOwnerMetadataService(
@@ -256,7 +256,7 @@ def request_requires_tenant_metadata(
 
 def backfill_bucket_owner_metadata(
     ctx: BucketListingAdminContext,
-    buckets: list[CephAdminBucketSummary],
+    buckets: list[BucketListingSummary],
     *,
     include_tenant: bool = False,
     progress: ListingProgressEmitter | None = None,
@@ -265,7 +265,7 @@ def backfill_bucket_owner_metadata(
     progress_start: int = 63,
     progress_end: int = 65,
     cancel_check: Callable[[], None] | None = None,
-) -> list[CephAdminBucketSummary]:
+) -> list[BucketListingSummary]:
     if not buckets:
         return buckets
 
@@ -284,8 +284,8 @@ def backfill_bucket_owner_metadata(
         return buckets
 
     def load_one(
-        bucket: CephAdminBucketSummary,
-    ) -> tuple[CephAdminBucketSummary, str | None, str | None, bool]:
+        bucket: BucketListingSummary,
+    ) -> tuple[BucketListingSummary, str | None, str | None, bool]:
         try:
             payload = ctx.rgw_admin.get_bucket_info(bucket.name, stats=False, allow_not_found=True)
         except RGWAdminError:

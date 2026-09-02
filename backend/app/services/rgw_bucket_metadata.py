@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Literal
 
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.bucket_listing import BucketListingSummary
 from app.utils.normalize import normalize_optional_scalar
 from app.utils.rgw_identifiers import is_rgw_account_id
 from app.utils.usage_stats import extract_usage_stats
@@ -45,7 +45,7 @@ def resolve_bucket_owner_identity(entry: dict) -> tuple[str | None, str | None]:
     return None, owner
 
 
-def build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
+def build_bucket_summary(entry: dict) -> BucketListingSummary | None:
     if not isinstance(entry, dict):
         return None
     bucket_name = extract_bucket_name(entry)
@@ -72,7 +72,7 @@ def build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
                 quota_objects = int(quota.get("max_objects"))
         except (TypeError, ValueError):
             quota_objects = None
-    return CephAdminBucketSummary(
+    return BucketListingSummary(
         name=bucket_name,
         tenant=tenant,
         tenant_metadata_resolved="tenant" in entry and entry.get("tenant") is not None,

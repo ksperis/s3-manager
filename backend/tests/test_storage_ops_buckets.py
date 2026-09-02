@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from app.db import S3Account, S3Connection, User, UserRole
 from app.models.bucket import Bucket, BucketEncryptionConfiguration, BucketLifecycleConfig, BucketNotificationConfiguration
 from app.models.bucket_filter import BucketFilterQuery
-from app.models.ceph_admin import CephAdminBucketSummary
+from app.models.bucket_listing import BucketListingSummary
 from app.models.execution_context import ExecutionContextCapabilities
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
 from app.routers import dependencies
@@ -1195,12 +1195,12 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
 
     def fake_enrich_buckets(buckets, requested_features, include_tags, service, account):  # noqa: ANN001, ARG001
         enrich_inputs.append([bucket.name for bucket in buckets])
-        enriched: list[CephAdminBucketSummary] = []
+        enriched: list[BucketListingSummary] = []
         for bucket in buckets:
             tone = "active" if bucket.name == "alpha" else "inactive"
             state = "Enabled" if bucket.name == "alpha" else "Disabled"
             enriched.append(
-                CephAdminBucketSummary(
+                BucketListingSummary(
                     name=bucket.name,
                     tenant=bucket.tenant,
                     owner=bucket.owner,
@@ -1280,12 +1280,12 @@ def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
     def fake_enrich_buckets(buckets, requested_features, include_tags, service, account):  # noqa: ANN001, ARG001
         captured["requested_features"] = requested_features
         captured["include_tags"] = include_tags
-        enriched: list[CephAdminBucketSummary] = []
+        enriched: list[BucketListingSummary] = []
         for bucket in buckets:
             tone = "active" if bucket.name == "alpha" else "inactive"
             state = "Configured" if bucket.name == "alpha" else "Not set"
             enriched.append(
-                CephAdminBucketSummary(
+                BucketListingSummary(
                     name=bucket.name,
                     tenant=bucket.tenant,
                     owner=bucket.owner,
