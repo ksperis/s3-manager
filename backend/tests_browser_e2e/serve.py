@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -19,7 +20,6 @@ BACKEND_HOST = "127.0.0.1"
 BACKEND_PORT = int(os.getenv("E2E_BACKEND_PORT", "8000"))
 if not 1 <= BACKEND_PORT <= 65535:
     raise ValueError("E2E_BACKEND_PORT must be between 1 and 65535")
-FRONTEND_ORIGINS = ["http://localhost:4173", "http://127.0.0.1:4173"]
 BOOTSTRAP_URL_FILENAME = "first-admin-bootstrap-url"
 
 
@@ -33,6 +33,23 @@ def _env_str(name: str, default: str | None = None) -> str | None:
 
 def _generate_secret() -> str:
     return secrets.token_urlsafe(48)
+
+
+def _frontend_origins() -> tuple[str, list[str]]:
+    configured = _env_str("E2E_FRONTEND_BASE_URL", "http://localhost:4173") or "http://localhost:4173"
+    parsed = urlparse(configured)
+    if parsed.scheme != "http" or parsed.hostname != "localhost" or parsed.path not in {"", "/"}:
+        raise ValueError("E2E_FRONTEND_BASE_URL must be an http://localhost origin")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("E2E_FRONTEND_BASE_URL must contain a valid port") from exc
+    if port is None:
+        port = 80
+    if not 1 <= port <= 65535:
+        raise ValueError("E2E_FRONTEND_BASE_URL port must be between 1 and 65535")
+    canonical = f"http://localhost:{port}"
+    return canonical, [canonical, f"http://127.0.0.1:{port}"]
 
 
 def _build_app_settings_payload() -> str:
@@ -88,16 +105,15 @@ def _prepare_environment(backend_root: Path) -> dict[str, str]:
     e2e_s3_access_key = _env_str("E2E_S3_ACCESS_KEY", "minio") or "minio"
     e2e_s3_secret_key = _env_str("E2E_S3_SECRET_KEY", "minio123") or "minio123"
     e2e_s3_region = _env_str("E2E_S3_REGION", "us-east-1") or "us-east-1"
+    frontend_origin, frontend_origins = _frontend_origins()
 
+    env["APP_ENV"] = "test"
     env["DATABASE_URL"] = f"sqlite:///{database_path.resolve().as_posix()}"
     env["APP_SETTINGS_PATH"] = app_settings_path.resolve().as_posix()
-    env["JWT_KEYS"] = _env_str("JWT_KEYS", json.dumps([_generate_secret()])) or json.dumps([_generate_secret()])
+    env["JWT_KEYS"] = json.dumps([_generate_secret()])
     env["UI_JWT_KEYS"] = json.dumps([_generate_secret()])
     env["API_JWT_KEYS"] = json.dumps([_generate_secret()])
-    env["CREDENTIAL_KEYS"] = _env_str(
-        "CREDENTIAL_KEYS",
-        json.dumps([_generate_secret()]),
-    ) or json.dumps([_generate_secret()])
+    env["CREDENTIAL_KEYS"] = json.dumps([_generate_secret()])
 
     env["E2E_ADMIN_EMAIL"] = _env_str(
         "E2E_ADMIN_EMAIL",
@@ -116,12 +132,20 @@ def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env["SEED_S3_ACCESS_KEY"] = e2e_s3_access_key
     env["SEED_S3_SECRET_KEY"] = e2e_s3_secret_key
     env["SEED_S3_REGION"] = e2e_s3_region
+    env["SEED_S3_ENDPOINT_FEATURES"] = ""
+    env["ENV_STORAGE_ENDPOINTS"] = ""
+    env["SEED_RGW_ADMIN_ACCESS_KEY"] = ""
+    env["SEED_RGW_ADMIN_SECRET_KEY"] = ""
+    env["SEED_SUPERVISION_ACCESS_KEY"] = ""
+    env["SEED_SUPERVISION_SECRET_KEY"] = ""
+    env["SEED_CEPH_ADMIN_ACCESS_KEY"] = ""
+    env["SEED_CEPH_ADMIN_SECRET_KEY"] = ""
     env["OIDC_PROVIDERS"] = "{}"
     env["LDAP_PROVIDERS"] = "{}"
-    env["CORS_ORIGINS"] = json.dumps(FRONTEND_ORIGINS)
-    env["PUBLIC_ORIGIN"] = FRONTEND_ORIGINS[0]
+    env["CORS_ORIGINS"] = json.dumps(frontend_origins)
+    env["PUBLIC_ORIGIN"] = frontend_origin
     env["WEBAUTHN_RP_ID"] = "localhost"
-    env["WEBAUTHN_ORIGIN"] = FRONTEND_ORIGINS[0]
+    env["WEBAUTHN_ORIGIN"] = frontend_origin
     env["REFRESH_TOKEN_COOKIE_SECURE"] = "false"
     env["BUCKET_MIGRATION_WORKER_ENABLED"] = "false"
     env["PYTHONUNBUFFERED"] = "1"

@@ -21,6 +21,9 @@ export const E2E_BROWSER_CONNECTION_NAME =
   "Browser Moto E2E";
 export const E2E_BUCKET_NAME = process.env.E2E_BUCKET_NAME ?? "browser-e2e";
 
+export const E2E_ADMIN_STORAGE_STATE_PATH = fileURLToPath(
+  new URL("../.auth/agent-admin.json", import.meta.url),
+);
 export const E2E_STORAGE_STATE_PATH = fileURLToPath(new URL("../.auth/browser-user.json", import.meta.url));
 export const E2E_UPLOAD_FIXTURE_PATH = fileURLToPath(new URL("../fixtures/upload-smoke.txt", import.meta.url));
 export const E2E_BOOTSTRAP_URL_PATH = fileURLToPath(

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 
 import { defineConfig } from "@playwright/test";
 
-const frontendUrl = "http://localhost:4173";
+const frontendUrl = process.env.E2E_FRONTEND_BASE_URL ?? "http://localhost:4173";
 const backendPort = process.env.E2E_BACKEND_PORT ?? "8000";
 const backendHealthUrl = `http://127.0.0.1:${backendPort}/health`;
 const motoServerUrl = process.env.E2E_S3_ENDPOINT ?? "http://localhost:5000";

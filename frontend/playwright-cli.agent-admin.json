@@ -1,0 +1,11 @@
+{
+  "browser": {
+    "contextOptions": {
+      "storageState": "e2e/.auth/agent-admin.json",
+      "viewport": { "width": 1728, "height": 972 },
+      "locale": "en-US",
+      "timezoneId": "UTC",
+      "colorScheme": "dark"
+    }
+  }
+}

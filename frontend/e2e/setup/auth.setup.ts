@@ -1,4 +1,4 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { chmod, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { expect, test as setup, type APIResponse, type Page } from "@playwright/test";
@@ -7,6 +7,7 @@ import {
   E2E_ADMIN_EMAIL,
   E2E_ADMIN_FULL_NAME,
   E2E_ADMIN_PASSWORD,
+  E2E_ADMIN_STORAGE_STATE_PATH,
   E2E_BOOTSTRAP_URL_PATH,
   E2E_AUTH_ADMIN_EMAIL,
   E2E_AUTH_ADMIN_FULL_NAME,
@@ -184,7 +185,7 @@ async function ensurePrivateConnection(page: Page): Promise<PrivateConnection> {
   return (await updateResponse.json()) as PrivateConnection;
 }
 
-setup("bootstrap browser auth with S3 backend", async ({ page }) => {
+setup("bootstrap reusable admin and browser auth", async ({ browser, page }) => {
   const { seedMoto } = await import("../../scripts/e2e/seed-moto.mjs");
   await seedMoto({
     endpoint: E2E_S3_ENDPOINT,
@@ -245,33 +246,46 @@ setup("bootstrap browser auth with S3 backend", async ({ page }) => {
     fullName: E2E_AUTH_ADMIN_FULL_NAME,
     role: "ui_admin",
   });
-  await assertOk(
-    await page.request.post("/api/auth/logout", { headers: await csrfHeaders(page) }),
-    "Admin logout failed",
-  );
+
+  await mkdir(dirname(E2E_ADMIN_STORAGE_STATE_PATH), { recursive: true });
+  await page.context().storageState({ path: E2E_ADMIN_STORAGE_STATE_PATH });
+  await chmod(E2E_ADMIN_STORAGE_STATE_PATH, 0o600);
   await cdp.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId });
 
-  await mkdir(dirname(E2E_STORAGE_STATE_PATH), { recursive: true });
-  await page.goto("/login");
-  await page.locator('input[type="email"]').fill(E2E_USER_EMAIL);
-  await page.locator('input[type="password"]').fill(E2E_USER_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/unauthorized(?:\?.*)?$/);
-  const connection = await ensurePrivateConnection(page);
-  await page.goto(
-    `/browser?ctx=${encodeURIComponent(`conn-${connection.id}`)}&bucket=${encodeURIComponent(E2E_BUCKET_NAME)}`,
-  );
-  await expect(page).toHaveURL(/\/browser(?:\?.*)?$/);
-  expect(await page.evaluate(() => window.localStorage.getItem("token"))).toBeNull();
-  const cookies = await page.context().cookies();
-  expect(cookies.find((cookie) => cookie.name === "ui_access")?.httpOnly).toBe(true);
-  expect(cookies.find((cookie) => cookie.name === "refresh_token")?.httpOnly).toBe(true);
-  expect(cookies.find((cookie) => cookie.name === "csrf_token")?.httpOnly).toBe(false);
-  await page.reload();
-  await expect(page).toHaveURL(/\/browser(?:\?.*)?$/);
-  await expect(page.getByRole("button", { name: "Select bucket" })).toContainText(
-    E2E_BUCKET_NAME,
-    { timeout: 30_000 },
-  );
-  await page.context().storageState({ path: E2E_STORAGE_STATE_PATH });
+  const browserUserContext = await browser.newContext({
+    baseURL: E2E_FRONTEND_BASE_URL,
+    colorScheme: "dark",
+    locale: "en-US",
+    timezoneId: "UTC",
+    viewport: { width: 1728, height: 972 },
+  });
+  try {
+    const browserPage = await browserUserContext.newPage();
+    await mkdir(dirname(E2E_STORAGE_STATE_PATH), { recursive: true });
+    await browserPage.goto("/login");
+    await browserPage.locator('input[type="email"]').fill(E2E_USER_EMAIL);
+    await browserPage.locator('input[type="password"]').fill(E2E_USER_PASSWORD);
+    await browserPage.getByRole("button", { name: "Sign in" }).click();
+    await expect(browserPage).toHaveURL(/\/unauthorized(?:\?.*)?$/);
+    const connection = await ensurePrivateConnection(browserPage);
+    await browserPage.goto(
+      `/browser?ctx=${encodeURIComponent(`conn-${connection.id}`)}&bucket=${encodeURIComponent(E2E_BUCKET_NAME)}`,
+    );
+    await expect(browserPage).toHaveURL(/\/browser(?:\?.*)?$/);
+    expect(await browserPage.evaluate(() => window.localStorage.getItem("token"))).toBeNull();
+    const cookies = await browserUserContext.cookies();
+    expect(cookies.find((cookie) => cookie.name === "ui_access")?.httpOnly).toBe(true);
+    expect(cookies.find((cookie) => cookie.name === "refresh_token")?.httpOnly).toBe(true);
+    expect(cookies.find((cookie) => cookie.name === "csrf_token")?.httpOnly).toBe(false);
+    await browserPage.reload();
+    await expect(browserPage).toHaveURL(/\/browser(?:\?.*)?$/);
+    await expect(browserPage.getByRole("button", { name: "Select bucket" })).toContainText(
+      E2E_BUCKET_NAME,
+      { timeout: 30_000 },
+    );
+    await browserUserContext.storageState({ path: E2E_STORAGE_STATE_PATH });
+    await chmod(E2E_STORAGE_STATE_PATH, 0o600);
+  } finally {
+    await browserUserContext.close();
+  }
 });
