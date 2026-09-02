@@ -32,7 +32,10 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
-import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import DataTableShell, {
+  dataTableDefaultActionProps,
+  type DataTableColumn,
+} from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiMeterBar from "../../components/ui/UiMeterBar";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -767,11 +770,7 @@ export default function BucketsPage() {
         field: "name",
         primary: true,
         mobileRole: "primary",
-        render: (bucket) => (
-          <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className="hover:text-primary-700 dark:hover:text-primary-200">
-            {bucket.name}
-          </Link>
-        ),
+        render: (bucket) => <span className="block truncate">{bucket.name}</span>,
       },
     ];
 
@@ -881,6 +880,7 @@ export default function BucketsPage() {
             <Link
               to={`/manager/buckets/${encodeURIComponent(bucket.name)}`}
               className={`${tableActionButtonClasses} whitespace-nowrap`}
+              {...dataTableDefaultActionProps}
             >
               Configure
             </Link>

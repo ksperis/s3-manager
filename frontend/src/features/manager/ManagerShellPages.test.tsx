@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1376,6 +1376,42 @@ describe("manager shell pages", () => {
       "data-mobile-actions",
       "true"
     );
+  });
+
+  it("opens bucket configuration from the row without duplicating the name link", async () => {
+    window.sessionStorage.setItem(
+      MANAGER_BUCKET_COLUMNS_SESSION_STORAGE_KEY,
+      JSON.stringify(["used_bytes", "object_count"])
+    );
+    listBucketsMock.mockResolvedValue([
+      {
+        name: "bucket-clickable",
+        used_bytes: 1024,
+        object_count: 7,
+      },
+    ]);
+    setSelectedManagerAccountContext();
+
+    render(
+      <MemoryRouter initialEntries={["/manager/buckets"]}>
+        <Routes>
+          <Route path="/manager/buckets" element={<BucketsPage />} />
+          <Route path="/manager/buckets/:bucketName" element={<div>Bucket configuration route</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const bucketName = await screen.findByText("bucket-clickable");
+    expect(bucketName).toHaveClass("block", "truncate");
+    expect(screen.queryByRole("link", { name: "bucket-clickable" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Configure" })).toHaveAttribute(
+      "data-table-default-action",
+      "true"
+    );
+
+    fireEvent.click(screen.getByText("1.0 KB"));
+
+    expect(await screen.findByText("Bucket configuration route")).toBeInTheDocument();
   });
 
   it("opens the delete-with-purge page for a non-empty bucket when purge access is enabled", async () => {
