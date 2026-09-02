@@ -18,7 +18,6 @@ describe("updateStoredUserProfile", () => {
       email: "me@example.test",
       role: "ui_user",
       full_name: "Ada Lovelace",
-      display_name: "Ada Lovelace",
       ui_language: "fr",
     });
   });
@@ -28,7 +27,6 @@ describe("updateStoredUserProfile", () => {
       updateStoredUserProfile(
         {
           fullName: "Grace Hopper",
-          displayName: "Amazing Grace",
           uiPreferences: { theme: "dark" },
         },
         { createIfMissing: true }
@@ -37,7 +35,6 @@ describe("updateStoredUserProfile", () => {
 
     expect(readStoredUser()).toEqual({
       full_name: "Grace Hopper",
-      display_name: "Amazing Grace",
       ui_preferences: { theme: "dark" },
     });
   });

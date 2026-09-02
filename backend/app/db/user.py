@@ -23,7 +23,6 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
-    display_name = Column(String, nullable=True)
     picture_url = Column(String, nullable=True)
     avatar_preference = Column(String, nullable=False, default="auto", server_default="auto")
     avatar_image = Column(LargeBinary, nullable=True)

@@ -179,7 +179,7 @@ export default function AdminPortalRequestsPage() {
           const requester = request.requester_user_id != null
             ? requestersById.get(request.requester_user_id)
             : undefined;
-          const label = requester?.display_name || requester?.full_name || request.requester_email;
+          const label = requester?.full_name || request.requester_email;
           const roleLabel = uiPrincipalRoleLabel(requester?.role);
           const badge = (
             <>

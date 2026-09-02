@@ -313,7 +313,6 @@ class FirstAdminBootstrapService:
         return User(
             email=email,
             full_name=normalized_name,
-            display_name=normalized_name,
             hashed_password=get_password_hash(password),
             role=UserRole.UI_SUPERADMIN.value,
             is_active=True,

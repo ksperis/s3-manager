@@ -279,8 +279,8 @@ class ExternalIdentityUserService:
             identity.last_login_at = utcnow()
             if picture_url and user.picture_url != picture_url:
                 user.picture_url = picture_url
-            if full_name and not user.display_name:
-                user.display_name = full_name
+            if full_name and not user.full_name:
+                user.full_name = full_name
             self.db.add_all([identity, user])
             self.db.commit()
             self.db.refresh(user)
@@ -332,7 +332,6 @@ class ExternalIdentityUserService:
         user = User(
             email=generated_email,
             full_name=full_name,
-            display_name=full_name,
             picture_url=picture_url,
             hashed_password=None,
             is_active=True,

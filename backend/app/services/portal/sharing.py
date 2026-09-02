@@ -113,7 +113,7 @@ class PortalSharingMixin:
                 PortalStorageSpaceCollaboratorPreview(
                     user_id=user_id,
                     email=target.email,
-                    display_name=target.display_name or target.full_name,
+                    display_name=target.full_name,
                     role=role,
                     avatar=avatar_service.descriptor(target),
                 )
@@ -237,7 +237,7 @@ class PortalSharingMixin:
             PortalCollaborator(
                 user_id=user_id,
                 email=target.email,
-                display_name=target.display_name or target.full_name,
+                display_name=target.full_name,
                 portal_role=portal_role,
                 access_source=self._portal_access_source(sources),
                 member_since=self._portal_collaborator_member_since(target, sources, source_dates.get(user_id)),
@@ -274,7 +274,7 @@ class PortalSharingMixin:
         collaborator = PortalCollaborator(
             user_id=target.id,
             email=target.email,
-            display_name=target.display_name or target.full_name,
+            display_name=target.full_name,
             portal_role=portal_role,
             access_source=self._portal_access_source(sources),
             member_since=self._portal_collaborator_member_since(
@@ -439,7 +439,7 @@ class PortalSharingMixin:
         return PortalStorageSpaceAccessPerson(
             user_id=owner.id,
             email=owner.email,
-            display_name=owner.display_name or owner.full_name,
+            display_name=owner.full_name,
             role="Owner",
             portal_role=member[1] if member else None,
             access_source="owner",
@@ -650,7 +650,7 @@ class PortalSharingMixin:
                 PortalStorageSpaceShareCandidate(
                     user_id=user_id,
                     email=target.email,
-                    display_name=target.display_name or target.full_name,
+                    display_name=target.full_name,
                     portal_role=portal_role,
                     access_source=self._portal_access_source(sources),
                     already_shared=user_id in shared_user_ids,

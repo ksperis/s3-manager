@@ -30,7 +30,7 @@ export default function SortableHeader<T extends string | null = string>({
   if (!isSortable) {
     return (
       <th
-        className={`px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${alignClass} ${className}`}
+        className={`align-middle px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${alignClass} ${className}`}
       >
         <div className={`flex items-center ${align === "right" ? "justify-end" : "gap-1"}`}>{label}</div>
       </th>
@@ -39,7 +39,7 @@ export default function SortableHeader<T extends string | null = string>({
 
   return (
     <th
-      className={`px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${alignClass} ${className}`}
+      className={`align-middle px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${alignClass} ${className}`}
       aria-sort={isActive ? (direction === "asc" ? "ascending" : "descending") : "none"}
     >
       <button

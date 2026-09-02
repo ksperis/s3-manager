@@ -253,7 +253,7 @@ export default function EndpointStatusPage() {
         id: "endpoint",
         label: "Endpoint",
         primary: true,
-        cellClassName: "align-top min-w-[16rem]",
+        cellClassName: "min-w-[16rem]",
         render: (incident) => (
           <span className="block max-w-full">
             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
@@ -264,31 +264,30 @@ export default function EndpointStatusPage() {
       {
         id: "status",
         label: "Status",
-        cellClassName: "align-top",
         render: (incident) => <StatusPill status={incident.status} />,
       },
       {
         id: "start",
         label: "Start",
-        cellClassName: "align-top whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
+        cellClassName: "whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
         render: (incident) => formatTimestamp(incident.start),
       },
       {
         id: "end",
         label: "End",
-        cellClassName: "align-top whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
+        cellClassName: "whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
         render: (incident) => (incident.end ? formatTimestamp(incident.end) : "Ongoing"),
       },
       {
         id: "duration",
         label: "Duration",
-        cellClassName: "align-top whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
+        cellClassName: "whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
         render: (incident) => (incident.duration_minutes != null ? `${incident.duration_minutes} min` : "-"),
       },
       {
         id: "type",
         label: "Type",
-        cellClassName: "align-top min-w-[14rem] ui-caption text-slate-500 dark:text-slate-400",
+        cellClassName: "min-w-[14rem] ui-caption text-slate-500 dark:text-slate-400",
         render: (incident) =>
           `${(incident.check_type || "availability").toUpperCase()} · ${(incident.scope || "endpoint").toUpperCase()} · ${formatCheckMode(incident.check_mode)}`,
       },

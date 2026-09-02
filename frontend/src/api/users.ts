@@ -82,7 +82,6 @@ export type User = {
   id: number;
   email: string;
   full_name?: string | null;
-  display_name?: string | null;
   picture_url?: string | null;
   avatar?: UserAvatarDescriptor | null;
   has_local_password?: boolean;
@@ -114,7 +113,6 @@ export type UserSummary = {
   id: number;
   email: string;
   full_name?: string | null;
-  display_name?: string | null;
   avatar?: UserAvatarDescriptor | null;
   role: UiRole;
 };

@@ -435,7 +435,6 @@ def test_update_current_user_password_paths(db_session):
         new_password="nextpass12345",
     )
     assert updated.full_name == "Profile Name"
-    assert updated.display_name == "Profile Name"
     assert updated.ui_language == "fr"
 
 
@@ -492,6 +491,38 @@ def test_paginate_users_and_detached_user_use_canonical_preload(db_session, monk
     connection_ids = {connection.id for connection in out.s3_connection_details}
     assert shared_conn.id in connection_ids
     assert owned_conn.id not in connection_ids
+
+
+def test_paginate_users_searches_and_sorts_by_canonical_name(db_session):
+    service = UsersService(db_session)
+    alpha = _seed_user(db_session, "z-email-canonical@example.com")
+    alpha.full_name = "Alpha Canonical"
+    email_only = _seed_user(db_session, "middle-canonical@example.com")
+    email_only.full_name = None
+    zulu = _seed_user(db_session, "a-email-canonical@example.com")
+    zulu.full_name = "Zulu Canonical"
+    db_session.commit()
+
+    rows, total = service.paginate_users(
+        page=1,
+        page_size=10,
+        search="canonical",
+        sort_field="name",
+        sort_direction="asc",
+    )
+
+    assert total == 3
+    assert [row.id for row in rows] == [alpha.id, email_only.id, zulu.id]
+    assert all("display_name" not in row.model_dump() for row in rows)
+
+    descending, _ = service.paginate_users(
+        page=1,
+        page_size=10,
+        search="canonical",
+        sort_field="name",
+        sort_direction="desc",
+    )
+    assert [row.id for row in descending] == [zulu.id, email_only.id, alpha.id]
 
 
 def test_admin_user_projection_and_search_hide_private_connection_links(db_session):

@@ -32,7 +32,6 @@ export type S3UserUserLink = {
   user_id: number;
   user_email?: string | null;
   user_full_name?: string | null;
-  user_display_name?: string | null;
   user_avatar?: UserAvatarDescriptor | null;
   allow_manager_browser_data_access?: boolean;
 };

@@ -45,7 +45,6 @@ type StoredAccountLink = {
 
 type StoredTopbarUser = {
   full_name?: string | null;
-  display_name?: string | null;
   avatar?: UserAvatarDescriptor | null;
   role?: UiRole | null;
   can_create_manual_private_connections?: boolean | null;
@@ -164,10 +163,7 @@ export default function Topbar({
   const controlsStripRef = useRef<HTMLDivElement | null>(null);
 
   const accountDisplay = userEmail ?? "Session";
-  const accountName =
-    storedUser?.display_name?.trim() ||
-    storedUser?.full_name?.trim() ||
-    accountDisplay;
+  const accountName = storedUser?.full_name?.trim() || accountDisplay;
   const accountAvatarName = accountName === accountDisplay ? null : accountName;
   const showNotifications = !isS3Session;
 

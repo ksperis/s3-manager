@@ -1661,7 +1661,6 @@ def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
     owner = User(
         email="owner-avatar@example.com",
         full_name="Owner Avatar",
-        display_name="Owner Avatar",
         picture_url="https://identity.example.com/owner.png",
         hashed_password="x",
         role="ui_user",
@@ -1669,7 +1668,6 @@ def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
     viewer = User(
         email="viewer-avatar@example.com",
         full_name="Viewer Avatar",
-        display_name="Viewer Avatar",
         hashed_password="x",
         role="ui_user",
     )
@@ -3321,7 +3319,7 @@ def test_portal_server_access_logs_resolve_requester_identities(monkeypatch, db_
     actor = User(email="actor-log-identities@example.com", hashed_password="x", role="ui_user")
     portal_user = User(
         email="portal.identity@example.com",
-        display_name="Portal Identity",
+        full_name="Portal Identity",
         hashed_password="x",
         role="ui_user",
     )
@@ -4330,10 +4328,10 @@ def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch
 def test_portal_collaborators_summarize_effective_members_and_visible_external_access(monkeypatch, db_session):
     now = utcnow()
     account = make_s3_account(db_session, name="portal-collaborators", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    actor = User(email="actor-collab@example.com", display_name="Actor", hashed_password="x", role="ui_user")
-    direct = User(email="direct-collab@example.com", display_name="Direct", hashed_password="x", role="ui_user")
-    grouped = User(email="grouped-collab@example.com", display_name="Grouped", hashed_password="x", role="ui_user")
-    promoted = User(email="promoted-collab@example.com", display_name="Promoted", hashed_password="x", role="ui_user")
+    actor = User(email="actor-collab@example.com", full_name="Actor", hashed_password="x", role="ui_user")
+    direct = User(email="direct-collab@example.com", full_name="Direct", hashed_password="x", role="ui_user")
+    grouped = User(email="grouped-collab@example.com", full_name="Grouped", hashed_password="x", role="ui_user")
+    promoted = User(email="promoted-collab@example.com", full_name="Promoted", hashed_password="x", role="ui_user")
     inactive = User(email="inactive-collab@example.com", hashed_password="x", role="ui_user", is_active=False)
     group = UiGroup(name="Portal collaborator group")
     manager_group = UiGroup(name="Portal collaborator managers")
@@ -4488,8 +4486,8 @@ def test_portal_collaborators_summarize_effective_members_and_visible_external_a
 def test_portal_collaborator_access_review_reports_effective_sources_and_revoke_scope(db_session):
     account = make_s3_account(db_session, name="portal-access-review", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     other_account = make_s3_account(db_session, name="portal-access-review-other", rgw_access_key="OTHER-AK", rgw_secret_key="OTHER-SK")
-    manager = User(email="manager-review@example.com", display_name="Manager", hashed_password="x", role="ui_user")
-    member = User(email="member-review@example.com", display_name="Member", hashed_password="x", role="ui_user")
+    manager = User(email="manager-review@example.com", full_name="Manager", hashed_password="x", role="ui_user")
+    member = User(email="member-review@example.com", full_name="Member", hashed_password="x", role="ui_user")
     outsider = User(email="outsider-review@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, other_account, manager, member, outsider])
     db_session.commit()
@@ -4632,7 +4630,7 @@ def test_portal_collaborator_access_review_authorizes_manager_or_self_and_isolat
 
 def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(monkeypatch, db_session):
     account = make_s3_account(db_session, name="portal-access-summary", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    owner = User(email="owner-access-summary@example.com", display_name="Owner Summary", hashed_password="x", role="ui_user")
+    owner = User(email="owner-access-summary@example.com", full_name="Owner Summary", hashed_password="x", role="ui_user")
     member = User(email="member-access-summary@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-access-summary@example.com", hashed_password="x", role="ui_user")
     outsider = User(email="outsider-access-summary@example.com", hashed_password="x", role="ui_user")

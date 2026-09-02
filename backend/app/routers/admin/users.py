@@ -129,7 +129,7 @@ def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
     search: Optional[str] = Query(None),
-    sort_by: str = Query("email"),
+    sort_by: str = Query("name"),
     sort_dir: str = Query("asc"),
     users_service: UsersService = Depends(get_users_service_dependency),
     _: DbUser = Depends(get_current_super_admin),

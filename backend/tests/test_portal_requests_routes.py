@@ -24,7 +24,6 @@ def _seed_user(db_session, *, email: str, role: str = UserRole.UI_USER.value) ->
     user = User(
         email=email,
         full_name=email.split("@")[0],
-        display_name=email.split("@")[0],
         hashed_password="x",
         is_active=True,
         role=role,

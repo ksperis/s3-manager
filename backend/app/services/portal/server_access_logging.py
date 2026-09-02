@@ -557,9 +557,9 @@ class PortalServerAccessLoggingMixin:
         for link, linked_user in portal_rows:
             if not link.iam_user_id or link.iam_user_id in identity_by_requester:
                 continue
-            label = link.iam_username or linked_user.display_name or linked_user.full_name or linked_user.email
+            label = link.iam_username or linked_user.full_name or linked_user.email
             detail_parts = ["Portal user"]
-            user_label = linked_user.display_name or linked_user.full_name or linked_user.email
+            user_label = linked_user.full_name or linked_user.email
             if user_label and user_label != label:
                 detail_parts.append(user_label)
             identity_by_requester[link.iam_user_id] = PortalServerAccessRequesterIdentity(

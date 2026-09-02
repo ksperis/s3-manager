@@ -87,7 +87,6 @@ function getS3UserSearchCandidates(user: S3User): Array<string | number | null |
     user.email,
     ...(user.user_links ?? []).flatMap((link) => [
       link.user_email,
-      link.user_display_name,
       link.user_full_name,
     ]),
     ...(user.group_links ?? []).map((link) => link.group_name),
@@ -387,7 +386,7 @@ export default function S3UsersPage() {
       return {
         id: link.user_id,
         kind: "user",
-        label: link.user_display_name || link.user_full_name || link.user_email || `User #${link.user_id}`,
+        label: link.user_full_name || link.user_email || `User #${link.user_id}`,
         email: link.user_email,
         avatar: link.user_avatar,
       };
@@ -750,7 +749,7 @@ export default function S3UsersPage() {
       label: "Name",
       field: "name",
       primary: true,
-      cellClassName: "min-w-[240px] max-w-[360px] align-top",
+      cellClassName: "min-w-[240px] max-w-[360px]",
       render: (user) => {
         const tagItems = buildUiTagItems(user.tags);
         return (
@@ -773,13 +772,13 @@ export default function S3UsersPage() {
       id: "uid",
       label: "UID",
       field: "uid",
-      cellClassName: "min-w-[176px] align-top",
+      cellClassName: "min-w-[176px]",
       render: (user) => user.rgw_user_uid,
     },
     {
       id: "endpoint",
       label: "Endpoint",
-      cellClassName: "min-w-[160px] align-top",
+      cellClassName: "min-w-[160px]",
       render: (user) => (
         <span title={user.storage_endpoint_url || undefined}>
           {user.storage_endpoint_name}
@@ -797,7 +796,7 @@ export default function S3UsersPage() {
       label: "Actions",
       align: "right",
       mobileRole: "actions",
-      cellClassName: "min-w-[176px] align-top",
+      cellClassName: "min-w-[176px]",
       render: (user) => {
         const deleteBusy = deleteBusyId === user.id;
         return (

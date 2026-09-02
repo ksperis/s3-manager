@@ -1173,7 +1173,7 @@ export default function ProfilePage({
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                 <UserAvatar
                   avatar={avatar}
-                  name={fullName || storedUser?.display_name || storedUser?.email}
+                  name={fullName || storedUser?.email}
                   email={storedUser?.email}
                   size="xl"
                 />

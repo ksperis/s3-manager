@@ -119,7 +119,6 @@ class UsersService:
         user = User(
             email=payload.email,
             full_name=payload.full_name,
-            display_name=payload.full_name,
             hashed_password=get_password_hash(payload.password),
             is_active=True,
             role=UserRole.UI_SUPERADMIN.value,
@@ -149,7 +148,6 @@ class UsersService:
         user = User(
             email=payload.email,
             full_name=payload.full_name,
-            display_name=payload.full_name,
             hashed_password=get_password_hash(payload.password),
             is_active=True,
             role=role,
@@ -187,7 +185,6 @@ class UsersService:
         if "full_name" in payload.model_fields_set:
             normalized_name = (payload.full_name or "").strip()
             user.full_name = normalized_name or None
-            user.display_name = normalized_name or None
         if payload.password:
             validate_password_policy(payload.password)
             user.hashed_password = get_password_hash(payload.password)
@@ -310,7 +307,6 @@ class UsersService:
         normalized_name = full_name.strip() if full_name is not None else None
         if full_name is not None:
             user.full_name = normalized_name or None
-            user.display_name = normalized_name or None
         if update_ui_language:
             user.ui_language = ui_language or None
         if update_quota_alerts_enabled:
@@ -482,7 +478,6 @@ class UsersService:
                 id=row.id,
                 email=row.email,
                 full_name=row.full_name,
-                display_name=row.display_name or row.full_name,
                 avatar=avatar_service.descriptor(row),
                 role=row.role,
             )
@@ -494,7 +489,7 @@ class UsersService:
         page: int,
         page_size: int,
         search: Optional[str] = None,
-        sort_field: str = "email",
+        sort_field: str = "name",
         sort_direction: str = "asc",
     ) -> tuple[list[UserOut], int]:
         query = self.db.query(User)
@@ -521,6 +516,7 @@ class UsersService:
             query = query.filter(
                 or_(
                     User.email.ilike(pattern),
+                    User.full_name.ilike(pattern),
                     User.role.ilike(pattern),
                     S3Account.name.ilike(pattern),
                     S3Account.rgw_account_id.ilike(pattern),
@@ -531,7 +527,15 @@ class UsersService:
                 )
             )
             query = query.distinct()
+        name_sort = func.lower(
+            func.coalesce(
+                func.nullif(func.trim(User.full_name), ""),
+                User.email,
+            )
+        )
         sort_map = {
+            "name": name_sort,
+            "full_name": name_sort,
             "email": User.email,
             "role": User.role,
             "created_at": User.created_at,
@@ -539,6 +543,7 @@ class UsersService:
             "last_login": User.last_login_at,
         }
         order_column = sort_map.get(sort_field, User.email)
+        uses_email_sort = sort_field == "email" or sort_field not in sort_map
         if sort_direction == "desc":
             order_column = order_column.desc()
         if sort_field in {"last_login_at", "last_login"}:
@@ -546,7 +551,18 @@ class UsersService:
         total_query = query.with_entities(func.count(func.distinct(User.id)))
         total = total_query.scalar() or 0
         offset = max(page - 1, 0) * page_size
-        rows = query.order_by(order_column).offset(offset).limit(page_size).all()
+        order_columns = [order_column]
+        if not uses_email_sort:
+            order_columns.append(
+                User.email.desc() if sort_direction == "desc" else User.email.asc()
+            )
+        order_columns.append(User.id.asc())
+        rows = (
+            query.order_by(*order_columns)
+            .offset(offset)
+            .limit(page_size)
+            .all()
+        )
         output_service = UserOutputService(self.db)
         preloaded = output_service.preload(rows)
         outputs = [

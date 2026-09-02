@@ -129,7 +129,6 @@ def test_admin_accounts_search_matches_linked_user_email_and_exposes_avatar(clie
     user = User(
         email="specific.member@example.test",
         full_name="Specific Member",
-        display_name="Specific Member",
         hashed_password="x",
         role=UserRole.UI_USER.value,
         is_active=True,

@@ -1031,7 +1031,7 @@ export default function GroupsPage() {
       return {
         id,
         kind: "user",
-        label: user.display_name || user.full_name || user.email || `User #${id}`,
+        label: user.full_name || user.email || `User #${id}`,
         email: user.email,
         avatar: user.avatar,
         role_labels: [uiPrincipalRoleLabel(user.role)],
@@ -1045,7 +1045,7 @@ export default function GroupsPage() {
       label: "Name",
       field: "name",
       primary: true,
-      cellClassName: "align-top min-w-[14rem]",
+      cellClassName: "min-w-[14rem]",
       render: (group) => (
         <div className="flex w-full items-center gap-2">
           <GroupAvatar avatar={group.avatar} name={group.name} size="md" decorative />
@@ -1061,7 +1061,7 @@ export default function GroupsPage() {
     {
       id: "rights",
       label: "Rights",
-      cellClassName: "align-top min-w-[12rem]",
+      cellClassName: "min-w-[12rem]",
       render: (group) => {
         const access = normalizeManagerToolAccess(group.manager_tool_access);
         const toolCount =
@@ -1099,13 +1099,13 @@ export default function GroupsPage() {
     {
       id: "members",
       label: "Members",
-      cellClassName: "align-top min-w-[10rem]",
+      cellClassName: "min-w-[10rem]",
       render: (group) => renderGroupMembers(group),
     },
     {
       id: "associations",
       label: "Storage associations",
-      cellClassName: "align-top min-w-[18rem]",
+      cellClassName: "min-w-[18rem]",
       render: (group) => renderGroupAssociations(group),
     },
     {
@@ -1113,7 +1113,6 @@ export default function GroupsPage() {
       label: "Actions",
       align: "right",
       mobileRole: "actions",
-      cellClassName: "align-top",
       render: (group) => (
         <div className="flex justify-end gap-2">
           <button

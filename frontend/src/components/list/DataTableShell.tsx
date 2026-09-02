@@ -178,7 +178,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
                     key={column.id}
                     data-table-actions={stickyActions && column.mobileRole === "actions" ? "true" : undefined}
                     className={cx(
-                      "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
+                      "align-middle px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
                       column.mobileRole === "actions" && actionColumnClasses,
                       (column.align ?? "left") === "right" ? "text-right" : "text-left",
                       column.headerClassName
@@ -218,7 +218,9 @@ export default function DataTableShell<Row, SortField extends string = string>({
                   <tr className={resolveRowClassName(row)} {...rowAttributes?.(row)}>
                     {columns.map((column) => {
                       const align = column.align ?? "left";
-                      const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
+                      const cellBase = align === "right"
+                        ? "align-middle px-6 py-4 text-right"
+                        : "align-middle px-6 py-4";
                       const isPrimary = column.primary || column.id === primaryColumnId;
                       const mobileRole = column.mobileRole ?? (isPrimary ? "primary" : undefined);
                       const mobileLabel = column.mobileLabel ?? column.label;
@@ -247,7 +249,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
                   </tr>
                   {expandedContent ? (
                     <tr className={resolveExpandedRowClassName(row)} data-expanded-row="true">
-                      <td colSpan={columns.length} className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      <td colSpan={columns.length} className="align-middle px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                         {expandedContent}
                       </td>
                     </tr>

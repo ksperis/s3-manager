@@ -30,7 +30,7 @@ def test_get_or_create_oidc_user_creates_new_user(db_session):
     assert identity.provider_id == "google"
     assert identity.subject == "sub-123"
     assert identity.email_verified is True
-    assert user.display_name == "OIDC User"
+    assert user.full_name == "OIDC User"
     assert user.hashed_password is None
 
 
@@ -102,7 +102,6 @@ def test_get_or_create_oidc_user_reuses_existing_mapping(db_session):
     mapped = User(
         email="mapped@example.com",
         full_name="Mapped",
-        display_name="Mapped",
         hashed_password=None,
         is_active=True,
         role=UserRole.UI_USER.value,

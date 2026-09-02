@@ -94,7 +94,7 @@ function getConnectionSearchCandidates(connection: S3ConnectionAdminItem): Array
     connection.name,
     connection.endpoint_url,
     connection.created_by_email,
-    ...(connection.user_details ?? []).flatMap((user) => [user.email, user.display_name, user.full_name]),
+    ...(connection.user_details ?? []).flatMap((user) => [user.email, user.full_name]),
     ...(connection.group_details ?? []).map((group) => group.name),
     ...extractUiTagLabels(connection.tags),
   ];
@@ -380,7 +380,7 @@ export default function S3ConnectionsPage() {
       return {
         id: user.id,
         kind: "user",
-        label: user.display_name || user.full_name || user.email || `User #${user.id}`,
+        label: user.full_name || user.email || `User #${user.id}`,
         email: user.email,
         avatar: user.avatar,
       };

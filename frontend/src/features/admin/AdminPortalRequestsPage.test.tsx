@@ -65,7 +65,7 @@ describe("AdminPortalRequestsPage", () => {
       {
         id: 1,
         email: "requester@example.org",
-        display_name: "Request Owner",
+        full_name: "Request Owner",
         role: "ui_user",
         avatar: { preference: "initials", source: "initials", initials: "RO" },
       },

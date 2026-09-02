@@ -716,7 +716,7 @@ export default function S3AccountsPage() {
       label: "Name",
       field: "name",
       primary: true,
-      cellClassName: "min-w-[240px] max-w-[360px] align-top",
+      cellClassName: "min-w-[240px] max-w-[360px]",
       render: (account) => {
         const tagItems = buildUiTagItems(account.tags);
         return (
@@ -739,13 +739,13 @@ export default function S3AccountsPage() {
       id: "rgw-id",
       label: "RGW ID",
       field: "rgw_account_id",
-      cellClassName: "min-w-[176px] align-top",
+      cellClassName: "min-w-[176px]",
       render: (account) => account.rgw_account_id,
     },
     {
       id: "endpoint",
       label: "Endpoint",
-      cellClassName: "min-w-[160px] align-top",
+      cellClassName: "min-w-[160px]",
       render: (account) => (
         <span title={account.storage_endpoint_url || undefined}>
           {account.storage_endpoint_name || "—"}
@@ -763,7 +763,7 @@ export default function S3AccountsPage() {
       label: "Actions",
       align: "right",
       mobileRole: "actions",
-      cellClassName: "min-w-[144px] align-top",
+      cellClassName: "min-w-[144px]",
       render: (account) => {
         const deleteBusy = deletingS3AccountId === account.id;
         return isSuperAdmin ? (
@@ -855,7 +855,7 @@ export default function S3AccountsPage() {
       return {
         id: link.user_id,
         kind: "user",
-        label: link.user_full_name || user?.display_name || user?.full_name || link.user_email || user?.email || `User #${link.user_id}`,
+        label: link.user_full_name || user?.full_name || link.user_email || user?.email || `User #${link.user_id}`,
         email: link.user_email || user?.email,
         avatar: link.user_avatar || user?.avatar,
         manager_role: link.manager_role,

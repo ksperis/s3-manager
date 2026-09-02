@@ -42,7 +42,7 @@ def _remote_picture_url(value: object) -> str | None:
 
 
 def _avatar_initials(user: User) -> str:
-    label = str(user.display_name or user.full_name or "").strip()
+    label = str(user.full_name or "").strip()
     if label:
         parts = [part for part in re.split(r"[^\w]+", label, flags=re.UNICODE) if part]
         if len(parts) >= 2:

@@ -181,7 +181,6 @@ class S3UserAssociationsService:
                     user_id=int(user.id),
                     user_email=user.email,
                     user_full_name=user.full_name,
-                    user_display_name=user.display_name,
                     user_avatar=avatar_service.descriptor(user),
                     allow_manager_browser_data_access=bool(allow_browser),
                 )

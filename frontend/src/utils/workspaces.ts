@@ -40,7 +40,6 @@ export type SessionUser = {
   id?: number | null;
   email?: string | null;
   full_name?: string | null;
-  display_name?: string | null;
   avatar?: UserAvatarDescriptor | null;
   has_local_password?: boolean | null;
   role?: UiRole | null;

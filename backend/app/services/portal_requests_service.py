@@ -368,8 +368,6 @@ class PortalRequestsService:
         if target:
             if not target.is_active:
                 raise ValueError("Target user is inactive")
-            if target_name and not target.display_name:
-                target.display_name = target_name
             if target_name and not target.full_name:
                 target.full_name = target_name
             self.db.add(target)
@@ -377,7 +375,6 @@ class PortalRequestsService:
             target = User(
                 email=target_email,
                 full_name=target_name,
-                display_name=target_name,
                 hashed_password=None,
                 is_active=True,
                 role=UserRole.UI_USER.value,

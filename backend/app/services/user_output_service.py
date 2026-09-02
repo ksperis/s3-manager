@@ -199,7 +199,6 @@ class UserOutputService:
             id=user.id,
             email=user.email,
             full_name=user.full_name,
-            display_name=user.display_name or user.full_name,
             picture_url=user.picture_url,
             avatar=UserAvatarService(self.db).descriptor(user),
             has_local_password=bool(user.hashed_password),

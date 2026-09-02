@@ -28,7 +28,6 @@ def test_ldap_login_creates_cookie_session_and_returns_ui_none_user(client, db_s
             user = User(
                 email="jane@example.test",
                 full_name="Jane Doe",
-                display_name="Jane Doe",
                 hashed_password=None,
                 is_active=True,
                 role=UserRole.UI_NONE.value,

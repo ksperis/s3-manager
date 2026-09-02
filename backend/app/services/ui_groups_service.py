@@ -322,7 +322,6 @@ class UiGroupsService:
                     id=row.id,
                     email=row.email,
                     full_name=row.full_name,
-                    display_name=row.display_name or row.full_name,
                     avatar=UserAvatarService(self.db).descriptor(row),
                     role=row.role,
                 )

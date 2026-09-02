@@ -105,7 +105,6 @@ class UserSummary(ApiModel):
     id: int
     email: EmailStr
     full_name: Optional[str] = None
-    display_name: Optional[str] = None
     avatar: Optional[UserAvatar] = None
     role: UiRole
     iam_username: Optional[str] = None
@@ -115,7 +114,6 @@ class UserAssociationDetail(ApiModel):
     id: int
     email: str
     full_name: Optional[str] = None
-    display_name: Optional[str] = None
     avatar: Optional[UserAvatar] = None
     allow_manager_browser_data_access: bool = False
 
@@ -124,7 +122,6 @@ class User(ApiModel):
     id: int
     email: EmailStr
     full_name: Optional[str] = None
-    display_name: Optional[str] = None
     picture_url: Optional[str] = None
     avatar: Optional[UserAvatar] = None
     is_active: bool = True
@@ -202,7 +199,6 @@ class UserOut(ApiModel):
     id: int
     email: str
     full_name: Optional[str] = None
-    display_name: Optional[str] = None
     picture_url: Optional[str] = None
     avatar: UserAvatar
     has_local_password: bool = False

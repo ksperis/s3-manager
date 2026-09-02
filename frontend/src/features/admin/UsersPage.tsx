@@ -61,8 +61,9 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { cx, uiInputClass } from "../../components/ui/styles";
+import { cx, uiInputClass, uiMutedTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
+import UserAvatar from "../../components/UserAvatar";
 import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser, setSessionUserCache } from "../../utils/workspaces";
 import {
@@ -158,7 +159,7 @@ function RoleAccessHelp({
 }
 
 export default function UsersPage() {
-  type SortField = "email" | "role" | "accounts" | "last_login_at";
+  type SortField = "name" | "role" | "accounts" | "last_login_at";
 
   const MAX_VISIBLE_OPTIONS = 10;
   const { generalSettings } = useGeneralSettings();
@@ -282,7 +283,7 @@ export default function UsersPage() {
   const [editRoleHelpOpen, setEditRoleHelpOpen] = useState(false);
   const [filter, setFilter] = useState(principalEditRequest?.search ?? "");
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
-    field: "email",
+    field: "name",
     direction: "asc",
   });
   const [page, setPage] = useState(1);
@@ -1126,11 +1127,32 @@ export default function UsersPage() {
   });
   const userTableColumns: Array<DataTableColumn<User, SortField>> = [
     {
-      id: "email",
-      label: "Email",
-      field: "email",
+      id: "user",
+      label: "User",
+      field: "name",
       primary: true,
-      render: (user) => <span className="block max-w-full break-all">{user.email}</span>,
+      render: (user) => {
+        const fullName = user.full_name?.trim();
+        return (
+          <span className="flex min-w-0 items-center gap-2.5">
+            <UserAvatar
+              avatar={user.avatar}
+              name={fullName || user.email}
+              email={user.email}
+              size="md"
+              decorative
+            />
+            <span className="min-w-0">
+              <span className="block break-words">{fullName || user.email}</span>
+              {fullName && (
+                <span className={cx("block break-all text-[11px] font-medium", uiMutedTextClass)}>
+                  {user.email}
+                </span>
+              )}
+            </span>
+          </span>
+        );
+      },
     },
     {
       id: "role",
@@ -1547,7 +1569,7 @@ export default function UsersPage() {
           loadingMessage="Loading users..."
           errorMessage="Unable to load users."
           emptyMessage="No users."
-          primaryColumnId="email"
+          primaryColumnId="user"
           responsiveCards
           tableClassName="compact-table"
           sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}

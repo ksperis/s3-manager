@@ -299,7 +299,7 @@ class S3AccountsService:
                         allow_manager_browser_data_access
                     ),
                     user_email=user.email,
-                    user_full_name=user.display_name or user.full_name,
+                    user_full_name=user.full_name,
                     user_avatar=avatar_service.descriptor(user),
                 )
             )

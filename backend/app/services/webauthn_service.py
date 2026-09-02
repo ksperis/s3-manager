@@ -63,7 +63,7 @@ class WebAuthnService:
             rp_name=self.settings.webauthn_rp_name,
             user_id=str(user.id).encode(),
             user_name=user.email,
-            user_display_name=user.display_name or user.full_name or user.email,
+            user_display_name=user.full_name or user.email,
             challenge=challenge,
             timeout=300_000,
             attestation=AttestationConveyancePreference.NONE,

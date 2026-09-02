@@ -77,7 +77,6 @@ def _seed_user(
     user = User(
         email=email,
         full_name=full_name,
-        display_name=full_name,
         hashed_password="x" if role != UserRole.UI_NONE.value else None,
         is_active=active,
         role=role,

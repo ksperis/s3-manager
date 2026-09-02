@@ -7,7 +7,6 @@ import type { UserAvatarDescriptor } from "../../api/users";
 
 type StoredUserProfilePatch = {
   fullName?: string | null;
-  displayName?: string | null;
   uiLanguage?: "en" | "fr" | "de" | null;
   uiPreferences?: Record<string, unknown> | null;
   avatar?: UserAvatarDescriptor | null;
@@ -22,9 +21,6 @@ export function updateStoredUserProfile(
   const next = { ...(stored ?? {}) };
   if ("fullName" in patch) {
     next.full_name = patch.fullName ?? null;
-    next.display_name = patch.displayName ?? patch.fullName ?? null;
-  } else if ("displayName" in patch) {
-    next.display_name = patch.displayName ?? null;
   }
   if ("uiLanguage" in patch) {
     next.ui_language = patch.uiLanguage ?? null;

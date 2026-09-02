@@ -30,7 +30,6 @@ export type UiGroupUserDetail = {
   email: string;
   role?: string | null;
   full_name?: string | null;
-  display_name?: string | null;
   avatar?: UserAvatarDescriptor | null;
 };
 

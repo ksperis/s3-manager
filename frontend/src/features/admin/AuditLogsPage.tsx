@@ -278,13 +278,13 @@ export default function AuditLogsPage() {
       {
         id: "time",
         label: "Time",
-        cellClassName: "align-top whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
+        cellClassName: "whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
         render: (log) => formatAuditDate(log.created_at),
       },
       {
         id: "actor",
         label: "Actor",
-        cellClassName: "align-top min-w-[12rem]",
+        cellClassName: "min-w-[12rem]",
         render: (log) => (
           <div className="flex flex-col gap-1">
             <span className="font-semibold text-slate-900 dark:text-slate-100">{log.user_email}</span>
@@ -295,26 +295,24 @@ export default function AuditLogsPage() {
       {
         id: "scope",
         label: "Scope",
-        cellClassName: "align-top",
         render: (log) => <ScopeBadge scope={log.scope} />,
       },
       {
         id: "action",
         label: "Action",
         primary: true,
-        cellClassName: "align-top font-mono ui-caption",
+        cellClassName: "font-mono ui-caption",
         render: (log) => log.action,
       },
       {
         id: "status",
         label: "Status",
-        cellClassName: "align-top",
         render: (log) => <StatusBadge status={log.status} />,
       },
       {
         id: "target",
         label: "Target",
-        cellClassName: "align-top min-w-[8rem]",
+        cellClassName: "min-w-[8rem]",
         render: (log) => (
           <>
             <div className="ui-caption text-slate-600 dark:text-slate-300">{log.entity_type || "-"}</div>
@@ -325,7 +323,7 @@ export default function AuditLogsPage() {
       {
         id: "account",
         label: "S3 Account/User",
-        cellClassName: "align-top min-w-[10rem]",
+        cellClassName: "min-w-[10rem]",
         render: (log) =>
           log.account_name ? (
             <div className="font-medium text-slate-900 dark:text-white">{log.account_name}</div>
@@ -338,7 +336,7 @@ export default function AuditLogsPage() {
       {
         id: "details",
         label: "Details",
-        cellClassName: "align-top min-w-[18rem] max-w-[28rem]",
+        cellClassName: "min-w-[18rem] max-w-[28rem]",
         render: (log) => <MetadataPreview metadata={log.metadata as Record<string, unknown> | undefined} />,
       },
     ],

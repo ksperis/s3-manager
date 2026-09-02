@@ -42,7 +42,9 @@ describe("DataTableShell", () => {
     expect(screen.getByRole("table")).toHaveClass("manager-table", "!table-auto", "!w-max");
     expect(screen.getByText("Archive")).toHaveClass("font-semibold");
     expect(screen.getByRole("columnheader", { name: "Name" })).toHaveAttribute("aria-sort", "ascending");
+    expect(screen.getByRole("columnheader", { name: "Name" })).toHaveClass("align-middle");
     expect(screen.getByRole("columnheader", { name: "Count" })).toHaveClass("text-right");
+    expect(screen.getByText("Archive").closest("td")).toHaveClass("align-middle");
     expect(screen.getByRole("button", { name: /Name/ })).toHaveClass("uppercase");
 
     await user.click(screen.getByRole("button", { name: /Name/ }));

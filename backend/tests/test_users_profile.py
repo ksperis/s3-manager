@@ -26,7 +26,6 @@ def _seed_user(db_session, *, hashed_password: str | None, role: str = UserRole.
     user = User(
         email=email,
         full_name="Profile User",
-        display_name="Profile User",
         hashed_password=hashed_password,
         is_active=True,
         role=role,
@@ -48,11 +47,10 @@ def test_update_users_me_updates_full_name(client, db_session, monkeypatch):
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["full_name"] == "Nouveau Nom"
-    assert payload["display_name"] == "Nouveau Nom"
+    assert "display_name" not in payload
 
     db_session.refresh(user)
     assert user.full_name == "Nouveau Nom"
-    assert user.display_name == "Nouveau Nom"
 
 
 def test_users_me_exposes_gravatar_descriptor_with_initials(client, db_session):

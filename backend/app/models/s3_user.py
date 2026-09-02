@@ -20,7 +20,6 @@ class S3UserUserLink(_S3UserAssociationLink):
     user_id: int
     user_email: Optional[str] = None
     user_full_name: Optional[str] = None
-    user_display_name: Optional[str] = None
     user_avatar: Optional[UserAvatar] = None
 
 

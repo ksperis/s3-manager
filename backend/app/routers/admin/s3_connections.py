@@ -89,7 +89,6 @@ def _linked_user_details_by_connection(
                 id=normalized_user_id,
                 email=user.email,
                 full_name=user.full_name,
-                display_name=user.display_name,
                 avatar=avatar_service.descriptor(user),
             )
         )
@@ -160,7 +159,7 @@ def _to_admin_item(
         verify_tls=details.verify_tls,
         created_by_user_id=conn.created_by_user_id,
         created_by_email=created_by_email,
-        created_by_full_name=(created_by_user.display_name or created_by_user.full_name) if created_by_user else None,
+        created_by_full_name=created_by_user.full_name if created_by_user else None,
         created_by_avatar=UserAvatarService(tags_service.db).descriptor(created_by_user) if created_by_user else None,
         user_count=int(user_count),
         user_details=user_details,
