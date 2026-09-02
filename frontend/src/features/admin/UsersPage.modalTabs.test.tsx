@@ -386,7 +386,7 @@ describe("UsersPage modal tabs", () => {
     });
   });
 
-  it("blocks saving a user account association without either role", async () => {
+  it("keeps the required user Manager role while Portal is off", async () => {
     listUsersMock.mockResolvedValue({
       items: [
         {
@@ -411,21 +411,13 @@ describe("UsersPage modal tabs", () => {
     render(<UsersPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
-    fireEvent.change(
-      screen.getByRole("combobox", { name: "Manager role for acc-1" }),
-      { target: { value: "" } },
-    );
-
+    const managerRoleSelect = screen.getByRole("combobox", {
+      name: "Manager role for acc-1",
+    });
+    expect(managerRoleSelect).toHaveValue("account_administrator");
     expect(
-      screen.getByText("Choose a Manager role; Portal is off."),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(updateUserMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("tab", { name: "Associations" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+      within(managerRoleSelect).getByRole("option", { name: "No Manager access" }),
+    ).toBeDisabled();
   });
 
   it("keeps associations when switching General/Associations and submits linked payload", async () => {

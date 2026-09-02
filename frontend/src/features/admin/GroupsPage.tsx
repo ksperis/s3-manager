@@ -633,6 +633,7 @@ export default function GroupsPage() {
                     <td className={adminAssociationTableControlCellClass}>
                       <ManagerAccountRoleSelect
                         label={label}
+                        portalEnabled={showPortalRole}
                         value={link}
                         onChange={updateAccess}
                         showLabel={false}

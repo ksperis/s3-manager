@@ -10,6 +10,11 @@ import {
 } from "../../api/accountAccess";
 import UiSelect from "../../components/ui/UiSelect";
 
+const activeManagerRoleClass =
+  "border-amber-300 bg-amber-50 font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100";
+const activePortalRoleClass =
+  "border-sky-300 bg-sky-50 font-semibold text-sky-900 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-100";
+
 type AccountRoleSelectProps = {
   value: AccountAccessGrant;
   onChange: (value: AccountAccessGrant) => void;
@@ -21,12 +26,14 @@ type AccountRoleSelectProps = {
 };
 
 type ManagerAccountRoleSelectProps = AccountRoleSelectProps & {
+  portalEnabled: boolean;
   error?: ReactNode;
 };
 
 export function ManagerAccountRoleSelect({
   value,
   onChange,
+  portalEnabled,
   label,
   showLabel = true,
   fieldClassName = "w-52",
@@ -43,9 +50,12 @@ export function ManagerAccountRoleSelect({
       {...(describedBy ? { "aria-describedby": describedBy } : {})}
       size="compact"
       fieldClassName={fieldClassName}
+      className={value.manager_role ? activeManagerRoleClass : undefined}
+      title={!portalEnabled ? "A Manager role is required while Portal is off." : undefined}
       value={value.manager_role ?? ""}
       onChange={(event) => {
         const managerRole = parseManagerAccountRole(event.target.value);
+        if (!portalEnabled && managerRole === null) return;
         onChange({
           ...value,
           manager_role: managerRole,
@@ -55,7 +65,11 @@ export function ManagerAccountRoleSelect({
       }}
     >
       {MANAGER_ACCOUNT_ROLE_OPTIONS.map((option) => (
-        <option key={option.value || "none"} value={option.value}>
+        <option
+          key={option.value || "none"}
+          value={option.value}
+          disabled={!portalEnabled && option.value === ""}
+        >
           {option.label}
         </option>
       ))}
@@ -87,6 +101,7 @@ export function PortalAccountRoleSelect({
       title={!portalEnabled ? "Portal is off; existing roles are preserved." : undefined}
       size="compact"
       fieldClassName={fieldClassName}
+      className={value.portal_role ? activePortalRoleClass : undefined}
       value={value.portal_role ?? ""}
       disabled={!portalEnabled}
       onChange={(event) =>
@@ -144,6 +159,7 @@ export default function AccountAccessRoleSelectors({
     <div className="flex flex-wrap items-start gap-3">
       <ManagerAccountRoleSelect
         label={label}
+        portalEnabled={portalEnabled}
         value={value}
         onChange={onChange}
         error={missingRole ? getAccountAccessRequiredMessage(portalEnabled) : undefined}

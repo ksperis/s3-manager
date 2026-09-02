@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import AccountAccessRoleSelectors from "./AccountAccessRoleSelectors";
@@ -18,6 +18,24 @@ describe("AccountAccessRoleSelectors", () => {
     expect(screen.getByText("Portal")).toBeInTheDocument();
   });
 
+  it("highlights assigned Manager and Portal roles", () => {
+    render(
+      <AccountAccessRoleSelectors
+        label="Research Archive"
+        portalEnabled
+        value={{ manager_role: "account_administrator", portal_role: "portal_user" }}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Manager role for Research Archive" }),
+    ).toHaveClass("bg-amber-50", "font-semibold");
+    expect(
+      screen.getByRole("combobox", { name: "Portal role for Research Archive" }),
+    ).toHaveClass("bg-sky-50", "font-semibold");
+  });
+
   it("explains why a preserved Portal role is read-only", () => {
     render(
       <AccountAccessRoleSelectors
@@ -34,6 +52,12 @@ describe("AccountAccessRoleSelectors", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("combobox", { name: "Portal role for Research Archive" }),
+    ).toBeDisabled();
+    const managerSelect = screen.getByRole("combobox", {
+      name: "Manager role for Research Archive",
+    });
+    expect(
+      within(managerSelect).getByRole("option", { name: "No Manager access" }),
     ).toBeDisabled();
   });
 
@@ -72,17 +96,25 @@ describe("AccountAccessRoleSelectors", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not suggest a Portal role while Portal is off", () => {
+  it("prevents clearing the Manager role while Portal is off", () => {
+    const onChange = vi.fn();
     render(
       <AccountAccessRoleSelectors
         label="Empty association"
         portalEnabled={false}
-        value={{ manager_role: null, portal_role: null }}
-        onChange={vi.fn()}
+        value={{ manager_role: "account_administrator", portal_role: null }}
+        onChange={onChange}
       />,
     );
 
-    expect(screen.getByText("Choose a Manager role; Portal is off.")).toBeInTheDocument();
-  });
+    const managerSelect = screen.getByRole("combobox", {
+      name: "Manager role for Empty association",
+    });
+    expect(
+      within(managerSelect).getByRole("option", { name: "No Manager access" }),
+    ).toBeDisabled();
 
+    fireEvent.change(managerSelect, { target: { value: "" } });
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

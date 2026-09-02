@@ -5,6 +5,7 @@ import {
   AdminAssociationLinkedTable,
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
+  adminAssociationTableActionCellClass,
 } from "./AdminAssociationPicker";
 
 describe("AdminAssociationPicker", () => {
@@ -22,7 +23,7 @@ describe("AdminAssociationPicker", () => {
         rows={
           <tr>
             <td>Operators</td>
-            <td>Remove</td>
+            <td className={adminAssociationTableActionCellClass}>Remove</td>
           </tr>
         }
       />
@@ -30,6 +31,11 @@ describe("AdminAssociationPicker", () => {
 
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getByText("Operators")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveClass(
+      "w-px",
+      "whitespace-nowrap",
+    );
+    expect(screen.getByText("Remove").closest("td")).toHaveClass("w-px", "whitespace-nowrap");
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
     expect(onAction).toHaveBeenCalledTimes(1);
   });

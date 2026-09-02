@@ -311,7 +311,7 @@ describe("GroupsPage", () => {
     );
   });
 
-  it("blocks saving a group account association without either role", async () => {
+  it("keeps the required group Manager role while Portal is off", async () => {
     listGroupsMock.mockResolvedValue({
       items: [
         {
@@ -343,21 +343,13 @@ describe("GroupsPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
     expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: /Portal role/ })).not.toBeInTheDocument();
-    fireEvent.change(
-      screen.getByRole("combobox", { name: "Manager role for acc-1" }),
-      { target: { value: "" } },
-    );
-
+    const managerRoleSelect = screen.getByRole("combobox", {
+      name: "Manager role for acc-1",
+    });
+    expect(managerRoleSelect).toHaveValue("account_administrator");
     expect(
-      screen.getByText("Choose a Manager role; Portal is off."),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(updateGroupMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("tab", { name: "Associations" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+      within(managerRoleSelect).getByRole("option", { name: "No Manager access" }),
+    ).toBeDisabled();
   });
 
   it("creates a group with default rights off, members, associations, and Manager tool access", async () => {

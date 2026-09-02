@@ -139,6 +139,7 @@ export default function UserAccountAssociationsPanel({
                     <td className={adminAssociationTableControlCellClass}>
                       <ManagerAccountRoleSelect
                         label={label}
+                        portalEnabled={showPortalRole}
                         value={entry}
                         onChange={updateAccess}
                         showLabel={false}

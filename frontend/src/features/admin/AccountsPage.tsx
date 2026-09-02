@@ -1752,6 +1752,7 @@ export default function S3AccountsPage() {
                                 <td className={adminAssociationTableControlCellClass}>
                                   <ManagerAccountRoleSelect
                                     label={u.label}
+                                    portalEnabled={portalEnabled}
                                     value={u}
                                     onChange={updateAccess}
                                     showLabel={false}
@@ -1966,6 +1967,7 @@ export default function S3AccountsPage() {
                                 <td className={adminAssociationTableControlCellClass}>
                                   <ManagerAccountRoleSelect
                                     label={group.label}
+                                    portalEnabled={portalEnabled}
                                     value={group}
                                     onChange={updateAccess}
                                     showLabel={false}

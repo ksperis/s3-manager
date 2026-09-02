@@ -537,7 +537,7 @@ describe("AccountsPage modal tabs", () => {
     );
   });
 
-  it("blocks saving an account principal association without either role", async () => {
+  it("keeps the required account-principal Manager role while Portal is off", async () => {
     const accountWithManagerLink = {
       id: 1,
       name: "acc-1",
@@ -579,21 +579,13 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
     expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: /Portal role/ })).not.toBeInTheDocument();
-    fireEvent.change(
-      screen.getByRole("combobox", { name: "Manager role for ui7@example.com" }),
-      { target: { value: "" } },
-    );
-
+    const managerRoleSelect = screen.getByRole("combobox", {
+      name: "Manager role for ui7@example.com",
+    });
+    expect(managerRoleSelect).toHaveValue("account_administrator");
     expect(
-      screen.getByText("Choose a Manager role; Portal is off."),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-
-    expect(updateS3AccountMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("tab", { name: "Linked UI users" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+      within(managerRoleSelect).getByRole("option", { name: "No Manager access" }),
+    ).toBeDisabled();
   });
 
   it("submits privileged access grants from the account edit tab", async () => {
