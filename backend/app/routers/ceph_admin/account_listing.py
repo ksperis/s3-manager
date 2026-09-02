@@ -36,6 +36,7 @@ from app.services.bucket_listing_shared import listing_sort_key, serialize_filte
 from app.services.listing_progress import (
     ListingProgressEmitter,
     ListingProgressSnapshot,
+    emit_listing_ready,
     interpolate_progress_percent,
     invoke_cancel_check,
 )
@@ -331,7 +332,11 @@ class _AccountListingPipeline:
         if self.cache_key is None:
             raise RuntimeError("Account listing cache key is not initialized")
         results = get_cached_accounts_listing(self.cache_key, self._build_listing)
-        self._emit_listing_ready(results)
+        emit_listing_ready(
+            self.progress,
+            item_count=len(results),
+            cancel_check=self.cancel_check,
+        )
         filtered_results = self._apply_search(results)
         page_items, total, has_next = self._paginate(filtered_results)
         page_items = self._enrich_page(page_items)
@@ -450,20 +455,6 @@ class _AccountListingPipeline:
         )
         invoke_cancel_check(self.cancel_check)
         return enriched
-
-    def _emit_listing_ready(
-        self,
-        results: list[CephAdminRgwAccountSummary],
-    ) -> None:
-        self.progress.emit(
-            percent=75,
-            stage="listing_ready",
-            processed=len(results),
-            total=len(results),
-            message="Base listing ready",
-            force=True,
-        )
-        invoke_cancel_check(self.cancel_check)
 
     def _apply_search(
         self,

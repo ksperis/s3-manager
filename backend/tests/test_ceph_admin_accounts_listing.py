@@ -345,6 +345,12 @@ def test_ceph_admin_accounts_listing_advanced_progress_is_monotonic():
     assert percents == sorted(percents)
     assert all(0 <= percent <= 100 for percent in percents)
     assert percents[-1] == 100
+    assert any(
+        snapshot.stage == "listing_ready"
+        and snapshot.processed == 2
+        and snapshot.total == 2
+        for snapshot in snapshots
+    )
 
 
 def test_ceph_admin_accounts_detail_enrichment_reports_item_progress():

@@ -70,6 +70,23 @@ def invoke_cancel_check(cancel_check: Callable[[], None] | None) -> None:
     cancel_check()
 
 
+def emit_listing_ready(
+    progress: ListingProgressEmitter,
+    *,
+    item_count: int,
+    cancel_check: Callable[[], None] | None,
+) -> None:
+    progress.emit(
+        percent=75,
+        stage="listing_ready",
+        processed=item_count,
+        total=item_count,
+        message="Base listing ready",
+        force=True,
+    )
+    invoke_cancel_check(cancel_check)
+
+
 def interpolate_progress_percent(start: int, end: int, *, processed: int, total: int) -> int:
     clamped_start = max(0, min(100, int(start)))
     clamped_end = max(clamped_start, min(100, int(end)))
