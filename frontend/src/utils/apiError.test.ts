@@ -18,6 +18,35 @@ describe("extractApiError", () => {
     expect(extractApiError(error, "Fallback message")).toBe("Forbidden by policy");
   });
 
+  it("formats FastAPI validation details with their payload location", () => {
+    const error = new ApiError("Request failed with status 422", {
+      response: {
+        status: 422,
+        data: {
+          detail: [
+            {
+              type: "extra_forbidden",
+              loc: ["body", "user_links", 0, "label"],
+              msg: "Extra inputs are not permitted",
+              input: "Research Archive",
+            },
+            {
+              type: "extra_forbidden",
+              loc: ["body", "user_links", 0, "id"],
+              msg: "Extra inputs are not permitted",
+              input: 7,
+            },
+          ],
+        },
+        headers: {},
+      },
+    });
+
+    expect(extractApiError(error, "Unable to update the account.")).toBe(
+      "user_links.0.label: Extra inputs are not permitted · user_links.0.id: Extra inputs are not permitted",
+    );
+  });
+
   it("normalizes low-level network errors when backend detail is missing", () => {
     const error = new ApiError("Failed to fetch");
 

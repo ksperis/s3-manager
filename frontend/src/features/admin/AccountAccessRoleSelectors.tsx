@@ -25,6 +25,18 @@ type AccountRoleSelectProps = {
   describedBy?: string;
 };
 
+function copyAccountAccessGrant(value: AccountAccessGrant): AccountAccessGrant {
+  return {
+    manager_role: value.manager_role,
+    portal_role: value.portal_role,
+    ...(value.allow_manager_browser_data_access === undefined
+      ? {}
+      : {
+          allow_manager_browser_data_access: value.allow_manager_browser_data_access,
+        }),
+  };
+}
+
 type ManagerAccountRoleSelectProps = AccountRoleSelectProps & {
   portalEnabled: boolean;
   error?: ReactNode;
@@ -57,7 +69,7 @@ export function ManagerAccountRoleSelect({
         const managerRole = parseManagerAccountRole(event.target.value);
         if (!portalEnabled && managerRole === null) return;
         onChange({
-          ...value,
+          ...copyAccountAccessGrant(value),
           manager_role: managerRole,
           allow_manager_browser_data_access:
             managerRole === null ? false : value.allow_manager_browser_data_access,
@@ -106,7 +118,7 @@ export function PortalAccountRoleSelect({
       disabled={!portalEnabled}
       onChange={(event) =>
         onChange({
-          ...value,
+          ...copyAccountAccessGrant(value),
           portal_role: parsePortalAccountRole(event.target.value),
         })
       }

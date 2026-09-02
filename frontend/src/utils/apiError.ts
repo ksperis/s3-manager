@@ -49,6 +49,38 @@ export function isRecentWebAuthnRequired(error: unknown): boolean {
   return detail === RECENT_WEBAUTHN_REQUIRED_DETAIL;
 }
 
+function formatFastApiValidationDetail(detail: unknown, fallback: string): string | null {
+  if (!Array.isArray(detail)) return null;
+
+  const issues = detail.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const { loc, msg } = entry as { loc?: unknown; msg?: unknown };
+    if (typeof msg !== "string" || msg.trim().length === 0) return [];
+
+    const location = Array.isArray(loc)
+      ? loc
+          .filter((part) => part !== "body")
+          .filter((part): part is string | number =>
+            typeof part === "string" || typeof part === "number"
+          )
+          .map(String)
+          .filter(Boolean)
+          .join(".")
+      : "";
+    const message = sanitizeErrorMessage(msg, fallback);
+    return [location ? `${location}: ${message}` : message];
+  });
+
+  if (issues.length === 0) return null;
+  const visibleIssues = issues.slice(0, 3);
+  const remainingCount = issues.length - visibleIssues.length;
+  const suffix =
+    remainingCount > 0
+      ? ` · ${remainingCount} more validation error${remainingCount === 1 ? "" : "s"}`
+      : "";
+  return `${visibleIssues.join(" · ")}${suffix}`;
+}
+
 export function classifyApiError(error: unknown, fallback: string): ApiFailure {
   if (isApiError(error)) {
     const status = error.response?.status ?? null;
@@ -58,7 +90,7 @@ export function classifyApiError(error: unknown, fallback: string): ApiFailure {
     const safeDetail =
       typeof detail === "string" && detail.trim().length > 0
         ? sanitizeErrorMessage(detail, fallback)
-        : null;
+        : formatFastApiValidationDetail(detail, fallback);
     if (
       code === "ECONNABORTED" ||
       code === "ETIMEDOUT" ||

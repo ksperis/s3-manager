@@ -117,4 +117,43 @@ describe("AccountAccessRoleSelectors", () => {
     fireEvent.change(managerSelect, { target: { value: "" } });
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("emits only API grant fields when the displayed value contains row metadata", () => {
+    const onChange = vi.fn();
+    const value = {
+      id: 7,
+      label: "Research Archive",
+      manager_role: "account_administrator" as const,
+      portal_role: "portal_user" as const,
+      allow_manager_browser_data_access: true,
+    };
+    render(
+      <AccountAccessRoleSelectors
+        label={value.label}
+        portalEnabled
+        value={value}
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Manager role for Research Archive" }),
+      { target: { value: "" } },
+    );
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Portal role for Research Archive" }),
+      { target: { value: "portal_manager" } },
+    );
+
+    expect(onChange).toHaveBeenNthCalledWith(1, {
+      manager_role: null,
+      portal_role: "portal_user",
+      allow_manager_browser_data_access: false,
+    });
+    expect(onChange).toHaveBeenNthCalledWith(2, {
+      manager_role: "account_administrator",
+      portal_role: "portal_manager",
+      allow_manager_browser_data_access: true,
+    });
+  });
 });
