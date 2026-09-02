@@ -632,6 +632,65 @@ export const parseRawMappingText = (value: string): ParsedRawMappingResult => {
   return { mapping, invalidLines };
 };
 
+export const reconcileBucketCompareManualMapping = ({
+  previous,
+  sourceBuckets,
+  targetBuckets,
+  sameTargetSelected,
+}: {
+  previous: Readonly<Record<string, string>>;
+  sourceBuckets: string[];
+  targetBuckets: string[];
+  sameTargetSelected: boolean;
+}): Record<string, string> => {
+  const knownTargets = new Set(targetBuckets);
+  const next: Record<string, string> = {};
+
+  sourceBuckets.forEach((sourceBucket) => {
+    const previousTarget = (previous[sourceBucket] ?? "").trim();
+    if (previousTarget) {
+      next[sourceBucket] = previousTarget;
+      return;
+    }
+    if (knownTargets.has(sourceBucket) && !sameTargetSelected) {
+      next[sourceBucket] = sourceBucket;
+    }
+  });
+
+  return next;
+};
+
+export const mergeRawBucketCompareMappings = (
+  previous: Readonly<Record<string, string>>,
+  sourceBuckets: string[],
+  rawMapping: ReadonlyMap<string, string>
+): Readonly<Record<string, string>> => {
+  const next = { ...previous };
+  let changed = false;
+  sourceBuckets.forEach((sourceBucket) => {
+    const mapped = rawMapping.get(sourceBucket);
+    if (!mapped || (next[sourceBucket] ?? "").trim() === mapped) return;
+    next[sourceBucket] = mapped;
+    changed = true;
+  });
+  return changed ? next : previous;
+};
+
+export const updateBucketCompareConfigFeatures = <TFeature extends string>(
+  current: readonly TFeature[],
+  orderedFeatures: readonly TFeature[],
+  feature: TFeature,
+  enabled: boolean
+): TFeature[] => {
+  const next = new Set(current);
+  if (enabled) {
+    next.add(feature);
+  } else {
+    next.delete(feature);
+  }
+  return orderedFeatures.filter((key) => next.has(key));
+};
+
 export const buildBucketCompareMappingModel = ({
   targetSelected,
   targetKind,

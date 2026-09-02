@@ -5,12 +5,15 @@ import {
   buildBucketCompareMappingModel,
   compareObjectDetailsFromKeys,
   matchesBucketCompareRunFilters,
+  mergeRawBucketCompareMappings,
+  reconcileBucketCompareManualMapping,
   resolveBucketCompareRunSettlement,
   sourceCompareObjectDetailFromDiff,
   summarizeBucketCompareRun,
   targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
+  updateBucketCompareConfigFeatures,
 } from "./bucketCompareShared";
 
 const buildModel = (
@@ -89,6 +92,59 @@ describe("bucket comparison mapping model", () => {
         sameTargetSelected: true,
       }).comparePlan.error
     ).toBe("Same-endpoint comparison requires manual mapping.");
+  });
+});
+
+describe("bucket comparison configuration state", () => {
+  it("reconciles selected sources while preserving explicit manual targets", () => {
+    expect(
+      reconcileBucketCompareManualMapping({
+        previous: { alpha: " custom-alpha ", stale: "archive" },
+        sourceBuckets: ["alpha", "beta", "missing"],
+        targetBuckets: ["alpha", "beta"],
+        sameTargetSelected: false,
+      })
+    ).toEqual({ alpha: "custom-alpha", beta: "beta" });
+    expect(
+      reconcileBucketCompareManualMapping({
+        previous: {},
+        sourceBuckets: ["alpha"],
+        targetBuckets: ["alpha"],
+        sameTargetSelected: true,
+      })
+    ).toEqual({});
+  });
+
+  it("merges raw mappings only for selected sources and preserves identity when unchanged", () => {
+    const previous = { alpha: "raw-alpha", beta: "manual-beta" };
+    const rawMapping = new Map([
+      ["alpha", "raw-alpha"],
+      ["beta", "raw-beta"],
+      ["stale", "raw-stale"],
+    ]);
+
+    expect(mergeRawBucketCompareMappings(previous, ["alpha"], rawMapping)).toBe(
+      previous
+    );
+    expect(
+      mergeRawBucketCompareMappings(previous, ["alpha", "beta"], rawMapping)
+    ).toEqual({ alpha: "raw-alpha", beta: "raw-beta" });
+  });
+
+  it("updates selected configuration features in canonical order", () => {
+    const ordered = ["versioning", "policy", "tags"] as const;
+
+    expect(
+      updateBucketCompareConfigFeatures(["tags"], ordered, "versioning", true)
+    ).toEqual(["versioning", "tags"]);
+    expect(
+      updateBucketCompareConfigFeatures(
+        ["versioning", "policy"],
+        ordered,
+        "versioning",
+        false
+      )
+    ).toEqual(["policy"]);
   });
 });
 

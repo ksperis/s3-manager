@@ -42,7 +42,9 @@ import {
   getRunStatusTone,
   getVisibleCompareObjectKeys,
   matchesBucketCompareRunFilters,
+  mergeRawBucketCompareMappings,
   parseRawMappingText,
+  reconcileBucketCompareManualMapping,
   renderCompareObjectDetails,
   renderDiffLines,
   resolveBucketCompareRunSettlement,
@@ -51,6 +53,7 @@ import {
   targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
+  updateBucketCompareConfigFeatures,
   useCompareVisibleKeysClipboard,
 } from "../shared/bucketCompareShared";
 import {
@@ -276,43 +279,26 @@ export default function ManagerBucketCompareModal({
 
   useEffect(() => {
     if (mappingMode !== "manual") return;
-    const knownTargets = new Set(targetBucketNames);
-    setManualMapping((prev) => {
-      const next: Record<string, string> = {};
-      sortedSourceBuckets.forEach((sourceBucket) => {
-        const prevTarget = (prev[sourceBucket] ?? "").trim();
-        if (prevTarget) {
-          next[sourceBucket] = prevTarget;
-          return;
-        }
-        const byName = targetBucketNames.find((candidate) => candidate === sourceBucket);
-        if (byName && !(sameContextSelected && sourceBucketNameSet.has(byName))) {
-          next[sourceBucket] = byName;
-          return;
-        }
-        if (knownTargets.has(sourceBucket) && !(sameContextSelected && sourceBucketNameSet.has(sourceBucket))) {
-          next[sourceBucket] = sourceBucket;
-        }
-      });
-      return next;
-    });
-  }, [mappingMode, sameContextSelected, sortedSourceBuckets, sourceBucketNameSet, targetBucketNames]);
+    setManualMapping((previous) =>
+      reconcileBucketCompareManualMapping({
+        previous,
+        sourceBuckets: sortedSourceBuckets,
+        targetBuckets: targetBucketNames,
+        sameTargetSelected: sameContextSelected,
+      })
+    );
+  }, [mappingMode, sameContextSelected, sortedSourceBuckets, targetBucketNames]);
 
   useEffect(() => {
     if (mappingMode !== "manual") return;
     if (parsedRawMapping.mapping.size === 0) return;
-    setManualMapping((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      sortedSourceBuckets.forEach((sourceBucket) => {
-        const mapped = parsedRawMapping.mapping.get(sourceBucket);
-        if (!mapped) return;
-        if ((next[sourceBucket] ?? "").trim() === mapped) return;
-        next[sourceBucket] = mapped;
-        changed = true;
-      });
-      return changed ? next : prev;
-    });
+    setManualMapping((previous) =>
+      mergeRawBucketCompareMappings(
+        previous,
+        sortedSourceBuckets,
+        parsedRawMapping.mapping
+      )
+    );
   }, [mappingMode, parsedRawMapping.mapping, sortedSourceBuckets]);
 
   const {
@@ -379,15 +365,14 @@ export default function ManagerBucketCompareModal({
     : "Manager Browser is disabled for this surface.";
 
   const toggleConfigFeature = (feature: ManagerBucketCompareConfigFeature, enabled: boolean) => {
-    setSelectedConfigFeatures((prev) => {
-      const next = new Set(prev);
-      if (enabled) {
-        next.add(feature);
-      } else {
-        next.delete(feature);
-      }
-      return ALL_CONFIG_FEATURE_KEYS.filter((key) => next.has(key));
-    });
+    setSelectedConfigFeatures((current) =>
+      updateBucketCompareConfigFeatures(
+        current,
+        ALL_CONFIG_FEATURE_KEYS,
+        feature,
+        enabled
+      )
+    );
   };
 
   const runCompare = async () => {
