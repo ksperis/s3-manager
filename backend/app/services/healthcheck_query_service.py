@@ -25,8 +25,16 @@ from app.services.healthcheck_common import (
     WINDOW_DELTAS,
     HealthWindow,
     _coerce_check_mode,
-    _percentile,
     resolve_healthcheck_profile,
+)
+from app.services.healthcheck_query_projection import (
+    build_daily_from_rollups,
+    build_rollup_availability_map,
+    build_segment_timeline_map,
+    incident_duration_minutes,
+    status_from_rollup_counts,
+    workspace_endpoint_snapshot,
+    workspace_incident_payload,
 )
 from app.utils.name_ordering import name_order_by
 from app.utils.time import utcnow
@@ -111,7 +119,7 @@ class HealthCheckQueryService:
         series = [
             {
                 "timestamp": row.bucket_start.isoformat(),
-                "status": self._status_from_rollup_counts(
+                "status": status_from_rollup_counts(
                     up_count=int(row.up_count or 0),
                     degraded_count=int(row.degraded_count or 0),
                     down_count=int(row.down_count or 0),
@@ -124,7 +132,7 @@ class HealthCheckQueryService:
             }
             for row in rollup_rows
         ]
-        daily = self._build_daily_from_rollups(rollup_rows, start=start, end=now)
+        daily = build_daily_from_rollups(rollup_rows, start=start, end=now)
         data_points = sum(
             int(row.up_count or 0)
             + int(row.degraded_count or 0)
@@ -304,9 +312,6 @@ class HealthCheckQueryService:
         for row in segment_rows:
             meta = endpoint_meta.get(int(row.storage_endpoint_id), {})
             end_time = row.ended_at
-            duration = None
-            if end_time is not None:
-                duration = int((end_time - row.started_at).total_seconds() / 60)
             incidents.append(
                 {
                     "endpoint_id": int(row.storage_endpoint_id),
@@ -315,7 +320,7 @@ class HealthCheckQueryService:
                     "status": row.status,
                     "start": row.started_at.isoformat(),
                     "end": end_time.isoformat() if end_time else None,
-                    "duration_minutes": duration,
+                    "duration_minutes": incident_duration_minutes(row),
                     "check_mode": _coerce_check_mode(row.check_mode),
                     "check_type": row.check_type or DEFAULT_CHECK_TYPE,
                     "scope": row.scope or DEFAULT_SCOPE,
@@ -333,54 +338,6 @@ class HealthCheckQueryService:
             "total": total,
             "incidents": incidents,
         }
-
-    @staticmethod
-    def _workspace_endpoint_snapshot(
-        *,
-        endpoint: StorageEndpoint,
-        latest_scope: EndpointHealthLatest | None,
-        now: datetime,
-        stale_after_seconds: int,
-    ) -> tuple[dict[str, Any], str]:
-        profile = resolve_healthcheck_profile(endpoint)
-        if latest_scope is not None:
-            status = str(latest_scope.status or HealthCheckStatus.UNKNOWN.value)
-            checked_at = latest_scope.checked_at.isoformat()
-            latency_ms = latest_scope.latency_ms
-            check_mode = _coerce_check_mode(latest_scope.check_mode)
-        else:
-            status = HealthCheckStatus.UNKNOWN.value
-            checked_at = now.isoformat()
-            latency_ms = None
-            check_mode = profile.mode
-
-        is_stale = latest_scope is None or (
-            now - latest_scope.checked_at > timedelta(seconds=stale_after_seconds)
-        )
-        counted_statuses = {
-            HealthCheckStatus.UP.value,
-            HealthCheckStatus.DEGRADED.value,
-            HealthCheckStatus.DOWN.value,
-        }
-        effective_status = (
-            status
-            if not is_stale and status in counted_statuses
-            else HealthCheckStatus.UNKNOWN.value
-        )
-        return (
-            {
-                "endpoint_id": endpoint.id,
-                "name": endpoint.name,
-                "endpoint_url": endpoint.endpoint_url,
-                "status": status,
-                "checked_at": checked_at,
-                "latency_ms": latency_ms,
-                "check_mode": check_mode,
-                "check_target_url": profile.target_url,
-                "is_stale": is_stale,
-            },
-            effective_status,
-        )
 
     def _workspace_incident_rows(
         self,
@@ -413,34 +370,6 @@ class HealthCheckQueryService:
             .all()
         )
 
-    @staticmethod
-    def _workspace_incident_payload(
-        row: EndpointHealthStatusSegment,
-        *,
-        endpoint_meta: dict[int, dict[str, Any]],
-        incident_cutoff: datetime,
-    ) -> dict[str, Any]:
-        end_time = row.ended_at
-        duration_minutes = (
-            int((end_time - row.started_at).total_seconds() / 60)
-            if end_time is not None
-            else None
-        )
-        endpoint_info = endpoint_meta.get(int(row.storage_endpoint_id), {})
-        return {
-            "endpoint_id": int(row.storage_endpoint_id),
-            "endpoint_name": endpoint_info.get("name")
-            or f"Endpoint {row.storage_endpoint_id}",
-            "endpoint_url": endpoint_info.get("url"),
-            "status": row.status,
-            "start": row.started_at.isoformat(),
-            "end": end_time.isoformat() if end_time else None,
-            "duration_minutes": duration_minutes,
-            "check_mode": _coerce_check_mode(row.check_mode),
-            "ongoing": end_time is None,
-            "recent": end_time is not None and end_time >= incident_cutoff,
-        }
-
     def build_workspace_health_overview(
         self,
         *,
@@ -459,7 +388,7 @@ class HealthCheckQueryService:
         endpoint_ids = [int(endpoint.id) for endpoint in endpoints]
         latest_scope_by_endpoint = self._load_latest_scope_by_endpoint(endpoint_ids)
         endpoint_snapshots = [
-            self._workspace_endpoint_snapshot(
+            workspace_endpoint_snapshot(
                 endpoint=endpoint,
                 latest_scope=latest_scope_by_endpoint.get(endpoint.id),
                 now=now,
@@ -484,7 +413,7 @@ class HealthCheckQueryService:
             for endpoint in endpoints
         }
         payload_incidents = [
-            self._workspace_incident_payload(
+            workspace_incident_payload(
                 row,
                 endpoint_meta=endpoint_meta,
                 incident_cutoff=incident_cutoff,
@@ -540,14 +469,11 @@ class HealthCheckQueryService:
         )
         incidents: list[dict[str, Any]] = []
         for row in rows:
-            duration = None
-            if row.ended_at is not None:
-                duration = int((row.ended_at - row.started_at).total_seconds() / 60)
             incidents.append(
                 {
                     "start": row.started_at.isoformat(),
                     "end": row.ended_at.isoformat() if row.ended_at else None,
-                    "duration_minutes": duration,
+                    "duration_minutes": incident_duration_minutes(row),
                     "status": row.status,
                     "check_mode": _coerce_check_mode(row.check_mode),
                     "check_type": row.check_type or DEFAULT_CHECK_TYPE,
@@ -638,31 +564,12 @@ class HealthCheckQueryService:
             )
             .all()
         )
-        timeline_by_endpoint: dict[int, list[dict[str, Any]]] = {endpoint_id: [] for endpoint_id in endpoint_ids}
-        for row in rows:
-            segment_start = max(row.started_at, start)
-            segment_end = min((row.ended_at or now), now)
-            if segment_end <= segment_start:
-                continue
-            status = str(row.status or HealthCheckStatus.UNKNOWN.value)
-            reason: Optional[str] = None
-            if status == HealthCheckStatus.DOWN.value:
-                reason = "Endpoint unavailable during this period."
-            elif status == HealthCheckStatus.DEGRADED.value:
-                if row.avg_latency_ms is not None:
-                    reason = f"Elevated latency around {row.avg_latency_ms} ms."
-                else:
-                    reason = "Degraded checks detected."
-            timeline_by_endpoint.setdefault(int(row.storage_endpoint_id), []).append(
-                {
-                    "timestamp": segment_start.isoformat(),
-                    "end_timestamp": segment_end.isoformat(),
-                    "status": status,
-                    "latency_ms": row.avg_latency_ms,
-                    "reason": reason,
-                }
-            )
-        return timeline_by_endpoint
+        return build_segment_timeline_map(
+            rows,
+            endpoint_ids=endpoint_ids,
+            start=start,
+            now=now,
+        )
 
     def _build_rollup_availability_map(
         self,
@@ -689,95 +596,7 @@ class HealthCheckQueryService:
             )
             .all()
         )
-        accumulator: dict[int, dict[str, int]] = {}
-        for row in rows:
-            endpoint_id = int(row.storage_endpoint_id)
-            state = accumulator.setdefault(endpoint_id, {"up": 0, "known": 0})
-            up_count = int(row.up_count or 0)
-            degraded_count = int(row.degraded_count or 0)
-            down_count = int(row.down_count or 0)
-            state["up"] += up_count
-            state["known"] += up_count + degraded_count + down_count
-
-        availability_by_endpoint: dict[int, Optional[float]] = {}
-        for endpoint_id in endpoint_ids:
-            state = accumulator.get(endpoint_id)
-            if not state or state["known"] <= 0:
-                availability_by_endpoint[endpoint_id] = None
-                continue
-            availability_by_endpoint[endpoint_id] = round((state["up"] / state["known"]) * 100.0, 2)
-        return availability_by_endpoint
-
-    @staticmethod
-    def _status_from_rollup_counts(*, up_count: int, degraded_count: int, down_count: int) -> str:
-        if down_count > 0:
-            return HealthCheckStatus.DOWN.value
-        if degraded_count > 0:
-            return HealthCheckStatus.DEGRADED.value
-        if up_count > 0:
-            return HealthCheckStatus.UP.value
-        return HealthCheckStatus.UNKNOWN.value
-
-    def _build_daily_from_rollups(
-        self,
-        rollup_rows: list[EndpointHealthRollup],
-        *,
-        start: datetime,
-        end: datetime,
-    ) -> list[dict[str, Any]]:
-        if not rollup_rows:
-            return []
-        by_day: dict[str, dict[str, Any]] = {}
-        cursor = start.date()
-        end_day = end.date()
-        while cursor <= end_day:
-            day_key = cursor.isoformat()
-            by_day[day_key] = {
-                "day": day_key,
-                "ok_count": 0,
-                "degraded_count": 0,
-                "down_count": 0,
-                "avg_latency_ms": None,
-                "p95_latency_ms": None,
-                "_latency_total": 0,
-                "_latency_samples": 0,
-                "_p95_values": [],
-            }
-            cursor += timedelta(days=1)
-
-        for row in rollup_rows:
-            day_key = row.bucket_start.date().isoformat()
-            aggregate = by_day.get(day_key)
-            if aggregate is None:
-                continue
-            up_count = int(row.up_count or 0)
-            degraded_count = int(row.degraded_count or 0)
-            down_count = int(row.down_count or 0)
-            aggregate["ok_count"] += up_count
-            aggregate["degraded_count"] += degraded_count
-            aggregate["down_count"] += down_count
-            sample_count = int(row.latency_sample_count or 0)
-            if sample_count > 0 and row.latency_avg_ms is not None:
-                aggregate["_latency_total"] += int(row.latency_avg_ms) * sample_count
-                aggregate["_latency_samples"] += sample_count
-            if row.latency_p95_ms is not None:
-                aggregate["_p95_values"].append(int(row.latency_p95_ms))
-
-        output: list[dict[str, Any]] = []
-        for day_key in sorted(by_day.keys()):
-            aggregate = by_day[day_key]
-            latency_samples = int(aggregate["_latency_samples"])
-            if latency_samples > 0:
-                aggregate["avg_latency_ms"] = int(round(int(aggregate["_latency_total"]) / latency_samples))
-            p95_values = [int(value) for value in aggregate["_p95_values"]]
-            if p95_values:
-                aggregate["p95_latency_ms"] = _percentile(p95_values, 0.95)
-            aggregate.pop("_latency_total", None)
-            aggregate.pop("_latency_samples", None)
-            aggregate.pop("_p95_values", None)
-            output.append(aggregate)
-
-        return output
+        return build_rollup_availability_map(rows, endpoint_ids=endpoint_ids)
 
     def _load_latest_scope_by_endpoint(self, endpoint_ids: list[int]) -> dict[int, EndpointHealthLatest]:
         if not endpoint_ids:
