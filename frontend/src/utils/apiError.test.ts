@@ -5,11 +5,20 @@ import {
   classifyApiError,
   extractApiError,
   isApiFeatureNotImplemented,
+  isCancelledError,
   isRecentWebAuthnRequired,
   sanitizeErrorMessage,
 } from "./apiError";
 
 describe("extractApiError", () => {
+  it("recognizes browser and Axios request cancellation errors", () => {
+    expect(isCancelledError(new DOMException("Aborted", "AbortError"))).toBe(true);
+    expect(isCancelledError({ name: "CanceledError" })).toBe(true);
+    expect(isCancelledError({ code: "ERR_CANCELED" })).toBe(true);
+    expect(isCancelledError(new Error("Request failed"))).toBe(false);
+    expect(isCancelledError(null)).toBe(false);
+  });
+
   it("prefers backend detail when available", () => {
     const error = new ApiError("Request failed with status 403", {
       response: { status: 403, data: { detail: "Forbidden by policy" }, headers: {} },

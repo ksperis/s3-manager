@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { shouldUsePostBucketListing } from "../../api/bucketListingTransport";
+import { isCancelledError } from "../../utils/apiError";
 import type {
   CephAdminBucket,
   CephAdminBucketsStreamProgress,
@@ -81,14 +82,6 @@ const INACTIVE_ADVANCED_PROGRESS: AdvancedSearchProgress = {
   processed: 0,
   total: 0,
 };
-
-function isCancelledError(err: unknown): boolean {
-  if (err instanceof DOMException && err.name === "AbortError") return true;
-  if (typeof err !== "object" || err === null) return false;
-  const name = "name" in err ? String((err as { name?: unknown }).name ?? "") : "";
-  const code = "code" in err ? String((err as { code?: unknown }).code ?? "") : "";
-  return name === "CanceledError" || code === "ERR_CANCELED";
-}
 
 export function useBucketOpsListing({
   selectedScopeId,

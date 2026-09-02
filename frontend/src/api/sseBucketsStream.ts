@@ -1,5 +1,5 @@
 import client, { buildApiRequestHeaders } from "./client";
-import { sanitizeErrorMessage } from "../utils/apiError";
+import { isCancelledError, sanitizeErrorMessage } from "../utils/apiError";
 import { consumeSseStream } from "./sseStream";
 
 type StreamBucketsOptions<TProgress> = {
@@ -28,14 +28,6 @@ export function buildJsonPostRequestInit(payload: unknown): RequestInit {
     },
     body: JSON.stringify(payload),
   };
-}
-
-function isCancelledError(err: unknown): boolean {
-  if (err instanceof DOMException && err.name === "AbortError") return true;
-  if (typeof err !== "object" || err === null) return false;
-  const name = "name" in err ? String((err as { name?: unknown }).name ?? "") : "";
-  const code = "code" in err ? String((err as { code?: unknown }).code ?? "") : "";
-  return name === "CanceledError" || code === "ERR_CANCELED";
 }
 
 function buildHeaders(method: string, extraHeaders?: HeadersInit): Headers {

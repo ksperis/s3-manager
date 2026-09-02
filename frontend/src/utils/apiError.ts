@@ -26,6 +26,14 @@ const NETWORK_UNAVAILABLE_PATTERN =
 const TIMEOUT_MESSAGE_PATTERN = /\b(?:timed? out|timeout)\b/i;
 const RECENT_WEBAUTHN_REQUIRED_DETAIL = "Recent WebAuthn verification required";
 
+export function isCancelledError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === "AbortError") return true;
+  if (typeof error !== "object" || error === null) return false;
+  const name = "name" in error ? String((error as { name?: unknown }).name ?? "") : "";
+  const code = "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
+  return name === "CanceledError" || code === "ERR_CANCELED";
+}
+
 export function sanitizeErrorMessage(message: string, fallback = "Unexpected error"): string {
   const trimmed = message.trim();
   if (!trimmed) return fallback;

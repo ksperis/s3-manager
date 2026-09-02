@@ -205,14 +205,6 @@ export const renderFilterCostIndicator = (level: FilterCostLevel, tooltip: strin
   );
 };
 
-export function isCancelledError(err: unknown): boolean {
-  if (err instanceof DOMException && err.name === "AbortError") return true;
-  if (typeof err !== "object" || err === null) return false;
-  const name = "name" in err ? String((err as { name?: unknown }).name ?? "") : "";
-  const code = "code" in err ? String((err as { code?: unknown }).code ?? "") : "";
-  return name === "CanceledError" || code === "ERR_CANCELED";
-}
-
 const formatAdvancedSearchStage = (stage: string) => {
   if (!stage.trim()) return "";
   return stage

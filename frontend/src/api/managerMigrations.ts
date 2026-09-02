@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client, { buildApiRequestHeaders } from "./client";
-import { sanitizeErrorMessage } from "../utils/apiError";
+import { isCancelledError, sanitizeErrorMessage } from "../utils/apiError";
 import { consumeSseStream } from "./sseStream";
 
 export type BucketMigrationMode = "one_shot" | "pre_sync";
@@ -198,14 +198,6 @@ type ManagerMigrationStreamOptions = {
 function resolveApiBaseUrl(): string {
   const base = typeof client.defaults.baseURL === "string" && client.defaults.baseURL.trim() ? client.defaults.baseURL : "/api";
   return base.endsWith("/") ? base.slice(0, -1) : base;
-}
-
-function isCancelledError(err: unknown): boolean {
-  if (err instanceof DOMException && err.name === "AbortError") return true;
-  if (typeof err !== "object" || err === null) return false;
-  const name = "name" in err ? String((err as { name?: unknown }).name ?? "") : "";
-  const code = "code" in err ? String((err as { code?: unknown }).code ?? "") : "";
-  return name === "CanceledError" || code === "ERR_CANCELED";
 }
 
 export async function listManagerMigrations(limit = 100, contextId?: string | null): Promise<BucketMigrationView[]> {

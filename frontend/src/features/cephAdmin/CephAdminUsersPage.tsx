@@ -47,7 +47,6 @@ import {
   formatQuickFilterMatchModeTitle,
   formatTextMatchModeSymbol,
   formatTextFilterSummary,
-  isCancelledError,
   parseExactListInput,
   progressFromAdvancedSearchEvent,
   quickFilterMatchModeButtonClass,
@@ -59,7 +58,7 @@ import {
   type FilterCostLevel,
   type TextMatchMode,
 } from "./filtering/advancedFilterShared";
-import { extractApiError } from "../../utils/apiError";
+import { extractApiError, isCancelledError } from "../../utils/apiError";
 import { readClientJsonFromKey, writeClientJsonToKey } from "../../utils/clientStorage";
 import { formatBytes, formatNumber } from "../../utils/format";
 
