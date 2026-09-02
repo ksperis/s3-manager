@@ -5,6 +5,7 @@
 import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 
 import TableEmptyState from "../TableEmptyState";
+import { tableActionColumnClasses } from "../tableActionClasses";
 import { cx } from "../ui/styles";
 import type { ListTableStatus } from "./listTableStatus";
 
@@ -80,7 +81,9 @@ function decorateTableRow(row: ReactElement, columns: ManagerTableColumn[], resp
 
     const mobileRole = column.mobileRole;
     const mobileLabel = column.mobileLabel ?? labelToText(column.label);
+    const { className } = cell.props as { className?: string };
     return cloneElement(cell, {
+      className: cx(className, mobileRole === "actions" && tableActionColumnClasses),
       "data-label": responsiveCards && !mobileRole && !column.mobileHidden && mobileLabel ? mobileLabel : undefined,
       "data-mobile-primary": responsiveCards && mobileRole === "primary" ? "true" : undefined,
       "data-mobile-actions": responsiveCards && mobileRole === "actions" ? "true" : undefined,
@@ -154,6 +157,7 @@ export default function ManagerTable<TSortField extends string = string>({
                   data-table-actions={column.mobileRole === "actions" ? "true" : undefined}
                   className={cx(
                     "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
+                    column.mobileRole === "actions" && tableActionColumnClasses,
                     column.align === "right" ? "text-right" : "text-left",
                     column.className
                   )}

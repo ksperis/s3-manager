@@ -22,11 +22,21 @@ describe("ManagerTable", () => {
 
     expect(screen.getByRole("table")).toHaveClass("manager-table");
     expect(screen.getByRole("columnheader", { name: "Name" })).toHaveClass("text-left");
-    expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveClass("text-right");
+    expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveClass(
+      "text-right",
+      "w-px",
+      "whitespace-nowrap",
+      "md:[&>*]:!flex-nowrap"
+    );
     expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveAttribute("data-table-actions", "true");
     expect(screen.getByRole("columnheader", { name: "Select" }).querySelector(".sr-only")).toHaveTextContent("Select");
     expect(screen.getByText("logs-prod")).toBeInTheDocument();
     expect(screen.getByText("Edit").closest("td")).toHaveAttribute("data-table-actions", "true");
+    expect(screen.getByText("Edit").closest("td")).toHaveClass(
+      "w-px",
+      "whitespace-nowrap",
+      "md:[&>*]:!flex-nowrap"
+    );
   });
 
   it("adds shared responsive-card metadata when requested", () => {

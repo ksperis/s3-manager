@@ -7,6 +7,7 @@ import { Fragment, type HTMLAttributes, type ReactNode } from "react";
 import PaginationControls from "../PaginationControls";
 import SortableHeader from "../SortableHeader";
 import TableEmptyState from "../TableEmptyState";
+import { tableActionColumnClasses } from "../tableActionClasses";
 import { cx } from "../ui/styles";
 import type { ListTableStatus } from "./listTableStatus";
 
@@ -118,6 +119,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
                     data-table-actions={stickyActions && column.mobileRole === "actions" ? "true" : undefined}
                     className={cx(
                       "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
+                      column.mobileRole === "actions" && tableActionColumnClasses,
                       (column.align ?? "left") === "right" ? "text-right" : "text-left",
                       column.headerClassName
                     )}
@@ -163,7 +165,12 @@ export default function DataTableShell<Row, SortField extends string = string>({
                       return (
                         <td
                           key={`${key}:${column.id}`}
-                          className={cx(cellBase, textClass, column.cellClassName)}
+                          className={cx(
+                            cellBase,
+                            textClass,
+                            mobileRole === "actions" && tableActionColumnClasses,
+                            column.cellClassName
+                          )}
                           data-label={responsiveCards && !mobileRole && !column.mobileHidden ? mobileLabel : undefined}
                           data-mobile-primary={responsiveCards && mobileRole === "primary" ? "true" : undefined}
                           data-mobile-actions={responsiveCards && mobileRole === "actions" ? "true" : undefined}
