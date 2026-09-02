@@ -33,6 +33,7 @@ import { stableSignature } from "../../utils/stableSignature";
 import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import InlinePolicyDraftEditor from "./InlinePolicyDraftEditor";
+import ManagedPolicySelectionPanel from "./ManagedPolicySelectionPanel";
 import ManagerToolbarSearch from "./ManagerToolbarSearch";
 import CreateManagedPrivateAccessModal from "./CreateManagedPrivateAccessModal";
 import { useInlinePolicyDraftEditor } from "./useInlinePolicyDraftEditor";
@@ -190,15 +191,6 @@ export default function ManagerUsersPage() {
     return sorted;
   }, [users, filter, sort]);
 
-  const filteredPolicies = useMemo(() => {
-    const query = policySearch.trim().toLowerCase();
-    if (!query) return policies;
-    return policies.filter((p) => {
-      const name = p.name.toLowerCase();
-      const arn = p.arn.toLowerCase();
-      return name.includes(query) || arn.includes(query);
-    });
-  }, [policies, policySearch]);
   const advancedCurrentSignature = useMemo(
     () =>
       stableSignature({
@@ -633,71 +625,19 @@ export default function ManagerUsersPage() {
                 </div>
               )}
             </div>
-            <div className="space-y-2 rounded-lg border border-dashed border-[color:var(--ui-border)] p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="ui-body font-semibold text-slate-800 dark:text-slate-100">Attach policies (optional)</div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Bind JSON policies now or skip and attach later.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {selectedPolicies.length > 0 && (
-                    <span className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      {selectedPolicies.length} selected
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowPolicyOptions((prev) => !prev)}
-                    className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                  >
-                    {showPolicyOptions ? "Hide" : "Show"}
-                  </button>
-                </div>
-              </div>
-              {showPolicyOptions && (
-                <>
-                  {policies.length === 0 ? (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">No policies available. Create them in the Policies tab.</p>
-                  ) : (
-                    <>
-                      <input
-                        type="text"
-                        value={policySearch}
-                        onChange={(e) => setPolicySearch(e.target.value)}
-                        placeholder="Search policies by name or ARN"
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        {filteredPolicies.length === 0 && (
-                          <span className="ui-caption text-slate-500 dark:text-slate-400">No matching policies.</span>
-                        )}
-                        {filteredPolicies.map((policy) => {
-                          const checked = selectedPolicies.includes(policy.arn);
-                          return (
-                            <UiCheckboxField
-                              key={policy.arn}
-                              checked={checked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedPolicies((prev) => [...prev, policy.arn]);
-                                } else {
-                                  setSelectedPolicies((prev) => prev.filter((arn) => arn !== policy.arn));
-                                }
-                              }}
-                              className="rounded border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              labelProps={{ title: policy.arn }}
-                            >
-                              <span>{policy.name}</span>
-                            </UiCheckboxField>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Policies must be created first in the Policies tab.</p>
-                </>
-              )}
-            </div>
+            <ManagedPolicySelectionPanel
+              title="Attach policies (optional)"
+              description="Bind JSON policies now or skip and attach later."
+              emptyMessage="No policies available. Create them in the Policies tab."
+              footer="Policies must be created first in the Policies tab."
+              policies={policies}
+              selectedPolicyArns={selectedPolicies}
+              search={policySearch}
+              expanded={showPolicyOptions}
+              onSearchChange={setPolicySearch}
+              onExpandedChange={setShowPolicyOptions}
+              onSelectionChange={setSelectedPolicies}
+            />
             <InlinePolicyDraftEditor
               drafts={inlineDrafts}
               selectedDraftName={selectedInlineDraftName}

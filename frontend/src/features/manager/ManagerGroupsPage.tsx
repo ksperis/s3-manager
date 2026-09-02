@@ -22,8 +22,8 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
-import { uiCheckboxClass } from "../../components/ui/styles";
 import InlinePolicyDraftEditor from "./InlinePolicyDraftEditor";
+import ManagedPolicySelectionPanel from "./ManagedPolicySelectionPanel";
 import ManagerToolbarSearch from "./ManagerToolbarSearch";
 import { useInlinePolicyDraftEditor } from "./useInlinePolicyDraftEditor";
 
@@ -113,15 +113,6 @@ export default function ManagerGroupsPage() {
     }
   }, [selectedPolicies.length]);
 
-  const filteredPolicies = useMemo(() => {
-    const query = policySearch.trim().toLowerCase();
-    if (!query) return policies;
-    return policies.filter((policy) => {
-      const name = policy.name.toLowerCase();
-      const arn = policy.arn.toLowerCase();
-      return name.includes(query) || arn.includes(query);
-    });
-  }, [policies, policySearch]);
   const advancedCurrentSignature = useMemo(
     () =>
       stableSignature({
@@ -371,75 +362,19 @@ export default function ManagerGroupsPage() {
                 required
               />
             </div>
-            <div className="space-y-2 rounded-lg border border-dashed border-[color:var(--ui-border)] p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="ui-body font-semibold text-slate-800 dark:text-slate-100">Attach policies</div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Select managed policies to link immediately.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {selectedPolicies.length > 0 && (
-                    <span className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      {selectedPolicies.length} selected
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowPolicyOptions((prev) => !prev)}
-                    className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                  >
-                    {showPolicyOptions ? "Hide" : "Show"}
-                  </button>
-                </div>
-              </div>
-              {showPolicyOptions && (
-                <>
-                  {policies.length === 0 ? (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">No policies available. Create them first.</p>
-                  ) : (
-                    <>
-                      <input
-                        type="text"
-                        value={policySearch}
-                        onChange={(e) => setPolicySearch(e.target.value)}
-                        placeholder="Search policies by name or ARN"
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        {filteredPolicies.length === 0 && (
-                          <span className="ui-caption text-slate-500 dark:text-slate-400">No matching policies.</span>
-                        )}
-                        {filteredPolicies.map((policy) => {
-                          const checked = selectedPolicies.includes(policy.arn);
-                          return (
-                            <label
-                              key={policy.arn}
-                              className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              title={policy.arn}
-                            >
-                              <input
-                                type="checkbox"
-                                className={uiCheckboxClass}
-                                checked={checked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedPolicies((prev) => [...prev, policy.arn]);
-                                  } else {
-                                    setSelectedPolicies((prev) => prev.filter((arn) => arn !== policy.arn));
-                                  }
-                                }}
-                              />
-                              <span>{policy.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Policies can also be attached later from the group page.</p>
-                </>
-              )}
-            </div>
+            <ManagedPolicySelectionPanel
+              title="Attach policies"
+              description="Select managed policies to link immediately."
+              emptyMessage="No policies available. Create them first."
+              footer="Policies can also be attached later from the group page."
+              policies={policies}
+              selectedPolicyArns={selectedPolicies}
+              search={policySearch}
+              expanded={showPolicyOptions}
+              onSearchChange={setPolicySearch}
+              onExpandedChange={setShowPolicyOptions}
+              onSelectionChange={setSelectedPolicies}
+            />
             <InlinePolicyDraftEditor
               drafts={inlineDrafts}
               selectedDraftName={selectedInlineDraftName}
