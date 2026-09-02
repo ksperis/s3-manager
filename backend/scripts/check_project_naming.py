@@ -22,6 +22,7 @@ WITHDRAWN_NAME_PATTERNS = (
     re.compile("kl" + "o-", re.IGNORECASE),
 )
 BASE64_DATA_PAYLOAD = re.compile(r"(?<=base64,)[A-Za-z0-9+/=\r\n]+")
+JSON_INTEGRITY_VALUE = re.compile(r'("integrity"\s*:\s*")[^"]*(")')
 
 
 def _tracked_paths() -> list[Path]:
@@ -40,6 +41,16 @@ def _historical(path: Path) -> bool:
 
 def _matches(value: str, patterns: tuple[re.Pattern[str], ...]) -> list[str]:
     return sorted({match.group(0) for pattern in patterns for match in pattern.finditer(value)})
+
+
+def _searchable_content(relative_path: Path, content: str) -> str:
+    searchable_content = BASE64_DATA_PAYLOAD.sub("<binary-payload>", content)
+    if relative_path.name == "package-lock.json":
+        searchable_content = JSON_INTEGRITY_VALUE.sub(
+            r"\1<opaque-integrity>\2",
+            searchable_content,
+        )
+    return searchable_content
 
 
 def main() -> int:
@@ -61,7 +72,7 @@ def main() -> int:
             content = absolute_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        searchable_content = BASE64_DATA_PAYLOAD.sub("<binary-payload>", content)
+        searchable_content = _searchable_content(relative_path, content)
         content_matches = _matches(searchable_content, patterns)
         if content_matches:
             failures.append(f"{relative_path}: forbidden former-name content fragment(s): {', '.join(content_matches)}")
