@@ -1,5 +1,20 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-09 trusted proxy boundary is mandatory
+
+Production startup now refuses an empty `TRUSTED_PROXY_CIDRS`. The Helm chart
+requires the structured `backend.trustedProxyCidrs` value and rejects a raw
+`backend.env.TRUSTED_PROXY_CIDRS` override. Before upgrading, identify the
+actual direct peers that connect to the backend and configure their narrow
+CIDRs. Requests from any other peer ignore `X-Forwarded-For`; trusted chains
+continue to be evaluated from right to left so an injected left-most value
+cannot select a new rate-limit identity.
+
+For Docker Compose with a fixed proxy address, a `/32` entry is preferred. For
+Kubernetes, use the verified ingress-controller pod subnet or addresses rather
+than the entire cluster or private address space. The chart intentionally fails
+to render until this boundary is supplied.
+
 ## 2026-09 outbound target allowlists
 
 Production now fails closed for user-controlled outbound destinations. Populate

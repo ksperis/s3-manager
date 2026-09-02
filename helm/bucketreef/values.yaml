@@ -11,6 +11,8 @@ image:
 backend:
   replicas: 1
   databaseType: postgresql
+  # Exact ingress/reverse-proxy pod CIDRs. Required by the production profile.
+  trustedProxyCidrs: []
   # Existing Secret is mandatory. It must contain database-url, ui-jwt-keys,
   # api-jwt-keys, credential-keys and internal-cron-token.
   existingSecret: ""

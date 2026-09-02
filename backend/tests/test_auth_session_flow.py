@@ -292,6 +292,53 @@ def test_login_rate_limit_returns_429_after_max_failed_attempts(monkeypatch, cli
     assert event.user_agent == "pytest-rate-limit"
 
 
+def test_trusted_proxy_rate_limits_real_clients_and_ignores_injected_leftmost_xff(
+    monkeypatch,
+    client,
+    db_session,
+):
+    user = User(
+        email="proxy-ratelimit@example.com",
+        full_name="Proxy Rate Limit",
+        hashed_password=get_password_hash("valid-password-123"),
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    monkeypatch.setattr(auth_router.settings, "trusted_proxy_cidrs", ["10.0.0.0/24"])
+    monkeypatch.setattr(auth_router.settings, "login_rate_limit_max_attempts", 1)
+    monkeypatch.setattr(auth_router.settings, "login_rate_limit_window_seconds", 3600)
+    monkeypatch.setattr(client._transport, "client", ("10.0.0.10", 50000))
+
+    def attempt(forwarded_for: str):
+        return client.post(
+            "/api/auth/login",
+            data={"username": user.email, "password": "wrong-password"},
+            headers={
+                **trusted_origin_headers(),
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-Forwarded-For": forwarded_for,
+            },
+        )
+
+    client_a_chain = "198.51.100.10, 10.0.0.2"
+    client_b_chain = "198.51.100.11, 10.0.0.2"
+    injected_chain = "203.0.113.77, 198.51.100.10, 10.0.0.2"
+
+    assert attempt(client_a_chain).status_code == 401
+    assert attempt(client_a_chain).status_code == 429
+    assert attempt(client_b_chain).status_code == 401
+    assert attempt(injected_chain).status_code == 429
+
+    limited_ips = {
+        row.ip_address
+        for row in db_session.query(AuditLog).filter(AuditLog.action == "login_rate_limited").all()
+    }
+    assert limited_ips == {"198.51.100.10"}
+
+
 def test_iam_overview_success(monkeypatch, client, db_session):
     account = _setup_account(db_session)
 

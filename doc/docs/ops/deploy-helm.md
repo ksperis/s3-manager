@@ -17,6 +17,7 @@ and give both images the exact same immutable `dev-<short-sha>` tag.
 ```bash
 helm install bucketreef helm/bucketreef \
   --set backend.existingSecret=bucketreef-auth \
+  --set-json 'backend.trustedProxyCidrs=["10.244.2.0/24"]' \
   --set image.backend.repository=ghcr.io/ksperis/bucketreef-backend \
   --set image.frontend.repository=ghcr.io/ksperis/bucketreef-frontend
 ```
@@ -49,6 +50,22 @@ The referenced existing Secret is mandatory and must provide the keys mapped
 by `backend.secretKeys`: database URL, distinct UI/API JWT rings, credential
 ring, and internal Cron token. Ingress must be enabled with an existing TLS
 secret. Sensitive values in `backend.env` are rejected by chart rendering.
+
+`backend.trustedProxyCidrs` is also mandatory. Set it to the narrow pod CIDR or
+individual addresses actually used by your ingress/reverse-proxy path; the
+chart serializes it to `TRUSTED_PROXY_CIDRS`. For example, if the ingress
+controller pods are verified to use only `10.244.2.0/24`:
+
+```yaml
+backend:
+  trustedProxyCidrs:
+    - 10.244.2.0/24
+```
+
+Obtain the real controller pod addresses and cluster pod CIDRs from your
+Kubernetes network configuration before choosing this value. Do not copy the
+example blindly and do not use `0.0.0.0/0`, `::/0`, or a broad corporate CIDR.
+Requests from peers outside this boundary ignore `X-Forwarded-For`.
 
 ## Create the first administrator
 

@@ -38,6 +38,20 @@ Unlike the local `./quickstart`, this command does not generate or persist the
 other required application secrets for you. Configure the complete `.env`
 contract before using it beyond an isolated development check.
 
+When `APP_ENV=production`, `TRUSTED_PROXY_CIDRS` must be a non-empty JSON list
+containing only the actual reverse proxy boundary. If an external proxy has the
+fixed address `10.42.7.15`, use the narrow host route:
+
+```bash
+TRUSTED_PROXY_CIDRS='["10.42.7.15/32"]'
+```
+
+For a proxy attached to a dedicated Compose network, inspect that network and
+use its exact subnet only when every address in it is controlled as a trusted
+proxy. Never trust the entire private range merely because the proxy currently
+has a private address. Direct deployments without a proxy should remain in the
+development profile; production deliberately refuses an empty trust boundary.
+
 ## Default endpoints
 
 - Frontend: `http://localhost:8080`

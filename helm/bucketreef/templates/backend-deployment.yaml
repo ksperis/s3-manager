@@ -9,10 +9,16 @@
 {{- if not .Values.ingress.tls -}}
 {{- fail "ingress.tls must reference an existing TLS secret." -}}
 {{- end -}}
+{{- if not .Values.backend.trustedProxyCidrs -}}
+{{- fail "backend.trustedProxyCidrs is required and must contain the exact ingress/reverse-proxy CIDR boundary." -}}
+{{- end -}}
 {{- range $secretName := list "DATABASE_URL" "UI_JWT_KEYS" "API_JWT_KEYS" "CREDENTIAL_KEYS" "INTERNAL_CRON_TOKEN" "SMTP_PASSWORD" -}}
 {{- if hasKey $.Values.backend.env $secretName -}}
 {{- fail (printf "%s must be supplied through backend.existingSecret, not backend.env." $secretName) -}}
 {{- end -}}
+{{- end -}}
+{{- if hasKey .Values.backend.env "TRUSTED_PROXY_CIDRS" -}}
+{{- fail "TRUSTED_PROXY_CIDRS must be configured with backend.trustedProxyCidrs, not backend.env." -}}
 {{- end -}}
 {{- if and (gt $backendReplicas 1) (ne (lower .Values.backend.databaseType) "postgresql") -}}
 {{- fail "backend.replicas > 1 requires backend.databaseType=postgresql." -}}
@@ -51,6 +57,8 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+            - name: TRUSTED_PROXY_CIDRS
+              value: {{ .Values.backend.trustedProxyCidrs | toJson | quote }}
             {{- if not (hasKey .Values.backend.env "BACKEND_REPLICAS") }}
             - name: BACKEND_REPLICAS
               value: {{ .Values.backend.replicas | quote }}

@@ -49,6 +49,9 @@ Key areas:
   `CREDENTIAL_KEYS`, access/session lifetimes, secure host-only cookie settings,
   `PUBLIC_ORIGIN`, `ALLOWED_HOSTS`, `TRUSTED_PROXY_CIDRS`, WebAuthn, and
   OIDC/LDAP environment providers.
+  Production requires a non-empty `TRUSTED_PROXY_CIDRS` list containing the
+  precise ingress or reverse-proxy CIDRs. Forwarded client addresses are
+  ignored for untrusted direct peers.
 - Outbound targets: `USER_SUPPLIED_S3_ENDPOINT_ALLOWED_HOSTS` and
   `BUCKET_MIGRATION_WEBHOOK_ALLOWED_HOSTS`. In production, an empty list blocks
   the corresponding user-controlled destinations. Entries match only the exact

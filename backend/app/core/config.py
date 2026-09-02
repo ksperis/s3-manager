@@ -638,6 +638,8 @@ class Settings(BaseSettings):
             raise ValueError("ALLOWED_HOSTS must include the PUBLIC_ORIGIN host in production")
         if self.cors_origins != [self.public_origin]:
             raise ValueError("CORS_ORIGINS must contain only PUBLIC_ORIGIN in production")
+        if not self.trusted_proxy_cidrs:
+            raise ValueError("Production requires a non-empty TRUSTED_PROXY_CIDRS boundary")
         for cidr in self.trusted_proxy_cidrs:
             network = ipaddress.ip_network(cidr, strict=False)
             if network.prefixlen == 0:

@@ -4,7 +4,9 @@
 
 - Use OIDC or LDAP over verified TLS for real users.
 - Set distinct strong UI/API JWT rings, credential-encryption keys, and scheduler secrets.
-- Set `APP_ENV=production`; startup then rejects HTTP origins, insecure cookies, wildcard hosts, weak keys, insecure providers, broad proxy trust, and unregistered S3 login endpoints.
+- Set `APP_ENV=production`; startup then rejects HTTP origins, insecure cookies,
+  wildcard hosts, weak keys, insecure providers, empty or broad proxy trust,
+  and unregistered S3 login endpoints.
 - Keep `PUBLIC_ORIGIN`, `CORS_ORIGINS`, `ALLOWED_HOSTS`, `WEBAUTHN_ORIGIN`, and `WEBAUTHN_RP_ID` exact.
 - Expose internal scheduler/API automation paths only on trusted networks.
 - Store LDAP bind passwords, SMTP password, storage credentials, and registry tokens in a secret manager.
