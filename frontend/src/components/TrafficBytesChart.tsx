@@ -5,7 +5,7 @@
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { TrafficSeriesPoint, TrafficWindow } from "../api/stats";
-import { formatBytes } from "../utils/format";
+import { formatBytes, formatBytesAxis } from "../utils/format";
 import { formatChartTooltipTimestamp, type ChartTooltipProps } from "./chartTooltip";
 
 type ChartPoint = TrafficSeriesPoint & { timestampMs: number };
@@ -208,18 +208,4 @@ export default function TrafficBytesChart({
       </BarChart>
     </ResponsiveContainer>
   );
-}
-
-function formatBytesAxis(value: number) {
-  if (!Number.isFinite(value)) return "0";
-  if (value === 0) return "0";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let idx = 0;
-  let sized = value;
-  while (sized >= 1024 && idx < units.length - 1) {
-    sized /= 1024;
-    idx += 1;
-  }
-  const decimals = sized >= 10 ? 0 : 1;
-  return `${sized.toFixed(decimals)} ${units[idx]}`;
 }

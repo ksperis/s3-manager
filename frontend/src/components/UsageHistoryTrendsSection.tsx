@@ -16,7 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "../api/usageHistory";
-import { formatBytes, formatCompactNumber, formatPercentage } from "../utils/format";
+import { formatBytes, formatBytesAxis, formatCompactNumber, formatPercentage } from "../utils/format";
 import { MetricsCard, MetricsChartPanel } from "./MetricsCard";
 import MetricsUnavailableCard from "./MetricsUnavailableCard";
 import { MetricsSnapshotCard } from "./MetricsTrafficOverview";
@@ -280,18 +280,4 @@ function formatTooltipValue(name: string, value: unknown, metric: "storage" | "i
   const numeric = Number(value) || 0;
   if (metric === "storage" || name === "Storage") return formatBytes(numeric);
   return formatCompactNumber(numeric);
-}
-
-function formatBytesAxis(value: number) {
-  if (!Number.isFinite(value)) return "0";
-  if (value === 0) return "0";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let idx = 0;
-  let sized = value;
-  while (sized >= 1024 && idx < units.length - 1) {
-    sized /= 1024;
-    idx += 1;
-  }
-  const decimals = sized >= 10 ? 0 : 1;
-  return `${sized.toFixed(decimals)} ${units[idx]}`;
 }
