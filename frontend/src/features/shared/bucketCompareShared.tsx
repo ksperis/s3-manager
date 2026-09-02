@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useId, useState, type ReactNode } from "react";
+import { useCallback, useId, useState, type ReactNode } from "react";
 import { cx, type UiTone } from "../../components/ui/styles";
 import { extractApiError, isCancelledError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
@@ -348,7 +348,7 @@ export const formatCompareDisplayLimitMessage = (
   return `Showing ${visibleCount} of ${totalCount} objects. ${hidden} not displayed.`;
 };
 
-export const copyCompareObjectKeysToClipboard = async (keys: string[]): Promise<void> => {
+const copyCompareObjectKeysToClipboard = async (keys: string[]): Promise<void> => {
   const clipboard =
     typeof window !== "undefined"
       ? window.navigator.clipboard
@@ -359,6 +359,31 @@ export const copyCompareObjectKeysToClipboard = async (keys: string[]): Promise<
     throw new Error("Clipboard API is unavailable.");
   }
   await clipboard.writeText(keys.join("\n"));
+};
+
+export const useCompareVisibleKeysClipboard = () => {
+  const [copyFeedback, setCopyFeedback] = useState<
+    (CompareVisibleKeysCopyFeedback & { id: string }) | null
+  >(null);
+  const copyVisibleKeys = useCallback(async (id: string, keys: string[]) => {
+    if (keys.length === 0) return;
+    try {
+      await copyCompareObjectKeysToClipboard(keys);
+      setCopyFeedback({
+        id,
+        tone: "success",
+        message: `Copied ${keys.length} key${keys.length === 1 ? "" : "s"} to clipboard.`,
+      });
+    } catch {
+      setCopyFeedback({
+        id,
+        tone: "danger",
+        message: "Unable to copy keys to clipboard.",
+      });
+    }
+  }, []);
+
+  return { copyFeedback, copyVisibleKeys };
 };
 
 export const renderCompareObjectDetails = (

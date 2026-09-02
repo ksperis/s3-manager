@@ -32,7 +32,6 @@ import {
   bucketComparisonCancelledMessage,
   buildBucketCompareMappingModel,
   compareObjectDetailsFromKeys,
-  copyCompareObjectKeysToClipboard,
   extractCompareError,
   formatCompareDisplayLimitMessage,
   formatUnknown,
@@ -52,6 +51,7 @@ import {
   targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
+  useCompareVisibleKeysClipboard,
 } from "../shared/bucketCompareShared";
 import {
   formatDownloadTimestamp,
@@ -187,7 +187,6 @@ export default function ManagerBucketCompareModal({
   const [items, setItems] = useState<CompareRunItem[]>([]);
   const [lastRunOptions, setLastRunOptions] = useState<CompareRunOptionsSnapshot | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingRemediationAction | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<(CompareVisibleKeysCopyFeedback & { id: string }) | null>(null);
   const [downloadFeedback, setDownloadFeedback] = useState<(CompareVisibleKeysCopyFeedback & { id: string }) | null>(null);
   const [downloadInFlight, setDownloadInFlight] = useState<string | null>(null);
   const [resultSearch, setResultSearch] = useState("");
@@ -197,6 +196,7 @@ export default function ManagerBucketCompareModal({
   const parsedRawMapping = useMemo(() => parseRawMappingText(rawMappingText), [rawMappingText]);
   const cancelRequestedRef = useRef(false);
   const requestControllersRef = useRef(new Set<AbortController>());
+  const { copyFeedback, copyVisibleKeys } = useCompareVisibleKeysClipboard();
   const controlClass = uiInputClass;
   const compactControlClass =
     "w-full rounded-md border border-slate-200 px-2 py-1 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
@@ -761,24 +761,6 @@ export default function ManagerBucketCompareModal({
     setPendingAction(null);
     await startRemediationAction(action);
   }, [pendingAction, startRemediationAction]);
-
-  const copyVisibleKeys = useCallback(async (id: string, keys: string[]) => {
-    if (keys.length === 0) return;
-    try {
-      await copyCompareObjectKeysToClipboard(keys);
-      setCopyFeedback({
-        id,
-        tone: "success",
-        message: `Copied ${keys.length} key${keys.length === 1 ? "" : "s"} to clipboard.`,
-      });
-    } catch {
-      setCopyFeedback({
-        id,
-        tone: "danger",
-        message: "Unable to copy keys to clipboard.",
-      });
-    }
-  }, []);
 
   const downloadCompareObject = useCallback(
     async (params: { contextId: string; bucket: string; key: string; feedbackId: string }) => {

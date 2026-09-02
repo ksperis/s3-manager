@@ -27,7 +27,6 @@ import {
   bucketComparisonCancelledMessage,
   buildBucketCompareMappingModel,
   compareObjectDetailsFromKeys,
-  copyCompareObjectKeysToClipboard,
   extractCompareError,
   formatCompareDisplayLimitMessage,
   formatUnknown,
@@ -47,6 +46,7 @@ import {
   targetCompareObjectDetailFromDiff,
   updateBucketCompareRunItem,
   updateBucketCompareRunProgress,
+  useCompareVisibleKeysClipboard,
 } from "../shared/bucketCompareShared";
 import {
   formatDownloadTimestamp,
@@ -120,7 +120,6 @@ export default function CephAdminBucketCompareModal({
   const [progress, setProgress] = useState({ completed: 0, total: 0, failed: 0, cancelled: 0 });
   const [items, setItems] = useState<CompareRunItem[]>([]);
   const [pendingExplore, setPendingExplore] = useState<PendingExploreNavigation | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<(CompareVisibleKeysCopyFeedback & { id: string }) | null>(null);
   const [resultSearch, setResultSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CompareRunItem["status"]>("all");
   const [diffFilter, setDiffFilter] = useState<"all" | "with_diff" | "no_diff">("all");
@@ -128,6 +127,7 @@ export default function CephAdminBucketCompareModal({
   const parsedRawMapping = useMemo(() => parseRawMappingText(rawMappingText), [rawMappingText]);
   const cancelRequestedRef = useRef(false);
   const requestControllersRef = useRef(new Set<AbortController>());
+  const { copyFeedback, copyVisibleKeys } = useCompareVisibleKeysClipboard();
   const controlClass = uiInputClass;
   const compactControlClass =
     "w-full rounded-md border border-slate-200 px-2 py-1 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
@@ -513,24 +513,6 @@ export default function CephAdminBucketCompareModal({
 
   const openExploreConfirm = useCallback((href: string, detail: { key: string }) => {
     setPendingExplore({ href, objectKey: detail.key });
-  }, []);
-
-  const copyVisibleKeys = useCallback(async (id: string, keys: string[]) => {
-    if (keys.length === 0) return;
-    try {
-      await copyCompareObjectKeysToClipboard(keys);
-      setCopyFeedback({
-        id,
-        tone: "success",
-        message: `Copied ${keys.length} key${keys.length === 1 ? "" : "s"} to clipboard.`,
-      });
-    } catch {
-      setCopyFeedback({
-        id,
-        tone: "danger",
-        message: "Unable to copy keys to clipboard.",
-      });
-    }
   }, []);
 
   const confirmExploreNavigation = useCallback(() => {
