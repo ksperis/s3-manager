@@ -294,6 +294,9 @@ export default function SecurityPage() {
       details: [{ label: "Session", value: session.id }],
     };
   }, [pendingConfirmation]);
+  const lastRequiredPasskey = passkeyRequired
+    && credentials.status === "ready"
+    && credentials.data.length === 1;
 
   return (
     <div className="space-y-4">
@@ -334,13 +337,23 @@ export default function SecurityPage() {
             {credentials.data.map((credential) => (
               <li key={credential.id} className={cx("flex flex-wrap items-center justify-between gap-3 px-3 py-2", uiPanelMutedClass)}>
                 <span className="ui-body font-semibold text-[var(--ui-text)]">{credential.name}</span>
-                <UiButton variant="danger" size="xs" onClick={() => setPendingConfirmation({ kind: "revoke-credential", credential })}>
+                <UiButton
+                  variant="danger"
+                  size="xs"
+                  disabled={lastRequiredPasskey}
+                  onClick={() => setPendingConfirmation({ kind: "revoke-credential", credential })}
+                >
                   Revoke
                 </UiButton>
               </li>
             ))}
           </ul>
         </SecuritySectionState>
+        {lastRequiredPasskey ? (
+          <UiInlineMessage tone="info" className="mt-3">
+            Add another passkey before revoking this one because your role requires at least one.
+          </UiInlineMessage>
+        ) : null}
         {credentials.status === "ready" && credentials.data.length > 0 ? (
           <div className="mt-3">
             <UiButton variant="secondary" size="sm" onClick={() => setPendingConfirmation({ kind: "regenerate-codes" })}>

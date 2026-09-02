@@ -17,7 +17,7 @@ from app.scripts.reset_last_superadmin_mfa import OperatorRecoveryError, reset_l
 from app.core.config import get_settings
 from app.services.auth_session_service import AuthSessionService
 from app.services.app_settings_service import load_app_settings_for_db
-from app.services.webauthn_service import WebAuthnSecurityError, WebAuthnService
+from app.services.webauthn_service import LastRequiredPasskeyError, WebAuthnSecurityError, WebAuthnService
 
 
 def _user(db_session, *, email: str, role: str = UserRole.UI_USER.value) -> User:
@@ -70,14 +70,14 @@ def test_last_passkey_can_be_revoked_only_when_role_policy_allows_it(db_session)
     db_session.add(required)
     db_session.commit()
     _set_passkey_policy(db_session, users=True)
-    with pytest.raises(WebAuthnSecurityError, match="must keep"):
+    with pytest.raises(LastRequiredPasskeyError, match="must keep"):
         WebAuthnService(db_session).revoke_credential(required_user, required.id)
 
     admin = _user(db_session, email="admin-required-passkey@example.com", role=UserRole.UI_ADMIN.value)
     admin_credential = _credential(admin, "admin-required-passkey")
     db_session.add(admin_credential)
     db_session.commit()
-    with pytest.raises(WebAuthnSecurityError, match="must keep"):
+    with pytest.raises(LastRequiredPasskeyError, match="must keep"):
         WebAuthnService(db_session).revoke_credential(admin, admin_credential.id)
 
 

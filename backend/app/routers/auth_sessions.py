@@ -37,7 +37,7 @@ from app.services.audit_service import AuditService
 from app.services.auth_session_service import AuthSessionError, AuthSessionService, RefreshReplayError
 from app.services.external_identity_user_service import ExternalIdentityUserService
 from app.services.users_service import get_users_service
-from app.services.webauthn_service import WebAuthnSecurityError, WebAuthnService
+from app.services.webauthn_service import LastRequiredPasskeyError, WebAuthnSecurityError, WebAuthnService
 from app.services.app_settings_service import load_app_settings_for_db
 from app.services.identity_security_policy import (
     require_self_service_security_action,
@@ -414,6 +414,8 @@ def revoke_webauthn_credential(
     require_self_service_security_action(request, db, current_user)
     try:
         WebAuthnService(db).revoke_credential(current_user, credential_id)
+    except LastRequiredPasskeyError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except WebAuthnSecurityError as exc:
         raise HTTPException(status_code=400, detail="Passkey cannot be revoked") from exc
     AuthSessionService(db).revoke_all_for_user(current_user, "mfa_changed", increment_version=False)

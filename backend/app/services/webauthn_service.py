@@ -37,6 +37,10 @@ class WebAuthnSecurityError(ValueError):
     pass
 
 
+class LastRequiredPasskeyError(WebAuthnSecurityError):
+    pass
+
+
 class WebAuthnService:
     def __init__(self, db: Session, settings: Optional[Settings] = None) -> None:
         self.db = db
@@ -230,7 +234,7 @@ class WebAuthnService:
             from app.services.identity_security_policy import passkey_required_for_role
 
             if passkey_required_for_role(self.db, user.role):
-                raise WebAuthnSecurityError("This account must keep at least one passkey")
+                raise LastRequiredPasskeyError("This account must keep at least one passkey")
         row.revoked_at = utcnow()
         user.auth_version += 1
         self.db.add_all([row, user])

@@ -401,6 +401,33 @@ def test_profile_webauthn_step_up_requires_an_active_passkey(auth_client, db_ses
     assert response.json()["detail"] == "WebAuthn authentication is unavailable"
 
 
+def test_profile_cannot_revoke_the_last_passkey_required_by_role(auth_client, db_session):
+    user = _user(db_session, email="last-required-passkey@example.com")
+    credential = WebAuthnCredential(
+        id="last-required-passkey",
+        user_id=user.id,
+        credential_id="last-required-passkey-id",
+        public_key="public-key",
+        sign_count=0,
+        transports_json="[]",
+        name="Passkey",
+    )
+    db_session.add(credential)
+    db_session.commit()
+    credentials = authenticate_ui_client(auth_client, db_session, user, mfa_verified=True)
+    _set_general_setting(db_session, "require_passkey_for_users", True)
+
+    response = auth_client.delete(
+        f"/api/auth/security/webauthn/credentials/{credential.id}",
+        headers=trusted_origin_headers(csrf_token=credentials.csrf_token),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "This account must keep at least one passkey"
+    db_session.refresh(credential)
+    assert credential.revoked_at is None
+
+
 def test_external_identity_inventory_and_revocation_require_a_recent_passkey(auth_client, db_session):
     user = _user(db_session, email="external-identity@example.com")
     identity = ExternalIdentity(

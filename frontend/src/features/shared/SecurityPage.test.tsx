@@ -147,7 +147,7 @@ describe("SecurityPage", () => {
     expect(mocks.listExternalIdentities).toHaveBeenCalledTimes(2);
   });
 
-  it("confirms passkey revocation before executing it", async () => {
+  it("blocks revocation when the role requires the last passkey", async () => {
     const user = userEvent.setup();
     mocks.listSecurityCredentials.mockResolvedValue([
       { id: "credential-1", name: "Laptop", created_at: "2026-08-14T10:00:00Z" },
@@ -157,7 +157,28 @@ describe("SecurityPage", () => {
 
     const passkeysCard = (await screen.findByRole("heading", { name: "Passkeys" })).closest("section");
     expect(passkeysCard).not.toBeNull();
-    await user.click(within(passkeysCard!).getByRole("button", { name: "Revoke" }));
+    const revokeButton = within(passkeysCard!).getByRole("button", { name: "Revoke" });
+    expect(revokeButton).toBeDisabled();
+    expect(screen.getByText("Add another passkey before revoking this one because your role requires at least one.")).toBeInTheDocument();
+    await user.click(revokeButton);
+    expect(screen.queryByRole("dialog", { name: "Revoke passkey" })).not.toBeInTheDocument();
+    expect(mocks.revokeSecurityCredential).not.toHaveBeenCalled();
+  });
+
+  it("confirms passkey revocation before executing it when another passkey remains", async () => {
+    const user = userEvent.setup();
+    mocks.listSecurityCredentials.mockResolvedValue([
+      { id: "credential-1", name: "Laptop", created_at: "2026-08-14T10:00:00Z" },
+      { id: "credential-2", name: "Phone", created_at: "2026-08-15T10:00:00Z" },
+    ]);
+
+    render(<SecurityPage />);
+
+    const passkeysCard = (await screen.findByRole("heading", { name: "Passkeys" })).closest("section");
+    expect(passkeysCard).not.toBeNull();
+    const laptopRow = screen.getByText("Laptop").closest("li");
+    expect(laptopRow).not.toBeNull();
+    await user.click(within(laptopRow!).getByRole("button", { name: "Revoke" }));
     const dialog = screen.getByRole("dialog", { name: "Revoke passkey" });
     expect(mocks.revokeSecurityCredential).not.toHaveBeenCalled();
 
@@ -185,6 +206,7 @@ describe("SecurityPage", () => {
 
   it("verifies and retries a previously confirmed sensitive action exactly once", async () => {
     const user = userEvent.setup();
+    storedUserState.role = "ui_user";
     mocks.listSecurityCredentials.mockResolvedValue([
       { id: "credential-1", name: "Laptop", created_at: "2026-08-14T10:00:00Z" },
     ]);
@@ -207,6 +229,7 @@ describe("SecurityPage", () => {
 
   it("cancels an action step-up without retrying or exposing the raw guard", async () => {
     const user = userEvent.setup();
+    storedUserState.role = "ui_user";
     mocks.listSecurityCredentials.mockResolvedValue([
       { id: "credential-1", name: "Laptop", created_at: "2026-08-14T10:00:00Z" },
     ]);
