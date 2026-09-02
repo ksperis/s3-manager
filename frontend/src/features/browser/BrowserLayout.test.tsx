@@ -138,8 +138,31 @@ describe("BrowserLayout", () => {
     );
   });
 
-  it("keeps a single page-level Browser heading when context selection blocks the outlet", () => {
-    useBrowserContextMock.mockReturnValue(buildBrowserContext({ selectedContextId: null }));
+  it("renders the only Browser account as a static topbar control", () => {
+    useBrowserContextMock.mockReturnValue(buildBrowserContext({
+      contexts: [{ id: "ctx-1", display_name: "Main account" }],
+    }));
+
+    render(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <Routes>
+          <Route path="/browser" element={<BrowserLayout />}>
+            <Route index element={<BrowserSidebarSlotConsumer />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole("button", { name: "Browser account selector" })).not.toBeInTheDocument();
+    expect(screen.getByText("Main account")).toBeInTheDocument();
+    expect(capturedSelectorProps).toBeNull();
+  });
+
+  it("keeps a single page-level Browser heading when no context is available", () => {
+    useBrowserContextMock.mockReturnValue(buildBrowserContext({
+      contexts: [],
+      selectedContextId: null,
+    }));
 
     render(
       <MemoryRouter initialEntries={["/browser"]}>
@@ -152,7 +175,7 @@ describe("BrowserLayout", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Browser", level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Select a private Browser connection", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "No private Browser connection", level: 2 })).toBeInTheDocument();
     expect(screen.queryByText("Browser page content")).not.toBeInTheDocument();
   });
 });

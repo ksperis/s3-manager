@@ -74,16 +74,18 @@ describe("BrowserContextProvider", () => {
     listExecutionContextsMock.mockResolvedValue(CONTEXTS);
   });
 
-  it("ignores legacy localStorage keys and requires an explicit selection", async () => {
+  it("ignores legacy localStorage keys and falls back to the first context", async () => {
     localStorage.setItem("selectedS3AccountId", "conn-legacy");
     localStorage.setItem("selectedBrowserContextId", "s3u-legacy");
     localStorage.setItem("selectedExecutionContextId", "s3u-2");
 
     renderProvider("/browser");
 
-    await waitFor(() => expect(listExecutionContextsMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId("selected")).toHaveTextContent("null");
-    expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByTestId("selected")).toHaveTextContent("conn-1");
+      expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBe("conn-1");
+      expect(screen.getByTestId("location")).toHaveTextContent("/browser?ctx=conn-1");
+    });
   });
 
   it("uses the Browser-specific preference when present", async () => {
@@ -122,17 +124,17 @@ describe("BrowserContextProvider", () => {
     expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBe("101");
   });
 
-  it("clears a forbidden remembered selection without falling back", async () => {
+  it("replaces a forbidden remembered selection with the first authorized context", async () => {
     localStorage.setItem("selectedBrowserExecutionContextId", "conn-forbidden");
 
     renderProvider("/browser?ctx=conn-forbidden");
 
     await waitFor(() => {
-      expect(screen.getByTestId("selected")).toHaveTextContent("null");
-      expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBeNull();
+      expect(screen.getByTestId("selected")).toHaveTextContent("conn-1");
+      expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBe("conn-1");
     });
-    expect(screen.getByTestId("location")).toHaveTextContent("/browser");
-    expect(screen.getByTestId("access-error")).toHaveTextContent("no longer authorized");
+    expect(screen.getByTestId("location")).toHaveTextContent("/browser?ctx=conn-1");
+    expect(screen.getByTestId("access-error")).toHaveTextContent("none");
   });
 
   it("keeps the mounted tab context when another tab changes the preference", async () => {
@@ -162,8 +164,7 @@ describe("BrowserContextProvider", () => {
 
     renderProvider("/browser");
 
-    await waitFor(() => expect(listExecutionContextsMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId("selected")).toHaveTextContent("null");
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
     expect(listExecutionContextsMock).toHaveBeenCalledTimes(1);
 
     act(() => {
@@ -171,5 +172,7 @@ describe("BrowserContextProvider", () => {
     });
 
     await waitFor(() => expect(listExecutionContextsMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("selected")).toHaveTextContent("conn-1");
+    expect(screen.getByTestId("location")).toHaveTextContent("/browser?ctx=conn-1");
   });
 });

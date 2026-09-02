@@ -51,7 +51,7 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
   } = useExecutionContextCatalog({
     scope: "browser",
     storageKey: EXECUTION_CONTEXT_STORAGE_KEY,
-    selectionPolicy: "explicit",
+    selectionPolicy: "first-available",
     accessDeniedMessage: "Access to /browser is denied for this user.",
     revokedSelectionMessage:
       "The previously selected Browser account is no longer authorized. Select an available account.",

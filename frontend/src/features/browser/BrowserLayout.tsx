@@ -50,7 +50,7 @@ function BrowserShell() {
   const [identityAccessMode, setIdentityAccessMode] = useState<ContextAccessMode>(null);
   const [sidebarBody, setSidebarBodyState] = useState<BrowserSidebarBodyRenderer | null>(null);
   const selected = contexts.find((a) => a.id === selectedContextId);
-  const showSelector = requiresContextSelection && contexts.length > 0;
+  const showSelector = requiresContextSelection && contexts.length > 1;
   const identityLabel = iamIdentity
     ? identityAccessMode === "connection"
       ? `S3 Identity: ${iamIdentity}`
