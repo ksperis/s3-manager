@@ -1,5 +1,6 @@
 import client, { buildApiRequestHeaders } from "./client";
 import { sanitizeErrorMessage } from "../utils/apiError";
+import { consumeSseStream } from "./sseStream";
 
 type StreamBucketsOptions<TProgress> = {
   signal?: AbortSignal;
@@ -83,68 +84,19 @@ export async function streamBucketsWithSse<TProgress, TResult>({
     throw new Error("Streaming response body is unavailable");
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let currentEvent = "message";
-  let currentDataLines: string[] = [];
   let resultPayload: TResult | null = null;
 
-  const handleEvent = () => {
-    if (currentDataLines.length === 0) {
-      currentEvent = "message";
-      return;
-    }
-    const payloadText = currentDataLines.join("\n");
-    currentDataLines = [];
-    const payload = payloadText ? (JSON.parse(payloadText) as Record<string, unknown>) : {};
-    if (currentEvent === "progress") {
+  await consumeSseStream(response.body, ({ event, data }) => {
+    const payload = data ? (JSON.parse(data) as Record<string, unknown>) : {};
+    if (event === "progress") {
       options?.onProgress?.(payload as unknown as TProgress);
-    } else if (currentEvent === "result") {
+    } else if (event === "result") {
       resultPayload = payload as unknown as TResult;
-    } else if (currentEvent === "error") {
+    } else if (event === "error") {
       const detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail ?? payload);
       throw new Error(sanitizeErrorMessage(detail || streamFailedLabel, streamFailedLabel));
     }
-    currentEvent = "message";
-  };
-
-  const processLine = (line: string) => {
-    if (line === "") {
-      handleEvent();
-      return;
-    }
-    if (line.startsWith(":")) {
-      return;
-    }
-    if (line.startsWith("event:")) {
-      currentEvent = line.slice(6).trim() || "message";
-      return;
-    }
-    if (line.startsWith("data:")) {
-      currentDataLines.push(line.slice(5).trimStart());
-    }
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-    buffer = buffer.replace(/\r\n/g, "\n");
-    let newlineIndex = buffer.indexOf("\n");
-    while (newlineIndex >= 0) {
-      const line = buffer.slice(0, newlineIndex);
-      buffer = buffer.slice(newlineIndex + 1);
-      processLine(line);
-      newlineIndex = buffer.indexOf("\n");
-    }
-    if (done) {
-      if (buffer.length > 0) {
-        processLine(buffer);
-      }
-      processLine("");
-      break;
-    }
-  }
+  });
 
   if (!resultPayload) {
     throw new Error(missingResultMessage);

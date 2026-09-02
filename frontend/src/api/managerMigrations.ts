@@ -4,6 +4,7 @@
  */
 import client, { buildApiRequestHeaders } from "./client";
 import { sanitizeErrorMessage } from "../utils/apiError";
+import { consumeSseStream } from "./sseStream";
 
 export type BucketMigrationMode = "one_shot" | "pre_sync";
 export type BucketMigrationStatus =
@@ -275,70 +276,21 @@ export async function streamManagerMigration(
     throw new Error("Streaming response body is unavailable");
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let currentEvent = "message";
-  let currentDataLines: string[] = [];
   let latestSnapshot: BucketMigrationDetail | null = null;
 
-  const handleEvent = () => {
-    if (currentDataLines.length === 0) {
-      currentEvent = "message";
-      return;
-    }
-    const payloadText = currentDataLines.join("\n");
-    currentDataLines = [];
-    const payload = payloadText ? (JSON.parse(payloadText) as Record<string, unknown>) : {};
-    if (currentEvent === "snapshot") {
+  await consumeSseStream(response.body, ({ event, data }) => {
+    const payload = data ? (JSON.parse(data) as Record<string, unknown>) : {};
+    if (event === "snapshot") {
       const detail = payload as unknown as BucketMigrationDetail;
       latestSnapshot = detail;
       options?.onSnapshot?.(detail);
-    } else if (currentEvent === "done") {
+    } else if (event === "done") {
       options?.onDone?.(payload as unknown as ManagerMigrationStreamDone);
-    } else if (currentEvent === "error") {
+    } else if (event === "error") {
       const detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail ?? payload);
       throw new Error(sanitizeErrorMessage(detail || "Migration stream failed", "Migration stream failed"));
     }
-    currentEvent = "message";
-  };
-
-  const processLine = (line: string) => {
-    if (line === "") {
-      handleEvent();
-      return;
-    }
-    if (line.startsWith(":")) {
-      return;
-    }
-    if (line.startsWith("event:")) {
-      currentEvent = line.slice(6).trim() || "message";
-      return;
-    }
-    if (line.startsWith("data:")) {
-      currentDataLines.push(line.slice(5).trimStart());
-    }
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-    buffer = buffer.replace(/\r\n/g, "\n");
-    let newlineIndex = buffer.indexOf("\n");
-    while (newlineIndex >= 0) {
-      const line = buffer.slice(0, newlineIndex);
-      buffer = buffer.slice(newlineIndex + 1);
-      processLine(line);
-      newlineIndex = buffer.indexOf("\n");
-    }
-    if (done) {
-      if (buffer.length > 0) {
-        processLine(buffer);
-      }
-      processLine("");
-      break;
-    }
-  }
+  });
 
   if (!latestSnapshot) {
     throw new Error("Migration stream ended without a snapshot payload");
