@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
 from app.models.bucket import (
@@ -11,21 +10,11 @@ from app.models.bucket import (
     BucketProperties,
     BucketWebsiteConfiguration,
 )
-from app.models.ceph_admin import CephAdminBucketFilterRule, CephAdminBucketSummary
+from app.models.ceph_admin import CephAdminBucketFilterRule
 from app.services.bucket_listing_shared import coerce_filter_bool, coerce_filter_number
-from app.services.bucket_notification_state import account_sns_feature_enabled
-from app.services.bucket_configuration_service import BucketConfigurationService
-from app.services.listing_progress import (
-    ListingProgressEmitter,
-    build_listing_progress_callback,
-    invoke_cancel_check,
-)
-from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.normalize import normalize_text
 
-BUCKET_FEATURE_PARAM_MAX_WORKERS = 6
-
-_FEATURE_PARAM_UNAVAILABLE = object()
+FEATURE_PARAM_UNAVAILABLE = object()
 _FEATURE_PARAM_SOURCE_BY_PARAM: dict[str, str] = {
     "lifecycle_rule_id": "lifecycle",
     "lifecycle_rule_status": "lifecycle",
@@ -86,10 +75,6 @@ _NOTIFICATION_CONFIGURATION_SPECS = (
     ("queue", "QueueConfigurations", "QueueArn"),
     ("lambda", "LambdaFunctionConfigurations", "LambdaFunctionArn"),
 )
-
-
-def bucket_identity_key(bucket: CephAdminBucketSummary) -> str:
-    return f"{bucket.tenant or ''}:{bucket.name}"
 
 
 def _match_text_value(left: str | None, op: str, right_raw: object) -> bool:
@@ -868,8 +853,8 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
     source = _FEATURE_PARAM_SOURCE_BY_PARAM.get(param)
     if not source:
         return False
-    source_data = snapshot.get(source, _FEATURE_PARAM_UNAVAILABLE)
-    if source_data is _FEATURE_PARAM_UNAVAILABLE:
+    source_data = snapshot.get(source, FEATURE_PARAM_UNAVAILABLE)
+    if source_data is FEATURE_PARAM_UNAVAILABLE:
         return False
 
     if param in _LIFECYCLE_PARAMS:
@@ -887,19 +872,19 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
 
 def _normalize_lifecycle_group_source(source_data: object) -> object:
     if not isinstance(source_data, list):
-        return _FEATURE_PARAM_UNAVAILABLE
+        return FEATURE_PARAM_UNAVAILABLE
     return [item for item in source_data if isinstance(item, dict)]
 
 
 def _normalize_cors_group_source(source_data: object) -> object:
     if not isinstance(source_data, BucketProperties):
-        return _FEATURE_PARAM_UNAVAILABLE
+        return FEATURE_PARAM_UNAVAILABLE
     raw_rules = source_data.cors_rules if isinstance(source_data.cors_rules, list) else []
     return [item for item in raw_rules if isinstance(item, dict)]
 
 
 def _normalize_notification_group_source(source_data: object) -> object:
-    return source_data if isinstance(source_data, dict) else _FEATURE_PARAM_UNAVAILABLE
+    return source_data if isinstance(source_data, dict) else FEATURE_PARAM_UNAVAILABLE
 
 
 def _identity_group_source(source_data: object) -> object:
@@ -950,10 +935,10 @@ def _match_grouped_param_rules(
     match_all: _GroupedRulesMatcher,
     match_one: _GroupedRuleMatcher,
 ) -> list[bool]:
-    if not rules or source_data is _FEATURE_PARAM_UNAVAILABLE:
+    if not rules or source_data is FEATURE_PARAM_UNAVAILABLE:
         return [] if not rules else [False]
     normalized_source = normalize_source(source_data)
-    if normalized_source is _FEATURE_PARAM_UNAVAILABLE:
+    if normalized_source is FEATURE_PARAM_UNAVAILABLE:
         return [False]
     if match_mode == "all":
         return [match_all(rules, normalized_source)]
@@ -986,7 +971,7 @@ def match_bucket_feature_param_rules(
             _match_grouped_param_rules(
                 grouped_rules[feature],
                 match_mode,
-                snapshot.get(source, _FEATURE_PARAM_UNAVAILABLE),
+                snapshot.get(source, FEATURE_PARAM_UNAVAILABLE),
                 normalize_source,
                 match_all,
                 match_one,
@@ -997,7 +982,7 @@ def match_bucket_feature_param_rules(
     return all(results) if match_mode == "all" else any(results)
 
 
-def _required_feature_param_sources(rules: list[CephAdminBucketFilterRule]) -> set[str]:
+def required_feature_param_sources(rules: list[CephAdminBucketFilterRule]) -> set[str]:
     required: set[str] = set()
     for rule in rules:
         if not rule.param:
@@ -1006,110 +991,3 @@ def _required_feature_param_sources(rules: list[CephAdminBucketFilterRule]) -> s
         if source:
             required.add(source)
     return required
-
-
-def _load_feature_param_snapshot_for_bucket(
-    bucket: CephAdminBucketSummary,
-    required_sources: set[str],
-    service: BucketConfigurationService,
-    account: S3ExecutionTarget,
-) -> dict[str, object]:
-    snapshot: dict[str, object] = {}
-    if "props" in required_sources:
-        try:
-            snapshot["props"] = service.get_bucket_properties(bucket.name, account)
-        except RuntimeError:
-            snapshot["props"] = _FEATURE_PARAM_UNAVAILABLE
-    if "lifecycle" in required_sources:
-        try:
-            snapshot["lifecycle"] = service.get_lifecycle(bucket.name, account).rules or []
-        except RuntimeError:
-            snapshot["lifecycle"] = _FEATURE_PARAM_UNAVAILABLE
-    if "logging" in required_sources:
-        try:
-            snapshot["logging"] = service.get_bucket_logging(bucket.name, account)
-        except RuntimeError:
-            snapshot["logging"] = _FEATURE_PARAM_UNAVAILABLE
-    if "website" in required_sources:
-        try:
-            snapshot["website"] = service.get_bucket_website(bucket.name, account)
-        except RuntimeError:
-            snapshot["website"] = _FEATURE_PARAM_UNAVAILABLE
-    if "policy" in required_sources:
-        try:
-            snapshot["policy"] = service.get_policy(bucket.name, account)
-        except RuntimeError:
-            snapshot["policy"] = _FEATURE_PARAM_UNAVAILABLE
-    if "notifications" in required_sources:
-        if not account_sns_feature_enabled(account):
-            snapshot["notifications"] = _FEATURE_PARAM_UNAVAILABLE
-        else:
-            try:
-                snapshot["notifications"] = service.get_bucket_notifications(bucket.name, account).configuration or {}
-            except RuntimeError:
-                snapshot["notifications"] = _FEATURE_PARAM_UNAVAILABLE
-    if "encryption" in required_sources:
-        try:
-            snapshot["encryption"] = service.get_bucket_encryption(bucket.name, account)
-        except RuntimeError:
-            snapshot["encryption"] = _FEATURE_PARAM_UNAVAILABLE
-    return snapshot
-
-
-def load_bucket_feature_param_snapshots(
-    buckets: list[CephAdminBucketSummary],
-    rules: list[CephAdminBucketFilterRule],
-    service: BucketConfigurationService,
-    account: S3ExecutionTarget,
-    *,
-    progress: ListingProgressEmitter | None = None,
-    progress_stage: str = "feature_param_enrichment",
-    progress_message: str = "Loading bucket feature parameters",
-    progress_start: int = 82,
-    progress_end: int = 88,
-    cancel_check: Callable[[], None] | None = None,
-) -> tuple[dict[str, dict[str, object]], set[str]]:
-    snapshots: dict[str, dict[str, object]] = {}
-    if not buckets:
-        return snapshots, set()
-    required_sources = _required_feature_param_sources(rules)
-    if not required_sources:
-        available = {bucket_identity_key(bucket) for bucket in buckets}
-        return snapshots, available
-
-    def load_one(bucket: CephAdminBucketSummary) -> tuple[str, dict[str, object]]:
-        return bucket_identity_key(bucket), _load_feature_param_snapshot_for_bucket(bucket, required_sources, service, account)
-
-    max_workers = min(BUCKET_FEATURE_PARAM_MAX_WORKERS, len(buckets))
-    total = len(buckets)
-    emit_progress = build_listing_progress_callback(
-        progress,
-        stage=progress_stage,
-        message=progress_message,
-        start=progress_start,
-        end=progress_end,
-        total=total,
-    )
-
-    if max_workers <= 1:
-        for index, bucket in enumerate(buckets, start=1):
-            invoke_cancel_check(cancel_check)
-            key, snapshot = load_one(bucket)
-            snapshots[key] = snapshot
-            emit_progress(index)
-            invoke_cancel_check(cancel_check)
-    else:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(load_one, bucket) for bucket in buckets]
-            for index, future in enumerate(as_completed(futures), start=1):
-                invoke_cancel_check(cancel_check)
-                key, snapshot = future.result()
-                snapshots[key] = snapshot
-                emit_progress(index)
-                invoke_cancel_check(cancel_check)
-
-    available_keys: set[str] = set()
-    for key, snapshot in snapshots.items():
-        if all(snapshot.get(source, _FEATURE_PARAM_UNAVAILABLE) is not _FEATURE_PARAM_UNAVAILABLE for source in required_sources):
-            available_keys.add(key)
-    return snapshots, available_keys

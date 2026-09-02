@@ -23,10 +23,8 @@ from app.services.bucket_listing_enrichment import (
     match_bucket_feature_rule,
     match_bucket_field_rule,
 )
-from app.services.bucket_feature_param_matching import (
-    load_bucket_feature_param_snapshots,
-    match_bucket_feature_param_rules,
-)
+from app.services.bucket_feature_param_matching import match_bucket_feature_param_rules
+from app.services.bucket_feature_param_snapshot_loader import load_bucket_feature_param_snapshots
 from app.services.bucket_listing_shared import (
     filter_requires_stats,
     listing_sort_key,

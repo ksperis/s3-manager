@@ -37,10 +37,10 @@ from app.services.bucket_listing_enrichment import (
 )
 from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
 from app.utils.tagging import TAG_DOMAIN_BUCKET_UI_CEPH_ADMIN
-from app.services.bucket_feature_param_matching import (
+from app.services.bucket_feature_param_matching import match_bucket_feature_param_rules
+from app.services.bucket_feature_param_snapshot_loader import (
     bucket_identity_key,
     load_bucket_feature_param_snapshots,
-    match_bucket_feature_param_rules,
 )
 from app.services.bucket_listing_shared import parse_filter, parse_includes, serialize_filter
 from app.services.bucket_owner_enrichment import BucketOwnerUsage, compute_bucket_owner_usage
