@@ -34,6 +34,19 @@ class RGWAdminOperationResponse:
     result: Any
 
 
+def _merge_extra_params(
+    params: Dict[str, Any],
+    extra_params: Optional[Dict[str, Any]],
+) -> None:
+    if not isinstance(extra_params, dict):
+        return
+    for key, value in extra_params.items():
+        normalized_key = str(key or "").strip()
+        if not normalized_key or value is None:
+            continue
+        params[normalized_key] = value
+
+
 class RGWAdminClient:
     def __init__(
         self,
@@ -339,12 +352,7 @@ class RGWAdminClient:
             params["tenant"] = tenant
         if caps:
             params["caps"] = caps
-        if isinstance(extra_params, dict):
-            for key, value in extra_params.items():
-                normalized_key = str(key or "").strip()
-                if not normalized_key or value is None:
-                    continue
-                params[normalized_key] = value
+        _merge_extra_params(params, extra_params)
         result = self._request("PUT", "/admin/user", params=params, allow_conflict=True)
         if isinstance(result, dict) and result.get("conflict"):
             existing = self.get_user(uid, tenant=tenant, allow_not_found=True)
@@ -558,12 +566,7 @@ class RGWAdminClient:
             params["max_groups"] = int(max_groups)
         if max_access_keys is not None:
             params["max_access_keys"] = int(max_access_keys)
-        if isinstance(extra_params, dict):
-            for key, value in extra_params.items():
-                normalized_key = str(key or "").strip()
-                if not normalized_key or value is None:
-                    continue
-                params[normalized_key] = value
+        _merge_extra_params(params, extra_params)
         result = self._request(
             "POST",
             "/admin/account",
@@ -612,12 +615,7 @@ class RGWAdminClient:
             params["max_groups"] = int(max_groups)
         if max_access_keys is not None:
             params["max_access_keys"] = int(max_access_keys)
-        if isinstance(extra_params, dict):
-            for key, value in extra_params.items():
-                normalized_key = str(key or "").strip()
-                if not normalized_key or value is None:
-                    continue
-                params[normalized_key] = value
+        _merge_extra_params(params, extra_params)
         result = self._request(
             "POST",
             "/admin/account",
@@ -850,12 +848,7 @@ class RGWAdminClient:
             params["system"] = self._to_rgw_bool(bool(system))
         if account_root is not None:
             params["account-root"] = self._to_rgw_bool(bool(account_root))
-        if isinstance(extra_params, dict):
-            for key, value in extra_params.items():
-                normalized_key = str(key or "").strip()
-                if not normalized_key or value is None:
-                    continue
-                params[normalized_key] = value
+        _merge_extra_params(params, extra_params)
         result = self._request(
             "PUT",
             "/admin/user",
@@ -1131,12 +1124,7 @@ class RGWAdminClient:
             params["email"] = email
         if account_root:
             params["account-root"] = "true"
-        if isinstance(extra_params, dict):
-            for key, value in extra_params.items():
-                normalized_key = str(key or "").strip()
-                if not normalized_key or value is None:
-                    continue
-                params[normalized_key] = value
+        _merge_extra_params(params, extra_params)
         result = self._request("PUT", "/admin/user", params=params, allow_conflict=True)
         if isinstance(result, dict) and result.get("conflict"):
             # Some RGW versions return 409 even after creating the account-scoped user.
