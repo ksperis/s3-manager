@@ -76,14 +76,26 @@ describe("IdentitySecurityPage", () => {
     mocks.finishRecentWebAuthnVerification.mockResolvedValue({ mfa_verified_at: "2026-08-14T10:00:00Z" });
   });
 
-  it("shows requests and global sessions in the dedicated administration page", async () => {
+  it("presents identity requests and sessions as structured administration views", async () => {
+    const user = userEvent.setup();
     render(<IdentitySecurityPage />);
 
-    expect(await screen.findByText("candidate@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Candidate User")).toBeInTheDocument();
-    expect(screen.getByText(/candidate@example.com · ui_user/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "External identity link requests" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Platform sessions" })).toBeInTheDocument();
+    const requestsPanel = await screen.findByRole("tabpanel", { name: /Link requests/ });
+    expect(within(requestsPanel).getByText("External identity link requests")).toBeInTheDocument();
+    expect(within(requestsPanel).getAllByText("candidate@example.com")).toHaveLength(2);
+    expect(within(requestsPanel).getByText("OIDC")).toBeInTheDocument();
+    expect(within(requestsPanel).getByText("User")).toBeInTheDocument();
+    expect(within(requestsPanel).getByRole("table")).toHaveClass("responsive-data-table", "compact-table");
+    expect(screen.queryByText("ui_user")).not.toBeInTheDocument();
+    expect(screen.queryByText("Candidate User")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /Active sessions/ }));
+    const sessionsPanel = screen.getByRole("tabpanel", { name: /Active sessions/ });
+    expect(within(sessionsPanel).getByText("Platform sessions")).toBeInTheDocument();
+    expect(within(sessionsPanel).getByText("Candidate User")).toBeInTheDocument();
+    expect(within(sessionsPanel).getByText("Password")).toBeInTheDocument();
+    expect(within(sessionsPanel).getAllByText("User")).toHaveLength(2);
+    expect(within(sessionsPanel).getByRole("table")).toHaveClass("responsive-data-table", "compact-table");
   });
 
   it("confirms link decisions and session revocation", async () => {
@@ -97,6 +109,7 @@ describe("IdentitySecurityPage", () => {
     await user.click(within(linkDialog).getByRole("button", { name: "Approve link" }));
     await waitFor(() => expect(mocks.decideExternalLinkRequest).toHaveBeenCalledWith("request-1", true));
 
+    await user.click(screen.getByRole("tab", { name: /Active sessions/ }));
     await user.click(screen.getByRole("button", { name: "Revoke" }));
     const dialog = screen.getByRole("dialog", { name: "Revoke session" });
     expect(mocks.adminRevokeSession).not.toHaveBeenCalled();
@@ -145,7 +158,9 @@ describe("IdentitySecurityPage", () => {
     expect(screen.queryByText("No active sessions.")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText("Candidate User")).toBeInTheDocument();
+    expect(await screen.findByRole("tabpanel", { name: /Link requests/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Active sessions/ }));
+    expect(screen.getByText("Candidate User")).toBeInTheDocument();
     expect(mocks.listAdminSessions).toHaveBeenCalledTimes(2);
   });
 });
