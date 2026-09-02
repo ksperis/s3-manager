@@ -10,7 +10,7 @@ from app.models.base import ApiModel
 UsageTrendWindow = Literal["month", "week", "day"]
 
 
-class ManagerUsageTrendBaseline(ApiModel):
+class UsageTrendBaseline(ApiModel):
     window: UsageTrendWindow
     label: str
     period_start: str
@@ -20,7 +20,7 @@ class ManagerUsageTrendBaseline(ApiModel):
     collected_at: Optional[str] = None
 
 
-class ManagerUsageTrendsResponse(ApiModel):
-    storage: Optional[ManagerUsageTrendBaseline] = None
-    objects: Optional[ManagerUsageTrendBaseline] = None
-    buckets: Optional[ManagerUsageTrendBaseline] = None
+class UsageTrendsResponse(ApiModel):
+    storage: Optional[UsageTrendBaseline] = None
+    objects: Optional[UsageTrendBaseline] = None
+    buckets: Optional[UsageTrendBaseline] = None

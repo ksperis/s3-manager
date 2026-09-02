@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.db import QuotaUsageDaily
 from app.models.access_context import ManagerActor
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
-from app.models.manager_stats import ManagerUsageTrendsResponse
+from app.models.usage_trends import UsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 from app.routers.dependencies import (
     get_account_context,
@@ -114,14 +114,14 @@ def account_stats(
     }
 
 
-@router.get("/usage-trends", response_model=ManagerUsageTrendsResponse, response_model_exclude_none=True)
+@router.get("/usage-trends", response_model=UsageTrendsResponse, response_model_exclude_none=True)
 def account_usage_trends(
     account: S3ExecutionContext = Depends(get_account_context),
     _: ManagerActor = Depends(require_usage_capable_manager),
     db: Session = Depends(get_db),
-) -> ManagerUsageTrendsResponse:
+) -> UsageTrendsResponse:
     if not load_app_settings().general.usage_history_enabled:
-        return ManagerUsageTrendsResponse()
+        return UsageTrendsResponse()
     return build_account_usage_trends(db, account, reference_date=utcnow().date())
 
 

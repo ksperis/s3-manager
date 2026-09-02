@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db import QuotaUsageDaily
 from app.services.s3_execution_context import S3ExecutionTarget
-from app.models.manager_stats import ManagerUsageTrendBaseline, ManagerUsageTrendsResponse
+from app.models.usage_trends import UsageTrendBaseline, UsageTrendsResponse
 from app.utils.time import utcnow
 
 UsageTrendWindow = Literal["month", "week", "day"]
@@ -52,8 +52,8 @@ def _serialize_usage_trend_baseline(
     *,
     window: UsageTrendWindow,
     label: str,
-) -> ManagerUsageTrendBaseline:
-    return ManagerUsageTrendBaseline(
+) -> UsageTrendBaseline:
+    return UsageTrendBaseline(
         window=window,
         label=label,
         period_start=row.day.isoformat(),
@@ -70,7 +70,7 @@ def select_usage_trend_baseline(
     filters: list,
     value_column,
     reference_date: date | None = None,
-) -> ManagerUsageTrendBaseline | None:
+) -> UsageTrendBaseline | None:
     today = reference_date or utcnow().date()
     for window, label, min_age_days in USAGE_TREND_WINDOWS:
         cutoff = today - timedelta(days=min_age_days)
@@ -90,11 +90,11 @@ def build_account_usage_trends(
     account: S3ExecutionTarget,
     *,
     reference_date: date | None = None,
-) -> ManagerUsageTrendsResponse:
+) -> UsageTrendsResponse:
     filters = account_usage_trend_filters(account)
     if not filters:
-        return ManagerUsageTrendsResponse()
-    return ManagerUsageTrendsResponse(
+        return UsageTrendsResponse()
+    return UsageTrendsResponse(
         storage=select_usage_trend_baseline(
             db,
             filters=filters,

@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.db import QuotaUsageDaily, S3Account, User
 from app.models.access_context import AccountAccess
 from app.models.bucket_usage_stats import BucketUsageStatsAggregateResponse
-from app.models.manager_stats import ManagerUsageTrendsResponse
+from app.models.usage_trends import UsageTrendsResponse
 from app.models.portal import (
     PortalStorageSpaceUsageStatsResponse,
     PortalStorageSpaceUsageStatsSnapshot,
@@ -78,11 +78,11 @@ def portal_usage(
         raise_bad_gateway_from_runtime(exc)
 
 
-@router.get("/usage-trends", response_model=ManagerUsageTrendsResponse, response_model_exclude_none=True)
+@router.get("/usage-trends", response_model=UsageTrendsResponse, response_model_exclude_none=True)
 def portal_usage_trends(
     access: AccountAccess = Depends(get_portal_account_access),
     db: Session = Depends(get_db),
-) -> ManagerUsageTrendsResponse:
+) -> UsageTrendsResponse:
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
@@ -90,7 +90,7 @@ def portal_usage_trends(
     if endpoint and not resolve_feature_flags(endpoint).metrics_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage metrics are disabled for this endpoint")
     if not load_app_settings().general.usage_history_enabled:
-        return ManagerUsageTrendsResponse()
+        return UsageTrendsResponse()
     return build_account_usage_trends(db, access.account, reference_date=utcnow().date())
 
 
