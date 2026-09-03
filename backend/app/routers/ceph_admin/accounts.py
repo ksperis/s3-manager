@@ -12,10 +12,7 @@ from app.models.ceph_admin import (
     CephAdminRgwAccountSummary,
     PaginatedCephAdminAccountsResponse,
 )
-from app.routers.ceph_admin.account_listing import (
-    _enrich_accounts,
-    compute_accounts_listing,
-)
+from app.routers.ceph_admin.account_listing import compute_accounts_listing
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
     get_ceph_admin_context,

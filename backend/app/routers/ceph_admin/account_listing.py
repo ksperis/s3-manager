@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from fastapi import status
-
 from app.models.ceph_admin import (
     CephAdminAccountFilterQuery,
     CephAdminAccountFilterRule,
@@ -19,6 +17,11 @@ from app.routers.ceph_admin.account_common import (
 from app.routers.ceph_admin.account_listing_cache import (
     get_cached_accounts_listing,
     get_cached_rgw_accounts_payload,
+)
+from app.routers.ceph_admin.account_listing_enrichment import (
+    account_field_needs_enrichment,
+    account_profile_needs_enrichment,
+    enrich_accounts,
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.routers.ceph_admin.listing_common import (
@@ -37,16 +40,12 @@ from app.services.listing_progress import (
     ListingProgressEmitter,
     ListingProgressSnapshot,
     emit_listing_ready,
-    interpolate_progress_percent,
     invoke_cancel_check,
 )
 from app.services.listing_rule_matching import match_numeric_rule, match_text_rule
-from app.services.rgw_admin import RGWAdminError
-from app.utils.http_errors import raise_http_exception_from_exception
 from app.utils.normalize import normalize_optional_scalar
 from app.utils.quota_stats import extract_quota_limits
-from app.utils.rgw_payloads import extract_bucket_list
-from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
+from app.utils.usage_stats import compute_usage_ratio_percent
 
 
 def _clone_account(account: CephAdminRgwAccountSummary) -> CephAdminRgwAccountSummary:
@@ -126,118 +125,6 @@ def _includes_for_account_fields(fields: set[str]) -> set[str]:
     }:
         include.add("usage")
     return include
-
-
-def _account_field_needs_enrichment(
-    account: CephAdminRgwAccountSummary,
-    field: str,
-) -> bool:
-    if field == "account_name":
-        return not bool((account.account_name or "").strip())
-    if field == "quota_usage_size_percent":
-        return account.used_bytes is None or account.quota_max_size_bytes is None
-    if field == "quota_usage_object_percent":
-        return account.object_count is None or account.quota_max_objects is None
-    return getattr(account, field, None) is None
-
-
-def _account_profile_needs_enrichment(
-    account: CephAdminRgwAccountSummary,
-) -> bool:
-    return _account_field_needs_enrichment(account, "account_name") or account.email is None
-
-
-def _enrich_accounts(
-    accounts: list[CephAdminRgwAccountSummary],
-    requested: set[str],
-    ctx: CephAdminContext,
-    *,
-    progress: ListingProgressEmitter | None = None,
-    progress_stage: str = "detail_enrichment",
-    progress_message: str = "Loading account details",
-    progress_start: int = 50,
-    progress_end: int = 64,
-    cancel_check: Callable[[], None] | None = None,
-) -> list[CephAdminRgwAccountSummary]:
-    if not accounts or not requested:
-        return accounts
-    enriched: list[CephAdminRgwAccountSummary] = []
-    total = len(accounts)
-    for index, item in enumerate(accounts, start=1):
-        invoke_cancel_check(cancel_check)
-        account = _clone_account(item)
-        try:
-            payload = ctx.rgw_admin.get_account(
-                account.account_id,
-                allow_not_found=True,
-            )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-        if payload and not payload.get("not_found"):
-            _apply_account_detail_payload(account, payload, requested, ctx)
-        enriched.append(account)
-        if progress is not None:
-            progress.emit(
-                percent=interpolate_progress_percent(
-                    progress_start,
-                    progress_end,
-                    processed=index,
-                    total=total,
-                ),
-                stage=progress_stage,
-                processed=index,
-                total=total,
-                message=progress_message,
-            )
-        invoke_cancel_check(cancel_check)
-    return enriched
-
-
-def _apply_account_detail_payload(
-    account: CephAdminRgwAccountSummary,
-    payload: dict[str, Any],
-    requested: set[str],
-    ctx: CephAdminContext,
-) -> None:
-    if "profile" in requested:
-        if not account.account_name:
-            account.account_name = normalize_optional_scalar(
-                payload.get("account_name")
-                or payload.get("name")
-                or payload.get("display_name")
-            )
-        account.email = normalize_optional_scalar(
-            payload.get("email") or payload.get("mail")
-        )
-    if "limits" in requested:
-        limits = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
-        account.max_users = parse_int(payload.get("max_users") or limits.get("max_users"))
-        account.max_buckets = parse_int(
-            payload.get("max_buckets") or limits.get("max_buckets")
-        )
-    if "quota" in requested:
-        quota_size, quota_objects = extract_quota_limits(
-            payload,
-            keys=("quota", "account_quota"),
-        )
-        account.quota_max_size_bytes = quota_size
-        account.quota_max_objects = quota_objects
-    if "stats" in requested:
-        account.bucket_count = extract_bucket_count(payload)
-        account.user_count = extract_user_count(payload)
-    if "usage" in requested:
-        try:
-            buckets_payload = ctx.rgw_admin.get_all_buckets(
-                account_id=account.account_id,
-                with_stats=True,
-            )
-        except RGWAdminError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-        _usage, total_bytes, total_objects, _count = summarize_bucket_usage(
-            extract_bucket_list(buckets_payload)
-        )
-        account.used_bytes = total_bytes
-        account.object_count = total_objects
 
 
 def _account_from_entry(entry: object) -> CephAdminRgwAccountSummary | None:
@@ -429,7 +316,7 @@ class _AccountListingPipeline:
         fields_needing_enrichment = {
             field
             for field in fields
-            if any(_account_field_needs_enrichment(item, field) for item in results)
+            if any(account_field_needs_enrichment(item, field) for item in results)
         }
         requested = _includes_for_account_fields(fields_needing_enrichment)
         if not requested:
@@ -442,7 +329,7 @@ class _AccountListingPipeline:
             message="Loading account details",
             force=True,
         )
-        enriched = _enrich_accounts(
+        enriched = enrich_accounts(
             results,
             requested,
             self.ctx,
@@ -471,7 +358,7 @@ class _AccountListingPipeline:
             message="Loading account profiles",
             force=True,
         )
-        searchable = _enrich_accounts(
+        searchable = enrich_accounts(
             results,
             {"profile"},
             self.ctx,
@@ -541,11 +428,11 @@ class _AccountListingPipeline:
     ) -> list[CephAdminRgwAccountSummary]:
         requested = set(self.requested)
         if "profile" in requested and not any(
-            _account_profile_needs_enrichment(item) for item in page_items
+            account_profile_needs_enrichment(item) for item in page_items
         ):
             requested.discard("profile")
         if any(
-            _account_field_needs_enrichment(item, "account_name")
+            account_field_needs_enrichment(item, "account_name")
             for item in page_items
         ):
             requested.add("profile")
@@ -559,7 +446,7 @@ class _AccountListingPipeline:
             message="Loading page details",
             force=True,
         )
-        enriched = _enrich_accounts(
+        enriched = enrich_accounts(
             page_items,
             requested,
             self.ctx,
