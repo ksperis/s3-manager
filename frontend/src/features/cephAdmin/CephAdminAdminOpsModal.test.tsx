@@ -12,16 +12,19 @@ const checkIndexMock = vi.fn();
 const listUsersMock = vi.fn();
 const listAccountsMock = vi.fn();
 
+vi.mock("../../api/cephAdminAdminOps", () => ({
+  deleteCephAdminAccount: (...args: unknown[]) => deleteAccountMock(...args),
+  deleteCephAdminUser: (...args: unknown[]) => deleteUserMock(...args),
+  deleteCephAdminBucket: (...args: unknown[]) => deleteBucketMock(...args),
+  unlinkCephAdminBucket: (...args: unknown[]) => unlinkBucketMock(...args),
+  linkCephAdminBucket: (...args: unknown[]) => linkBucketMock(...args),
+  checkCephAdminBucketIndex: (...args: unknown[]) => checkIndexMock(...args),
+}));
+
 vi.mock("../../api/cephAdmin", async () => {
   const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
   return {
     ...actual,
-    deleteCephAdminAccount: (...args: unknown[]) => deleteAccountMock(...args),
-    deleteCephAdminUser: (...args: unknown[]) => deleteUserMock(...args),
-    deleteCephAdminBucket: (...args: unknown[]) => deleteBucketMock(...args),
-    unlinkCephAdminBucket: (...args: unknown[]) => unlinkBucketMock(...args),
-    linkCephAdminBucket: (...args: unknown[]) => linkBucketMock(...args),
-    checkCephAdminBucketIndex: (...args: unknown[]) => checkIndexMock(...args),
     listCephAdminUsers: (...args: unknown[]) => listUsersMock(...args),
     listCephAdminAccounts: (...args: unknown[]) => listAccountsMock(...args),
   };

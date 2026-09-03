@@ -5,19 +5,21 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  checkCephAdminBucketIndex,
-  type CephAdminAdminOpsResult,
   type CephAdminBucket,
-  deleteCephAdminAccount,
-  deleteCephAdminBucket,
-  deleteCephAdminUser,
-  linkCephAdminBucket,
   listCephAdminAccounts,
   listCephAdminUsers,
   type CephAdminRgwAccount,
   type CephAdminRgwUser,
-  unlinkCephAdminBucket,
 } from "../../api/cephAdmin";
+import {
+  checkCephAdminBucketIndex,
+  type CephAdminAdminOpsResult,
+  deleteCephAdminAccount,
+  deleteCephAdminBucket,
+  deleteCephAdminUser,
+  linkCephAdminBucket,
+  unlinkCephAdminBucket,
+} from "../../api/cephAdminAdminOps";
 import Modal from "../../components/Modal";
 import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
