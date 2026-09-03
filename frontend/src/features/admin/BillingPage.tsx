@@ -38,6 +38,7 @@ import {
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { triggerBlobDownload } from "../../utils/download";
+import { currentUtcMonthInputValue } from "../../utils/dateInputValues";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import { DownloadIcon, RefreshIcon } from "../browser/browserIcons";
@@ -71,13 +72,6 @@ const SORT_OPTIONS = [
   { value: "requests", label: "Requests" },
 ] as const;
 type BillingSortBy = (typeof SORT_OPTIONS)[number]["value"];
-
-function currentMonth(): string {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = `${now.getUTCMonth() + 1}`.padStart(2, "0");
-  return `${year}-${month}`;
-}
 
 function defaultCollectDay(): string {
   const now = new Date();
@@ -135,7 +129,7 @@ function isBillingDisabledMessage(message: string): boolean {
 }
 
 export default function BillingPage() {
-  const [month, setMonth] = useState<string>(currentMonth());
+  const [month, setMonth] = useState<string>(currentUtcMonthInputValue());
   const [collectDay, setCollectDay] = useState<string>(defaultCollectDay());
   const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
   const [selectedEndpointId, setSelectedEndpointId] = useState<number | null>(null);

@@ -22,6 +22,7 @@ import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiCardMutedClass, uiInputClass, uiLabelClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
+import { currentUtcMonthInputValue } from "../../utils/dateInputValues";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
@@ -36,13 +37,6 @@ import { PortalPageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 type PortalUsageTab = "storage" | "storage-spaces" | "usage-composition" | "usage-history" | "traffic" | "billing";
-
-function currentMonth(): string {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = `${now.getUTCMonth() + 1}`.padStart(2, "0");
-  return `${year}-${month}`;
-}
 
 function percent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
@@ -88,7 +82,7 @@ function formatBackendTimestamp(value: string | null | undefined, locale: Return
 export default function PortalUsagePage() {
   const { locale, t } = useI18n();
   const { generalSettings } = useGeneralSettings();
-  const [month, setMonth] = useState(currentMonth());
+  const [month, setMonth] = useState(currentUtcMonthInputValue());
   const [activeTab, setActiveTab] = useState<PortalUsageTab>("storage");
   const [trafficWindow, setTrafficWindow] = useState<TrafficWindow>("week");
   const [usageHistoryWindow, setUsageHistoryWindow] = useState<UsageHistoryTrendWindow>("month");
