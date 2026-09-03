@@ -35,7 +35,7 @@ let accountContext = {
   requiresS3AccountSelection: true,
 };
 
-vi.mock("../../api/buckets", () => ({
+vi.mock("../../api/managerBuckets", () => ({
   listBuckets: (...args: unknown[]) => listBucketsMock(...args),
 }));
 

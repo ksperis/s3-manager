@@ -18,7 +18,7 @@ import {
   FeatureRuleInventoryRule,
   FeatureRuleInventoryStatus,
   listFeatureRuleInventory,
-} from "../../api/buckets";
+} from "../../api/managerBuckets";
 import { S3AccountSelector } from "../../api/accountParams";
 import { extractApiError } from "../../utils/apiError";
 import { useS3AccountContext } from "./S3AccountContext";

@@ -6,7 +6,7 @@ import type { Bucket } from "../../api/bucketContracts";
 import type {
   ManagerBucketCompareActionResult,
   ManagerBucketCompareResult,
-} from "../../api/buckets";
+} from "../../api/managerBuckets";
 import { ApiError } from "../../api/client";
 import type { ExecutionContext } from "../../api/executionContexts";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
@@ -19,8 +19,8 @@ const clipboardWriteTextMock = vi.fn<(value: string) => Promise<void>>();
 const createObjectUrlMock = vi.fn(() => "blob:compare-download");
 const revokeObjectUrlMock = vi.fn();
 
-vi.mock("../../api/buckets", async () => {
-  const actual = await vi.importActual<typeof import("../../api/buckets")>("../../api/buckets");
+vi.mock("../../api/managerBuckets", async () => {
+  const actual = await vi.importActual<typeof import("../../api/managerBuckets")>("../../api/managerBuckets");
   return {
     ...actual,
     listBuckets: (contextId: string, options?: { with_stats?: boolean }) => listBucketsMock(contextId, options),

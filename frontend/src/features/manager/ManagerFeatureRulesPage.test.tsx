@@ -11,8 +11,8 @@ vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
 }));
 
-vi.mock("../../api/buckets", async () => {
-  const actual = await vi.importActual<typeof import("../../api/buckets")>("../../api/buckets");
+vi.mock("../../api/managerBuckets", async () => {
+  const actual = await vi.importActual<typeof import("../../api/managerBuckets")>("../../api/managerBuckets");
   return {
     ...actual,
     listFeatureRuleInventory: (...args: unknown[]) => listFeatureRuleInventoryMock(...args),

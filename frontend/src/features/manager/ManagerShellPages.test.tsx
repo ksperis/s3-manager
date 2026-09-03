@@ -99,8 +99,8 @@ vi.mock("../browser/BrowserEmbed", () => ({
   ),
 }));
 
-vi.mock("../../api/buckets", async () => {
-  const actual = await vi.importActual<typeof import("../../api/buckets")>("../../api/buckets");
+vi.mock("../../api/managerBuckets", async () => {
+  const actual = await vi.importActual<typeof import("../../api/managerBuckets")>("../../api/managerBuckets");
   return {
     ...actual,
     listBuckets: (...args: unknown[]) => listBucketsMock(...args),

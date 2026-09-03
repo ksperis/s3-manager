@@ -15,7 +15,7 @@ vi.mock("./client", () => ({
 }));
 
 import { importS3Accounts } from "./accounts";
-import { compareManagerBucketPair, runManagerBucketCompareAction } from "./buckets";
+import { compareManagerBucketPair, runManagerBucketCompareAction } from "./managerBuckets";
 import { backupCephAdminBucketConfigs, compareCephAdminBucketPair } from "./cephAdminBuckets";
 import { rotateS3Keys } from "./keyRotation";
 

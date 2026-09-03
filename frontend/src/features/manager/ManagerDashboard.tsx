@@ -4,7 +4,7 @@
  */
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { listBuckets } from "../../api/buckets";
+import { listBuckets } from "../../api/managerBuckets";
 import type { Bucket } from "../../api/bucketContracts";
 import {
   getManagerUsageStatsAggregate,

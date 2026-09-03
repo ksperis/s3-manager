@@ -17,7 +17,7 @@ vi.mock("../../../api/executionContexts", () => ({
   listExecutionContexts: (...args: unknown[]) => listExecutionContextsMock(...args),
 }));
 
-vi.mock("../../../api/buckets", () => ({
+vi.mock("../../../api/managerBuckets", () => ({
   listBuckets: (...args: unknown[]) => listBucketsMock(...args),
 }));
 

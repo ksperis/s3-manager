@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 
-import { listBuckets } from "../../api/buckets";
+import { listBuckets } from "../../api/managerBuckets";
 import type { Bucket } from "../../api/bucketContracts";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";

@@ -9,7 +9,7 @@ import type {
   FeatureRuleInventoryBucket,
   FeatureRuleInventoryRule,
   FeatureRuleInventoryStatus,
-} from "../../api/buckets";
+} from "../../api/managerBuckets";
 import type { ListTableStatus } from "../../components/list/listTableStatus";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import TableEmptyState from "../../components/TableEmptyState";

@@ -23,7 +23,7 @@ import {
   ManagerBucketObjectDetail,
   runManagerBucketCompareAction,
   type ManagerBucketCompareConfigFeature,
-} from "../../api/buckets";
+} from "../../api/managerBuckets";
 import type { ExecutionContext } from "../../api/executionContexts";
 import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,

@@ -3,7 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client, { timeoutForRequestProfile } from "./client";
-import { S3AccountSelector, withS3AccountParam } from "./accountParams";
+import type { S3AccountSelector } from "./accountParams";
+import { withS3AccountParam } from "./accountParams";
 import type { Bucket } from "./bucketContracts";
 
 const MANAGER_BUCKETS_PATH = "/manager/buckets";

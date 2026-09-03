@@ -14,7 +14,7 @@ import {
   createBucket,
   deleteBucket,
   listBuckets,
-} from "../../api/buckets";
+} from "../../api/managerBuckets";
 import {
   getBucketCors,
   getBucketLogging,
