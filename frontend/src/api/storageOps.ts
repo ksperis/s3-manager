@@ -8,7 +8,7 @@ import {
   deleteBucketLifecycle,
   deleteBucketLogging,
   deleteBucketNotifications,
-  deleteBucketPolicyApi,
+  deleteBucketPolicy,
   getBucketCors,
   getBucketEncryption,
   getBucketLifecycle,
@@ -26,7 +26,7 @@ import {
   setBucketVersioning,
   updateBucketObjectLock,
   updateBucketPublicAccessBlock,
-} from "./buckets";
+} from "./bucketDetails";
 import type {
   BucketCors,
   BucketEncryptionConfiguration,
@@ -240,7 +240,7 @@ export async function putStorageOpsBucketPolicy(
 
 export async function deleteStorageOpsBucketPolicy(_scopeId: number, bucketRef: string): Promise<void> {
   const { contextId, bucketName } = resolveBucketTarget(bucketRef);
-  await deleteBucketPolicyApi(contextId, bucketName);
+  await deleteBucketPolicy(contextId, bucketName);
 }
 
 export async function getStorageOpsBucketLogging(

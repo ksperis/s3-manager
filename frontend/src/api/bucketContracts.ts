@@ -10,6 +10,19 @@ export type BucketFeatureStatus = {
   tone: BucketFeatureTone;
 };
 
+export type Bucket = {
+  name: string;
+  creation_date?: string;
+  owner?: string | null;
+  owner_name?: string | null;
+  used_bytes?: number;
+  object_count?: number;
+  quota_max_size_bytes?: number | null;
+  quota_max_objects?: number | null;
+  tags?: BucketTag[] | null;
+  features?: Record<string, BucketFeatureStatus> | null;
+};
+
 export type BucketLifecycleRule = {
   id?: string | null;
   status?: string | null;

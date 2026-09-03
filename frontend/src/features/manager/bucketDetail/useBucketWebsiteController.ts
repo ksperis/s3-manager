@@ -8,7 +8,7 @@ import {
   deleteBucketWebsite,
   getBucketWebsite,
   putBucketWebsite,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import type { BucketWebsiteConfiguration } from "../../../api/bucketContracts";
 import {
   deleteCephAdminBucketWebsite,

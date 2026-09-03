@@ -8,7 +8,7 @@ import {
   deleteBucketLifecycle,
   getBucketLifecycle,
   putBucketLifecycle,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import {
   deleteCephAdminBucketLifecycle,
   getCephAdminBucketLifecycle,

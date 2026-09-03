@@ -9,7 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   updateCephAdminBucketAcl: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   getBucketAcl: (...args: unknown[]) => apiMocks.getBucketAcl(...args),
   updateBucketAcl: (...args: unknown[]) => apiMocks.updateBucketAcl(...args),
 }));

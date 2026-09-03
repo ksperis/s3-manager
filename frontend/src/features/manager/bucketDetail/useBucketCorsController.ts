@@ -8,7 +8,7 @@ import {
   deleteBucketCors,
   getBucketCors,
   putBucketCors,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import {
   deleteCephAdminBucketCors,
   getCephAdminBucketCors,

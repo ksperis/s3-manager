@@ -8,7 +8,7 @@ import {
   deleteBucketNotifications,
   getBucketNotifications,
   putBucketNotifications,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import {
   deleteCephAdminBucketNotifications,
   getCephAdminBucketNotifications,

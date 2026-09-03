@@ -8,7 +8,7 @@ import {
   deleteBucketEncryption,
   getBucketEncryption,
   putBucketEncryption,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import {
   deleteCephAdminBucketEncryption,
   getCephAdminBucketEncryption,

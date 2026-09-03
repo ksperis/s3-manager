@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   putCephAdminBucketReplication: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   deleteBucketReplication: (...args: unknown[]) =>
     apiMocks.deleteBucketReplication(...args),
   getBucketReplication: (...args: unknown[]) =>

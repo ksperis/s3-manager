@@ -4,38 +4,9 @@
  */
 import client, { timeoutForRequestProfile } from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
-import type {
-  BucketAcl,
-  BucketCors,
-  BucketEncryptionConfiguration,
-  BucketFeatureStatus,
-  BucketLifecycleConfig,
-  BucketLoggingConfiguration,
-  BucketNotificationConfiguration,
-  BucketObjectLockConfiguration,
-  BucketPolicy,
-  BucketProperties,
-  BucketPublicAccessBlock,
-  BucketQuotaUpdate,
-  BucketReplicationConfiguration,
-  BucketTag,
-  BucketVersioningStatus,
-  BucketWebsiteConfiguration,
-} from "./bucketContracts";
+import type { Bucket } from "./bucketContracts";
 
-function isTopLevelBrowserSurface(): boolean {
-  if (typeof window === "undefined") return false;
-  const normalizedPath = window.location.pathname.replace(/\/+$/, "");
-  return normalizedPath === "/browser";
-}
-
-function bucketBasePath(): string {
-  return isTopLevelBrowserSurface() ? "/browser/buckets/config" : "/manager/buckets";
-}
-
-function bucketPath(bucketName: string): string {
-  return `${bucketBasePath()}/${encodeURIComponent(bucketName)}`;
-}
+const MANAGER_BUCKETS_PATH = "/manager/buckets";
 
 export type FeatureRuleFeature = "lifecycle" | "policy" | "cors" | "notifications" | "tags";
 export type FeatureRuleInventoryStatus = "configured" | "empty" | "unavailable";
@@ -57,24 +28,11 @@ export type FeatureRuleInventoryBucket = {
   error?: string | null;
 };
 
-export type Bucket = {
-  name: string;
-  creation_date?: string;
-  owner?: string | null;
-  owner_name?: string | null;
-  used_bytes?: number;
-  object_count?: number;
-  quota_max_size_bytes?: number | null;
-  quota_max_objects?: number | null;
-  tags?: BucketTag[] | null;
-  features?: Record<string, BucketFeatureStatus> | null;
-};
-
 export async function listBuckets(
   accountId: S3AccountSelector,
   options?: { include?: string[]; with_stats?: boolean; signal?: AbortSignal }
 ): Promise<Bucket[]> {
-  const { data } = await client.get<Bucket[]>(bucketBasePath(), {
+  const { data } = await client.get<Bucket[]>(MANAGER_BUCKETS_PATH, {
     params: withS3AccountParam(
       {
         include: options?.include?.join(","),
@@ -98,17 +56,6 @@ export async function listFeatureRuleInventory(
   return data;
 }
 
-export async function getBucketStats(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  options?: { with_stats?: boolean }
-): Promise<Bucket> {
-  const { data } = await client.get<Bucket>(`${bucketPath(bucketName)}/stats`, {
-    params: withS3AccountParam({ with_stats: options?.with_stats }, accountId),
-  });
-  return data;
-}
-
 type CreateBucketOptions = {
   versioning?: boolean;
   locationConstraint?: string;
@@ -117,7 +64,7 @@ type CreateBucketOptions = {
 export async function createBucket(name: string, accountId: S3AccountSelector, options?: CreateBucketOptions): Promise<void> {
   const locationConstraint = options?.locationConstraint?.trim();
   await client.post(
-    bucketBasePath(),
+    MANAGER_BUCKETS_PATH,
     {
       name,
       versioning: options?.versioning ?? false,
@@ -128,7 +75,9 @@ export async function createBucket(name: string, accountId: S3AccountSelector, o
 }
 
 export async function deleteBucket(name: string, accountId: S3AccountSelector): Promise<void> {
-  await client.delete(bucketPath(name), { params: withS3AccountParam(undefined, accountId) });
+  await client.delete(`${MANAGER_BUCKETS_PATH}/${encodeURIComponent(name)}`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
 }
 
 export type ManagerBucketCompareConfigFeature =
@@ -238,20 +187,13 @@ export type ManagerBucketCompareActionResult = {
   message: string;
 };
 
-export async function getBucketProperties(accountId: S3AccountSelector, bucketName: string): Promise<BucketProperties> {
-  const { data } = await client.get<BucketProperties>(`${bucketPath(bucketName)}/properties`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
 export async function compareManagerBucketPair(
   sourceContextId: S3AccountSelector,
   payload: ManagerBucketCompareRequest,
   options?: { signal?: AbortSignal }
 ): Promise<ManagerBucketCompareResult> {
   const { data } = await client.post<ManagerBucketCompareResult>(
-    `${bucketBasePath()}/compare`,
+    `${MANAGER_BUCKETS_PATH}/compare`,
     payload,
     {
       params: withS3AccountParam(undefined, sourceContextId),
@@ -268,336 +210,13 @@ export async function runManagerBucketCompareAction(
   options?: { signal?: AbortSignal }
 ): Promise<ManagerBucketCompareActionResult> {
   const { data } = await client.post<ManagerBucketCompareActionResult>(
-    `${bucketBasePath()}/compare/action`,
+    `${MANAGER_BUCKETS_PATH}/compare/action`,
     payload,
     {
       params: withS3AccountParam(undefined, sourceContextId),
       signal: options?.signal,
       timeout: timeoutForRequestProfile("long_running"),
     }
-  );
-  return data;
-}
-
-export async function getBucketAcl(accountId: S3AccountSelector, bucketName: string): Promise<BucketAcl> {
-  const { data } = await client.get<BucketAcl>(`${bucketPath(bucketName)}/acl`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
-export async function updateBucketAcl(accountId: S3AccountSelector, bucketName: string, acl: string): Promise<BucketAcl> {
-  const { data } = await client.put<BucketAcl>(
-    `${bucketPath(bucketName)}/acl`,
-    { acl },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function getBucketPublicAccessBlock(
-  accountId: S3AccountSelector,
-  bucketName: string
-): Promise<BucketPublicAccessBlock> {
-  const { data } = await client.get<BucketPublicAccessBlock>(
-    `${bucketPath(bucketName)}/public-access-block`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function updateBucketPublicAccessBlock(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  payload: BucketPublicAccessBlock
-): Promise<BucketPublicAccessBlock> {
-  const { data } = await client.put<BucketPublicAccessBlock>(
-    `${bucketPath(bucketName)}/public-access-block`,
-    payload,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function updateBucketQuota(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  payload: BucketQuotaUpdate
-): Promise<void> {
-  await client.put(`${bucketPath(bucketName)}/quota`, payload, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-}
-
-export async function getBucketVersioning(
-  accountId: S3AccountSelector,
-  bucketName: string
-): Promise<BucketVersioningStatus> {
-  const { data } = await client.get<BucketVersioningStatus>(
-    `${bucketPath(bucketName)}/versioning`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function setBucketVersioning(accountId: S3AccountSelector, bucketName: string, enabled: boolean): Promise<void> {
-  await client.put(
-    `${bucketPath(bucketName)}/versioning`,
-    { enabled },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-}
-
-export async function getBucketPolicy(accountId: S3AccountSelector, bucketName: string): Promise<BucketPolicy> {
-  const { data } = await client.get<BucketPolicy>(`${bucketPath(bucketName)}/policy`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
-export async function putBucketPolicy(accountId: S3AccountSelector, bucketName: string, policy: Record<string, unknown>): Promise<BucketPolicy> {
-  const { data } = await client.put<BucketPolicy>(
-    `${bucketPath(bucketName)}/policy`,
-    { policy },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function deleteBucketPolicyApi(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`${bucketPath(bucketName)}/policy`, { params: withS3AccountParam(undefined, accountId) });
-}
-
-export async function getBucketLifecycle(accountId: S3AccountSelector, bucketName: string): Promise<BucketLifecycleConfig> {
-  const { data } = await client.get<BucketLifecycleConfig>(`${bucketPath(bucketName)}/lifecycle`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
-export async function putBucketLifecycle(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  rules: Record<string, unknown>[]
-): Promise<BucketLifecycleConfig> {
-  const { data } = await client.put<BucketLifecycleConfig>(
-    `${bucketPath(bucketName)}/lifecycle`,
-    { rules },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function deleteBucketLifecycle(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`${bucketPath(bucketName)}/lifecycle`, { params: withS3AccountParam(undefined, accountId) });
-}
-
-export async function getBucketCors(accountId: S3AccountSelector, bucketName: string): Promise<BucketCors> {
-  const { data } = await client.get<BucketCors>(`${bucketPath(bucketName)}/cors`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
-export async function putBucketCors(accountId: S3AccountSelector, bucketName: string, rules: Record<string, unknown>[]): Promise<BucketCors> {
-  const { data } = await client.put<BucketCors>(
-    `${bucketPath(bucketName)}/cors`,
-    { rules },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function deleteBucketCors(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`${bucketPath(bucketName)}/cors`, { params: withS3AccountParam(undefined, accountId) });
-}
-
-export async function getBucketEncryption(
-  accountId: S3AccountSelector,
-  bucketName: string
-): Promise<BucketEncryptionConfiguration> {
-  const { data } = await client.get<BucketEncryptionConfiguration>(
-    `${bucketPath(bucketName)}/encryption`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function putBucketEncryption(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  rules: Record<string, unknown>[]
-): Promise<BucketEncryptionConfiguration> {
-  const { data } = await client.put<BucketEncryptionConfiguration>(
-    `${bucketPath(bucketName)}/encryption`,
-    { rules },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function deleteBucketEncryption(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`${bucketPath(bucketName)}/encryption`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-}
-
-export async function getBucketTags(accountId: S3AccountSelector, bucketName: string): Promise<{ tags: BucketTag[] }> {
-  const { data } = await client.get<{ tags: BucketTag[] }>(`${bucketPath(bucketName)}/tags`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
-export async function putBucketTags(accountId: S3AccountSelector, bucketName: string, tags: BucketTag[]): Promise<void> {
-  await client.put(
-    `${bucketPath(bucketName)}/tags`,
-    { tags },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-}
-
-export async function deleteBucketTags(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`${bucketPath(bucketName)}/tags`, { params: withS3AccountParam(undefined, accountId) });
-}
-
-export async function getBucketLogging(
-  accountId: S3AccountSelector,
-  bucketName: string
-): Promise<BucketLoggingConfiguration> {
-  const { data } = await client.get<BucketLoggingConfiguration>(
-    `${bucketPath(bucketName)}/logging`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function putBucketLogging(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  payload: BucketLoggingConfiguration
-): Promise<BucketLoggingConfiguration> {
-  const { data } = await client.put<BucketLoggingConfiguration>(
-    `${bucketPath(bucketName)}/logging`,
-    payload,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function deleteBucketLogging(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`${bucketPath(bucketName)}/logging`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-}
-
-export async function getBucketNotifications(
-  accountId: S3AccountSelector,
-  bucketName: string
-): Promise<BucketNotificationConfiguration> {
-  const { data } = await client.get<BucketNotificationConfiguration>(
-    `${bucketPath(bucketName)}/notifications`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function putBucketNotifications(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  configuration: Record<string, unknown>
-): Promise<BucketNotificationConfiguration> {
-  const { data } = await client.put<BucketNotificationConfiguration>(
-    `${bucketPath(bucketName)}/notifications`,
-    { configuration },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function deleteBucketNotifications(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`${bucketPath(bucketName)}/notifications`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-}
-
-export async function getBucketReplication(
-  accountId: S3AccountSelector,
-  bucketName: string
-): Promise<BucketReplicationConfiguration> {
-  const { data } = await client.get<BucketReplicationConfiguration>(
-    `${bucketPath(bucketName)}/replication`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function putBucketReplication(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  configuration: Record<string, unknown>
-): Promise<BucketReplicationConfiguration> {
-  const { data } = await client.put<BucketReplicationConfiguration>(
-    `${bucketPath(bucketName)}/replication`,
-    { configuration },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function deleteBucketReplication(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`${bucketPath(bucketName)}/replication`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-}
-
-export async function getBucketWebsite(accountId: S3AccountSelector, bucketName: string): Promise<BucketWebsiteConfiguration> {
-  const { data } = await client.get<BucketWebsiteConfiguration>(
-    `${bucketPath(bucketName)}/website`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function putBucketWebsite(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  payload: BucketWebsiteConfiguration
-): Promise<BucketWebsiteConfiguration> {
-  const { data } = await client.put<BucketWebsiteConfiguration>(
-    `${bucketPath(bucketName)}/website`,
-    payload,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function deleteBucketWebsite(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`${bucketPath(bucketName)}/website`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-}
-
-export async function getBucketObjectLock(
-  accountId: S3AccountSelector,
-  bucketName: string
-): Promise<BucketObjectLockConfiguration> {
-  const { data } = await client.get<BucketObjectLockConfiguration>(
-    `${bucketPath(bucketName)}/object-lock`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function updateBucketObjectLock(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  payload: BucketObjectLockConfiguration
-): Promise<BucketObjectLockConfiguration> {
-  const { data } = await client.put<BucketObjectLockConfiguration>(
-    `${bucketPath(bucketName)}/object-lock`,
-    payload,
-    { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
 }

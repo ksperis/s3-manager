@@ -2,7 +2,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Bucket, ManagerBucketCompareActionResult, ManagerBucketCompareResult } from "../../api/buckets";
+import type { Bucket } from "../../api/bucketContracts";
+import type {
+  ManagerBucketCompareActionResult,
+  ManagerBucketCompareResult,
+} from "../../api/buckets";
 import { ApiError } from "../../api/client";
 import type { ExecutionContext } from "../../api/executionContexts";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";

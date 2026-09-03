@@ -15,7 +15,7 @@ const apiMocks = vi.hoisted(() => ({
   putCephAdminBucketNotifications: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   deleteBucketNotifications: (...args: unknown[]) =>
     apiMocks.deleteBucketNotifications(...args),
   getBucketNotifications: (...args: unknown[]) =>

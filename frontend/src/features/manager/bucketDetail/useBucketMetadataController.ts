@@ -4,7 +4,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { S3AccountSelector } from "../../../api/accountParams";
-import { getBucketStats, type Bucket } from "../../../api/buckets";
+import { getBucketStats } from "../../../api/bucketDetails";
+import type { Bucket } from "../../../api/bucketContracts";
 import { listCephAdminBuckets } from "../../../api/cephAdminBuckets";
 import { extractApiError } from "../../../utils/apiError";
 

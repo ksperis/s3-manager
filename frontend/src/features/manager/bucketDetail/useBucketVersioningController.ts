@@ -7,7 +7,7 @@ import type { S3AccountSelector } from "../../../api/accountParams";
 import {
   getBucketVersioning,
   setBucketVersioning,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import {
   getCephAdminBucketVersioning,
   setCephAdminBucketVersioning,

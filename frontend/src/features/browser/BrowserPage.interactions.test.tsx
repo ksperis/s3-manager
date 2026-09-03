@@ -196,19 +196,22 @@ vi.mock("../../api/browserMultipart", () => ({
     abortMultipartUploadMock(...args),
 }));
 
-vi.mock("../../api/buckets", async () => {
+vi.mock("../../api/bucketDetails", async () => {
   const actual =
-    await vi.importActual<typeof import("../../api/buckets")>(
-      "../../api/buckets",
+    await vi.importActual<typeof import("../../api/bucketDetails")>(
+      "../../api/bucketDetails",
     );
   return {
     ...actual,
-    getBucketStats: (...args: unknown[]) => getBucketStatsMock(...args),
-    getBucketProperties: (...args: unknown[]) =>
-      getBucketPropertiesMock(...args),
-    getBucketPolicy: (...args: unknown[]) => getBucketPolicyMock(...args),
-    getBucketLogging: (...args: unknown[]) => getBucketLoggingMock(...args),
-    getBucketWebsite: (...args: unknown[]) => getBucketWebsiteMock(...args),
+    browserBucketDetails: {
+      ...actual.browserBucketDetails,
+      getBucketStats: (...args: unknown[]) => getBucketStatsMock(...args),
+      getBucketProperties: (...args: unknown[]) =>
+        getBucketPropertiesMock(...args),
+      getBucketPolicy: (...args: unknown[]) => getBucketPolicyMock(...args),
+      getBucketLogging: (...args: unknown[]) => getBucketLoggingMock(...args),
+      getBucketWebsite: (...args: unknown[]) => getBucketWebsiteMock(...args),
+    },
   };
 });
 

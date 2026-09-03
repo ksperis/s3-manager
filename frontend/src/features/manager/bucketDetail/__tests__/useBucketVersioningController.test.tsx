@@ -9,7 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   setCephAdminBucketVersioning: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   getBucketVersioning: (...args: unknown[]) =>
     apiMocks.getBucketVersioning(...args),
   setBucketVersioning: (...args: unknown[]) =>

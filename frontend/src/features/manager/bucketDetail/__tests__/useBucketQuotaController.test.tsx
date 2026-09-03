@@ -7,7 +7,7 @@ const apiMocks = vi.hoisted(() => ({
   updateCephAdminBucketQuota: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   updateBucketQuota: (...args: unknown[]) =>
     apiMocks.updateBucketQuota(...args),
 }));

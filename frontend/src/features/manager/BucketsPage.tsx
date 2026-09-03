@@ -13,16 +13,18 @@ import { cx, uiButtonBaseClass, uiButtonVariants, uiCheckboxClass } from "../../
 import {
   createBucket,
   deleteBucket,
+  listBuckets,
+} from "../../api/buckets";
+import {
   getBucketCors,
   getBucketLogging,
   getBucketNotifications,
   getBucketPolicy,
   getBucketProperties,
   getBucketWebsite,
-  listBuckets,
-} from "../../api/buckets";
-import type { Bucket } from "../../api/buckets";
+} from "../../api/bucketDetails";
 import type {
+  Bucket,
   BucketFeatureStatus,
   BucketProperties,
   BucketTag,

@@ -5,10 +5,10 @@
 import { useCallback, useState } from "react";
 import type { S3AccountSelector } from "../../../api/accountParams";
 import {
-  deleteBucketPolicyApi,
+  deleteBucketPolicy,
   getBucketPolicy,
   putBucketPolicy,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import {
   deleteCephAdminBucketPolicy,
   getCephAdminBucketPolicy,
@@ -110,7 +110,7 @@ export function useBucketPolicyController({
         if (!endpointId) return;
         await deleteCephAdminBucketPolicy(endpointId, bucketName);
       } else {
-        await deleteBucketPolicyApi(accountId, bucketName);
+        await deleteBucketPolicy(accountId, bucketName);
       }
       setPolicy(null);
       setText("");

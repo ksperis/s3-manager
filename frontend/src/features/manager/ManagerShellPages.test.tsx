@@ -104,9 +104,19 @@ vi.mock("../../api/buckets", async () => {
   return {
     ...actual,
     listBuckets: (...args: unknown[]) => listBucketsMock(...args),
-    getBucketProperties: (...args: unknown[]) => getBucketPropertiesMock(...args),
     createBucket: vi.fn(),
     deleteBucket: vi.fn(),
+  };
+});
+
+vi.mock("../../api/bucketDetails", async () => {
+  const actual = await vi.importActual<typeof import("../../api/bucketDetails")>(
+    "../../api/bucketDetails",
+  );
+  return {
+    ...actual,
+    getBucketProperties: (...args: unknown[]) =>
+      getBucketPropertiesMock(...args),
   };
 });
 

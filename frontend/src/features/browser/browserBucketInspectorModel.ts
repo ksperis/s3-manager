@@ -3,13 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { S3AccountSelector } from "../../api/accountParams";
-import {
-  getBucketLogging,
-  getBucketPolicy,
-  getBucketProperties,
-  getBucketStats,
-  getBucketWebsite,
-} from "../../api/buckets";
+import { browserBucketDetails } from "../../api/bucketDetails";
 
 type BucketInspectorTone = "active" | "inactive" | "unknown";
 export type BucketInspectorFeature = {
@@ -89,12 +83,14 @@ export const fetchBucketInspectorData = async ({
 }): Promise<BucketInspectorData> => {
   const [statsResult, propertiesResult, policyResult, loggingResult, websiteResult] =
     await Promise.allSettled([
-      getBucketStats(accountId, bucketName, { with_stats: includeUsage }),
-      getBucketProperties(accountId, bucketName),
-      getBucketPolicy(accountId, bucketName),
-      getBucketLogging(accountId, bucketName),
+      browserBucketDetails.getBucketStats(accountId, bucketName, {
+        with_stats: includeUsage,
+      }),
+      browserBucketDetails.getBucketProperties(accountId, bucketName),
+      browserBucketDetails.getBucketPolicy(accountId, bucketName),
+      browserBucketDetails.getBucketLogging(accountId, bucketName),
       includeStaticWebsite
-        ? getBucketWebsite(accountId, bucketName)
+        ? browserBucketDetails.getBucketWebsite(accountId, bucketName)
         : Promise.resolve(null),
     ] as const);
 

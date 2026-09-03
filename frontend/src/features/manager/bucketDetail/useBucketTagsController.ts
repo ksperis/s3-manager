@@ -8,7 +8,7 @@ import {
   deleteBucketTags,
   getBucketTags,
   putBucketTags,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import type { BucketTag } from "../../../api/bucketContracts";
 import {
   deleteCephAdminBucketTags,

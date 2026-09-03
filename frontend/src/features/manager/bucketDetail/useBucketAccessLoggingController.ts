@@ -8,7 +8,7 @@ import {
   deleteBucketLogging,
   getBucketLogging,
   putBucketLogging,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import type { BucketLoggingConfiguration } from "../../../api/bucketContracts";
 import {
   deleteCephAdminBucketLogging,

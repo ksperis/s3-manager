@@ -1,24 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  getBucketLogging,
-  getBucketPolicy,
-  getBucketProperties,
-  getBucketStats,
-  getBucketWebsite,
-} from "../../api/buckets";
+import { browserBucketDetails } from "../../api/bucketDetails";
 
 import {
   buildBucketInspectorFeatures,
   fetchBucketInspectorData,
 } from "./browserBucketInspectorModel";
 
-vi.mock("../../api/buckets", () => ({
-  getBucketLogging: vi.fn(),
-  getBucketPolicy: vi.fn(),
-  getBucketProperties: vi.fn(),
-  getBucketStats: vi.fn(),
-  getBucketWebsite: vi.fn(),
+vi.mock("../../api/bucketDetails", () => ({
+  browserBucketDetails: {
+    getBucketLogging: vi.fn(),
+    getBucketPolicy: vi.fn(),
+    getBucketProperties: vi.fn(),
+    getBucketStats: vi.fn(),
+    getBucketWebsite: vi.fn(),
+  },
 }));
 
 beforeEach(() => vi.resetAllMocks());
@@ -45,7 +41,7 @@ describe("browser bucket inspector model", () => {
   });
 
   it("loads and normalizes bucket stats and feature states", async () => {
-    vi.mocked(getBucketStats).mockResolvedValue({
+    vi.mocked(browserBucketDetails.getBucketStats).mockResolvedValue({
       name: "archive",
       creation_date: "2026-08-02T10:00:00.000Z",
       used_bytes: 128,
@@ -53,7 +49,7 @@ describe("browser bucket inspector model", () => {
       quota_max_size_bytes: 1024,
       quota_max_objects: null,
     } as never);
-    vi.mocked(getBucketProperties).mockResolvedValue({
+    vi.mocked(browserBucketDetails.getBucketProperties).mockResolvedValue({
       versioning_status: "Suspended",
       object_lock: { enabled: true },
       public_access_block: {
@@ -65,14 +61,14 @@ describe("browser bucket inspector model", () => {
       lifecycle_rules: [{ ID: "expire" }],
       cors_rules: [],
     } as never);
-    vi.mocked(getBucketPolicy).mockResolvedValue({
+    vi.mocked(browserBucketDetails.getBucketPolicy).mockResolvedValue({
       policy: { Version: "2012-10-17", Statement: [] },
     } as never);
-    vi.mocked(getBucketLogging).mockResolvedValue({
+    vi.mocked(browserBucketDetails.getBucketLogging).mockResolvedValue({
       enabled: true,
       target_bucket: "logs",
     } as never);
-    vi.mocked(getBucketWebsite).mockResolvedValue({
+    vi.mocked(browserBucketDetails.getBucketWebsite).mockResolvedValue({
       index_document: "index.html",
       routing_rules: [],
     } as never);
@@ -84,7 +80,7 @@ describe("browser bucket inspector model", () => {
       includeStaticWebsite: true,
     });
 
-    expect(getBucketStats).toHaveBeenCalledWith(7, "archive", {
+    expect(browserBucketDetails.getBucketStats).toHaveBeenCalledWith(7, "archive", {
       with_stats: true,
     });
     expect(data).toMatchObject({
@@ -106,10 +102,10 @@ describe("browser bucket inspector model", () => {
   });
 
   it("keeps independent feature failures visible as unavailable", async () => {
-    vi.mocked(getBucketStats).mockRejectedValue(new Error("stats"));
-    vi.mocked(getBucketProperties).mockRejectedValue(new Error("properties"));
-    vi.mocked(getBucketPolicy).mockRejectedValue(new Error("policy"));
-    vi.mocked(getBucketLogging).mockRejectedValue(new Error("logging"));
+    vi.mocked(browserBucketDetails.getBucketStats).mockRejectedValue(new Error("stats"));
+    vi.mocked(browserBucketDetails.getBucketProperties).mockRejectedValue(new Error("properties"));
+    vi.mocked(browserBucketDetails.getBucketPolicy).mockRejectedValue(new Error("policy"));
+    vi.mocked(browserBucketDetails.getBucketLogging).mockRejectedValue(new Error("logging"));
 
     const data = await fetchBucketInspectorData({
       accountId: 7,
@@ -118,7 +114,7 @@ describe("browser bucket inspector model", () => {
       includeStaticWebsite: false,
     });
 
-    expect(getBucketWebsite).not.toHaveBeenCalled();
+    expect(browserBucketDetails.getBucketWebsite).not.toHaveBeenCalled();
     expect(Object.values(data.features)).toEqual(
       expect.arrayContaining([
         { state: "Unavailable", tone: "unknown" },

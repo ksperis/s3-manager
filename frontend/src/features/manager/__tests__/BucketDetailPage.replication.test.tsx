@@ -46,8 +46,8 @@ const updateCephAdminBucketObjectLockMock = vi.fn();
 const fetchCephAdminClusterTrafficMock = vi.fn();
 const deleteCephAdminBucketReplicationMock = vi.fn();
 
-vi.mock("../../../api/buckets", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/buckets")>("../../../api/buckets");
+vi.mock("../../../api/bucketDetails", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/bucketDetails")>("../../../api/bucketDetails");
   return {
     ...actual,
     getBucketStats: (...args: unknown[]) => getBucketStatsMock(...args),

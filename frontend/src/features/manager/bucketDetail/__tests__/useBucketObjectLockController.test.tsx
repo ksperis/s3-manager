@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   updateCephAdminBucketObjectLock: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   getBucketObjectLock: (...args: unknown[]) =>
     apiMocks.getBucketObjectLock(...args),
   setBucketVersioning: (...args: unknown[]) =>

@@ -4,7 +4,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 
-import { type Bucket, listBuckets } from "../../api/buckets";
+import { listBuckets } from "../../api/buckets";
+import type { Bucket } from "../../api/bucketContracts";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 import { useS3AccountContext } from "./S3AccountContext";

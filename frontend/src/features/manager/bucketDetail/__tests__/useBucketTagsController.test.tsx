@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   putCephAdminBucketTags: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   deleteBucketTags: (...args: unknown[]) => apiMocks.deleteBucketTags(...args),
   getBucketTags: (...args: unknown[]) => apiMocks.getBucketTags(...args),
   putBucketTags: (...args: unknown[]) => apiMocks.putBucketTags(...args),

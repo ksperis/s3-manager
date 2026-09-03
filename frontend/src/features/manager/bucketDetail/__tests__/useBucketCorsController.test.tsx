@@ -14,7 +14,7 @@ const apiMocks = vi.hoisted(() => ({
   putCephAdminBucketCors: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   deleteBucketCors: (...args: unknown[]) => apiMocks.deleteBucketCors(...args),
   getBucketCors: (...args: unknown[]) => apiMocks.getBucketCors(...args),
   putBucketCors: (...args: unknown[]) => apiMocks.putBucketCors(...args),

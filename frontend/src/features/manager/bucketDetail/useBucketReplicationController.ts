@@ -8,7 +8,7 @@ import {
   deleteBucketReplication,
   getBucketReplication,
   putBucketReplication,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import {
   deleteCephAdminBucketReplication,
   getCephAdminBucketReplication,

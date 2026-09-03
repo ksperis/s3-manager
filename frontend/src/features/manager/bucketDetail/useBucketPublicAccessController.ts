@@ -7,7 +7,7 @@ import type { S3AccountSelector } from "../../../api/accountParams";
 import {
   getBucketPublicAccessBlock,
   updateBucketPublicAccessBlock,
-} from "../../../api/buckets";
+} from "../../../api/bucketDetails";
 import type { BucketPublicAccessBlock } from "../../../api/bucketContracts";
 import {
   getCephAdminBucketPublicAccessBlock,

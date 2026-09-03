@@ -4,7 +4,7 @@
  */
 import { ReactNode } from "react";
 
-import { type Bucket } from "../../api/buckets";
+import type { Bucket } from "../../api/bucketContracts";
 import ListToolbar from "../../components/ListToolbar";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { ListTableStatus } from "../../components/list/listTableStatus";

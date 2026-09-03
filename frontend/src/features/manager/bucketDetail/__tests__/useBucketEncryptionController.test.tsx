@@ -14,7 +14,7 @@ const apiMocks = vi.hoisted(() => ({
   putCephAdminBucketEncryption: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   deleteBucketEncryption: (...args: unknown[]) =>
     apiMocks.deleteBucketEncryption(...args),
   getBucketEncryption: (...args: unknown[]) =>

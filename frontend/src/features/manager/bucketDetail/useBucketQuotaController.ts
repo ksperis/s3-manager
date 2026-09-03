@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import type { S3AccountSelector } from "../../../api/accountParams";
-import { updateBucketQuota } from "../../../api/buckets";
+import { updateBucketQuota } from "../../../api/bucketDetails";
 import type { BucketQuotaUpdate } from "../../../api/bucketContracts";
 import { updateCephAdminBucketQuota } from "../../../api/cephAdminBucketDetails";
 import { extractApiError } from "../../../utils/apiError";

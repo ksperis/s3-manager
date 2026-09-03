@@ -4,7 +4,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { listBuckets, type Bucket } from "../../../api/buckets";
+import { listBuckets } from "../../../api/buckets";
+import type { Bucket } from "../../../api/bucketContracts";
 import { type ExecutionContext } from "../../../api/executionContexts";
 import {
   getManagerMigration,

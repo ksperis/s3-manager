@@ -9,7 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   updateCephAdminBucketPublicAccessBlock: vi.fn(),
 }));
 
-vi.mock("../../../../api/buckets", () => ({
+vi.mock("../../../../api/bucketDetails", () => ({
   getBucketPublicAccessBlock: (...args: unknown[]) =>
     apiMocks.getBucketPublicAccessBlock(...args),
   updateBucketPublicAccessBlock: (...args: unknown[]) =>
