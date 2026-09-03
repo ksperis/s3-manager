@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -774,35 +774,44 @@ class ManagedPrivateAccessService:
         failure: str,
         user: User,
     ) -> None:
-        provisioning = self.db.query(ManagedPrivateAccess).filter(ManagedPrivateAccess.id == provisioning_id).first()
-        if provisioning is None:
-            return
-        try:
-            self._cleanup_iam_resources(provisioning, iam)
-        except Exception as cleanup_exc:
-            cleanup_error = str(sanitize_error_detail(str(cleanup_exc)))
-            self._record(
-                user,
+        self._compensate(
+            provisioning_id,
+            cleanup=lambda provisioning: self._cleanup_iam_resources(
                 provisioning,
-                "managed_private_access.compensation.failure",
-                status="failure",
-                message=cleanup_error,
-            )
-            self._set_cleanup_pending(provisioning, cleanup_error, user=user)
-            return
-        provisioning.state = "failed"
-        provisioning.cleanup_error = failure
-        provisioning.updated_at = utcnow()
-        self.db.commit()
-        self._record(user, provisioning, "managed_private_access.compensation.success", status="failure", message=failure)
+                iam,
+            ),
+            failure=failure,
+            user=user,
+        )
 
     def _compensate_rgw_user(self, provisioning_id: int, *, failure: str, user: User) -> None:
+        def cleanup(provisioning: ManagedPrivateAccess) -> None:
+            if provisioning.created_access_key and provisioning.access_key_id:
+                S3UsersService(self.db).delete_key(
+                    provisioning.source_context_id,
+                    provisioning.access_key_id,
+                )
+
+        self._compensate(
+            provisioning_id,
+            cleanup=cleanup,
+            failure=failure,
+            user=user,
+        )
+
+    def _compensate(
+        self,
+        provisioning_id: int,
+        *,
+        cleanup: Callable[[ManagedPrivateAccess], None],
+        failure: str,
+        user: User,
+    ) -> None:
         provisioning = self.db.query(ManagedPrivateAccess).filter(ManagedPrivateAccess.id == provisioning_id).first()
         if provisioning is None:
             return
         try:
-            if provisioning.created_access_key and provisioning.access_key_id:
-                S3UsersService(self.db).delete_key(provisioning.source_context_id, provisioning.access_key_id)
+            cleanup(provisioning)
         except Exception as cleanup_exc:
             cleanup_error = str(sanitize_error_detail(str(cleanup_exc)))
             self._record(
