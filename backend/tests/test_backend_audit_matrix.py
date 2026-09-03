@@ -114,7 +114,7 @@ def test_backend_audit_matrix_tracks_shared_bucket_config_mutation_delegation():
         "app/routers/browser_bucket_config_rules.py"
     )
     assert rows_by_function["put_bucket_encryption"].file.relative_to(backend_root) == Path(
-        "app/routers/manager/bucket_config.py"
+        "app/routers/manager/bucket_config_core.py"
     )
     assert rows_by_function["put_bucket_encryption"].signals["delegated_bucket_config_mutation_audit"]
     assert rows_by_function["delete_bucket_encryption"].signals["delegated_bucket_config_mutation_audit"]
