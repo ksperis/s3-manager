@@ -34,6 +34,7 @@ import InlinePolicyDraftEditor from "./InlinePolicyDraftEditor";
 import ManagedPolicySelectionPanel from "./ManagedPolicySelectionPanel";
 import ManagerToolbarSearch from "./ManagerToolbarSearch";
 import { useInlinePolicyDraftEditor } from "./useInlinePolicyDraftEditor";
+import { useManagerIamCollection } from "./useManagerIamCollection";
 
 const DEFAULT_ASSUME_ROLE_DOCUMENT = JSON.stringify(
   {
@@ -58,10 +59,17 @@ export default function ManagerRolesPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
-  const [roles, setRoles] = useState<IAMRole[]>([]);
   const [roleFilter, setRoleFilter] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    error,
+    items: roles,
+    load,
+    loadRelated,
+    loading,
+    setError,
+    setItems: setRoles,
+    setLoading,
+  } = useManagerIamCollection(listIamRoles);
   const {
     inlineDraftMode,
     inlineDraftName,
@@ -111,27 +119,11 @@ export default function ManagerRolesPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  const load = useCallback(async (accountId: S3AccountSelector) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await listIamRoles(accountId);
-      setRoles(data);
-    } catch (err) {
-      setError(extractError(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadPolicies = useCallback(async (accountId: S3AccountSelector) => {
-    try {
-      const data = await listIamPolicies(accountId);
-      setPolicies(data);
-    } catch (err) {
-      setError(extractError(err));
-    }
-  }, []);
+  const loadPolicies = useCallback(
+    (accountId: S3AccountSelector) =>
+      loadRelated(accountId, listIamPolicies, setPolicies),
+    [loadRelated],
+  );
 
   useEffect(() => {
     if (needsS3AccountSelection) {
@@ -143,7 +135,7 @@ export default function ManagerRolesPage() {
     load(accountIdForApi);
     loadPolicies(accountIdForApi);
     resetInlinePolicyDraftEditor();
-  }, [accountIdForApi, needsS3AccountSelection, accessMode, load, loadPolicies, resetInlinePolicyDraftEditor]);
+  }, [accountIdForApi, needsS3AccountSelection, accessMode, load, loadPolicies, resetInlinePolicyDraftEditor, setLoading, setRoles]);
 
   useEffect(() => {
     if (selectedPolicies.length > 0) {

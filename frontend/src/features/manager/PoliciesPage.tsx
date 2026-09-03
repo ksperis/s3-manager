@@ -2,10 +2,9 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
-import { S3AccountSelector } from "../../api/accountParams";
 import { IamPolicy, createIamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -18,6 +17,7 @@ import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPa
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import ManagerToolbarSearch from "./ManagerToolbarSearch";
+import { useManagerIamCollection } from "./useManagerIamCollection";
 
 const DEFAULT_POLICY_DOCUMENT = JSON.stringify(
   {
@@ -40,10 +40,16 @@ export default function PoliciesPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
-  const [policies, setPolicies] = useState<IamPolicy[]>([]);
   const [policyFilter, setPolicyFilter] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    error,
+    items: policies,
+    load,
+    loading,
+    setError,
+    setItems: setPolicies,
+    setLoading,
+  } = useManagerIamCollection(listIamPolicies);
   const [advancedName, setAdvancedName] = useState("");
   const [documentText, setDocumentText] = useState(DEFAULT_POLICY_DOCUMENT);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
@@ -53,19 +59,6 @@ export default function PoliciesPage() {
     stableSignature({ advancedName: "", documentText: DEFAULT_POLICY_DOCUMENT })
   );
 
-  const load = useCallback(async (accountId: S3AccountSelector) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await listIamPolicies(accountId);
-      setPolicies(data);
-    } catch (err) {
-      setError(extractError(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     if (needsS3AccountSelection) {
       setPolicies([]);
@@ -73,7 +66,7 @@ export default function PoliciesPage() {
       return;
     }
     load(accountIdForApi);
-  }, [accountIdForApi, needsS3AccountSelection, accessMode, load]);
+  }, [accountIdForApi, needsS3AccountSelection, accessMode, load, setLoading, setPolicies]);
 
   const handleAdvancedCreate = async (e: FormEvent) => {
     e.preventDefault();

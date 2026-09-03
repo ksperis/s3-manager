@@ -37,6 +37,7 @@ import ManagedPolicySelectionPanel from "./ManagedPolicySelectionPanel";
 import ManagerToolbarSearch from "./ManagerToolbarSearch";
 import CreateManagedPrivateAccessModal from "./CreateManagedPrivateAccessModal";
 import { useInlinePolicyDraftEditor } from "./useInlinePolicyDraftEditor";
+import { useManagerIamCollection } from "./useManagerIamCollection";
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
@@ -54,9 +55,16 @@ export default function ManagerUsersPage() {
   } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
-  const [users, setUsers] = useState<IAMUser[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    error,
+    items: users,
+    load,
+    loadRelated,
+    loading,
+    setError,
+    setItems: setUsers,
+    setLoading,
+  } = useManagerIamCollection(listIamUsers);
   const {
     inlineDraftMode,
     inlineDraftName,
@@ -106,36 +114,17 @@ export default function ManagerUsersPage() {
     direction: "asc",
   });
 
-  const load = useCallback(async (accountId: S3AccountSelector) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await listIamUsers(accountId);
-      setUsers(data);
-    } catch (err) {
-      setError(extractError(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadGroups = useCallback(
+    (accountId: S3AccountSelector) =>
+      loadRelated(accountId, listIamGroups, setGroups),
+    [loadRelated],
+  );
 
-  const loadGroups = useCallback(async (accountId: S3AccountSelector) => {
-    try {
-      const data = await listIamGroups(accountId);
-      setGroups(data);
-    } catch (err) {
-      setError(extractError(err));
-    }
-  }, []);
-
-  const loadPolicies = useCallback(async (accountId: S3AccountSelector) => {
-    try {
-      const data = await listIamPolicies(accountId);
-      setPolicies(data);
-    } catch (err) {
-      setError(extractError(err));
-    }
-  }, []);
+  const loadPolicies = useCallback(
+    (accountId: S3AccountSelector) =>
+      loadRelated(accountId, listIamPolicies, setPolicies),
+    [loadRelated],
+  );
 
   useEffect(() => {
     if (needsS3AccountSelection) {
@@ -162,6 +151,8 @@ export default function ManagerUsersPage() {
     loadPolicies,
     needsS3AccountSelection,
     resetInlinePolicyDraftEditor,
+    setLoading,
+    setUsers,
   ]);
 
   useEffect(() => {
