@@ -20,6 +20,7 @@ from .portal.space_settings import PortalStorageSpaceSettingsMixin
 from .portal.state_usage import PortalStateUsageMixin
 from .portal.storage_space_access import PortalStorageSpaceAccessMixin
 from .portal.storage_space_bucket_policies import PortalStorageSpaceBucketPoliciesMixin
+from .portal.storage_space_catalog import PortalStorageSpaceCatalogMixin
 from .portal.storage_space_icons import PortalStorageSpaceIconsMixin
 from .portal.storage_spaces import PortalStorageSpacesMixin
 from .portal.trash_restore import PortalDeletedPrefixRestoreMixin
@@ -39,6 +40,7 @@ class PortalService(
     PortalDeletedPrefixRestoreMixin,
     PortalCollaboratorsMixin,
     PortalStorageSpaceIconsMixin,
+    PortalStorageSpaceCatalogMixin,
     PortalStorageSpacesMixin,
     PortalObjectsMixin,
     PortalSharingMixin,
