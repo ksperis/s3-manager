@@ -19,6 +19,7 @@ from app.db import (
     UserUiGroup,
 )
 from app.models.app_settings import AppSettings
+from app.models.storage_endpoint import StorageEndpointAdminOpsPermissions
 from app.services import app_settings_service
 from app.services.manager_ceph_management_access_service import ManagerCephManagementAccessService
 from app.services.s3_execution_context import S3ExecutionContext
@@ -43,8 +44,29 @@ def _user(db_session, email: str) -> User:
     return user
 
 
+def _admin_ops_permissions(*, buckets_write: bool = True) -> StorageEndpointAdminOpsPermissions:
+    return StorageEndpointAdminOpsPermissions(
+        users_read=True,
+        users_write=True,
+        buckets_read=buckets_write,
+        buckets_write=buckets_write,
+        accounts_read=True,
+        accounts_write=True,
+    )
+
+
+def _settings_with_manager_bucket_quota() -> AppSettings:
+    settings = AppSettings()
+    settings.general.bucket_quota_management_enabled = True
+    return settings
+
+
+def test_bucket_quota_management_is_disabled_by_default():
+    assert AppSettings().general.bucket_quota_management_enabled is False
+
+
 def test_quota_policy_revalidates_direct_manager_access_after_revocation(db_session, monkeypatch):
-    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: AppSettings())
+    monkeypatch.setattr(app_settings_service, "load_app_settings", _settings_with_manager_bucket_quota)
     user = _user(db_session, "quota-direct@example.test")
     endpoint = _endpoint(name="quota-direct")
     account = S3Account(
@@ -68,6 +90,10 @@ def test_quota_policy_revalidates_direct_manager_access_after_revocation(db_sess
     db_session.commit()
     context = S3ExecutionContext.from_account(account)
     policy = ManagerCephManagementAccessService(db_session)
+    monkeypatch.setattr(
+        "app.services.manager_ceph_management_access_service._resolve_endpoint_admin_ops_permissions",
+        lambda _endpoint: _admin_ops_permissions(),
+    )
 
     assert policy.evaluate("bucket_quota", surface="manager", actor=user, account=context).allowed is True
 
@@ -78,8 +104,48 @@ def test_quota_policy_revalidates_direct_manager_access_after_revocation(db_sess
     assert decision.reason == "Not authorized for this Manager context"
 
 
+def test_quota_policy_requires_endpoint_buckets_write_capability(db_session, monkeypatch):
+    monkeypatch.setattr(app_settings_service, "load_app_settings", _settings_with_manager_bucket_quota)
+    monkeypatch.setattr(
+        "app.services.manager_ceph_management_access_service._resolve_endpoint_admin_ops_permissions",
+        lambda _endpoint: _admin_ops_permissions(buckets_write=False),
+    )
+    user = _user(db_session, "quota-missing-buckets-write@example.test")
+    endpoint = _endpoint(name="quota-missing-buckets-write")
+    account = S3Account(
+        name="quota-missing-buckets-write-account",
+        rgw_account_id="RGW00000000000000077",
+        rgw_user_uid="RGW00000000000000077-admin",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+        allow_bucket_quota_management=True,
+    )
+    db_session.add_all([endpoint, account])
+    db_session.flush()
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
+            portal_role=None,
+        )
+    )
+    db_session.commit()
+
+    decision = ManagerCephManagementAccessService(db_session).evaluate(
+        "bucket_quota",
+        surface="manager",
+        actor=user,
+        account=S3ExecutionContext.from_account(account),
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "Bucket quota management requires buckets=write on the endpoint Admin Ops identity"
+
+
 def test_key_policy_accepts_group_access_and_revalidates_revocation(db_session, monkeypatch):
-    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: AppSettings())
+    monkeypatch.setattr(app_settings_service, "load_app_settings", _settings_with_manager_bucket_quota)
     user = _user(db_session, "keys-group@example.test")
     endpoint = _endpoint(name="keys-group")
     s3_user = S3User(
@@ -150,7 +216,7 @@ def test_policy_rejects_each_missing_ceph_admin_capability(
     endpoint_field,
     endpoint_value,
 ):
-    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: AppSettings())
+    monkeypatch.setattr(app_settings_service, "load_app_settings", _settings_with_manager_bucket_quota)
     user = _user(db_session, f"no-admin-{operation}@example.test")
     endpoint = _endpoint(name=f"no-admin-{operation}", admin_enabled=False)
     endpoint.features_config = "features:\n  admin:\n    enabled: true\n"
@@ -197,7 +263,7 @@ def test_policy_rejects_non_eligible_manager_contexts(
     operation,
     context_kind,
 ):
-    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: AppSettings())
+    monkeypatch.setattr(app_settings_service, "load_app_settings", _settings_with_manager_bucket_quota)
     user = _user(db_session, f"{operation}-{context_kind}@example.test")
     context = S3ExecutionContext(
         context_id=f"{context_kind}-1",

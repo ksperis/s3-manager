@@ -26,7 +26,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   bucket_compare_enabled: true,
   bucket_integrity_check_enabled: true,
   bucket_usage_stats_enabled: true,
-  bucket_quota_management_enabled: true,
+  bucket_quota_management_enabled: false,
   manager_ceph_s3_user_keys_enabled: true,
   managed_private_connection_provisioning_enabled: false,
   allow_login_access_keys: false,

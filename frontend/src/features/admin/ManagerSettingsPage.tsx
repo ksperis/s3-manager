@@ -329,7 +329,7 @@ export default function ManagerSettingsPage() {
               >
                 <SettingsItem
                   title="Bucket quota management"
-                  description="Enables Ceph bucket quota management for eligible S3 Account and RGW User contexts in Manager."
+                  description="Enables Ceph bucket quota management for eligible S3 Account and RGW User contexts in Manager. Requires buckets=write on the endpoint Admin Ops identity."
                   action={
                     <SettingsToggleAction
                       checked={Boolean(settings.general.bucket_quota_management_enabled)}

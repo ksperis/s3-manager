@@ -31,17 +31,18 @@ def _endpoint(**overrides) -> StorageEndpoint:
         (
             [
                 {"type": "users", "perm": "read,write"},
+                {"type": "buckets", "perm": "write"},
                 {"type": "accounts", "perm": "write"},
             ],
-            (True, True, True, True),
+            (True, True, True, True, True, True),
         ),
         (
             "users=read;accounts=read,write",
-            (True, False, True, True),
+            (True, False, False, False, True, True),
         ),
         (
-            {"users": "write", "accounts": "read"},
-            (True, True, True, False),
+            {"users": "write", "buckets": "read", "accounts": "read"},
+            (True, True, True, False, True, False),
         ),
     ],
 )
@@ -72,6 +73,8 @@ def test_resolves_supported_rgw_caps_payloads(raw_caps, expected):
     assert (
         permissions.users_read,
         permissions.users_write,
+        permissions.buckets_read,
+        permissions.buckets_write,
         permissions.accounts_read,
         permissions.accounts_write,
     ) == expected
@@ -115,6 +118,8 @@ def test_skips_resolution_without_ceph_admin_execution(
 
     assert permissions.users_read is False
     assert permissions.users_write is False
+    assert permissions.buckets_read is False
+    assert permissions.buckets_write is False
     assert permissions.accounts_read is False
     assert permissions.accounts_write is False
 
@@ -141,5 +146,7 @@ def test_returns_empty_permissions_when_rgw_lookup_fails():
 
     assert permissions.users_read is False
     assert permissions.users_write is False
+    assert permissions.buckets_read is False
+    assert permissions.buckets_write is False
     assert permissions.accounts_read is False
     assert permissions.accounts_write is False

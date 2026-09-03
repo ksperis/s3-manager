@@ -72,7 +72,7 @@ class GeneralSettings(ApiModel):
     bucket_integrity_check_enabled: bool = True
     bucket_usage_stats_enabled: bool = True
     bucket_purge_enabled: bool = False
-    bucket_quota_management_enabled: bool = True
+    bucket_quota_management_enabled: bool = False
     manager_ceph_s3_user_keys_enabled: bool = True
     managed_private_connection_provisioning_enabled: bool = False
     allow_login_access_keys: bool = False

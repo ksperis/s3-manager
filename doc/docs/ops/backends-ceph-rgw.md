@@ -16,6 +16,10 @@ Ceph RGW is a primary target, especially when RGW Accounts are available.
 - Consider multisite implications in production.
 - Document cluster-specific limits for your organization.
 - Keep the RGW Admin Ops credential restricted to documented admin and internal collection flows.
+- Give the RGW Admin Ops identity `buckets=write` only when Manager bucket quota
+  management is enabled. The per-account or per-user
+  `allow_bucket_quota_management` grant authorizes a BucketReef target; it does
+  not add capabilities to the RGW service identity.
 - If the S3 endpoint URL is not the RGW Admin Ops URL, configure the dedicated
   Admin endpoint override instead of relying on the S3 endpoint as a fallback.
 - Test lifecycle, notifications, versioning, object lock, bucket policy, CORS, website, logging, and replication on the target Ceph release before promising them to tenants.
@@ -24,6 +28,35 @@ Ceph RGW is a primary target, especially when RGW Accounts are available.
   where operators are allowed to create, disable, enable, or delete RGW access
   keys. The global Manager setting, user or group tool access, the S3 User allow
   flag, and Admin Ops credentials must all line up.
+
+## Admin Ops capability for Manager bucket quotas
+
+Manager updates an individual bucket through `PUT /admin/bucket`. Ceph requires
+the Admin Ops identity signing that request to have `buckets=write`.
+`accounts=write` authorizes account-level quota operations, but it does not
+authorize an individual bucket quota update.
+
+Create a new BucketReef Admin Ops identity with the complete expected capability
+set:
+
+```bash
+radosgw-admin user create \
+  --uid="bkr-admin" \
+  --display-name="BucketReef Admin Ops" \
+  --caps="users=read,write;accounts=read,write;buckets=write"
+```
+
+For an existing identity created without the bucket capability, add only the
+missing capability and keep the existing access keys:
+
+```bash
+radosgw-admin caps add --uid="bkr-admin" --caps="buckets=write"
+```
+
+Confirm the returned `caps` include `buckets=write`, then reopen the account or
+RGW user in Admin. BucketReef detects this capability before allowing the
+`Bucket quota management` target grant and revalidates it when Manager exposes
+or executes the action.
 
 ## Minimum lab validation
 

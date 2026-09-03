@@ -27,6 +27,7 @@ function Probe() {
       <span data-testid="endpoint-status">{String(generalSettings.endpoint_status_enabled)}</span>
       <span data-testid="usage-history">{String(generalSettings.usage_history_enabled)}</span>
       <span data-testid="portal-browser">{String(generalSettings.browser_portal_enabled)}</span>
+      <span data-testid="bucket-quota-management">{String(generalSettings.bucket_quota_management_enabled)}</span>
       <span data-testid="loading">{String(loading)}</span>
       <button
         type="button"
@@ -91,6 +92,7 @@ describe("GeneralSettingsProvider fallbacks", () => {
     expect(screen.getByTestId("endpoint-status").textContent).toBe("true");
     expect(screen.getByTestId("usage-history").textContent).toBe("true");
     expect(screen.getByTestId("portal-browser").textContent).toBe("true");
+    expect(screen.getByTestId("bucket-quota-management").textContent).toBe("false");
     expect(fetchGeneralSettings).not.toHaveBeenCalled();
   });
 
@@ -115,6 +117,7 @@ describe("GeneralSettingsProvider fallbacks", () => {
     expect(screen.getByTestId("endpoint-status").textContent).toBe("true");
     expect(screen.getByTestId("usage-history").textContent).toBe("true");
     expect(screen.getByTestId("portal-browser").textContent).toBe("true");
+    expect(screen.getByTestId("bucket-quota-management").textContent).toBe("false");
   });
 
   it("writes saved settings to the local cache immediately", async () => {

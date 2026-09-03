@@ -111,6 +111,7 @@ describe("S3UsersPage modal tabs", () => {
       },
       admin_ops_permissions: {
         users_write: true,
+        buckets_write: true,
       },
     });
 

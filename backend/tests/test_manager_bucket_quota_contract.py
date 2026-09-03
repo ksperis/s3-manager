@@ -2,11 +2,23 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import pytest
+
 from app.db import ManagerAccountRole, S3Account, S3Connection, StorageEndpoint, User, UserRole, UserS3Account
 from app.main import app
+from app.models.app_settings import AppSettings
+from app.models.storage_endpoint import StorageEndpointAdminOpsPermissions
 from app.routers import dependencies
 from app.routers.manager import buckets as manager_buckets_router
+from app.services import app_settings_service
 from app.services.s3_execution_context import S3ExecutionContext
+
+
+@pytest.fixture(autouse=True)
+def _enable_manager_bucket_quota(monkeypatch):
+    settings = AppSettings()
+    settings.general.bucket_quota_management_enabled = True
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
 
 def _quota_user(db_session) -> User:
@@ -103,7 +115,7 @@ def test_manager_bucket_quota_update_requires_target_grant(client, db_session):
     assert response.json()["detail"] == "Bucket quota management is not enabled for this resource"
 
 
-def test_manager_bucket_quota_update_succeeds_with_privileged_access(client, db_session):
+def test_manager_bucket_quota_update_succeeds_with_privileged_access(client, db_session, monkeypatch):
     user = _quota_user(db_session)
     account = _quota_account(db_session)
     _grant_manager_access(db_session, user, account)
@@ -120,6 +132,10 @@ def test_manager_bucket_quota_update_succeeds_with_privileged_access(client, db_
     app.dependency_overrides[dependencies.get_current_actor] = lambda: user
     app.dependency_overrides[manager_buckets_router.get_bucket_configuration_service] = lambda: FakeBucketsService()
     app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
+    monkeypatch.setattr(
+        "app.services.manager_ceph_management_access_service._resolve_endpoint_admin_ops_permissions",
+        lambda _endpoint: StorageEndpointAdminOpsPermissions(buckets_read=True, buckets_write=True),
+    )
     try:
         response = client.put(
             "/api/manager/buckets/demo-bucket/quota",

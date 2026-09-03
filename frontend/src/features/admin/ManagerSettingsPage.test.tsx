@@ -148,6 +148,11 @@ describe("ManagerSettingsPage", () => {
     const user = userEvent.setup();
     render(<ManagerSettingsPage />);
 
+    expect(
+      await screen.findByText(
+        "Enables Ceph bucket quota management for eligible S3 Account and RGW User contexts in Manager. Requires buckets=write on the endpoint Admin Ops identity."
+      )
+    ).toBeInTheDocument();
     const toggle = (await screen.findByLabelText("Bucket quota management")) as HTMLInputElement;
     expect(toggle.checked).toBe(true);
 

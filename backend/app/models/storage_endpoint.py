@@ -40,6 +40,8 @@ class StorageEndpointFeatures(ApiModel):
 class StorageEndpointAdminOpsPermissions(ApiModel):
     users_read: bool = False
     users_write: bool = False
+    buckets_read: bool = False
+    buckets_write: bool = False
     accounts_read: bool = False
     accounts_write: bool = False
 

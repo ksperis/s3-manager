@@ -24,7 +24,7 @@ BucketReef shows an action only when all required conditions are true:
 | IAM | Manager | Endpoint IAM capability and effective Manager access. |
 | Ceph S3 User access keys | Manager > Ceph | Effective S3 User Manager context access, `manager_ceph_s3_user_keys_enabled`, `allow_access_key_management`, Ceph endpoint, and Admin Ops credentials. |
 | Managed private connection provisioning | Manager | `managed_private_connection_provisioning_enabled`, effective direct or inherited UI-user provisioning access, an eligible Manager context, the context resource opt-in when required, and endpoint IAM or Ceph Admin capabilities. |
-| Bucket quota management | Manager, Ceph Admin | Manager requires effective Account or S3 User context access, `bucket_quota_management_enabled`, `allow_bucket_quota_management`, and Ceph Admin Ops capability. Ceph Admin keeps its administrative authorization. Browser and Storage Ops cannot write quotas. |
+| Bucket quota management | Manager, Ceph Admin | Manager requires effective Account or S3 User context access, `bucket_quota_management_enabled`, `allow_bucket_quota_management`, and `buckets=write` on the endpoint Admin Ops identity. Ceph Admin keeps its administrative authorization. Browser and Storage Ops cannot write quotas. |
 | Bucket composition statistics | Manager, Portal | `bucket_usage_stats_enabled`, an eligible context, and S3 object or version-listing permission. |
 | RGW traffic and usage metrics | Manager | `manager_rgw_usage_metrics_enabled`, an eligible Manager context, endpoint metrics or usage capability, and supervision credentials. |
 | SNS topics and bucket notifications | Manager, Ceph Admin, Storage Ops | Endpoint SNS capability and feature-specific action rights. |
@@ -36,6 +36,8 @@ BucketReef shows an action only when all required conditions are true:
 
 ## What to do first
 
+- Manager bucket quota management is globally disabled by default. Enable it
+  only after the endpoint Admin Ops identity has `buckets=write`.
 - Recheck the selected workspace and context.
 - Open [User profile](profile.md) if you expected a private connection or selector tag.
 - Ask an admin whether the feature is globally enabled.

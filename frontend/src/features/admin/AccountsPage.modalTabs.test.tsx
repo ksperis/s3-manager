@@ -148,6 +148,7 @@ describe("AccountsPage modal tabs", () => {
         usage: true,
       },
       admin_ops_permissions: {
+        buckets_write: true,
         accounts_write: true,
       },
     });
@@ -649,6 +650,28 @@ describe("AccountsPage modal tabs", () => {
         allow_bucket_quota_management: true,
       })
     );
+  });
+
+  it("requires the Admin Ops buckets write capability before enabling bucket quota management", async () => {
+    getStorageEndpointMock.mockResolvedValueOnce({
+      id: 10,
+      name: "ceph-main",
+      provider: "ceph",
+      is_default: true,
+      capabilities: { account: true, admin: true },
+      admin_ops_permissions: { accounts_write: true, buckets_write: false },
+    });
+
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.click(await screen.findByRole("tab", { name: "Privileged access" }));
+
+    expect(
+      await screen.findByText("Requires buckets=write on the endpoint Admin Ops identity before this grant can be enabled.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Bucket quota management/ })).toBeDisabled();
   });
 
   it("shows portal overrides tab when the portal feature is enabled", async () => {

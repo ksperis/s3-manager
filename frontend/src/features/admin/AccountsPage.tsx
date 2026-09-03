@@ -183,6 +183,7 @@ export default function S3AccountsPage() {
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
   const [endpointsLoaded, setEndpointsLoaded] = useState(false);
   const [endpointAccountsWrite, setEndpointAccountsWrite] = useState<Record<number, boolean>>({});
+  const [endpointBucketsWrite, setEndpointBucketsWrite] = useState<Record<number, boolean>>({});
   const [endpointPermissionLoading, setEndpointPermissionLoading] = useState<Record<number, boolean>>({});
   const [endpointPermissionErrors, setEndpointPermissionErrors] = useState<Record<number, string | null>>({});
   const [importTenantEndpointId, setImportTenantEndpointId] = useState<string>("");
@@ -242,6 +243,7 @@ export default function S3AccountsPage() {
   const editingCapabilities = editingS3Account?.storage_endpoint_capabilities ?? null;
   const editingEndpointId = editingS3Account?.storage_endpoint_id ?? null;
   const editingEndpointCanWrite = editingEndpointId ? endpointAccountsWrite[editingEndpointId] === true : false;
+  const editingEndpointCanWriteBuckets = editingEndpointId ? endpointBucketsWrite[editingEndpointId] === true : false;
   const usageEnabled = Boolean(editingCapabilities?.usage);
   const adminEnabled = Boolean(editingCapabilities?.admin);
   const hasUsageIdentity = Boolean(editingS3Account?.rgw_account_id);
@@ -630,9 +632,14 @@ export default function S3AccountsPage() {
           ...prev,
           [endpointId]: Boolean(endpoint.admin_ops_permissions?.accounts_write),
         }));
+        setEndpointBucketsWrite((prev) => ({
+          ...prev,
+          [endpointId]: Boolean(endpoint.admin_ops_permissions?.buckets_write),
+        }));
         setEndpointPermissionErrors((prev) => ({ ...prev, [endpointId]: null }));
       } catch (err) {
         setEndpointAccountsWrite((prev) => ({ ...prev, [endpointId]: false }));
+        setEndpointBucketsWrite((prev) => ({ ...prev, [endpointId]: false }));
         setEndpointPermissionErrors((prev) => ({ ...prev, [endpointId]: extractError(err) }));
       } finally {
         setEndpointPermissionLoading((prev) => ({ ...prev, [endpointId]: false }));
@@ -2107,9 +2114,12 @@ export default function S3AccountsPage() {
                   items={[
                     {
                       title: "Bucket quota management",
-                      description: "Allow Ceph bucket quota updates for this S3 Account in Manager.",
+                      description: editingEndpointCanWriteBuckets
+                        ? "Allow Ceph bucket quota updates for this S3 Account in Manager."
+                        : "Requires buckets=write on the endpoint Admin Ops identity before this grant can be enabled.",
                       ariaLabel: "Bucket quota management",
                       checked: editForm.allow_bucket_quota_management,
+                      disabled: !editForm.allow_bucket_quota_management && !editingEndpointCanWriteBuckets,
                       onChange: (checked) =>
                         setEditForm((prev) => ({
                           ...prev,

@@ -117,6 +117,7 @@ export default function S3UsersPage() {
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
   const [endpointsLoaded, setEndpointsLoaded] = useState(false);
   const [endpointUsersWrite, setEndpointUsersWrite] = useState<Record<number, boolean>>({});
+  const [endpointBucketsWrite, setEndpointBucketsWrite] = useState<Record<number, boolean>>({});
   const [endpointPermissionLoading, setEndpointPermissionLoading] = useState<Record<number, boolean>>({});
   const [endpointPermissionErrors, setEndpointPermissionErrors] = useState<Record<number, string | null>>({});
 
@@ -344,9 +345,11 @@ export default function S3UsersPage() {
       try {
         const endpoint = await getStorageEndpoint(endpointId, { include_admin_ops_permissions: true });
         setEndpointUsersWrite((prev) => ({ ...prev, [endpointId]: Boolean(endpoint.admin_ops_permissions?.users_write) }));
+        setEndpointBucketsWrite((prev) => ({ ...prev, [endpointId]: Boolean(endpoint.admin_ops_permissions?.buckets_write) }));
         setEndpointPermissionErrors((prev) => ({ ...prev, [endpointId]: null }));
       } catch (err) {
         setEndpointUsersWrite((prev) => ({ ...prev, [endpointId]: false }));
+        setEndpointBucketsWrite((prev) => ({ ...prev, [endpointId]: false }));
         setEndpointPermissionErrors((prev) => ({ ...prev, [endpointId]: extractError(err) }));
       } finally {
         setEndpointPermissionLoading((prev) => ({ ...prev, [endpointId]: false }));
@@ -411,6 +414,7 @@ export default function S3UsersPage() {
   );
   const editingEndpointId = editingUser?.storage_endpoint_id ?? null;
   const allowUserQuotaUpdates = editingEndpointId ? endpointUsersWrite[editingEndpointId] === true : false;
+  const editingEndpointCanWriteBuckets = editingEndpointId ? endpointBucketsWrite[editingEndpointId] === true : false;
 
   useEffect(() => {
     const defaultCeph =
@@ -1460,9 +1464,12 @@ export default function S3UsersPage() {
                 items={[
                   {
                     title: "Bucket quota management",
-                    description: "Allow Ceph bucket quota updates for this RGW User in Manager.",
+                    description: editingEndpointCanWriteBuckets
+                      ? "Allow Ceph bucket quota updates for this RGW User in Manager."
+                      : "Requires buckets=write on the endpoint Admin Ops identity before this grant can be enabled.",
                     ariaLabel: "Bucket quota management",
                     checked: editForm.allow_bucket_quota_management,
+                    disabled: !editForm.allow_bucket_quota_management && !editingEndpointCanWriteBuckets,
                     onChange: (checked) =>
                       setEditForm((prev) => ({
                         ...prev,

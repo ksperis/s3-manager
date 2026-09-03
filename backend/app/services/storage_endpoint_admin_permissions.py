@@ -80,12 +80,16 @@ def _allows(scope_permissions: set[str], permission: str) -> bool:
 def _permissions_from_caps(raw_caps: object) -> StorageEndpointAdminOpsPermissions:
     parsed_caps = _parse_caps_payload(raw_caps)
     users_permissions = parsed_caps.get("users", set())
+    buckets_permissions = parsed_caps.get("buckets", set())
     accounts_permissions = parsed_caps.get("accounts", set())
     users_write = _allows(users_permissions, "write")
+    buckets_write = _allows(buckets_permissions, "write")
     accounts_write = _allows(accounts_permissions, "write")
     return StorageEndpointAdminOpsPermissions(
         users_read=_allows(users_permissions, "read") or users_write,
         users_write=users_write,
+        buckets_read=_allows(buckets_permissions, "read") or buckets_write,
+        buckets_write=buckets_write,
         accounts_read=_allows(accounts_permissions, "read") or accounts_write,
         accounts_write=accounts_write,
     )

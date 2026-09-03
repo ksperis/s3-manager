@@ -109,6 +109,7 @@ def test_list_endpoints_skips_admin_ops_permissions_by_default(db_session, monke
             return {
                 "caps": [
                     {"type": "users", "perm": "read,write"},
+                    {"type": "buckets", "perm": "write"},
                     {"type": "accounts", "perm": "read,write"},
                 ]
             }
@@ -126,6 +127,8 @@ def test_list_endpoints_skips_admin_ops_permissions_by_default(db_session, monke
     perms = target.admin_ops_permissions
     assert perms.users_read is False
     assert perms.users_write is False
+    assert perms.buckets_read is False
+    assert perms.buckets_write is False
     assert perms.accounts_read is False
     assert perms.accounts_write is False
 
@@ -435,6 +438,7 @@ def test_get_endpoint_exposes_admin_ops_permissions_from_caps(db_session, monkey
             return {
                 "caps": [
                     {"type": "users", "perm": "read,write"},
+                    {"type": "buckets", "perm": "read,write"},
                     {"type": "accounts", "perm": "read,write"},
                 ]
             }
@@ -449,6 +453,8 @@ def test_get_endpoint_exposes_admin_ops_permissions_from_caps(db_session, monkey
     perms = target.admin_ops_permissions
     assert perms.users_read is True
     assert perms.users_write is True
+    assert perms.buckets_read is True
+    assert perms.buckets_write is True
     assert perms.accounts_read is True
     assert perms.accounts_write is True
 
@@ -472,6 +478,8 @@ def test_get_endpoint_falls_back_to_no_admin_ops_permissions_on_rgw_error(db_ses
     perms = target.admin_ops_permissions
     assert perms.users_read is False
     assert perms.users_write is False
+    assert perms.buckets_read is False
+    assert perms.buckets_write is False
     assert perms.accounts_read is False
     assert perms.accounts_write is False
 

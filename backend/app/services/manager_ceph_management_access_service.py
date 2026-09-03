@@ -10,15 +10,29 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User
+from app.models.storage_endpoint import StorageEndpointAdminOpsPermissions
 from app.services import app_settings_service
 from app.services.effective_access_service import EffectiveAccessService, MANAGER_TOOL_ROLES
+from app.services.rgw_admin import get_rgw_admin_client
 from app.services.s3_execution_context import S3ExecutionTarget
+from app.services.storage_endpoint_admin_permissions import (
+    resolve_storage_endpoint_admin_ops_permissions,
+)
 from app.utils.normalize import normalize_storage_provider
 from app.utils.storage_endpoint_features import resolve_feature_flags
 
 
 ManagerCephManagementOperation = Literal["bucket_quota", "rgw_access_keys"]
 ManagerCephManagementSurface = Literal["manager", "browser"]
+
+
+def _resolve_endpoint_admin_ops_permissions(endpoint: StorageEndpoint) -> StorageEndpointAdminOpsPermissions:
+    return resolve_storage_endpoint_admin_ops_permissions(
+        endpoint,
+        provider=normalize_storage_provider(endpoint.provider),
+        capabilities={"admin": resolve_feature_flags(endpoint).admin_enabled},
+        client_factory=get_rgw_admin_client,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,4 +124,10 @@ class ManagerCephManagementAccessService:
         )
         if not self._endpoint_supports_ceph_admin(endpoint):
             return self._deny("Ceph Admin API is not available for this context")
+        if operation == "bucket_quota":
+            permissions = _resolve_endpoint_admin_ops_permissions(endpoint)
+            if not permissions.buckets_write:
+                return self._deny(
+                    "Bucket quota management requires buckets=write on the endpoint Admin Ops identity"
+                )
         return ManagerCephManagementDecision(allowed=True, reason="")

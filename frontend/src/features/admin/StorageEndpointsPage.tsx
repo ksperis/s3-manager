@@ -90,7 +90,7 @@ const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="bkr-admin" \\',
   '  --display-name="BucketReef Admin Ops" \\',
-  '  --caps="users=read,write;accounts=read,write"',
+  '  --caps="users=read,write;accounts=read,write;buckets=write"',
 ].join("\n");
 
 const SUPERVISION_OPS_COMMAND = [
@@ -1397,9 +1397,10 @@ export default function StorageEndpointsPage() {
                   {showOpsHelp && (
                     <>
                       <p className="mt-2">
-                        <span className="font-semibold">Admin Ops</span> keys let BucketReef create RGW accounts and S3 users. If you do not
-                        provide Admin Ops keys, you must create accounts/users outside of BucketReef and import them manually (or
-                        via the API).
+                        <span className="font-semibold">Admin Ops</span> keys let BucketReef create RGW accounts and S3 users, and apply
+                        explicitly delegated Manager bucket quota changes. Individual bucket quota changes require the
+                        <code> buckets=write</code> capability included in the example below. If you do not provide Admin Ops keys, you must
+                        create accounts/users outside of BucketReef and import them manually (or via the API).
                       </p>
                       <p className="mt-2">
                         <span className="font-semibold">Supervision Ops</span> keys are read-only credentials used for usage logs and metrics

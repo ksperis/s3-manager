@@ -35,6 +35,8 @@ export type StorageEndpointFeatures = {
 export type StorageEndpointAdminOpsPermissions = {
   users_read: boolean;
   users_write: boolean;
+  buckets_read: boolean;
+  buckets_write: boolean;
   accounts_read: boolean;
   accounts_write: boolean;
 };
