@@ -242,11 +242,19 @@ describe("UsersPage modal tabs", () => {
         {
           id: 12,
           email: "responsive.user@example.com",
+          full_name: "Responsive User",
           role: "ui_superadmin",
           last_login_at: "2026-07-07T08:45:56Z",
         },
+        {
+          id: 13,
+          email: "email.only@example.com",
+          full_name: null,
+          role: "ui_user",
+          last_login_at: null,
+        },
       ],
-      total: 1,
+      total: 2,
       page: 1,
       page_size: 25,
       has_next: false,
@@ -255,6 +263,13 @@ describe("UsersPage modal tabs", () => {
     render(<UsersPage />);
 
     const table = await screen.findByRole("table");
+    expect(screen.getByRole("columnheader", { name: "User" })).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    expect(listUsersMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sort_by: "name", sort_dir: "asc" }),
+    );
     expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
     expect(screen.getByLabelText("Search")).toHaveAttribute(
       "placeholder",
@@ -268,7 +283,6 @@ describe("UsersPage modal tabs", () => {
           search: "responsive",
         })
       );
-          full_name: "Responsive User",
     });
     expect(table).toHaveClass("responsive-data-table");
     const identityCell = screen.getByText("Responsive User").closest("td");
@@ -278,16 +292,16 @@ describe("UsersPage modal tabs", () => {
     expect(within(identityCell as HTMLElement).getByText("RU")).toBeInTheDocument();
     const emailOnlyCell = screen.getByText("email.only@example.com").closest("td");
     expect(within(emailOnlyCell as HTMLElement).getAllByText("email.only@example.com")).toHaveLength(1);
-        {
-          id: 13,
-          email: "email.only@example.com",
-          full_name: null,
-          role: "ui_user",
-          last_login_at: null,
-        },
     expect(within(table).queryByRole("button", { name: "responsive.user@example.com" })).not.toBeInTheDocument();
     expect(screen.getByText("Superadmin").closest("td")).toHaveAttribute("data-label", "Role");
     expect(screen.getAllByRole("button", { name: "Edit" })[0].closest("td")).toHaveAttribute("data-mobile-actions", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "User" }));
+    await waitFor(() => {
+      expect(listUsersMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort_by: "name", sort_dir: "desc" }),
+      );
+    });
   });
 
   it("preserves an existing portal role while hiding its column when Portal is disabled", async () => {
@@ -295,19 +309,12 @@ describe("UsersPage modal tabs", () => {
       items: [
         {
           id: 12,
-    expect(screen.getByRole("columnheader", { name: "User" })).toHaveAttribute(
-      "aria-sort",
-      "ascending",
-    );
-    expect(listUsersMock).toHaveBeenCalledWith(
-      expect.objectContaining({ sort_by: "name", sort_dir: "asc" }),
-    );
           email: "assoc.summary@example.com",
           role: "ui_user",
           account_links: [{ account_id: 1, manager_role: null, portal_role: "portal_manager" }],
         },
       ],
-      total: 2,
+      total: 1,
       page: 1,
       page_size: 25,
       has_next: false,
@@ -321,13 +328,6 @@ describe("UsersPage modal tabs", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-
-    fireEvent.click(screen.getByRole("button", { name: "User" }));
-    await waitFor(() => {
-      expect(listUsersMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({ sort_by: "name", sort_dir: "desc" }),
-      );
-    });
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
 
     expect(screen.getByRole("columnheader", { name: "Manager role" })).toBeInTheDocument();

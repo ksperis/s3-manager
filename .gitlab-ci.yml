@@ -78,7 +78,7 @@ helm-contract:
     - helm template bucketreef helm/bucketreef -f ops/ci/helm-secure-values.yaml --set backend.existingSecret=bucketreef-auth > /tmp/bucketreef-rendered.yaml
     - test -s /tmp/bucketreef-rendered.yaml
     - "grep -q 'name: TRUSTED_PROXY_CIDRS' /tmp/bucketreef-rendered.yaml"
-    - grep -q '\["10.42.0.0/16"\]' /tmp/bucketreef-rendered.yaml
+    - grep -q '\["10.244.0.0/16"\]' /tmp/bucketreef-rendered.yaml
     - grep -q 'ghcr.io/ksperis/bucketreef-backend:0.2.2' /tmp/bucketreef-rendered.yaml
     - grep -q 'ghcr.io/ksperis/bucketreef-frontend:0.2.2' /tmp/bucketreef-rendered.yaml
     - "grep -q 'kind: NetworkPolicy' /tmp/bucketreef-rendered.yaml"
@@ -106,7 +106,7 @@ compose-contract:
     - docker compose version
     - |
       for compose_file in docker-compose.yml docker-compose.build.yml; do
-        rendered="$(INTERNAL_CRON_TOKEN=test docker compose --file "$compose_file" config --format json)"
+        rendered="$(INTERNAL_CRON_TOKEN=test docker compose --profile operations --file "$compose_file" config --format json)"
         test "$(printf '%s' "$rendered" | jq -r '.services.frontend.environment.CSP_CONNECT_SRC')" = "'self'"
         printf '%s' "$rendered" | jq -e '.services.backend.healthcheck.test and .services.frontend.healthcheck.test' >/dev/null
         printf '%s' "$rendered" | jq -e '.services.backend.read_only and .services.frontend.read_only and .services.scheduler.read_only' >/dev/null
