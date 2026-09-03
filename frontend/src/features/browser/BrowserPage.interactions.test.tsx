@@ -177,11 +177,14 @@ vi.mock("../../api/browser", async () => {
     cleanupObjectVersions: (...args: unknown[]) =>
       cleanupObjectVersionsMock(...args),
     createFolder: (...args: unknown[]) => createFolderMock(...args),
-    presignObject: (...args: unknown[]) => presignObjectMock(...args),
-    proxyDownload: (...args: unknown[]) => proxyDownloadMock(...args),
-    proxyUpload: (...args: unknown[]) => proxyUploadMock(...args),
   };
 });
+
+vi.mock("../../api/browserTransfers", () => ({
+  presignObject: (...args: unknown[]) => presignObjectMock(...args),
+  proxyDownload: (...args: unknown[]) => proxyDownloadMock(...args),
+  proxyUpload: (...args: unknown[]) => proxyUploadMock(...args),
+}));
 
 vi.mock("../../api/browserMultipart", () => ({
   initiateMultipartUpload: (...args: unknown[]) =>

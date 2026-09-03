@@ -11,9 +11,9 @@ const apiMocks = vi.hoisted(() => ({
   proxyUpload: vi.fn(),
 }));
 
-vi.mock("../../api/browser", async () => {
-  const actual = await vi.importActual<typeof import("../../api/browser")>(
-    "../../api/browser",
+vi.mock("../../api/browserTransfers", async () => {
+  const actual = await vi.importActual<typeof import("../../api/browserTransfers")>(
+    "../../api/browserTransfers",
   );
   return {
     ...actual,

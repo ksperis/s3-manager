@@ -6,11 +6,13 @@ import { useCallback } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   fetchObjectMetadata,
-  proxyDownload,
   type BrowserRequestOptions,
+} from "../../api/browser";
+import {
+  proxyDownload,
   type PresignedUrl,
   type PresignRequest,
-} from "../../api/browser";
+} from "../../api/browserTransfers";
 import type { ObjectPreviewLoadResult } from "../shared/ObjectPreview";
 import { buildInlinePreviewDisposition } from "./browserObjectDetailsModel";
 

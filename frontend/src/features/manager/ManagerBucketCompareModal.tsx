@@ -12,7 +12,7 @@ import UiDetails from "../../components/ui/UiDetails";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import UiSelect from "../../components/ui/UiSelect";
 import { UiTone, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
-import { proxyDownload } from "../../api/browser";
+import { proxyDownload } from "../../api/browserTransfers";
 import { runWithConcurrencySettled } from "../../utils/concurrency";
 import {
   compareManagerBucketPair,

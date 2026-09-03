@@ -25,13 +25,9 @@ vi.mock("../../api/buckets", async () => {
   };
 });
 
-vi.mock("../../api/browser", async () => {
-  const actual = await vi.importActual<typeof import("../../api/browser")>("../../api/browser");
-  return {
-    ...actual,
-    proxyDownload: (...args: unknown[]) => proxyDownloadMock(...args),
-  };
-});
+vi.mock("../../api/browserTransfers", () => ({
+  proxyDownload: (...args: unknown[]) => proxyDownloadMock(...args),
+}));
 
 const contexts: ExecutionContext[] = [
   {

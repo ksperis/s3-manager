@@ -17,7 +17,6 @@ import {
   getStsCredentials,
   listBrowserObjects,
   listObjectVersions,
-  proxyUpload,
   updateObjectTags,
 } from "./browser";
 
@@ -101,21 +100,6 @@ describe("browser api", () => {
       },
     );
   });
-
-  it.each([
-    ["text/plain", "text/plain"],
-    ["", "application/octet-stream"],
-  ])(
-    "sends the browser file content type '%s' as proxy upload metadata",
-    async (fileType, expectedContentType) => {
-      const file = new File(["payload"], "report.txt", { type: fileType });
-
-      await proxyUpload("conn-7", "bucket-a", "uploads/report.txt", file);
-
-      const form = clientMock.post.mock.calls[0]?.[1] as FormData;
-      expect(form.get("content_type")).toBe(expectedContentType);
-    },
-  );
 
   it("sends the explicit Manager Browser surface on simple and advanced calls", async () => {
     clientMock.get.mockResolvedValue({ data: {} });

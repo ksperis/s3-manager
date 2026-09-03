@@ -7,10 +7,10 @@ const apiMocks = vi.hoisted(() => ({
   presignObject: vi.fn(),
 }));
 
-vi.mock("../../api/browser", async () => {
+vi.mock("../../api/browserTransfers", async () => {
   const actual =
-    await vi.importActual<typeof import("../../api/browser")>(
-      "../../api/browser",
+    await vi.importActual<typeof import("../../api/browserTransfers")>(
+      "../../api/browserTransfers",
     );
   return {
     ...actual,

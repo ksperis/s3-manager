@@ -4,11 +4,11 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
+import type { BrowserRequestOptions } from "../../api/browser";
 import {
   presignObject,
-  type BrowserRequestOptions,
   type PresignedUrl,
-} from "../../api/browser";
+} from "../../api/browserTransfers";
 import { extractApiError } from "../../utils/apiError";
 import { formatLocalDateTime } from "./browserUtils";
 import { runBrowserScopedSave } from "./browserScopedSave";

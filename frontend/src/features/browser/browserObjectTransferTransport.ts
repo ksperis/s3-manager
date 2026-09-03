@@ -6,15 +6,15 @@ import {
   withS3AccountParam,
   type S3AccountSelector,
 } from "../../api/accountParams";
+import type { BrowserRequestOptions } from "../../api/browser";
 import {
   buildBrowserFetchHeaders,
   presignObject,
   proxyDownload,
   proxyUpload,
-  type BrowserRequestOptions,
   type PresignedUrl,
   type PresignRequest,
-} from "../../api/browser";
+} from "../../api/browserTransfers";
 import { buildApiUrl } from "../../api/client";
 import {
   ensureSuccessfulBrowserTransferResponse,

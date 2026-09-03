@@ -16,10 +16,7 @@ const uploadMocks = vi.hoisted(() => ({
   uploadBrowserFileMultipart: vi.fn(),
 }));
 
-vi.mock("../../api/browser", async () => ({
-  ...(await vi.importActual<typeof import("../../api/browser")>(
-    "../../api/browser",
-  )),
+vi.mock("../../api/browserTransfers", () => ({
   proxyUpload: apiMocks.proxyUpload,
 }));
 

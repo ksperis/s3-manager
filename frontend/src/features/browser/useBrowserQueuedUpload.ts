@@ -3,13 +3,13 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback } from "react";
+import type { BrowserRequestOptions } from "../../api/browser";
 import {
   proxyUpload,
-  type BrowserRequestOptions,
   type PresignRequest,
   type PresignedUrl,
   type UploadProgressEvent,
-} from "../../api/browser";
+} from "../../api/browserTransfers";
 import {
   abortMultipartUpload,
   completeMultipartUpload,

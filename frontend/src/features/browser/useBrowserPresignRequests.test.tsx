@@ -10,16 +10,9 @@ const apiMocks = vi.hoisted(() => ({
   presignPartWithSts: vi.fn(),
 }));
 
-vi.mock("../../api/browser", async () => {
-  const actual =
-    await vi.importActual<typeof import("../../api/browser")>(
-      "../../api/browser",
-    );
-  return {
-    ...actual,
-    presignObject: (...args: unknown[]) => apiMocks.presignObject(...args),
-  };
-});
+vi.mock("../../api/browserTransfers", () => ({
+  presignObject: (...args: unknown[]) => apiMocks.presignObject(...args),
+}));
 
 vi.mock("../../api/browserMultipart", () => ({
   presignPart: (...args: unknown[]) => apiMocks.presignPart(...args),

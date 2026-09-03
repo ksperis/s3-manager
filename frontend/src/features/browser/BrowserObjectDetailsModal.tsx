@@ -9,9 +9,11 @@ import ObjectPreview from "../shared/ObjectPreview";
 import {
   type BrowserObjectVersion,
   type BrowserRequestOptions,
-  type PresignedUrl,
-  type PresignRequest,
 } from "../../api/browser";
+import type {
+  PresignedUrl,
+  PresignRequest,
+} from "../../api/browserTransfers";
 import type { S3AccountSelector } from "../../api/accountParams";
 import { BrowserCopyValueModal } from "./BrowserDialogModals";
 import BrowserObjectArchiveTab from "./BrowserObjectArchiveTab";

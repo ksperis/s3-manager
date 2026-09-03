@@ -16,9 +16,12 @@ vi.mock("../../api/browser", async () => {
     ...actual,
     fetchObjectMetadata: (...args: unknown[]) =>
       apiMocks.fetchObjectMetadata(...args),
-    proxyDownload: (...args: unknown[]) => apiMocks.proxyDownload(...args),
   };
 });
+
+vi.mock("../../api/browserTransfers", () => ({
+  proxyDownload: (...args: unknown[]) => apiMocks.proxyDownload(...args),
+}));
 
 const baseOptions = {
   accountId: "acc-1",

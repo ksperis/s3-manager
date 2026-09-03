@@ -3,7 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback } from "react";
-import type { PresignRequest, PresignedUrl } from "../../api/browser";
+import type {
+  PresignRequest,
+  PresignedUrl,
+} from "../../api/browserTransfers";
 import type { BrowserCopyDialogState } from "./useBrowserCopyDialog";
 import type { BrowserItem } from "./browserTypes";
 
