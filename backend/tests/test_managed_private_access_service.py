@@ -35,12 +35,12 @@ from app.models.managed_private_access import (
 from app.models.policy import Policy
 from app.models.s3_connection import S3ConnectionUpdate
 from app.models.s3_user import S3UserGeneratedKey
-from app.services.managed_private_access_service import (
+from app.services.managed_private_access_errors import (
     ManagedPrivateAccessConflict,
     ManagedPrivateAccessError,
     ManagedPrivateAccessForbidden,
-    ManagedPrivateAccessService,
 )
+from app.services.managed_private_access_service import ManagedPrivateAccessService
 from app.services import app_settings_service
 from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_execution_context import S3ExecutionContext
@@ -289,7 +289,7 @@ def test_iam_provisioning_accepts_authorized_private_or_shared_connection_source
     service = ManagedPrivateAccessService(db_session)
     monkeypatch.setattr(service, "_iam_service_for_account", lambda _account: fake)
     monkeypatch.setattr(
-        "app.services.managed_private_access_service.validate_user_supplied_s3_endpoint",
+            "app.services.managed_private_access_sources.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value,
     )
     _disable_capability_probe(monkeypatch)
@@ -443,7 +443,7 @@ def test_custom_connection_destination_must_pass_private_tls_rules(db_session, m
     db_session.add(source)
     db_session.commit()
     monkeypatch.setattr(
-        "app.services.managed_private_access_service.validate_user_supplied_s3_endpoint",
+        "app.services.managed_private_access_sources.validate_user_supplied_s3_endpoint",
         lambda value, field_name="Endpoint URL": value,
     )
 
@@ -503,7 +503,7 @@ def test_claim_constraint_rejects_concurrent_active_source(db_session):
     user = _user(db_session, email="concurrent@example.test")
     account = _account(db_session, user, _endpoint(db_session))
     service = ManagedPrivateAccessService(db_session)
-    source = service._resolve_iam_source(user, account)
+    source = service.sources.resolve_iam_source(user, account)
 
     service._claim(user, source)
     with pytest.raises(ManagedPrivateAccessConflict, match="already exists"):

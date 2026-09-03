@@ -21,13 +21,13 @@ from app.routers.dependencies import (
     require_iam_capable_manager,
 )
 from app.core.sensitive_data import sanitize_error_detail
-from app.services.managed_private_access_service import (
+from app.services.managed_private_access_errors import (
     ManagedPrivateAccessCleanupPending,
     ManagedPrivateAccessConflict,
     ManagedPrivateAccessError,
     ManagedPrivateAccessForbidden,
-    ManagedPrivateAccessService,
 )
+from app.services.managed_private_access_service import ManagedPrivateAccessService
 
 router = APIRouter(prefix="/manager/private-access", tags=["manager-private-access"])
 

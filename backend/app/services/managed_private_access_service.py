@@ -4,35 +4,44 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from typing import Callable, Literal
+from typing import Callable
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db import ManagedPrivateAccess, S3Account, S3Connection, S3User, StorageProvider, User
+from app.core.sensitive_data import sanitize_error_detail
+from app.db import ManagedPrivateAccess, S3Account, S3Connection, User
 from app.models.managed_private_access import (
     ManagedIAMPrivateAccessRequest,
     ManagedPrivateAccessResult,
     ManagedRGWUserPrivateAccessRequest,
 )
 from app.models.s3_connection import CredentialOwnerType
-from app.core.sensitive_data import sanitize_error_detail, sanitized_error_log_detail
 from app.services import app_settings_service
 from app.services.audit_service import AuditService
 from app.services.effective_access_service import EffectiveAccessService, ResolvedUserAccess
-from app.services.rgw_iam import RGWIAMService, get_iam_service
-from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
-from app.services.s3_connections_service import S3ConnectionsService
+from app.services.managed_private_access_errors import (
+    ManagedPrivateAccessCleanupPending,
+    ManagedPrivateAccessConflict,
+    ManagedPrivateAccessError,
+    ManagedPrivateAccessForbidden,
+)
+from app.services.managed_private_access_sources import (
+    ManagedPrivateAccessDestination,
+    ManagedPrivateAccessSource,
+    ManagedPrivateAccessSourceResolver,
+)
 from app.services.mappers.s3_connection import mask_access_key_id
+from app.services.rgw_iam import RGWIAMService, get_iam_service
+from app.services.s3_connection_capabilities_service import (
+    refresh_connection_detected_capabilities,
+)
+from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.s3_users_service import S3UsersService
-from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
-from app.utils.s3_connection_endpoint import build_custom_endpoint_config, resolve_connection_details
-from app.utils.s3_endpoint import resolve_iam_client_options, validate_user_supplied_s3_endpoint
-from app.utils.normalize import normalize_storage_provider
+from app.utils.s3_connection_endpoint import resolve_connection_details
+from app.utils.s3_endpoint import resolve_iam_client_options
 from app.utils.storage_endpoint_features import (
     aws_iam_client_options_for_region,
-    resolve_feature_flags,
     resolve_iam_endpoint,
     resolve_iam_signing_region,
 )
@@ -41,7 +50,6 @@ from app.utils.time import utcnow
 
 ACTIVE_STATES = ("provisioning", "active", "deleting", "cleanup_pending")
 AMAZON_S3_FULL_ACCESS_POLICY_ARN = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-RemotePrincipalType = Literal["iam_user", "rgw_user"]
 
 
 def _credential_owner_type_for_principal(
@@ -54,45 +62,13 @@ def _credential_owner_type_for_principal(
     raise ManagedPrivateAccessError(f"Unsupported remote principal type: {principal_type}")
 
 
-class ManagedPrivateAccessError(RuntimeError):
-    pass
-
-
-class ManagedPrivateAccessConflict(ManagedPrivateAccessError):
-    pass
-
-
-class ManagedPrivateAccessForbidden(ManagedPrivateAccessError):
-    pass
-
-
-class ManagedPrivateAccessCleanupPending(ManagedPrivateAccessError):
-    def __init__(self, provisioning_id: int, message: str) -> None:
-        super().__init__(message)
-        self.provisioning_id = provisioning_id
-
-
-@dataclass(frozen=True)
-class _Source:
-    kind: str
-    identifier: int
-    remote_principal_type: RemotePrincipalType
-    remote_principal_identifier: str
-    iam_username: str | None
-
-
-@dataclass(frozen=True)
-class _Destination:
-    storage_endpoint_id: int | None
-    custom_endpoint_config: str | None
-
-
 class ManagedPrivateAccessService:
     """Orchestrate remote credentials and a private connection as a durable saga."""
 
     def __init__(self, db: Session) -> None:
         self.db = db
         self.access = EffectiveAccessService(db)
+        self.sources = ManagedPrivateAccessSourceResolver(db, self.access)
         self.connections = S3ConnectionsService(db)
         self.audit = AuditService(db)
 
@@ -104,8 +80,8 @@ class ManagedPrivateAccessService:
         payload: ManagedIAMPrivateAccessRequest,
     ) -> ManagedPrivateAccessResult:
         self._ensure_managed_private_connection_provisioning_allowed(user)
-        source = self._resolve_iam_source(user, account)
-        destination = self._derive_destination(source)
+        source = self.sources.resolve_iam_source(user, account)
+        destination = self.sources.derive_destination(source)
         iam = self._iam_service_for_account(account)
         try:
             self._validate_iam_selections(iam, payload)
@@ -205,8 +181,8 @@ class ManagedPrivateAccessService:
         payload: ManagedRGWUserPrivateAccessRequest,
     ) -> ManagedPrivateAccessResult:
         self._ensure_managed_private_connection_provisioning_allowed(user)
-        source = self._resolve_rgw_user_source(user, account)
-        destination = self._derive_destination(source)
+        source = self.sources.resolve_rgw_user_source(user, account)
+        destination = self.sources.derive_destination(source)
         existing = self._active_for_source(user.id, source)
         if existing is not None:
             return self._resolve_idempotent_existing(existing, payload)
@@ -384,18 +360,6 @@ class ManagedPrivateAccessService:
             .all()
         )
 
-    @staticmethod
-    def iam_source_reference(account: S3ExecutionTarget) -> tuple[str, int] | None:
-        connection_id = getattr(account, "s3_connection_id", None)
-        if isinstance(connection_id, int) and connection_id > 0:
-            return "connection", connection_id
-        if getattr(account, "s3_user_id", None) is not None:
-            return None
-        account_id = getattr(account, "id", None)
-        if isinstance(account_id, int) and account_id > 0:
-            return "account", account_id
-        return None
-
     def managed_provisioning_allowed(
         self,
         user: User,
@@ -422,7 +386,7 @@ class ManagedPrivateAccessService:
                 user,
                 resolved=resolved,
             )
-            self._resolve_rgw_user_source(user, account)
+            self.sources.resolve_rgw_user_source(user, account)
         except ManagedPrivateAccessError:
             return False
         return True
@@ -437,114 +401,6 @@ class ManagedPrivateAccessService:
             raise ManagedPrivateAccessForbidden(
                 "Managed private S3 connection provisioning is not allowed for this user"
             )
-
-    def _resolve_iam_source(self, user: User, account: S3ExecutionTarget) -> _Source:
-        effective = self.access.resolve_user(user)
-        connection_id = getattr(account, "s3_connection_id", None)
-        if isinstance(connection_id, int):
-            connection = self.db.query(S3Connection).filter(S3Connection.id == connection_id).first()
-            if (
-                connection is None
-                or not self.access.connection_is_allowed(
-                    user,
-                    connection,
-                    workspace="manager",
-                    resolved=effective,
-                )
-                or not s3_connection_can_manage_iam(connection.capabilities_json)
-            ):
-                raise ManagedPrivateAccessForbidden("IAM provisioning is not allowed for this connection")
-            endpoint = connection.storage_endpoint
-            if endpoint is not None and not resolve_feature_flags(endpoint).iam_enabled:
-                raise ManagedPrivateAccessForbidden("IAM is disabled for this endpoint")
-            username = self._iam_username(user.id, "connection", connection.id)
-            return _Source("connection", connection.id, "iam_user", username, username)
-
-        if getattr(account, "s3_user_id", None) is not None:
-            raise ManagedPrivateAccessForbidden("IAM provisioning is not available for an RGW User context")
-        account_id = getattr(account, "id", None)
-        if not isinstance(account_id, int) or account_id <= 0:
-            raise ManagedPrivateAccessForbidden("A persisted RGW Account context is required")
-        link = effective.account_link_for(account_id)
-        if link is None or not self.access.manager_account_allowed(link):
-            raise ManagedPrivateAccessForbidden("Account administrator access is required")
-        source_account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
-        if source_account is None or source_account.storage_endpoint is None:
-            raise ManagedPrivateAccessError("The account has no usable storage endpoint")
-        if not resolve_feature_flags(source_account.storage_endpoint).iam_enabled:
-            raise ManagedPrivateAccessForbidden("IAM is disabled for this endpoint")
-        username = self._iam_username(user.id, "account", account_id)
-        return _Source("account", account_id, "iam_user", username, username)
-
-    def _resolve_rgw_user_source(self, user: User, account: S3ExecutionTarget) -> _Source:
-        s3_user_id = getattr(account, "s3_user_id", None)
-        if not isinstance(s3_user_id, int) or s3_user_id <= 0:
-            raise ManagedPrivateAccessForbidden("An assigned RGW User context is required")
-        resolved = self.access.resolve_user(user)
-        if not resolved.has_s3_user(s3_user_id):
-            raise ManagedPrivateAccessForbidden("The RGW User is not assigned to this user")
-        s3_user = self.db.query(S3User).filter(S3User.id == s3_user_id).first()
-        if s3_user is None:
-            raise ManagedPrivateAccessError("RGW User not found")
-        endpoint = s3_user.storage_endpoint
-        if (
-            not s3_user.allow_managed_private_connection_provisioning
-            or endpoint is None
-            or normalize_storage_provider(endpoint.provider) != StorageProvider.CEPH
-            or not resolve_feature_flags(endpoint).admin_enabled
-            or not (endpoint.admin_access_key or "").strip()
-            or not (endpoint.admin_secret_key or "").strip()
-        ):
-            raise ManagedPrivateAccessForbidden("Managed Ceph private access is not allowed for this context")
-        return _Source(
-            "s3_user",
-            s3_user.id,
-            "rgw_user",
-            s3_user.rgw_user_uid,
-            None,
-        )
-
-    def _derive_destination(self, source: _Source) -> _Destination:
-        if source.kind == "account":
-            row = self.db.query(S3Account).filter(S3Account.id == source.identifier).first()
-            endpoint_id = row.storage_endpoint_id if row is not None else None
-            if endpoint_id is None or row is None or row.storage_endpoint is None:
-                raise ManagedPrivateAccessError("The source account has no usable storage endpoint")
-            return _Destination(endpoint_id, None)
-        if source.kind == "s3_user":
-            row = self.db.query(S3User).filter(S3User.id == source.identifier).first()
-            endpoint_id = row.storage_endpoint_id if row is not None else None
-            if endpoint_id is None or row is None or row.storage_endpoint is None:
-                raise ManagedPrivateAccessError("The source RGW User has no usable storage endpoint")
-            return _Destination(endpoint_id, None)
-
-        connection = self.db.query(S3Connection).filter(S3Connection.id == source.identifier).first()
-        if connection is None:
-            raise ManagedPrivateAccessError("Source connection not found")
-        if connection.storage_endpoint_id is not None:
-            if connection.storage_endpoint is None:
-                raise ManagedPrivateAccessError("The source connection endpoint is unavailable")
-            return _Destination(connection.storage_endpoint_id, None)
-        details = resolve_connection_details(connection)
-        try:
-            endpoint_url = validate_user_supplied_s3_endpoint(
-                (details.endpoint_url or "").strip(),
-                field_name="Endpoint URL",
-            )
-        except ValueError as exc:
-            raise ManagedPrivateAccessError(sanitized_error_log_detail(exc)) from exc
-        if not details.verify_tls:
-            raise ManagedPrivateAccessError("Managed private access requires TLS verification")
-        return _Destination(
-            None,
-            build_custom_endpoint_config(
-                endpoint_url,
-                details.region,
-                details.force_path_style,
-                details.verify_tls,
-                details.provider,
-            ),
-        )
 
     def _validate_iam_selections(
         self,
@@ -565,7 +421,11 @@ class ManagedPrivateAccessService:
         if len(inline_names) != len(set(inline_names)):
             raise ManagedPrivateAccessError("Inline policy names must be unique")
 
-    def _active_for_source(self, user_id: int, source: _Source) -> ManagedPrivateAccess | None:
+    def _active_for_source(
+        self,
+        user_id: int,
+        source: ManagedPrivateAccessSource,
+    ) -> ManagedPrivateAccess | None:
         return (
             self.db.query(ManagedPrivateAccess)
             .filter(
@@ -601,7 +461,11 @@ class ManagedPrivateAccessService:
             "A managed private access already exists or requires cleanup for this execution context"
         )
 
-    def _claim(self, user: User, source: _Source) -> ManagedPrivateAccess:
+    def _claim(
+        self,
+        user: User,
+        source: ManagedPrivateAccessSource,
+    ) -> ManagedPrivateAccess:
         row = ManagedPrivateAccess(
             owner_user_id=user.id,
             source_context_type=source.kind,
@@ -629,7 +493,7 @@ class ManagedPrivateAccessService:
         *,
         user: User,
         provisioning: ManagedPrivateAccess,
-        destination: _Destination,
+        destination: ManagedPrivateAccessDestination,
         connection_name: str,
         access_key_id: str,
         secret_access_key: str,
@@ -882,11 +746,6 @@ class ManagedPrivateAccessService:
                 "provisioning_state": provisioning.state,
             },
         )
-
-    @staticmethod
-    def _iam_username(user_id: int, source_kind: str, source_id: int) -> str:
-        kind = "acc" if source_kind == "account" else "conn"
-        return f"bkr-private-u{user_id}-{kind}{source_id}"
 
     @staticmethod
     def _json_list(value: str) -> list[str]:

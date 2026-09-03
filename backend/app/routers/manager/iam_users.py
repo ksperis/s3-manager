@@ -23,6 +23,7 @@ from app.routers.manager.iam_common import (
 )
 from app.services.audit_service import AuditService
 from app.services.managed_private_access_service import ManagedPrivateAccessService
+from app.services.managed_private_access_sources import iam_source_reference
 
 router = APIRouter(prefix="/manager/iam/users", tags=["manager-iam-users"])
 
@@ -36,7 +37,7 @@ def list_users(
     _, service = get_account_and_service(account)
     try:
         users = service.list_users()
-        source = ManagedPrivateAccessService.iam_source_reference(account)
+        source = iam_source_reference(account)
         if source is not None:
             managed = {
                 row.iam_username: row
@@ -102,7 +103,7 @@ def delete_user(
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> None:
-    source = ManagedPrivateAccessService.iam_source_reference(account)
+    source = iam_source_reference(account)
     if source is not None:
         managed = ManagedPrivateAccessService(db).managed_iam_user(*source, user_name)
         if managed is not None:
@@ -135,7 +136,7 @@ def list_access_keys(
     _, service = get_account_and_service(account)
     try:
         keys = service.list_access_keys(user_name)
-        source = ManagedPrivateAccessService.iam_source_reference(account)
+        source = iam_source_reference(account)
         if source is not None:
             managed = {
                 row.access_key_id: row
@@ -160,7 +161,7 @@ def create_access_key(
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> AccessKey:
-    source = ManagedPrivateAccessService.iam_source_reference(account)
+    source = iam_source_reference(account)
     if source is not None and ManagedPrivateAccessService(db).managed_iam_user(*source, user_name) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -193,7 +194,7 @@ def update_access_key_status(
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> AccessKey:
-    source = ManagedPrivateAccessService.iam_source_reference(account)
+    source = iam_source_reference(account)
     if source is not None and ManagedPrivateAccessService(db).managed_key(*source, access_key_id) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -232,7 +233,7 @@ def delete_access_key(
     audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> None:
-    source = ManagedPrivateAccessService.iam_source_reference(account)
+    source = iam_source_reference(account)
     if source is not None and ManagedPrivateAccessService(db).managed_key(*source, access_key_id) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

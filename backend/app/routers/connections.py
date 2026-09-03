@@ -20,10 +20,8 @@ from app.services.audit_service import AuditService
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.s3_connection_endpoint_planner import StorageEndpointNotFoundError
 from app.services.s3_connections_service import S3ConnectionsService
-from app.services.managed_private_access_service import (
-    ManagedPrivateAccessCleanupPending,
-    ManagedPrivateAccessService,
-)
+from app.services.managed_private_access_errors import ManagedPrivateAccessCleanupPending
+from app.services.managed_private_access_service import ManagedPrivateAccessService
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.services.tags_service import TagsService, serialize_tag_summaries
@@ -250,4 +248,3 @@ def delete_connection(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=sanitize_error_detail(str(exc))) from exc
     return None
-
