@@ -4,7 +4,7 @@
  */
 import type { ReactNode } from "react";
 import type { ManagerTrafficStats, ManagerUsageTrendBaseline, TrafficWindow } from "../api/stats";
-import { formatBytes, formatCompactNumber, formatPercentage } from "../utils/format";
+import { formatBytes, formatPercentage, formatSpacedCompactNumber } from "../utils/format";
 import {
   workspaceTrendWindowDays,
   type WorkspaceDashboardMetric,
@@ -81,14 +81,6 @@ function workspaceDashboardPercent(used?: number | null, quota?: number | null):
   return Math.max(0, Math.min(100, (used / quota) * 100));
 }
 
-export function formatWorkspaceDashboardNumber(value?: number | null): string {
-  if (value == null) return "-";
-  return formatCompactNumber(value)
-    .replace(/k$/, " K")
-    .replace(/M$/, " M")
-    .replace(/B$/, " B");
-}
-
 function formatWorkspaceOptionalBytes(value?: number | null): string {
   return value == null ? "" : formatBytes(value);
 }
@@ -104,8 +96,8 @@ function formatWorkspaceCountQuotaDetail(
   usagePercent?: number | null,
   ofLabel = "of"
 ): string {
-  if (value == null) return formatWorkspaceQuotaDetail(`${formatWorkspaceDashboardNumber(quota)} ${unitLabel}`, usagePercent, ofLabel);
-  const detail = `${formatWorkspaceDashboardNumber(value)} / ${formatWorkspaceDashboardNumber(quota)} ${unitLabel}`;
+  if (value == null) return formatWorkspaceQuotaDetail(`${formatSpacedCompactNumber(quota)} ${unitLabel}`, usagePercent, ofLabel);
+  const detail = `${formatSpacedCompactNumber(value)} / ${formatSpacedCompactNumber(quota)} ${unitLabel}`;
   return usagePercent == null ? detail : `${detail} (${formatPercentage(usagePercent)})`;
 }
 
@@ -230,7 +222,7 @@ function formatWorkspaceCountTrend(
   baseline?: ManagerUsageTrendBaseline | null,
   comparisonLabel = "vs"
 ): WorkspaceDashboardMetricTrend | undefined {
-  return formatWorkspaceSignedTrend(currentValue, baselineValue, baseline?.label ?? "", formatWorkspaceDashboardNumber, comparisonLabel);
+  return formatWorkspaceSignedTrend(currentValue, baselineValue, baseline?.label ?? "", formatSpacedCompactNumber, comparisonLabel);
 }
 
 function formatCountValue(value: number | null | undefined): string {

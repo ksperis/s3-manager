@@ -4,7 +4,20 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { formatBytesAxis } from "./format";
+import { formatBytesAxis, formatSpacedCompactNumber } from "./format";
+
+describe("formatSpacedCompactNumber", () => {
+  it.each([
+    [undefined, "-"],
+    [null, "-"],
+    [999, "999"],
+    [1_000, "1 K"],
+    [1_200_000, "1.2 M"],
+    [1_000_000_000, "1 B"],
+  ] as const)("formats %s as %s", (value, expected) => {
+    expect(formatSpacedCompactNumber(value)).toBe(expected);
+  });
+});
 
 describe("formatBytesAxis", () => {
   it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0])(

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ManagerTrafficStats } from "../api/stats";
+import { formatSpacedCompactNumber } from "../utils/format";
 import { buildWorkspaceStorageEvolutionPoints } from "./WorkspaceDashboardKit";
 import {
   buildWorkspaceDashboardKpis,
-  formatWorkspaceDashboardNumber,
   formatWorkspaceSignedTrend,
   formatWorkspaceTrafficTrend,
   formatWorkspaceProjectedFull,
@@ -98,7 +98,7 @@ describe("workspaceDashboardKpis", () => {
   });
 
   it("keeps localized KPI trend values separate from long qualifiers", () => {
-    const signedTrend = formatWorkspaceSignedTrend(91, 47, "la semaine dernière", formatWorkspaceDashboardNumber, "par rapport à");
+    const signedTrend = formatWorkspaceSignedTrend(91, 47, "la semaine dernière", formatSpacedCompactNumber, "par rapport à");
     expect(signedTrend).toMatchObject({
       label: "44 par rapport à la semaine dernière",
       valueLabel: "44",

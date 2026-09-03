@@ -49,6 +49,10 @@ export function formatCompactNumber(value?: number | null): string {
   return `${(value / 1_000_000_000).toFixed(value % 1_000_000_000 === 0 ? 0 : 1)}B`;
 }
 
+export function formatSpacedCompactNumber(value?: number | null): string {
+  return formatCompactNumber(value).replace(/([kMB])$/, (_match, unit: string) => ` ${unit.toUpperCase()}`);
+}
+
 export function formatPercentage(value?: number | null): string {
   if (value === undefined || value === null || Number.isNaN(value)) return "-";
   return `${value.toFixed(value >= 10 ? 0 : 1)}%`;

@@ -24,7 +24,6 @@ import {
 } from "../../components/WorkspaceDashboardKit";
 import {
   buildWorkspaceDashboardKpis,
-  formatWorkspaceDashboardNumber,
   formatWorkspaceProjectedFull,
   formatWorkspaceSignedBytesDelta,
   formatWorkspaceSignedTrend,
@@ -36,7 +35,7 @@ import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiCardClass, uiMutedTextClass } from "../../components/ui/styles";
 import { useI18n, type I18nMessage } from "../../i18n";
-import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
+import { formatBytes, formatPercentage, formatSpacedCompactNumber } from "../../utils/format";
 import {
   BucketCollectionIcon,
   BucketIcon,
@@ -93,14 +92,6 @@ const TOP_STORAGE_SPACES_LIMIT = 4;
 function percent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
   return Math.max(0, Math.min(100, (used / quota) * 100));
-}
-
-function formatDashboardNumber(value?: number | null): string {
-  if (value == null) return "-";
-  return formatCompactNumber(value)
-    .replace(/k$/, " K")
-    .replace(/M$/, " M")
-    .replace(/B$/, " B");
 }
 
 function alertTone(tone: string) {
@@ -339,7 +330,7 @@ function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
                 <span className="ui-caption font-semibold text-[var(--ui-text)]">{formatBytes(row.usedBytes)}</span>
                 {row.percent != null ? <ProgressBar value={row.percent} className="h-1.5" /> : <span className="h-1.5" />}
               </div>
-              <span className="text-right ui-caption font-semibold text-[var(--ui-text)]">{formatDashboardNumber(row.objectCount)}</span>
+              <span className="text-right ui-caption font-semibold text-[var(--ui-text)]">{formatSpacedCompactNumber(row.objectCount)}</span>
             </div>
           ))}
         </div>
@@ -598,7 +589,7 @@ export default function PortalDashboard() {
   });
   const collaboratorsMetric: WorkspaceDashboardMetric = {
     label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }),
-    value: formatWorkspaceDashboardNumber(collaborators?.summary.collaborator_count),
+    value: formatSpacedCompactNumber(collaborators?.summary.collaborator_count),
     detail: externalToolAccessDetail(collaborators?.summary.external_access_key_count, t),
     trend: collaboratorsError
       ? undefined
@@ -606,7 +597,7 @@ export default function PortalDashboard() {
           collaborators?.summary.collaborator_count,
           collaboratorTrendBaseline?.collaborator_count,
           collaboratorTrendBaseline?.label ?? "",
-          formatWorkspaceDashboardNumber,
+          formatSpacedCompactNumber,
           trendComparisonLabel
         ),
     tone: "violet",

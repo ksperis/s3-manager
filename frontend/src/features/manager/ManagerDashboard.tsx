@@ -56,7 +56,7 @@ import {
   uiMutedTextClass,
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
+import { formatBytes, formatPercentage, formatSpacedCompactNumber } from "../../utils/format";
 import {
   BellIcon,
   BucketCollectionIcon,
@@ -128,14 +128,6 @@ function formatRelativeTime(value?: string | null, now = Date.now()): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-function formatDashboardNumber(value?: number | null): string {
-  if (value == null) return "-";
-  return formatCompactNumber(value)
-    .replace(/k$/, " K")
-    .replace(/M$/, " M")
-    .replace(/B$/, " B");
 }
 
 function formatOptionalBytes(value?: number | null): string {
@@ -365,7 +357,7 @@ function TopBucketsCard({
               <ProgressBar value={row.percent} className="h-1.5" />
             </div>
             <span className="text-right ui-caption font-semibold text-[var(--ui-text)]">
-              {formatDashboardNumber(row.objectCount)}
+              {formatSpacedCompactNumber(row.objectCount)}
             </span>
           </div>
         ))}
@@ -495,35 +487,35 @@ function QuotaStatusCard({
     },
     {
       label: "Buckets",
-      value: formatQuotaStatusValue(visibleBucketCount, visibleBucketQuota, formatDashboardNumber),
+      value: formatQuotaStatusValue(visibleBucketCount, visibleBucketQuota, formatSpacedCompactNumber),
       percent: bucketStatusPercent,
       tone: "emerald" as DashboardTone,
       icon: <BucketCollectionIcon className="h-3.5 w-3.5" />,
     },
     {
       label: "Objects",
-      value: formatQuotaStatusValue(visibleObjectCount, visibleObjectQuota, formatDashboardNumber),
+      value: formatQuotaStatusValue(visibleObjectCount, visibleObjectQuota, formatSpacedCompactNumber),
       percent: objectPercent,
       tone: "violet" as DashboardTone,
       icon: <FileIcon className="h-3.5 w-3.5" />,
     },
     {
       label: "Users",
-      value: formatQuotaStatusValue(visibleUserCount, visibleUserQuota, formatDashboardNumber),
+      value: formatQuotaStatusValue(visibleUserCount, visibleUserQuota, formatSpacedCompactNumber),
       percent: userPercent,
       tone: "blue" as DashboardTone,
       icon: <UserIcon className="h-3.5 w-3.5" />,
     },
     {
       label: "Roles",
-      value: formatQuotaStatusValue(visibleRoleCount, visibleRoleQuota, formatDashboardNumber),
+      value: formatQuotaStatusValue(visibleRoleCount, visibleRoleQuota, formatSpacedCompactNumber),
       percent: rolePercent,
       tone: "amber" as DashboardTone,
       icon: <ShieldIcon className="h-3.5 w-3.5" />,
     },
     {
       label: "Groups",
-      value: formatQuotaStatusValue(visibleGroupCount, visibleGroupQuota, formatDashboardNumber),
+      value: formatQuotaStatusValue(visibleGroupCount, visibleGroupQuota, formatSpacedCompactNumber),
       percent: groupPercent,
       tone: "emerald" as DashboardTone,
       icon: <GroupIcon className="h-3.5 w-3.5" />,
