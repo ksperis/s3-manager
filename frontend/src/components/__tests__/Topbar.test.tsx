@@ -5,6 +5,8 @@ import { setSessionUserCache } from "../../utils/workspaces";
 import Topbar from "../Topbar";
 
 const notificationApiMock = vi.hoisted(() => ({
+  clearReadUserNotifications: vi.fn(),
+  deleteUserNotification: vi.fn(),
   fetchUserNotifications: vi.fn(),
   markUserNotificationsRead: vi.fn(),
 }));
@@ -38,6 +40,10 @@ describe("Topbar account menu", () => {
     notificationApiMock.fetchUserNotifications.mockResolvedValue({ items: [], unread_count: 0 });
     notificationApiMock.markUserNotificationsRead.mockReset();
     notificationApiMock.markUserNotificationsRead.mockResolvedValue({ updated_count: 0, unread_count: 0 });
+    notificationApiMock.deleteUserNotification.mockReset();
+    notificationApiMock.deleteUserNotification.mockResolvedValue({ deleted_count: 0, unread_count: 0 });
+    notificationApiMock.clearReadUserNotifications.mockReset();
+    notificationApiMock.clearReadUserNotifications.mockResolvedValue({ deleted_count: 0, unread_count: 0 });
     setSessionUserCache({
       role: "ui_admin",
       authType: "password",
@@ -230,6 +236,127 @@ describe("Topbar account menu", () => {
       expect(notificationApiMock.markUserNotificationsRead).toHaveBeenCalledWith({ all: true });
     });
     expect(await screen.findByText("0 unread")).toBeInTheDocument();
+  });
+
+  it("renders typed notification details and deletes individual and read rows", async () => {
+    const user = userEvent.setup();
+    const identityNotification = {
+      id: 51,
+      type: "identity_link_request",
+      severity: "warning",
+      title: "Identity link approval requested",
+      message: "person@example.test requested an external identity link.",
+      subject_type: "identity_request",
+      payload: {
+        target_user_email: "person@example.test",
+        provider_type: "oidc",
+        provider_id: "company",
+        expires_at: "2026-01-12T09:00:00Z",
+      },
+      created_at: "2026-01-11T09:00:00Z",
+      read_at: "2026-01-11T09:05:00Z",
+    };
+    const endpointNotification = {
+      id: 52,
+      type: "endpoint_health",
+      severity: "error",
+      title: "Endpoint unavailable",
+      message: "Endpoint Production is down: connection refused",
+      subject_type: "endpoint",
+      storage_endpoint_id: 9,
+      payload: {
+        endpoint_name: "Production",
+        current_status: "down",
+        check_mode: "s3",
+        latency_ms: 238,
+        checked_at: "2026-01-11T10:00:00Z",
+      },
+      created_at: "2026-01-11T10:00:00Z",
+      read_at: null,
+    };
+    const initialPayload = {
+      items: [endpointNotification, identityNotification],
+      unread_count: 1,
+    };
+    notificationApiMock.fetchUserNotifications
+      .mockResolvedValueOnce(initialPayload)
+      .mockResolvedValueOnce(initialPayload)
+      .mockResolvedValueOnce({ items: [identityNotification], unread_count: 0 })
+      .mockResolvedValueOnce({ items: [], unread_count: 0 });
+    notificationApiMock.deleteUserNotification.mockResolvedValue({ deleted_count: 1, unread_count: 0 });
+    notificationApiMock.clearReadUserNotifications.mockResolvedValue({ deleted_count: 1, unread_count: 0 });
+
+    render(<Topbar userEmail="admin@example.com" />);
+
+    await user.click(screen.getByRole("button", { name: "Notifications" }));
+    expect(await screen.findByText("Identity link approval requested")).toBeInTheDocument();
+    expect(screen.getByText("User", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.getByText("person@example.test", { selector: "dd" })).toBeInTheDocument();
+    expect(screen.getByText("oidc:company")).toBeInTheDocument();
+    expect(screen.getByText("Production", { selector: "dd" })).toBeInTheDocument();
+    expect(screen.getByText("down")).toBeInTheDocument();
+    expect(screen.getByText("238 ms")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Delete notification: Endpoint unavailable" }));
+
+    await waitFor(() => {
+      expect(notificationApiMock.deleteUserNotification).toHaveBeenCalledWith(52);
+    });
+    expect(screen.queryByText("Endpoint unavailable")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear read" }));
+
+    await waitFor(() => {
+      expect(notificationApiMock.clearReadUserNotifications).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByText("No notifications.")).toBeInTheDocument();
+  });
+
+  it("keeps the notifications menu open when delete APIs fail", async () => {
+    const user = userEvent.setup();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    notificationApiMock.fetchUserNotifications.mockResolvedValue({
+      items: [
+        {
+          id: 61,
+          type: "endpoint_health",
+          severity: "error",
+          title: "Endpoint unavailable",
+          message: "Endpoint Production is down.",
+          subject_type: "endpoint",
+          payload: {},
+          created_at: "2026-01-11T10:00:00Z",
+          read_at: null,
+        },
+        {
+          id: 62,
+          type: "identity_link_request",
+          severity: "warning",
+          title: "Identity request",
+          message: "An identity link needs review.",
+          subject_type: "identity_request",
+          payload: {},
+          created_at: "2026-01-11T09:00:00Z",
+          read_at: "2026-01-11T09:05:00Z",
+        },
+      ],
+      unread_count: 1,
+    });
+    notificationApiMock.deleteUserNotification.mockRejectedValue(new Error("delete failed"));
+    notificationApiMock.clearReadUserNotifications.mockRejectedValue(new Error("clear failed"));
+
+    render(<Topbar userEmail="admin@example.com" />);
+    await user.click(screen.getByRole("button", { name: "Notifications" }));
+    await screen.findByText("Endpoint unavailable");
+
+    await user.click(screen.getByRole("button", { name: "Delete notification: Endpoint unavailable" }));
+    expect(await screen.findByText("Unable to delete notification.")).toBeInTheDocument();
+    expect(screen.getByRole("menu", { name: "Notifications" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear read" }));
+    expect(await screen.findByText("Unable to clear read notifications.")).toBeInTheDocument();
+    expect(screen.getByRole("menu", { name: "Notifications" })).toBeInTheDocument();
+    warnSpy.mockRestore();
   });
 
   it("renders the workspace selector in the topbar when requested", async () => {

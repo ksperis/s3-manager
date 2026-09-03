@@ -2,10 +2,18 @@
 # Licensed under the Apache License, Version 2.0
 import json
 import uuid
+from datetime import timedelta
 
 import pytest
 
-from app.db import AuditLog, ExternalIdentity, ExternalIdentityLinkRequest, User, UserRole
+from app.db import (
+    AuditLog,
+    ExternalIdentity,
+    ExternalIdentityLinkRequest,
+    User,
+    UserNotification,
+    UserRole,
+)
 from app.services.external_identity_user_service import ExternalIdentityLinkRequiredError
 from app.services.users_service import UsersService
 from app.utils.time import utcnow
@@ -61,6 +69,103 @@ def test_get_or_create_oidc_user_requires_approval_for_existing_email(db_session
     assert request.provider_id == "google"
     assert request.subject == "sub-456"
     assert db_session.query(ExternalIdentity).count() == 0
+
+
+def test_identity_link_request_notifies_authorized_admins_once_per_episode(
+    db_session,
+):
+    existing = User(
+        email="identity-target@example.com",
+        hashed_password="hash",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    admin = User(
+        email="identity-admin@example.com",
+        hashed_password="hash",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    superadmin = User(
+        email="identity-superadmin@example.com",
+        hashed_password="hash",
+        is_active=True,
+        role=UserRole.UI_SUPERADMIN.value,
+    )
+    inactive_admin = User(
+        email="identity-inactive@example.com",
+        hashed_password="hash",
+        is_active=False,
+        role=UserRole.UI_ADMIN.value,
+    )
+    db_session.add_all([existing, admin, superadmin, inactive_admin])
+    db_session.commit()
+    service = UsersService(db_session)
+
+    def request_link() -> None:
+        with pytest.raises(ExternalIdentityLinkRequiredError):
+            service.get_or_create_oidc_user(
+                provider="google",
+                subject="identity-notification-subject",
+                email=existing.email,
+                full_name="Identity Target",
+                picture_url=None,
+            )
+
+    request_link()
+    request_link()
+
+    rows = db_session.query(UserNotification).order_by(UserNotification.user_id).all()
+    assert {row.user_id for row in rows} == {admin.id, superadmin.id}
+    assert {row.notification_type for row in rows} == {"identity_link_request"}
+    assert {row.subject_type for row in rows} == {"identity_request"}
+    assert {row.severity for row in rows} == {"warning"}
+    assert all("identity-notification-subject" not in row.payload_json for row in rows)
+
+    link_request = db_session.query(ExternalIdentityLinkRequest).one()
+    link_request.expires_at = utcnow() - timedelta(seconds=1)
+    db_session.add(link_request)
+    db_session.commit()
+
+    request_link()
+
+    assert db_session.query(UserNotification).count() == 4
+    assert len({row.event_key for row in db_session.query(UserNotification).all()}) == 2
+
+
+def test_privileged_identity_link_request_notifies_superadmins_only(db_session):
+    target = User(
+        email="privileged-target@example.com",
+        hashed_password="hash",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    admin = User(
+        email="standard-admin@example.com",
+        hashed_password="hash",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    superadmin = User(
+        email="review-superadmin@example.com",
+        hashed_password="hash",
+        is_active=True,
+        role=UserRole.UI_SUPERADMIN.value,
+    )
+    db_session.add_all([target, admin, superadmin])
+    db_session.commit()
+
+    with pytest.raises(ExternalIdentityLinkRequiredError):
+        UsersService(db_session).get_or_create_oidc_user(
+            provider="google",
+            subject="privileged-notification-subject",
+            email=target.email,
+            full_name="Privileged Target",
+            picture_url=None,
+        )
+
+    rows = db_session.query(UserNotification).all()
+    assert [row.user_id for row in rows] == [superadmin.id]
 
 
 def test_get_or_create_oidc_user_rejects_email_bound_to_another_identity(

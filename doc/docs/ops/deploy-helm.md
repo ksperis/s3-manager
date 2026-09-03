@@ -26,7 +26,7 @@ helm install bucketreef helm/bucketreef \
 
 - Backend and frontend Deployments + Services.
 - Optional Ingress.
-- Built-in CronJobs for billing, healthchecks, quota monitoring, and usage history collection.
+- Built-in CronJobs for billing, healthchecks, quota monitoring, usage history collection, and user notification retention.
 - Optional bundled PostgreSQL in values (evaluate for your environment policies).
 - CronJobs render with `concurrencyPolicy: Forbid`; the backend also uses database leases so a manual trigger and a CronJob cannot run the same collection at the same time.
 
@@ -36,8 +36,9 @@ Cron values blocks:
 - `healthcheckCronJob`
 - `quotaMonitorCronJob`
 - `usageHistoryCronJob`
+- `notificationRetentionCronJob`
 
-Backend env defaults include billing/quota retention knobs.
+Backend env defaults include billing/quota and user-notification retention knobs.
 Provide `SMTP_PASSWORD` via your secret injection policy.
 LDAP providers can be injected through `backend.extraEnv` with
 `LDAP_PROVIDERS__<key>__...` variables. Store bind passwords in Kubernetes
@@ -165,7 +166,7 @@ For `backend.replicas > 1`:
   legacy imports or files that are explicitly shared.
 - If backend persistence is enabled, use `ReadWriteMany`. The chart rejects
   `ReadWriteOnce` with multiple backend replicas.
-- Enable each billing, healthcheck, quota-monitor, and usage-history CronJob
+- Enable each billing, healthcheck, quota-monitor, usage-history, and notification-retention CronJob
   once per release. The chart-level `concurrencyPolicy: Forbid` and backend DB
   leases protect against overlapping runs.
 
@@ -261,7 +262,7 @@ browser E2E suite.
 4. Optionally configure the first storage endpoint.
 5. Optionally create or import the first account or connection.
 6. Verify the healthcheck CronJob runs and endpoint status updates when storage is configured.
-7. Verify billing, quota monitoring, and usage-history CronJobs are enabled or intentionally disabled.
+7. Verify billing, quota monitoring, usage-history, and notification-retention CronJobs are enabled or intentionally disabled.
 8. Check Browser and Portal feature flags before giving access to users.
 9. Review [Operations: security](operations-security.md) and [Operations: observability](operations-observability.md) before publishing the URL broadly.
 

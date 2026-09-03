@@ -25,10 +25,18 @@ User-level preferences:
 - `/users/me.quota_alerts_enabled` (default `true`, email delivery only)
 - `/users/me.quota_alerts_global_watch` (default `false`, admin-like roles only)
 
-Topbar quota notifications are created by the quota monitor for active users who
-administer the affected account, manage it through Portal, or are linked to the
-affected RGW user. Admin-like global watchers also receive the in-app
-notification even when they disable quota alert emails.
+Topbar quota notifications are created by the quota monitor for active users
+who have effective `account_administrator` Manager access or `portal_manager`
+Portal access to the affected account. Both direct and group associations are
+resolved, and a user holding both roles receives only one notification. Users
+linked to the affected RGW user and admin-like global watchers keep their
+existing visibility. Global watchers receive the in-app notification even when
+they disable quota alert emails.
+
+The same account recipient expansion applies to email alerts. Email delivery
+continues to require the user's `quota_alerts_enabled` preference. Visibility is
+revalidated when notifications are listed, so revoking the relevant account,
+group, or RGW-user access also hides older quota alerts.
 
 ## SMTP configuration
 
@@ -91,6 +99,14 @@ Retention env vars:
 - `BILLING_DAILY_RETENTION_DAYS` (default `365`)
 
 Set retention to `0` to disable purge for the corresponding dataset.
+
+User notification retention is separate. `USER_NOTIFICATIONS_RETENTION_DAYS`
+defaults to `90`, applies to read and unread notifications, and accepts `0` to
+disable the purge. The notification purge runs through
+`POST /api/internal/notifications/purge`. Compose schedules it daily with
+`NOTIFICATION_RETENTION_CRON_SCHEDULE`; Helm uses
+`notificationRetentionCronJob`. The internal endpoint is token- and
+lease-protected and reports the number of deleted rows.
 
 ## Alert semantics
 

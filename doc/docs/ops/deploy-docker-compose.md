@@ -86,6 +86,7 @@ The scheduler triggers:
 - billing daily collection (default `02:00 UTC`, day offset `1`)
 - quota monitoring for alerts (default every hour)
 - usage history collection for managed accounts and S3 users (default `03:00 UTC`)
+- user notification retention (default `03:15 UTC`)
 
 Persist the same strong shared token in `.env` or your secret manager:
 
@@ -99,6 +100,7 @@ Main scheduler knobs:
 - `BILLING_CRON_SCHEDULE`
 - `QUOTA_MONITOR_CRON_SCHEDULE`
 - `USAGE_HISTORY_CRON_SCHEDULE`
+- `NOTIFICATION_RETENTION_CRON_SCHEDULE`
 - `BILLING_DAY_OFFSET`
 
 History retention / SMTP knobs:
@@ -106,6 +108,7 @@ History retention / SMTP knobs:
 - `BILLING_DAILY_RETENTION_DAYS`
 - `QUOTA_HISTORY_HOURLY_RETENTION_DAYS`
 - `QUOTA_HISTORY_DAILY_RETENTION_DAYS`
+- `USER_NOTIFICATIONS_RETENTION_DAYS` (default `90`; `0` disables purge)
 - `SMTP_PASSWORD`
 
 LDAP is configured on the backend with `LDAP_PROVIDERS__<key>__...`

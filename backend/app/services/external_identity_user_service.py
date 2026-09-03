@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.db import ExternalIdentity, ExternalIdentityLinkRequest, User, UserRole
 from app.services.auth_session_service import AuthSessionService
 from app.services.audit_service import AuditService
+from app.services.user_notifications_service import UserNotificationsService
 from app.utils.time import utcnow
 
 
@@ -399,9 +400,56 @@ class ExternalIdentityUserService:
                 expires_at=now + timedelta(hours=24),
             )
         self.db.add(request)
+        self.db.flush()
+        self._notify_link_request_admins(request, user)
         self.db.commit()
         self.db.refresh(request)
         return request
+
+    def _notify_link_request_admins(
+        self,
+        request: ExternalIdentityLinkRequest,
+        target_user: User,
+    ) -> None:
+        recipient_roles = {UserRole.UI_SUPERADMIN.value}
+        if target_user.role in {
+            UserRole.UI_USER.value,
+            UserRole.UI_NONE.value,
+        }:
+            recipient_roles.add(UserRole.UI_ADMIN.value)
+        recipient_ids = [
+            int(row[0])
+            for row in self.db.query(User.id)
+            .filter(
+                User.is_active.is_(True),
+                User.role.in_(sorted(recipient_roles)),
+            )
+            .all()
+        ]
+        UserNotificationsService(self.db).create_notifications(
+            user_ids=recipient_ids,
+            notification_type="identity_link_request",
+            severity="warning",
+            title="Identity link approval requested",
+            message=(
+                f"{target_user.email} requested an external identity link "
+                f"through {request.provider_type}:{request.provider_id}."
+            ),
+            subject_type="identity_request",
+            event_key=(
+                f"identity_link_request:{request.id}:"
+                f"{request.created_at.isoformat()}"
+            ),
+            payload={
+                "request_id": request.id,
+                "target_user_id": int(target_user.id),
+                "target_user_email": target_user.email,
+                "provider_type": request.provider_type,
+                "provider_id": request.provider_id,
+                "expires_at": request.expires_at.isoformat(),
+            },
+            created_at=request.created_at,
+        )
 
     def _find_mapping(
         self,

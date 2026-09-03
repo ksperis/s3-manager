@@ -61,3 +61,8 @@ class MarkUserNotificationsReadRequest(ApiModel):
 class MarkUserNotificationsReadResponse(ApiModel):
     updated_count: int = 0
     unread_count: int = 0
+
+
+class DeleteUserNotificationsResponse(ApiModel):
+    deleted_count: int = 0
+    unread_count: int = 0

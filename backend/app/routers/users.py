@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from sqlalchemy.orm import Session
 from app.db import User
 from app.models.user_notification import (
+    DeleteUserNotificationsResponse,
     MarkUserNotificationsReadRequest,
     MarkUserNotificationsReadResponse,
     UserNotificationsResponse,
@@ -57,6 +58,45 @@ def mark_my_notifications_read(
     )
     return MarkUserNotificationsReadResponse(
         updated_count=updated,
+        unread_count=service.unread_count_for_user(current_user),
+    )
+
+
+@router.delete("/me/notifications", response_model=DeleteUserNotificationsResponse)
+def delete_my_read_notifications(
+    read_only: bool = Query(...),
+    current_user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+) -> DeleteUserNotificationsResponse:
+    if not read_only:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="read_only=true is required",
+        )
+    service = UserNotificationsService(db)
+    deleted = service.delete_for_user(current_user, read_only=True)
+    return DeleteUserNotificationsResponse(
+        deleted_count=deleted,
+        unread_count=service.unread_count_for_user(current_user),
+    )
+
+
+@router.delete(
+    "/me/notifications/{notification_id}",
+    response_model=DeleteUserNotificationsResponse,
+)
+def delete_my_notification(
+    notification_id: int,
+    current_user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+) -> DeleteUserNotificationsResponse:
+    service = UserNotificationsService(db)
+    deleted = service.delete_for_user(
+        current_user,
+        notification_id=notification_id,
+    )
+    return DeleteUserNotificationsResponse(
+        deleted_count=deleted,
         unread_count=service.unread_count_for_user(current_user),
     )
 

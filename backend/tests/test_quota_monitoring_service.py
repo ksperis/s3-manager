@@ -502,7 +502,7 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
             UiGroupS3Account(
                 group_id=account_group.id,
                 account_id=account.id,
-                manager_role=None,
+                manager_role=ManagerAccountRole.ACCOUNT_ADMINISTRATOR.value,
                 portal_role=PortalAccountRole.PORTAL_MANAGER.value,
             ),
             UiGroupS3User(
@@ -535,6 +535,8 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
     )
 
     assert set(account_resolved) == {
+        "account-admin@example.test",
+        "account-root@example.test",
         "account-portal-manager@example.test",
         "group-portal-manager@example.test",
         "global-admin@example.test",
@@ -570,6 +572,8 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
             index=recipient_index,
         )
     ) == {
+        account_admin.id,
+        account_root.id,
         account_portal_manager.id,
         account_disabled.id,
         group_portal_manager.id,

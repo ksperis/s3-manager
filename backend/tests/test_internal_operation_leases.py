@@ -9,6 +9,7 @@ from app.services.operation_lease_service import (
     HEALTHCHECK_RUN_OPERATION,
     QUOTA_MONITOR_ALERTS_OPERATION,
     USAGE_HISTORY_COLLECT_OPERATION,
+    USER_NOTIFICATIONS_PURGE_OPERATION,
     OperationLeaseService,
     billing_daily_operation_name,
 )
@@ -108,3 +109,28 @@ def test_internal_usage_history_skips_when_lease_is_active(client, db_session, m
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "skipped"
     assert response.json()["operation"] == USAGE_HISTORY_COLLECT_OPERATION
+
+
+def test_internal_notification_purge_skips_when_lease_is_active(
+    client,
+    db_session,
+    monkeypatch,
+):
+    _set_token(monkeypatch)
+    OperationLeaseService(db_session).acquire(
+        USER_NOTIFICATIONS_PURGE_OPERATION,
+        ttl_seconds=600,
+        owner="other-backend",
+    )
+
+    response = client.post(
+        "/api/internal/notifications/purge",
+        headers={"X-Internal-Token": "expected-token"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "status": "skipped",
+        "reason": "already_running",
+        "operation": USER_NOTIFICATIONS_PURGE_OPERATION,
+    }

@@ -27,6 +27,9 @@ from app.services.healthcheck_common import (
     _compute_status,
     resolve_healthcheck_profile,
 )
+from app.services.endpoint_health_notifications_service import (
+    EndpointHealthNotificationsService,
+)
 from app.services.healthcheck_persistence_service import HealthCheckPersistenceService
 from app.services.s3_client import get_s3_client
 from app.utils.name_ordering import name_order_by
@@ -89,10 +92,18 @@ class HealthCheckService:
 
         results.sort(key=lambda item: item.endpoint_id)
 
+        notification_service = EndpointHealthNotificationsService(self.db)
+        previous_statuses = notification_service.load_previous_statuses(results)
+        notifications_created = notification_service.create_transition_notifications(
+            results=results,
+            endpoints={int(endpoint.id): endpoint for endpoint in endpoints},
+            previous_statuses=previous_statuses,
+        )
         self._persistence.record_results(results)
         return {
             "checked_at": run_started_at.isoformat(),
             "total": len(endpoints),
+            "notifications_created": notifications_created,
             "results": [
                 {
                     "endpoint_id": result.endpoint_id,

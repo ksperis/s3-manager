@@ -42,6 +42,7 @@ backend:
     BILLING_DAILY_RETENTION_DAYS: "365"
     QUOTA_HISTORY_HOURLY_RETENTION_DAYS: "30"
     QUOTA_HISTORY_DAILY_RETENTION_DAYS: "365"
+    USER_NOTIFICATIONS_RETENTION_DAYS: "90"
   extraEnv: []
   persistence:
     enabled: true
@@ -212,6 +213,14 @@ quotaMonitorCronJob:
 usageHistoryCronJob:
   enabled: false
   schedule: "0 3 * * *"
+  backoffLimit: 1
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  extraEnv: []
+
+notificationRetentionCronJob:
+  enabled: false
+  schedule: "15 3 * * *"
   backoffLimit: 1
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2

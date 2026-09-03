@@ -68,6 +68,7 @@ administrator is a separate operator action.
 - LDAP production providers require LDAPS or StartTLS, certificate verification, modern TLS, escaped filters, and bounded timeouts.
 - OIDC providers default to `linking_policy=manual`. In `trusted_email` mode, BucketReef links only a verified email in an exact configured domain to one active standard local-password account that has no active or revoked external identity. Privileged, inactive, already federated, unverified, out-of-domain, or unsafe matches remain manual. Unknown emails keep the existing JIT behavior and create a `ui_none` account.
 - Admins decide requests only for standard users; Superadmins can also decide requests for privileged accounts. The immutable mapping key remains `(provider_type, provider_id, subject)`. Subjects are not written to audit metadata.
+- Every new manual link request, and every request reopened after expiry, creates one warning in the notification center for each active administrator allowed to decide it. An unchanged pending request is not repeated; privileged targets notify Superadmins only.
 
 The canonical administration routes are `/api/admin/identity/link-requests`, `/api/admin/identity/sessions`, and `/api/admin/users/{id}/security`. The former global routes under `/api/auth` are not aliases.
 

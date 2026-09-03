@@ -4,6 +4,8 @@
  */
 import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  clearReadUserNotifications,
+  deleteUserNotification,
   fetchUserNotifications,
   markUserNotificationsRead,
   type UserNotification,
@@ -148,6 +150,7 @@ export default function Topbar({
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [deletingNotification, setDeletingNotification] = useState<number | "read" | null>(null);
   const notificationsRootRef = useRef<HTMLDivElement | null>(null);
   const notificationsSurfaceRef = useRef<HTMLDivElement | null>(null);
   const notificationsTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -233,6 +236,36 @@ export default function Topbar({
       setNotificationsError("Unable to mark notifications as read.");
     }
   }, [loadNotifications, showNotifications, unreadNotificationsCount]);
+
+  const deleteNotification = useCallback(async (notificationId: number) => {
+    setNotificationsError(null);
+    setDeletingNotification(notificationId);
+    try {
+      const response = await deleteUserNotification(notificationId);
+      setUnreadNotificationsCount(response.unread_count);
+      await loadNotifications();
+    } catch (error) {
+      console.warn("Unable to delete notification", error);
+      setNotificationsError("Unable to delete notification.");
+    } finally {
+      setDeletingNotification(null);
+    }
+  }, [loadNotifications]);
+
+  const clearReadNotifications = useCallback(async () => {
+    setNotificationsError(null);
+    setDeletingNotification("read");
+    try {
+      const response = await clearReadUserNotifications();
+      setUnreadNotificationsCount(response.unread_count);
+      await loadNotifications();
+    } catch (error) {
+      console.warn("Unable to clear read notifications", error);
+      setNotificationsError("Unable to clear read notifications.");
+    } finally {
+      setDeletingNotification(null);
+    }
+  }, [loadNotifications]);
 
   const adaptiveControlDescriptors = useMemo(
     () => (controlDescriptors?.filter((control) => control.id !== "workspace") ?? []),
@@ -566,13 +599,25 @@ export default function Topbar({
 
   const renderNotificationItem = (item: UserNotification) => {
     const payload = item.payload ?? {};
-    const checkedAt = formatDateTime((payload.checked_at as string | undefined) ?? item.created_at);
+    const isOperationalCheck = item.type === "quota_alert" || item.type === "endpoint_health";
+    const occurredAt = formatDateTime(
+      (isOperationalCheck ? payload.checked_at as string | undefined : undefined) ?? item.created_at
+    );
     const ratio = formatPercent(payload.usage_ratio_pct);
     const usedBytes = formatBytes(payload.used_bytes);
     const quotaBytes = formatBytes(payload.quota_size_bytes);
     const usedObjects = formatCount(payload.used_objects);
     const quotaObjects = formatCount(payload.quota_objects);
     const endpointName = typeof payload.endpoint_name === "string" ? payload.endpoint_name : null;
+    const targetUserEmail = typeof payload.target_user_email === "string" ? payload.target_user_email : null;
+    const provider =
+      typeof payload.provider_type === "string" && typeof payload.provider_id === "string"
+        ? `${payload.provider_type}:${payload.provider_id}`
+        : null;
+    const currentStatus = typeof payload.current_status === "string" ? payload.current_status : null;
+    const checkMode = typeof payload.check_mode === "string" ? payload.check_mode : null;
+    const latency = typeof payload.latency_ms === "number" ? `${Math.round(payload.latency_ms)} ms` : null;
+    const expiresAt = formatDateTime(typeof payload.expires_at === "string" ? payload.expires_at : null);
     const severityLabel = item.severity === "error" ? "Error" : item.severity === "warning" ? "Warning" : "Info";
     const severityClass =
       item.severity === "error"
@@ -592,9 +637,20 @@ export default function Topbar({
             <p className="truncate ui-caption font-semibold text-[var(--shell-text)]">{item.title}</p>
             <p className="mt-0.5 ui-caption text-[var(--shell-text)]">{item.message}</p>
           </div>
-          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${severityClass}`}>
-            {severityLabel}
-          </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${severityClass}`}>
+              {severityLabel}
+            </span>
+            <button
+              type="button"
+              onClick={() => void deleteNotification(item.id)}
+              disabled={deletingNotification !== null}
+              aria-label={`Delete notification: ${item.title}`}
+              className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-[var(--shell-muted)] transition hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deletingNotification === item.id ? "Deleting..." : "Delete"}
+            </button>
+          </div>
         </div>
         <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 ui-caption text-[var(--shell-muted)]">
           {ratio && (
@@ -627,10 +683,46 @@ export default function Topbar({
               <dd className="truncate text-right text-[var(--shell-text)]">{endpointName}</dd>
             </>
           )}
-          {checkedAt && (
+          {targetUserEmail && (
             <>
-              <dt>Checked</dt>
-              <dd className="text-right text-[var(--shell-text)]">{checkedAt}</dd>
+              <dt>User</dt>
+              <dd className="truncate text-right text-[var(--shell-text)]">{targetUserEmail}</dd>
+            </>
+          )}
+          {provider && (
+            <>
+              <dt>Provider</dt>
+              <dd className="truncate text-right text-[var(--shell-text)]">{provider}</dd>
+            </>
+          )}
+          {currentStatus && (
+            <>
+              <dt>Status</dt>
+              <dd className="text-right font-semibold capitalize text-[var(--shell-text)]">{currentStatus}</dd>
+            </>
+          )}
+          {checkMode && (
+            <>
+              <dt>Check</dt>
+              <dd className="text-right uppercase text-[var(--shell-text)]">{checkMode}</dd>
+            </>
+          )}
+          {latency && (
+            <>
+              <dt>Latency</dt>
+              <dd className="text-right text-[var(--shell-text)]">{latency}</dd>
+            </>
+          )}
+          {expiresAt && (
+            <>
+              <dt>Expires</dt>
+              <dd className="text-right text-[var(--shell-text)]">{expiresAt}</dd>
+            </>
+          )}
+          {occurredAt && (
+            <>
+              <dt>{isOperationalCheck ? "Checked" : "Created"}</dt>
+              <dd className="text-right text-[var(--shell-text)]">{occurredAt}</dd>
             </>
           )}
         </dl>
@@ -723,14 +815,24 @@ export default function Topbar({
                           <p className="ui-caption font-semibold text-[var(--shell-text)]">Notifications</p>
                           <p className="shell-muted-text ui-caption">{unreadNotificationsCount} unread</p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={markAllNotificationsRead}
-                          disabled={unreadNotificationsCount <= 0}
-                          className="rounded-md px-2 py-1 ui-caption font-semibold text-primary-700 transition hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-200 dark:hover:bg-white/[0.06]"
-                        >
-                          Mark all as read
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => void clearReadNotifications()}
+                            disabled={notifications.length === 0 || deletingNotification !== null}
+                            className="rounded-md px-2 py-1 ui-caption font-semibold text-[var(--shell-muted)] transition hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {deletingNotification === "read" ? "Clearing..." : "Clear read"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={markAllNotificationsRead}
+                            disabled={unreadNotificationsCount <= 0 || deletingNotification !== null}
+                            className="rounded-md px-2 py-1 ui-caption font-semibold text-primary-700 transition hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-200 dark:hover:bg-white/[0.06]"
+                          >
+                            Mark all as read
+                          </button>
+                        </div>
                       </div>
 
                       <div className="max-h-[28rem] overflow-y-auto p-2">

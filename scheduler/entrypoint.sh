@@ -14,6 +14,7 @@ umask 077
   echo "$BILLING_CRON_SCHEDULE /bin/sh /opt/cron/run-billing.sh"
   echo "$QUOTA_MONITOR_CRON_SCHEDULE /bin/sh /opt/cron/run-quota-monitor.sh"
   echo "$USAGE_HISTORY_CRON_SCHEDULE /bin/sh /opt/cron/run-usage-history.sh"
+  echo "${NOTIFICATION_RETENTION_CRON_SCHEDULE:-15 3 * * *} /bin/sh /opt/cron/run-notification-retention.sh"
 } > "$crontab_file"
 
 exec supercronic "$crontab_file"

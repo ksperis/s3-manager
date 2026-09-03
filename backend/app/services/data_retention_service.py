@@ -8,7 +8,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db import BillingStorageDaily, BillingUsageDaily, QuotaUsageDaily, QuotaUsageHourly
+from app.db import (
+    BillingStorageDaily,
+    BillingUsageDaily,
+    QuotaUsageDaily,
+    QuotaUsageHourly,
+    UserNotification,
+)
 from app.utils.time import utcnow
 
 
@@ -86,6 +92,32 @@ class DataRetentionService:
                 "daily_retention_days": int(self.settings.billing_daily_retention_days or 0),
                 "deleted_usage_daily": int(deleted_usage),
                 "deleted_storage_daily": int(deleted_storage),
+            }
+        }
+
+    def purge_user_notifications(self) -> dict[str, Any]:
+        retention_days = int(self.settings.user_notifications_retention_days or 0)
+        if retention_days <= 0:
+            return {
+                "user_notifications": {
+                    "retention_days": retention_days,
+                    "deleted": 0,
+                }
+            }
+
+        cutoff = utcnow() - timedelta(days=retention_days)
+        deleted = (
+            self.db.query(UserNotification)
+            .filter(UserNotification.created_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        if deleted:
+            self.db.commit()
+        return {
+            "user_notifications": {
+                "retention_days": retention_days,
+                "deleted": int(deleted),
+                "cutoff": cutoff.isoformat(),
             }
         }
 

@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.routers import dependencies
 from app.services.quota_monitoring_service import QuotaMonitoringService
+from app.services.data_retention_service import DataRetentionService
 
 
 def test_internal_usage_history_collect_uses_daily_history_mode(client, monkeypatch):
@@ -76,3 +77,28 @@ def test_internal_quota_monitor_does_not_persist_usage_history(client, monkeypat
     assert response.status_code == 200, response.text
     assert calls == [{"include_quota_alerts": True, "include_usage_history": False}]
     assert response.json()["history_hourly_upserts"] == 0
+
+
+def test_internal_notification_retention_runs_scoped_purge(client, monkeypatch):
+    monkeypatch.setattr(dependencies.settings, "internal_cron_token", "expected-token")
+    monkeypatch.setattr(
+        DataRetentionService,
+        "purge_user_notifications",
+        lambda self: {
+            "user_notifications": {
+                "retention_days": 90,
+                "deleted": 4,
+            }
+        },
+    )
+
+    response = client.post(
+        "/api/internal/notifications/purge",
+        headers={"X-Internal-Token": "expected-token"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "status": "completed",
+        "user_notifications": {"retention_days": 90, "deleted": 4},
+    }

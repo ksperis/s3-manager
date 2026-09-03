@@ -27,6 +27,8 @@ def test_runtime_images_are_fixed_non_root_and_read_only_compatible():
     assert "sha256sum -c" in scheduler
     assert "USER 10001:10001" in scheduler
     assert "apk add" not in scheduler_entrypoint
+    assert "NOTIFICATION_RETENTION_CRON_SCHEDULE" in scheduler_entrypoint
+    assert "run-notification-retention.sh" in scheduler_entrypoint
     assert "exec supercronic" in scheduler_entrypoint
 
 
@@ -42,6 +44,12 @@ def test_compose_services_drop_privileges_and_keep_public_port():
             assert service["tmpfs"]
         assert services["frontend"]["ports"][0].endswith(":8080")
         assert services["scheduler"]["user"] == "10001:10001"
+        assert services["backend"]["environment"][
+            "USER_NOTIFICATIONS_RETENTION_DAYS"
+        ]
+        assert services["scheduler"]["environment"][
+            "NOTIFICATION_RETENTION_CRON_SCHEDULE"
+        ]
 
 
 def test_helm_workloads_apply_least_privilege_contract():
@@ -53,6 +61,7 @@ def test_helm_workloads_apply_least_privilege_contract():
         "healthcheck-cronjob.yaml",
         "quota-monitor-cronjob.yaml",
         "usage-history-cronjob.yaml",
+        "notification-retention-cronjob.yaml",
     ]
     for filename in templates:
         template = _read(f"helm/bucketreef/templates/{filename}")

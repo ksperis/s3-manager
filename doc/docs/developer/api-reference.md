@@ -69,6 +69,19 @@ counts include only non-expired pending requests visible within the actor's
 role hierarchy; Portal counts include only the exact `pending` status. The
 aggregate exposes no request detail and does not require recent WebAuthn.
 
+The personal notification center uses these endpoints:
+
+- `GET /api/users/me/notifications` lists currently visible notifications.
+- `DELETE /api/users/me/notifications/{notification_id}` removes one currently
+  visible notification.
+- `DELETE /api/users/me/notifications?read_only=true` removes all currently
+  visible read notifications.
+
+Both deletion routes return `{ deleted_count, unread_count }`; they never
+delete another user's or a currently inaccessible notification. Notification
+subjects include quota alerts, Identity Security requests, and endpoint health
+transitions.
+
 An authenticated UI user can renew recent WebAuthn verification without
 creating a new session through
 `POST /api/auth/security/webauthn/authentication/options` followed by
@@ -101,3 +114,8 @@ List endpoints generally expose explicit filters in query parameters and return 
 ## Internal endpoints
 
 Internal scheduler endpoints are not user APIs. They require the shared internal token and should stay behind trusted network controls.
+
+`POST /api/internal/notifications/purge` deletes read and unread user
+notifications older than `USER_NOTIFICATIONS_RETENTION_DAYS`, reports the
+deleted row count, and is protected against concurrent runs by a database
+operation lease. A retention value of `0` disables the purge.

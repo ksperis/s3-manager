@@ -426,6 +426,11 @@ class Settings(BaseSettings):
         ge=0,
         description="Retention in days for quota_usage_daily; 0 disables purge (QUOTA_HISTORY_DAILY_RETENTION_DAYS)",
     )
+    user_notifications_retention_days: int = Field(
+        90,
+        ge=0,
+        description="Retention in days for user notifications; 0 disables purge (USER_NOTIFICATIONS_RETENTION_DAYS)",
+    )
     smtp_password: Optional[str] = Field(
         None,
         description="SMTP password used for quota notifications (SMTP_PASSWORD)",

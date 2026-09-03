@@ -33,8 +33,12 @@ Use this page when you need to adjust personal UI preferences, manage your sign-
 ## Expected result
 
 Your local UI preferences are updated, and your private connections remain easier to identify and filter.
-Quota notifications for accounts or RGW users you administer remain visible from
-the topbar notification menu when the platform quota monitor raises them.
+The topbar notification menu shows quota alerts for accounts or RGW users you
+administer. Administrators also see new Identity Security link requests within
+their role hierarchy and endpoint health transitions. You can mark all
+notifications as read, delete an individual entry, or use **Clear read** to
+delete all entries already read. A failed deletion stays visible as an inline
+error and does not close the menu.
 
 In automatic avatar mode, the UI uses your uploaded image first, then the image
 provided by your OIDC identity provider, then Gravatar. Initials remain the
@@ -50,6 +54,11 @@ the account menu in the topbar.
 !!! note
     The quota email preference controls email delivery only. Topbar quota notifications
     are shown for accessible RGW accounts or users when quota monitoring is enabled.
+
+!!! note
+    Notification visibility is revalidated against current access. By default,
+    read and unread notifications expire after 90 days. Operators can change or
+    disable this retention through `USER_NOTIFICATIONS_RETENTION_DAYS`.
 
 !!! note
     Uploaded profile images are stored by the application and are visible only

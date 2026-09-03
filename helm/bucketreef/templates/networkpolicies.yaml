@@ -82,7 +82,7 @@ spec:
                 values: [{{ .Release.Name | quote }}]
               - key: app.kubernetes.io/component
                 operator: In
-                values: [billing-cron, healthcheck-cron, quota-monitor-cron, usage-history-cron]
+                values: [billing-cron, healthcheck-cron, notification-retention-cron, quota-monitor-cron, usage-history-cron]
       ports:
         - protocol: TCP
           port: {{ .Values.service.backend.port }}
@@ -137,7 +137,7 @@ spec:
         values: [{{ .Release.Name | quote }}]
       - key: app.kubernetes.io/component
         operator: In
-        values: [billing-cron, healthcheck-cron, quota-monitor-cron, usage-history-cron]
+        values: [billing-cron, healthcheck-cron, notification-retention-cron, quota-monitor-cron, usage-history-cron]
   policyTypes: [Ingress, Egress]
   ingress: []
   egress:

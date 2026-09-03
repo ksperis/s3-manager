@@ -22,6 +22,7 @@ from app.utils.time import utcnow
 HEALTHCHECK_RUN_OPERATION = "healthchecks:run"
 QUOTA_MONITOR_ALERTS_OPERATION = "quota-monitor:alerts"
 USAGE_HISTORY_COLLECT_OPERATION = "quota-monitor:usage-history"
+USER_NOTIFICATIONS_PURGE_OPERATION = "user-notifications:purge"
 
 
 def billing_daily_operation_name(day_iso: str) -> str:

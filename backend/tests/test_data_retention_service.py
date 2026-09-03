@@ -15,6 +15,9 @@ from app.db import (
     S3Account,
     StorageEndpoint,
     StorageProvider,
+    User,
+    UserNotification,
+    UserRole,
 )
 from app.services.data_retention_service import DataRetentionService
 
@@ -231,3 +234,99 @@ def test_purge_all_with_zero_retention_disables_purge(db_session):
     assert db_session.query(QuotaUsageDaily).count() == 1
     assert db_session.query(BillingUsageDaily).count() == 1
     assert db_session.query(BillingStorageDaily).count() == 1
+
+
+def test_purge_user_notifications_removes_read_and_unread_rows_after_cutoff(
+    db_session,
+):
+    now = utcnow()
+    user = User(
+        email="notification-retention@example.test",
+        hashed_password="x",
+        role=UserRole.UI_USER.value,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add_all(
+        [
+            UserNotification(
+                user_id=user.id,
+                notification_type="test",
+                severity="info",
+                title="Old unread",
+                message="Old unread notification",
+                event_key="retention:old-unread",
+                payload_json="{}",
+                created_at=now - timedelta(days=91),
+            ),
+            UserNotification(
+                user_id=user.id,
+                notification_type="test",
+                severity="info",
+                title="Old read",
+                message="Old read notification",
+                event_key="retention:old-read",
+                payload_json="{}",
+                created_at=now - timedelta(days=91),
+                read_at=now - timedelta(days=90),
+            ),
+            UserNotification(
+                user_id=user.id,
+                notification_type="test",
+                severity="info",
+                title="Recent",
+                message="Recent notification",
+                event_key="retention:recent",
+                payload_json="{}",
+                created_at=now - timedelta(days=89),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    service = DataRetentionService(db_session)
+    service.settings = SimpleNamespace(user_notifications_retention_days=90)
+
+    result = service.purge_user_notifications()
+
+    assert result["user_notifications"]["retention_days"] == 90
+    assert result["user_notifications"]["deleted"] == 2
+    assert [row.event_key for row in db_session.query(UserNotification).all()] == [
+        "retention:recent"
+    ]
+
+    second = service.purge_user_notifications()
+    assert second["user_notifications"]["deleted"] == 0
+
+
+def test_purge_user_notifications_zero_retention_preserves_rows(db_session):
+    user = User(
+        email="notification-retention-disabled@example.test",
+        hashed_password="x",
+        role=UserRole.UI_USER.value,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(
+        UserNotification(
+            user_id=user.id,
+            notification_type="test",
+            severity="info",
+            title="Preserved",
+            message="Preserved notification",
+            event_key="retention:disabled",
+            payload_json="{}",
+            created_at=utcnow() - timedelta(days=500),
+        )
+    )
+    db_session.commit()
+
+    service = DataRetentionService(db_session)
+    service.settings = SimpleNamespace(user_notifications_retention_days=0)
+
+    result = service.purge_user_notifications()
+
+    assert result["user_notifications"] == {"retention_days": 0, "deleted": 0}
+    assert db_session.query(UserNotification).count() == 1

@@ -29,6 +29,19 @@ healthcheck operation lease.
 The scheduler or CronJob must use the same `INTERNAL_CRON_TOKEN` as the backend.
 Keep the internal route on a trusted network.
 
+## Administrator notifications
+
+Active `ui_admin` and `ui_superadmin` users receive an in-app notification for
+the first abnormal result and for every later status transition to `degraded`
+or `down`. An unchanged state does not generate another notification. A
+transition from either abnormal state back to `up` generates an informational
+recovery notification.
+
+`degraded` maps to warning severity and `down` maps to error severity. The
+notification payload contains the endpoint identifier and name, check mode,
+latency, status and a sanitized error summary when one is available. Health
+telemetry does not create application audit events.
+
 ## Per-endpoint mode
 
 Admin **Storage Backends** exposes:

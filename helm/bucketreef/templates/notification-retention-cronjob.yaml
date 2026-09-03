@@ -1,0 +1,76 @@
+{{- if .Values.notificationRetentionCronJob.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "bucketreef.fullname" . }}-notification-retention
+  labels:
+    {{- include "bucketreef.labels" . | nindent 4 }}
+    app.kubernetes.io/component: notification-retention-cron
+spec:
+  schedule: {{ .Values.notificationRetentionCronJob.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.notificationRetentionCronJob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.notificationRetentionCronJob.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.notificationRetentionCronJob.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "bucketreef.labels" . | nindent 12 }}
+            app.kubernetes.io/component: notification-retention-cron
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            {{- toYaml .Values.cronJobs.podSecurityContext | nindent 12 }}
+          containers:
+            - name: notification-retention-runner
+              image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+              imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.cronJobs.containerSecurityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.cronJobs.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+              env:
+                - name: NOTIFICATION_RETENTION_API_BASE
+                  value: {{ printf "http://%s-backend:%d" (include "bucketreef.fullname" .) (.Values.service.backend.port | int) | quote }}
+                - name: INTERNAL_CRON_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backend.existingSecret | quote }}
+                      key: {{ .Values.backend.secretKeys.internalCronToken | quote }}
+                {{- range .Values.notificationRetentionCronJob.extraEnv }}
+                - name: {{ .name }}
+                  value: {{ .value | quote }}
+                {{- end }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  python - <<'PY'
+                  import os
+                  import sys
+                  import requests
+
+                  base = os.environ.get("NOTIFICATION_RETENTION_API_BASE")
+                  token = os.environ.get("INTERNAL_CRON_TOKEN")
+                  if not base or not token:
+                      print("Missing NOTIFICATION_RETENTION_API_BASE or INTERNAL_CRON_TOKEN", file=sys.stderr)
+                      sys.exit(1)
+                  url = f"{base}/api/internal/notifications/purge"
+                  resp = requests.post(url, headers={"X-Internal-Token": token}, timeout=30)
+                  resp.raise_for_status()
+                  payload = resp.json()
+                  deleted = payload.get("user_notifications", {}).get("deleted", 0)
+                  print(
+                      f"Notification retention {payload.get('status', 'unknown')}; "
+                      f"deleted {deleted} rows"
+                  )
+                  PY
+          volumes:
+            - name: tmp
+              emptyDir: {}
+{{- end }}

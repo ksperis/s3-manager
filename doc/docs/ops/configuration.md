@@ -10,7 +10,7 @@ Configuration is split between backend environment variables and UI settings.
 | Required | `INTERNAL_CRON_TOKEN` when scheduler or CronJobs are enabled | Internal automation endpoints must not be callable without the shared token. |
 | Recommended | OIDC or LDAP provider settings | Enterprise identity is safer and easier to operate than local-only users. |
 | Recommended | Feature flags for Manager, Portal, Browser, Ceph Admin, Storage Ops, billing, endpoint status, usage history, and quota alerts | Users should see only the surfaces that are intentionally launched. |
-| Recommended | Healthcheck, billing, quota, and usage-history schedules and retention | Operational data should be fresh enough to support troubleshooting and capacity decisions. |
+| Recommended | Healthcheck, billing, quota, usage-history, and notification-retention schedules | Operational data should be fresh enough to support troubleshooting and notification history should remain bounded. |
 | Recommended | SMTP settings when quota alerts are enabled | Quota alerts need a deliverable notification path. |
 | Optional | Branding color and login logo | Useful for tenant or lab identity, but not required for safe operation. |
 
@@ -20,7 +20,7 @@ Configuration is split between backend environment variables and UI settings.
 |---|---|---|
 | Login sessions, stored credentials, trusted origins | Backend environment and secret manager | `APP_ENV`, `PUBLIC_ORIGIN`, `CORS_ORIGINS`, `ALLOWED_HOSTS`, UI/API JWT rings, credential encryption, WebAuthn, trusted proxies, and secure cookies. |
 | Which workspaces users can see | Admin app settings and feature force-locks | `FEATURE_*` env locks, user roles, UI groups, account links, Manager tool access. |
-| Schedulers and internal automation | Runtime env, Compose scheduler, or Helm CronJobs | `INTERNAL_CRON_TOKEN`, `healthcheckCronJob`, `billingCronJob`, `quotaMonitorCronJob`, `usageHistoryCronJob`. |
+| Schedulers and internal automation | Runtime env, Compose scheduler, or Helm CronJobs | `INTERNAL_CRON_TOKEN`, `healthcheckCronJob`, `billingCronJob`, `quotaMonitorCronJob`, `usageHistoryCronJob`, `notificationRetentionCronJob`. |
 | Health, metrics, billing, quota, and usage history freshness | App settings plus job schedules | Endpoint capability, retention env vars, latest collection logs. |
 | Enterprise authentication | Admin **Settings > Authentication** or env-managed OIDC/LDAP providers | TLS verification, provider priority, write-only secrets, startup warnings. |
 | Portal self-service behavior | Admin Portal settings | Portal account links, Storage Space defaults, access-key policy, IAM group projections. |
@@ -67,6 +67,7 @@ Key areas:
 - Billing, quota monitoring, usage history collection, and healthcheck behavior.
 - Backend replica and lease coordination: `BACKEND_REPLICAS`, `OPERATION_LEASE_TTL_SECONDS`, and `BILLING_OPERATION_LEASE_TTL_SECONDS`.
 - Shared history retention: `BILLING_DAILY_RETENTION_DAYS`, `QUOTA_HISTORY_HOURLY_RETENTION_DAYS`, `QUOTA_HISTORY_DAILY_RETENTION_DAYS`.
+- User notification retention: `USER_NOTIFICATIONS_RETENTION_DAYS` (default `90`; `0` disables purge) and the daily `NOTIFICATION_RETENTION_CRON_SCHEDULE` Compose job or `notificationRetentionCronJob` Helm job.
 - Quota SMTP secret: `SMTP_PASSWORD`.
 - Interactive storage budgets: `STORAGE_INTERACTIVE_CONNECT_TIMEOUT_SECONDS` (default `2`),
   `STORAGE_INTERACTIVE_READ_TIMEOUT_SECONDS` (default `5`), and

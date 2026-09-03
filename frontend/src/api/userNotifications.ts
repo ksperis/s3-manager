@@ -36,6 +36,11 @@ type MarkUserNotificationsReadResponse = {
   unread_count: number;
 };
 
+export type DeleteUserNotificationsResponse = {
+  deleted_count: number;
+  unread_count: number;
+};
+
 export async function fetchUserNotifications(limit = 20): Promise<UserNotificationsResponse> {
   const { data } = await client.get<UserNotificationsResponse>("/users/me/notifications", {
     params: { limit },
@@ -47,5 +52,22 @@ export async function markUserNotificationsRead(
   payload: MarkUserNotificationsReadPayload
 ): Promise<MarkUserNotificationsReadResponse> {
   const { data } = await client.post<MarkUserNotificationsReadResponse>("/users/me/notifications/read", payload);
+  return data;
+}
+
+export async function deleteUserNotification(
+  notificationId: number
+): Promise<DeleteUserNotificationsResponse> {
+  const { data } = await client.delete<DeleteUserNotificationsResponse>(
+    `/users/me/notifications/${notificationId}`
+  );
+  return data;
+}
+
+export async function clearReadUserNotifications(): Promise<DeleteUserNotificationsResponse> {
+  const { data } = await client.delete<DeleteUserNotificationsResponse>(
+    "/users/me/notifications",
+    { params: { read_only: true } }
+  );
   return data;
 }
