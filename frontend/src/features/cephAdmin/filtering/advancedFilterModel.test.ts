@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { advancedFilterFieldHighlight, appendNumericFilterRule } from "./advancedFilterModel";
+import {
+  advancedFilterFieldHighlight,
+  appendNumericFilterRule,
+  buildNumericFilterSummaryItems,
+} from "./advancedFilterModel";
 
 describe("advancedFilterModel", () => {
   it("prioritizes pending field presentation over applied presentation", () => {
@@ -23,5 +27,24 @@ describe("advancedFilterModel", () => {
     appendNumericFilterRule(rules, "max_buckets", "lte", "invalid");
 
     expect(rules).toEqual([{ field: "max_buckets", op: "gte", value: 12 }]);
+  });
+
+  it("builds numeric and percentage summary items", () => {
+    expect(
+      buildNumericFilterSummaryItems(
+        { count: " 1200 ", invalid: "many", percent: "25", blank: " " },
+        [
+          { key: "count", label: "Count >=" },
+          { key: "invalid", label: "Invalid" },
+          { key: "percent", label: "Usage >=", format: "percent" },
+          { key: "blank", label: "Blank" },
+        ],
+        "draft-",
+      ),
+    ).toEqual([
+      { field: "count", id: "draft-count", label: "Count >= 1,200" },
+      { field: "invalid", id: "draft-invalid", label: "Invalid many" },
+      { field: "percent", id: "draft-percent", label: "Usage >= 25%" },
+    ]);
   });
 });

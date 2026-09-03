@@ -57,7 +57,11 @@ import {
   type FilterCostLevel,
   type TextMatchMode,
 } from "./filtering/advancedFilterShared";
-import { advancedFilterFieldHighlight, appendNumericFilterRule } from "./filtering/advancedFilterModel";
+import {
+  advancedFilterFieldHighlight,
+  appendNumericFilterRule,
+  buildNumericFilterSummaryItems,
+} from "./filtering/advancedFilterModel";
 import { useCephAdminListingFilters } from "./filtering/useCephAdminListingFilters";
 import { useCephAdminEntityListing } from "./listing/useCephAdminEntityListing";
 import { readClientJsonFromKey, writeClientJsonToKey } from "../../utils/clientStorage";
@@ -529,22 +533,12 @@ export default function CephAdminUsersPage() {
           remove: { type: "advanced", field: "suspended" },
         });
       }
-      numericFields.forEach(({ key, label }) => {
-        const raw = (advancedApplied[key] as string).trim();
-        if (!raw) return;
-        const numeric = Number(raw);
-        const display = Number.isFinite(numeric) ? formatNumber(numeric) : raw;
-        items.push({ id: `num-${key}`, label: `${label} ${display}`, remove: { type: "advanced", field: key } });
+      buildNumericFilterSummaryItems(
+        advancedApplied,
+        canViewMetrics ? [...numericFields, ...usageNumericFields] : numericFields,
+      ).forEach(({ field, id, label }) => {
+        items.push({ id, label, remove: { type: "advanced", field } });
       });
-      if (canViewMetrics) {
-        usageNumericFields.forEach(({ key, label }) => {
-          const raw = (advancedApplied[key] as string).trim();
-          if (!raw) return;
-          const numeric = Number(raw);
-          const display = Number.isFinite(numeric) ? `${numeric}%` : raw;
-          items.push({ id: `num-${key}`, label: `${label} ${display}`, remove: { type: "advanced", field: key } });
-        });
-      }
     }
     return items;
   }, [
@@ -588,22 +582,13 @@ export default function CephAdminUsersPage() {
         label: `Status: ${advancedDraft.suspended === "active" ? "Active" : "Suspended"}`,
       });
     }
-    numericFields.forEach(({ key, label }) => {
-      const raw = (advancedDraft[key] as string).trim();
-      if (!raw) return;
-      const numeric = Number(raw);
-      const display = Number.isFinite(numeric) ? formatNumber(numeric) : raw;
-      items.push({ id: `draft-${key}`, label: `${label} ${display}` });
-    });
-    if (canViewMetrics) {
-      usageNumericFields.forEach(({ key, label }) => {
-        const raw = (advancedDraft[key] as string).trim();
-        if (!raw) return;
-        const numeric = Number(raw);
-        const display = Number.isFinite(numeric) ? `${numeric}%` : raw;
-        items.push({ id: `draft-${key}`, label: `${label} ${display}` });
-      });
-    }
+    items.push(
+      ...buildNumericFilterSummaryItems(
+        advancedDraft,
+        canViewMetrics ? [...numericFields, ...usageNumericFields] : numericFields,
+        "draft-",
+      ).map(({ id, label }) => ({ id, label })),
+    );
     return items;
   }, [
     advancedDraft,

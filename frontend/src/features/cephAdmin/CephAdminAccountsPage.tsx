@@ -62,7 +62,11 @@ import {
   type FilterCostLevel,
   type TextMatchMode,
 } from "./filtering/advancedFilterShared";
-import { advancedFilterFieldHighlight, appendNumericFilterRule } from "./filtering/advancedFilterModel";
+import {
+  advancedFilterFieldHighlight,
+  appendNumericFilterRule,
+  buildNumericFilterSummaryItems,
+} from "./filtering/advancedFilterModel";
 import { useCephAdminListingFilters } from "./filtering/useCephAdminListingFilters";
 import { useCephAdminEntityListing } from "./listing/useCephAdminEntityListing";
 import { readClientJsonFromKey, writeClientJsonToKey } from "../../utils/clientStorage";
@@ -497,22 +501,12 @@ export default function CephAdminAccountsPage() {
       if (accountNameLabel) items.push({ id: "accountName", label: accountNameLabel, remove: { type: "advanced", field: "accountName" } });
       const emailLabel = formatTextFilterSummary("Email", advancedApplied.email, emailAppliedMode);
       if (emailLabel) items.push({ id: "email", label: emailLabel, remove: { type: "advanced", field: "email" } });
-      numericFields.forEach(({ key, label }) => {
-        const raw = (advancedApplied[key] as string).trim();
-        if (!raw) return;
-        const numeric = Number(raw);
-        const display = Number.isFinite(numeric) ? formatNumber(numeric) : raw;
-        items.push({ id: `num-${key}`, label: `${label} ${display}`, remove: { type: "advanced", field: key } });
+      buildNumericFilterSummaryItems(
+        advancedApplied,
+        canViewMetrics ? [...numericFields, ...usageNumericFields] : numericFields,
+      ).forEach(({ field, id, label }) => {
+        items.push({ id, label, remove: { type: "advanced", field } });
       });
-      if (canViewMetrics) {
-        usageNumericFields.forEach(({ key, label }) => {
-          const raw = (advancedApplied[key] as string).trim();
-          if (!raw) return;
-          const numeric = Number(raw);
-          const display = Number.isFinite(numeric) ? `${numeric}%` : raw;
-          items.push({ id: `num-${key}`, label: `${label} ${display}`, remove: { type: "advanced", field: key } });
-        });
-      }
     }
     return items;
   }, [
@@ -541,22 +535,13 @@ export default function CephAdminAccountsPage() {
     if (accountNameLabel) items.push({ id: "draft-accountName", label: accountNameLabel });
     const emailLabel = formatTextFilterSummary("Email", advancedDraft.email, emailDraftMode);
     if (emailLabel) items.push({ id: "draft-email", label: emailLabel });
-    numericFields.forEach(({ key, label }) => {
-      const raw = (advancedDraft[key] as string).trim();
-      if (!raw) return;
-      const numeric = Number(raw);
-      const display = Number.isFinite(numeric) ? formatNumber(numeric) : raw;
-      items.push({ id: `draft-${key}`, label: `${label} ${display}` });
-    });
-    if (canViewMetrics) {
-      usageNumericFields.forEach(({ key, label }) => {
-        const raw = (advancedDraft[key] as string).trim();
-        if (!raw) return;
-        const numeric = Number(raw);
-        const display = Number.isFinite(numeric) ? `${numeric}%` : raw;
-        items.push({ id: `draft-${key}`, label: `${label} ${display}` });
-      });
-    }
+    items.push(
+      ...buildNumericFilterSummaryItems(
+        advancedDraft,
+        canViewMetrics ? [...numericFields, ...usageNumericFields] : numericFields,
+        "draft-",
+      ).map(({ id, label }) => ({ id, label })),
+    );
     return items;
   }, [advancedDraft, accountNameDraftMode, emailDraftMode, numericFields, canViewMetrics, usageNumericFields]);
 
