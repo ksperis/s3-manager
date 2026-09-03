@@ -314,8 +314,12 @@ def _list_current_objects(manager_session: BackendSession, account_id: int, buck
 
 
 def _list_bucket_names(manager_session: BackendSession, account_id: int) -> list[str]:
-    payload = manager_session.get("/browser/buckets", params=_account_params(account_id))
-    return sorted(str(entry.get("name") or "") for entry in payload or [] if entry.get("name"))
+    payload = manager_session.get("/browser/buckets/search", params=_account_params(account_id))
+    return sorted(
+        str(entry.get("name") or "")
+        for entry in payload.get("items") or []
+        if entry.get("name")
+    )
 
 
 def _bucket_exists(manager_session: BackendSession, account_id: int, bucket_name: str) -> bool:

@@ -21,12 +21,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import User
 from app.models.access_context import ManagerActor
 from app.models.app_settings import BrowserSettings
 from app.models.bucket import BucketVersioningStatus
 from app.models.browser import (
-    BrowserBucket,
     BrowserObjectSortBy,
     BrowserUsageSummary,
     BrowserObjectSortDir,
@@ -79,17 +77,6 @@ def get_browser_settings(_: ManagerActor = Depends(get_current_account_admin)) -
 def get_browser_usage_service(db: Session = Depends(get_db)) -> BrowserUsageSummaryService:
     return get_browser_usage_summary_service(db)
 
-
-@router.get("/buckets", response_model=list[BrowserBucket], response_model_exclude_none=True)
-def list_buckets(
-    account: S3ExecutionContext = Depends(get_account_context),
-    service: BrowserService = Depends(get_browser_service),
-    _: ManagerActor = Depends(get_current_account_admin),
-) -> list[BrowserBucket]:
-    try:
-        return service.list_buckets(account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
 
 @router.get(
     "/buckets/search",

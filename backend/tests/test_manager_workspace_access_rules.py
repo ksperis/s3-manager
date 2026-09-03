@@ -243,7 +243,7 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
     )
 
     account_ctx = dependencies.get_account_context(
-        request=_request("/api/browser/buckets", headers={"X-S3-Workspace": "portal"}),
+        request=_request("/api/browser/buckets/search", headers={"X-S3-Workspace": "portal"}),
         account_ref=str(account.id),
         actor=user,
         db=db_session,
@@ -566,7 +566,7 @@ def test_manager_workspace_rejects_connection_without_manager_access(db_session)
     assert "not authorized" in str(exc.value.detail)
 
 
-@pytest.mark.parametrize("path", ["/api/manager/buckets", "/api/browser/buckets"])
+@pytest.mark.parametrize("path", ["/api/manager/buckets", "/api/browser/buckets/search"])
 def test_manager_and_browser_workspace_reject_inactive_connection(db_session, path: str):
     user = User(
         email="connection-inactive-rejected@example.com",
@@ -890,7 +890,7 @@ def test_browser_workspace_rejects_forged_s3_user_context(db_session):
 
     with pytest.raises(HTTPException) as exc:
         dependencies.get_account_context(
-            request=_request("/api/browser/buckets"),
+            request=_request("/api/browser/buckets/search"),
             account_ref=f"s3u-{s3_user.id}",
             actor=user,
             db=db_session,
@@ -941,7 +941,7 @@ def test_browser_workspace_rejects_forged_account_and_shared_connection(db_sessi
     for account_ref in (str(account.id), f"conn-{shared_connection.id}"):
         with pytest.raises(HTTPException) as exc:
             dependencies.get_account_context(
-                request=_request("/api/browser/buckets"),
+                request=_request("/api/browser/buckets/search"),
                 account_ref=account_ref,
                 actor=user,
                 db=db_session,
@@ -1172,7 +1172,7 @@ def test_browser_workspace_accepts_ceph_admin_selector_for_authorized_user(db_se
     monkeypatch.setattr(ceph_admin_dependencies, "validate_ceph_admin_service_identity", lambda _endpoint: None)
 
     account = dependencies.get_account_context(
-        request=_request("/api/browser/buckets"),
+        request=_request("/api/browser/buckets/search"),
         account_ref=f"ceph-admin-{endpoint.id}",
         actor=user,
         db=db_session,
@@ -1220,7 +1220,7 @@ def test_browser_workspace_rejects_ceph_admin_selector_for_invalid_ceph_admin_id
 
     with pytest.raises(HTTPException) as exc:
         dependencies.get_account_context(
-            request=_request("/api/browser/buckets"),
+            request=_request("/api/browser/buckets/search"),
             account_ref=f"ceph-admin-{endpoint.id}",
             actor=user,
             db=db_session,
@@ -1258,7 +1258,7 @@ def test_browser_workspace_rejects_ceph_admin_selector_for_non_admin_user(db_ses
 
     with pytest.raises(HTTPException) as exc:
         dependencies.get_account_context(
-            request=_request("/api/browser/buckets"),
+            request=_request("/api/browser/buckets/search"),
             account_ref=f"ceph-admin-{endpoint.id}",
             actor=user,
             db=db_session,

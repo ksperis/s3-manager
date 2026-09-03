@@ -80,7 +80,7 @@ def test_account_requires_admin_and_permission_on_same_direct_link(db_session):
     db_session.commit()
 
     context = dependencies.get_account_context(
-        request=_request("/api/browser/buckets"),
+        request=_request("/api/browser/buckets/search"),
         account_ref=str(account.id),
         actor=user,
         db=db_session,
@@ -92,7 +92,7 @@ def test_account_requires_admin_and_permission_on_same_direct_link(db_session):
     db_session.commit()
     with pytest.raises(HTTPException) as exc:
         dependencies.get_account_context(
-            request=_request("/api/browser/buckets"),
+            request=_request("/api/browser/buckets/search"),
             account_ref=str(account.id),
             actor=user,
             db=db_session,
@@ -185,7 +185,7 @@ def test_rgw_user_permission_aggregates_direct_and_group_and_revokes(db_session)
     db_session.commit()
 
     context = dependencies.get_account_context(
-        request=_request("/api/browser/buckets"),
+        request=_request("/api/browser/buckets/search"),
         account_ref=f"s3u-{s3_user.id}",
         actor=user,
         db=db_session,
@@ -197,7 +197,7 @@ def test_rgw_user_permission_aggregates_direct_and_group_and_revokes(db_session)
     db_session.commit()
     with pytest.raises(HTTPException) as exc:
         dependencies.get_account_context(
-            request=_request("/api/browser/buckets"),
+            request=_request("/api/browser/buckets/search"),
             account_ref=f"s3u-{s3_user.id}",
             actor=user,
             db=db_session,
@@ -246,7 +246,7 @@ def test_private_connection_requires_both_flags_and_shared_is_always_denied(db_s
     db_session.commit()
 
     context = dependencies.get_account_context(
-        request=_request("/api/browser/buckets"),
+        request=_request("/api/browser/buckets/search"),
         account_ref=f"conn-{private.id}",
         actor=user,
         db=db_session,
@@ -259,7 +259,7 @@ def test_private_connection_requires_both_flags_and_shared_is_always_denied(db_s
     for connection in (private, shared):
         with pytest.raises(HTTPException) as exc:
             dependencies.get_account_context(
-                request=_request("/api/browser/buckets"),
+                request=_request("/api/browser/buckets/search"),
                 account_ref=f"conn-{connection.id}",
                 actor=user,
                 db=db_session,
@@ -287,7 +287,7 @@ def test_direct_s3_session_uses_its_credentials_and_browser_capability(db_sessio
     )
 
     context = dependencies.get_account_context(
-        request=_request("/api/browser/buckets"),
+        request=_request("/api/browser/buckets/search"),
         account_ref=str(account.id),
         actor=actor,
         db=db_session,
@@ -297,7 +297,7 @@ def test_direct_s3_session_uses_its_credentials_and_browser_capability(db_sessio
     actor.capabilities.access_browser = False
     with pytest.raises(HTTPException) as exc:
         dependencies.get_account_context(
-            request=_request("/api/browser/buckets"),
+            request=_request("/api/browser/buckets/search"),
             account_ref=str(account.id),
             actor=actor,
             db=db_session,
@@ -344,17 +344,17 @@ def test_manager_context_and_surface_gate_use_same_explicit_permission(db_sessio
     )
     assert payload.manager_browser_enabled is True
     assert payload.manager_browser_message is None
-    require_browser_workspace_surface(_request("/api/browser/buckets"))
+    require_browser_workspace_surface(_request("/api/browser/buckets/search"))
 
     settings.general.browser_manager_enabled = False
     with pytest.raises(HTTPException) as exc:
-        require_browser_workspace_surface(_request("/api/browser/buckets"))
+        require_browser_workspace_surface(_request("/api/browser/buckets/search"))
     assert exc.value.status_code == 403
 
     settings.general.browser_manager_enabled = True
     settings.general.manager_enabled = False
     with pytest.raises(HTTPException) as exc:
-        require_browser_workspace_surface(_request("/api/browser/buckets"))
+        require_browser_workspace_surface(_request("/api/browser/buckets/search"))
     assert exc.value.status_code == 403
 
     settings.general.manager_enabled = True

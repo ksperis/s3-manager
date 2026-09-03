@@ -73,6 +73,15 @@ def test_browser_bucket_search_endpoint_contract(client):
     }
 
 
+def test_browser_bucket_openapi_excludes_removed_duplicate_collections() -> None:
+    paths = app.openapi()["paths"]
+
+    assert set(paths["/api/browser/buckets"]) == {"post"}
+    assert "/api/browser/buckets/search" in paths
+    assert "/api/browser/buckets/config" not in paths
+    assert "/api/browser/buckets/config/{bucket_name}" not in paths
+
+
 def test_browser_bucket_search_endpoint_paginates_results(client):
     class FakeService:
         buckets = [

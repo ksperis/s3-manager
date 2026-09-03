@@ -39,8 +39,8 @@ def test_browser_bucket_config_router_aggregates_every_feature_family() -> None:
     )
 
     assert included_routers == feature_routers
-    assert sum(len(router.routes) for router in feature_routers) == 40
-    assert len(expected_operations) == 40
+    assert sum(len(router.routes) for router in feature_routers) == 37
+    assert len(expected_operations) == 37
 
 
 def test_manager_bucket_config_router_aggregates_every_feature_family() -> None:

@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, Query, status
 from app.models.access_context import ManagerActor
 from app.models.bucket import (
     Bucket,
-    BucketCreate,
     BucketEncryptionConfiguration,
     BucketObjectLock,
     BucketObjectLockUpdate,
@@ -26,7 +25,6 @@ from app.routers.dependencies import (
 )
 from app.services import bucket_config_actions
 from app.services.audit_service import AuditService
-from app.services.bucket_ui_tags_service import BucketUiTagsService, PhysicalBucketTarget
 from app.services.bucket_config_mutation_service import BucketConfigMutationService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.bucket_configuration_service import (
@@ -34,7 +32,6 @@ from app.services.bucket_configuration_service import (
     get_bucket_configuration_service,
 )
 from app.services.buckets_service import BucketsService, get_buckets_service
-from app.services.storage_ops_bucket_listing_service import resolve_storage_ops_context_tenant
 from app.services.s3_execution_context import S3ExecutionContext
 
 router = APIRouter()
@@ -68,22 +65,6 @@ def get_browser_bucket_config_mutation_service(
     )
 
 
-@router.get("/buckets/config", response_model=list[Bucket])
-def list_bucket_configs(
-    include: list[str] = Query(default=[], description="Optional extra fields to include (e.g. tags, versioning, cors)"),
-    with_stats: bool = Query(True, description="Include usage/quota stats from admin listing"),
-    account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
-    _: ManagerActor = Depends(get_current_account_admin),
-) -> list[Bucket]:
-    return bucket_config_actions.list_bucket_configs(
-        service=service,
-        account=account,
-        include=include,
-        with_stats=with_stats,
-    )
-
-
 @router.get("/buckets/config/{bucket_name}/stats", response_model=Bucket)
 def get_bucket_config_stats(
     bucket_name: str,
@@ -98,73 +79,6 @@ def get_bucket_config_stats(
         bucket_name=bucket_name,
         with_stats=with_stats,
     )
-
-
-@router.post("/buckets/config", status_code=status.HTTP_201_CREATED)
-def create_bucket_config(
-    payload: BucketCreate,
-    account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
-    browser_service: BrowserService = Depends(get_browser_service),
-    actor: ManagerActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> dict[str, Any]:
-    response, audit_metadata = bucket_config_actions.create_bucket_config(
-        service=service,
-        account=account,
-        payload=payload,
-    )
-    _invalidate_browser_listing_cache(browser_service, account, bucket_name=payload.name)
-    audit_service.record_action(
-        user=actor,
-        scope="browser",
-        action="create_bucket",
-        entity_type="bucket",
-        entity_id=payload.name,
-        account=account,
-        metadata=audit_metadata,
-    )
-    return response
-
-
-@router.delete("/buckets/config/{bucket_name}")
-def delete_bucket_config(
-    bucket_name: str,
-    force: bool = Query(False, description="Set to true to delete all objects before deleting the bucket"),
-    account: S3ExecutionContext = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
-    browser_service: BrowserService = Depends(get_browser_service),
-    actor: ManagerActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> dict[str, str]:
-    response, audit_metadata = bucket_config_actions.delete_bucket_config(
-        service=service,
-        account=account,
-        bucket_name=bucket_name,
-        force=force,
-    )
-    _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
-    audit_service.record_action(
-        user=actor,
-        scope="browser",
-        action="delete_bucket",
-        entity_type="bucket",
-        entity_id=bucket_name,
-        account=account,
-        metadata=audit_metadata,
-    )
-    endpoint_id = int(getattr(account, "storage_endpoint_id", 0) or 0)
-    if endpoint_id > 0:
-        tag_service = BucketUiTagsService(audit_service.db)
-        with tag_service.transaction():
-            tag_service.remove_all_namespaces_for_bucket(
-                PhysicalBucketTarget.create(
-                    endpoint_id,
-                    resolve_storage_ops_context_tenant(account),
-                    bucket_name,
-                )
-            )
-    return response
 
 
 @router.put("/buckets/config/{bucket_name}/quota")
@@ -288,4 +202,3 @@ def delete_bucket_encryption_config(
         audit_action="delete_bucket_encryption",
         action=bucket_config_actions.delete_bucket_encryption_config,
     )
-

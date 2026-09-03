@@ -31,7 +31,6 @@ from app.models.bucket import (
     BucketWebsiteConfiguration,
 )
 from app.utils.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
-from app.services.bucket_listing_shared import parse_includes
 from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.buckets_service import BucketsService
 from app.services.s3_deletion import BucketNotEmptyError
@@ -110,17 +109,6 @@ def apply_bucket_config_delete(
     )
     audit_recorder({})
     return no_content_response()
-
-
-def list_bucket_configs(
-    *,
-    service: BucketsService,
-    account: S3ExecutionTarget,
-    include: list[str],
-    with_stats: bool,
-) -> list[Bucket]:
-    include_set = parse_includes(include)
-    return _map_runtime_error(lambda: service.list_buckets(account, include=include_set, with_stats=with_stats))
 
 
 def get_bucket_config_stats(
