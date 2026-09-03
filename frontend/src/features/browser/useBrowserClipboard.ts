@@ -13,8 +13,8 @@ import {
   createFolder,
   deleteObjects,
   fetchObjectMetadata,
-  getBucketCorsStatus,
 } from "../../api/browser";
+import { getBrowserBucketCorsStatus } from "../../api/browserBuckets";
 import {
   abortMultipartUpload,
   completeMultipartUpload,
@@ -176,7 +176,7 @@ export function useBrowserClipboard({
       targetBucket: string,
     ): Promise<ClipboardTransferMode> => {
       try {
-        const status = await getBucketCorsStatus(
+        const status = await getBrowserBucketCorsStatus(
           selector,
           targetBucket,
           uiOrigin,

@@ -4,13 +4,12 @@ import { readBrowserRootContextSelection } from "./browserRootUiState";
 import { useBrowserBucketCatalog } from "./useBrowserBucketCatalog";
 
 const apiMocks = vi.hoisted(() => ({
-  listBrowserObjects: vi.fn(),
   searchBrowserBuckets: vi.fn(),
 }));
 
-vi.mock("../../api/browser", async () => ({
-  ...(await vi.importActual<typeof import("../../api/browser")>(
-    "../../api/browser",
+vi.mock("../../api/browserBuckets", async () => ({
+  ...(await vi.importActual<typeof import("../../api/browserBuckets")>(
+    "../../api/browserBuckets",
   )),
   ...apiMocks,
 }));

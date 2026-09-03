@@ -13,10 +13,10 @@ import {
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
-  getBucketVersioning,
   listBrowserObjects,
   listObjectVersions,
 } from "../../api/browser";
+import { getBrowserBucketVersioning } from "../../api/browserBuckets";
 import type {
   BrowserObject,
   BrowserObjectVersion,
@@ -723,7 +723,7 @@ export function useBrowserObjectListing({
       return;
     }
     let active = true;
-    getBucketVersioning(accountId, bucketName, stableRequestOptions)
+    getBrowserBucketVersioning(accountId, bucketName, stableRequestOptions)
       .then((data) => {
         if (!active) return;
         setIsVersioningEnabled(

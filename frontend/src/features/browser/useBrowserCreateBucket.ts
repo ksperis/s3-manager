@@ -7,8 +7,8 @@ import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   createBrowserBucket,
-  ensureBucketCors,
-} from "../../api/browser";
+  ensureBrowserBucketCors,
+} from "../../api/browserBuckets";
 import type { BucketCorsStatus } from "../../api/browserContracts";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
@@ -118,7 +118,7 @@ export function useBrowserCreateBucket({
       let corsApplied = false;
       if (uiOrigin) {
         try {
-          const status = await ensureBucketCors(
+          const status = await ensureBrowserBucketCors(
             accountIdForApi,
             normalizedName,
             uiOrigin,

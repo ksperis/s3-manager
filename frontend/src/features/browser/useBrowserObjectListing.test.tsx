@@ -7,7 +7,7 @@ import type {
 import { useBrowserObjectListing } from "./useBrowserObjectListing";
 
 const apiMocks = vi.hoisted(() => ({
-  getBucketVersioning: vi.fn(),
+  getBrowserBucketVersioning: vi.fn(),
   listBrowserObjects: vi.fn(),
   listObjectVersions: vi.fn(),
 }));
@@ -16,7 +16,18 @@ vi.mock("../../api/browser", async () => ({
   ...(await vi.importActual<typeof import("../../api/browser")>(
     "../../api/browser",
   )),
-  ...apiMocks,
+  listBrowserObjects: (...args: unknown[]) =>
+    apiMocks.listBrowserObjects(...args),
+  listObjectVersions: (...args: unknown[]) =>
+    apiMocks.listObjectVersions(...args),
+}));
+
+vi.mock("../../api/browserBuckets", async () => ({
+  ...(await vi.importActual<typeof import("../../api/browserBuckets")>(
+    "../../api/browserBuckets",
+  )),
+  getBrowserBucketVersioning: (...args: unknown[]) =>
+    apiMocks.getBrowserBucketVersioning(...args),
 }));
 
 function deferred<T>() {
@@ -82,7 +93,7 @@ function createOptions() {
 describe("useBrowserObjectListing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    apiMocks.getBucketVersioning.mockResolvedValue({
+    apiMocks.getBrowserBucketVersioning.mockResolvedValue({
       status: "Disabled",
       enabled: false,
     });
@@ -186,7 +197,7 @@ describe("useBrowserObjectListing", () => {
   });
 
   it("lists latest delete markers when bucket versioning is active", async () => {
-    apiMocks.getBucketVersioning.mockResolvedValue({
+    apiMocks.getBrowserBucketVersioning.mockResolvedValue({
       status: "Enabled",
       enabled: true,
     });

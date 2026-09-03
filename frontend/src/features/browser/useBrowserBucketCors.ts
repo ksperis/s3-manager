@@ -7,9 +7,9 @@ import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import {
-  ensureBucketCors,
-  getBucketCorsStatus,
-} from "../../api/browser";
+  ensureBrowserBucketCors,
+  getBrowserBucketCorsStatus,
+} from "../../api/browserBuckets";
 import type { BucketCorsStatus } from "../../api/browserContracts";
 import { resolveBrowserCorsAvailability } from "./browserTransferPresentation";
 
@@ -97,7 +97,7 @@ export function useBrowserBucketCors({
     setErrorState(null);
     setStatusMessage(null);
     try {
-      const nextStatus = await ensureBucketCors(
+      const nextStatus = await ensureBrowserBucketCors(
         accountIdForApi,
         bucketName,
         origin,
@@ -144,7 +144,7 @@ export function useBrowserBucketCors({
     if (!scopeKey) return;
 
     let active = true;
-    getBucketCorsStatus(
+    getBrowserBucketCorsStatus(
       accountIdForApi,
       bucketName,
       origin,

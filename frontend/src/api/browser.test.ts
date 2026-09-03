@@ -12,7 +12,6 @@ vi.mock("./client", () => ({
 }));
 
 import {
-  getBucketVersioning,
   fetchObjectMetadata,
   getStsCredentials,
   listBrowserObjects,
@@ -61,9 +60,6 @@ describe("browser api", () => {
   it("lists hierarchical versions with Portal headers, S3 cursors, and cancellation", async () => {
     const signal = new AbortController().signal;
 
-    await getBucketVersioning("101", "research data", {
-      workspaceSurface: "portal",
-    });
     await listObjectVersions("101", "research data", {
       prefix: "reports/",
       delimiter: "/",
@@ -74,16 +70,7 @@ describe("browser api", () => {
       requestOptions: { workspaceSurface: "portal" },
     });
 
-    expect(clientMock.get).toHaveBeenNthCalledWith(
-      1,
-      "/browser/buckets/research%20data/versioning",
-      {
-        params: { account_id: "101" },
-        headers: { "X-S3-Workspace": "portal" },
-      },
-    );
-    expect(clientMock.get).toHaveBeenNthCalledWith(
-      2,
+    expect(clientMock.get).toHaveBeenCalledWith(
       "/browser/buckets/research%20data/versions",
       {
         params: {
@@ -104,7 +91,6 @@ describe("browser api", () => {
   it("sends the explicit Manager Browser surface on simple and advanced calls", async () => {
     clientMock.get.mockResolvedValue({ data: {} });
 
-    await getBucketVersioning("12", "bucket-a", { workspaceSurface: "manager" });
     await getStsCredentials("12", { workspaceSurface: "manager" });
     await fetchObjectMetadata(
       "12",

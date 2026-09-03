@@ -4,21 +4,21 @@ import type { BucketCorsStatus } from "../../api/browserContracts";
 import { useBrowserBucketCors } from "./useBrowserBucketCors";
 
 const apiMocks = vi.hoisted(() => ({
-  ensureBucketCors: vi.fn(),
-  getBucketCorsStatus: vi.fn(),
+  ensureBrowserBucketCors: vi.fn(),
+  getBrowserBucketCorsStatus: vi.fn(),
 }));
 
-vi.mock("../../api/browser", async () => {
+vi.mock("../../api/browserBuckets", async () => {
   const actual =
-    await vi.importActual<typeof import("../../api/browser")>(
-      "../../api/browser",
+    await vi.importActual<typeof import("../../api/browserBuckets")>(
+      "../../api/browserBuckets",
     );
   return {
     ...actual,
-    ensureBucketCors: (...args: unknown[]) =>
-      apiMocks.ensureBucketCors(...args),
-    getBucketCorsStatus: (...args: unknown[]) =>
-      apiMocks.getBucketCorsStatus(...args),
+    ensureBrowserBucketCors: (...args: unknown[]) =>
+      apiMocks.ensureBrowserBucketCors(...args),
+    getBrowserBucketCorsStatus: (...args: unknown[]) =>
+      apiMocks.getBrowserBucketCorsStatus(...args),
   };
 });
 
@@ -36,8 +36,8 @@ const enabledCors: BucketCorsStatus = { enabled: true, rules: [] };
 describe("useBrowserBucketCors", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    apiMocks.getBucketCorsStatus.mockResolvedValue(disabledCors);
-    apiMocks.ensureBucketCors.mockResolvedValue(enabledCors);
+    apiMocks.getBrowserBucketCorsStatus.mockResolvedValue(disabledCors);
+    apiMocks.ensureBrowserBucketCors.mockResolvedValue(enabledCors);
   });
 
   it("applies CORS for the active bucket and closes its action popover", async () => {
@@ -60,7 +60,7 @@ describe("useBrowserBucketCors", () => {
       await result.current.ensureCors();
     });
 
-    expect(apiMocks.ensureBucketCors).toHaveBeenCalledWith(
+    expect(apiMocks.ensureBrowserBucketCors).toHaveBeenCalledWith(
       "acc-1",
       "bucket-a",
       "https://ui.example.test",
@@ -76,7 +76,7 @@ describe("useBrowserBucketCors", () => {
   it("ignores a status response from a previously selected bucket", async () => {
     const bucketARequest = deferred<BucketCorsStatus>();
     const bucketBRequest = deferred<BucketCorsStatus>();
-    apiMocks.getBucketCorsStatus.mockImplementation(
+    apiMocks.getBrowserBucketCorsStatus.mockImplementation(
       (_accountId: string, bucketName: string) =>
         bucketName === "bucket-a"
           ? bucketARequest.promise
@@ -97,7 +97,7 @@ describe("useBrowserBucketCors", () => {
     );
 
     await waitFor(() => {
-      expect(apiMocks.getBucketCorsStatus).toHaveBeenCalledWith(
+      expect(apiMocks.getBrowserBucketCorsStatus).toHaveBeenCalledWith(
         "acc-1",
         "bucket-a",
         "https://ui.example.test",
@@ -106,7 +106,7 @@ describe("useBrowserBucketCors", () => {
     });
     rerender({ bucketName: "bucket-b" });
     await waitFor(() => {
-      expect(apiMocks.getBucketCorsStatus).toHaveBeenCalledWith(
+      expect(apiMocks.getBrowserBucketCorsStatus).toHaveBeenCalledWith(
         "acc-1",
         "bucket-b",
         "https://ui.example.test",
@@ -126,7 +126,7 @@ describe("useBrowserBucketCors", () => {
   });
 
   it("does not offer CORS repair when the status could not be checked", async () => {
-    apiMocks.getBucketCorsStatus.mockResolvedValue({
+    apiMocks.getBrowserBucketCorsStatus.mockResolvedValue({
       enabled: false,
       rules: [],
       error: "AccessDenied",

@@ -35,9 +35,9 @@ const fetchBrowserUsageSummaryMock = vi.fn();
 const fetchBrowserSettingsMock = vi.fn();
 const listBrowserObjectsMock = vi.fn();
 const fetchBrowserObjectColumnsMock = vi.fn();
-const getBucketVersioningMock = vi.fn();
-const getBucketCorsStatusMock = vi.fn();
-const ensureBucketCorsMock = vi.fn();
+const getBrowserBucketVersioningMock = vi.fn();
+const getBrowserBucketCorsStatusMock = vi.fn();
+const ensureBrowserBucketCorsMock = vi.fn();
 const createBrowserBucketMock = vi.fn();
 const listObjectVersionsMock = vi.fn();
 const fetchObjectMetadataMock = vi.fn();
@@ -139,22 +139,9 @@ vi.mock("../../api/browser", async () => {
     );
   return {
     ...actual,
-    searchBrowserBuckets: (...args: unknown[]) =>
-      searchBrowserBucketsMock(...args),
-    fetchBrowserUsageSummary: (...args: unknown[]) =>
-      fetchBrowserUsageSummaryMock(...args),
-    fetchBrowserSettings: (...args: unknown[]) =>
-      fetchBrowserSettingsMock(...args),
     listBrowserObjects: (...args: unknown[]) => listBrowserObjectsMock(...args),
     fetchBrowserObjectColumns: (...args: unknown[]) =>
       fetchBrowserObjectColumnsMock(...args),
-    getBucketVersioning: (...args: unknown[]) =>
-      getBucketVersioningMock(...args),
-    getBucketCorsStatus: (...args: unknown[]) =>
-      getBucketCorsStatusMock(...args),
-    ensureBucketCors: (...args: unknown[]) => ensureBucketCorsMock(...args),
-    createBrowserBucket: (...args: unknown[]) =>
-      createBrowserBucketMock(...args),
     listObjectVersions: (...args: unknown[]) => listObjectVersionsMock(...args),
     fetchObjectMetadata: (...args: unknown[]) =>
       fetchObjectMetadataMock(...args),
@@ -177,6 +164,30 @@ vi.mock("../../api/browser", async () => {
     cleanupObjectVersions: (...args: unknown[]) =>
       cleanupObjectVersionsMock(...args),
     createFolder: (...args: unknown[]) => createFolderMock(...args),
+  };
+});
+
+vi.mock("../../api/browserBuckets", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../api/browserBuckets")>(
+      "../../api/browserBuckets",
+    );
+  return {
+    ...actual,
+    searchBrowserBuckets: (...args: unknown[]) =>
+      searchBrowserBucketsMock(...args),
+    fetchBrowserUsageSummary: (...args: unknown[]) =>
+      fetchBrowserUsageSummaryMock(...args),
+    fetchBrowserSettings: (...args: unknown[]) =>
+      fetchBrowserSettingsMock(...args),
+    getBrowserBucketVersioning: (...args: unknown[]) =>
+      getBrowserBucketVersioningMock(...args),
+    getBrowserBucketCorsStatus: (...args: unknown[]) =>
+      getBrowserBucketCorsStatusMock(...args),
+    ensureBrowserBucketCors: (...args: unknown[]) =>
+      ensureBrowserBucketCorsMock(...args),
+    createBrowserBucket: (...args: unknown[]) =>
+      createBrowserBucketMock(...args),
   };
 });
 
@@ -783,12 +794,12 @@ describe("BrowserPage interactions", () => {
       }),
     );
 
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: false,
       status: "Disabled",
     });
-    getBucketCorsStatusMock.mockResolvedValue({ enabled: true, rules: [] });
-    ensureBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
+    getBrowserBucketCorsStatusMock.mockResolvedValue({ enabled: true, rules: [] });
+    ensureBrowserBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
     createBrowserBucketMock.mockResolvedValue(undefined);
     listObjectVersionsMock.mockResolvedValue({
       versions: [],
@@ -1075,7 +1086,7 @@ describe("BrowserPage interactions", () => {
       "portal-bucket",
       expect.objectContaining({ workspaceSurface: "portal" }),
     );
-    expect(getBucketVersioningMock).toHaveBeenCalledWith(
+    expect(getBrowserBucketVersioningMock).toHaveBeenCalledWith(
       "acc-portal",
       "portal-bucket",
       { workspaceSurface: "portal" },
@@ -1143,7 +1154,7 @@ describe("BrowserPage interactions", () => {
   it("moves the Portal deleted-files toggle into More", async () => {
     const user = userEvent.setup();
     const onVisibilityChange = vi.fn();
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -1183,7 +1194,7 @@ describe("BrowserPage interactions", () => {
   it("keeps historical folders reachable after dense version pages in the Portal mixed view", async () => {
     const restoreDeletedObject = vi.fn();
     const restoreDeletedPrefix = vi.fn();
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -1310,7 +1321,7 @@ describe("BrowserPage interactions", () => {
   });
 
   it("keeps an explicit continuation when 5,000 scanned versions yield no deleted row", async () => {
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -2341,7 +2352,7 @@ describe("BrowserPage interactions", () => {
         "created-bucket",
         { versioning: false },
       );
-      expect(ensureBucketCorsMock).toHaveBeenCalledWith(
+      expect(ensureBrowserBucketCorsMock).toHaveBeenCalledWith(
         "acc-1",
         "created-bucket",
         window.location.origin,
@@ -2370,7 +2381,7 @@ describe("BrowserPage interactions", () => {
 
   it("renders a passive Unavailable badge when direct and proxy transfers are both unavailable", async () => {
     const user = userEvent.setup();
-    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    getBrowserBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
     renderPage();
     await findRowByLabel("a.txt");
 
@@ -2391,7 +2402,7 @@ describe("BrowserPage interactions", () => {
       other_operations_parallelism: 2,
       streaming_zip_threshold_mb: 200,
     });
-    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    getBrowserBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
     renderPage();
     await findRowByLabel("a.txt");
 
@@ -2411,7 +2422,7 @@ describe("BrowserPage interactions", () => {
       other_operations_parallelism: 2,
       streaming_zip_threshold_mb: 200,
     });
-    getBucketCorsStatusMock.mockResolvedValue({
+    getBrowserBucketCorsStatusMock.mockResolvedValue({
       enabled: false,
       rules: [],
       error: "AccessDenied",
@@ -2431,7 +2442,7 @@ describe("BrowserPage interactions", () => {
 
     renderPage();
     await findRowByLabel("a.txt");
-    await waitFor(() => expect(getBucketCorsStatusMock).toHaveBeenCalled());
+    await waitFor(() => expect(getBrowserBucketCorsStatusMock).toHaveBeenCalled());
 
     expect(
       screen.queryByText("Direct download/upload is not allowed on this bucket."),
@@ -4201,7 +4212,7 @@ describe("BrowserPage interactions", () => {
 
   it("opens the single-row actions menu from More actions and routes Details to the inspector", async () => {
     const user = userEvent.setup();
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -4287,7 +4298,7 @@ describe("BrowserPage interactions", () => {
 
   it("opens Preview and Properties from the file actions menu into the unified modal", async () => {
     const user = userEvent.setup();
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -4406,7 +4417,7 @@ describe("BrowserPage interactions", () => {
 
   it("keeps the inspector context informative without an action toolbar", async () => {
     const user = userEvent.setup();
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -4467,7 +4478,7 @@ describe("BrowserPage interactions", () => {
 
   it("keeps the Details inspector informative and routes its only link to full details", async () => {
     const user = userEvent.setup();
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -5239,7 +5250,7 @@ describe("BrowserPage interactions", () => {
       other_operations_parallelism: 2,
       streaming_zip_threshold_mb: 200,
     });
-    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    getBrowserBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
     const firstUpload = createDeferred<void>();
     const secondUpload = createDeferred<void>();
     let uploadCallCount = 0;
@@ -5585,7 +5596,7 @@ describe("BrowserPage interactions", () => {
       other_operations_parallelism: 2,
       streaming_zip_threshold_mb: 200,
     });
-    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    getBrowserBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
     const view = renderPage({ accountIdForApi: "acc-1" });
 
     await copyOrCutItem(user, "a.txt", "Copy");
@@ -5750,7 +5761,7 @@ describe("BrowserPage interactions", () => {
       layout: { showFolders: false, showInspector: false, showActionBar: true },
       contextSelections: {},
     });
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -5843,7 +5854,7 @@ describe("BrowserPage interactions", () => {
 
   it("supports Stop for cleaning old versions", async () => {
     const user = userEvent.setup();
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -5858,7 +5869,7 @@ describe("BrowserPage interactions", () => {
 
     renderPage({ defaultShowInspector: true });
     await waitFor(() => {
-      expect(getBucketVersioningMock).toHaveBeenCalledTimes(1);
+      expect(getBrowserBucketVersioningMock).toHaveBeenCalledTimes(1);
     });
     const menu = await openContextMoreMenu(user);
     const cleanOldVersionsAction = within(menu).getByRole("menuitem", {
@@ -5892,7 +5903,7 @@ describe("BrowserPage interactions", () => {
 
   it("supports Stop for restore version and delete version operations", async () => {
     const user = userEvent.setup();
-    getBucketVersioningMock.mockResolvedValue({
+    getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
@@ -6031,7 +6042,7 @@ describe("BrowserPage interactions", () => {
 
   it("renders CORS warning with inline info action and moves CORS button into popover", async () => {
     const user = userEvent.setup();
-    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    getBrowserBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
     renderPage();
 
     const warningText = "Direct download/upload is not allowed on this bucket.";
@@ -6065,8 +6076,8 @@ describe("BrowserPage interactions", () => {
 
   it("applies CORS from popover and closes popover on Escape/outside click", async () => {
     const user = userEvent.setup();
-    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
-    ensureBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
+    getBrowserBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    ensureBrowserBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
     renderPage();
 
     const warningLine = (
@@ -6123,7 +6134,7 @@ describe("BrowserPage interactions", () => {
     );
 
     await waitFor(() => {
-      expect(ensureBucketCorsMock).toHaveBeenCalledWith(
+      expect(ensureBrowserBucketCorsMock).toHaveBeenCalledWith(
         "acc-1",
         "bucket-1",
         window.location.origin,

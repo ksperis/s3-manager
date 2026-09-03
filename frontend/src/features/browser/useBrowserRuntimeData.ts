@@ -8,7 +8,7 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   fetchBrowserSettings,
   fetchBrowserUsageSummary,
-} from "../../api/browser";
+} from "../../api/browserBuckets";
 import type {
   BrowserSettings,
   BrowserUsageSummary,

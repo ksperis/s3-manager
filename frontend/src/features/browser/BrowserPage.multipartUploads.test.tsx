@@ -7,8 +7,8 @@ import BrowserPage from "./BrowserPage";
 const searchBrowserBucketsMock = vi.fn();
 const fetchBrowserSettingsMock = vi.fn();
 const listBrowserObjectsMock = vi.fn();
-const getBucketVersioningMock = vi.fn();
-const getBucketCorsStatusMock = vi.fn();
+const getBrowserBucketVersioningMock = vi.fn();
+const getBrowserBucketCorsStatusMock = vi.fn();
 const listMultipartUploadsMock = vi.fn();
 const abortMultipartUploadMock = vi.fn();
 
@@ -44,11 +44,22 @@ vi.mock("../../api/browser", async () => {
   const actual = await vi.importActual<typeof import("../../api/browser")>("../../api/browser");
   return {
     ...actual,
+    listBrowserObjects: (...args: unknown[]) => listBrowserObjectsMock(...args),
+  };
+});
+
+vi.mock("../../api/browserBuckets", async () => {
+  const actual = await vi.importActual<typeof import("../../api/browserBuckets")>(
+    "../../api/browserBuckets",
+  );
+  return {
+    ...actual,
     searchBrowserBuckets: (...args: unknown[]) => searchBrowserBucketsMock(...args),
     fetchBrowserSettings: (...args: unknown[]) => fetchBrowserSettingsMock(...args),
-    listBrowserObjects: (...args: unknown[]) => listBrowserObjectsMock(...args),
-    getBucketVersioning: (...args: unknown[]) => getBucketVersioningMock(...args),
-    getBucketCorsStatus: (...args: unknown[]) => getBucketCorsStatusMock(...args),
+    getBrowserBucketVersioning: (...args: unknown[]) =>
+      getBrowserBucketVersioningMock(...args),
+    getBrowserBucketCorsStatus: (...args: unknown[]) =>
+      getBrowserBucketCorsStatusMock(...args),
   };
 });
 
@@ -116,8 +127,8 @@ describe("BrowserPage multipart uploads modal", () => {
       next_continuation_token: null,
     });
 
-    getBucketVersioningMock.mockResolvedValue({ enabled: false, status: "Disabled" });
-    getBucketCorsStatusMock.mockResolvedValue({ enabled: true, rules: [] });
+    getBrowserBucketVersioningMock.mockResolvedValue({ enabled: false, status: "Disabled" });
+    getBrowserBucketCorsStatusMock.mockResolvedValue({ enabled: true, rules: [] });
 
     getBucketStatsMock.mockResolvedValue({
       name: "bucket-1",

@@ -11,9 +11,9 @@ const apiMocks = vi.hoisted(() => ({
   fetchBrowserUsageSummary: vi.fn(),
 }));
 
-vi.mock("../../api/browser", async () => ({
-  ...(await vi.importActual<typeof import("../../api/browser")>(
-    "../../api/browser",
+vi.mock("../../api/browserBuckets", async () => ({
+  ...(await vi.importActual<typeof import("../../api/browserBuckets")>(
+    "../../api/browserBuckets",
   )),
   ...apiMocks,
 }));

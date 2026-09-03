@@ -7,7 +7,7 @@ import { useBrowserClipboard } from "./useBrowserClipboard";
 const apiMocks = vi.hoisted(() => ({
   copyObject: vi.fn(),
   fetchObjectMetadata: vi.fn(),
-  getBucketCorsStatus: vi.fn(),
+  getBrowserBucketCorsStatus: vi.fn(),
 }));
 const transferMocks = vi.hoisted(() => ({
   transferClipboardObjectBetweenContexts: vi.fn(),
@@ -29,7 +29,21 @@ vi.mock("../../api/browser", async () => {
     );
   return {
     ...actual,
-    ...apiMocks,
+    copyObject: (...args: unknown[]) => apiMocks.copyObject(...args),
+    fetchObjectMetadata: (...args: unknown[]) =>
+      apiMocks.fetchObjectMetadata(...args),
+  };
+});
+
+vi.mock("../../api/browserBuckets", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../api/browserBuckets")>(
+      "../../api/browserBuckets",
+    );
+  return {
+    ...actual,
+    getBrowserBucketCorsStatus: (...args: unknown[]) =>
+      apiMocks.getBrowserBucketCorsStatus(...args),
   };
 });
 
@@ -94,7 +108,7 @@ describe("useBrowserClipboard", () => {
       size: 12,
       content_type: "text/plain",
     });
-    apiMocks.getBucketCorsStatus.mockResolvedValue({ enabled: true, rules: [] });
+    apiMocks.getBrowserBucketCorsStatus.mockResolvedValue({ enabled: true, rules: [] });
     transferMocks.transferClipboardObjectBetweenContexts.mockResolvedValue(
       undefined,
     );
@@ -236,7 +250,7 @@ describe("useBrowserClipboard", () => {
 
   it("keeps cross-context transfers direct when CORS status is unknown", async () => {
     const resolvedModes: string[] = [];
-    apiMocks.getBucketCorsStatus.mockResolvedValue({
+    apiMocks.getBrowserBucketCorsStatus.mockResolvedValue({
       enabled: false,
       rules: [],
       error: "AccessDenied",
@@ -273,6 +287,6 @@ describe("useBrowserClipboard", () => {
     });
 
     expect(resolvedModes).toEqual(["direct", "direct"]);
-    expect(apiMocks.getBucketCorsStatus).toHaveBeenCalledTimes(2);
+    expect(apiMocks.getBrowserBucketCorsStatus).toHaveBeenCalledTimes(2);
   });
 });
