@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { BrowserSettings } from "../../api/browser";
+import type { BrowserSettings, BucketCorsStatus } from "../../api/browser";
 import {
   DEFAULT_DIRECT_DOWNLOAD_PARALLELISM,
   DEFAULT_DIRECT_UPLOAD_PARALLELISM,
@@ -37,6 +37,15 @@ export type BrowserTransferAccessBadge = {
   tone: "danger" | "warning" | "info" | "success";
   indicatorClassName: string;
 };
+
+export type BrowserCorsAvailability = "enabled" | "disabled" | "unknown";
+
+export function resolveBrowserCorsAvailability(
+  status: BucketCorsStatus | null | undefined,
+): BrowserCorsAvailability {
+  if (!status || status.error) return "unknown";
+  return status.enabled ? "enabled" : "disabled";
+}
 
 export function resolveBrowserTransferParallelism(
   settings: TransferParallelismSettings | null | undefined,

@@ -124,4 +124,28 @@ describe("useBrowserBucketCors", () => {
     });
     expect(result.current.status?.enabled).toBe(false);
   });
+
+  it("does not offer CORS repair when the status could not be checked", async () => {
+    apiMocks.getBucketCorsStatus.mockResolvedValue({
+      enabled: false,
+      rules: [],
+      error: "AccessDenied",
+    });
+
+    const { result } = renderHook(() =>
+      useBrowserBucketCors({
+        accountIdForApi: "acc-1",
+        allowAction: true,
+        bucketName: "bucket-a",
+        enabled: true,
+        origin: "https://ui.example.test",
+        setStatusMessage: vi.fn(),
+      }),
+    );
+
+    await waitFor(() =>
+      expect(result.current.status?.error).toBe("AccessDenied"),
+    );
+    expect(result.current.actionAvailable).toBe(false);
+  });
 });

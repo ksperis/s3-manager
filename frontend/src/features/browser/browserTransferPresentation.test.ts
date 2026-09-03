@@ -2,12 +2,30 @@ import { describe, expect, it } from "vitest";
 import {
   buildBrowserTransferWarnings,
   isStsCredentialsExpiring,
+  resolveBrowserCorsAvailability,
   resolveBrowserTransferAccessBadge,
   resolveBrowserTransferParallelism,
   resolveDirectCredentialStsTooltip,
 } from "./browserTransferPresentation";
 
 describe("browser transfer presentation", () => {
+  it("distinguishes verified CORS states from an unknown status", () => {
+    expect(
+      resolveBrowserCorsAvailability({ enabled: true, rules: [] }),
+    ).toBe("enabled");
+    expect(
+      resolveBrowserCorsAvailability({ enabled: false, rules: [] }),
+    ).toBe("disabled");
+    expect(
+      resolveBrowserCorsAvailability({
+        enabled: false,
+        rules: [],
+        error: "AccessDenied",
+      }),
+    ).toBe("unknown");
+    expect(resolveBrowserCorsAvailability(null)).toBe("unknown");
+  });
+
   it("selects and clamps direct or proxy transfer parallelism", () => {
     const settings = {
       direct_upload_parallelism: 6,

@@ -1,15 +1,26 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { S3AccountSelector } from "../../api/accountParams";
 import type { BrowserItem } from "./browserTypes";
 import { useBrowserClipboard } from "./useBrowserClipboard";
 
 const apiMocks = vi.hoisted(() => ({
   copyObject: vi.fn(),
   fetchObjectMetadata: vi.fn(),
+  getBucketCorsStatus: vi.fn(),
 }));
 const transferMocks = vi.hoisted(() => ({
   transferClipboardObjectBetweenContexts: vi.fn(),
 }));
+
+type CapturedTransferParameters = {
+  source: { selector: S3AccountSelector; bucket: string };
+  destination: { selector: S3AccountSelector; bucket: string };
+  resolveMode: (
+    selector: S3AccountSelector,
+    bucket: string,
+  ) => Promise<"direct" | "proxy">;
+};
 
 vi.mock("../../api/browser", async () => {
   const actual =
@@ -83,6 +94,7 @@ describe("useBrowserClipboard", () => {
       size: 12,
       content_type: "text/plain",
     });
+    apiMocks.getBucketCorsStatus.mockResolvedValue({ enabled: true, rules: [] });
     transferMocks.transferClipboardObjectBetweenContexts.mockResolvedValue(
       undefined,
     );
@@ -220,5 +232,47 @@ describe("useBrowserClipboard", () => {
     );
     expect(apiMocks.copyObject).not.toHaveBeenCalled();
     expect(options.onRefreshNow).toHaveBeenCalledWith("archive/");
+  });
+
+  it("keeps cross-context transfers direct when CORS status is unknown", async () => {
+    const resolvedModes: string[] = [];
+    apiMocks.getBucketCorsStatus.mockResolvedValue({
+      enabled: false,
+      rules: [],
+      error: "AccessDenied",
+    });
+    transferMocks.transferClipboardObjectBetweenContexts.mockImplementation(
+      async (parameters: CapturedTransferParameters) => {
+        resolvedModes.push(
+          await parameters.resolveMode(
+            parameters.source.selector,
+            parameters.source.bucket,
+          ),
+          await parameters.resolveMode(
+            parameters.destination.selector,
+            parameters.destination.bucket,
+          ),
+        );
+      },
+    );
+    const options = createOptions();
+    const { result, rerender } = renderHook(
+      (overrides: Partial<typeof options>) =>
+        useBrowserClipboard({ ...options, ...overrides }),
+      { initialProps: {} },
+    );
+    act(() => result.current.copy([item("docs/report.txt")]));
+    rerender({
+      accountId: "acc-2",
+      bucketName: "destination-bucket",
+      functionalProfile: "advanced",
+    });
+
+    await act(async () => {
+      await result.current.paste();
+    });
+
+    expect(resolvedModes).toEqual(["direct", "direct"]);
+    expect(apiMocks.getBucketCorsStatus).toHaveBeenCalledTimes(2);
   });
 });

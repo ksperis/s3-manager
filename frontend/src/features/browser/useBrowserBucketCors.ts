@@ -11,6 +11,7 @@ import {
   type BrowserRequestOptions,
   type BucketCorsStatus,
 } from "../../api/browser";
+import { resolveBrowserCorsAvailability } from "./browserTransferPresentation";
 
 type ScopedValue<T> = {
   scopeKey: string;
@@ -69,7 +70,9 @@ export function useBrowserBucketCors({
   const error = errorState?.scopeKey === scopeKey ? errorState.value : null;
   const fixing = fixingScopeKey === scopeKey;
   const actionAvailable = Boolean(
-    allowAction && origin && status && !status.enabled,
+    allowAction &&
+      origin &&
+      resolveBrowserCorsAvailability(status) === "disabled",
   );
 
   const setStatus = useCallback(

@@ -153,6 +153,7 @@ import {
 import {
   CORS_DIRECT_TRANSFER_WARNING,
   buildBrowserTransferWarnings,
+  resolveBrowserCorsAvailability,
   resolveBrowserTransferAccessBadge,
   resolveBrowserTransferParallelism,
   resolveDirectCredentialStsTooltip,
@@ -820,12 +821,14 @@ export default function BrowserPage({
     setStatusMessage,
   });
   const proxyAllowed = browserSettings?.allow_proxy_transfers ?? false;
+  const corsAvailability = resolveBrowserCorsAvailability(corsStatus);
+  const corsEnabled =
+    corsAvailability === "unknown" ? null : corsAvailability === "enabled";
   const useProxyTransfers = Boolean(
     bucketName &&
       hasS3AccountContext &&
       proxyAllowed &&
-      corsStatus &&
-      !corsStatus.enabled,
+      corsAvailability === "disabled",
   );
   const transferParallelism = useMemo(
     () =>
@@ -860,12 +863,12 @@ export default function BrowserPage({
         warningMessage,
         corsFixError,
         stsCredentialsError,
-        corsEnabled: corsStatus?.enabled ?? null,
+        corsEnabled,
         proxyAllowed,
       }),
     [
       corsFixError,
-      corsStatus?.enabled,
+      corsEnabled,
       proxyAllowed,
       stsCredentialsError,
       warningMessage,
@@ -884,7 +887,7 @@ export default function BrowserPage({
     () =>
       resolveBrowserTransferAccessBadge({
         hasContext: hasS3AccountContext,
-        corsEnabled: corsStatus?.enabled ?? null,
+        corsEnabled,
         proxyAllowed,
         useProxyTransfers,
         sseActive,
@@ -893,7 +896,7 @@ export default function BrowserPage({
         directCredentialStsTooltip,
       }),
     [
-      corsStatus?.enabled,
+      corsEnabled,
       hasS3AccountContext,
       directCredentialStsTooltip,
       proxyAllowed,

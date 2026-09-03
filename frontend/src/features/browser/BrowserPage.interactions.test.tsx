@@ -2392,6 +2392,80 @@ describe("BrowserPage interactions", () => {
     expectPassiveStatusBadge(badge);
   });
 
+  it("keeps Portal uploads direct when the CORS status is unknown", async () => {
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: true,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 2,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 2,
+      streaming_zip_threshold_mb: 200,
+    });
+    getBucketCorsStatusMock.mockResolvedValue({
+      enabled: false,
+      rules: [],
+      error: "AccessDenied",
+    });
+    const portalContext = makeExecutionContext({
+      id: "portal-101",
+      kind: "portal_account",
+    });
+    setBrowserContext({
+      contexts: [portalContext],
+      selectedContextId: portalContext.id,
+      selectedContext: portalContext,
+      requiresContextSelection: true,
+      selectorForApi: "acc-portal",
+      selectedKind: "portal_account",
+    });
+
+    renderPage();
+    await findRowByLabel("a.txt");
+    await waitFor(() => expect(getBucketCorsStatusMock).toHaveBeenCalled());
+
+    expect(
+      screen.queryByText("Direct download/upload is not allowed on this bucket."),
+    ).not.toBeInTheDocument();
+    const menu = await openContextMoreMenu(userEvent.setup());
+    expect(within(menu).getByText("Presign")).toBeInTheDocument();
+    expect(within(menu).queryByText("Proxy")).not.toBeInTheDocument();
+
+    const file = new File(["portal payload"], "portal-direct.txt", {
+      type: "text/plain",
+    });
+    const fileInput = document.querySelector(
+      'input[type="file"]:not([directory])',
+    ) as HTMLInputElement | null;
+    expect(fileInput).not.toBeNull();
+    fireEvent.change(fileInput as HTMLInputElement, {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(presignObjectMock).toHaveBeenCalledWith(
+        "acc-portal",
+        "bucket-1",
+        {
+          key: "portal-direct.txt",
+          operation: "put_object",
+          content_type: "text/plain",
+          expires_in: 1800,
+        },
+        null,
+        { workspaceSurface: "portal" },
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://example.test/portal-direct.txt",
+        expect.objectContaining({
+          method: "PUT",
+          credentials: "omit",
+        }),
+      );
+    });
+    expect(proxyUploadMock).not.toHaveBeenCalled();
+  });
+
   it("opens bucket configuration from More on /browser", async () => {
     const user = userEvent.setup();
     renderPage();

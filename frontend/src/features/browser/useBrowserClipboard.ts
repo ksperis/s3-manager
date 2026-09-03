@@ -28,6 +28,7 @@ import {
 } from "./browserClipboardTransfer";
 import { formatBrowserOperationError } from "./browserOperationErrors";
 import { updateOperationDetailById } from "./browserOperationDetailState";
+import { resolveBrowserCorsAvailability } from "./browserTransferPresentation";
 import {
   downloadBrowserTransferBlob,
   downloadBrowserTransferStream,
@@ -179,14 +180,11 @@ export function useBrowserClipboard({
           uiOrigin,
           requestOptions,
         );
-        if (status.enabled) return "direct";
-      } catch {
-        if (!proxyAllowed) {
-          throw new Error(
-            `Direct transfer is unavailable for ${targetBucket} and proxy transfers are disabled.`,
-          );
+        if (resolveBrowserCorsAvailability(status) !== "disabled") {
+          return "direct";
         }
-        return "proxy";
+      } catch {
+        return "direct";
       }
       if (proxyAllowed) return "proxy";
       throw new Error(
