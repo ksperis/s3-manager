@@ -21,13 +21,9 @@ vi.mock("../../api/cephAdminAdminOps", () => ({
   checkCephAdminBucketIndex: (...args: unknown[]) => checkIndexMock(...args),
 }));
 
-vi.mock("../../api/cephAdmin", async () => {
-  const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
-  return {
-    ...actual,
-    listCephAdminUsers: (...args: unknown[]) => listUsersMock(...args),
-  };
-});
+vi.mock("../../api/cephAdminUsers", () => ({
+  listCephAdminUsers: (...args: unknown[]) => listUsersMock(...args),
+}));
 
 vi.mock("../../api/cephAdminAccounts", () => ({
   listCephAdminAccounts: (...args: unknown[]) => listAccountsMock(...args),

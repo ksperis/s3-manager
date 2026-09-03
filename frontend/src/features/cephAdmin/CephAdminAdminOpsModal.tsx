@@ -6,13 +6,15 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   type CephAdminBucket,
-  listCephAdminUsers,
-  type CephAdminRgwUser,
 } from "../../api/cephAdmin";
 import {
   listCephAdminAccounts,
   type CephAdminRgwAccount,
 } from "../../api/cephAdminAccounts";
+import {
+  listCephAdminUsers,
+  type CephAdminRgwUser,
+} from "../../api/cephAdminUsers";
 import {
   checkCephAdminBucketIndex,
   type CephAdminAdminOpsResult,

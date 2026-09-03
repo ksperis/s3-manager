@@ -7,7 +7,7 @@ import {
   CephAdminRgwUserDetail,
   createCephAdminUser,
   CreateCephAdminUserPayload,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminUsers";
 import { listCephAdminAccounts } from "../../api/cephAdminAccounts";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import WorkflowPage from "../../components/WorkflowPage";

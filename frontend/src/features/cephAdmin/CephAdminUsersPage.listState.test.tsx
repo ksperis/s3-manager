@@ -20,7 +20,7 @@ vi.mock("./CephAdminUserEditModal", () => ({
   default: () => null,
 }));
 
-vi.mock("../../api/cephAdmin", () => ({
+vi.mock("../../api/cephAdminUsers", () => ({
   listCephAdminUsers: (...args: unknown[]) => listCephAdminUsersMock(...args),
   streamCephAdminUsers: (...args: unknown[]) => streamCephAdminUsersMock(...args),
 }));

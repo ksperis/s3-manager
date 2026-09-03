@@ -21,7 +21,12 @@ import { toolbarCompactButtonClasses } from "../../components/toolbarControlClas
 import { cx, uiButtonBaseClass, uiButtonVariants } from "../../components/ui/styles";
 import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import UiButton from "../../components/ui/UiButton";
-import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers, streamCephAdminUsers } from "../../api/cephAdmin";
+import {
+  CephAdminRgwUser,
+  CephAdminRgwUserDetail,
+  listCephAdminUsers,
+  streamCephAdminUsers,
+} from "../../api/cephAdminUsers";
 import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
 import CephAdminAdminOpsModal from "./CephAdminAdminOpsModal";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";

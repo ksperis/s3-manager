@@ -7,13 +7,9 @@ import { setSessionUserCache } from "../../utils/workspaces";
 const createCephAdminUserMock = vi.fn();
 const listCephAdminAccountsMock = vi.fn();
 
-vi.mock("../../api/cephAdmin", async () => {
-  const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
-  return {
-    ...actual,
-    createCephAdminUser: (...args: unknown[]) => createCephAdminUserMock(...args),
-  };
-});
+vi.mock("../../api/cephAdminUsers", () => ({
+  createCephAdminUser: (...args: unknown[]) => createCephAdminUserMock(...args),
+}));
 
 vi.mock("../../api/cephAdminAccounts", () => ({
   listCephAdminAccounts: (...args: unknown[]) => listCephAdminAccountsMock(...args),

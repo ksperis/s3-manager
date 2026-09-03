@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { streamCephAdminBuckets, streamCephAdminUsers } from "./cephAdmin";
+import { streamCephAdminBuckets } from "./cephAdmin";
 import { streamCephAdminAccounts } from "./cephAdminAccounts";
+import { streamCephAdminUsers } from "./cephAdminUsers";
 
 function buildStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();

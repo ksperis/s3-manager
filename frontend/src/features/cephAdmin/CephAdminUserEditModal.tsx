@@ -9,7 +9,7 @@ import {
   UpdateCephAdminUserPayload,
   getCephAdminUserDetail,
   updateCephAdminUserConfig,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminUsers";
 import {
   getCephAdminUserMetrics,
   type CephAdminEntityMetrics,

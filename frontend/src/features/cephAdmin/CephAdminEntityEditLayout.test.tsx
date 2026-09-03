@@ -22,13 +22,10 @@ vi.mock("../../api/cephAdminUserKeys", async () => {
   };
 });
 
-vi.mock("../../api/cephAdmin", async () => {
-  const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
-  return {
-    ...actual,
-    getCephAdminUserDetail: (...args: unknown[]) => getCephAdminUserDetailMock(...args),
-  };
-});
+vi.mock("../../api/cephAdminUsers", () => ({
+  getCephAdminUserDetail: (...args: unknown[]) =>
+    getCephAdminUserDetailMock(...args),
+}));
 
 vi.mock("../../api/cephAdminAccounts", () => ({
   getCephAdminAccountDetail: (...args: unknown[]) =>
