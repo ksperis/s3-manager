@@ -62,6 +62,7 @@ import {
   type FilterCostLevel,
   type TextMatchMode,
 } from "./filtering/advancedFilterShared";
+import { advancedFilterFieldHighlight, appendNumericFilterRule } from "./filtering/advancedFilterModel";
 import { useCephAdminListingFilters } from "./filtering/useCephAdminListingFilters";
 import { useCephAdminEntityListing } from "./listing/useCephAdminEntityListing";
 import { readClientJsonFromKey, writeClientJsonToKey } from "../../utils/clientStorage";
@@ -224,14 +225,6 @@ const buildAdvancedFilterPayload = (
   allowUsageFilters: boolean
 ) => {
   const rules: Array<Record<string, unknown>> = [];
-  const addNumericRule = (field: string, op: "gte" | "lte", raw: string) => {
-    const trimmed = raw.trim();
-    if (!trimmed) return;
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed)) return;
-    rules.push({ field, op, value: parsed });
-  };
-
   const quickParsed = parseExactListInput(quickSearch);
   if (quickParsed.values.length > 0 && (quickMatchMode === "exact" || quickParsed.listProvided)) {
     rules.push(...buildTextFieldRules("account_id", quickSearch, "exact"));
@@ -241,26 +234,26 @@ const buildAdvancedFilterPayload = (
     rules.push(...buildTextFieldRules("account_name", advanced.accountName, advanced.accountNameMatchMode));
     rules.push(...buildTextFieldRules("email", advanced.email, advanced.emailMatchMode));
 
-    addNumericRule("max_users", "gte", advanced.minMaxUsers);
-    addNumericRule("max_users", "lte", advanced.maxMaxUsers);
-    addNumericRule("max_buckets", "gte", advanced.minMaxBuckets);
-    addNumericRule("max_buckets", "lte", advanced.maxMaxBuckets);
+    appendNumericFilterRule(rules, "max_users", "gte", advanced.minMaxUsers);
+    appendNumericFilterRule(rules, "max_users", "lte", advanced.maxMaxUsers);
+    appendNumericFilterRule(rules, "max_buckets", "gte", advanced.minMaxBuckets);
+    appendNumericFilterRule(rules, "max_buckets", "lte", advanced.maxMaxBuckets);
 
-    addNumericRule("quota_max_size_bytes", "gte", advanced.minQuotaBytes);
-    addNumericRule("quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
-    addNumericRule("quota_max_objects", "gte", advanced.minQuotaObjects);
-    addNumericRule("quota_max_objects", "lte", advanced.maxQuotaObjects);
+    appendNumericFilterRule(rules, "quota_max_size_bytes", "gte", advanced.minQuotaBytes);
+    appendNumericFilterRule(rules, "quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
+    appendNumericFilterRule(rules, "quota_max_objects", "gte", advanced.minQuotaObjects);
+    appendNumericFilterRule(rules, "quota_max_objects", "lte", advanced.maxQuotaObjects);
     if (allowUsageFilters) {
-      addNumericRule("quota_usage_size_percent", "gte", advanced.minQuotaUsageSizePercent);
-      addNumericRule("quota_usage_size_percent", "lte", advanced.maxQuotaUsageSizePercent);
-      addNumericRule("quota_usage_object_percent", "gte", advanced.minQuotaUsageObjectPercent);
-      addNumericRule("quota_usage_object_percent", "lte", advanced.maxQuotaUsageObjectPercent);
+      appendNumericFilterRule(rules, "quota_usage_size_percent", "gte", advanced.minQuotaUsageSizePercent);
+      appendNumericFilterRule(rules, "quota_usage_size_percent", "lte", advanced.maxQuotaUsageSizePercent);
+      appendNumericFilterRule(rules, "quota_usage_object_percent", "gte", advanced.minQuotaUsageObjectPercent);
+      appendNumericFilterRule(rules, "quota_usage_object_percent", "lte", advanced.maxQuotaUsageObjectPercent);
     }
 
-    addNumericRule("bucket_count", "gte", advanced.minBucketCount);
-    addNumericRule("bucket_count", "lte", advanced.maxBucketCount);
-    addNumericRule("user_count", "gte", advanced.minUserCount);
-    addNumericRule("user_count", "lte", advanced.maxUserCount);
+    appendNumericFilterRule(rules, "bucket_count", "gte", advanced.minBucketCount);
+    appendNumericFilterRule(rules, "bucket_count", "lte", advanced.maxBucketCount);
+    appendNumericFilterRule(rules, "user_count", "gte", advanced.minUserCount);
+    appendNumericFilterRule(rules, "user_count", "lte", advanced.maxUserCount);
   }
 
   if (rules.length === 0) return undefined;
@@ -397,22 +390,10 @@ export default function CephAdminAccountsPage() {
     setPage(1);
   };
 
-  const activeFieldClass =
-    "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25";
-  const activeLabelClass = "text-emerald-700 dark:text-emerald-200";
-  const pendingFieldClass =
-    "border-amber-400 bg-amber-50 ring-2 ring-amber-300/70 dark:border-amber-400/70 dark:bg-amber-500/20 dark:ring-amber-500/25";
-  const pendingLabelClass = "text-amber-700 dark:text-amber-300";
-  const fieldHighlight = (isApplied: boolean, isPending: boolean) => {
-    if (isPending) return { labelClass: pendingLabelClass, fieldClass: pendingFieldClass };
-    if (isApplied) return { labelClass: activeLabelClass, fieldClass: activeFieldClass };
-    return { labelClass: "", fieldClass: "" };
-  };
-
   const quickDraftValue = filter.trim();
   const quickAppliedValue = searchValue.trim();
   const quickFilterPending = quickDraftValue !== quickAppliedValue;
-  const quickFilterFieldState = fieldHighlight(quickAppliedValue.length > 0, quickFilterPending);
+  const quickFilterFieldState = advancedFilterFieldHighlight(quickAppliedValue.length > 0, quickFilterPending);
 
   const accountNameAppliedValue = (advancedApplied?.accountName ?? "").trim();
   const emailAppliedValue = (advancedApplied?.email ?? "").trim();
@@ -443,8 +424,8 @@ export default function CephAdminAccountsPage() {
     accountNameDraftValue !== accountNameAppliedValue || (accountNameDraftValue.length > 0 && accountNameDraftMode !== accountNameAppliedMode);
   const emailPending = emailDraftValue !== emailAppliedValue || (emailDraftValue.length > 0 && emailDraftMode !== emailAppliedMode);
 
-  const accountNameFieldState = fieldHighlight(Boolean(accountNameAppliedValue), accountNamePending);
-  const emailFieldState = fieldHighlight(Boolean(emailAppliedValue), emailPending);
+  const accountNameFieldState = advancedFilterFieldHighlight(Boolean(accountNameAppliedValue), accountNamePending);
+  const emailFieldState = advancedFilterFieldHighlight(Boolean(emailAppliedValue), emailPending);
 
   const numericFields = useMemo<Array<{ key: AdvancedNumericField; label: string }>>(() => [
     { key: "minMaxUsers", label: "Max users >=" },
@@ -473,7 +454,7 @@ export default function CephAdminAccountsPage() {
       const draft = (advancedDraft[key] as string).trim();
       const applied = (advancedApplied?.[key] as string | undefined)?.trim() ?? "";
       const pending = draft !== applied;
-      states[key] = fieldHighlight(Boolean(applied), pending);
+      states[key] = advancedFilterFieldHighlight(Boolean(applied), pending);
     });
     return states;
   }, [advancedDraft, advancedApplied, numericFields, usageNumericFields]);
