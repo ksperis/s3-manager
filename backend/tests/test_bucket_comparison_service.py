@@ -275,7 +275,7 @@ def test_compare_bucket_content_wraps_list_objects_client_error(monkeypatch):
                 "ListObjectsV2",
             )
 
-    monkeypatch.setattr(service, "_compare_client", lambda _account: DeniedClient())
+    monkeypatch.setattr(service, "_build_client", lambda _account: DeniedClient())
 
     with pytest.raises(RuntimeError) as exc:
         service.compare_bucket_content(
@@ -332,7 +332,7 @@ def test_compare_remediation_uses_requested_object_keys(monkeypatch):
         "_list_bucket_objects_for_compare",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("remediation must not re-list objects")),
     )
-    monkeypatch.setattr(service, "_compare_client", lambda _account: object())
+    monkeypatch.setattr(service, "_build_client", lambda _account: object())
     monkeypatch.setattr(service, "_accounts_share_storage_endpoint", lambda _source, _target: True)
 
     def fake_remediate(**kwargs):

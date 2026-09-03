@@ -21,7 +21,7 @@ from app.models.bucket_integrity import (
     BucketIntegrityProgressStage,
     BucketIntegrityStatus,
 )
-from app.services.long_running_s3_client import LongRunningS3ClientService
+from app.services.long_running_s3_client import LongRunningS3ClientMixin
 from app.utils.s3_errors import format_s3_error
 from app.utils.time import assume_utc
 
@@ -115,7 +115,7 @@ def _object_request_kwargs(bucket_name: str, obj: _ObjectRef) -> dict[str, Any]:
     return kwargs
 
 
-class BucketIntegrityCheckService(LongRunningS3ClientService):
+class BucketIntegrityCheckService(LongRunningS3ClientMixin):
     s3_user_agent_extra = "bucketreef-bucket-integrity"
 
     def _iter_objects(

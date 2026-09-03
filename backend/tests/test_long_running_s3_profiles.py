@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from types import SimpleNamespace
 
+import pytest
+
 from app.services import s3_client
 from app.services.bucket_comparison_service import BucketComparisonService
 from app.services.bucket_integrity_service import BucketIntegrityCheckService
@@ -9,6 +11,13 @@ from app.services.bucket_migration import execution_context
 from app.services.bucket_migration.execution_context import BucketMigrationExecutionContextMixin
 from app.services.bucket_purge_service import BucketPurgeService
 from app.services.bucket_usage_stats_service import BucketUsageStatsService
+
+
+def test_comparison_preserves_specific_missing_credentials_error():
+    account = SimpleNamespace(effective_rgw_credentials=lambda: (None, None))
+
+    with pytest.raises(RuntimeError, match="S3ExecutionTarget is missing admin credentials"):
+        BucketComparisonService()._build_client(account)
 
 
 def test_compare_migration_purge_integrity_and_usage_select_long_running_profile(monkeypatch):
@@ -25,7 +34,7 @@ def test_compare_migration_purge_integrity_and_usage_select_long_running_profile
         session_token=lambda: None,
     )
 
-    BucketComparisonService()._compare_client(account)
+    BucketComparisonService()._build_client(account)
     BucketPurgeService()._build_client(account)
     BucketIntegrityCheckService()._build_client(account)
     BucketUsageStatsService()._build_client(account)
@@ -42,6 +51,7 @@ def test_compare_migration_purge_integrity_and_usage_select_long_running_profile
 
     assert len(captured) == 5
     assert all(call["request_profile"] == "long_running" for call in captured)
+    assert captured[0].get("user_agent_extra") is None
     assert [call.get("user_agent_extra") for call in captured[1:4]] == [
         "bucketreef-bucket-purge",
         "bucketreef-bucket-integrity",

@@ -34,7 +34,7 @@ from app.services.bucket_usage_stats_scan import (
     DistributionBuilder,
     ObjectVersionEntry,
 )
-from app.services.long_running_s3_client import LongRunningS3ClientService
+from app.services.long_running_s3_client import LongRunningS3ClientMixin
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.aws_errors import aws_error_code
 from app.utils.s3_errors import format_s3_error
@@ -110,7 +110,7 @@ def _dedupe_bucket_names(bucket_names: Iterable[str] | None) -> list[str] | None
     return list(dict.fromkeys(name.strip() for name in bucket_names if name and name.strip()))
 
 
-class BucketUsageStatsService(LongRunningS3ClientService):
+class BucketUsageStatsService(LongRunningS3ClientMixin):
     s3_user_agent_extra = "bucketreef-bucket-usage-stats"
 
     def __init__(self, session_factory: sessionmaker[Session] | Callable[[], Session] | None = None) -> None:

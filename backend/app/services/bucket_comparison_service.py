@@ -11,15 +11,11 @@ from app.services import (
     bucket_compare_remediation,
     bucket_configuration_comparison,
     bucket_content_comparison,
-    s3_client,
 )
 from app.services.bucket_configuration_comparison import BucketConfigurationReader
 from app.services.bucket_configuration_service import BucketConfigurationService
+from app.services.long_running_s3_client import LongRunningS3ClientMixin
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services.s3_execution_client import (
-    require_s3_execution_credentials,
-    s3_execution_client_kwargs,
-)
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.s3_errors import format_s3_error
 from app.utils.s3_etag import etag_md5
@@ -27,34 +23,16 @@ from app.utils.s3_etag import etag_md5
 logger = logging.getLogger(__name__)
 
 
-class BucketComparisonService:
+class BucketComparisonService(LongRunningS3ClientMixin):
     """Compare bucket contents and configuration, then remediate content differences."""
+
+    s3_credentials_error_message = "S3ExecutionTarget is missing admin credentials"
 
     def __init__(self, configuration_reader: Optional[BucketConfigurationReader] = None) -> None:
         self._configuration_reader = configuration_reader or BucketConfigurationService()
 
-    @staticmethod
-    def _account_credentials(account: S3ExecutionTarget) -> tuple[str, str]:
-        return require_s3_execution_credentials(
-            account,
-            error_message="S3ExecutionTarget is missing admin credentials",
-        )
-
-    @staticmethod
-    def _client_kwargs(account: S3ExecutionTarget) -> dict[str, object]:
-        return s3_execution_client_kwargs(account)
-
-    def _compare_client(self, account: S3ExecutionTarget):
-        access_key, secret_key = self._account_credentials(account)
-        return s3_client.get_s3_client(
-            access_key=access_key,
-            secret_key=secret_key,
-            request_profile="long_running",
-            **self._client_kwargs(account),
-        )
-
     def _list_bucket_objects_for_compare(self, bucket_name: str, account: S3ExecutionTarget):
-        client = self._compare_client(account)
+        client = self._build_client(account)
         continuation_token: Optional[str] = None
         while True:
             kwargs: dict[str, Any] = {"Bucket": bucket_name, "MaxKeys": 1000}
@@ -158,11 +136,11 @@ class BucketComparisonService:
 
         if action == "delete_target_only":
             source_client = None
-            target_client = self._compare_client(target_account)
+            target_client = self._build_client(target_account)
             same_endpoint = False
         else:
-            source_client = self._compare_client(source_account)
-            target_client = self._compare_client(target_account)
+            source_client = self._build_client(source_account)
+            target_client = self._build_client(target_account)
             same_endpoint = self._accounts_share_storage_endpoint(source_account, target_account)
 
         return bucket_compare_remediation.remediate_bucket_content(
