@@ -58,6 +58,9 @@ load_kind_image() {
       --digests \
       --snapshotter=overlayfs \
       -
+  if [[ "${KIND_SMOKE_PRUNE_SOURCE_IMAGES:-false}" == "true" ]]; then
+    docker image rm "$image" >/dev/null
+  fi
 }
 
 configure_kind_api_access() {

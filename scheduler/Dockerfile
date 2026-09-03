@@ -4,7 +4,8 @@ ARG SUPERCRONIC_VERSION=v0.2.49
 ARG SUPERCRONIC_SHA256_AMD64=a53ae236602c7338aba3fbaff40bda6300eae3b9fedb8261eb06cfe3724430c1
 ARG SUPERCRONIC_SHA256_ARM64=02aa0cb229ba09050cba6638059dadb9eedc2276632ea43d6a57a2f8c1629dd5
 
-RUN apk add --no-cache ca-certificates curl tzdata \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates curl tzdata \
     && case "$(apk --print-arch)" in \
          x86_64) supercronic_arch=amd64; supercronic_sha256="$SUPERCRONIC_SHA256_AMD64" ;; \
          aarch64) supercronic_arch=arm64; supercronic_sha256="$SUPERCRONIC_SHA256_ARM64" ;; \

@@ -366,6 +366,9 @@ def test_kind_smoke_routes_the_api_through_the_dind_service():
     ).read_text(encoding="utf-8")
 
     assert smoke_job["variables"]["KIND_API_HOST"] == "docker"
+    assert smoke_job["variables"]["KIND_SMOKE_PRUNE_SOURCE_IMAGES"] == "true"
     assert 'apiServerAddress: "0.0.0.0"' in smoke_script
     assert 'certSANs:' in smoke_script
     assert '--server="https://${KIND_API_HOST}:${api_port}"' in smoke_script
+    assert '"${KIND_SMOKE_PRUNE_SOURCE_IMAGES:-false}" == "true"' in smoke_script
+    assert 'docker image rm "$image" >/dev/null' in smoke_script
