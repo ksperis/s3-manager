@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -222,80 +222,17 @@ class KeyRotationService:
                 0,
             )
 
-        results: list[KeyRotationResultItem] = []
-        deleted_old_keys = 0
-        disabled_old_keys = 0
-
-        for account in accounts:
-            account_label = account.name
-
-            old_access_key = normalize_optional_string(account.rgw_access_key)
-            new_access_key: Optional[str] = None
-            active_tenant: Optional[str] = None
-            try:
-                active_tenant = self._detect_user_tenant(
-                    admin,
-                    uid=account.rgw_user_uid,
-                    preferred_tenant=account.rgw_account_id,
-                )
-                (
-                    new_access_key,
-                    new_secret_key,
-                    retired_action,
-                    active_tenant,
-                ) = self._rotate_identity_access_key(
-                    admin,
-                    uid=account.rgw_user_uid,
-                    tenant=active_tenant,
-                    previous_access_key=old_access_key,
-                    deactivate_only=deactivate_only,
-                )
-                account.rgw_access_key = new_access_key
-                account.rgw_secret_key = new_secret_key
-                self.db.add(account)
-                self.db.commit()
-                self.db.refresh(account)
-
-                if retired_action == "deleted":
-                    deleted_old_keys += 1
-                elif retired_action == "disabled":
-                    disabled_old_keys += 1
-
-                results.append(
-                    self._build_result(
-                        endpoint=endpoint,
-                        key_type=key_type,
-                        target_type="account",
-                        target_id=str(account.id),
-                        target_label=account_label,
-                        status="rotated",
-                        message="Account interface key rotated.",
-                        old_access_key=self._mask_access_key(old_access_key),
-                        new_access_key=self._mask_access_key(new_access_key),
-                    )
-                )
-            except ValueError as exc:
-                self.db.rollback()
-                if new_access_key and new_access_key != old_access_key:
-                    self._cleanup_new_key(
-                        admin,
-                        uid=account.rgw_user_uid,
-                        access_key=new_access_key,
-                        tenant=active_tenant,
-                    )
-                results.append(
-                    self._build_result(
-                        endpoint=endpoint,
-                        key_type=key_type,
-                        target_type="account",
-                        target_id=str(account.id),
-                        target_label=account_label,
-                        status="failed",
-                        message=sanitized_error_log_detail(exc),
-                    )
-                )
-
-        return results, deleted_old_keys, disabled_old_keys
+        return self._rotate_persisted_identity_keys(
+            endpoint=endpoint,
+            key_type=key_type,
+            deactivate_only=deactivate_only,
+            admin=admin,
+            identities=accounts,
+            target_type="account",
+            target_label=lambda account: account.name,
+            preferred_tenant=lambda account: account.rgw_account_id,
+            success_message="Account interface key rotated.",
+        )
 
     def _rotate_endpoint_supervision_key(
         self,
@@ -480,20 +417,45 @@ class KeyRotationService:
                 0,
             )
 
+        return self._rotate_persisted_identity_keys(
+            endpoint=endpoint,
+            key_type=key_type,
+            deactivate_only=deactivate_only,
+            admin=admin,
+            identities=s3_users,
+            target_type="s3_user",
+            target_label=lambda s3_user: s3_user.name or s3_user.rgw_user_uid,
+            preferred_tenant=lambda _s3_user: None,
+            success_message="S3 user interface key rotated.",
+        )
+
+    def _rotate_persisted_identity_keys(
+        self,
+        *,
+        endpoint: StorageEndpoint,
+        key_type: KeyRotationType,
+        deactivate_only: bool,
+        admin: RGWAdminClient,
+        identities: list[S3Account] | list[S3User],
+        target_type: str,
+        target_label: Callable[[S3Account | S3User], Optional[str]],
+        preferred_tenant: Callable[[S3Account | S3User], Optional[str]],
+        success_message: str,
+    ) -> tuple[list[KeyRotationResultItem], int, int]:
         results: list[KeyRotationResultItem] = []
         deleted_old_keys = 0
         disabled_old_keys = 0
 
-        for s3_user in s3_users:
-            user_label = s3_user.name or s3_user.rgw_user_uid
-            old_access_key = normalize_optional_string(s3_user.rgw_access_key)
+        for identity in identities:
+            label = target_label(identity)
+            old_access_key = normalize_optional_string(identity.rgw_access_key)
             new_access_key: Optional[str] = None
             active_tenant: Optional[str] = None
             try:
                 active_tenant = self._detect_user_tenant(
                     admin,
-                    uid=s3_user.rgw_user_uid,
-                    preferred_tenant=None,
+                    uid=identity.rgw_user_uid,
+                    preferred_tenant=preferred_tenant(identity),
                 )
                 (
                     new_access_key,
@@ -502,16 +464,16 @@ class KeyRotationService:
                     active_tenant,
                 ) = self._rotate_identity_access_key(
                     admin,
-                    uid=s3_user.rgw_user_uid,
+                    uid=identity.rgw_user_uid,
                     tenant=active_tenant,
                     previous_access_key=old_access_key,
                     deactivate_only=deactivate_only,
                 )
-                s3_user.rgw_access_key = new_access_key
-                s3_user.rgw_secret_key = new_secret_key
-                self.db.add(s3_user)
+                identity.rgw_access_key = new_access_key
+                identity.rgw_secret_key = new_secret_key
+                self.db.add(identity)
                 self.db.commit()
-                self.db.refresh(s3_user)
+                self.db.refresh(identity)
 
                 if retired_action == "deleted":
                     deleted_old_keys += 1
@@ -522,11 +484,11 @@ class KeyRotationService:
                     self._build_result(
                         endpoint=endpoint,
                         key_type=key_type,
-                        target_type="s3_user",
-                        target_id=str(s3_user.id),
-                        target_label=user_label,
+                        target_type=target_type,
+                        target_id=str(identity.id),
+                        target_label=label,
                         status="rotated",
-                        message="S3 user interface key rotated.",
+                        message=success_message,
                         old_access_key=self._mask_access_key(old_access_key),
                         new_access_key=self._mask_access_key(new_access_key),
                     )
@@ -536,7 +498,7 @@ class KeyRotationService:
                 if new_access_key and new_access_key != old_access_key:
                     self._cleanup_new_key(
                         admin,
-                        uid=s3_user.rgw_user_uid,
+                        uid=identity.rgw_user_uid,
                         access_key=new_access_key,
                         tenant=active_tenant,
                     )
@@ -544,9 +506,9 @@ class KeyRotationService:
                     self._build_result(
                         endpoint=endpoint,
                         key_type=key_type,
-                        target_type="s3_user",
-                        target_id=str(s3_user.id),
-                        target_label=user_label,
+                        target_type=target_type,
+                        target_id=str(identity.id),
+                        target_label=label,
                         status="failed",
                         message=sanitized_error_log_detail(exc),
                     )
