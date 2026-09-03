@@ -26,7 +26,7 @@ import {
   CephAdminRgwAccountDetail,
   listCephAdminAccounts,
   streamCephAdminAccounts,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminAccounts";
 import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
 import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";

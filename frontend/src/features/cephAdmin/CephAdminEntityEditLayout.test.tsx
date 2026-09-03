@@ -26,10 +26,14 @@ vi.mock("../../api/cephAdmin", async () => {
   const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
   return {
     ...actual,
-    getCephAdminAccountDetail: (...args: unknown[]) => getCephAdminAccountDetailMock(...args),
     getCephAdminUserDetail: (...args: unknown[]) => getCephAdminUserDetailMock(...args),
   };
 });
+
+vi.mock("../../api/cephAdminAccounts", () => ({
+  getCephAdminAccountDetail: (...args: unknown[]) =>
+    getCephAdminAccountDetailMock(...args),
+}));
 
 describe("Ceph Admin entity editor layout", () => {
   beforeEach(() => {

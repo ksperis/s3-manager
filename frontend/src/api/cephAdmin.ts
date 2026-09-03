@@ -22,6 +22,13 @@ import {
 } from "./bucketListingTransport";
 import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
 import type { ListBrowserObjectsResponse } from "./browser";
+import {
+  buildCephAdminEntityListingQuery,
+  type CephAdminEntityListingParams,
+  type CephAdminEntityListingRequestOptions,
+  type CephAdminListingStreamOptions,
+  type CephAdminListingStreamProgress,
+} from "./cephAdminEntityListing";
 
 export type CephAdminEndpoint = {
   id: number;
@@ -47,113 +54,11 @@ export type CephAdminEndpointAccess = {
   availability_checked_at?: string | null;
 };
 
-export type CephAdminRgwAccount = {
-  account_id: string;
-  account_name?: string | null;
-  email?: string | null;
-  max_users?: number | null;
-  max_buckets?: number | null;
-  quota_max_size_bytes?: number | null;
-  quota_max_objects?: number | null;
-  bucket_count?: number | null;
-  user_count?: number | null;
-};
-
 export type CephAdminRgwQuotaConfig = {
   enabled?: boolean | null;
   max_size_bytes?: number | null;
   max_objects?: number | null;
 };
-
-export type CephAdminRgwAccountDetail = {
-  account_id: string;
-  account_name?: string | null;
-  email?: string | null;
-  max_users?: number | null;
-  max_buckets?: number | null;
-  max_roles?: number | null;
-  max_groups?: number | null;
-  max_access_keys?: number | null;
-  bucket_count?: number | null;
-  user_count?: number | null;
-  quota?: CephAdminRgwQuotaConfig | null;
-  bucket_quota?: CephAdminRgwQuotaConfig | null;
-};
-
-export type UpdateCephAdminAccountPayload = {
-  account_name?: string | null;
-  email?: string | null;
-  max_users?: number | null;
-  max_buckets?: number | null;
-  max_roles?: number | null;
-  max_groups?: number | null;
-  max_access_keys?: number | null;
-  quota_enabled?: boolean | null;
-  quota_max_size_bytes?: number | null;
-  quota_max_objects?: number | null;
-  bucket_quota_enabled?: boolean | null;
-  bucket_quota_max_size_bytes?: number | null;
-  bucket_quota_max_objects?: number | null;
-  extra_params?: Record<string, unknown>;
-};
-
-export type CreateCephAdminAccountPayload = {
-  account_id?: string | null;
-  account_name: string;
-  email?: string | null;
-  max_users?: number | null;
-  max_buckets?: number | null;
-  max_roles?: number | null;
-  max_groups?: number | null;
-  max_access_keys?: number | null;
-  quota_enabled?: boolean | null;
-  quota_max_size_bytes?: number | null;
-  quota_max_objects?: number | null;
-  bucket_quota_enabled?: boolean | null;
-  bucket_quota_max_size_bytes?: number | null;
-  bucket_quota_max_objects?: number | null;
-  extra_params?: Record<string, unknown>;
-};
-
-type CreateCephAdminAccountResponse = {
-  account: CephAdminRgwAccountDetail;
-};
-
-type PaginatedCephAdminAccountsResponse = PaginatedResponse<CephAdminRgwAccount>;
-
-type ListCephAdminAccountsParams = {
-  page?: number;
-  page_size?: number;
-  search?: string;
-  advanced_filter?: string;
-  sort_by?: string;
-  sort_dir?: "asc" | "desc";
-  include?: string[];
-};
-
-type EntityListingOptions = {
-  signal?: AbortSignal;
-};
-
-function buildEntityListingQuery(
-  params?: Pick<
-    ListCephAdminAccountsParams,
-    "page" | "page_size" | "search" | "advanced_filter" | "sort_by" | "sort_dir" | "include"
-  >
-): URLSearchParams {
-  const query = new URLSearchParams();
-  if (!params) return query;
-  if (typeof params.page === "number") query.set("page", String(params.page));
-  if (typeof params.page_size === "number") query.set("page_size", String(params.page_size));
-  if (typeof params.search === "string" && params.search.trim()) query.set("search", params.search);
-  if (typeof params.advanced_filter === "string" && params.advanced_filter.trim()) {
-    query.set("advanced_filter", params.advanced_filter);
-  }
-  if (typeof params.sort_by === "string" && params.sort_by.trim()) query.set("sort_by", params.sort_by);
-  if (params.sort_dir) query.set("sort_dir", params.sort_dir);
-  if (params.include && params.include.length > 0) query.set("include", params.include.join(","));
-  return query;
-}
 
 export async function listCephAdminEndpoints(): Promise<CephAdminEndpoint[]> {
   const { data } = await client.get<CephAdminEndpoint[]>("/ceph-admin/endpoints", {
@@ -171,79 +76,6 @@ export async function getCephAdminEndpointAccess(
     signal: options?.signal,
     timeout: timeoutForRequestProfile("interactive"),
   });
-  return data;
-}
-
-export async function listCephAdminAccounts(
-  endpointId: number,
-  params?: ListCephAdminAccountsParams,
-  options?: EntityListingOptions
-): Promise<PaginatedCephAdminAccountsResponse> {
-  const { data } = await client.get<PaginatedCephAdminAccountsResponse>(`/ceph-admin/endpoints/${endpointId}/accounts`, {
-    params: {
-      ...params,
-      include: params?.include?.join(","),
-    },
-    signal: options?.signal,
-  });
-  return data;
-}
-
-export type CephAdminListingStreamProgress = {
-  request_id: string;
-  percent: number;
-  stage: string;
-  processed: number;
-  total: number;
-  message?: string;
-};
-
-type CephAdminListingStreamOptions = {
-  signal?: AbortSignal;
-  onProgress?: (event: CephAdminListingStreamProgress) => void;
-};
-
-export async function streamCephAdminAccounts(
-  endpointId: number,
-  params?: ListCephAdminAccountsParams,
-  options?: CephAdminListingStreamOptions
-): Promise<PaginatedCephAdminAccountsResponse> {
-  const baseUrl = resolveApiBaseUrl();
-  const query = buildEntityListingQuery(params);
-  const queryText = query.toString();
-  const url = `${baseUrl}/ceph-admin/endpoints/${endpointId}/accounts/stream${queryText ? `?${queryText}` : ""}`;
-  return streamBucketsWithSse<CephAdminListingStreamProgress, PaginatedCephAdminAccountsResponse>({
-    url,
-    options,
-    streamFailedLabel: "Advanced search stream failed",
-    missingResultMessage: "Advanced search stream ended without a result payload",
-  });
-}
-
-export async function getCephAdminAccountDetail(endpointId: number, accountId: string): Promise<CephAdminRgwAccountDetail> {
-  const { data } = await client.get<CephAdminRgwAccountDetail>(
-    `/ceph-admin/endpoints/${endpointId}/accounts/${encodeURIComponent(accountId)}/detail`
-  );
-  return data;
-}
-
-export async function createCephAdminAccount(
-  endpointId: number,
-  payload: CreateCephAdminAccountPayload
-): Promise<CreateCephAdminAccountResponse> {
-  const { data } = await client.post<CreateCephAdminAccountResponse>(`/ceph-admin/endpoints/${endpointId}/accounts`, payload);
-  return data;
-}
-
-export async function updateCephAdminAccountConfig(
-  endpointId: number,
-  accountId: string,
-  payload: UpdateCephAdminAccountPayload
-): Promise<CephAdminRgwAccountDetail> {
-  const { data } = await client.put<CephAdminRgwAccountDetail>(
-    `/ceph-admin/endpoints/${endpointId}/accounts/${encodeURIComponent(accountId)}/config`,
-    payload
-  );
   return data;
 }
 
@@ -328,20 +160,12 @@ type CreateCephAdminUserResponse = {
 
 type PaginatedCephAdminUsersResponse = PaginatedResponse<CephAdminRgwUser>;
 
-type ListCephAdminUsersParams = {
-  page?: number;
-  page_size?: number;
-  search?: string;
-  advanced_filter?: string;
-  sort_by?: string;
-  sort_dir?: "asc" | "desc";
-  include?: string[];
-};
+type ListCephAdminUsersParams = CephAdminEntityListingParams;
 
 export async function listCephAdminUsers(
   endpointId: number,
   params?: ListCephAdminUsersParams,
-  options?: EntityListingOptions
+  options?: CephAdminEntityListingRequestOptions
 ): Promise<PaginatedCephAdminUsersResponse> {
   const { data } = await client.get<PaginatedCephAdminUsersResponse>(`/ceph-admin/endpoints/${endpointId}/users`, {
     params: {
@@ -359,7 +183,7 @@ export async function streamCephAdminUsers(
   options?: CephAdminListingStreamOptions
 ): Promise<PaginatedCephAdminUsersResponse> {
   const baseUrl = resolveApiBaseUrl();
-  const query = buildEntityListingQuery(params);
+  const query = buildCephAdminEntityListingQuery(params);
   const queryText = query.toString();
   const url = `${baseUrl}/ceph-admin/endpoints/${endpointId}/users/stream${queryText ? `?${queryText}` : ""}`;
   return streamBucketsWithSse<CephAdminListingStreamProgress, PaginatedCephAdminUsersResponse>({

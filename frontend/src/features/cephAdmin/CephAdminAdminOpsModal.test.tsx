@@ -26,9 +26,12 @@ vi.mock("../../api/cephAdmin", async () => {
   return {
     ...actual,
     listCephAdminUsers: (...args: unknown[]) => listUsersMock(...args),
-    listCephAdminAccounts: (...args: unknown[]) => listAccountsMock(...args),
   };
 });
+
+vi.mock("../../api/cephAdminAccounts", () => ({
+  listCephAdminAccounts: (...args: unknown[]) => listAccountsMock(...args),
+}));
 
 const successResult = {
   operation: "test",

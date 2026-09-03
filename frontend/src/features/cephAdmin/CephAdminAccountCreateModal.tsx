@@ -7,7 +7,7 @@ import {
   CephAdminRgwAccountDetail,
   createCephAdminAccount,
   CreateCephAdminAccountPayload,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminAccounts";
 import WorkflowPage from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";

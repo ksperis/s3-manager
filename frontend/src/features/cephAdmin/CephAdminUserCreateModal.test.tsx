@@ -12,9 +12,12 @@ vi.mock("../../api/cephAdmin", async () => {
   return {
     ...actual,
     createCephAdminUser: (...args: unknown[]) => createCephAdminUserMock(...args),
-    listCephAdminAccounts: (...args: unknown[]) => listCephAdminAccountsMock(...args),
   };
 });
+
+vi.mock("../../api/cephAdminAccounts", () => ({
+  listCephAdminAccounts: (...args: unknown[]) => listCephAdminAccountsMock(...args),
+}));
 
 describe("CephAdminUserCreateModal", () => {
   beforeEach(() => {

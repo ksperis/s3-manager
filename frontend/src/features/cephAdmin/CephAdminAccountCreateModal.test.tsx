@@ -5,13 +5,9 @@ import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 
 const createCephAdminAccountMock = vi.fn();
 
-vi.mock("../../api/cephAdmin", async () => {
-  const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
-  return {
-    ...actual,
-    createCephAdminAccount: (...args: unknown[]) => createCephAdminAccountMock(...args),
-  };
-});
+vi.mock("../../api/cephAdminAccounts", () => ({
+  createCephAdminAccount: (...args: unknown[]) => createCephAdminAccountMock(...args),
+}));
 
 describe("CephAdminAccountCreateModal", () => {
   beforeEach(() => {

@@ -20,14 +20,10 @@ vi.mock("./CephAdminAccountEditModal", () => ({
   default: ({ accountId }: { accountId: string }) => <div>Editing account {accountId}</div>,
 }));
 
-vi.mock("../../api/cephAdmin", async () => {
-  const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
-  return {
-    ...actual,
-    listCephAdminAccounts: (...args: unknown[]) => listCephAdminAccountsMock(...args),
-    streamCephAdminAccounts: (...args: unknown[]) => streamCephAdminAccountsMock(...args),
-  };
-});
+vi.mock("../../api/cephAdminAccounts", () => ({
+  listCephAdminAccounts: (...args: unknown[]) => listCephAdminAccountsMock(...args),
+  streamCephAdminAccounts: (...args: unknown[]) => streamCephAdminAccountsMock(...args),
+}));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

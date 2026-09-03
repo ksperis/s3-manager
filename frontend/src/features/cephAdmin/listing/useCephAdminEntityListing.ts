@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CephAdminListingStreamProgress } from "../../../api/cephAdmin";
+import type { CephAdminListingStreamProgress } from "../../../api/cephAdminEntityListing";
 import { extractApiError, isCancelledError } from "../../../utils/apiError";
 import {
   INACTIVE_ADVANCED_PROGRESS,
