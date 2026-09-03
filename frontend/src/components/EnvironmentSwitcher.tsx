@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import type { TopbarDropdownOption } from "./TopbarDropdownSelect";
+import CephStorageIcon from "./CephStorageIcon";
 import { getWorkspaceAccess } from "../api/executionContexts";
 import { fetchCurrentUser } from "../api/users";
 import { writeClientStorage } from "../utils/clientStorage";
@@ -151,7 +152,7 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
 
 function workspaceIconById(id: WorkspaceId): React.ReactNode {
   if (id === "admin") return <AdminIcon className="h-4 w-4" />;
-  if (id === "ceph-admin") return <CephIcon className="h-4 w-4" />;
+  if (id === "ceph-admin") return <CephStorageIcon className="h-4 w-4" />;
   if (id === "storage-ops") return <OpsIcon className="h-4 w-4" />;
   if (id === "manager") return <ManagerIcon className="h-4 w-4" />;
   if (id === "browser") return <BrowserIcon className="h-4 w-4" />;
@@ -163,16 +164,6 @@ function AdminIcon(props: React.SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M12 3.5 4 7v5c0 4.5 3.2 7.8 8 8.8 4.8-1 8-4.3 8-8.8V7l-8-3.5Z" />
       <path strokeLinecap="round" strokeWidth={1.6} d="M9.2 12.2 11 14l3.8-3.8" />
-    </svg>
-  );
-}
-
-function CephIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <ellipse cx="12" cy="6.5" rx="6.5" ry="2.7" strokeWidth={1.6} />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.5 6.5v5.5c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V6.5" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.5 12v5.5c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V12" />
     </svg>
   );
 }

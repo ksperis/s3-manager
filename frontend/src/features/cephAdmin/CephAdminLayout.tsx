@@ -4,6 +4,7 @@
  */
 import { Outlet, useLocation } from "react-router-dom";
 import Layout from "../../components/Layout";
+import CephStorageIcon from "../../components/CephStorageIcon";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import { TopbarStaticControl } from "../../components/TopbarControlTrigger";
 import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
@@ -198,7 +199,7 @@ function CephAdminShell() {
           mode="icon"
           label="Endpoint"
           value={selectedEndpointLabel}
-          icon={<EndpointIcon className="h-4 w-4" />}
+          icon={<CephStorageIcon className="h-4 w-4" />}
           ariaLabel={`Endpoint ${selectedEndpointLabel}`}
           title={selectedEndpoint?.endpoint_url ?? selectedEndpointLabel}
         />
@@ -209,7 +210,7 @@ function CephAdminShell() {
         mode="icon_label"
         label="Endpoint"
         value={selectedEndpointLabel}
-        icon={<EndpointIcon className="h-4 w-4" />}
+        icon={<CephStorageIcon className="h-4 w-4" />}
         ariaLabel={`Endpoint ${selectedEndpointLabel}`}
         title={selectedEndpoint?.endpoint_url ?? selectedEndpointLabel}
         className={TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
@@ -221,7 +222,7 @@ function CephAdminShell() {
   const topbarControlDescriptors: TopbarControlDescriptor[] = [
     {
       id: "endpoint",
-      icon: <EndpointIcon className="h-4 w-4" />,
+      icon: <CephStorageIcon className="h-4 w-4" />,
       selectedLabel: selectedEndpointLabel,
       priority: 20,
       estimatedIconWidth: 36,
@@ -237,7 +238,7 @@ function CephAdminShell() {
             title={selectedEndpoint?.endpoint_url ?? undefined}
             widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
             menuMinWidthClassName="min-w-[24rem]"
-            icon={<EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
+            icon={<CephStorageIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
             disabled={!selectorEnabled || loading}
             triggerMode={mode}
           />
@@ -306,16 +307,6 @@ export default function CephAdminLayout() {
     <CephAdminEndpointProvider>
       <CephAdminShell />
     </CephAdminEndpointProvider>
-  );
-}
-
-function EndpointIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <ellipse cx="12" cy="6.5" rx="6.5" ry="2.7" strokeWidth={1.6} />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.5 6.5v5.5c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V6.5" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.5 12v5.5c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V12" />
-    </svg>
   );
 }
 
