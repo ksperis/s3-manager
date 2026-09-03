@@ -78,10 +78,10 @@ describe("useBrowserPrefixVersions", () => {
     expect(apiMocks.listObjectVersions).not.toHaveBeenCalled();
 
     act(() => result.current.open());
-    await waitFor(() =>
-      expect(apiMocks.listObjectVersions).toHaveBeenCalledOnce(),
-    );
-    expect(result.current.canLoadMore).toBe(true);
+    await waitFor(() => {
+      expect(apiMocks.listObjectVersions).toHaveBeenCalledOnce();
+      expect(result.current.canLoadMore).toBe(true);
+    });
     await act(async () => result.current.loadMore());
     expect(apiMocks.listObjectVersions).toHaveBeenNthCalledWith(
       2,
