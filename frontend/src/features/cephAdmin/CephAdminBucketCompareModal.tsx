@@ -14,11 +14,11 @@ import { uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { runWithConcurrencySettled } from "../../utils/concurrency";
 import {
   CephAdminBucketCompareResult,
-  CephAdminEndpoint,
   compareCephAdminBucketPair,
   listCephAdminBuckets,
   type CephAdminBucketCompareConfigFeature,
 } from "../../api/cephAdmin";
+import type { CephAdminEndpoint } from "../../api/cephAdminEndpoints";
 import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,

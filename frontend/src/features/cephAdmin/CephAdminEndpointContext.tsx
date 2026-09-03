@@ -4,7 +4,12 @@
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
-import { CephAdminEndpoint, CephAdminEndpointAccess, getCephAdminEndpointAccess, listCephAdminEndpoints } from "../../api/cephAdmin";
+import {
+  CephAdminEndpoint,
+  CephAdminEndpointAccess,
+  getCephAdminEndpointAccess,
+  listCephAdminEndpoints,
+} from "../../api/cephAdminEndpoints";
 import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 import { resolveUrlScopedSelection } from "../../utils/urlScopedSelection";

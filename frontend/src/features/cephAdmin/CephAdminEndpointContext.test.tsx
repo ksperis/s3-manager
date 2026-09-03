@@ -7,7 +7,7 @@ import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndp
 const listCephAdminEndpointsMock = vi.fn();
 const getCephAdminEndpointAccessMock = vi.fn();
 
-vi.mock("../../api/cephAdmin", () => ({
+vi.mock("../../api/cephAdminEndpoints", () => ({
   listCephAdminEndpoints: (...args: unknown[]) => listCephAdminEndpointsMock(...args),
   getCephAdminEndpointAccess: (...args: unknown[]) => getCephAdminEndpointAccessMock(...args),
 }));

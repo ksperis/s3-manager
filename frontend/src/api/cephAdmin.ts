@@ -4,7 +4,6 @@
  */
 import client, { timeoutForRequestProfile } from "./client";
 import type { PaginatedResponse } from "./types";
-import type { TagDefinitionSummary } from "./tags";
 import type { BucketUiTagDefinition } from "./bucketUiTags";
 import type {
   BucketFeatureStatus,
@@ -24,55 +23,6 @@ import type { ListBrowserObjectsResponse } from "./browser";
 import {
   type CephAdminListingStreamProgress,
 } from "./cephAdminEntityListing";
-
-export type CephAdminEndpoint = {
-  id: number;
-  name: string;
-  endpoint_url: string;
-  admin_endpoint?: string | null;
-  region?: string | null;
-  is_default: boolean;
-  capabilities?: Record<string, boolean>;
-  tags: TagDefinitionSummary[];
-};
-
-export type CephAdminEndpointAccess = {
-  endpoint_id: number;
-  can_admin: boolean;
-  can_accounts: boolean;
-  can_metrics: boolean;
-  admin_warning?: string | null;
-  accounts_warning?: string | null;
-  active_rgw_uid?: string | null;
-  active_rgw_tenant?: string | null;
-  availability_status?: "unknown" | "available" | "unavailable" | "denied" | "misconfigured";
-  availability_checked_at?: string | null;
-};
-
-export type CephAdminRgwQuotaConfig = {
-  enabled?: boolean | null;
-  max_size_bytes?: number | null;
-  max_objects?: number | null;
-};
-
-export async function listCephAdminEndpoints(): Promise<CephAdminEndpoint[]> {
-  const { data } = await client.get<CephAdminEndpoint[]>("/ceph-admin/endpoints", {
-    timeout: timeoutForRequestProfile("interactive"),
-  });
-  return data;
-}
-
-export async function getCephAdminEndpointAccess(
-  endpointId: number,
-  options?: { probe?: boolean; signal?: AbortSignal }
-): Promise<CephAdminEndpointAccess> {
-  const { data } = await client.get<CephAdminEndpointAccess>(`/ceph-admin/endpoints/${endpointId}/access`, {
-    params: options?.probe ? { probe: true } : undefined,
-    signal: options?.signal,
-    timeout: timeoutForRequestProfile("interactive"),
-  });
-  return data;
-}
 
 export type CephAdminBucket = {
   name: string;

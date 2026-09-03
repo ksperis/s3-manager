@@ -4,9 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   CephAdminBucketCompareResult,
-  CephAdminEndpoint,
   PaginatedCephAdminBucketsResponse,
 } from "../../api/cephAdmin";
+import type { CephAdminEndpoint } from "../../api/cephAdminEndpoints";
 import CephAdminBucketCompareModal from "./CephAdminBucketCompareModal";
 
 const listCephAdminBucketsMock = vi.fn<(...args: unknown[]) => Promise<PaginatedCephAdminBucketsResponse>>();
