@@ -2,13 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import logging
 from typing import Callable, Optional, Sequence
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.db import S3Account, S3User, StorageEndpoint, StorageProvider
+from app.db import S3Account, S3User, StorageEndpoint
 from app.models.key_rotation import (
     KeyRotationRequest,
     KeyRotationResponse,
@@ -16,20 +15,13 @@ from app.models.key_rotation import (
     KeyRotationSummary,
     KeyRotationType,
 )
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.key_rotation_rgw import RgwAccessKeyRotator
+from app.services.rgw_admin import RGWAdminClient
 from app.services.rgw_endpoint_clients import get_endpoint_admin_rgw_client
-from app.services.rgw_user_key_parser import RgwUserKeyParser
 from app.utils.normalize import (
     normalize_optional_string,
-    normalize_storage_provider,
-)
-from app.utils.storage_endpoint_features import (
-    resolve_admin_endpoint,
-    resolve_feature_flags,
 )
 from app.core.sensitive_data import sanitized_error_log_detail
-
-logger = logging.getLogger(__name__)
 
 
 class KeyRotationService:
@@ -50,6 +42,7 @@ class KeyRotationService:
 
     def __init__(self, db: Session) -> None:
         self.db = db
+        self._rgw = RgwAccessKeyRotator(get_endpoint_admin_rgw_client)
 
     def rotate_keys(self, payload: KeyRotationRequest) -> KeyRotationResponse:
         endpoints = (
@@ -187,7 +180,7 @@ class KeyRotationService:
         key_type: KeyRotationType,
         deactivate_only: bool,
     ) -> tuple[list[KeyRotationResultItem], int, int]:
-        error = self._validate_ceph_admin_api(endpoint)
+        error = self._rgw.validate_ceph_admin_api(endpoint)
         if error:
             return (
                 [
@@ -244,18 +237,21 @@ class KeyRotationService:
             )
 
         try:
-            admin_client = self._build_direct_client(
+            admin_client = self._rgw.build_direct_client(
                 endpoint=endpoint,
                 access_key=admin_access_key,
                 secret_key=admin_secret_key,
             )
-            uid, tenant = self._resolve_identity_from_access_key(admin_client, old_access_key)
+            uid, tenant = self._rgw.resolve_identity_from_access_key(
+                admin_client,
+                old_access_key,
+            )
             (
                 new_access_key,
                 new_secret_key,
                 retired_action,
                 _,
-            ) = self._rotate_identity_access_key(
+            ) = self._rgw.rotate_identity_access_key(
                 admin_client,
                 uid=uid,
                 tenant=tenant,
@@ -297,8 +293,10 @@ class KeyRotationService:
                     target_label=endpoint.name,
                     status="rotated",
                     message="Endpoint supervision credential rotated via Admin Ops identity.",
-                    old_access_key=self._mask_access_key(old_access_key),
-                    new_access_key=self._mask_access_key(endpoint.supervision_access_key),
+                    old_access_key=self._rgw.mask_access_key(old_access_key),
+                    new_access_key=self._rgw.mask_access_key(
+                        endpoint.supervision_access_key
+                    ),
                 )
             ],
             deleted_old_keys,
@@ -338,7 +336,7 @@ class KeyRotationService:
         empty_message: str,
         success_message: str,
     ) -> tuple[list[KeyRotationResultItem], int, int]:
-        error = self._validate_ceph_admin_api(endpoint)
+        error = self._rgw.validate_ceph_admin_api(endpoint)
         if error:
             return (
                 [
@@ -357,7 +355,7 @@ class KeyRotationService:
             )
 
         try:
-            admin = self._build_endpoint_admin_client(endpoint)
+            admin = self._rgw.build_endpoint_admin_client(endpoint)
         except ValueError as exc:
             return (
                 [
@@ -426,7 +424,7 @@ class KeyRotationService:
             new_access_key: Optional[str] = None
             active_tenant: Optional[str] = None
             try:
-                active_tenant = self._detect_user_tenant(
+                active_tenant = self._rgw.detect_user_tenant(
                     admin,
                     uid=identity.rgw_user_uid,
                     preferred_tenant=preferred_tenant(identity),
@@ -436,7 +434,7 @@ class KeyRotationService:
                     new_secret_key,
                     retired_action,
                     active_tenant,
-                ) = self._rotate_identity_access_key(
+                ) = self._rgw.rotate_identity_access_key(
                     admin,
                     uid=identity.rgw_user_uid,
                     tenant=active_tenant,
@@ -463,14 +461,14 @@ class KeyRotationService:
                         target_label=label,
                         status="rotated",
                         message=success_message,
-                        old_access_key=self._mask_access_key(old_access_key),
-                        new_access_key=self._mask_access_key(new_access_key),
+                        old_access_key=self._rgw.mask_access_key(old_access_key),
+                        new_access_key=self._rgw.mask_access_key(new_access_key),
                     )
                 )
             except ValueError as exc:
                 self.db.rollback()
                 if new_access_key and new_access_key != old_access_key:
-                    self._cleanup_new_key(
+                    self._rgw.cleanup_new_key(
                         admin,
                         uid=identity.rgw_user_uid,
                         access_key=new_access_key,
@@ -499,7 +497,7 @@ class KeyRotationService:
         secret_key_field: str,
         deactivate_only: bool,
     ) -> tuple[list[KeyRotationResultItem], int, int]:
-        error = self._validate_ceph_admin_api(endpoint)
+        error = self._rgw.validate_ceph_admin_api(endpoint)
         if error:
             return (
                 [
@@ -537,18 +535,21 @@ class KeyRotationService:
             )
 
         try:
-            direct_admin = self._build_direct_client(
+            direct_admin = self._rgw.build_direct_client(
                 endpoint=endpoint,
                 access_key=old_access_key,
                 secret_key=old_secret_key,
             )
-            uid, tenant = self._resolve_identity_from_access_key(direct_admin, old_access_key)
+            uid, tenant = self._rgw.resolve_identity_from_access_key(
+                direct_admin,
+                old_access_key,
+            )
             (
                 new_access_key,
                 new_secret_key,
                 retired_action,
                 _,
-            ) = self._rotate_identity_access_key(
+            ) = self._rgw.rotate_identity_access_key(
                 direct_admin,
                 uid=uid,
                 tenant=tenant,
@@ -591,8 +592,10 @@ class KeyRotationService:
                     target_label=endpoint.name,
                     status="rotated",
                     message=message,
-                    old_access_key=self._mask_access_key(old_access_key),
-                    new_access_key=self._mask_access_key(getattr(endpoint, access_key_field)),
+                    old_access_key=self._rgw.mask_access_key(old_access_key),
+                    new_access_key=self._rgw.mask_access_key(
+                        getattr(endpoint, access_key_field)
+                    ),
                 )
             ],
             deleted_old_keys,
@@ -625,42 +628,6 @@ class KeyRotationService:
             new_access_key=new_access_key,
         )
 
-    def _validate_ceph_admin_api(self, endpoint: StorageEndpoint) -> Optional[str]:
-        provider = normalize_storage_provider(endpoint.provider)
-        if provider != StorageProvider.CEPH:
-            return "Key rotation is only supported for Ceph endpoints."
-        if not resolve_feature_flags(endpoint).admin_enabled:
-            return "Admin feature is disabled."
-        return None
-
-    def _build_endpoint_admin_client(self, endpoint: StorageEndpoint) -> RGWAdminClient:
-        if not endpoint.admin_access_key or not endpoint.admin_secret_key:
-            raise ValueError("Endpoint admin credentials are not configured.")
-        return self._build_direct_client(
-            endpoint=endpoint,
-            access_key=endpoint.admin_access_key,
-            secret_key=endpoint.admin_secret_key,
-        )
-
-    def _build_direct_client(
-        self,
-        *,
-        endpoint: StorageEndpoint,
-        access_key: str,
-        secret_key: str,
-    ) -> RGWAdminClient:
-        admin_endpoint = resolve_admin_endpoint(endpoint)
-        if not admin_endpoint:
-            raise ValueError("Admin feature is disabled or admin endpoint is not configured.")
-        try:
-            return get_endpoint_admin_rgw_client(
-                endpoint,
-                access_key=access_key,
-                secret_key=secret_key,
-            )
-        except RGWAdminError as exc:
-            raise ValueError(f"Unable to build RGW admin client: {exc}") from exc
-
     def _list_accounts_for_endpoint(self, endpoint: StorageEndpoint) -> list[S3Account]:
         query = self.db.query(S3Account)
         if endpoint.is_default:
@@ -680,186 +647,6 @@ class KeyRotationService:
         else:
             query = query.filter(S3User.storage_endpoint_id == endpoint.id)
         return query.order_by(S3User.id.asc()).all()
-
-    def _detect_user_tenant(
-        self,
-        admin: RGWAdminClient,
-        *,
-        uid: str,
-        preferred_tenant: Optional[str],
-    ) -> Optional[str]:
-        attempts: list[Optional[str]] = []
-        for candidate in (normalize_optional_string(preferred_tenant), None):
-            if candidate in attempts:
-                continue
-            attempts.append(candidate)
-
-        last_error: Optional[Exception] = None
-        for tenant in attempts:
-            try:
-                payload = admin.get_user(uid, tenant=tenant, allow_not_found=True)
-            except RGWAdminError as exc:
-                last_error = exc
-                continue
-            if payload and not payload.get("not_found"):
-                return tenant
-
-        if last_error:
-            raise ValueError(f"Unable to load RGW user '{uid}': {last_error}") from last_error
-        raise ValueError(f"RGW user '{uid}' was not found.")
-
-    def _create_access_key_with_fallback(
-        self,
-        admin: RGWAdminClient,
-        *,
-        uid: str,
-        tenant: Optional[str],
-    ) -> tuple[dict, Optional[str]]:
-        attempts: list[Optional[str]] = []
-        for candidate in (normalize_optional_string(tenant), None):
-            if candidate in attempts:
-                continue
-            attempts.append(candidate)
-
-        last_error: Optional[Exception] = None
-        for candidate in attempts:
-            try:
-                response = admin.create_access_key(uid, tenant=candidate)
-                return response, candidate
-            except RGWAdminError as exc:
-                last_error = exc
-
-        raise ValueError(f"Unable to create a new access key for '{uid}': {last_error}") from last_error
-
-    def _rotate_identity_access_key(
-        self,
-        admin: RGWAdminClient,
-        *,
-        uid: str,
-        tenant: Optional[str],
-        previous_access_key: Optional[str],
-        deactivate_only: bool,
-    ) -> tuple[str, str, Optional[str], Optional[str]]:
-        old_access_key = normalize_optional_string(previous_access_key)
-        response, active_tenant = self._create_access_key_with_fallback(admin, uid=uid, tenant=tenant)
-        new_access_key, new_secret_key = RgwUserKeyParser.select_credentials(
-            admin.extract_keys(response),
-            exclude_access_key=old_access_key,
-        )
-        if not new_access_key or not new_secret_key:
-            raise ValueError(f"RGW did not return the new key pair for '{uid}'.")
-        if old_access_key and new_access_key == old_access_key:
-            raise ValueError(f"RGW returned the existing key for '{uid}' instead of generating a new one.")
-
-        retired_action: Optional[str] = None
-        if old_access_key:
-            retired_action = self._retire_previous_key(
-                admin=admin,
-                uid=uid,
-                tenant=active_tenant,
-                previous_access_key=old_access_key,
-                deactivate_only=deactivate_only,
-                new_access_key=new_access_key,
-            )
-
-        return new_access_key, new_secret_key, retired_action, active_tenant
-
-    def _retire_previous_key(
-        self,
-        *,
-        admin: RGWAdminClient,
-        uid: str,
-        tenant: Optional[str],
-        previous_access_key: str,
-        deactivate_only: bool,
-        new_access_key: str,
-    ) -> str:
-        try:
-            if deactivate_only:
-                admin.set_access_key_status(uid, previous_access_key, enabled=False, tenant=tenant)
-                return "disabled"
-            admin.delete_access_key(uid, previous_access_key, tenant=tenant)
-            return "deleted"
-        except RGWAdminError as exc:
-            self._cleanup_new_key(admin, uid=uid, access_key=new_access_key, tenant=tenant)
-            action = "disable" if deactivate_only else "delete"
-            raise ValueError(f"Unable to {action} previous key for '{uid}': {exc}") from exc
-
-    def _cleanup_new_key(
-        self,
-        admin: RGWAdminClient,
-        *,
-        uid: str,
-        access_key: Optional[str],
-        tenant: Optional[str],
-    ) -> None:
-        candidate = normalize_optional_string(access_key)
-        if not candidate:
-            return
-        try:
-            admin.delete_access_key(uid, candidate, tenant=tenant)
-        except RGWAdminError:
-            logger.warning("Unable to clean up newly created key '%s' for '%s'", candidate, uid)
-
-    def _resolve_identity_from_access_key(
-        self,
-        admin: RGWAdminClient,
-        access_key: str,
-    ) -> tuple[str, Optional[str]]:
-        try:
-            payload = admin.get_user_by_access_key(access_key, allow_not_found=True)
-        except RGWAdminError as exc:
-            raise ValueError(f"Unable to resolve RGW user for access key: {exc}") from exc
-        if not payload:
-            raise ValueError("Access key is not associated with an RGW user.")
-
-        candidates: list[dict] = []
-        if isinstance(payload, dict):
-            candidates.append(payload)
-            nested_user = payload.get("user")
-            if isinstance(nested_user, dict):
-                candidates.append(nested_user)
-
-        uid: Optional[str] = None
-        tenant: Optional[str] = None
-        for candidate in candidates:
-            for field_name in ("uid", "user_id", "user"):
-                field_value = candidate.get(field_name)
-                normalized = normalize_optional_string(field_value)
-                if normalized:
-                    uid = normalized
-                    break
-            if uid:
-                break
-
-        for candidate in candidates:
-            for field_name in ("tenant", "account_id"):
-                field_value = candidate.get(field_name)
-                normalized = normalize_optional_string(field_value)
-                if normalized:
-                    tenant = normalized
-                    break
-            if tenant:
-                break
-
-        if uid and "$" in uid and not tenant:
-            split_tenant, split_uid = uid.split("$", 1)
-            if split_tenant and split_uid:
-                tenant = split_tenant
-                uid = split_uid
-
-        if not uid:
-            raise ValueError("Unable to resolve RGW user identity for this access key.")
-        return uid, tenant
-
-    def _mask_access_key(self, value: Optional[str]) -> Optional[str]:
-        normalized = normalize_optional_string(value)
-        if not normalized:
-            return None
-        if len(normalized) <= 8:
-            return "***" + normalized[-2:]
-        return f"{normalized[:4]}***{normalized[-4:]}"
-
 
 def get_key_rotation_service(db: Session) -> KeyRotationService:
     return KeyRotationService(db)
