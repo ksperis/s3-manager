@@ -72,6 +72,7 @@ import {
 import AdminAssociationAdvancedSettings from "./AdminAssociationAdvancedSettings";
 import { AdminAccessToggleSection } from "./AdminAccessSections";
 import AdminQuotaFields from "./AdminQuotaFields";
+import { buildAdminQuotaSizeEditorValue } from "./adminQuotaForm";
 import { AssociationPrincipalStack, type AssociationPrincipalItem } from "./AssociationSummary";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
@@ -93,16 +94,6 @@ function getS3UserSearchCandidates(user: S3User): Array<string | number | null |
 }
 
 export default function S3UsersPage() {
-  const resolveQuotaForEdit = (quotaGb?: number | null) => {
-    if (quotaGb == null) {
-      return { value: "", unit: "GiB" as const };
-    }
-    if (quotaGb > 0 && quotaGb < 1) {
-      return { value: String(Math.round(quotaGb * 1024)), unit: "MiB" as const };
-    }
-    return { value: String(quotaGb), unit: "GiB" as const };
-  };
-
   const [users, setUsers] = useState<S3User[]>([]);
   const [portalUsers, setPortalUsers] = useState<UserSummary[]>([]);
   const [portalUsersLoaded, setPortalUsersLoaded] = useState(false);
@@ -483,7 +474,7 @@ export default function S3UsersPage() {
         if (prev.quota_max_size_gb !== "" || prev.quota_max_objects !== "") {
           return prev;
         }
-        const quota = resolveQuotaForEdit(detail.quota_max_size_gb);
+        const quota = buildAdminQuotaSizeEditorValue(detail.quota_max_size_gb);
         return {
           ...prev,
           quota_max_size_gb: quota.value,
@@ -500,7 +491,7 @@ export default function S3UsersPage() {
     void loadPortalUsersIfNeeded();
     void loadGroupsIfNeeded();
     void loadEndpointsIfNeeded();
-    const quota = resolveQuotaForEdit(user.quota_max_size_gb);
+    const quota = buildAdminQuotaSizeEditorValue(user.quota_max_size_gb);
     const nextEditForm = {
       name: user.name,
       email: user.email ?? "",

@@ -71,6 +71,7 @@ import {
 } from "./AssociationSummary";
 import { AdminAccessToggleSection } from "./AdminAccessSections";
 import AdminQuotaFields from "./AdminQuotaFields";
+import { buildAdminQuotaSizeEditorValue } from "./adminQuotaForm";
 import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
@@ -311,16 +312,6 @@ export default function S3AccountsPage() {
       }),
     [defaultAccountEndpointId]
   );
-
-  const resolveQuotaForEdit = (quotaGb?: number | null) => {
-    if (quotaGb == null) {
-      return { value: "", unit: "GiB" as const };
-    }
-    if (quotaGb > 0 && quotaGb < 1) {
-      return { value: String(Math.round(quotaGb * 1024)), unit: "MiB" as const };
-    }
-    return { value: String(quotaGb), unit: "GiB" as const };
-  };
 
   const extractError = useCallback((err: unknown) => extractApiError(err, "Unexpected error"), []);
 
@@ -994,7 +985,7 @@ export default function S3AccountsPage() {
     void loadEndpointsIfNeeded();
     const detail = await loadAccountDetail(account);
     if (!detail) return;
-    const quota = resolveQuotaForEdit(detail.quota_max_size_gb);
+    const quota = buildAdminQuotaSizeEditorValue(detail.quota_max_size_gb);
     const nextEditForm = {
       tags: normalizeUiTags(detail.tags),
       quota_max_size_gb: quota.value,
