@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  PANEL_LAYOUT_GAP_PX,
   clampBrowserPanelWidth,
-  resolveBrowserPanelWidths,
+  clampFoldersPanelWidth,
 } from "../browserPanelLayout";
 
 describe("browserPanelLayout", () => {
@@ -13,17 +12,8 @@ describe("browserPanelLayout", () => {
     expect(clampBrowserPanelWidth(319.6, 220, 420)).toBe(320);
   });
 
-  it("keeps a usable center column when both side panels are visible", () => {
-    const widths = resolveBrowserPanelWidths({
-      containerWidth: 900,
-      foldersPanelWidthPx: 420,
-      inspectorPanelWidthPx: 520,
-      isFoldersPanelVisible: true,
-      isInspectorPanelVisible: true,
-    });
-
-    expect(widths.resolvedFoldersWidth + widths.resolvedInspectorWidth + 2 * PANEL_LAYOUT_GAP_PX).toBeLessThanOrEqual(
-      900 - 320
-    );
+  it("uses the root folders-panel limits", () => {
+    expect(clampFoldersPanelWidth(100)).toBe(220);
+    expect(clampFoldersPanelWidth(999)).toBe(420);
   });
 });

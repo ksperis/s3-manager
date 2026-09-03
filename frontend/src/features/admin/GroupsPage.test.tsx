@@ -395,7 +395,7 @@ describe("GroupsPage", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Browser" }));
     expect(screen.getByText("Browser options inherited by group members.")).toBeInTheDocument();
-    const browserAdvancedToggle = screen.getByRole("checkbox", { name: "Enable advanced Browser features" });
+    const browserAdvancedToggle = screen.getByRole("checkbox", { name: "Enable technical S3 tools" });
     expect(browserAdvancedToggle).not.toBeChecked();
     fireEvent.click(browserAdvancedToggle);
 

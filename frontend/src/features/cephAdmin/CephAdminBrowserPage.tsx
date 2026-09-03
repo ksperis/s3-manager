@@ -55,7 +55,6 @@ export default function CephAdminBrowserPage() {
             hasContext={Boolean(browserSelector)}
             workspaceSurface="ceph-admin"
             functionalProfile="advanced"
-            layoutMode="standard"
             density="compact"
             capabilityFacts={{
               canWriteObjects: true,

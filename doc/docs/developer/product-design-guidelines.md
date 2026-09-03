@@ -94,6 +94,16 @@ workspace-specific visual themes when a shared product pattern fits.
 | Dashboards and metrics | Shared KPI, usage, traffic, and workspace dashboard components | Reuse chart language across Admin, Manager, Portal, and Ceph Admin while keeping labels surface-appropriate. |
 | Browser inside another workspace | `BrowserEmbed` with a locked or compact profile | Embedded Browser should reduce chrome and preserve the parent workspace's job. |
 
+For the standalone Browser, keep functional access separate from presentation:
+**Technical S3 tools** controls the Advanced action set, while density and the
+optional Folders and Details panels remain user display preferences. The
+default is Compact with panels hidden. Compact uses one path-and-icon-action
+row when width permits; Comfortable uses labeled actions on that row at wide
+viewports and moves them below the path before the toolbar becomes cramped.
+Selection actions replace controls inside the existing context bar rather than
+inserting a new row, and Details uses an overlay so opening it does not shrink
+or shift the object list.
+
 ## Page or modal decision
 
 Use a focused page when the task has any of these characteristics:

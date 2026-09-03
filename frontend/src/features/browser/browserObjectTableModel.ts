@@ -4,7 +4,6 @@
  */
 import type {
   BrowserActionId,
-  BrowserLayoutMode,
 } from "./browserActions";
 import type { BrowserObject } from "../../api/browserContracts";
 import { formatBytes } from "../../utils/format";
@@ -295,10 +294,9 @@ export const resolveColumnWidthPx = (
 
 export const loadVisibleColumnsForSurface = (
   isMainBrowserPath: boolean,
-  layoutMode: BrowserLayoutMode,
 ): BrowserColumnId[] => {
   const stored = isMainBrowserPath
-    ? readBrowserRootObjectColumns(layoutMode)
+    ? readBrowserRootObjectColumns()
     : readBrowserEmbeddedObjectColumns();
   if (!stored.length) {
     return DEFAULT_VISIBLE_COLUMN_IDS;
@@ -310,10 +308,9 @@ export const loadVisibleColumnsForSurface = (
 export const persistVisibleColumnsForSurface = (
   isMainBrowserPath: boolean,
   columns: BrowserColumnId[],
-  layoutMode: BrowserLayoutMode,
 ) => {
   if (isMainBrowserPath) {
-    writeBrowserRootObjectColumns(columns, layoutMode);
+    writeBrowserRootObjectColumns(columns);
     return;
   }
   writeBrowserEmbeddedObjectColumns(columns);
@@ -321,10 +318,9 @@ export const persistVisibleColumnsForSurface = (
 
 export const loadColumnWidthsForSurface = (
   isMainBrowserPath: boolean,
-  layoutMode: BrowserLayoutMode,
 ): BrowserObjectColumnWidths => {
   const stored = isMainBrowserPath
-    ? readBrowserRootObjectColumnWidths(layoutMode)
+    ? readBrowserRootObjectColumnWidths()
     : readBrowserEmbeddedObjectColumnWidths();
   return normalizeColumnWidths(stored);
 };
@@ -332,11 +328,10 @@ export const loadColumnWidthsForSurface = (
 export const persistColumnWidthsForSurface = (
   isMainBrowserPath: boolean,
   widths: BrowserObjectColumnWidths,
-  layoutMode: BrowserLayoutMode,
 ) => {
   const normalized = normalizeColumnWidths(widths);
   if (isMainBrowserPath) {
-    writeBrowserRootObjectColumnWidths(normalized, layoutMode);
+    writeBrowserRootObjectColumnWidths(normalized);
     return;
   }
   writeBrowserEmbeddedObjectColumnWidths(normalized);
@@ -411,7 +406,7 @@ export const buildBrowserItems = (
   return [...folderItems, ...objectItems, ...deletedItems];
 };
 
-export type BrowserPathStats = {
+type BrowserPathStats = {
   totalBytes: number;
   files: number;
   deletedFiles: number;

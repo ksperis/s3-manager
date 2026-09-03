@@ -26,6 +26,7 @@ import {
   uiCardMutedClass,
   uiMenuClass,
 } from "../../components/ui/styles";
+import { formatBytes } from "../../utils/format";
 import {
   CLIENT_STORAGE_KEYS,
   writeClientStorage,
@@ -52,7 +53,6 @@ import { useBrowserBucketCatalog } from "./useBrowserBucketCatalog";
 import { useBrowserClipboard } from "./useBrowserClipboard";
 import { useBrowserConfirmDialog } from "./useBrowserConfirmDialog";
 import { useBrowserContextMenu } from "./useBrowserContextMenu";
-import { useBrowserContextCounts } from "./useBrowserContextCounts";
 import { useBrowserCopyActions } from "./useBrowserCopyActions";
 import { useBrowserCopyDialog } from "./useBrowserCopyDialog";
 import { useBrowserCreateBucket } from "./useBrowserCreateBucket";
@@ -97,7 +97,6 @@ import {
   type BrowserActionId,
   type BrowserCapabilityFacts,
   type BrowserFunctionalProfile,
-  type BrowserLayoutMode,
   getVisibleBrowserActions,
   resolveBrowserActions,
   runBrowserAction,
@@ -129,7 +128,8 @@ import BrowserMobileSelectionActions from "./BrowserMobileSelectionActions";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import {
   DEFAULT_FOLDERS_PANEL_WIDTH_PX,
-  DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
+  MAX_FOLDERS_PANEL_WIDTH_PX,
+  MIN_FOLDERS_PANEL_WIDTH_PX,
   readStoredBrowserRootUiState,
 } from "./browserRootUiState";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
@@ -172,7 +172,6 @@ import {
   ROW_ACTION_GAP_PX,
   SELECTION_COLUMN_WIDTH_PX,
   buildBrowserItems,
-  buildBrowserPathStats,
   collectAvailableStorageClasses,
   resolveColumnWidthPx,
   type BrowserColumnId,
@@ -207,7 +206,6 @@ export default function BrowserPage({
   hasContext: hasContextOverride,
   workspaceSurface: workspaceSurfaceOverride,
   functionalProfile: functionalProfileOverride,
-  layoutMode: layoutModeOverride,
   density: densityOverride,
   capabilityFacts: capabilityFactsOverride,
   lockedBucketName,
@@ -291,14 +289,6 @@ export default function BrowserPage({
       : rootBrowserAdvancedFeaturesEnabled
         ? "advanced"
         : "standard");
-  const initialLayoutMode: BrowserLayoutMode =
-    layoutModeOverride ??
-    (isMainBrowserPath && resolvedFunctionalProfile === "advanced"
-      ? (initialStoredRootUiState?.activeLayout ?? "standard")
-      : "standard");
-  const initialRootUiLayout = isMainBrowserPath
-    ? initialStoredRootUiState?.layouts[initialLayoutMode] ?? null
-    : null;
   const resolvedCapabilityFacts = useMemo<BrowserCapabilityFacts>(
     () =>
       capabilityFactsOverride ?? {
@@ -372,44 +362,34 @@ export default function BrowserPage({
     usePortalWorkspaceLabels,
   });
   const {
-    activeLayoutMode,
-    activePanelResize,
+    adjustFoldersPanelWidth,
     canUseFoldersPanel,
     canUseInspectorPanel,
-    changeLayoutMode,
+    closeInspectorPanel,
+    foldersPanelResizeActive,
     isFoldersPanelVisible,
     isInspectorPanelVisible,
     layoutContainerRef,
     layoutTemplateColumns,
     openInspectorPanel,
     resolvedFoldersWidth,
-    resolvedInspectorWidth,
     resetFoldersPanelWidth,
-    resetInspectorPanelWidth,
     showFolders,
     showInspector,
-    startPanelResize,
+    startFoldersPanelResize,
     toggleFoldersPanel,
     toggleInspectorPanel,
   } = useBrowserPanelLayout({
-    allowFoldersPanel:
-      allowFoldersPanel && resolvedFunctionalProfile === "advanced",
-    allowInspectorPanel:
-      allowInspectorPanel && resolvedFunctionalProfile === "advanced",
-    canChangeLayout:
-      isMainBrowserPath && resolvedFunctionalProfile === "advanced",
+    allowFoldersPanel,
+    allowInspectorPanel,
     initialFoldersPanelWidthPx:
-      initialRootUiLayout?.foldersPanelWidthPx ??
+      initialStoredRootUiState?.foldersPanelWidthPx ??
       DEFAULT_FOLDERS_PANEL_WIDTH_PX,
-    initialInspectorPanelWidthPx:
-      initialRootUiLayout?.inspectorPanelWidthPx ??
-      DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-    initialLayoutMode,
     initialShowFolders: isMainBrowserPath
-      ? (initialRootUiLayout?.showFolders ?? defaultShowFolders)
+      ? (initialStoredRootUiState?.showFolders ?? defaultShowFolders)
       : defaultShowFolders,
     initialShowInspector: isMainBrowserPath
-      ? (initialRootUiLayout?.showInspector ?? defaultShowInspector)
+      ? (initialStoredRootUiState?.showInspector ?? defaultShowInspector)
       : defaultShowInspector,
     persistLayout: isMainBrowserPath,
   });
@@ -423,7 +403,6 @@ export default function BrowserPage({
     visibleColumns,
   } = useBrowserObjectColumns({
     isMainBrowserPath,
-    layoutMode: activeLayoutMode,
   });
   const effectiveVisibleColumns = isPortalProfile
     ? DEFAULT_VISIBLE_COLUMN_IDS
@@ -441,7 +420,7 @@ export default function BrowserPage({
   } = useBrowserObjectSort({ visibleColumns: visibleColumnSet });
   const isMobileViewport = useMediaQuery(MOBILE_OBJECT_LIST_MEDIA_QUERY);
   const [inspectorTab, setInspectorTab] =
-    useState<BrowserInspectorTab>("context");
+    useState<BrowserInspectorTab>("bucket");
   const {
     canConfigure: canConfigureRootBrowserDensity,
     compactMode,
@@ -715,10 +694,6 @@ export default function BrowserPage({
     usageSummary
   );
   const isCephContext = effectiveContextEndpointProvider === "ceph";
-  const showLayoutModeToggle =
-    showPanelToggles &&
-    isMainBrowserPath &&
-    resolvedFunctionalProfile === "advanced";
   const bucketManagementEnabled =
     normalizedPath.endsWith("/browser") &&
     !isEmbeddedBrowserPath &&
@@ -963,7 +938,7 @@ export default function BrowserPage({
     accountSwitchInFlight,
     bucketName,
     currentBucketUnavailable,
-    enabled: hasS3AccountContext,
+    enabled: hasS3AccountContext && isFoldersPanelVisible,
     onWarning: setWarningMessage,
     prefix,
     requestOptions: browserRequestOptions,
@@ -1371,8 +1346,6 @@ export default function BrowserPage({
     return [...ordered, ...unknown];
   }, [availableStorageClasses]);
 
-  const pathStats = useMemo(() => buildBrowserPathStats(items), [items]);
-
   const cephQuotaScopeLabel = isS3UserContext
     ? "User quota"
     : "Account quota";
@@ -1416,6 +1389,7 @@ export default function BrowserPage({
     enabled:
       isInspectorPanelVisible &&
       inspectorTab === "details" &&
+      resolvedFunctionalProfile === "advanced" &&
       hasS3AccountContext &&
       Boolean(inspectedObjectKey) &&
       isVersioningEnabled,
@@ -1430,10 +1404,7 @@ export default function BrowserPage({
   const selectionItems = selectedItems;
   const selectionInfo = getSelectionInfo(selectionItems);
   const selectionFiles = selectionInfo.files;
-  const selectionFolders = selectionInfo.folders;
-  const selectionIsSingle = selectionInfo.isSingle;
   const selectionPrimary = selectionInfo.primary;
-  const selectionHasDeleted = selectionInfo.hasDeleted;
   const canSelectionActions = selectionInfo.items.length > 0;
 
   const rowPadding = compactMode ? "!py-0.5" : "py-2.5";
@@ -1473,21 +1444,6 @@ export default function BrowserPage({
     bucketName,
     enabled: hasS3AccountContext,
     requestOptions: browserRequestOptions,
-  });
-
-  const {
-    count: handleContextCount,
-    counts: contextCounts,
-    error: contextCountsError,
-    loading: contextCountsLoading,
-  } = useBrowserContextCounts({
-    accountId: accountIdForApi,
-    bucketName,
-    enabled: hasS3AccountContext,
-    listAllObjectsForPrefix,
-    prefix: normalizedPrefix,
-    requestOptions: browserRequestOptions,
-    versioningEnabled: isVersioningEnabled,
   });
 
   const {
@@ -1825,6 +1781,21 @@ export default function BrowserPage({
     setInspectorTab("bucket");
     void loadBucketInspectorData();
   }, [loadBucketInspectorData]);
+
+  useEffect(() => {
+    if (
+      isInspectorPanelVisible &&
+      inspectorTab === "bucket" &&
+      !isPortalProfile
+    ) {
+      void loadBucketInspectorData();
+    }
+  }, [
+    inspectorTab,
+    isInspectorPanelVisible,
+    isPortalProfile,
+    loadBucketInspectorData,
+  ]);
 
   const handleItemNameClick = (
     event: ReactMouseEvent<HTMLElement>,
@@ -2520,14 +2491,18 @@ export default function BrowserPage({
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
   const isActionBarVisible = selectedCount > 0;
-  const isCompactToolbarMode = !isActionBarVisible;
+  const showContextToolbarActions = !isActionBarVisible;
   const browserChromeShellClasses =
     "relative z-20 shrink-0 pb-2";
   const browserNoticeShellClasses = "shrink-0 pb-2";
   const browserContentShellClasses =
     "relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden pb-3";
   const toolbarSelectionSummary =
-    selectedCount > 0 ? `${selectedCount} selected` : "No selection";
+    selectedCount === 1 && selectionPrimary
+      ? selectionPrimary.name
+      : selectedCount > 1
+        ? `${selectedCount} selected · ${formatBytes(selectedBytes)}`
+        : "No selection";
   const toolbarCanUploadFiles = pathActionStates.uploadFiles.enabled;
   const toolbarCanUploadFolder = pathActionStates.uploadFolder.enabled;
   const toolbarCanCreateFolder = pathActionStates.newFolder.enabled;
@@ -2557,7 +2532,8 @@ export default function BrowserPage({
   const hasToolbarOperationsAction = hasOperationsPanelContent;
   const hasToolbarStatusSection =
     Boolean(accessBadge) || hasToolbarOperationsAction;
-  const hasToolbarColumnsSection = !isPortalProfile;
+  const hasToolbarColumnsSection =
+    resolvedFunctionalProfile === "advanced";
   const toolbarColumnsSummary = `${effectiveVisibleColumns.length}/${COLUMN_DEFINITIONS.length} visible`;
   const handleToolbarDownload = () => {
     runSelectionAction("download");
@@ -2571,7 +2547,7 @@ export default function BrowserPage({
       rootRef={searchControlRef}
       optionsButtonRef={searchOptionsButtonRef}
       optionsMenuRef={searchOptionsMenuRef}
-      portalProfile={isPortalProfile}
+      advancedOptionsEnabled={resolvedFunctionalProfile === "advanced"}
       optionsOpen={showSearchOptionsMenu}
       filter={filter}
       objectNounPlural={workspaceObjectNounPlural}
@@ -2612,6 +2588,7 @@ export default function BrowserPage({
         <div className={browserShellClasses}>
         <div className={browserChromeShellClasses}>
           <BrowserToolbar
+            compactMode={compactMode}
             bucketSelector={{
               rootRef: bucketMenuRef,
               filterInputRef: bucketMenuFilterRef,
@@ -2680,8 +2657,8 @@ export default function BrowserPage({
               ),
               restoreEnabled: pathActionStates.restore.enabled,
             }}
-            compactActions={{
-              visible: isCompactToolbarMode,
+            contextActions={{
+              visible: showContextToolbarActions,
               canUploadFiles: toolbarCanUploadFiles,
               canUploadFolder: toolbarCanUploadFolder,
               canCreateFolder: toolbarCanCreateFolder,
@@ -2722,17 +2699,6 @@ export default function BrowserPage({
                   : undefined,
                 inspector: showInspectorToggle
                   ? { checked: showInspector, onToggle: toggleInspectorPanel }
-                  : undefined,
-                workbench: showLayoutModeToggle
-                  ? {
-                      checked: activeLayoutMode === "workbench",
-                      onToggle: () =>
-                        changeLayoutMode(
-                          activeLayoutMode === "workbench"
-                            ? "standard"
-                            : "workbench",
-                        ),
-                    }
                   : undefined,
               },
               columns: hasToolbarColumnsSection
@@ -2855,6 +2821,7 @@ export default function BrowserPage({
                 currentBucketAccess={currentBucketAccess}
                 treeRootNode={treeRootNode}
                 workspaceNoun={workspaceNoun}
+                onClose={toggleFoldersPanel}
                 onRefresh={handleRefresh}
                 onSelectPrefix={handleSelectPrefix}
                 onToggleTreeNode={handleToggleTreeNode}
@@ -2950,25 +2917,59 @@ export default function BrowserPage({
               />
             </div>
 
-            {isInspectorPanelVisible && (
+            {isFoldersPanelVisible && (
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize folders panel"
+                aria-valuemin={MIN_FOLDERS_PANEL_WIDTH_PX}
+                aria-valuemax={MAX_FOLDERS_PANEL_WIDTH_PX}
+                aria-valuenow={resolvedFoldersWidth}
+                title="Resize folders panel"
+                tabIndex={0}
+                className="absolute inset-y-0 z-20 -translate-x-1/2 cursor-col-resize touch-none select-none"
+                style={{
+                  left: `calc(${resolvedFoldersWidth}px + ${PANEL_LAYOUT_GAP_PX / 2}px)`,
+                  width: `${PANEL_RESIZER_HITBOX_WIDTH_PX}px`,
+                }}
+                onPointerDown={startFoldersPanelResize}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    adjustFoldersPanelWidth(-16);
+                  } else if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    adjustFoldersPanelWidth(16);
+                  } else if (event.key === "Home") {
+                    event.preventDefault();
+                    resetFoldersPanelWidth();
+                  }
+                }}
+                onDoubleClick={resetFoldersPanelWidth}
+              >
+                <div
+                  className={`mx-auto h-full w-0.5 rounded-full bg-slate-200 transition dark:bg-slate-700 ${
+                    foldersPanelResizeActive
+                      ? "bg-primary dark:bg-primary-300"
+                      : "hover:bg-slate-300 dark:hover:bg-slate-500"
+                  }`}
+                />
+              </div>
+            )}
+          </div>
+          {isInspectorPanelVisible && (
+            <div className="absolute inset-y-0 right-0 z-30 w-[min(24rem,calc(100%-1rem))]">
               <BrowserInspectorPanel
-                activeTab={inspectorTab}
+                activeTab={isPortalProfile ? "details" : inspectorTab}
                 workspaceNoun={workspaceNoun}
                 workspaceNounCapitalized={workspaceNounCapitalized}
                 usePortalWorkspaceLabels={usePortalWorkspaceLabels}
+                technicalDetailsEnabled={
+                  resolvedFunctionalProfile === "advanced"
+                }
                 actionButtonClasses={chromeBulkActionClasses}
-                context={{
-                  currentPath,
-                  pathStats,
-                  versioningEnabled: isVersioningEnabled,
-                  showDeletedObjects,
-                  counts: contextCounts,
-                  countsLoading: contextCountsLoading,
-                  countsError: contextCountsError,
-                  canCount: Boolean(bucketName && hasS3AccountContext),
-                  onCount: () => void handleContextCount(),
-                }}
                 bucket={{
+                  available: !isPortalProfile,
                   name: bucketName,
                   hasContext: hasS3AccountContext,
                   loading: bucketInspectorLoading,
@@ -2979,17 +2980,6 @@ export default function BrowserPage({
                   cephQuotaScopeLabel,
                   cephContextQuotaSizeBytes,
                   cephContextQuotaObjects,
-                }}
-                selection={{
-                  hasActions: canSelectionActions,
-                  selectedCount,
-                  isSingle: selectionIsSingle,
-                  primary: selectionPrimary,
-                  fileCount: selectionFiles.length,
-                  folderCount: selectionFolders.length,
-                  hasDeleted: selectionHasDeleted,
-                  selectedBytes,
-                  onOpenFullDetails: () => runSelectionAction("details"),
                 }}
                 details={{
                   item: inspectedItem,
@@ -3003,65 +2993,19 @@ export default function BrowserPage({
                       inspectedItem && canLoadMoreObjectVersions,
                     ),
                     onLoadMore: inspectedItem
-                      ? () =>
-                          void loadObjectVersions({ append: true })
+                      ? () => void loadObjectVersions({ append: true })
                       : undefined,
                     onRestoreVersion: handleRestoreVersion,
                     onDeleteVersion: handleDeleteVersion,
                   },
                   onOpenFullDetails: runInspectedFullDetailsAction,
                 }}
-                onSelectTab={setInspectorTab}
-                onOpenBucketTab={handleOpenBucketInspector}
+                onSelectDetails={() => setInspectorTab("details")}
+                onOpenBucket={handleOpenBucketInspector}
+                onClose={closeInspectorPanel}
               />
-            )}
-            {isFoldersPanelVisible && (
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize folders panel"
-                title="Resize folders panel"
-                className="absolute inset-y-0 z-20 -translate-x-1/2 cursor-col-resize touch-none select-none"
-                style={{
-                  left: `calc(${resolvedFoldersWidth}px + ${PANEL_LAYOUT_GAP_PX / 2}px)`,
-                  width: `${PANEL_RESIZER_HITBOX_WIDTH_PX}px`,
-                }}
-                onPointerDown={startPanelResize("folders")}
-                onDoubleClick={resetFoldersPanelWidth}
-              >
-                <div
-                  className={`mx-auto h-full w-0.5 rounded-full bg-slate-200 transition dark:bg-slate-700 ${
-                    activePanelResize === "folders"
-                      ? "bg-primary dark:bg-primary-300"
-                      : "hover:bg-slate-300 dark:hover:bg-slate-500"
-                  }`}
-                />
-              </div>
-            )}
-            {isInspectorPanelVisible && (
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize inspector panel"
-                title="Resize inspector panel"
-                className="absolute inset-y-0 z-20 translate-x-1/2 cursor-col-resize touch-none select-none"
-                style={{
-                  right: `calc(${resolvedInspectorWidth}px + ${PANEL_LAYOUT_GAP_PX / 2}px)`,
-                  width: `${PANEL_RESIZER_HITBOX_WIDTH_PX}px`,
-                }}
-                onPointerDown={startPanelResize("inspector")}
-                onDoubleClick={resetInspectorPanelWidth}
-              >
-                <div
-                  className={`mx-auto h-full w-0.5 rounded-full bg-slate-200 transition dark:bg-slate-700 ${
-                    activePanelResize === "inspector"
-                      ? "bg-primary dark:bg-primary-300"
-                      : "hover:bg-slate-300 dark:hover:bg-slate-500"
-                  }`}
-                />
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
       </div>

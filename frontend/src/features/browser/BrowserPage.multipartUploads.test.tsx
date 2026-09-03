@@ -206,7 +206,7 @@ describe("BrowserPage multipart uploads modal", () => {
     expect(await screen.findByText("Multipart upload aborted for uploads/big-file.bin.")).toBeInTheDocument();
   });
 
-  it("opens the row More menu without restoring an inspector action toolbar", async () => {
+  it("keeps the optional Details panel closed until its action is chosen", async () => {
     const user = userEvent.setup();
 
     listBrowserObjectsMock.mockResolvedValue({
@@ -226,7 +226,7 @@ describe("BrowserPage multipart uploads modal", () => {
 
     renderPage({ defaultShowInspector: false });
 
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Details view" })).not.toBeInTheDocument();
 
     const fileName = await screen.findByText(/monthly\.csv/);
     const row = fileName.closest("[data-browser-item]");
@@ -243,10 +243,9 @@ describe("BrowserPage multipart uploads modal", () => {
 
     expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
     expect(within(menu).getByRole("button", { name: "Properties" })).toBeInTheDocument();
-    expect(menuButtons.slice(0, 2)).toEqual(["Preview", "Properties"]);
-    expect(menuButtons).not.toContain("Details");
+    expect(menuButtons.slice(0, 2)).toEqual(["Details", "Preview"]);
     expect(menuButtons).not.toContain("Advanced");
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Details view" })).not.toBeInTheDocument();
 
     await user.click(within(menu).getByRole("button", { name: "Properties" }));
 
@@ -255,6 +254,6 @@ describe("BrowserPage multipart uploads modal", () => {
         name: /Object details · .*monthly\.csv/i,
       }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Details view" })).not.toBeInTheDocument();
   });
 });

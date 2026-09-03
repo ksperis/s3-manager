@@ -14,28 +14,22 @@ import {
 import {
   PANEL_LAYOUT_GAP_PX,
   PANELS_DISABLE_MEDIA_QUERY,
-  resolveBrowserPanelWidths,
+  clampBrowserPanelWidth,
 } from "./browserPanelLayout";
-import type { BrowserLayoutMode } from "./browserActions";
-import { resolveBrowserPanelVisibility } from "./browserResponsivePanels";
 import {
   DEFAULT_FOLDERS_PANEL_WIDTH_PX,
-  DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-  readBrowserRootUiState,
-  writeBrowserRootActiveLayout,
+  MAX_FOLDERS_PANEL_WIDTH_PX,
+  MIN_FOLDERS_PANEL_WIDTH_PX,
   writeBrowserRootUiLayout,
 } from "./browserRootUiState";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 
-type PanelSide = "folders" | "inspector";
+const MIN_BROWSER_CENTER_WIDTH_PX = 320;
 
 type UseBrowserPanelLayoutOptions = {
   allowFoldersPanel: boolean;
   allowInspectorPanel: boolean;
-  canChangeLayout: boolean;
   initialFoldersPanelWidthPx: number;
-  initialInspectorPanelWidthPx: number;
-  initialLayoutMode: BrowserLayoutMode;
   initialShowFolders: boolean;
   initialShowInspector: boolean;
   persistLayout: boolean;
@@ -44,101 +38,65 @@ type UseBrowserPanelLayoutOptions = {
 export function useBrowserPanelLayout({
   allowFoldersPanel,
   allowInspectorPanel,
-  canChangeLayout,
   initialFoldersPanelWidthPx,
-  initialInspectorPanelWidthPx,
-  initialLayoutMode,
   initialShowFolders,
   initialShowInspector,
   persistLayout,
 }: UseBrowserPanelLayoutOptions) {
-  const [activeLayoutMode, setActiveLayoutMode] =
-    useState<BrowserLayoutMode>(initialLayoutMode);
   const [showFolders, setShowFolders] = useState(initialShowFolders);
   const [showInspector, setShowInspector] = useState(initialShowInspector);
   const [foldersPanelWidthPx, setFoldersPanelWidthPx] = useState(
     initialFoldersPanelWidthPx,
   );
-  const [inspectorPanelWidthPx, setInspectorPanelWidthPx] = useState(
-    initialInspectorPanelWidthPx,
-  );
   const [layoutContainerWidthPx, setLayoutContainerWidthPx] = useState(0);
-  const [activePanelResize, setActivePanelResize] =
-    useState<PanelSide | null>(null);
+  const [foldersPanelResizeActive, setFoldersPanelResizeActive] =
+    useState(false);
   const isNarrowViewport = useMediaQuery(PANELS_DISABLE_MEDIA_QUERY);
   const layoutContainerRef = useRef<HTMLDivElement | null>(null);
   const foldersPanelWidthRef = useRef(foldersPanelWidthPx);
-  const inspectorPanelWidthRef = useRef(inspectorPanelWidthPx);
   const isFoldersPanelVisibleRef = useRef(false);
-  const isInspectorPanelVisibleRef = useRef(false);
 
-  const {
-    canUseFoldersPanel,
-    canUseInspectorPanel,
-    isFoldersPanelVisible,
-    isInspectorPanelVisible,
-  } = resolveBrowserPanelVisibility({
-    allowFoldersPanel:
-      allowFoldersPanel && activeLayoutMode === "workbench",
-    allowInspectorPanel:
-      allowInspectorPanel && activeLayoutMode === "workbench",
-    isNarrowViewport,
-    showFolders,
-    showInspector,
-  });
+  const canUseFoldersPanel = allowFoldersPanel && !isNarrowViewport;
+  const canUseInspectorPanel = allowInspectorPanel && !isNarrowViewport;
+  const isFoldersPanelVisible = canUseFoldersPanel && showFolders;
+  const isInspectorPanelVisible = canUseInspectorPanel && showInspector;
   foldersPanelWidthRef.current = foldersPanelWidthPx;
-  inspectorPanelWidthRef.current = inspectorPanelWidthPx;
   isFoldersPanelVisibleRef.current = isFoldersPanelVisible;
-  isInspectorPanelVisibleRef.current = isInspectorPanelVisible;
 
-  const { resolvedFoldersWidth, resolvedInspectorWidth } = useMemo(
-    () =>
-      resolveBrowserPanelWidths({
-        containerWidth: layoutContainerWidthPx,
-        foldersPanelWidthPx,
-        inspectorPanelWidthPx,
-        isFoldersPanelVisible,
-        isInspectorPanelVisible,
-      }),
-    [
+  const resolvedFoldersWidth = useMemo(() => {
+    const maximumFromViewport =
+      layoutContainerWidthPx > 0
+        ? layoutContainerWidthPx -
+          PANEL_LAYOUT_GAP_PX -
+          MIN_BROWSER_CENTER_WIDTH_PX
+        : MAX_FOLDERS_PANEL_WIDTH_PX;
+    return clampBrowserPanelWidth(
       foldersPanelWidthPx,
-      inspectorPanelWidthPx,
-      isFoldersPanelVisible,
-      isInspectorPanelVisible,
-      layoutContainerWidthPx,
-    ],
-  );
-  const layoutTemplateColumns = useMemo(() => {
-    if (isFoldersPanelVisible && isInspectorPanelVisible) {
-      return `${resolvedFoldersWidth}px minmax(0, 1fr) ${resolvedInspectorWidth}px`;
-    }
-    if (isFoldersPanelVisible) {
-      return `${resolvedFoldersWidth}px minmax(0, 1fr)`;
-    }
-    if (isInspectorPanelVisible) {
-      return `minmax(0, 1fr) ${resolvedInspectorWidth}px`;
-    }
-    return "minmax(0, 1fr)";
-  }, [
-    isFoldersPanelVisible,
-    isInspectorPanelVisible,
-    resolvedFoldersWidth,
-    resolvedInspectorWidth,
-  ]);
+      MIN_FOLDERS_PANEL_WIDTH_PX,
+      Math.min(
+        MAX_FOLDERS_PANEL_WIDTH_PX,
+        Math.max(MIN_FOLDERS_PANEL_WIDTH_PX, maximumFromViewport),
+      ),
+    );
+  }, [foldersPanelWidthPx, layoutContainerWidthPx]);
+
+  const layoutTemplateColumns = isFoldersPanelVisible
+    ? `${resolvedFoldersWidth}px minmax(0, 1fr)`
+    : "minmax(0, 1fr)";
 
   useLayoutEffect(() => {
     const updateLayoutContainerWidth = () => {
       setLayoutContainerWidthPx(
-        Math.round(layoutContainerRef.current?.getBoundingClientRect().width ?? 0),
+        Math.round(
+          layoutContainerRef.current?.getBoundingClientRect().width ?? 0,
+        ),
       );
     };
     updateLayoutContainerWidth();
     if (typeof window === "undefined") return;
     window.addEventListener("resize", updateLayoutContainerWidth);
     if (typeof ResizeObserver === "undefined" || !layoutContainerRef.current) {
-      return () => {
-        window.removeEventListener("resize", updateLayoutContainerWidth);
-      };
+      return () => window.removeEventListener("resize", updateLayoutContainerWidth);
     }
     const observer = new ResizeObserver(updateLayoutContainerWidth);
     observer.observe(layoutContainerRef.current);
@@ -149,63 +107,40 @@ export function useBrowserPanelLayout({
   }, []);
 
   useEffect(() => {
-    if (activePanelResize || !persistLayout) return;
-    writeBrowserRootUiLayout(
-      {
-        foldersPanelWidthPx,
-        inspectorPanelWidthPx,
-        showFolders,
-        showInspector,
-      },
-      activeLayoutMode,
-    );
+    if (foldersPanelResizeActive || !persistLayout) return;
+    writeBrowserRootUiLayout({
+      foldersPanelWidthPx,
+      showFolders,
+      showInspector,
+    });
   }, [
-    activePanelResize,
-    activeLayoutMode,
+    foldersPanelResizeActive,
     foldersPanelWidthPx,
-    inspectorPanelWidthPx,
     persistLayout,
     showFolders,
     showInspector,
   ]);
 
   useEffect(() => {
-    if (!canChangeLayout) return;
-    writeBrowserRootActiveLayout(activeLayoutMode);
-  }, [activeLayoutMode, canChangeLayout]);
-
-  useEffect(() => {
-    if (!activePanelResize) return;
+    if (!foldersPanelResizeActive) return;
     const handlePointerMove = (event: PointerEvent) => {
       const rect = layoutContainerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      if (activePanelResize === "folders") {
-        if (!isFoldersPanelVisibleRef.current) return;
-        const nextWidth = event.clientX - rect.left - PANEL_LAYOUT_GAP_PX / 2;
-        const { resolvedFoldersWidth: nextFoldersWidth } =
-          resolveBrowserPanelWidths({
-            containerWidth: rect.width,
-            foldersPanelWidthPx: nextWidth,
-            inspectorPanelWidthPx: inspectorPanelWidthRef.current,
-            isFoldersPanelVisible: isFoldersPanelVisibleRef.current,
-            isInspectorPanelVisible: isInspectorPanelVisibleRef.current,
-          });
-        setFoldersPanelWidthPx(nextFoldersWidth);
-        return;
-      }
-      if (!isInspectorPanelVisibleRef.current) return;
-      const nextWidth = rect.right - event.clientX - PANEL_LAYOUT_GAP_PX / 2;
-      const { resolvedInspectorWidth: nextInspectorWidth } =
-        resolveBrowserPanelWidths({
-          containerWidth: rect.width,
-          foldersPanelWidthPx: foldersPanelWidthRef.current,
-          inspectorPanelWidthPx: nextWidth,
-          isFoldersPanelVisible: isFoldersPanelVisibleRef.current,
-          isInspectorPanelVisible: isInspectorPanelVisibleRef.current,
-        });
-      setInspectorPanelWidthPx(nextInspectorWidth);
+      if (!rect || !isFoldersPanelVisibleRef.current) return;
+      setFoldersPanelWidthPx(
+        clampBrowserPanelWidth(
+          event.clientX - rect.left - PANEL_LAYOUT_GAP_PX / 2,
+          MIN_FOLDERS_PANEL_WIDTH_PX,
+          Math.max(
+            MIN_FOLDERS_PANEL_WIDTH_PX,
+            Math.min(
+              MAX_FOLDERS_PANEL_WIDTH_PX,
+              rect.width - PANEL_LAYOUT_GAP_PX - MIN_BROWSER_CENTER_WIDTH_PX,
+            ),
+          ),
+        ),
+      );
     };
-    const stopPanelResize = () => setActivePanelResize(null);
+    const stopPanelResize = () => setFoldersPanelResizeActive(false);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("pointermove", handlePointerMove);
@@ -218,18 +153,13 @@ export function useBrowserPanelLayout({
       document.removeEventListener("pointerup", stopPanelResize);
       document.removeEventListener("pointercancel", stopPanelResize);
     };
-  }, [activePanelResize]);
+  }, [foldersPanelResizeActive]);
 
-  const startPanelResize = useCallback(
-    (side: PanelSide) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (
-        (side === "folders" && !isFoldersPanelVisibleRef.current) ||
-        (side === "inspector" && !isInspectorPanelVisibleRef.current)
-      ) {
-        return;
-      }
+  const startFoldersPanelResize = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isFoldersPanelVisibleRef.current) return;
       event.preventDefault();
-      setActivePanelResize(side);
+      setFoldersPanelResizeActive(true);
     },
     [],
   );
@@ -237,10 +167,15 @@ export function useBrowserPanelLayout({
     () => setFoldersPanelWidthPx(DEFAULT_FOLDERS_PANEL_WIDTH_PX),
     [],
   );
-  const resetInspectorPanelWidth = useCallback(
-    () => setInspectorPanelWidthPx(DEFAULT_INSPECTOR_PANEL_WIDTH_PX),
-    [],
-  );
+  const adjustFoldersPanelWidth = useCallback((deltaPx: number) => {
+    setFoldersPanelWidthPx((current) =>
+      clampBrowserPanelWidth(
+        current + deltaPx,
+        MIN_FOLDERS_PANEL_WIDTH_PX,
+        MAX_FOLDERS_PANEL_WIDTH_PX,
+      ),
+    );
+  }, []);
   const toggleFoldersPanel = useCallback(() => {
     if (!canUseFoldersPanel) return;
     setShowFolders((current) => !current);
@@ -253,37 +188,26 @@ export function useBrowserPanelLayout({
     if (!canUseInspectorPanel) return;
     setShowInspector(true);
   }, [canUseInspectorPanel]);
-  const changeLayoutMode = useCallback(
-    (nextMode: BrowserLayoutMode) => {
-      if (!canChangeLayout) return;
-      const nextLayout = readBrowserRootUiState().layouts[nextMode];
-      setShowFolders(nextLayout.showFolders);
-      setShowInspector(nextLayout.showInspector);
-      setFoldersPanelWidthPx(nextLayout.foldersPanelWidthPx);
-      setInspectorPanelWidthPx(nextLayout.inspectorPanelWidthPx);
-      setActiveLayoutMode(nextMode);
-    },
-    [canChangeLayout],
-  );
+  const closeInspectorPanel = useCallback(() => {
+    setShowInspector(false);
+  }, []);
 
   return {
-    activeLayoutMode,
-    activePanelResize,
+    adjustFoldersPanelWidth,
     canUseFoldersPanel,
     canUseInspectorPanel,
-    changeLayoutMode,
+    closeInspectorPanel,
+    foldersPanelResizeActive,
     isFoldersPanelVisible,
     isInspectorPanelVisible,
     layoutContainerRef,
     layoutTemplateColumns,
     openInspectorPanel,
-    resolvedFoldersWidth,
-    resolvedInspectorWidth,
     resetFoldersPanelWidth,
-    resetInspectorPanelWidth,
+    resolvedFoldersWidth,
     showFolders,
     showInspector,
-    startPanelResize,
+    startFoldersPanelResize,
     toggleFoldersPanel,
     toggleInspectorPanel,
   };

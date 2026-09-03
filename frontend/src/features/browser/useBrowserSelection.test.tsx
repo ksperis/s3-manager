@@ -80,7 +80,7 @@ function useSelectionHarness({
   scopeKey?: string;
 }) {
   const [inspectorTab, setInspectorTab] =
-    useState<BrowserInspectorTab>("context");
+    useState<BrowserInspectorTab>("bucket");
   const selection = useBrowserSelection({
     inspectorTab,
     inspectorVisible: true,
@@ -98,7 +98,8 @@ describe("useBrowserSelection", () => {
 
     act(() => result.current.handleItemSelectionClick(mouseEvent(), "b"));
     expect(result.current.selectedIds).toEqual(["b"]);
-    expect(result.current.inspectorTab).toBe("selection");
+    expect(result.current.inspectorTab).toBe("details");
+    expect(result.current.inspectedItem).toEqual(items[1]);
 
     act(() =>
       result.current.handleItemSelectionClick(
@@ -155,7 +156,7 @@ describe("useBrowserSelection", () => {
       result.current.handleListKeyDown(keyboardEvent("Escape"), onOpenItem),
     );
     expect(result.current.selectedIds).toEqual([]);
-    expect(result.current.inspectorTab).toBe("context");
+    expect(result.current.inspectorTab).toBe("bucket");
   });
 
   it("resets selection and inspector state when the browsing scope changes", () => {
@@ -173,7 +174,7 @@ describe("useBrowserSelection", () => {
 
     expect(result.current.selectedIds).toEqual([]);
     expect(result.current.inspectedItem).toBeNull();
-    expect(result.current.inspectorTab).toBe("context");
+    expect(result.current.inspectorTab).toBe("bucket");
   });
 
   it("prepares contextual menus without leaking stale multi-selection", () => {

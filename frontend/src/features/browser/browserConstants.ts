@@ -23,6 +23,10 @@ export const toolbarPrimaryClasses =
   cx(uiButtonBaseClass, uiButtonVariants.primary, "px-2.5 py-1.5");
 export const toolbarIconButtonClasses =
   cx(uiIconButtonClass, "h-7 w-7");
+export const toolbarPrimaryIconButtonClasses =
+  cx(uiButtonBaseClass, uiButtonVariants.primary, "h-7 w-7 p-0");
+export const toolbarDangerIconButtonClasses =
+  cx(uiButtonBaseClass, uiButtonVariants.danger, "h-7 w-7 p-0");
 export const filterChipClasses =
   cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2.5 py-1.5");
 export const filterChipActiveClasses =

@@ -988,7 +988,7 @@ describe("UsersPage modal tabs", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Browser" }));
     expect(screen.getByText("Browser options for this UI user. Groups can also grant these options.")).toBeInTheDocument();
-    const advancedToggle = screen.getByRole("checkbox", { name: "Enable advanced Browser features" });
+    const advancedToggle = screen.getByRole("checkbox", { name: "Enable technical S3 tools" });
     expect(advancedToggle).not.toBeChecked();
     fireEvent.click(advancedToggle);
     fireEvent.click(screen.getByRole("button", { name: "Create" }));

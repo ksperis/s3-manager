@@ -31,7 +31,7 @@ type BrowserObjectSearchHeaderProps = {
   rootRef: RefObject<HTMLDivElement>;
   optionsButtonRef: RefObject<HTMLButtonElement>;
   optionsMenuRef: RefObject<HTMLDivElement>;
-  portalProfile: boolean;
+  advancedOptionsEnabled: boolean;
   optionsOpen: boolean;
   filter: string;
   objectNounPlural: string;
@@ -64,7 +64,7 @@ export default function BrowserObjectSearchHeader({
   rootRef,
   optionsButtonRef,
   optionsMenuRef,
-  portalProfile,
+  advancedOptionsEnabled,
   optionsOpen,
   filter,
   objectNounPlural,
@@ -120,10 +120,10 @@ export default function BrowserObjectSearchHeader({
           placeholder={`Search ${objectNounPlural}`}
           aria-label={`Search ${objectNounPlural}`}
           className={`${searchInputClasses} pl-9 ${
-            portalProfile ? "pr-3" : "pr-9"
+            advancedOptionsEnabled ? "pr-9" : "pr-3"
           } normal-case`}
         />
-        {!portalProfile && (
+        {advancedOptionsEnabled && (
           <button
             ref={optionsButtonRef}
             type="button"
@@ -142,7 +142,7 @@ export default function BrowserObjectSearchHeader({
           </button>
         )}
         <AnchoredPortalMenu
-          open={!portalProfile && optionsOpen}
+          open={advancedOptionsEnabled && optionsOpen}
           anchorRef={optionsButtonRef}
           placement="bottom-end"
           offset={8}

@@ -22,7 +22,7 @@ import { ApiError } from "../../api/client";
 import type { ExecutionContext } from "../../api/executionContexts";
 import {
   BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY,
-  BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY,
+  BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY,
 } from "./browserRootUiState";
 import {
   BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY,
@@ -340,9 +340,6 @@ function renderPageElement({
           allowFoldersPanel={allowFoldersPanel}
           workspaceSurface={workspaceSurface}
           functionalProfile={functionalProfile}
-          layoutMode={
-            defaultShowInspector || defaultShowFolders ? "workbench" : undefined
-          }
           density={
             initialEntry === "/browser"
               ? undefined
@@ -394,7 +391,6 @@ function renderEmbeddedPage({
         hasContext
         workspaceSurface="manager"
         functionalProfile="advanced"
-        layoutMode="standard"
         density="compact"
         capabilityFacts={{
           canWriteObjects: true,
@@ -434,11 +430,11 @@ function getContextToolbar() {
 }
 
 function getActionsToolbar() {
-  return screen.getByRole("toolbar", { name: "Browser actions bar" });
+  return screen.getByRole("toolbar", { name: "Browser context bar" });
 }
 
 function getContextPanel() {
-  return screen.getByRole("tabpanel", { name: "Context" });
+  return getContextToolbar();
 }
 
 function getCurrentBucketPanel() {
@@ -472,28 +468,15 @@ function seedBrowserRootUiState(value: unknown) {
   const layout = record.layout && typeof record.layout === "object"
     ? record.layout as Record<string, unknown>
     : {};
-  const activeLayout =
-    layout.showFolders === true ||
-    layout.showInspector === true ||
-    layout.showActionBar === true
-      ? "workbench"
-      : "standard";
   window.localStorage.setItem(
-    BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY,
+    BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY,
     JSON.stringify({
-      activeLayout,
       density: record.density === "comfortable" ? "comfortable" : "compact",
-      layouts: {
-        standard: {
-          objectColumns: record.objectColumns,
-          objectColumnWidths: record.objectColumnWidths,
-        },
-        workbench: {
-          ...layout,
-          objectColumns: record.objectColumns,
-          objectColumnWidths: record.objectColumnWidths,
-        },
-      },
+      showFolders: layout.showFolders === true,
+      showInspector: layout.showInspector === true,
+      foldersPanelWidthPx: layout.foldersPanelWidthPx,
+      objectColumns: record.objectColumns,
+      objectColumnWidths: record.objectColumnWidths,
     }),
   );
   if (record.contextSelections) {
@@ -570,12 +553,13 @@ async function openColumnsSubmenuFromMore(
 
 async function enableActionBar(user: ReturnType<typeof userEvent.setup>) {
   const row = await findRowByLabel("a.txt");
-  if (screen.queryByRole("toolbar", { name: "Browser actions bar" })) {
+  const toolbar = getContextToolbar();
+  if (within(toolbar).queryByRole("status")) {
     return;
   }
   await user.click(row);
   await waitFor(() => {
-    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+    expect(within(getContextToolbar()).getByRole("status")).toBeInTheDocument();
   });
 }
 
@@ -592,7 +576,7 @@ async function copyOrCutItem(
 
 async function pasteFromCurrentPath(user: ReturnType<typeof userEvent.setup>) {
   const actionsToolbar = screen.queryByRole("toolbar", {
-    name: "Browser actions bar",
+    name: "Browser context bar",
   });
   if (actionsToolbar) {
     const inlinePasteButton = within(actionsToolbar).queryByRole("button", {
@@ -950,7 +934,7 @@ describe("BrowserPage interactions", () => {
     ).toBeChecked();
 
     expect(
-      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+      screen.queryByRole("group", { name: "Details view" }),
     ).not.toBeInTheDocument();
   });
 
@@ -975,7 +959,7 @@ describe("BrowserPage interactions", () => {
     const mainMenu = openHeaderConfigMenu();
     expect(
       within(mainMenu).getByRole("menuitemradio", {
-        name: "Compact density",
+        name: "Compact",
       }),
     ).toHaveAttribute("aria-checked", "true");
     expect(within(mainMenu).getByText("Reset columns")).toBeInTheDocument();
@@ -985,10 +969,10 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
     openHeaderConfigMenu();
     expect(screen.queryByText("Reset columns")).not.toBeInTheDocument();
-    expect(screen.queryByText("Compact density")).not.toBeInTheDocument();
+    expect(screen.queryByText("Compact")).not.toBeInTheDocument();
   });
 
-  it("uses manager-equivalent chrome on /browser when advanced Browser access is disabled", async () => {
+  it("keeps display controls available while technical Browser access is disabled", async () => {
     const user = userEvent.setup();
     setSessionUserCache({
       id: 42,
@@ -1006,21 +990,23 @@ describe("BrowserPage interactions", () => {
     expect(within(mainMenu).queryByText("Reset columns")).not.toBeInTheDocument();
     expect(
       within(mainMenu).getByRole("menuitemradio", {
-        name: "Compact density",
+        name: "Compact",
       }),
     ).toHaveAttribute("aria-checked", "true");
     fireEvent.keyDown(document.body, { key: "Escape" });
     const moreMenu = await openContextMoreMenu(user);
     await user.click(
       within(moreMenu).getByRole("menuitemradio", {
-        name: "Comfortable density",
+        name: "Comfortable",
       }),
     );
     expect(await findRowByLabel("a.txt")).toHaveClass("h-16");
     expect(screen.queryByRole("button", { name: "Create bucket" })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("tablist", { name: "Inspector tabs" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("group", { name: "Details view" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Search options" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Versions", { exact: true })).not.toBeInTheDocument();
   });
 
   it("uses compact mode by default on /manager/browser", async () => {
@@ -1077,7 +1063,7 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.getByRole("textbox", { name: "Search files" }),
     ).toHaveAttribute("placeholder", "Search files");
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Details view" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Bucket" })).not.toBeInTheDocument();
     expect(searchBrowserBucketsMock).not.toHaveBeenCalled();
     expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", { workspaceSurface: "portal" });
@@ -1389,7 +1375,7 @@ describe("BrowserPage interactions", () => {
     });
 
     await findRowByLabel("a.txt");
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Details view" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Storage Space" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Multipart uploads" })).not.toBeInTheDocument();
   });
@@ -1430,7 +1416,7 @@ describe("BrowserPage interactions", () => {
     const headerConfigMenu = openHeaderConfigMenu();
     expect(
       within(headerConfigMenu).getByRole("menuitemradio", {
-        name: "Compact density",
+        name: "Compact",
       }),
     ).toHaveAttribute("aria-checked", "true");
     expect(within(headerConfigMenu).queryByText("Reset columns")).not.toBeInTheDocument();
@@ -1438,7 +1424,7 @@ describe("BrowserPage interactions", () => {
     const moreMenu = await openContextMoreMenu(user);
     expect(
       within(moreMenu).getByRole("menuitemradio", {
-        name: "Compact density",
+        name: "Compact",
       }),
     ).toHaveAttribute("aria-checked", "true");
     expect(
@@ -1662,8 +1648,8 @@ describe("BrowserPage interactions", () => {
     ).not.toBeInTheDocument();
     expect(
       JSON.parse(
-        window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY) ?? "{}",
-      ).layouts.standard.objectColumns,
+        window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY) ?? "{}",
+      ).objectColumns,
     ).toContain("etag");
     expect(
       JSON.parse(
@@ -1693,8 +1679,8 @@ describe("BrowserPage interactions", () => {
     await waitFor(() => {
       expect(
         JSON.parse(
-          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY) ?? "{}",
-        ).layouts.standard.objectColumnWidths.name,
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY) ?? "{}",
+        ).objectColumnWidths.name,
       ).toBe(420);
     });
     rootView.unmount();
@@ -1793,8 +1779,8 @@ describe("BrowserPage interactions", () => {
     await waitFor(() => {
       expect(
         JSON.parse(
-          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY) ?? "{}",
-        ).layouts.standard.objectColumnWidths,
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY) ?? "{}",
+        ).objectColumnWidths,
       ).toMatchObject({
         name: 400,
         etag: 252,
@@ -1811,8 +1797,8 @@ describe("BrowserPage interactions", () => {
       expect(screen.getByRole("table")).toHaveStyle({ minWidth: "720px" });
       expect(
         JSON.parse(
-          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY) ?? "{}",
-        ).layouts.standard.objectColumnWidths ?? {},
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY) ?? "{}",
+        ).objectColumnWidths ?? {},
       ).toEqual({});
     });
   });
@@ -1838,8 +1824,8 @@ describe("BrowserPage interactions", () => {
       expect(screen.getByRole("table")).toHaveStyle({ minWidth: "720px" });
       expect(
         JSON.parse(
-          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY) ?? "{}",
-        ).layouts.standard.objectColumnWidths ?? {},
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY) ?? "{}",
+        ).objectColumnWidths ?? {},
       ).toEqual({});
     });
   });
@@ -2120,23 +2106,34 @@ describe("BrowserPage interactions", () => {
       within(rowA).getByRole("button", { name: "Open file a.txt" }),
     ).not.toHaveClass("min-h-11");
     expect(within(rowA).queryByText("Text")).not.toBeInTheDocument();
+    expect(getContextToolbar()).toHaveAttribute("data-density", "compact");
+    expect(
+      within(
+        within(getContextToolbar()).getByRole("button", { name: "Upload" }),
+      ).queryByText("Upload"),
+    ).not.toBeInTheDocument();
 
     let menu = openHeaderConfigMenu();
     await user.click(
       within(menu).getByRole("menuitemradio", {
-        name: "Comfortable density",
+        name: "Comfortable",
       }),
     );
     rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-16");
     expect(within(rowA).getByText("Text")).toBeInTheDocument();
+    expect(getContextToolbar()).toHaveAttribute("data-density", "comfortable");
+    expect(
+      within(getContextToolbar()).getByRole("button", { name: "Upload" }),
+    ).toHaveTextContent("Upload");
 
     menu = openHeaderConfigMenu();
     await user.click(
-      within(menu).getByRole("menuitemradio", { name: "Compact density" }),
+      within(menu).getByRole("menuitemradio", { name: "Compact" }),
     );
     rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-9");
+    expect(getContextToolbar()).toHaveAttribute("data-density", "compact");
   });
 
   it("uses the compact browser toolbar by default and exposes upload and layout controls", async () => {
@@ -2162,9 +2159,7 @@ describe("BrowserPage interactions", () => {
     expect(
       within(contextToolbar).getByRole("button", { name: "Select bucket" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
-    ).not.toBeInTheDocument();
+    expect(within(contextToolbar).queryByRole("status")).not.toBeInTheDocument();
     expect(contextToolbar).not.toHaveClass("rounded-lg", "p-2");
     expect(screen.getByTestId("browser-layout").parentElement).toHaveClass(
       "pb-3",
@@ -2181,7 +2176,7 @@ describe("BrowserPage interactions", () => {
     expect(
       within(contextToolbar).queryByRole("button", { name: "Operations" }),
     ).not.toBeInTheDocument();
-    expect(uploadButton).toHaveClass("h-7", "w-7", "rounded-md");
+    expect(uploadButton).toHaveClass("h-7", "w-7", "ui-button-primary");
     expect(uploadButton).not.toHaveClass("h-9", "w-9", "rounded-xl");
     expect(newFolderButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(refreshButton).toHaveClass("h-7", "w-7", "rounded-md");
@@ -2219,7 +2214,7 @@ describe("BrowserPage interactions", () => {
       within(menu).queryByRole("menuitem", { name: "Operations overview" }),
     ).not.toBeInTheDocument();
     expect(
-      within(menu).getByRole("menuitemradio", { name: "Compact density" }),
+      within(menu).getByRole("menuitemradio", { name: "Compact" }),
     ).toHaveAttribute("aria-checked", "true");
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
     expect(within(menu).getByText("Current path")).toBeInTheDocument();
@@ -2233,7 +2228,10 @@ describe("BrowserPage interactions", () => {
       within(menu).getByRole("menuitem", { name: "Configure bucket" }),
     ).toBeInTheDocument();
     expect(
-      within(menu).getByRole("menuitemcheckbox", { name: /Workbench layout/i }),
+      within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
+    ).toHaveAttribute("aria-checked", "false");
+    expect(
+      within(menu).getByRole("menuitemcheckbox", { name: "Details panel" }),
     ).toHaveAttribute("aria-checked", "false");
 
   });
@@ -2632,9 +2630,7 @@ describe("BrowserPage interactions", () => {
     expect(
       within(contextToolbar).getByRole("button", { name: "More" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
-    ).not.toBeInTheDocument();
+    expect(within(contextToolbar).queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("aligns the embedded browser chrome with its page header", async () => {
@@ -2651,7 +2647,7 @@ describe("BrowserPage interactions", () => {
     expect(browserLayoutParent).not.toHaveClass("p-3");
   });
 
-  it("restores Workbench panels while keeping the selection bar automatic", async () => {
+  it("persists folders and details as independent display preferences", async () => {
     const user = userEvent.setup();
     const firstRender = renderPage();
 
@@ -2659,11 +2655,16 @@ describe("BrowserPage interactions", () => {
 
     const menu = await openContextMoreMenu(user);
     await user.click(
-      within(menu).getByRole("menuitemcheckbox", { name: /Workbench layout/i }),
+      within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
+    );
+    await user.click(
+      within(menu).getByRole("menuitemcheckbox", {
+        name: "Details panel",
+      }),
     );
 
     expect(
-      await screen.findByRole("tablist", { name: "Inspector tabs" }),
+      await screen.findByRole("group", { name: "Details view" }),
     ).toBeInTheDocument();
     await user.click(firstRow);
 
@@ -2671,9 +2672,7 @@ describe("BrowserPage interactions", () => {
       expect(
         screen.getByRole("region", { name: "Current bucket" }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole("toolbar", { name: "Browser actions bar" }),
-      ).toBeInTheDocument();
+      expect(within(getContextToolbar()).getByRole("status")).toBeInTheDocument();
     });
 
     firstRender.unmount();
@@ -2683,11 +2682,39 @@ describe("BrowserPage interactions", () => {
 
     expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
     expect(
-      screen.getByRole("tablist", { name: "Inspector tabs" }),
+      screen.getByRole("group", { name: "Details view" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
+    expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
     await user.click(remountedRow);
-    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+    expect(within(getContextToolbar()).getByRole("status")).toBeInTheDocument();
+  });
+
+  it("closes optional panels directly from their headers", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const menu = await openContextMoreMenu(user);
+    await user.click(
+      within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
+    );
+    await user.click(
+      within(menu).getByRole("menuitemcheckbox", { name: "Details panel" }),
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Close folders panel" }),
+    );
+    expect(
+      screen.queryByRole("region", { name: "Current bucket" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Close details panel" }),
+    );
+    expect(
+      screen.queryByRole("group", { name: "Details view" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps a stored inspector preference when the workspace temporarily disallows it", async () => {
@@ -2697,7 +2724,7 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(
-      await screen.findByRole("tablist", { name: "Inspector tabs" }),
+      await screen.findByRole("group", { name: "Details view" }),
     ).toBeInTheDocument();
 
     firstRender.unmount();
@@ -2706,13 +2733,13 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(
-      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+      screen.queryByRole("group", { name: "Details view" }),
     ).not.toBeInTheDocument();
 
     const blockedMenu = await openContextMoreMenu(user);
     expect(
       within(blockedMenu).queryByRole("menuitemcheckbox", {
-        name: /Inspector panel/i,
+        name: /Details panel/i,
       }),
     ).not.toBeInTheDocument();
 
@@ -2722,7 +2749,7 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(
-      screen.getByRole("tablist", { name: "Inspector tabs" }),
+      screen.getByRole("group", { name: "Details view" }),
     ).toBeInTheDocument();
   });
 
@@ -2737,10 +2764,10 @@ describe("BrowserPage interactions", () => {
 
     expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
     expect(
-      screen.getByRole("tablist", { name: "Inspector tabs" }),
+      screen.getByRole("group", { name: "Details view" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
-    const rootPreferenceSnapshot = window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY);
+    expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
+    const rootPreferenceSnapshot = window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY);
 
     rootRender.unmount();
 
@@ -2751,14 +2778,12 @@ describe("BrowserPage interactions", () => {
       screen.queryByRole("region", { name: "Current bucket" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+      screen.queryByRole("group", { name: "Details view" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
-    ).not.toBeInTheDocument();
+    expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
 
     managerRender.unmount();
-    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY)).toBe(rootPreferenceSnapshot);
+    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY)).toBe(rootPreferenceSnapshot);
 
     const cephAdminRender = renderEmbeddedPage({
       initialEntry: "/ceph-admin/browser",
@@ -2771,14 +2796,12 @@ describe("BrowserPage interactions", () => {
       screen.queryByRole("region", { name: "Current bucket" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+      screen.queryByRole("group", { name: "Details view" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
-    ).not.toBeInTheDocument();
+    expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
 
     cephAdminRender.unmount();
-    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY)).toBe(rootPreferenceSnapshot);
+    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY)).toBe(rootPreferenceSnapshot);
 
     const portalRender = renderPage({
       initialEntry: "/portal/storage-spaces/research-data",
@@ -2790,16 +2813,16 @@ describe("BrowserPage interactions", () => {
     });
     await findRowByLabel("a.txt");
     portalRender.unmount();
-    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY)).toBe(rootPreferenceSnapshot);
+    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY)).toBe(rootPreferenceSnapshot);
 
     renderPage();
     await findRowByLabel("a.txt");
 
     expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
     expect(
-      screen.getByRole("tablist", { name: "Inspector tabs" }),
+      screen.getByRole("group", { name: "Details view" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
+    expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("uses the default panel widths when nothing is stored", async () => {
@@ -2810,15 +2833,13 @@ describe("BrowserPage interactions", () => {
 
     await waitFor(() => {
       expect(layout.style.gridTemplateColumns).toBe(
-        "280px minmax(0, 1fr) 320px",
+        "280px minmax(0, 1fr)",
       );
     });
     expect(
       screen.getByRole("separator", { name: "Resize folders panel" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("separator", { name: "Resize inspector panel" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Details view" })).toBeInTheDocument();
   });
 
   it("resizes the folders panel and persists the width", async () => {
@@ -2836,42 +2857,15 @@ describe("BrowserPage interactions", () => {
 
     await waitFor(() => {
       expect(layout.style.gridTemplateColumns).toBe(
-        "354px minmax(0, 1fr) 320px",
+        "354px minmax(0, 1fr)",
       );
     });
     await waitFor(() => {
       expect(
         JSON.parse(
-          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY) ?? "{}",
-        ).layouts.workbench.foldersPanelWidthPx,
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY) ?? "{}",
+        ).foldersPanelWidthPx,
       ).toBe(354);
-    });
-  });
-
-  it("resizes the inspector panel and persists the width", async () => {
-    renderPage({ defaultShowFolders: true, defaultShowInspector: true });
-    await findRowByLabel("a.txt");
-
-    const layout = setBrowserLayoutRect(1400);
-    const separator = screen.getByRole("separator", {
-      name: "Resize inspector panel",
-    });
-
-    fireEvent.pointerDown(separator, { clientX: 1074 });
-    fireEvent.pointerMove(document, { clientX: 980 });
-    fireEvent.pointerUp(document);
-
-    await waitFor(() => {
-      expect(layout.style.gridTemplateColumns).toBe(
-        "280px minmax(0, 1fr) 414px",
-      );
-    });
-    await waitFor(() => {
-      expect(
-        JSON.parse(
-          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY) ?? "{}",
-        ).layouts.workbench.inspectorPanelWidthPx,
-      ).toBe(414);
     });
   });
 
@@ -2894,7 +2888,7 @@ describe("BrowserPage interactions", () => {
 
     await waitFor(() => {
       expect(layout.style.gridTemplateColumns).toBe(
-        "360px minmax(0, 1fr) 410px",
+        "360px minmax(0, 1fr)",
       );
     });
   });
@@ -2919,13 +2913,9 @@ describe("BrowserPage interactions", () => {
     await user.dblClick(
       screen.getByRole("separator", { name: "Resize folders panel" }),
     );
-    await user.dblClick(
-      screen.getByRole("separator", { name: "Resize inspector panel" }),
-    );
-
     await waitFor(() => {
       expect(layout.style.gridTemplateColumns).toBe(
-        "280px minmax(0, 1fr) 320px",
+        "280px minmax(0, 1fr)",
       );
     });
   });
@@ -2939,9 +2929,7 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.queryByRole("separator", { name: "Resize folders panel" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("separator", { name: "Resize inspector panel" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Details view" })).toBeInTheDocument();
 
     inspectorOnlyRender.unmount();
 
@@ -3023,13 +3011,13 @@ describe("BrowserPage interactions", () => {
       expect(within(toolbar).getByRole("button", { name: "Download" })).toBeEnabled();
 
       await user.click(moreButton);
-      const sheet = await screen.findByRole("dialog", { name: "1 selected" });
+      const sheet = await screen.findByRole("dialog", { name: "a.txt" });
       expect(within(sheet).getByRole("button", { name: "Close actions" })).toHaveFocus();
       expect(within(sheet).getByRole("button", { name: "Delete" })).toBeInTheDocument();
 
       fireEvent.keyDown(document, { key: "Escape" });
       await waitFor(() => {
-        expect(screen.queryByRole("dialog", { name: "1 selected" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("dialog", { name: "a.txt" })).not.toBeInTheDocument();
         expect(moreButton).toHaveFocus();
       });
     } finally {
@@ -3090,9 +3078,8 @@ describe("BrowserPage interactions", () => {
         expect.objectContaining({ prefix: "docs/" }),
       );
     });
-    expect(
-      within(getContextPanel()).getByText("bucket-2/docs"),
-    ).toBeInTheDocument();
+    expect(within(getContextPanel()).getByText("bucket-2")).toBeInTheDocument();
+    expect(within(getContextPanel()).getByText("docs")).toBeInTheDocument();
 
     firstRender.unmount();
 
@@ -3119,9 +3106,8 @@ describe("BrowserPage interactions", () => {
         expect.objectContaining({ prefix: "docs/" }),
       );
     });
-    expect(
-      within(getContextPanel()).getByText("bucket-2/docs"),
-    ).toBeInTheDocument();
+    expect(within(getContextPanel()).getByText("bucket-2")).toBeInTheDocument();
+    expect(within(getContextPanel()).getByText("docs")).toBeInTheDocument();
   });
 
   it("commits an edited path and returns to its parent from the context bar", async () => {
@@ -3748,7 +3734,7 @@ describe("BrowserPage interactions", () => {
       "More",
     ].map((name) => within(actionsToolbar).getByRole("button", { name }));
 
-    expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("status")).toHaveTextContent("a.txt");
     for (let index = 0; index < orderedButtons.length - 1; index += 1) {
       expect(
         Boolean(
@@ -3812,7 +3798,7 @@ describe("BrowserPage interactions", () => {
 
     const actionsToolbar = getActionsToolbar();
 
-    expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("status")).toHaveTextContent("docs");
     expect(
       within(actionsToolbar).getByRole("button", { name: "Download" }),
     ).toBeEnabled();
@@ -3902,7 +3888,7 @@ describe("BrowserPage interactions", () => {
     (objectsList as HTMLDivElement).focus();
     fireEvent.keyDown(objectsList, { key: "Escape" });
 
-    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
+    expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
     const menu = await openContextMoreMenu(user);
     expect(within(menu).getByRole("menuitem", { name: "Paste" })).toBeEnabled();
   });
@@ -3967,14 +3953,14 @@ describe("BrowserPage interactions", () => {
 
     const contextToolbar = getContextToolbar();
     expect(
-      within(contextToolbar).queryByRole("button", { name: "Download" }),
-    ).not.toBeInTheDocument();
+      within(contextToolbar).getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
     expect(
-      within(contextToolbar).queryByRole("button", { name: "Copy" }),
-    ).not.toBeInTheDocument();
+      within(contextToolbar).getByRole("button", { name: "Copy" }),
+    ).toBeInTheDocument();
     expect(
-      within(contextToolbar).queryByRole("button", { name: "Delete" }),
-    ).not.toBeInTheDocument();
+      within(contextToolbar).getByRole("button", { name: "Delete" }),
+    ).toBeInTheDocument();
 
     const moreMenu = await openActionsMoreMenu(user);
 
@@ -4024,16 +4010,14 @@ describe("BrowserPage interactions", () => {
     expect(
       within(getContextToolbar()).getByRole("button", { name: "Upload" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
-    ).not.toBeInTheDocument();
+    expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
 
     await user.click(
       within(getContextToolbar()).getByRole("button", { name: "More" }),
     );
     const menu = await screen.findByRole("menu", { name: "More" });
 
-    expect(within(menu).queryByText("Compact density")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Compact")).not.toBeInTheDocument();
     expect(within(menu).getByText("Current path")).toBeInTheDocument();
     expect(
       within(menu).getByRole("menuitem", { name: "Copy path" }),
@@ -4046,7 +4030,7 @@ describe("BrowserPage interactions", () => {
     ).not.toBeInTheDocument();
     expect(
       within(menu).queryByRole("menuitemcheckbox", {
-        name: /Inspector panel/i,
+        name: /Details panel/i,
       }),
     ).not.toBeInTheDocument();
     expect(
@@ -4219,7 +4203,7 @@ describe("BrowserPage interactions", () => {
     renderPage({ defaultShowInspector: true });
 
     await user.click(await findRowByLabel("a.txt"));
-    expect(screen.getByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Details view" })).toBeInTheDocument();
 
     await user.click(
       within(await findRowByLabel("a.txt")).getByRole("button", {
@@ -4268,32 +4252,15 @@ describe("BrowserPage interactions", () => {
     await user.click(within(menu).getByRole("button", { name: "Details" }));
 
     expect(
-      await screen.findByRole("tablist", { name: "Inspector tabs" }),
+      await screen.findByRole("group", { name: "Details view" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "Object" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
     expect(
       screen.queryByRole("dialog", { name: "Object details · a.txt" }),
     ).not.toBeInTheDocument();
-  });
-
-  it("does not show a focused fallback in Selection tab when no object is selected", async () => {
-    const user = userEvent.setup();
-    renderPage({ defaultShowInspector: true });
-
-    await user.click(await findRowByLabel("a.txt"));
-    const objectsList = screen.getByLabelText("Objects list");
-    (objectsList as HTMLDivElement).focus();
-    fireEvent.keyDown(objectsList, { key: "Escape" });
-
-    await user.click(screen.getByRole("tab", { name: "Selection" }));
-
-    expect(screen.queryByText(/^Focused:/)).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Select one or more objects to see selection actions."),
-    ).toBeInTheDocument();
   });
 
   it("opens Preview and Properties from the file actions menu into the unified modal", async () => {
@@ -4382,7 +4349,7 @@ describe("BrowserPage interactions", () => {
       within(menu).getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+      screen.queryByRole("group", { name: "Details view" }),
     ).not.toBeInTheDocument();
 
     expect(
@@ -4390,61 +4357,21 @@ describe("BrowserPage interactions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps inspector tabs on one line and removes the counter from the Selection tab", async () => {
+  it("keeps the simplified Object and Bucket views on one line", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: true });
 
     await user.click(await findRowByLabel("a.txt"));
 
-    const tablist = screen.getByRole("tablist", { name: "Inspector tabs" });
-    const tabs = within(tablist).getAllByRole("tab");
-    const selectionTab = within(tablist).getByRole("tab", {
-      name: "Selection",
-    });
+    const viewSwitcher = screen.getByRole("group", { name: "Details view" });
+    const views = within(viewSwitcher).getAllByRole("button");
 
-    expect(tablist).toHaveClass("flex-nowrap");
-    expect(tabs).toHaveLength(4);
-    expect(selectionTab).toHaveTextContent(/^Selection$/);
-
-    await user.click(selectionTab);
-
-    expect(
-      within(screen.getByRole("tabpanel", { name: "Selection" })).getByText(
-        "1 selected",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("keeps the inspector context informative without an action toolbar", async () => {
-    const user = userEvent.setup();
-    getBrowserBucketVersioningMock.mockResolvedValue({
-      enabled: true,
-      status: "Enabled",
-    });
-    renderPage({ defaultShowInspector: true });
-
-    await findRowByLabel("a.txt");
-    await user.click(screen.getByRole("tab", { name: "Context" }));
-
-    const panel = screen.getByRole("tabpanel", { name: "Context" });
-    expect(within(panel).getByText("Current location")).toBeInTheDocument();
-    expect(within(panel).queryByText("Actions")).not.toBeInTheDocument();
-    expect(within(panel).queryByRole("button", { name: "Upload files" })).not.toBeInTheDocument();
-  });
-
-  it("keeps only the full-details link in the selection inspector", async () => {
-    const user = userEvent.setup();
-    renderPage({ defaultShowInspector: true });
-
-    await user.click(await findRowByLabel("a.txt"));
-    await user.click(screen.getByRole("tab", { name: "Selection" }));
-
-    const panel = screen.getByRole("tabpanel", { name: "Selection" });
-    expect(within(panel).getByRole("button", { name: "Open full details" })).toBeInTheDocument();
-    expect(
-      within(panel).queryByRole("button", { name: "Copy path" }),
-    ).not.toBeInTheDocument();
-    expect(within(panel).queryByText("Bulk actions")).not.toBeInTheDocument();
+    expect(viewSwitcher).toHaveClass("flex-nowrap");
+    expect(views.map((view) => view.textContent)).toEqual(["Object", "Bucket"]);
+    expect(within(viewSwitcher).getByRole("button", { name: "Object" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("updates Details on simple row click when Details tab is active", async () => {
@@ -4452,26 +4379,21 @@ describe("BrowserPage interactions", () => {
     renderPage({ defaultShowInspector: true });
 
     await user.click(await findRowByLabel("a.txt"));
-    await user.click(screen.getByRole("tab", { name: "Details" }));
     await waitFor(() => {
       expect(
-        within(screen.getByRole("tabpanel", { name: "Details" })).getByText(
-          "a.txt",
-        ),
+        within(screen.getByRole("complementary", { name: "Details panel" })).getByText("a.txt"),
       ).toBeInTheDocument();
     });
 
     await user.click(await findRowByLabel("b.txt"));
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "Object" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
     await waitFor(() => {
       expect(
-        within(screen.getByRole("tabpanel", { name: "Details" })).getByText(
-          "b.txt",
-        ),
+        within(screen.getByRole("complementary", { name: "Details panel" })).getByText("b.txt"),
       ).toBeInTheDocument();
     });
   });
@@ -4526,15 +4448,14 @@ describe("BrowserPage interactions", () => {
       ).not.toBeInTheDocument();
     });
     expect(within(dialog).queryByTitle("Object preview")).not.toBeInTheDocument();
-    expect(listObjectVersionsMock).not.toHaveBeenCalled();
+    expect(listObjectVersionsMock).toHaveBeenCalledTimes(1);
     expect(getObjectLegalHoldMock).not.toHaveBeenCalled();
     expect(getObjectRetentionMock).not.toHaveBeenCalled();
 
     await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
 
     await user.click(rowA);
-    await user.click(screen.getByRole("tab", { name: "Details" }));
-    const panel = screen.getByRole("tabpanel", { name: "Details" });
+    const panel = screen.getByRole("complementary", { name: "Details panel" });
 
     await waitFor(() => {
       expect(listObjectVersionsMock).toHaveBeenCalledTimes(1);
@@ -4714,23 +4635,18 @@ describe("BrowserPage interactions", () => {
     },
   );
 
-  it("clears Details content when Details is active and multi-selection is applied", async () => {
+  it("returns the Details panel to the bucket view for multi-selection", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: true });
 
     await user.click(await findRowByLabel("a.txt"));
-    await user.click(screen.getByRole("tab", { name: "Details" }));
     fireEvent.click(await findRowByLabel("b.txt"), { ctrlKey: true });
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "Bucket" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
-    await waitFor(() => {
-      expect(
-        screen.getByText("Select a single object to view details."),
-      ).toBeInTheDocument();
-    });
+    expect(screen.getByText("Bucket overview")).toBeInTheDocument();
   });
 
   it("shows disabled legal hold and retention controls when object lock is not enabled on the bucket", async () => {
@@ -4744,8 +4660,7 @@ describe("BrowserPage interactions", () => {
     renderPage({ defaultShowInspector: true });
 
     await user.click(await findRowByLabel("a.txt"));
-    await user.click(screen.getByRole("tab", { name: "Details" }));
-    const panel = screen.getByRole("tabpanel", { name: "Details" });
+    const panel = screen.getByRole("complementary", { name: "Details panel" });
 
     await user.click(
       within(panel).getByRole("button", { name: "Open full details" }),
@@ -4784,29 +4699,23 @@ describe("BrowserPage interactions", () => {
     expect(within(dialog).getByLabelText("Bypass governance retention")).toBeDisabled();
   });
 
-  it("clears Details content when Escape clears selection while Details is active", async () => {
+  it("returns the Details panel to the bucket view when Escape clears selection", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: true });
 
     await user.click(await findRowByLabel("a.txt"));
-    await user.click(screen.getByRole("tab", { name: "Details" }));
-
     const objectsList = screen.getByLabelText("Objects list");
     (objectsList as HTMLDivElement).focus();
     fireEvent.keyDown(objectsList, { key: "Escape" });
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "Bucket" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
     expect(
       screen.getByRole("checkbox", { name: "Select a.txt" }),
     ).not.toBeChecked();
-    await waitFor(() => {
-      expect(
-        screen.getByText("Select a single object to view details."),
-      ).toBeInTheDocument();
-    });
+    expect(screen.getByText("Bucket overview")).toBeInTheDocument();
   });
 
   it("supports full keyboard navigation: arrows, range, home/end, space, enter and escape", async () => {
@@ -5942,9 +5851,8 @@ describe("BrowserPage interactions", () => {
 
     renderPage({ defaultShowInspector: true });
     await user.click(await findRowByLabel("a.txt"));
-    await user.click(screen.getByRole("tab", { name: "Details" }));
     await user.click(
-      within(screen.getByRole("tabpanel", { name: "Details" })).getByRole(
+      within(screen.getByRole("complementary", { name: "Details panel" })).getByRole(
         "button",
         { name: "Open full details" },
       ),

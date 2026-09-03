@@ -325,7 +325,7 @@ export default function BrowserContextMenu({
                 disabled={!onSetCompactMode}
               >
                 <ListIcon className="h-3.5 w-3.5" />
-                Comfortable density
+                Comfortable
                 {!compactMode && (
                   <span
                     aria-hidden="true"
@@ -346,7 +346,7 @@ export default function BrowserContextMenu({
                 disabled={!onSetCompactMode}
               >
                 <CompactIcon className="h-3.5 w-3.5" />
-                Compact density
+                Compact
                 {compactMode && (
                   <span
                     aria-hidden="true"

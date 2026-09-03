@@ -10,7 +10,7 @@ const buildProps = (
   rootRef: createRef<HTMLDivElement>(),
   optionsButtonRef: createRef<HTMLButtonElement>(),
   optionsMenuRef: createRef<HTMLDivElement>(),
-  portalProfile: false,
+  advancedOptionsEnabled: true,
   optionsOpen: false,
   filter: "",
   objectNounPlural: "objects",
@@ -157,10 +157,10 @@ describe("BrowserObjectSearchHeader", () => {
     expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
   });
 
-  it("keeps the Portal profile on the simple search contract", () => {
+  it("keeps the Standard and Portal profiles on the simple search contract", () => {
     render(
       <BrowserObjectSearchHeader
-        {...buildProps({ portalProfile: true, optionsOpen: true })}
+        {...buildProps({ advancedOptionsEnabled: false, optionsOpen: true })}
       />,
     );
 

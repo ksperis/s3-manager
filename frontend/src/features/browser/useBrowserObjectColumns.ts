@@ -10,7 +10,6 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import type { BrowserLayoutMode } from "./browserActions";
 import {
   DEFAULT_VISIBLE_COLUMN_IDS,
   clampColumnWidth,
@@ -39,21 +38,19 @@ type ActiveColumnResize = {
 
 type UseBrowserObjectColumnsOptions = {
   isMainBrowserPath: boolean;
-  layoutMode: BrowserLayoutMode;
 };
 
 export function useBrowserObjectColumns({
   isMainBrowserPath,
-  layoutMode,
 }: UseBrowserObjectColumnsOptions) {
-  const scopeKey = isMainBrowserPath ? `root:${layoutMode}` : "embedded";
+  const scopeKey = isMainBrowserPath ? "root" : "embedded";
   const storedVisibleColumns = useMemo(
-    () => loadVisibleColumnsForSurface(isMainBrowserPath, layoutMode),
-    [isMainBrowserPath, layoutMode],
+    () => loadVisibleColumnsForSurface(isMainBrowserPath),
+    [isMainBrowserPath],
   );
   const storedColumnWidths = useMemo(
-    () => loadColumnWidthsForSurface(isMainBrowserPath, layoutMode),
-    [isMainBrowserPath, layoutMode],
+    () => loadColumnWidthsForSurface(isMainBrowserPath),
+    [isMainBrowserPath],
   );
   const [visibleColumnsState, setVisibleColumnsState] = useState<
     ScopedState<BrowserColumnId[]>
@@ -88,21 +85,13 @@ export function useBrowserObjectColumns({
   }, [scopeKey]);
 
   useEffect(() => {
-    persistVisibleColumnsForSurface(
-      isMainBrowserPath,
-      visibleColumns,
-      layoutMode,
-    );
-  }, [isMainBrowserPath, layoutMode, visibleColumns]);
+    persistVisibleColumnsForSurface(isMainBrowserPath, visibleColumns);
+  }, [isMainBrowserPath, visibleColumns]);
 
   useEffect(() => {
     if (activeColumnResize) return;
-    persistColumnWidthsForSurface(
-      isMainBrowserPath,
-      columnWidths,
-      layoutMode,
-    );
-  }, [activeColumnResize, columnWidths, isMainBrowserPath, layoutMode]);
+    persistColumnWidthsForSurface(isMainBrowserPath, columnWidths);
+  }, [activeColumnResize, columnWidths, isMainBrowserPath]);
 
   useEffect(() => {
     if (!activeColumnResize) return;

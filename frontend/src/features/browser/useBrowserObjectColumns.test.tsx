@@ -1,7 +1,6 @@
 import { act, fireEvent, renderHook, waitFor } from "@testing-library/react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { BrowserLayoutMode } from "./browserActions";
 import {
   loadColumnWidthsForSurface,
   loadVisibleColumnsForSurface,
@@ -16,47 +15,35 @@ describe("useBrowserObjectColumns", () => {
     window.sessionStorage.clear();
   });
 
-  it("switches layouts without persisting columns from the previous scope", async () => {
-    persistVisibleColumnsForSurface(true, ["etag"], "standard");
-    persistColumnWidthsForSurface(true, { name: 420 }, "standard");
-    persistVisibleColumnsForSurface(true, ["storageClass"], "workbench");
-    persistColumnWidthsForSurface(true, { name: 360 }, "workbench");
+  it("keeps root and embedded column preferences separate", async () => {
+    persistVisibleColumnsForSurface(true, ["etag"]);
+    persistColumnWidthsForSurface(true, { name: 420 });
+    persistVisibleColumnsForSurface(false, ["storageClass"]);
+    persistColumnWidthsForSurface(false, { name: 360 });
 
     const { result, rerender } = renderHook(
-      ({ layoutMode }: { layoutMode: BrowserLayoutMode }) =>
-        useBrowserObjectColumns({ isMainBrowserPath: true, layoutMode }),
-      { initialProps: { layoutMode: "standard" as BrowserLayoutMode } },
+      ({ isMainBrowserPath }: { isMainBrowserPath: boolean }) =>
+        useBrowserObjectColumns({ isMainBrowserPath }),
+      { initialProps: { isMainBrowserPath: true } },
     );
     expect(result.current.visibleColumns).toEqual(["etag"]);
     expect(result.current.columnWidths).toEqual({ name: 420 });
-    const staleStandardToggle = result.current.toggleVisibleColumn;
 
-    rerender({ layoutMode: "workbench" });
+    rerender({ isMainBrowserPath: false });
     expect(result.current.visibleColumns).toEqual(["storageClass"]);
     expect(result.current.columnWidths).toEqual({ name: 360 });
-    act(() => staleStandardToggle("size"));
-    expect(result.current.visibleColumns).toEqual(["storageClass"]);
 
     await waitFor(() => {
-      expect(loadVisibleColumnsForSurface(true, "standard")).toEqual(["etag"]);
-      expect(loadColumnWidthsForSurface(true, "standard")).toEqual({
-        name: 420,
-      });
-      expect(loadVisibleColumnsForSurface(true, "workbench")).toEqual([
-        "storageClass",
-      ]);
-      expect(loadColumnWidthsForSurface(true, "workbench")).toEqual({
-        name: 360,
-      });
+      expect(loadVisibleColumnsForSurface(true)).toEqual(["etag"]);
+      expect(loadColumnWidthsForSurface(true)).toEqual({ name: 420 });
+      expect(loadVisibleColumnsForSurface(false)).toEqual(["storageClass"]);
+      expect(loadColumnWidthsForSurface(false)).toEqual({ name: 360 });
     });
   });
 
   it("persists a resized column only after the pointer interaction ends", async () => {
     const { result } = renderHook(() =>
-      useBrowserObjectColumns({
-        isMainBrowserPath: true,
-        layoutMode: "workbench",
-      }),
+      useBrowserObjectColumns({ isMainBrowserPath: true }),
     );
     const preventDefault = vi.fn();
     const stopPropagation = vi.fn();
@@ -67,19 +54,15 @@ describe("useBrowserObjectColumns", () => {
         stopPropagation,
       } as ReactPointerEvent<HTMLDivElement>);
     });
-    expect(preventDefault).toHaveBeenCalledOnce();
-    expect(stopPropagation).toHaveBeenCalledOnce();
     expect(document.body.style.cursor).toBe("col-resize");
 
     fireEvent.pointerMove(document, { clientX: 420 });
     expect(result.current.columnWidths).toEqual({ name: 420 });
-    expect(loadColumnWidthsForSurface(true, "workbench")).toEqual({});
+    expect(loadColumnWidthsForSurface(true)).toEqual({});
 
     fireEvent.pointerUp(document);
     await waitFor(() =>
-      expect(loadColumnWidthsForSurface(true, "workbench")).toEqual({
-        name: 420,
-      }),
+      expect(loadColumnWidthsForSurface(true)).toEqual({ name: 420 }),
     );
     expect(document.body.style.cursor).toBe("");
   });

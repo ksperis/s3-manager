@@ -1228,7 +1228,6 @@ export default function PortalStorageSpaceDetailPage() {
             hasContext={hasAccountContext}
             workspaceSurface="portal"
             functionalProfile="portal"
-            layoutMode="standard"
             density="comfortable"
             capabilityFacts={{
               canWriteObjects: canModifyObjects,

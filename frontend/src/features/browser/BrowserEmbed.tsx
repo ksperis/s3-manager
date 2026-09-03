@@ -8,7 +8,6 @@ import type {
   BrowserCapabilityFacts,
   BrowserDensity,
   BrowserFunctionalProfile,
-  BrowserLayoutMode,
 } from "./browserActions";
 import BrowserPage from "./BrowserPage";
 import type {
@@ -24,7 +23,6 @@ type BrowserEmbedProps = {
   hasContext: boolean;
   workspaceSurface: BrowserWorkspaceSurface;
   functionalProfile: BrowserFunctionalProfile;
-  layoutMode: BrowserLayoutMode;
   density: BrowserDensity;
   capabilityFacts: BrowserCapabilityFacts;
   lockedBucketName?: string;
@@ -47,7 +45,6 @@ export default function BrowserEmbed({
   hasContext,
   workspaceSurface,
   functionalProfile,
-  layoutMode,
   density,
   capabilityFacts,
   lockedBucketName,
@@ -70,7 +67,6 @@ export default function BrowserEmbed({
       hasContext={hasContext}
       workspaceSurface={workspaceSurface}
       functionalProfile={functionalProfile}
-      layoutMode={layoutMode}
       density={density}
       capabilityFacts={capabilityFacts}
       lockedBucketName={lockedBucketName}

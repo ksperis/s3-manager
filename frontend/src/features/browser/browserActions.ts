@@ -55,7 +55,6 @@ type BrowserActionDispatcherResult =
   | { executed: true }
   | { executed: false; reason: string };
 export type BrowserFunctionalProfile = "standard" | "advanced" | "portal";
-export type BrowserLayoutMode = "standard" | "workbench";
 export type BrowserDensity = "comfortable" | "compact";
 
 export type BrowserCapabilityFacts = {

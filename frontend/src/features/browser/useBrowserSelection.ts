@@ -64,19 +64,28 @@ export function useBrowserSelection({
     [selectedItems],
   );
   const inspectedItem = useMemo(() => {
-    if (activeItem && items.some((item) => item.id === activeItem.id)) {
+    if (selectedItems.length === 1) return selectedItems[0] ?? null;
+    if (
+      activeItem &&
+      selectedSet.has(activeItem.id) &&
+      items.some((item) => item.id === activeItem.id)
+    ) {
       return activeItem;
     }
     return null;
-  }, [activeItem, items]);
+  }, [activeItem, items, selectedItems, selectedSet]);
 
   const syncInspectorTab = useCallback(
     (selectedCount: number) => {
       setInspectorTab((currentTab) => {
-        if (inspectorVisible && currentTab === "details") {
+        if (
+          inspectorVisible &&
+          currentTab === "details" &&
+          selectedCount === 1
+        ) {
           return "details";
         }
-        return selectedCount > 0 ? "selection" : "context";
+        return selectedCount === 1 ? "details" : "bucket";
       });
     },
     [inspectorVisible, setInspectorTab],
@@ -373,7 +382,7 @@ export function useBrowserSelection({
     setSelectionAnchorId(null);
     setActiveRowId(null);
     setActiveItem(null);
-    setInspectorTab("context");
+    setInspectorTab("bucket");
   }, [scopeKey, setInspectorTab]);
 
   useEffect(() => {

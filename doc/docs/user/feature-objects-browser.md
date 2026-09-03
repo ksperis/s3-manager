@@ -25,13 +25,15 @@ Select the execution context before choosing a bucket. The same bucket name may 
      navigates, a previewable file up to 50 MiB opens on `Preview`, another file
      opens `Properties`, and a deleted object opens `Versions` or Portal
      `History`. A double-click on the same control still executes only once.
-   - Select from the rest of a row or mobile card. The desktop selection bar is
-     automatic; the mobile bottom bar exposes the essential actions without
-     horizontal scrolling. Use `More` for every secondary action.
-   - Use `More > Columns` to choose which object columns are visible. The default column set stays unchanged until you customize it.
+   - Select from the rest of a row or mobile card. On desktop, selection actions
+     replace the right side of the stable context bar so the list does not move.
+     The mobile bottom bar exposes the essential actions without horizontal
+     scrolling. Use `More` for every secondary action.
+   - With Technical S3 tools, use `More > Columns` to choose which object columns are visible. The default column set stays unchanged until you customize it.
    - Drag a column separator in the objects table header to resize `Name` and visible object columns. Double-click a separator to restore that column default width.
-   - Use the inspector for context and selection information. It may open the
-     full file details but does not duplicate the action toolbars.
+   - On `/browser`, use `More > Panels` to enable Folders or the overlay Details
+     panel. Both are optional for every user. Details keeps only the useful
+     object and bucket summaries and may open the full file details.
    - Upload files
    - Download objects
    - Preview supported files
@@ -54,10 +56,14 @@ Select the execution context before choosing a bucket. The same bucket name may 
 - Long-running bulk actions surface in **Operations overview**, where queued, active, completed, and failed work stays visible without leaving Browser.
 - `More` remains available in embedded Manager, Ceph Admin, and Portal Browser
   surfaces, where profile and resolved capability facts decide the visible set.
-- On the main `/browser` page, `More > View` lets every user choose Comfortable
-  or Compact density independently of the Standard, Advanced, or Portal
-  functional profile. The choice is stored for the root Browser only.
-- Object columns available from `More > Columns` include base listing columns such as `Size`, `Modified`, `Storage class`, and `ETag`, plus lazy detail columns such as `Content-Type`, `Tags`, `Metadata`, `Cache-Control`, `Expires`, and `Restore status`.
+- On the main `/browser` page, `More > View` lets every user choose
+  Comfortable or Compact and `More > Panels` independently controls
+  Folders and Details. Compact keeps the path and icon actions on one row;
+  Comfortable keeps labeled actions on that row when the window is wide and
+  moves them to a second row when space is tighter. These choices are stored
+  for the root Browser only. The default is a compact, panel-free view suitable
+  for small windows and dense object lists.
+- With Technical S3 tools, object columns available from `More > Columns` include base listing columns such as `Size`, `Modified`, `Storage class`, and `ETag`, plus lazy detail columns such as `Content-Type`, `Tags`, `Metadata`, `Cache-Control`, `Expires`, and `Restore status`.
 - Custom column widths are stored locally in the current browser and stay separate between the main `/browser` page and embedded browser surfaces.
 - `Reset columns` restores both the default visible columns and the default widths.
 - Only base listing columns are sortable. Lazy detail columns are display-only and load on demand for visible rows.

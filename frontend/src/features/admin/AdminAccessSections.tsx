@@ -99,14 +99,14 @@ export function BrowserAccessSection({
     <div className={adminModalSettingsGroupClass}>
       <PortalSettingsSection title="Browser" description={description} layout="stack">
         <PortalSettingsItem
-          title="Advanced Browser actions and Workbench"
-          description="Allows technical S3 actions and access to the optional Workbench layout. When disabled, /browser uses the simpler Standard profile."
+          title="Technical S3 tools"
+          description="Adds versions, metadata, batch operations, and bucket maintenance tools to /browser. Display density (rows and action toolbar) and optional panels remain personal choices for every Browser user."
           className={adminSettingsItemSurfaceClass(false)}
           action={
             <PortalSettingsToggleAction
               checked={checked}
               onChange={onChange}
-              ariaLabel="Enable advanced Browser features"
+              ariaLabel="Enable technical S3 tools"
             />
           }
         />

@@ -9,7 +9,6 @@ import type {
   BrowserCapabilityFacts,
   BrowserDensity,
   BrowserFunctionalProfile,
-  BrowserLayoutMode,
 } from "./browserActions";
 
 export type BrowserExecutionContextKind = ExecutionContextKind | "ceph_admin";
@@ -54,7 +53,6 @@ export type BrowserPageProps = {
   hasContext?: boolean;
   workspaceSurface?: BrowserWorkspaceSurface;
   functionalProfile?: BrowserFunctionalProfile;
-  layoutMode?: BrowserLayoutMode;
   density?: BrowserDensity;
   capabilityFacts?: BrowserCapabilityFacts;
   lockedBucketName?: string;

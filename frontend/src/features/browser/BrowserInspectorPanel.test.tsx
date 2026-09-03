@@ -33,30 +33,14 @@ type InspectorProps = ComponentProps<typeof BrowserInspectorPanel>;
 
 function buildProps(overrides: Partial<InspectorProps> = {}): InspectorProps {
   return {
-    activeTab: "context",
+    activeTab: "bucket",
     workspaceNoun: "bucket",
     workspaceNounCapitalized: "Bucket",
     usePortalWorkspaceLabels: false,
+    technicalDetailsEnabled: false,
     actionButtonClasses: "action-button",
-    context: {
-      currentPath: "documents/reports",
-      pathStats: {
-        totalBytes: 1024,
-        files: 1,
-        deletedFiles: 1,
-        folders: 2,
-        deletedFolders: 1,
-        storageCounts: { STANDARD: 1 },
-      },
-      versioningEnabled: true,
-      showDeletedObjects: true,
-      counts: { objects: 4, versions: 6, deleteMarkers: 2 },
-      countsLoading: false,
-      countsError: null,
-      canCount: true,
-      onCount: vi.fn(),
-    },
     bucket: {
+      available: true,
       name: "documents",
       hasContext: true,
       loading: false,
@@ -82,17 +66,6 @@ function buildProps(overrides: Partial<InspectorProps> = {}): InspectorProps {
       cephContextQuotaSizeBytes: 8192,
       cephContextQuotaObjects: 100,
     },
-    selection: {
-      hasActions: true,
-      selectedCount: 1,
-      isSingle: true,
-      primary: fileItem,
-      fileCount: 1,
-      folderCount: 0,
-      hasDeleted: false,
-      selectedBytes: 1024,
-      onOpenFullDetails: vi.fn(),
-    },
     details: {
       item: fileItem,
       path: `documents/${fileItem.key}`,
@@ -108,79 +81,69 @@ function buildProps(overrides: Partial<InspectorProps> = {}): InspectorProps {
       },
       onOpenFullDetails: vi.fn(),
     },
-    onSelectTab: vi.fn(),
-    onOpenBucketTab: vi.fn(),
+    onSelectDetails: vi.fn(),
+    onOpenBucket: vi.fn(),
+    onClose: vi.fn(),
     ...overrides,
   };
 }
 
 describe("BrowserInspectorPanel", () => {
-  it("renders context summaries and routes tab and count actions", () => {
+  it("offers only Object and Bucket views and routes close", () => {
     const props = buildProps();
     render(<BrowserInspectorPanel {...props} />);
 
-    expect(screen.getByText("documents/reports")).toBeInTheDocument();
-    expect(screen.getByText("STANDARD (1)")).toBeInTheDocument();
-    expect(screen.getByText("1.0 KB")).toBeInTheDocument();
-    expect(screen.getByText("Deleted shown")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Details view" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Object" }));
+    fireEvent.click(screen.getByRole("button", { name: "Bucket" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close details panel" }));
+    fireEvent.keyDown(screen.getByLabelText("Details panel"), { key: "Escape" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Recount" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Details" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Bucket" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Selection" }));
-
-    expect(props.context.onCount).toHaveBeenCalledOnce();
-    expect(props.onSelectTab).toHaveBeenNthCalledWith(1, "details");
-    expect(props.onOpenBucketTab).toHaveBeenCalledOnce();
-    expect(props.onSelectTab).toHaveBeenNthCalledWith(2, "selection");
+    expect(props.onSelectDetails).toHaveBeenCalledOnce();
+    expect(props.onOpenBucket).toHaveBeenCalledOnce();
+    expect(props.onClose).toHaveBeenCalledTimes(2);
   });
 
-  it("renders bucket stats, Ceph quotas, and feature states", () => {
-    render(<BrowserInspectorPanel {...buildProps({ activeTab: "bucket" })} />);
+  it("keeps the standard bucket overview useful without technical details", () => {
+    render(<BrowserInspectorPanel {...buildProps()} />);
 
     expect(screen.getByText("Bucket overview")).toBeInTheDocument();
     expect(screen.getByText("Object count")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
+    expect(screen.queryByText("Ceph quotas")).not.toBeInTheDocument();
+    expect(screen.queryByText("Features")).not.toBeInTheDocument();
+  });
+
+  it("adds quotas and features only for technical Browser access", () => {
+    render(
+      <BrowserInspectorPanel
+        {...buildProps({ technicalDetailsEnabled: true })}
+      />,
+    );
+
+    expect(screen.getByText("Ceph quotas")).toBeInTheDocument();
     expect(screen.getByText("Account quota size")).toBeInTheDocument();
     expect(screen.getByText("8.0 KB")).toBeInTheDocument();
-    expect(screen.getByText("Bucket quota objects")).toBeInTheDocument();
-    expect(screen.getByText("20")).toBeInTheDocument();
     expect(screen.getByText("Versioning")).toBeInTheDocument();
     expect(screen.getByText("Enabled")).toBeInTheDocument();
   });
 
-  it("renders the selection summary and opens full details", () => {
-    const props = buildProps({ activeTab: "selection" });
-    render(<BrowserInspectorPanel {...props} />);
+  it("shows basic object details to everyone and gates versions", () => {
+    const props = buildProps({ activeTab: "details" });
+    const { rerender } = render(<BrowserInspectorPanel {...props} />);
 
-    expect(screen.getByText("1 selected")).toBeInTheDocument();
     expect(screen.getByText(fileItem.name)).toBeInTheDocument();
-    expect(screen.getByText("Total size: 1.0 KB")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open full details" }));
-    expect(props.selection.onOpenFullDetails).toHaveBeenCalledOnce();
-  });
+    expect(screen.getByText("Path")).toBeInTheDocument();
+    expect(screen.queryByText("v: version-1")).not.toBeInTheDocument();
 
-  it("renders object versions and routes detail actions", () => {
-    const deletedItem = { ...fileItem, isDeleted: true };
-    const props = buildProps({
-      activeTab: "details",
-      details: {
-        ...buildProps().details,
-        item: deletedItem,
-      },
-    });
-    render(<BrowserInspectorPanel {...props} />);
-
-    expect(screen.getAllByText(/Deleted object/)).toHaveLength(2);
+    rerender(
+      <BrowserInspectorPanel {...props} technicalDetailsEnabled={true} />,
+    );
     expect(screen.getByText("v: version-1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open full details" }));
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete version" }));
-    fireEvent.click(screen.getByRole("button", { name: "Load more versions" }));
 
     expect(props.details.onOpenFullDetails).toHaveBeenCalledOnce();
     expect(props.details.versions.onRestoreVersion).toHaveBeenCalledWith(version);
-    expect(props.details.versions.onDeleteVersion).toHaveBeenCalledWith(version);
-    expect(props.details.versions.onLoadMore).toHaveBeenCalledOnce();
   });
 });

@@ -503,7 +503,6 @@ describe("PortalStorageSpaceDetailPage", () => {
       hasContext: true,
       workspaceSurface: "portal",
       functionalProfile: "portal",
-      layoutMode: "standard",
       density: "comfortable",
       capabilityFacts: {
         canWriteObjects: true,

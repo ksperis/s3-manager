@@ -26,6 +26,7 @@ const selectionAction: BrowserActionState = {
 
 function buildProps(overrides: Partial<ToolbarProps> = {}): ToolbarProps {
   return {
+    compactMode: true,
     bucketSelector: {
       rootRef: createRef<HTMLDivElement>(),
       filterInputRef: createRef<HTMLInputElement>(),
@@ -84,7 +85,7 @@ function buildProps(overrides: Partial<ToolbarProps> = {}): ToolbarProps {
       showRestore: false,
       restoreEnabled: false,
     },
-    compactActions: {
+    contextActions: {
       visible: true,
       canUploadFiles: true,
       canUploadFolder: true,
@@ -134,6 +135,10 @@ describe("BrowserToolbar", () => {
     });
     render(<BrowserToolbar {...props} />);
 
+    expect(screen.getByRole("button", { name: "Upload" })).toHaveClass(
+      "ui-button-primary",
+    );
+
     fireEvent.click(screen.getByRole("button", { name: "Hide deleted files" }));
     fireEvent.click(
       screen.getByRole("button", {
@@ -162,8 +167,8 @@ describe("BrowserToolbar", () => {
 
   it("renders the desktop selection bar and routes its primary actions", () => {
     const props = buildProps({
-      compactActions: {
-        ...buildProps().compactActions,
+      contextActions: {
+        ...buildProps().contextActions,
         visible: false,
       },
       selectionActions: {
@@ -179,7 +184,7 @@ describe("BrowserToolbar", () => {
     render(<BrowserToolbar {...props} />);
 
     const actionBar = screen.getByRole("toolbar", {
-      name: "Browser actions bar",
+      name: "Browser context bar",
     });
     expect(within(actionBar).getByText("2 selected")).toBeInTheDocument();
     expect(within(actionBar).getByRole("button", { name: "Copy" })).toBeDisabled();
@@ -241,11 +246,11 @@ describe("BrowserToolbar", () => {
     const menu = screen.getByRole("menu", { name: "More" });
     expect(within(menu).getByText("STS")).toBeInTheDocument();
     expect(
-      within(menu).getByRole("menuitemradio", { name: "Compact density" }),
+      within(menu).getByRole("menuitemradio", { name: "Compact" }),
     ).toHaveAttribute("aria-checked", "true");
     expect(
       within(menu).getByRole("menuitemradio", {
-        name: "Comfortable density",
+        name: "Comfortable",
       }),
     ).toHaveAttribute("aria-checked", "false");
     expect(within(menu).getByText("Selection overflow")).toBeInTheDocument();
@@ -312,11 +317,26 @@ describe("BrowserToolbar", () => {
     fireEvent.click(
       within(screen.getByRole("menu", { name: "More" })).getByRole(
         "menuitemradio",
-        { name: "Comfortable density" },
+        { name: "Comfortable" },
       ),
     );
 
     expect(onSetCompactMode).toHaveBeenCalledWith(false);
     expect(screen.queryByRole("menu", { name: "More" })).not.toBeInTheDocument();
+  });
+
+  it("uses labeled actions and keeps comfortable mode adaptive", () => {
+    render(<BrowserToolbar {...buildProps({ compactMode: false })} />);
+
+    const toolbar = screen.getByRole("toolbar", {
+      name: "Browser context bar",
+    });
+    for (const actionName of ["Upload", "New folder", "Refresh", "More"]) {
+      expect(
+        within(toolbar).getByRole("button", { name: actionName }),
+      ).toHaveTextContent(actionName);
+    }
+    expect(toolbar).toHaveAttribute("data-density", "comfortable");
+    expect(toolbar).toHaveClass("xl:flex-row");
   });
 });

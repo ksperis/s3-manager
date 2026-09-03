@@ -81,7 +81,6 @@ export default function ManagerBrowserPage() {
                 hasContext
                 workspaceSurface="manager"
                 functionalProfile="advanced"
-                layoutMode="standard"
                 density="compact"
                 capabilityFacts={{
                   canWriteObjects: true,

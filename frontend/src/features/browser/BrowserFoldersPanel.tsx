@@ -4,7 +4,7 @@
  */
 import { cx, uiCardClass } from "../../components/ui/styles";
 import type { BrowserBucket } from "../../api/browserContracts";
-import { FolderIcon, RefreshIcon } from "./browserIcons";
+import { FolderIcon, RefreshIcon, XIcon } from "./browserIcons";
 import {
   treeItemActiveClasses,
   treeItemBaseClasses,
@@ -20,6 +20,7 @@ type BrowserFoldersPanelProps = {
   currentBucketAccess: BucketAccessEntry;
   treeRootNode: TreeNode | null;
   workspaceNoun?: string;
+  onClose: () => void;
   onRefresh: () => void;
   onSelectPrefix: (prefix: string) => void;
   onToggleTreeNode: (node: TreeNode) => void;
@@ -90,6 +91,7 @@ export default function BrowserFoldersPanel({
   currentBucketAccess,
   treeRootNode,
   workspaceNoun = "bucket",
+  onClose,
   onRefresh,
   onSelectPrefix,
   onToggleTreeNode,
@@ -106,16 +108,27 @@ export default function BrowserFoldersPanel({
         <div className="min-w-0">
           <p className={panelSectionTitleClasses}>Folders</p>
         </div>
-        <button
-          type="button"
-          className={panelIconButtonClasses}
-          onClick={onRefresh}
-          disabled={!currentBucket}
-          aria-label="Refresh folders"
-          title="Refresh folders"
-        >
-          <RefreshIcon className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            className={panelIconButtonClasses}
+            onClick={onRefresh}
+            disabled={!currentBucket}
+            aria-label="Refresh folders"
+            title="Refresh folders"
+          >
+            <RefreshIcon className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className={panelIconButtonClasses}
+            onClick={onClose}
+            aria-label="Close folders panel"
+            title="Close folders panel"
+          >
+            <XIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       <section className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1" aria-label={`Current ${normalizedWorkspaceNoun}`}>

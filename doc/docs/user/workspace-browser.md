@@ -20,19 +20,25 @@ Use **Browser** for direct bucket/object operations.
    - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` context and endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
 3. Navigate buckets and prefixes.
    - Use the workspace sidebar to search and switch buckets directly from the workspace.
-   - Use the folders panel to browse folders for the active bucket.
+   - The object list starts in Compact view with optional panels hidden, so
+     it remains usable in a small window and leaves maximum room for objects.
+   - Open **More > Panels > Folders** when a tree is useful. Every `/browser`
+     user can enable it, and folder data is loaded only while the panel is open.
 4. Perform object actions from the most appropriate surface:
    - Activate the icon and name once to open the primary destination: folders
      navigate, previewable files up to 50 MiB open on `Preview`, other files
      open read-only or editable `Properties` according to the profile, and
      deleted objects open `Versions`/`History`.
-   - Click the rest of a row or mobile card to select it. Desktop shows a
-     sticky selection bar only while a selection exists; mobile shows a
+   - Click the rest of a row or mobile card to select it. Desktop replaces the
+     right side of the stable context bar with selection actions, without
+     moving the object list; mobile shows a
      safe-area action bar with `Open`, `Download`, and `More` when applicable.
    - Right-click or use `More` for all secondary actions. On mobile, `More`
      opens an accessible bottom sheet and explains temporarily disabled actions.
-   - The inspector is informative and may provide `Open full details`; it no
-     longer duplicates the action toolbars.
+   - Open **More > Panels > Details** for an overlay with the selected object's
+     essential facts or the current bucket summary. It does not reduce the
+     object-list width or duplicate action toolbars. Advanced users additionally
+     see versions, Ceph quotas, and technical bucket feature states.
 5. Perform uploads, downloads, previews, deletes, restores, and metadata/tag actions from those surfaces.
    - File actions such as `Preview`, `Versions`, and advanced object operations open the same `Object details` modal on the relevant tab.
    - Standard users can copy, cut, and paste inside the current connection.
@@ -55,17 +61,21 @@ Use **Browser** for direct bucket/object operations.
   literal: provider RGW logs attribute operations to that S3 identity, not to
   the signed-in UI user.
 - `/ceph-admin/browser` remains a separate endpoint-wide Ceph Admin surface.
-- `/browser` uses the Standard profile when advanced features are disabled.
-  Enabling **Advanced Browser actions and Workbench** adds technical S3 actions
-  and allows either the Standard or Workbench layout; it does not force
-  Workbench or a particular density. On `/browser`, every user can choose
-  **Comfortable density** or **Compact density** from **More > View**. The
-  saved choice is shared across Standard, Advanced, and Portal contexts, and a
-  user without a saved choice starts in Compact density. Manager and Ceph Admin
-  embeds use Advanced actions in a compact Standard layout, while the locked
-  Portal embed uses its dedicated Portal profile with comfortable density.
-- Layout, panels, and column preferences belong only to `/browser`. Its density
-  preference is also root-only and independent of the functional profile.
+- `/browser` uses the Standard profile when **Technical S3 tools** are disabled.
+  Enabling that administrator setting adds versions, metadata editing, advanced
+  search and columns, batch and cross-context operations, multipart supervision,
+  and bucket maintenance. It does not change the layout or density.
+- On `/browser`, every user can choose **Comfortable** or **Compact**
+  from **More > View**, and can independently show **Folders** or
+  **Details** from **More > Panels**. Compact keeps the path and icon actions on
+  one row whenever width permits. Comfortable displays labeled action buttons
+  on the path row when the window is wide enough, then moves them below the path
+  when space becomes tighter. These root-only preferences are
+  shared across Standard, Advanced, and Portal contexts. A user without saved
+  preferences starts in Compact with both panels hidden. On narrow
+  viewports the panels are temporarily hidden without erasing the saved choices.
+- Columns are configurable only with Technical S3 tools. Panel, density, and
+  column preferences belong only to `/browser`.
   Embedded Browser surfaces receive these settings explicitly and never read or
   write the root Browser preferences.
 - On `/browser`, buckets that cannot be listed are dimmed in the left panel and remain selectable so the backend error can be inspected explicitly.

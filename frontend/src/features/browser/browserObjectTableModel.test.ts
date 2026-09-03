@@ -19,21 +19,14 @@ describe("browserObjectTableModel", () => {
     window.sessionStorage.clear();
   });
 
-  it("keeps visible columns canonical and isolated by surface and root layout", () => {
+  it("keeps visible columns canonical and isolated by surface", () => {
     expect(DEFAULT_VISIBLE_COLUMN_IDS).toEqual(["size", "modified"]);
 
-    persistVisibleColumnsForSurface(true, ["etag", "size"], "standard");
-    persistVisibleColumnsForSurface(true, ["storageClass"], "workbench");
-    persistVisibleColumnsForSurface(false, ["contentType"], "standard");
+    persistVisibleColumnsForSurface(true, ["etag", "size"]);
+    persistVisibleColumnsForSurface(false, ["contentType"]);
 
-    expect(loadVisibleColumnsForSurface(true, "standard")).toEqual([
-      "size",
-      "etag",
-    ]);
-    expect(loadVisibleColumnsForSurface(true, "workbench")).toEqual([
-      "storageClass",
-    ]);
-    expect(loadVisibleColumnsForSurface(false, "workbench")).toEqual([
+    expect(loadVisibleColumnsForSurface(true)).toEqual(["size", "etag"]);
+    expect(loadVisibleColumnsForSurface(false)).toEqual([
       "contentType",
     ]);
   });
@@ -44,22 +37,17 @@ describe("browserObjectTableModel", () => {
       JSON.stringify({ name: 1, size: 999, modified: 180, unknown: 123 }),
     );
 
-    expect(loadColumnWidthsForSurface(false, "standard")).toEqual({
+    expect(loadColumnWidthsForSurface(false)).toEqual({
       name: 220,
       size: 180,
       modified: 180,
     });
 
-    persistColumnWidthsForSurface(
-      true,
-      { name: 900, tagsCount: 10 },
-      "workbench",
-    );
-    expect(loadColumnWidthsForSurface(true, "workbench")).toEqual({
+    persistColumnWidthsForSurface(true, { name: 900, tagsCount: 10 });
+    expect(loadColumnWidthsForSurface(true)).toEqual({
       name: 640,
       tagsCount: 72,
     });
-    expect(loadColumnWidthsForSurface(true, "standard")).toEqual({});
   });
 
   it("defines one unique schema entry per optional column", () => {
