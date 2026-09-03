@@ -14,6 +14,8 @@ from app.db import (
     is_admin_ui_role,
 )
 from app.models.s3_account import AccountGroupLink, AccountUserLink, S3AccountUpdate
+from app.services.ui_group_avatar_service import UiGroupAvatarService
+from app.services.user_avatar_service import UserAvatarService
 from app.utils.time import utcnow
 
 
@@ -22,6 +24,83 @@ class S3AccountAssociationsService:
 
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def load_user_links(
+        self,
+        account_ids: list[int],
+    ) -> dict[int, list[AccountUserLink]]:
+        if not account_ids:
+            return {}
+        rows = (
+            self.db.query(
+                UserS3Account.account_id,
+                User,
+                UserS3Account.manager_role,
+                UserS3Account.portal_role,
+                UserS3Account.allow_manager_browser_data_access,
+            )
+            .join(User, User.id == UserS3Account.user_id)
+            .filter(UserS3Account.account_id.in_(account_ids))
+            .order_by(
+                UserS3Account.account_id.asc(),
+                User.email.asc(),
+                User.id.asc(),
+            )
+            .all()
+        )
+        links_by_account: dict[int, list[AccountUserLink]] = {}
+        avatars = UserAvatarService(self.db)
+        for account_id, user, manager_role, portal_role, browser_access in rows:
+            links_by_account.setdefault(int(account_id), []).append(
+                AccountUserLink(
+                    user_id=int(user.id),
+                    manager_role=manager_role,
+                    portal_role=portal_role,
+                    allow_manager_browser_data_access=bool(browser_access),
+                    user_email=user.email,
+                    user_full_name=user.full_name,
+                    user_avatar=avatars.descriptor(user),
+                )
+            )
+        return links_by_account
+
+    def load_group_links(
+        self,
+        account_ids: list[int],
+    ) -> dict[int, list[AccountGroupLink]]:
+        if not account_ids:
+            return {}
+        rows = (
+            self.db.query(
+                UiGroupS3Account.account_id,
+                UiGroup,
+                UiGroupS3Account.manager_role,
+                UiGroupS3Account.portal_role,
+                UiGroupS3Account.allow_manager_browser_data_access,
+            )
+            .join(UiGroup, UiGroup.id == UiGroupS3Account.group_id)
+            .filter(UiGroupS3Account.account_id.in_(account_ids))
+            .order_by(
+                UiGroupS3Account.account_id.asc(),
+                UiGroup.name.asc(),
+                UiGroup.id.asc(),
+            )
+            .all()
+        )
+        links_by_account: dict[int, list[AccountGroupLink]] = {}
+        avatars = UiGroupAvatarService(self.db)
+        for account_id, group, manager_role, portal_role, browser_access in rows:
+            links_by_account.setdefault(int(account_id), []).append(
+                AccountGroupLink(
+                    group_id=int(group.id),
+                    group_name=group.name,
+                    group_avatar=avatars.descriptor(group),
+                    manager_role=manager_role,
+                    portal_role=portal_role,
+                    allow_manager_browser_data_access=bool(browser_access),
+                )
+            )
+        return links_by_account
 
     def affected_portal_user_ids(
         self,
