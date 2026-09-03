@@ -5,13 +5,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { cx, uiDataTableClass, uiPanelMutedClass } from "../../components/ui/styles";
 import {
-  CephAdminEntityMetrics,
   CephAdminRgwAccountDetail,
   UpdateCephAdminAccountPayload,
   getCephAdminAccountDetail,
-  getCephAdminAccountMetrics,
   updateCephAdminAccountConfig,
 } from "../../api/cephAdmin";
+import {
+  getCephAdminAccountMetrics,
+  type CephAdminEntityMetrics,
+} from "../../api/cephAdminMetrics";
 import WorkflowPage from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";

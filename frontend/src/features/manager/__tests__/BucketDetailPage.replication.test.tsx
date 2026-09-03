@@ -91,10 +91,14 @@ vi.mock("../../../api/cephAdmin", async () => {
     putCephAdminBucketLifecycle: (...args: unknown[]) => putCephAdminBucketLifecycleMock(...args),
     setCephAdminBucketVersioning: (...args: unknown[]) => setCephAdminBucketVersioningMock(...args),
     updateCephAdminBucketObjectLock: (...args: unknown[]) => updateCephAdminBucketObjectLockMock(...args),
-    fetchCephAdminClusterTraffic: (...args: unknown[]) => fetchCephAdminClusterTrafficMock(...args),
     deleteCephAdminBucketReplication: (...args: unknown[]) => deleteCephAdminBucketReplicationMock(...args),
   };
 });
+
+vi.mock("../../../api/cephAdminMetrics", () => ({
+  fetchCephAdminClusterTraffic: (...args: unknown[]) =>
+    fetchCephAdminClusterTrafficMock(...args),
+}));
 
 vi.mock("../../../api/objects", async () => {
   const actual = await vi.importActual<typeof import("../../../api/objects")>("../../../api/objects");

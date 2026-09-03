@@ -12,7 +12,7 @@ import {
   TrafficWindow,
   fetchManagerTraffic,
 } from "../../api/stats";
-import { fetchCephAdminClusterTraffic } from "../../api/cephAdmin";
+import { fetchCephAdminClusterTraffic } from "../../api/cephAdminMetrics";
 import {
   MetricsCard,
   MetricsChartPanel,

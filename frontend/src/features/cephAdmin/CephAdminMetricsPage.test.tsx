@@ -16,14 +16,10 @@ vi.mock("./CephAdminEndpointContext", () => ({
   useCephAdminEndpoint: () => useCephAdminEndpointMock(),
 }));
 
-vi.mock("../../api/cephAdmin", async () => {
-  const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
-  return {
-    ...actual,
-    fetchCephAdminClusterStorage: (...args: unknown[]) => fetchCephAdminClusterStorageMock(...args),
-    fetchCephAdminClusterTraffic: (...args: unknown[]) => fetchCephAdminClusterTrafficMock(...args),
-  };
-});
+vi.mock("../../api/cephAdminMetrics", () => ({
+  fetchCephAdminClusterStorage: (...args: unknown[]) => fetchCephAdminClusterStorageMock(...args),
+  fetchCephAdminClusterTraffic: (...args: unknown[]) => fetchCephAdminClusterTrafficMock(...args),
+}));
 
 vi.mock("../../api/bucketUsageStats", () => ({
   getCephAdminUsageStatsAggregate: (...args: unknown[]) => getCephAdminUsageStatsAggregateMock(...args),

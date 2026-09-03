@@ -9,11 +9,11 @@ import {
   type BucketUsageStatsAggregate,
 } from "../../api/bucketUsageStats";
 import {
-  CephAdminClusterStorageMetrics,
-  CephAdminClusterTrafficMetrics,
   fetchCephAdminClusterStorage,
   fetchCephAdminClusterTraffic,
-} from "../../api/cephAdmin";
+  type CephAdminClusterStorageMetrics,
+  type CephAdminClusterTrafficMetrics,
+} from "../../api/cephAdminMetrics";
 import { TrafficWindow } from "../../api/stats";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import { MetricsCard } from "../../components/MetricsCard";
