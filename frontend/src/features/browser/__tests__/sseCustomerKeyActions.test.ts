@@ -6,7 +6,7 @@ import {
   generateAndActivateSseCustomerKeyForScope,
   resolveSseCustomerKeyInputType,
 } from "../sseCustomerKeyActions";
-import { validateSseCustomerKeyBase64 } from "../../../api/browser";
+import { validateSseCustomerKeyBase64 } from "../../../api/browserSseCustomer";
 
 describe("sseCustomerKeyActions", () => {
   afterEach(() => {

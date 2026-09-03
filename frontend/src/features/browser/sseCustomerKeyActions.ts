@@ -2,7 +2,10 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { generateSseCustomerKeyBase64, validateSseCustomerKeyBase64 } from "../../api/browser";
+import {
+  generateSseCustomerKeyBase64,
+  validateSseCustomerKeyBase64,
+} from "../../api/browserSseCustomer";
 
 type CopySseCustomerKeyOutcome = "copied" | "manual_copy_required";
 

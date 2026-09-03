@@ -5,7 +5,7 @@ import {
   buildSseCustomerBackendHeaders,
   generateSseCustomerKeyBase64,
   validateSseCustomerKeyBase64,
-} from "./browser";
+} from "./browserSseCustomer";
 
 describe("browser SSE-C helpers", () => {
   afterEach(() => {
