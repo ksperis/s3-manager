@@ -5,7 +5,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { BucketProperties } from "../../api/buckets";
+import type { BucketProperties } from "../../api/bucketContracts";
 import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 

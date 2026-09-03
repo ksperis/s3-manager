@@ -9,6 +9,7 @@ import {
   mergeBrowserHeaders,
 } from "./browserRequestHeaders";
 import { buildSseCustomerBackendHeaders } from "./browserSseCustomer";
+import type { BucketVersioningStatus } from "./bucketContracts";
 import type { StorageSpaceIconDescriptor } from "./storageSpaceIcons";
 
 export type BrowserWorkspaceSurface = "browser" | "manager" | "ceph-admin" | "portal";
@@ -48,11 +49,6 @@ export type BrowserUsageSummary = {
   object_count?: number | null;
   quota_max_size_bytes?: number | null;
   quota_max_objects?: number | null;
-};
-
-type BucketVersioningStatus = {
-  status?: string | null;
-  enabled: boolean;
 };
 
 export type BrowserObject = {

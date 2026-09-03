@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { BucketProperties } from "../../api/buckets";
+import type { BucketProperties } from "../../api/bucketContracts";
 import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import {
   PUBLIC_ACCESS_BLOCK_OPTIONS,

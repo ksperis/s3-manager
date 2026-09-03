@@ -34,12 +34,11 @@ import type {
   BucketLoggingConfiguration,
   BucketNotificationConfiguration,
   BucketObjectLockConfiguration,
-  BucketObjectLockUpdatePayload,
   BucketPolicy,
   BucketProperties,
   BucketPublicAccessBlock,
   BucketWebsiteConfiguration,
-} from "./buckets";
+} from "./bucketContracts";
 import type {
   CephAdminBucket,
   CephAdminBucketsStreamProgress,
@@ -316,7 +315,7 @@ export async function setStorageOpsBucketVersioning(
 export async function updateStorageOpsBucketObjectLock(
   _scopeId: number,
   bucketRef: string,
-  payload: BucketObjectLockUpdatePayload
+  payload: BucketObjectLockConfiguration
 ): Promise<BucketObjectLockConfiguration> {
   const { contextId, bucketName } = resolveBucketTarget(bucketRef);
   return updateBucketObjectLock(contextId, bucketName, payload);

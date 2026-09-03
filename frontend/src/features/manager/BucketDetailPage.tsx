@@ -14,7 +14,7 @@ import {
   uiInputClass,
   uiTableContainerClass,
 } from "../../components/ui/styles";
-import { BucketPublicAccessBlock } from "../../api/buckets";
+import type { BucketPublicAccessBlock } from "../../api/bucketContracts";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";

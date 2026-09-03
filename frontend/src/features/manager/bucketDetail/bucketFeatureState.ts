@@ -5,7 +5,7 @@
 import type {
   BucketLoggingConfiguration,
   BucketPublicAccessBlock,
-} from "../../../api/buckets";
+} from "../../../api/bucketContracts";
 
 export type BucketFeatureCardMode = "graphical" | "json" | "hybrid";
 export type BucketFeatureVisualState = "neutral" | "configured" | "unsaved" | "disabled";

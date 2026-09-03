@@ -11,9 +11,6 @@ import PageEmptyState from "../../components/PageEmptyState";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiCheckboxClass } from "../../components/ui/styles";
 import {
-  Bucket,
-  BucketFeatureStatus,
-  BucketTag,
   createBucket,
   deleteBucket,
   getBucketCors,
@@ -24,7 +21,12 @@ import {
   getBucketWebsite,
   listBuckets,
 } from "../../api/buckets";
-import type { BucketProperties } from "../../api/buckets";
+import type { Bucket } from "../../api/buckets";
+import type {
+  BucketFeatureStatus,
+  BucketProperties,
+  BucketTag,
+} from "../../api/bucketContracts";
 import { S3AccountSelector } from "../../api/accountParams";
 import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";

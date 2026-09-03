@@ -5,7 +5,7 @@
 import client, { timeoutForRequestProfile } from "./client";
 import type { PaginatedResponse } from "./types";
 import type { BucketUiTagDefinition } from "./bucketUiTags";
-import type { BucketFeatureStatus, BucketTag } from "./buckets";
+import type { BucketFeatureStatus, BucketTag } from "./bucketContracts";
 import {
   buildBucketListingQuery,
   buildBucketListingRequestBody,

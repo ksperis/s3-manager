@@ -8,8 +8,8 @@ import {
   getBucketObjectLock,
   setBucketVersioning,
   updateBucketObjectLock,
-  type BucketObjectLockConfiguration,
 } from "../../../api/buckets";
+import type { BucketObjectLockConfiguration } from "../../../api/bucketContracts";
 import {
   getCephAdminBucketObjectLock,
   setCephAdminBucketVersioning,

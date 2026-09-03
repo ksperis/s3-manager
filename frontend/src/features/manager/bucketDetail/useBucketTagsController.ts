@@ -8,8 +8,8 @@ import {
   deleteBucketTags,
   getBucketTags,
   putBucketTags,
-  type BucketTag,
 } from "../../../api/buckets";
+import type { BucketTag } from "../../../api/bucketContracts";
 import {
   deleteCephAdminBucketTags,
   getCephAdminBucketTags,

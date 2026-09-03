@@ -7,8 +7,8 @@ import type { S3AccountSelector } from "../../../api/accountParams";
 import {
   getBucketAcl,
   updateBucketAcl,
-  type BucketAcl,
 } from "../../../api/buckets";
+import type { BucketAcl } from "../../../api/bucketContracts";
 import {
   getCephAdminBucketAcl,
   updateCephAdminBucketAcl,

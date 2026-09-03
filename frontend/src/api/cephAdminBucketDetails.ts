@@ -15,19 +15,12 @@ import type {
   BucketProperties,
   BucketPublicAccessBlock,
   BucketQuotaUpdate,
+  BucketReplicationConfiguration,
   BucketTag,
+  BucketVersioningStatus,
   BucketWebsiteConfiguration,
-} from "./buckets";
+} from "./bucketContracts";
 import client from "./client";
-
-type BucketReplicationConfiguration = {
-  configuration: Record<string, unknown>;
-};
-
-type BucketVersioningStatus = {
-  status?: string | null;
-  enabled: boolean;
-};
 
 function cephAdminBucketPath(endpointId: number, bucketName: string): string {
   return `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}`;
