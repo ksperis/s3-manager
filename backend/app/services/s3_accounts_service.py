@@ -827,13 +827,6 @@ class S3AccountsService:
                 raise ValueError(f"Unable to delete RGW account {account_identifier}: {exc}") from exc
         self._remove_account_entry(account)
 
-    def unlink_account(self, account_id: int) -> None:
-        account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
-        if not account:
-            raise ValueError("S3Account not found")
-        self._delete_root_user(account)
-        self._remove_account_entry(account)
-
     def _delete_root_user(self, account: S3Account) -> None:
         admin = self._admin_for_account(account, allow_missing=False)
         try:

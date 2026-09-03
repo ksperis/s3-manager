@@ -24,7 +24,6 @@ from app.db import (
     UserS3Account,
 )
 from app.models.s3_account import S3AccountCreate, S3AccountImport
-from app.services.rgw_admin import RGWAdminError
 
 
 def _seed_ceph_endpoint(db_session, *, account_enabled: bool = True, is_default: bool = True) -> StorageEndpoint:
@@ -436,10 +435,6 @@ class FakeRGWDeleteAdmin:
         return {"id": account_id, "user_list": []}
 
 
-class FakeRGWDeleteAdminFails(FakeRGWDeleteAdmin):
-    def delete_user(self, uid: str, tenant: Optional[str] = None):
-        raise RGWAdminError("delete_user failed")
-
 
 def _seed_account_derived_rows(db_session, *, endpoint: StorageEndpoint, account: S3Account) -> None:
     rate_card = BillingRateCard(
@@ -582,56 +577,3 @@ def test_delete_account_calls_rgw_when_flag_true(db_session, monkeypatch):
     assert fake_admin.deleted_users == [("rgw00000000000000002-admin", None)]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
 
-
-def test_unlink_account_deletes_root_and_interface_links(db_session, monkeypatch):
-    endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
-    account = S3Account(
-        name="UnlinkMe",
-        rgw_account_id="RGW00000000000000003",
-        rgw_user_uid="rgw00000000000000003-admin",
-        storage_endpoint_id=endpoint.id,
-    )
-    db_session.add(account)
-    db_session.flush()
-    user = User(email="unlink@example.com", hashed_password="hash", role=UserRole.UI_USER.value)
-    db_session.add(user)
-    db_session.flush()
-    db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=account.id,
-            manager_role="account_administrator",
-            portal_role=None,
-        )
-    )
-    db_session.commit()
-
-    fake_admin = FakeRGWDeleteAdmin()
-    svc = _build_service(db_session, monkeypatch, fake_admin)
-
-    svc.unlink_account(account.id)
-
-    assert fake_admin.deleted == []
-    assert fake_admin.deleted_users == [("rgw00000000000000003-admin", None)]
-    assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
-    assert db_session.query(UserS3Account).filter(UserS3Account.account_id == account.id).first() is None
-
-
-def test_unlink_account_raises_when_root_user_cannot_be_deleted(db_session, monkeypatch):
-    endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
-    account = S3Account(
-        name="BrokenUnlink",
-        rgw_account_id="RGW00000000000000004",
-        rgw_user_uid="rgw00000000000000004-admin",
-        storage_endpoint_id=endpoint.id,
-    )
-    db_session.add(account)
-    db_session.commit()
-
-    svc = _build_service(db_session, monkeypatch, FakeRGWDeleteAdminFails())
-
-    with pytest.raises(ValueError):
-        svc.unlink_account(account.id)
-
-    # S3Account should remain because unlink failed
-    assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is not None

@@ -92,30 +92,8 @@ def _seed_connection(db_session, *, created_by_user_id: int, name: str, is_share
     return entry
 
 
-def test_create_super_admin_create_user_and_authenticate(db_session):
+def test_create_user_and_authenticate(db_session):
     service = UsersService(db_session)
-
-    admin = service.create_super_admin(
-        UserCreate(
-            email="superadmin@example.com",
-            password="verylongpass123",
-            full_name="Super Admin",
-        )
-    )
-    assert admin.role == UserRole.UI_SUPERADMIN.value
-    assert admin.can_access_ceph_admin is False
-    assert admin.can_access_storage_ops is False
-    assert admin.can_access_manager_bucket_compare is False
-    assert admin.can_access_manager_bucket_integrity_check is False
-    assert admin.can_access_manager_bucket_migration is False
-    assert admin.can_access_manager_feature_rules is False
-    assert admin.can_create_manual_private_connections is False
-    assert admin.can_provision_managed_private_connections is False
-
-    with pytest.raises(ValueError, match="User already exists"):
-        service.create_super_admin(
-            UserCreate(email="superadmin@example.com", password="verylongpass123", full_name="Duplicate")
-        )
 
     with pytest.raises(ValueError, match=PASSWORD_POLICY_ERROR):
         service.create_user(UserCreate(email="short@example.com", password="short", full_name="Short"))

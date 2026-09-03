@@ -1,48 +1,22 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
 from app.db import (
     ApiToken,
     AuthSession,
     AuditLog,
     BucketMigration,
-    BillingAssignment,
-    BillingRateCard,
-    BillingStorageDaily,
-    BillingUsageDaily,
     RefreshToken,
-    S3Account,
     S3Connection,
     S3User,
-    StorageEndpoint,
-    StorageProvider,
     User,
     UserRole,
-    UserS3Account,
     UserS3Connection,
 )
-from app.services.s3_accounts_service import S3AccountsService
 from app.services.users_service import UsersService
 from app.db.tag_definition import TagDefinition
-
-
-def _seed_endpoint(db_session) -> StorageEndpoint:
-    endpoint = StorageEndpoint(
-        name="delete-int",
-        endpoint_url="https://delete-int.example.test",
-        provider=StorageProvider.CEPH.value,
-        admin_access_key="AKIA-ADMIN",
-        admin_secret_key="SECRET-ADMIN",
-        features_config="features:\n  admin:\n    enabled: true\n",
-        is_default=True,
-        is_editable=True,
-    )
-    db_session.add(endpoint)
-    db_session.commit()
-    db_session.refresh(endpoint)
-    return endpoint
 
 
 def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
@@ -152,84 +126,6 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
     refresh = db_session.query(RefreshToken).filter(RefreshToken.id == "ref-other").first()
     assert token is not None
     assert refresh is not None
-
-
-def test_unlink_account_cleans_links_and_purges_derived_rows(db_session):
-    endpoint = _seed_endpoint(db_session)
-    account = S3Account(
-        name="to-unlink",
-        rgw_account_id="RGW-TO-UNLINK",
-        rgw_user_uid="rgw-to-unlink-admin",
-        storage_endpoint_id=endpoint.id,
-    )
-    user = User(email="acc-user@example.com", hashed_password="x", role=UserRole.UI_USER.value)
-    s3_user = S3User(
-        name="billing-user",
-        rgw_user_uid="billing-user",
-        rgw_access_key="AKIA-BILL",
-        rgw_secret_key="SECRET-BILL",
-        storage_endpoint_id=endpoint.id,
-    )
-    db_session.add(account)
-    db_session.add(user)
-    db_session.add(s3_user)
-    db_session.flush()
-
-    db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=account.id,
-            manager_role=None,
-            portal_role="portal_user",
-        )
-    )
-    db_session.add(AuditLog(user_email=user.email, user_role=user.role, scope="admin", action="x", account_id=account.id))
-    rate_card = BillingRateCard(
-        name="rc-1",
-        currency="EUR",
-        effective_from=date(2026, 1, 1),
-    )
-    db_session.add(rate_card)
-    db_session.flush()
-    db_session.add(
-        BillingAssignment(
-            storage_endpoint_id=endpoint.id,
-            s3_account_id=account.id,
-            s3_user_id=s3_user.id,
-            rate_card_id=rate_card.id,
-        )
-    )
-    db_session.add(
-        BillingUsageDaily(
-            day=date(2026, 1, 1),
-            storage_endpoint_id=endpoint.id,
-            s3_account_id=account.id,
-            s3_user_id=s3_user.id,
-            source="rgw_admin_usage",
-        )
-    )
-    db_session.add(
-        BillingStorageDaily(
-            day=date(2026, 1, 1),
-            storage_endpoint_id=endpoint.id,
-            s3_account_id=account.id,
-            s3_user_id=s3_user.id,
-            source="rgw_admin_bucket_stats",
-        )
-    )
-    db_session.commit()
-
-    S3AccountsService(db_session).unlink_account(account.id)
-
-    assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
-    assert db_session.query(UserS3Account).filter(UserS3Account.account_id == account.id).first() is None
-    audit = db_session.query(AuditLog).first()
-    assert audit is not None and audit.account_id is None
-    assert db_session.query(BillingUsageDaily).filter(BillingUsageDaily.s3_account_id == account.id).count() == 0
-    assert (
-        db_session.query(BillingStorageDaily).filter(BillingStorageDaily.s3_account_id == account.id).count() == 0
-    )
-    assert db_session.query(BillingAssignment).filter(BillingAssignment.s3_account_id == account.id).count() == 0
 
 
 def test_delete_user_nulls_nullable_foreign_keys(db_session):

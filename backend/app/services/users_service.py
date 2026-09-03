@@ -111,26 +111,6 @@ class UsersService:
     def get_by_id(self, user_id: int) -> Optional[User]:
         return self.db.query(User).filter(User.id == user_id).first()
 
-    def create_super_admin(self, payload: UserCreate) -> User:
-        existing = self.get_by_email(payload.email)
-        if existing:
-            raise ValueError("User already exists")
-        validate_password_policy(payload.password)
-        user = User(
-            email=payload.email,
-            full_name=payload.full_name,
-            hashed_password=get_password_hash(payload.password),
-            is_active=True,
-            role=UserRole.UI_SUPERADMIN.value,
-            can_access_ceph_admin=False,
-            can_access_storage_ops=False,
-        )
-        self.db.add(user)
-        self.db.commit()
-        self.db.refresh(user)
-        logger.debug("Created super admin user id=%s email=%s", user.id, user.email)
-        return user
-
     def create_user(self, payload: UserCreate) -> User:
         existing = self.get_by_email(payload.email)
         if existing:

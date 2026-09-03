@@ -751,12 +751,5 @@ def test_server_managed_connection_generic_updates_protect_provenance_and_creden
             connection.id,
             S3ConnectionUpdate(access_browser=False, access_manager=False),
         )
-    with pytest.raises(ValueError, match="rotated by the provisioning service"):
-        service.update_credentials(
-            user.id,
-            connection.id,
-            access_key_id="OTHER-AK",
-            secret_access_key="OTHER-SK",
-        )
     with pytest.raises(ValueError, match="deleted by the provisioning service"):
         service.delete(user.id, connection.id)

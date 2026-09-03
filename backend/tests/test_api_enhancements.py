@@ -120,21 +120,6 @@ def test_admin_account_mutations_require_a_canonical_endpoint(client: TestClient
     assert removed_create_fields_response.status_code == 422
 
 
-def test_admin_unlink_account_endpoint_calls_service(client: TestClient):
-    called: dict[str, int] = {}
-
-    class FakeService:
-        def unlink_account(self, account_id: int) -> None:
-            called["id"] = account_id
-
-    app.dependency_overrides[admin_accounts_router.get_admin_accounts_service] = lambda: FakeService()
-    app.dependency_overrides[admin_accounts_router.get_audit_service] = lambda: _FakeAuditService()
-
-    response = client.post("/api/admin/accounts/42/unlink")
-
-    assert response.status_code == 204
-    assert called["id"] == 42
-
 
 def test_manager_create_bucket_passes_versioning_and_location(client: TestClient):
     captured: dict[str, object] = {}

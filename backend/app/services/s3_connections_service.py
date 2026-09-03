@@ -210,21 +210,6 @@ class S3ConnectionsService:
         self.db.refresh(row)
         return row
 
-    def update_credentials(self, user_id: int, connection_id: int, *, access_key_id: str, secret_access_key: str) -> S3Connection:
-        """Rotate credentials without mixing with metadata updates."""
-        row = self.get_owned(user_id, connection_id)
-        if row.server_managed:
-            raise ValueError("Server-managed connection credentials must be rotated by the provisioning service")
-        if self.is_active_managed_source(row.id):
-            raise ValueError("Connection credentials are locked while managed private accesses depend on this source")
-        row.access_key_id = access_key_id
-        row.secret_access_key = secret_access_key
-        self._refresh_detected_capabilities(row)
-        row.updated_at = utcnow()
-        self.db.commit()
-        self.db.refresh(row)
-        return self._to_model(row)
-
     def get_owned(self, user_id: int, connection_id: int) -> DBS3Connection:
         row = (
             self.db.query(DBS3Connection)

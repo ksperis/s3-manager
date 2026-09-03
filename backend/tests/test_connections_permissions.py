@@ -180,10 +180,6 @@ def test_revocation_keeps_owned_connection_lifecycle_but_rejects_sensitive_forge
                     {"verify_tls": False},
                 )
             ],
-            client.put(
-                f"/api/connections/{connection.id}/credentials",
-                json={"access_key_id": "FORGED-AK", "secret_access_key": "FORGED-SK"},
-            ),
             client.get("/api/connections/storage-endpoints"),
         ]
         assert all(response.status_code == 403 for response in forged_requests)

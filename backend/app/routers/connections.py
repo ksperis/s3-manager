@@ -9,7 +9,6 @@ from app.db import User
 from app.models.s3_connection import (
     S3Connection,
     S3ConnectionCreate,
-    S3ConnectionCredentialsUpdate,
     S3ConnectionCredentialsValidationRequest,
     S3ConnectionCredentialsValidationResult,
     S3ConnectionUpdate,
@@ -206,46 +205,6 @@ def update_connection(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc)))
 
-
-@router.put("/{connection_id}/credentials", response_model=S3Connection)
-def rotate_connection_credentials(
-    connection_id: int,
-    payload: S3ConnectionCredentialsUpdate,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_account_user),
-):
-    service = S3ConnectionsService(db)
-    try:
-        service.get_owned(user.id, connection_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found") from exc
-    _ensure_manual_private_connection_creation_allowed(db, user)
-    audit = AuditService(db)
-    try:
-        updated = service.update_credentials(
-            user.id,
-            connection_id,
-            access_key_id=payload.access_key_id,
-            secret_access_key=payload.secret_access_key,
-        )
-        audit.record_action(
-            user=user,
-            scope="browser",
-            action="connection.rotate_credentials",
-            entity_type="S3Connection",
-            entity_id=updated.id,
-            metadata={
-                "name": updated.name,
-                "endpoint_url": updated.endpoint_url,
-                "provider_hint": updated.provider_hint,
-                "access_key_id": updated.access_key_id,
-            },
-        )
-        return updated
-    except KeyError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)

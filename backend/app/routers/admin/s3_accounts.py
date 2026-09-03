@@ -290,26 +290,3 @@ def delete_account(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
 
-
-@router.post("/{account_id}/unlink", status_code=status.HTTP_204_NO_CONTENT)
-def unlink_account(
-    account_id: int,
-    service: S3AccountsService = Depends(get_admin_accounts_service),
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> None:
-    try:
-        logger.debug("Unlinking account %s", account_id)
-        service.unlink_account(account_id)
-        audit_service.record_action(
-            user=current_user,
-            scope="admin",
-            action="unlink_account",
-            entity_type="account",
-            entity_id=str(account_id),
-            metadata={"account_id": account_id},
-        )
-    except ValueError as exc:
-        detail = sanitize_error_detail(str(exc))
-        status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=status_code, detail=detail) from exc

@@ -35,13 +35,11 @@ from app.models.first_admin_bootstrap import (
 from app.models.ldap import LDAPLoginRequest, LDAPProviderInfo
 from app.models.oidc import OIDCCallbackRequest, OIDCProviderInfo, OIDCStartRequest, OIDCStartResponse
 from app.models.session import S3KeyLogin, SessionDescriptor
-from app.models.user import UserCreate, UserOut
 from app.routers import auth_api_tokens, auth_sessions
 from app.routers.auth_cookies import set_auth_cookies, set_pre_auth_cookie
 from app.routers.auth_session_guards import require_recent_mfa
 from app.routers.dependencies import (
     get_audit_service,
-    get_current_ui_superadmin,
     get_users_service_dependency,
 )
 from app.services.app_settings_service import load_app_settings
@@ -74,10 +72,7 @@ from app.services.session_service import SessionIntrospectionError, SessionServi
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.services.users_service import UsersService, get_users_service
 from app.services.webauthn_service import WebAuthnSecurityError, WebAuthnService
-from app.services.identity_security_policy import (
-    passkey_required_for_role,
-    require_admin_sensitive_action,
-)
+from app.services.identity_security_policy import passkey_required_for_role
 from app.utils.http_errors import raise_http_exception_from_exception
 from app.utils.request_security import client_ip, require_trusted_origin
 from app.utils.s3_endpoint import validate_custom_login_s3_endpoint
@@ -249,29 +244,6 @@ def create_first_admin_from_bootstrap(
         auth_type="bootstrap",
     )
 
-
-@router.post("/register-admin", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def register_admin(
-    request: Request,
-    payload: UserCreate,
-    users_service: UsersService = Depends(get_users_service_dependency),
-    current_user: User = Depends(get_current_ui_superadmin),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> UserOut:
-    require_admin_sensitive_action(request, users_service.db, current_user)
-    try:
-        user = users_service.create_super_admin(payload)
-    except ValueError as exc:
-        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
-    audit_service.record_action(
-        user=current_user,
-        scope="admin",
-        action="register_admin",
-        entity_type="user",
-        entity_id=user.id,
-        metadata={"email": user.email, "role": user.role},
-    )
-    return users_service.user_to_out(user)
 
 
 @router.post("/login", response_model=AuthenticationResponse)

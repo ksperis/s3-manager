@@ -15,6 +15,9 @@ from app.main import app
         ("get", "/api/portal/eligibility"),
         ("get", "/api/auth/admin/sessions"),
         ("get", "/api/auth/external-link-requests"),
+        ("post", "/api/auth/register-admin"),
+        ("post", "/api/admin/accounts/1/unlink"),
+        ("put", "/api/connections/1/credentials"),
     ],
 )
 def test_redundant_api_routes_return_not_found(client, method: str, path: str) -> None:
