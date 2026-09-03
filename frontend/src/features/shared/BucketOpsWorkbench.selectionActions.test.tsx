@@ -30,6 +30,12 @@ vi.mock("react-router-dom", async () => {
 
 vi.mock("../../api/cephAdminBuckets", () => ({
   backupCephAdminBucketConfigs: mocks.backupCephAdminBucketConfigs,
+  listCephAdminBuckets: mocks.listCephAdminBuckets,
+  refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
+  streamCephAdminBuckets: mocks.streamCephAdminBuckets,
+}));
+
+vi.mock("../../api/cephAdminBucketDetails", () => ({
   deleteCephAdminBucketLogging: mocks.noopAsync,
   deleteCephAdminBucketCors: mocks.noopAsync,
   deleteCephAdminBucketLifecycle: mocks.noopAsync,
@@ -44,15 +50,12 @@ vi.mock("../../api/cephAdminBuckets", () => ({
   getCephAdminBucketProperties: mocks.noopAsync,
   getCephAdminBucketPublicAccessBlock: mocks.noopAsync,
   getCephAdminBucketWebsite: mocks.noopAsync,
-  listCephAdminBuckets: mocks.listCephAdminBuckets,
   putCephAdminBucketLogging: mocks.noopAsync,
   putCephAdminBucketCors: mocks.noopAsync,
   putCephAdminBucketLifecycle: mocks.noopAsync,
   putCephAdminBucketNotifications: mocks.noopAsync,
   putCephAdminBucketPolicy: mocks.noopAsync,
-  refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning: mocks.noopAsync,
-  streamCephAdminBuckets: mocks.streamCephAdminBuckets,
   updateCephAdminBucketObjectLock: mocks.noopAsync,
   updateCephAdminBucketPublicAccessBlock: mocks.noopAsync,
   updateCephAdminBucketQuota: mocks.noopAsync,

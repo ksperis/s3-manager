@@ -7,7 +7,7 @@ const apiMocks = vi.hoisted(() => ({
   listObjects: vi.fn(),
 }));
 
-vi.mock("../../../../api/cephAdminBuckets", () => ({
+vi.mock("../../../../api/cephAdminBucketDetails", () => ({
   listCephAdminBucketObjects: (...args: unknown[]) =>
     apiMocks.listCephAdminBucketObjects(...args),
 }));

@@ -16,7 +16,7 @@ vi.mock("../../../../api/buckets", () => ({
     apiMocks.updateBucketPublicAccessBlock(...args),
 }));
 
-vi.mock("../../../../api/cephAdminBuckets", () => ({
+vi.mock("../../../../api/cephAdminBucketDetails", () => ({
   getCephAdminBucketPublicAccessBlock: (...args: unknown[]) =>
     apiMocks.getCephAdminBucketPublicAccessBlock(...args),
   updateCephAdminBucketPublicAccessBlock: (...args: unknown[]) =>

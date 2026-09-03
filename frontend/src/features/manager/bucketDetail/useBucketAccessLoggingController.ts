@@ -14,7 +14,7 @@ import {
   deleteCephAdminBucketLogging,
   getCephAdminBucketLogging,
   putCephAdminBucketLogging,
-} from "../../../api/cephAdminBuckets";
+} from "../../../api/cephAdminBucketDetails";
 import { extractApiError } from "../../../utils/apiError";
 import {
   normalizeAccessLoggingDraft,

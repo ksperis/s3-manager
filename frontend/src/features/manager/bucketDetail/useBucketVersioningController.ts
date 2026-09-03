@@ -11,7 +11,7 @@ import {
 import {
   getCephAdminBucketVersioning,
   setCephAdminBucketVersioning,
-} from "../../../api/cephAdminBuckets";
+} from "../../../api/cephAdminBucketDetails";
 import { extractApiError } from "../../../utils/apiError";
 
 type UseBucketVersioningControllerOptions = {

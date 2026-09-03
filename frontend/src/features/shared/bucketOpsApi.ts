@@ -17,18 +17,20 @@ import {
   getCephAdminBucketProperties,
   getCephAdminBucketPublicAccessBlock,
   getCephAdminBucketWebsite,
-  listCephAdminBuckets,
   putCephAdminBucketCors,
   putCephAdminBucketLifecycle,
   putCephAdminBucketLogging,
   putCephAdminBucketNotifications,
   putCephAdminBucketPolicy,
-  refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning,
-  streamCephAdminBuckets,
   updateCephAdminBucketObjectLock,
   updateCephAdminBucketPublicAccessBlock,
   updateCephAdminBucketQuota,
+} from "../../api/cephAdminBucketDetails";
+import {
+  listCephAdminBuckets,
+  refreshCephAdminBucketListingCache,
+  streamCephAdminBuckets,
 } from "../../api/cephAdminBuckets";
 import {
   deleteStorageOpsBucketCors,

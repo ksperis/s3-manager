@@ -14,7 +14,7 @@ import {
   deleteCephAdminBucketTags,
   getCephAdminBucketTags,
   putCephAdminBucketTags,
-} from "../../../api/cephAdminBuckets";
+} from "../../../api/cephAdminBucketDetails";
 import { extractApiError } from "../../../utils/apiError";
 import { createUiDraftId } from "../../../utils/uiDraftId";
 import { stableBucketJsonSignature } from "./bucketFeatureState";

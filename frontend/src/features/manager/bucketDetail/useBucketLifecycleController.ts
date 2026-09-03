@@ -13,7 +13,7 @@ import {
   deleteCephAdminBucketLifecycle,
   getCephAdminBucketLifecycle,
   putCephAdminBucketLifecycle,
-} from "../../../api/cephAdminBuckets";
+} from "../../../api/cephAdminBucketDetails";
 import { extractApiError } from "../../../utils/apiError";
 import {
   lifecycleRuleId,

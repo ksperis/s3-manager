@@ -20,7 +20,7 @@ vi.mock("../../../../api/buckets", () => ({
     apiMocks.putBucketLifecycle(...args),
 }));
 
-vi.mock("../../../../api/cephAdminBuckets", () => ({
+vi.mock("../../../../api/cephAdminBucketDetails", () => ({
   deleteCephAdminBucketLifecycle: (...args: unknown[]) =>
     apiMocks.deleteCephAdminBucketLifecycle(...args),
   getCephAdminBucketLifecycle: (...args: unknown[]) =>

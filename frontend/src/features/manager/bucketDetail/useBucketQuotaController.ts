@@ -8,7 +8,7 @@ import {
   updateBucketQuota,
   type BucketQuotaUpdate,
 } from "../../../api/buckets";
-import { updateCephAdminBucketQuota } from "../../../api/cephAdminBuckets";
+import { updateCephAdminBucketQuota } from "../../../api/cephAdminBucketDetails";
 import { extractApiError } from "../../../utils/apiError";
 
 export type BucketQuotaUnit = "MiB" | "GiB" | "TiB";

@@ -14,7 +14,7 @@ import {
   deleteCephAdminBucketWebsite,
   getCephAdminBucketWebsite,
   putCephAdminBucketWebsite,
-} from "../../../api/cephAdminBuckets";
+} from "../../../api/cephAdminBucketDetails";
 import { extractApiError } from "../../../utils/apiError";
 import { jsonTextSignature, stableBucketJsonSignature } from "./bucketFeatureState";
 

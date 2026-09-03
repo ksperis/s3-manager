@@ -12,7 +12,7 @@ vi.mock("../../../../api/buckets", () => ({
     apiMocks.updateBucketQuota(...args),
 }));
 
-vi.mock("../../../../api/cephAdminBuckets", () => ({
+vi.mock("../../../../api/cephAdminBucketDetails", () => ({
   updateCephAdminBucketQuota: (...args: unknown[]) =>
     apiMocks.updateCephAdminBucketQuota(...args),
 }));

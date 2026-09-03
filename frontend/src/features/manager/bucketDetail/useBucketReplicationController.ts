@@ -13,7 +13,7 @@ import {
   deleteCephAdminBucketReplication,
   getCephAdminBucketReplication,
   putCephAdminBucketReplication,
-} from "../../../api/cephAdminBuckets";
+} from "../../../api/cephAdminBucketDetails";
 import { extractApiError } from "../../../utils/apiError";
 import { createUiDraftId } from "../../../utils/uiDraftId";
 import {

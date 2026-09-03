@@ -18,7 +18,7 @@ vi.mock("../../../../api/buckets", () => ({
   putBucketWebsite: (...args: unknown[]) => apiMocks.putBucketWebsite(...args),
 }));
 
-vi.mock("../../../../api/cephAdminBuckets", () => ({
+vi.mock("../../../../api/cephAdminBucketDetails", () => ({
   deleteCephAdminBucketWebsite: (...args: unknown[]) =>
     apiMocks.deleteCephAdminBucketWebsite(...args),
   getCephAdminBucketWebsite: (...args: unknown[]) =>

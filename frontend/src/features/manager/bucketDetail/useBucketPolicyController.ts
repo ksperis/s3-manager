@@ -13,7 +13,7 @@ import {
   deleteCephAdminBucketPolicy,
   getCephAdminBucketPolicy,
   putCephAdminBucketPolicy,
-} from "../../../api/cephAdminBuckets";
+} from "../../../api/cephAdminBucketDetails";
 import { extractApiError } from "../../../utils/apiError";
 import {
   jsonTextSignature,

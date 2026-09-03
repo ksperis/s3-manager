@@ -73,6 +73,15 @@ vi.mock("../../../api/cephAdminBuckets", async () => {
   return {
     ...actual,
     listCephAdminBuckets: (...args: unknown[]) => listCephAdminBucketsMock(...args),
+  };
+});
+
+vi.mock("../../../api/cephAdminBucketDetails", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/cephAdminBucketDetails")>(
+    "../../../api/cephAdminBucketDetails",
+  );
+  return {
+    ...actual,
     listCephAdminBucketObjects: (...args: unknown[]) => listCephAdminBucketObjectsMock(...args),
     getCephAdminBucketProperties: (...args: unknown[]) => getCephAdminBucketPropertiesMock(...args),
     getCephAdminBucketVersioning: (...args: unknown[]) => getCephAdminBucketVersioningMock(...args),

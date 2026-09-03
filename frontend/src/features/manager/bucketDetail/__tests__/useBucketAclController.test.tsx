@@ -14,7 +14,7 @@ vi.mock("../../../../api/buckets", () => ({
   updateBucketAcl: (...args: unknown[]) => apiMocks.updateBucketAcl(...args),
 }));
 
-vi.mock("../../../../api/cephAdminBuckets", () => ({
+vi.mock("../../../../api/cephAdminBucketDetails", () => ({
   getCephAdminBucketAcl: (...args: unknown[]) =>
     apiMocks.getCephAdminBucketAcl(...args),
   updateCephAdminBucketAcl: (...args: unknown[]) =>

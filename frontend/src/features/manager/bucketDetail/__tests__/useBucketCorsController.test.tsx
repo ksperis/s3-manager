@@ -20,7 +20,7 @@ vi.mock("../../../../api/buckets", () => ({
   putBucketCors: (...args: unknown[]) => apiMocks.putBucketCors(...args),
 }));
 
-vi.mock("../../../../api/cephAdminBuckets", () => ({
+vi.mock("../../../../api/cephAdminBucketDetails", () => ({
   deleteCephAdminBucketCors: (...args: unknown[]) =>
     apiMocks.deleteCephAdminBucketCors(...args),
   getCephAdminBucketCors: (...args: unknown[]) =>

@@ -23,7 +23,7 @@ vi.mock("../../../../api/buckets", () => ({
     apiMocks.putBucketEncryption(...args),
 }));
 
-vi.mock("../../../../api/cephAdminBuckets", () => ({
+vi.mock("../../../../api/cephAdminBucketDetails", () => ({
   deleteCephAdminBucketEncryption: (...args: unknown[]) =>
     apiMocks.deleteCephAdminBucketEncryption(...args),
   getCephAdminBucketEncryption: (...args: unknown[]) =>

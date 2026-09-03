@@ -16,7 +16,7 @@ vi.mock("../../../../api/buckets", () => ({
     apiMocks.setBucketVersioning(...args),
 }));
 
-vi.mock("../../../../api/cephAdminBuckets", () => ({
+vi.mock("../../../../api/cephAdminBucketDetails", () => ({
   getCephAdminBucketVersioning: (...args: unknown[]) =>
     apiMocks.getCephAdminBucketVersioning(...args),
   setCephAdminBucketVersioning: (...args: unknown[]) =>

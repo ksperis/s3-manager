@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   getCephAdminBucketProperties,
-  listCephAdminBuckets,
   updateCephAdminBucketQuota,
-} from "../../api/cephAdminBuckets";
+} from "../../api/cephAdminBucketDetails";
+import { listCephAdminBuckets } from "../../api/cephAdminBuckets";
 import {
   getStorageOpsBucketProperties,
   listStorageOpsBuckets,
