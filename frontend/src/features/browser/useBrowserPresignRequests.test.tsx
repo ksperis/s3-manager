@@ -18,9 +18,12 @@ vi.mock("../../api/browser", async () => {
   return {
     ...actual,
     presignObject: (...args: unknown[]) => apiMocks.presignObject(...args),
-    presignPart: (...args: unknown[]) => apiMocks.presignPart(...args),
   };
 });
+
+vi.mock("../../api/browserMultipart", () => ({
+  presignPart: (...args: unknown[]) => apiMocks.presignPart(...args),
+}));
 
 vi.mock("./stsPresigner", () => ({
   presignObjectWithSts: (...args: unknown[]) =>

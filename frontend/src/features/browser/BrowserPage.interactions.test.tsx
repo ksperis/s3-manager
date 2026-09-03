@@ -180,15 +180,18 @@ vi.mock("../../api/browser", async () => {
     presignObject: (...args: unknown[]) => presignObjectMock(...args),
     proxyDownload: (...args: unknown[]) => proxyDownloadMock(...args),
     proxyUpload: (...args: unknown[]) => proxyUploadMock(...args),
-    initiateMultipartUpload: (...args: unknown[]) =>
-      initiateMultipartUploadMock(...args),
-    presignPart: (...args: unknown[]) => presignPartMock(...args),
-    completeMultipartUpload: (...args: unknown[]) =>
-      completeMultipartUploadMock(...args),
-    abortMultipartUpload: (...args: unknown[]) =>
-      abortMultipartUploadMock(...args),
   };
 });
+
+vi.mock("../../api/browserMultipart", () => ({
+  initiateMultipartUpload: (...args: unknown[]) =>
+    initiateMultipartUploadMock(...args),
+  presignPart: (...args: unknown[]) => presignPartMock(...args),
+  completeMultipartUpload: (...args: unknown[]) =>
+    completeMultipartUploadMock(...args),
+  abortMultipartUpload: (...args: unknown[]) =>
+    abortMultipartUploadMock(...args),
+}));
 
 vi.mock("../../api/buckets", async () => {
   const actual =

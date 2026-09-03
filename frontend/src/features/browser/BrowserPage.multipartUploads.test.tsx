@@ -49,10 +49,15 @@ vi.mock("../../api/browser", async () => {
     listBrowserObjects: (...args: unknown[]) => listBrowserObjectsMock(...args),
     getBucketVersioning: (...args: unknown[]) => getBucketVersioningMock(...args),
     getBucketCorsStatus: (...args: unknown[]) => getBucketCorsStatusMock(...args),
-    listMultipartUploads: (...args: unknown[]) => listMultipartUploadsMock(...args),
-    abortMultipartUpload: (...args: unknown[]) => abortMultipartUploadMock(...args),
   };
 });
+
+vi.mock("../../api/browserMultipart", () => ({
+  listMultipartUploads: (...args: unknown[]) =>
+    listMultipartUploadsMock(...args),
+  abortMultipartUpload: (...args: unknown[]) =>
+    abortMultipartUploadMock(...args),
+}));
 
 vi.mock("../../api/buckets", async () => {
   const actual = await vi.importActual<typeof import("../../api/buckets")>("../../api/buckets");

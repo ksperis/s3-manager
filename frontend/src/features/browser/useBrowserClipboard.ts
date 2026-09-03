@@ -8,17 +8,19 @@ import {
   type S3AccountSelector,
 } from "../../api/accountParams";
 import {
-  abortMultipartUpload,
-  completeMultipartUpload,
   copyObject,
   createFolder,
   deleteObjects,
   fetchObjectMetadata,
   getBucketCorsStatus,
-  initiateMultipartUpload,
-  presignPart,
   type BrowserRequestOptions,
 } from "../../api/browser";
+import {
+  abortMultipartUpload,
+  completeMultipartUpload,
+  initiateMultipartUpload,
+  presignPart,
+} from "../../api/browserMultipart";
 import { runWithConcurrency } from "../../utils/concurrency";
 import type { BrowserFunctionalProfile } from "./browserActions";
 import { PART_SIZE } from "./browserConstants";

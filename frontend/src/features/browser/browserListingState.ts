@@ -2,7 +2,8 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { BrowserObject, MultipartUploadItem } from "../../api/browser";
+import type { BrowserObject } from "../../api/browser";
+import type { MultipartUploadItem } from "../../api/browserMultipart";
 
 export const getDeletedObjectEntryId = (
   value: Pick<BrowserObject, "key" | "version_id">,

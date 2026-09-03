@@ -20,7 +20,13 @@ vi.mock("../../api/browser", async () => ({
   ...(await vi.importActual<typeof import("../../api/browser")>(
     "../../api/browser",
   )),
-  ...apiMocks,
+  proxyUpload: apiMocks.proxyUpload,
+}));
+
+vi.mock("../../api/browserMultipart", () => ({
+  abortMultipartUpload: apiMocks.abortMultipartUpload,
+  completeMultipartUpload: apiMocks.completeMultipartUpload,
+  initiateMultipartUpload: apiMocks.initiateMultipartUpload,
 }));
 
 vi.mock("./browserFileUpload", () => ({

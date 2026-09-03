@@ -6,14 +6,16 @@ import { useCallback } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   presignObject,
-  presignPart,
   type BrowserRequestOptions,
-  type PresignPartRequest,
-  type PresignPartResponse,
   type PresignRequest,
   type PresignedUrl,
   type StsCredentials,
 } from "../../api/browser";
+import {
+  presignPart,
+  type PresignPartRequest,
+  type PresignPartResponse,
+} from "../../api/browserMultipart";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 
 type EnsureStsCredentials = (

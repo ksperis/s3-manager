@@ -4,12 +4,12 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
+import type { BrowserRequestOptions } from "../../api/browser";
 import {
   abortMultipartUpload,
   listMultipartUploads,
-  type BrowserRequestOptions,
   type MultipartUploadItem,
-} from "../../api/browser";
+} from "../../api/browserMultipart";
 import { extractApiError } from "../../utils/apiError";
 import {
   MULTIPART_UPLOADS_HARD_LIMIT,

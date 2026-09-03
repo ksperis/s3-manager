@@ -11,12 +11,14 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type {
-  PresignPartRequest,
-  PresignPartResponse,
   PresignRequest,
   PresignedUrl,
   StsCredentials,
 } from "../../api/browser";
+import type {
+  PresignPartRequest,
+  PresignPartResponse,
+} from "../../api/browserMultipart";
 
 const DEFAULT_EXPIRES_IN = 900;
 

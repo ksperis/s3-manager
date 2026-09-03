@@ -4,17 +4,19 @@
  */
 import { useCallback } from "react";
 import {
-  abortMultipartUpload,
-  completeMultipartUpload,
-  initiateMultipartUpload,
   proxyUpload,
   type BrowserRequestOptions,
-  type PresignPartRequest,
-  type PresignPartResponse,
   type PresignRequest,
   type PresignedUrl,
   type UploadProgressEvent,
 } from "../../api/browser";
+import {
+  abortMultipartUpload,
+  completeMultipartUpload,
+  initiateMultipartUpload,
+  type PresignPartRequest,
+  type PresignPartResponse,
+} from "../../api/browserMultipart";
 import {
   MULTIPART_CONCURRENCY,
   MULTIPART_THRESHOLD,
