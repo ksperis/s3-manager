@@ -38,7 +38,7 @@ export type BrowserTransferAccessBadge = {
   indicatorClassName: string;
 };
 
-export type BrowserCorsAvailability = "enabled" | "disabled" | "unknown";
+type BrowserCorsAvailability = "enabled" | "disabled" | "unknown";
 
 export function resolveBrowserCorsAvailability(
   status: BucketCorsStatus | null | undefined,
