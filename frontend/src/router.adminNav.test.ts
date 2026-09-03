@@ -60,6 +60,75 @@ describe("buildAdminNav", () => {
     expect(identityAccess?.links.find((link) => link.label === "Identity Security")?.iconName).toBe("shield");
   });
 
+  it("adds exact pending request badges and hides zero counts", () => {
+    const populated = buildAdminNav(
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      { identity_link_requests: 2, portal_requests: 5 },
+    );
+    const empty = buildAdminNav(
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      { identity_link_requests: 0, portal_requests: 0 },
+    );
+
+    const identityLink = populated
+      .find((section) => section.label === "Identity & Access")
+      ?.links.find((link) => link.label === "Identity Security");
+    const portalLink = populated
+      .find((section) => section.label === "Audit & Reporting")
+      ?.links.find((link) => link.label === "Portal Requests");
+    expect(identityLink).toMatchObject({
+      badge: "2",
+      badgeAriaLabel: "2 pending identity link requests",
+      badgeTone: "attention",
+    });
+    expect(portalLink).toMatchObject({
+      badge: "5",
+      badgeAriaLabel: "5 pending Portal requests",
+      badgeTone: "attention",
+    });
+    expect(
+      empty
+        .find((section) => section.label === "Identity & Access")
+        ?.links.find((link) => link.label === "Identity Security")?.badge,
+    ).toBeUndefined();
+    expect(
+      empty
+        .find((section) => section.label === "Audit & Reporting")
+        ?.links.find((link) => link.label === "Portal Requests")?.badge,
+    ).toBeUndefined();
+  });
+
+  it("keeps Portal Requests hidden when Portal is disabled even with pending requests", () => {
+    const adminNav = buildAdminNav(
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      { identity_link_requests: 0, portal_requests: 5 },
+    );
+
+    expect(
+      adminNav
+        .find((section) => section.label === "Audit & Reporting")
+        ?.links.find((link) => link.label === "Portal Requests"),
+    ).toBeUndefined();
+  });
+
   it("keeps settings collapsed until the admin settings route asks for expansion", () => {
     const baseArgs = [true, true, false, false, false, true] as const;
 

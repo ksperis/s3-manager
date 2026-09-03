@@ -5,6 +5,7 @@
 import client from "./client";
 import type { S3AccountSelector } from "./accountParams";
 import { withS3AccountParam } from "./accountParams";
+import { notifyAdminPendingRequestsRefresh } from "../utils/adminPendingRequestsRefresh";
 
 export type PortalAdminRequestType = "portal_user_access" | "portal_user_removal" | "account_quota_change";
 export type PortalAdminRequestStatus = "pending" | "processing" | "approved" | "rejected" | "failed";
@@ -112,22 +113,30 @@ export async function approveAdminPortalRequest(
   requestId: number,
   payload?: { message?: string | null }
 ): Promise<PortalAdminRequest> {
-  const { data } = await client.post<PortalAdminRequest>(
-    `/admin/portal-requests/${requestId}/approve`,
-    payload ?? {}
-  );
-  return data;
+  try {
+    const { data } = await client.post<PortalAdminRequest>(
+      `/admin/portal-requests/${requestId}/approve`,
+      payload ?? {}
+    );
+    return data;
+  } finally {
+    notifyAdminPendingRequestsRefresh();
+  }
 }
 
 export async function rejectAdminPortalRequest(
   requestId: number,
   payload?: { message?: string | null }
 ): Promise<PortalAdminRequest> {
-  const { data } = await client.post<PortalAdminRequest>(
-    `/admin/portal-requests/${requestId}/reject`,
-    payload ?? {}
-  );
-  return data;
+  try {
+    const { data } = await client.post<PortalAdminRequest>(
+      `/admin/portal-requests/${requestId}/reject`,
+      payload ?? {}
+    );
+    return data;
+  } finally {
+    notifyAdminPendingRequestsRefresh();
+  }
 }
 
 export async function addAdminPortalRequestMessage(

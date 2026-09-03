@@ -63,6 +63,12 @@ and `/api/admin/identity/link-requests` within their role hierarchy to revoke
 sessions and decide manual federated-identity links; Admin step-up follows the
 global Admin passkey policy.
 
+`GET /api/admin/navigation/pending-requests` provides the lightweight Admin
+navigation counters `identity_link_requests` and `portal_requests`. Identity
+counts include only non-expired pending requests visible within the actor's
+role hierarchy; Portal counts include only the exact `pending` status. The
+aggregate exposes no request detail and does not require recent WebAuthn.
+
 An authenticated UI user can renew recent WebAuthn verification without
 creating a new session through
 `POST /api/auth/security/webauthn/authentication/options` followed by

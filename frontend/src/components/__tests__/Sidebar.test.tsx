@@ -6,6 +6,44 @@ import Sidebar, { resolveSidebarLinkIconName } from "../Sidebar";
 import { SIDEBAR_DEFAULT_WIDTH } from "../sidebarSizing";
 
 describe("Sidebar", () => {
+  const pendingLink = {
+    to: "/admin/identity-security",
+    label: "Identity Security",
+    badge: "3",
+    badgeAriaLabel: "3 pending identity link requests",
+    badgeTone: "attention" as const,
+  };
+
+  it("renders accessible attention badges in expanded, compact, and mobile navigation", () => {
+    const expanded = render(
+      <MemoryRouter>
+        <Sidebar sections={[{ label: "Identity & Access", links: [pendingLink] }]} />
+      </MemoryRouter>
+    );
+    const expandedBadge = screen.getByLabelText("3 pending identity link requests");
+    expect(expandedBadge).toHaveTextContent("3");
+    expect(expandedBadge).toHaveClass("bg-primary/15");
+    expanded.unmount();
+
+    const compact = render(
+      <MemoryRouter>
+        <Sidebar compact sections={[{ label: "Identity & Access", links: [pendingLink] }]} />
+      </MemoryRouter>
+    );
+    const compactLink = screen.getByRole("link", {
+      name: "Identity Security, 3 pending identity link requests",
+    });
+    expect(compactLink).toHaveTextContent("3");
+    compact.unmount();
+
+    render(
+      <MemoryRouter>
+        <Sidebar variant="mobile" sections={[{ label: "Identity & Access", links: [pendingLink] }]} />
+      </MemoryRouter>
+    );
+    expect(screen.getByLabelText("3 pending identity link requests")).toHaveTextContent("3");
+  });
+
   it("uses specific icons for admin navigation labels instead of the generic dot", () => {
     const adminLinks = [
       { to: "/admin/billing", label: "Billing", iconName: "wallet" },

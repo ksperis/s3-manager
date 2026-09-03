@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Laurent Barbe; Licensed under the Apache License, Version 2.0 */
 import client from "./client";
+import { notifyAdminPendingRequestsRefresh } from "../utils/adminPendingRequestsRefresh";
 
 export type SecurityCredential = { id: string; name: string; created_at: string; last_used_at?: string | null };
 export type SecuritySession = {
@@ -107,7 +108,11 @@ export async function listExternalLinkRequests(): Promise<ExternalLinkRequest[]>
   return (await client.get<ExternalLinkRequest[]>("/admin/identity/link-requests")).data;
 }
 export async function decideExternalLinkRequest(id: string, approve: boolean): Promise<void> {
-  await client.post(`/admin/identity/link-requests/${encodeURIComponent(id)}`, { approve });
+  try {
+    await client.post(`/admin/identity/link-requests/${encodeURIComponent(id)}`, { approve });
+  } finally {
+    notifyAdminPendingRequestsRefresh();
+  }
 }
 
 export async function getAdminUserSecurity(userId: number): Promise<AdminUserSecurity> {

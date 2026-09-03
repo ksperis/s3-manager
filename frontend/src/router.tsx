@@ -33,6 +33,8 @@ import {
   ADMIN_PAGE_CONTRACTS,
   workspacePageLink,
 } from "./navigation/workspacePages";
+import { useAdminPendingRequestCounts } from "./hooks/useAdminPendingRequestCounts";
+import type { AdminPendingRequestCounts } from "./api/adminNavigation";
 
 export { RequireManagerFeatureRulesTool, RequirePortalAccess } from "./routerGuards";
 
@@ -139,8 +141,11 @@ export const buildAdminNav = (
   usageHistoryEnabled: boolean,
   endpointStatusEnabled: boolean,
   isSuperAdmin: boolean,
-  settingsExpanded = false
+  settingsExpanded = false,
+  pendingRequestCounts: AdminPendingRequestCounts | null = null,
 ) => {
+  const identityRequestCount = pendingRequestCounts?.identity_link_requests ?? 0;
+  const portalRequestCount = pendingRequestCounts?.portal_requests ?? 0;
   const settingsLinks = [
     workspacePageLink(ADMIN_PAGE_CONTRACTS["general-settings"]),
     workspacePageLink(ADMIN_PAGE_CONTRACTS["authentication-settings"]),
@@ -172,6 +177,12 @@ export const buildAdminNav = (
         {
           ...workspacePageLink(ADMIN_PAGE_CONTRACTS["identity-security"]),
           iconName: "shield" as const,
+          badge: identityRequestCount > 0 ? String(identityRequestCount) : undefined,
+          badgeAriaLabel:
+            identityRequestCount > 0
+              ? `${identityRequestCount} pending identity link request${identityRequestCount === 1 ? "" : "s"}`
+              : undefined,
+          badgeTone: "attention" as const,
         },
       ],
     },
@@ -197,7 +208,19 @@ export const buildAdminNav = (
     {
       label: "Audit & Reporting",
       links: [
-        ...(portalEnabled ? [workspacePageLink(ADMIN_PAGE_CONTRACTS["portal-requests"])] : []),
+        ...(portalEnabled
+          ? [
+              {
+                ...workspacePageLink(ADMIN_PAGE_CONTRACTS["portal-requests"]),
+                badge: portalRequestCount > 0 ? String(portalRequestCount) : undefined,
+                badgeAriaLabel:
+                  portalRequestCount > 0
+                    ? `${portalRequestCount} pending Portal request${portalRequestCount === 1 ? "" : "s"}`
+                    : undefined,
+                badgeTone: "attention" as const,
+              },
+            ]
+          : []),
         ...(billingEnabled ? [workspacePageLink(ADMIN_PAGE_CONTRACTS.billing)] : []),
         ...(usageHistoryEnabled ? [workspacePageLink(ADMIN_PAGE_CONTRACTS["usage-history"])] : []),
         workspacePageLink(ADMIN_PAGE_CONTRACTS.audit),
@@ -218,6 +241,7 @@ export const buildAdminNav = (
 function AdminLayoutShell() {
   const { generalSettings } = useGeneralSettings();
   const location = useLocation();
+  const pendingRequestCounts = useAdminPendingRequestCounts();
   const currentUser = readStoredUser();
   const canConfigureApp = isSuperAdminRole(currentUser?.role);
   const adminNav = buildAdminNav(
@@ -227,7 +251,8 @@ function AdminLayoutShell() {
     generalSettings.usage_history_enabled,
     generalSettings.endpoint_status_enabled,
     canConfigureApp,
-    isAdminSettingsPath(location.pathname)
+    isAdminSettingsPath(location.pathname),
+    pendingRequestCounts,
   );
   return (
     <Layout

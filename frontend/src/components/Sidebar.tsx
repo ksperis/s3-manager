@@ -19,12 +19,46 @@ export type SidebarLink = {
   to: string;
   label: string;
   badge?: string;
+  badgeAriaLabel?: string;
+  badgeTone?: "neutral" | "attention";
   end?: boolean;
   disabled?: boolean;
   disabledHint?: string;
   iconName?: SidebarLinkIconName;
   icon?: ReactNode;
 };
+
+function compactLinkLabel(link: SidebarLink): string {
+  return link.badgeAriaLabel ? `${link.label}, ${link.badgeAriaLabel}` : link.label;
+}
+
+function SidebarLinkBadge({
+  link,
+  active,
+  compact,
+}: {
+  link: SidebarLink;
+  active: boolean;
+  compact: boolean;
+}) {
+  if (!link.badge) return null;
+  const highlighted = link.badgeTone === "attention" || active;
+  const positionClasses = compact
+    ? "absolute right-0.5 top-0.5 min-w-4 px-1 py-px text-[9px] leading-3"
+    : "shrink-0 px-1.5 py-0.5 ui-caption";
+  const toneClasses = highlighted
+    ? "bg-primary/15 text-primary-700 dark:text-[var(--shell-selected-text)]"
+    : "shell-menu-muted shell-muted-text";
+
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-full font-semibold ${positionClasses} ${toneClasses}`}
+      aria-label={link.badgeAriaLabel}
+    >
+      {link.badge}
+    </span>
+  );
+}
 
 const DEFAULT_DISABLED_HINT = "Unavailable in current context.";
 
@@ -148,9 +182,6 @@ export default function Sidebar({
     compact
       ? "shell-sidebar-item-active"
       : "shell-sidebar-item-active before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-r-full before:bg-primary";
-  const badgeClasses = "shrink-0 rounded-full px-1.5 py-0.5 ui-caption font-semibold";
-  const activeBadgeClasses = "bg-primary/15 text-primary-700 dark:text-[var(--shell-selected-text)]";
-  const inactiveBadgeClasses = "shell-menu-muted shell-muted-text";
   const containerClasses =
     variant === "desktop"
       ? "shell-sidebar relative hidden h-full shrink-0 border-r md:flex md:flex-col transition-[width] duration-200 ease-out"
@@ -247,7 +278,7 @@ export default function Sidebar({
                             <div
                               className={`${baseLinkClasses} ${inactiveLinkClasses} cursor-not-allowed opacity-50`}
                               aria-disabled="true"
-                              aria-label={compact ? link.label : undefined}
+                              aria-label={compact ? compactLinkLabel(link) : undefined}
                               title={link.disabledHint ?? DEFAULT_DISABLED_HINT}
                             >
                               <div className={`flex min-w-0 items-center ${compact ? "" : "gap-1.5"}`}>
@@ -256,17 +287,15 @@ export default function Sidebar({
                                 </span>
                                 {!compact && <span className="truncate">{link.label}</span>}
                               </div>
-                              {!compact && link.badge && (
-                                <span className={`${badgeClasses} ${inactiveBadgeClasses}`}>{link.badge}</span>
-                              )}
+                              <SidebarLinkBadge link={link} active={false} compact={compact} />
                             </div>
                           ) : (
                             <NavLink
                               to={link.to}
                               end={link.end}
                               onClick={onNavigate}
-                              aria-label={compact ? link.label : undefined}
-                              title={compact ? link.label : undefined}
+                              aria-label={compact ? compactLinkLabel(link) : undefined}
+                              title={compact ? compactLinkLabel(link) : undefined}
                               className={({ isActive }) =>
                                 [baseLinkClasses, isActive ? activeLinkClasses : inactiveLinkClasses].join(" ")
                               }
@@ -285,11 +314,7 @@ export default function Sidebar({
                                     </span>
                                     {!compact && <span className="truncate">{link.label}</span>}
                                   </div>
-                                  {!compact && link.badge && (
-                                    <span className={`${badgeClasses} ${isActive ? activeBadgeClasses : inactiveBadgeClasses}`}>
-                                      {link.badge}
-                                    </span>
-                                  )}
+                                  <SidebarLinkBadge link={link} active={isActive} compact={compact} />
                                 </>
                               )}
                             </NavLink>
