@@ -135,18 +135,22 @@ describe("UserAuthenticationPanel", () => {
     expect(parentSubmit).not.toHaveBeenCalled();
   });
 
-  it("unlocks the panel after recent passkey verification", async () => {
+  it("keeps the action pending and retries it once after recent passkey verification", async () => {
     const user = userEvent.setup();
-    mocks.getAdminUserSecurity
+    mocks.resetAdminUserMfa
       .mockRejectedValueOnce(new ApiError("Request failed", {
         response: { status: 403, data: { detail: "Recent WebAuthn verification required" }, headers: {} },
       }))
-      .mockResolvedValueOnce(security);
+      .mockResolvedValueOnce({});
     render(<UserAuthenticationPanel userId={42} canMutate />);
 
-    await user.click(await screen.findByRole("button", { name: "Verify with passkey" }));
+    await user.click(await screen.findByRole("button", { name: "Reset MFA" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Reset user MFA" })).getByRole("button", { name: "Reset MFA" }));
+    const verificationDialog = await screen.findByRole("dialog", { name: "Verify with passkey" });
+    await user.click(within(verificationDialog).getByRole("button", { name: "Verify with passkey" }));
 
-    await waitFor(() => expect(mocks.getAdminUserSecurity).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText("Laptop")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.resetAdminUserMfa).toHaveBeenCalledTimes(2));
+    expect(mocks.beginRecentWebAuthnVerification).toHaveBeenCalledOnce();
+    expect(await screen.findByText("MFA reset completed. Sessions and API tokens were revoked.")).toBeInTheDocument();
   });
 });

@@ -20,10 +20,12 @@ Browser requests must never send a Bearer token. A request containing both a UI 
 
 Passkey enrollment is controlled by `AppSettings.general`: `require_passkey_for_admins` defaults to `true` for `ui_admin` and `ui_superadmin`, while `require_passkey_for_users` defaults to `false` for `ui_user` and `ui_none`. Direct S3 sessions are excluded. Any user who voluntarily enrolls a passkey is challenged on subsequent logins as well. Enabling a requirement takes effect at the next authentication and does not terminate existing sessions. The RP ID and origin must exactly match `WEBAUTHN_RP_ID` and `WEBAUTHN_ORIGIN`; user verification is required, attestation is `none`, and challenges are single-use for five minutes.
 
-After enrollment, ten recovery codes are displayed once. Store them outside the browser. Each code is hashed in the database and can be consumed once. When `require_passkey_for_admins` is enabled, API-token management, identity administration, MFA reset, and administrative session revocation require a WebAuthn-authenticated session from the last `MFA_RECENT_MINUTES` (15 minutes by default). When it is disabled, an authorized active Admin session is sufficient. Personal security actions use a recent primary authentication when no passkey is enrolled or required; an enrolled or required passkey keeps the WebAuthn step-up. Revoking an external identity invalidates every UI session and API token owned by that user.
+After enrollment, ten recovery codes are displayed once. Store them outside the browser. Each code is hashed in the database and can be consumed once. Admin revalidation follows a balanced action-based policy. Security inventories, link-request lists, authentication details, and API-token lists require an interactive Admin session but not recent WebAuthn. Defensive actions that only remove access—rejecting a link request, revoking a session, or revoking an API token—also use the active interactive session, while preserving authorization, confirmation, and audit controls.
 
-When that freshness window expires, the Profile Security and API tokens surfaces
-offer an in-session passkey verification. The challenge is bound to the current
+When `require_passkey_for_admins` is enabled, access-creating or security-changing actions require WebAuthn verification from the last `MFA_RECENT_MINUTES` (15 minutes by default). These actions include approving an identity link, adding, revoking, or restoring an external identity, resetting MFA, setting a password, creating an API token or UI user, deleting a UI user, changing a user's identity, role, activation, privileges, Manager tools, or associations, changing authentication options or passkey requirements, and creating, updating, or deleting OIDC/LDAP providers. An unchanged normalized payload and a user full-name-only update do not require step-up. When the policy is disabled, these critical direct actions still require an authorized interactive Admin session but not recent WebAuthn. Personal security actions use a recent primary authentication when no passkey is enrolled or required; an enrolled or required passkey keeps the WebAuthn step-up. Revoking an external identity invalidates every UI session and API token owned by that user.
+
+When that freshness window expires, a critical action offers an in-session
+passkey verification without locking the surrounding page. The challenge is bound to the current
 UI session; successful verification updates that session's `mfa_verified_at`
 without issuing new access or refresh tokens, then retries the protected request
 once. `MFA_RECENT_MINUTES` remains the backend source of truth, and recovery
@@ -70,7 +72,7 @@ administrator is a separate operator action.
 - Admins decide requests only for standard users; Superadmins can also decide requests for privileged accounts. The immutable mapping key remains `(provider_type, provider_id, subject)`. Subjects are not written to audit metadata.
 - Every new manual link request, and every request reopened after expiry, creates one warning in the notification center for each active administrator allowed to decide it. An unchanged pending request is not repeated; privileged targets notify Superadmins only.
 
-The canonical administration routes are `/api/admin/identity/link-requests`, `/api/admin/identity/sessions`, and `/api/admin/users/{id}/security`. The former global routes under `/api/auth` are not aliases.
+The canonical administration routes are `/api/admin/identity/link-requests`, `/api/admin/identity/sessions`, and `/api/admin/users/{id}/security`. The former global routes under `/api/auth` are not aliases. Direct identity and critical security routes require a browser-backed UI session and reject Bearer tokens. Scoped non-interactive changes use only `POST /api/admin/automation/apply`.
 
 ## API-token scopes
 

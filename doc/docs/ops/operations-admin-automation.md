@@ -46,7 +46,12 @@ association.
 
 ## Authentication
 
-Use admin session token or admin API token.
+Use an interactive Admin session or an Admin API token with `admin:write`.
+This endpoint is the documented non-interactive exception for supported
+idempotent administration changes. Direct UI-user, external-identity, and
+other critical identity routes require a browser-backed Admin session and,
+when the Admin passkey policy is enabled, recent WebAuthn verification. Do not
+fall back to direct routes from automation.
 
 ## Related pages
 

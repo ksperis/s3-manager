@@ -113,6 +113,7 @@ export function useRecentWebAuthnStepUp() {
       title="Verify with passkey"
       onClose={cancelPrompt}
       maxWidthClass="max-w-lg"
+      zIndexClass="z-[90]"
       closeOnBackdropClick={!verifying}
       closeOnEscape={!verifying}
     >

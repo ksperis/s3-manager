@@ -140,20 +140,15 @@ describe("ApiTokensPage list states", () => {
     await waitFor(() => expect(revokeApiTokenMock).toHaveBeenCalledWith("tok-1"));
   });
 
-  it("replaces the raw guard error with a passkey banner and reloads the token list", async () => {
+  it("does not launch passkey verification while loading the token list", async () => {
     listApiTokensMock.mockRejectedValueOnce(recentWebAuthnRequiredError());
 
     render(<ApiTokensPage />);
 
-    expect(await screen.findByText("API tokens are locked. Verify your identity with a passkey to continue.")).toBeInTheDocument();
-    expect(screen.queryByText("Recent WebAuthn verification required")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Verify with passkey" }));
-
-    await waitFor(() => expect(listApiTokensMock).toHaveBeenCalledTimes(2));
-    expect(beginRecentWebAuthnVerificationMock).toHaveBeenCalledOnce();
-    expect(finishRecentWebAuthnVerificationMock).toHaveBeenCalledOnce();
-    expect(await screen.findByText("No API tokens.")).toBeInTheDocument();
+    expect(await screen.findByText("Recent WebAuthn verification required")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Verify with passkey" })).not.toBeInTheDocument();
+    expect(listApiTokensMock).toHaveBeenCalledOnce();
+    expect(beginRecentWebAuthnVerificationMock).not.toHaveBeenCalled();
   });
 
   it("keeps the create form and retries token creation once after passkey verification", async () => {
@@ -185,7 +180,7 @@ describe("ApiTokensPage list states", () => {
     expect(await screen.findByText("New API token: step-up-automation")).toBeInTheDocument();
   });
 
-  it("retries a confirmed revocation once after passkey verification", async () => {
+  it("does not wrap defensive token revocation in passkey verification", async () => {
     listApiTokensMock.mockResolvedValue([
       {
         id: "tok-step-up-revoke",
@@ -197,20 +192,16 @@ describe("ApiTokensPage list states", () => {
         revoked_at: null,
       },
     ]);
-    revokeApiTokenMock
-      .mockRejectedValueOnce(recentWebAuthnRequiredError())
-      .mockResolvedValueOnce(undefined);
+    revokeApiTokenMock.mockRejectedValueOnce(recentWebAuthnRequiredError());
 
     render(<ApiTokensPage />);
     await screen.findByText("deployment-bot");
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Revoke API token?" })).getByRole("button", { name: "Revoke token" }));
 
-    const verificationDialog = await screen.findByRole("dialog", { name: "Verify with passkey" });
-    fireEvent.click(within(verificationDialog).getByRole("button", { name: "Verify with passkey" }));
-
-    await waitFor(() => expect(revokeApiTokenMock).toHaveBeenCalledTimes(2));
-    expect(revokeApiTokenMock).toHaveBeenNthCalledWith(2, "tok-step-up-revoke");
+    expect(await screen.findByText("Recent WebAuthn verification required")).toBeInTheDocument();
+    expect(revokeApiTokenMock).toHaveBeenCalledTimes(1);
+    expect(beginRecentWebAuthnVerificationMock).not.toHaveBeenCalled();
   });
 
   it("surfaces a second guard response without opening another verification prompt", async () => {

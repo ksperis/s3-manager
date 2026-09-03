@@ -60,8 +60,19 @@ The security inventory is exposed through `/api/auth/sessions`,
 require recent WebAuthn when a passkey is enrolled or required, and recent
 primary authentication otherwise. Admins use `/api/admin/identity/sessions`
 and `/api/admin/identity/link-requests` within their role hierarchy to revoke
-sessions and decide manual federated-identity links; Admin step-up follows the
-global Admin passkey policy.
+sessions and decide manual federated-identity links. Reading these inventories,
+reading user authentication details, listing API tokens, rejecting a link, and
+revoking a session or token require an interactive Admin session without recent
+WebAuthn. Approving a link or changing identity, authentication, credentials,
+users, privileges, associations, or OIDC/LDAP providers requires recent
+WebAuthn when the global Admin passkey policy is enabled. The backend compares
+normalized persisted user and authentication-setting values before requiring
+step-up, so unchanged payloads and full-name-only user updates remain free of
+the prompt.
+
+Direct identity routes reject Bearer tokens even when the Admin passkey policy
+is disabled. `POST /api/admin/automation/apply` with `admin:write` is the sole
+documented non-interactive exception for its supported idempotent resources.
 
 `GET /api/admin/navigation/pending-requests` provides the lightweight Admin
 navigation counters `identity_link_requests` and `portal_requests`. Identity

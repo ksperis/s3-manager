@@ -10,7 +10,8 @@ Admin API tokens provide long-lived bearer authentication for automation.
 - Revocation is immediate.
 - Expiration is enforced server-side.
 - Default lifetime is 30 days and the hard maximum is 90 days.
-- Creation and revocation require recent WebAuthn verification when the global Admin passkey policy is enabled; otherwise an active authorized Admin session is sufficient.
+- Listing and revocation require an active authorized interactive Admin session but do not require recent WebAuthn verification.
+- Creation requires recent WebAuthn verification when the global Admin passkey policy is enabled; otherwise the interactive Admin session is sufficient.
 - The JWT and database row must contain the same scopes and `auth_version`.
 - Browser UI cookies cannot be combined with a Bearer token.
 
@@ -19,6 +20,10 @@ Admin API tokens provide long-lived bearer authentication for automation.
 Choose the minimum `read` and `write` scopes from `profile`, `admin`,
 `manager`, `browser`, `portal`, `ceph-admin`, and `storage-ops`. A token is
 denied on every protected route that has no explicit scope mapping.
+
+Bearer tokens cannot call the direct UI-user and identity-security routes. Use
+`POST /api/admin/automation/apply` with `admin:write` for supported
+non-interactive identity changes.
 
 ## Runtime controls
 

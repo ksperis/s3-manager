@@ -13,14 +13,17 @@ import {
   type AdminUserSecurity,
   type SecuritySession,
 } from "../../api/security";
-import { useRecentWebAuthnStepUp } from "../../auth/useRecentWebAuthnStepUp";
+import {
+  isRecentWebAuthnVerificationCancelled,
+  useRecentWebAuthnStepUp,
+} from "../../auth/useRecentWebAuthnStepUp";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
 import { cx, uiMutedTextClass, uiPanelMutedClass } from "../../components/ui/styles";
-import { extractApiError, isRecentWebAuthnRequired } from "../../utils/apiError";
+import { extractApiError } from "../../utils/apiError";
 
 type PendingAction =
   | { kind: "reset-mfa" }
@@ -31,7 +34,6 @@ type PendingAction =
 export default function UserAuthenticationPanel({ userId, canMutate }: { userId: number; canMutate: boolean }) {
   const [security, setSecurity] = useState<AdminUserSecurity | null>(null);
   const [loading, setLoading] = useState(true);
-  const [locked, setLocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,17 +44,15 @@ export default function UserAuthenticationPanel({ userId, canMutate }: { userId:
   const [subject, setSubject] = useState("");
   const [identityEmail, setIdentityEmail] = useState("");
   const [pending, setPending] = useState<PendingAction | null>(null);
-  const { runWithStepUp, verifyNow, verifying, verificationError, verificationDialog } = useRecentWebAuthnStepUp();
+  const { runWithStepUp, verificationDialog } = useRecentWebAuthnStepUp();
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       setSecurity(await getAdminUserSecurity(userId));
-      setLocked(false);
     } catch (loadError) {
-      if (isRecentWebAuthnRequired(loadError)) setLocked(true);
-      else setError(extractApiError(loadError, "Unable to load authentication details."));
+      setError(extractApiError(loadError, "Unable to load authentication details."));
     } finally {
       setLoading(false);
     }
@@ -60,16 +60,19 @@ export default function UserAuthenticationPanel({ userId, canMutate }: { userId:
 
   useEffect(() => { void load(); }, [load]);
 
-  const runAction = async (action: () => Promise<void>, success: string) => {
+  const runAction = async (action: () => Promise<void>, success: string, requiresStepUp = true) => {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      await runWithStepUp(action);
+      if (requiresStepUp) await runWithStepUp(action);
+      else await action();
       setMessage(success);
       await load();
     } catch (actionError) {
-      setError(extractApiError(actionError, "Unable to update authentication settings."));
+      if (!isRecentWebAuthnVerificationCancelled(actionError)) {
+        setError(extractApiError(actionError, "Unable to update authentication settings."));
+      }
       throw actionError;
     } finally {
       setBusy(false);
@@ -124,36 +127,13 @@ export default function UserAuthenticationPanel({ userId, canMutate }: { userId:
       } else if (pending.kind === "restore-identity") {
         await runAction(() => restoreAdminExternalIdentity(userId, pending.identity.id), "External identity restored.");
       } else {
-        await runAction(() => revokeAdminUserSession(userId, pending.session.id), "Session revoked.");
+        await runAction(() => revokeAdminUserSession(userId, pending.session.id), "Session revoked.", false);
       }
       setPending(null);
     } catch {
       // Keep the confirmation open for retry.
     }
   };
-
-  if (locked) {
-    return (
-      <>
-        <PageBanner tone={verificationError ? "error" : "warning"}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>{verificationError ?? "Verify with a passkey to view this user's authentication details."}</span>
-            <UiButton
-              size="xs"
-              variant="secondary"
-              loading={verifying}
-              onClick={() => void verifyNow().then((ok) => {
-                if (ok) return load();
-              })}
-            >
-              Verify with passkey
-            </UiButton>
-          </div>
-        </PageBanner>
-        {verificationDialog}
-      </>
-    );
-  }
 
   return (
     <div className="space-y-4">

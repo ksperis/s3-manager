@@ -15,6 +15,10 @@ import {
   updateUser,
 } from "../../api/users";
 import {
+  isRecentWebAuthnVerificationCancelled,
+  useRecentWebAuthnStepUp,
+} from "../../auth/useRecentWebAuthnStepUp";
+import {
   getAccountAccessRequiredMessage,
   hasAccountAccessRole,
   type AccountAccessGrant,
@@ -59,11 +63,11 @@ import DataTableShell, {
 } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
+import UserAvatar from "../../components/UserAvatar";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { cx, uiInputClass, uiMutedTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-import UserAvatar from "../../components/UserAvatar";
 import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser, setSessionUserCache } from "../../utils/workspaces";
 import {
@@ -163,6 +167,7 @@ export default function UsersPage() {
 
   const MAX_VISIBLE_OPTIONS = 10;
   const { generalSettings } = useGeneralSettings();
+  const { runWithStepUp, verificationDialog } = useRecentWebAuthnStepUp();
   const currentUser = useMemo(() => readStoredUser(), []);
   const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
   const currentIsAdminLike = isAdminLikeRole(currentUser?.role);
@@ -878,7 +883,7 @@ export default function UsersPage() {
       group_ids: createSelectedGroups,
     };
     try {
-      const created = await createUser(payload);
+      const created = await runWithStepUp(() => createUser(payload));
       if (created?.id) {
         const associationsPayload: UpdateUserPayload = {
           account_links: createSelectedS3Accounts.map((entry) => ({
@@ -895,7 +900,7 @@ export default function UsersPage() {
           associationsPayload.s3_connection_ids = createSelectedS3Connections;
         }
         if (Object.keys(associationsPayload).length > 0) {
-          await updateUser(created.id, associationsPayload);
+          await runWithStepUp(() => updateUser(created.id, associationsPayload));
         }
       }
       setActionMessage("User created");
@@ -906,7 +911,9 @@ export default function UsersPage() {
       }
       setShowCreateModal(false);
     } catch (err) {
-      setActionError(extractError(err));
+      if (!isRecentWebAuthnVerificationCancelled(err)) {
+        setActionError(extractError(err));
+      }
     }
   };
 
@@ -1072,7 +1079,7 @@ export default function UsersPage() {
       payload.group_ids = editSelectedGroups;
       payload.s3_user_links = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
-      const updatedUser = await updateUser(editingUser.id, payload);
+      const updatedUser = await runWithStepUp(() => updateUser(editingUser.id, payload));
       if (currentUserId !== null && currentUserId === editingUser.id && typeof window !== "undefined") {
         setSessionUserCache({ ...(readStoredUser() ?? {}), ...updatedUser });
       }
@@ -1083,7 +1090,9 @@ export default function UsersPage() {
         await fetchS3Accounts();
       }
     } catch (err) {
-      setActionError(extractError(err));
+      if (!isRecentWebAuthnVerificationCancelled(err)) {
+        setActionError(extractError(err));
+      }
     } finally {
       setBusyId(null);
     }
@@ -1106,14 +1115,16 @@ export default function UsersPage() {
     setActionError(null);
     setActionMessage(null);
     try {
-      await deleteUser(userId);
+      await runWithStepUp(() => deleteUser(userId));
       setActionMessage("User deleted");
       await fetchUsers();
+      setPendingDeleteUser(null);
     } catch (err) {
-      setActionError(extractError(err));
+      if (!isRecentWebAuthnVerificationCancelled(err)) {
+        setActionError(extractError(err));
+      }
     } finally {
       setBusyId(null);
-      setPendingDeleteUser(null);
     }
   };
 
@@ -1931,6 +1942,7 @@ export default function UsersPage() {
           {editCloseGuard.confirmationDialog}
         </WorkflowPage>
       )}
+      {verificationDialog}
     </div>
   );
 }

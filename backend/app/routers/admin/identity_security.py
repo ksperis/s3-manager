@@ -32,6 +32,7 @@ from app.services.identity_security_policy import (
     STANDARD_UI_ROLES,
     ensure_actor_can_manage_user,
     passkey_required_for_role,
+    require_admin_interactive_session,
     require_admin_sensitive_action,
 )
 from app.services.mfa_reset_service import MfaResetService
@@ -91,7 +92,7 @@ def get_user_security(
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_super_admin),
 ) -> AdminUserSecurity:
-    require_admin_sensitive_action(request, db, actor)
+    require_admin_interactive_session(request, db, actor)
     target = _target_user(db, actor, user_id)
     passkeys = db.query(WebAuthnCredential).filter(WebAuthnCredential.user_id == target.id)
     if not include_revoked:
@@ -302,7 +303,7 @@ def revoke_user_session(
     actor: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
-    require_admin_sensitive_action(request, db, actor)
+    require_admin_interactive_session(request, db, actor)
     target = _target_user(db, actor, user_id)
     session = db.query(AuthSession).filter(AuthSession.id == session_id, AuthSession.user_id == target.id).first()
     if session is None:
@@ -324,7 +325,7 @@ def list_identity_link_requests(
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_super_admin),
 ) -> list[ExternalIdentityLinkRequestInfo]:
-    require_admin_sensitive_action(request, db, actor)
+    require_admin_interactive_session(request, db, actor)
     rows = ExternalIdentityUserService(db).list_link_requests(include_decided=include_decided)
     user_ids = {row.user_id for row in rows}
     users = {row.id: row for row in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
@@ -361,12 +362,14 @@ def decide_identity_link_request(
     actor: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
-    require_admin_sensitive_action(request, db, actor)
+    require_admin_interactive_session(request, db, actor)
     request_row = ExternalIdentityUserService(db).list_link_requests(include_decided=True)
     link_request = next((row for row in request_row if row.id == request_id), None)
     if link_request is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="External identity request not found")
     _target_user(db, actor, link_request.user_id)
+    if payload.approve:
+        require_admin_sensitive_action(request, db, actor)
     try:
         decided = ExternalIdentityUserService(db).decide_link_request(
             request_id,
@@ -401,7 +404,7 @@ def list_global_sessions(
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_super_admin),
 ) -> list[AdminSessionInfo]:
-    require_admin_sensitive_action(request, db, actor)
+    require_admin_interactive_session(request, db, actor)
     rows = AuthSessionService(db).list_for_admin(actor, include_revoked=include_revoked)
     user_ids = {row.user_id for row in rows if row.user_id is not None}
     users = {row.id: row for row in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
@@ -424,7 +427,7 @@ def revoke_global_session(
     actor: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
-    require_admin_sensitive_action(request, db, actor)
+    require_admin_interactive_session(request, db, actor)
     row = db.query(AuthSession).filter(AuthSession.id == session_id).first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")

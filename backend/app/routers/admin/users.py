@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -28,8 +28,11 @@ from app.services.user_associations_service import (
 )
 from app.services.users_service import UsersService
 from app.services.identity_security_policy import (
+    admin_user_update_requires_step_up,
     ensure_actor_can_assign_role,
     ensure_actor_can_manage_user,
+    require_admin_interactive_session,
+    require_admin_sensitive_action,
 )
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
@@ -126,14 +129,17 @@ def _require_superadmin_for_group_privileges(
 
 @router.get("", response_model=PaginatedUsersResponse)
 def list_users(
+    request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
     search: Optional[str] = Query(None),
     sort_by: str = Query("name"),
     sort_dir: str = Query("asc"),
     users_service: UsersService = Depends(get_users_service_dependency),
-    _: DbUser = Depends(get_current_super_admin),
+    current_user: DbUser = Depends(get_current_super_admin),
+    db: Session = Depends(get_db),
 ) -> PaginatedUsersResponse:
+    require_admin_interactive_session(request, db, current_user)
     items, total = users_service.paginate_users(
         page=page,
         page_size=page_size,
@@ -147,14 +153,18 @@ def list_users(
 
 @router.get("/minimal", response_model=list[UserSummary])
 def list_users_minimal(
+    request: Request,
     users_service: UsersService = Depends(get_users_service_dependency),
-    _: DbUser = Depends(get_current_super_admin),
+    current_user: DbUser = Depends(get_current_super_admin),
+    db: Session = Depends(get_db),
 ) -> list[UserSummary]:
+    require_admin_interactive_session(request, db, current_user)
     return users_service.list_users_minimal()
 
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(
+    request: Request,
     payload: UserCreate,
     users_service: UsersService = Depends(get_users_service_dependency),
     associations_service: UserAssociationsService = Depends(get_user_associations_service_dependency),
@@ -175,6 +185,7 @@ def create_user(
         associations_service,
         group_ids=payload.group_ids,
     )
+    require_admin_sensitive_action(request, users_service.db, current_user)
     try:
         user = users_service.create_user(payload)
         audit_service.record_action(
@@ -196,6 +207,7 @@ def create_user(
 
 @router.put("/{user_id}", response_model=UserOut)
 def update_user(
+    request: Request,
     user_id: int,
     payload: UserUpdate,
     users_service: UsersService = Depends(get_users_service_dependency),
@@ -220,6 +232,9 @@ def update_user(
         associations_service,
         group_ids=payload.group_ids,
     )
+    require_admin_interactive_session(request, users_service.db, current_user)
+    if admin_user_update_requires_step_up(target, payload):
+        require_admin_sensitive_action(request, users_service.db, current_user)
     try:
         user = users_service.update_user(user_id, payload)
         audit_service.record_action(
@@ -239,6 +254,7 @@ def update_user(
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
+    request: Request,
     user_id: int,
     users_service: UsersService = Depends(get_users_service_dependency),
     current_user: DbUser = Depends(get_current_super_admin),
@@ -259,6 +275,7 @@ def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="The last active superadmin cannot be deleted",
         )
+    require_admin_sensitive_action(request, users_service.db, current_user)
     try:
         users_service.delete_user(user_id)
         audit_service.record_action(

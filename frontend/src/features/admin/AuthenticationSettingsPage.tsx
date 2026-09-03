@@ -37,6 +37,10 @@ import {
 } from "../../api/authSettings";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
+import {
+  isRecentWebAuthnVerificationCancelled,
+  useRecentWebAuthnStepUp,
+} from "../../auth/useRecentWebAuthnStepUp";
 import { extractApiError } from "../../utils/apiError";
 
 const CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE =
@@ -274,6 +278,7 @@ function statusBadge(provider: ProviderBadgeInput) {
 export default function AuthenticationSettingsPage() {
   const { setGeneralSettings } = useGeneralSettings();
   const authenticationConfirmation = useConfirmActionDialog();
+  const { runWithStepUp, verificationDialog } = useRecentWebAuthnStepUp();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -358,13 +363,15 @@ export default function AuthenticationSettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const saved = await updateAppSettings(settings);
+      const saved = await runWithStepUp(() => updateAppSettings(settings));
       setSettings(saved);
       setGeneralSettings(saved.general);
       showSavedMessage("Settings saved.");
     } catch (err) {
-      console.error(err);
-      setError(extractApiError(err, "Unable to save."));
+      if (!isRecentWebAuthnVerificationCancelled(err)) {
+        console.error(err);
+        setError(extractApiError(err, "Unable to save."));
+      }
     } finally {
       setSaving(false);
     }
@@ -476,16 +483,21 @@ export default function AuthenticationSettingsPage() {
     try {
       const payload = oidcPayloadFromForm(oidcForm);
       if (oidcFormMode === "create") {
-        await createOidcAdminProvider(payload);
+        await runWithStepUp(() => createOidcAdminProvider(payload));
       } else {
-        await updateOidcAdminProvider(selectedOidcProvider?.provider_id ?? payload.provider_id, payload);
+        await runWithStepUp(() => updateOidcAdminProvider(
+          selectedOidcProvider?.provider_id ?? payload.provider_id,
+          payload,
+        ));
       }
       await loadOidcProviders();
       closeOidcForm();
       showSavedMessage("OIDC provider saved.");
     } catch (err) {
-      console.error(err);
-      setOidcError(extractApiError(err, "Unable to save OIDC provider."));
+      if (!isRecentWebAuthnVerificationCancelled(err)) {
+        console.error(err);
+        setOidcError(extractApiError(err, "Unable to save OIDC provider."));
+      }
     } finally {
       setOidcSaving(false);
     }
@@ -496,15 +508,17 @@ export default function AuthenticationSettingsPage() {
     setOidcSaving(true);
     setOidcError(null);
     try {
-      await deleteOidcAdminProvider(provider.provider_id);
+      await runWithStepUp(() => deleteOidcAdminProvider(provider.provider_id));
       await loadOidcProviders();
       if (selectedOidcProvider?.provider_id === provider.provider_id) {
         closeOidcForm();
       }
       showSavedMessage("OIDC provider deleted.");
     } catch (err) {
-      console.error(err);
-      setOidcError(extractApiError(err, "Unable to delete OIDC provider."));
+      if (!isRecentWebAuthnVerificationCancelled(err)) {
+        console.error(err);
+        setOidcError(extractApiError(err, "Unable to delete OIDC provider."));
+      }
     } finally {
       setOidcSaving(false);
     }
@@ -572,16 +586,21 @@ export default function AuthenticationSettingsPage() {
     try {
       const payload = ldapPayloadFromForm(ldapForm);
       if (ldapFormMode === "create") {
-        await createLdapAdminProvider(payload);
+        await runWithStepUp(() => createLdapAdminProvider(payload));
       } else {
-        await updateLdapAdminProvider(selectedLdapProvider?.provider_id ?? payload.provider_id, payload);
+        await runWithStepUp(() => updateLdapAdminProvider(
+          selectedLdapProvider?.provider_id ?? payload.provider_id,
+          payload,
+        ));
       }
       await loadLdapProviders();
       closeLdapForm();
       showSavedMessage("LDAP provider saved.");
     } catch (err) {
-      console.error(err);
-      setLdapError(extractApiError(err, "Unable to save LDAP provider."));
+      if (!isRecentWebAuthnVerificationCancelled(err)) {
+        console.error(err);
+        setLdapError(extractApiError(err, "Unable to save LDAP provider."));
+      }
     } finally {
       setLdapSaving(false);
     }
@@ -592,15 +611,17 @@ export default function AuthenticationSettingsPage() {
     setLdapSaving(true);
     setLdapError(null);
     try {
-      await deleteLdapAdminProvider(provider.provider_id);
+      await runWithStepUp(() => deleteLdapAdminProvider(provider.provider_id));
       await loadLdapProviders();
       if (selectedLdapProvider?.provider_id === provider.provider_id) {
         closeLdapForm();
       }
       showSavedMessage("LDAP provider deleted.");
     } catch (err) {
-      console.error(err);
-      setLdapError(extractApiError(err, "Unable to delete LDAP provider."));
+      if (!isRecentWebAuthnVerificationCancelled(err)) {
+        console.error(err);
+        setLdapError(extractApiError(err, "Unable to delete LDAP provider."));
+      }
     } finally {
       setLdapSaving(false);
     }
@@ -1474,6 +1495,7 @@ export default function AuthenticationSettingsPage() {
         )}
       </SettingsCard>
       {authenticationConfirmation.confirmationDialog}
+      {verificationDialog}
     </PageShell>
   );
 }

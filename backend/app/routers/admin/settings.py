@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -14,9 +14,11 @@ from app.services.audit_service import AuditService
 from app.services.app_settings_service import (
     get_general_feature_locks,
     load_app_settings,
+    load_app_settings_for_db,
     load_default_app_settings,
     save_app_settings,
 )
+from app.services.identity_security_policy import require_admin_sensitive_action
 from app.services.ldap_provider_settings_service import (
     LDAPProviderAlreadyExistsError,
     LDAPProviderManagedByEnvironmentError,
@@ -40,6 +42,22 @@ from app.services.portal_service import get_portal_service
 
 router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
 
+_SENSITIVE_GENERAL_SETTINGS = (
+    "allow_login_access_keys",
+    "allow_login_endpoint_list",
+    "allow_login_custom_endpoint",
+    "require_passkey_for_admins",
+    "require_passkey_for_users",
+    "allow_user_external_identity_unlink",
+)
+
+
+def _authentication_settings_changed(current: AppSettings, requested: AppSettings) -> bool:
+    return any(
+        getattr(current.general, field) != getattr(requested.general, field)
+        for field in _SENSITIVE_GENERAL_SETTINGS
+    )
+
 
 @router.get("", response_model=AppSettings)
 def get_settings(_: User = Depends(get_current_ui_superadmin)) -> AppSettings:
@@ -58,11 +76,15 @@ def get_general_feature_locks_route(_: User = Depends(get_current_ui_superadmin)
 
 @router.put("", response_model=AppSettings)
 def update_settings(
+    request: Request,
     payload: AppSettings,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
     audit: AuditService = Depends(get_audit_service),
 ) -> AppSettings:
+    current_settings = load_app_settings_for_db(db)
+    if _authentication_settings_changed(current_settings, payload):
+        require_admin_sensitive_action(request, db, current_user)
     try:
         server_access_logging_summary = get_portal_service(db).reconcile_all_portal_server_access_logging(payload.portal)
     except RuntimeError as exc:
@@ -92,11 +114,13 @@ def list_oidc_provider_settings(
 
 @router.post("/oidc/providers", response_model=OIDCProviderAdminItem, status_code=status.HTTP_201_CREATED)
 def create_oidc_provider_settings(
+    request: Request,
     payload: OIDCProviderAdminPayload,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
     audit: AuditService = Depends(get_audit_service),
 ) -> OIDCProviderAdminItem:
+    require_admin_sensitive_action(request, db, current_user)
     try:
         item = create_oidc_provider(db, payload)
     except OIDCProviderManagedByEnvironmentError as exc:
@@ -119,12 +143,14 @@ def create_oidc_provider_settings(
 
 @router.put("/oidc/providers/{provider_id}", response_model=OIDCProviderAdminItem)
 def update_oidc_provider_settings(
+    request: Request,
     provider_id: str,
     payload: OIDCProviderAdminPayload,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
     audit: AuditService = Depends(get_audit_service),
 ) -> OIDCProviderAdminItem:
+    require_admin_sensitive_action(request, db, current_user)
     try:
         item = update_oidc_provider(db, provider_id, payload)
     except OIDCProviderManagedByEnvironmentError as exc:
@@ -147,11 +173,13 @@ def update_oidc_provider_settings(
 
 @router.delete("/oidc/providers/{provider_id}")
 def delete_oidc_provider_settings(
+    request: Request,
     provider_id: str,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
     audit: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
+    require_admin_sensitive_action(request, db, current_user)
     try:
         delete_oidc_provider(db, provider_id)
     except OIDCProviderManagedByEnvironmentError as exc:
@@ -182,11 +210,13 @@ def list_ldap_provider_settings(
 
 @router.post("/ldap/providers", response_model=LDAPProviderAdminItem, status_code=status.HTTP_201_CREATED)
 def create_ldap_provider_settings(
+    request: Request,
     payload: LDAPProviderAdminPayload,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
     audit: AuditService = Depends(get_audit_service),
 ) -> LDAPProviderAdminItem:
+    require_admin_sensitive_action(request, db, current_user)
     try:
         item = create_ldap_provider(db, payload)
     except LDAPProviderManagedByEnvironmentError as exc:
@@ -209,12 +239,14 @@ def create_ldap_provider_settings(
 
 @router.put("/ldap/providers/{provider_id}", response_model=LDAPProviderAdminItem)
 def update_ldap_provider_settings(
+    request: Request,
     provider_id: str,
     payload: LDAPProviderAdminPayload,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
     audit: AuditService = Depends(get_audit_service),
 ) -> LDAPProviderAdminItem:
+    require_admin_sensitive_action(request, db, current_user)
     try:
         item = update_ldap_provider(db, provider_id, payload)
     except LDAPProviderManagedByEnvironmentError as exc:
@@ -237,11 +269,13 @@ def update_ldap_provider_settings(
 
 @router.delete("/ldap/providers/{provider_id}")
 def delete_ldap_provider_settings(
+    request: Request,
     provider_id: str,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
     audit: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
+    require_admin_sensitive_action(request, db, current_user)
     try:
         delete_ldap_provider(db, provider_id)
     except LDAPProviderManagedByEnvironmentError as exc:

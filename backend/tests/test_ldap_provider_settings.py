@@ -22,6 +22,7 @@ from app.services.ldap_provider_settings_service import (
 )
 from app.services.ldap_service import LDAPAuthService, LDAPIdentity
 from app.services.users_service import get_users_service
+from tests.auth_test_utils import authenticate_ui_client
 
 
 def _provider_settings(*, enabled: bool = True, display_name: str = "Corporate LDAP") -> LDAPProviderSettings:
@@ -70,6 +71,13 @@ def _superadmin_user() -> User:
         is_active=True,
         role=UserRole.UI_SUPERADMIN.value,
     )
+
+
+def _authenticate_superadmin(client, db_session) -> None:
+    actor = _superadmin_user()
+    db_session.add(actor)
+    db_session.commit()
+    authenticate_ui_client(client, db_session, actor, mfa_verified=True)
 
 
 def _payload(**overrides) -> dict:
@@ -276,6 +284,7 @@ def test_admin_ldap_api_never_returns_secret_and_preserves_replaces_it(client, d
     )
     app.dependency_overrides[dependencies.get_current_user] = _superadmin_user
     app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+    _authenticate_superadmin(client, db_session)
 
     response = client.post("/api/admin/settings/ldap/providers", json=_payload())
     assert response.status_code == 201, response.text
@@ -330,6 +339,7 @@ def test_admin_ldap_api_supports_anonymous_search_and_clears_stored_credentials(
     )
     app.dependency_overrides[dependencies.get_current_user] = _superadmin_user
     app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+    _authenticate_superadmin(client, db_session)
 
     response = client.post(
         "/api/admin/settings/ldap/providers",
@@ -369,13 +379,14 @@ def test_admin_ldap_api_supports_anonymous_search_and_clears_stored_credentials(
     assert provider.bind_password is None
 
 
-def test_admin_ldap_api_rejects_partial_bind_credentials(client, monkeypatch):
+def test_admin_ldap_api_rejects_partial_bind_credentials(client, db_session, monkeypatch):
     monkeypatch.setattr(
         "app.services.ldap_provider_settings_service.get_settings",
         lambda: Settings(ldap_providers={}),
     )
     app.dependency_overrides[dependencies.get_current_user] = _superadmin_user
     app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+    _authenticate_superadmin(client, db_session)
 
     response = client.post(
         "/api/admin/settings/ldap/providers",
@@ -386,13 +397,14 @@ def test_admin_ldap_api_rejects_partial_bind_credentials(client, monkeypatch):
     assert "configured together" in response.text
 
 
-def test_admin_ldap_api_locks_environment_managed_provider(client, monkeypatch):
+def test_admin_ldap_api_locks_environment_managed_provider(client, db_session, monkeypatch):
     monkeypatch.setattr(
         "app.services.ldap_provider_settings_service.get_settings",
         lambda: Settings(ldap_providers={"corp": _provider_settings(display_name="Env LDAP")}),
     )
     app.dependency_overrides[dependencies.get_current_user] = _superadmin_user
     app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+    _authenticate_superadmin(client, db_session)
 
     response = client.get("/api/admin/settings/ldap/providers")
     assert response.status_code == 200, response.text

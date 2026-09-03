@@ -2,12 +2,16 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import UsersPage from "./UsersPage";
 import { setSessionUserCache } from "../../utils/workspaces";
+import { ApiError } from "../../api/client";
 
 const listUsersMock = vi.fn();
 const createUserMock = vi.fn();
 const updateUserMock = vi.fn();
 const assignUserToS3AccountMock = vi.fn();
 const deleteUserMock = vi.fn();
+const beginRecentWebAuthnVerificationMock = vi.fn();
+const finishRecentWebAuthnVerificationMock = vi.fn();
+const authenticatePasskeyMock = vi.fn();
 
 const listMinimalS3AccountsMock = vi.fn();
 const listMinimalS3UsersMock = vi.fn();
@@ -55,6 +59,15 @@ vi.mock("../../api/users", () => ({
   assignUserToS3Account: (userId: number, accountId: number, role: string) =>
     assignUserToS3AccountMock(userId, accountId, role),
   deleteUser: (userId: number) => deleteUserMock(userId),
+}));
+
+vi.mock("../../api/security", () => ({
+  beginRecentWebAuthnVerification: (...args: unknown[]) => beginRecentWebAuthnVerificationMock(...args),
+  finishRecentWebAuthnVerification: (...args: unknown[]) => finishRecentWebAuthnVerificationMock(...args),
+}));
+
+vi.mock("../../auth/webauthn", () => ({
+  authenticatePasskey: (...args: unknown[]) => authenticatePasskeyMock(...args),
 }));
 
 vi.mock("../../api/accounts", () => ({
@@ -137,6 +150,17 @@ describe("UsersPage modal tabs", () => {
     updateUserMock.mockResolvedValue({ id: 100 });
     assignUserToS3AccountMock.mockResolvedValue(undefined);
     deleteUserMock.mockResolvedValue(undefined);
+    beginRecentWebAuthnVerificationMock.mockResolvedValue({ challenge: "challenge" });
+    authenticatePasskeyMock.mockResolvedValue({ id: "credential" });
+    finishRecentWebAuthnVerificationMock.mockResolvedValue({ mfa_verified_at: "2026-09-02T10:00:00Z" });
+  });
+
+  const recentWebAuthnRequiredError = () => new ApiError("Request failed", {
+    response: {
+      status: 403,
+      data: { detail: "Recent WebAuthn verification required" },
+      headers: {},
+    },
   });
 
   it("opens the requested UI user directly in the edit page", async () => {
@@ -522,6 +546,34 @@ describe("UsersPage modal tabs", () => {
         s3_connection_ids: [21],
       })
     );
+  }, 10_000);
+
+  it("retries only the association request after user creation step-up", async () => {
+    createUserMock.mockResolvedValueOnce({ id: 100 });
+    updateUserMock
+      .mockRejectedValueOnce(recentWebAuthnRequiredError())
+      .mockResolvedValueOnce({ id: 100 });
+    render(<UsersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    fireEvent.change(screen.getByPlaceholderText("jane.doe@example.com"), { target: { value: "step-up@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("•••••••"), { target: { value: "secret-123456" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add accounts" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "acc-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    const verificationDialog = await screen.findByRole("dialog", { name: "Verify with passkey" });
+    expect(screen.getByRole("heading", { name: "Create user" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Accounts \(1\)/ })).toBeInTheDocument();
+    fireEvent.click(within(verificationDialog).getByRole("button", { name: "Verify with passkey" }));
+
+    await waitFor(() => expect(updateUserMock).toHaveBeenCalledTimes(2));
+    expect(createUserMock).toHaveBeenCalledTimes(1);
+    expect(updateUserMock).toHaveBeenNthCalledWith(2, 100, expect.objectContaining({
+      account_links: [expect.objectContaining({ account_id: 1 })],
+    }));
   }, 10_000);
 
   it("does not retry minimal account loading in a loop after an initial failure", async () => {

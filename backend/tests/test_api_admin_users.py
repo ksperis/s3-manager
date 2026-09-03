@@ -6,6 +6,21 @@ from app.db import UiGroup, User, UserRole
 from app.routers import dependencies
 from fastapi.testclient import TestClient
 from tests.s3_account_factory import make_s3_account
+from tests.auth_test_utils import authenticate_ui_client
+
+
+@pytest.fixture(autouse=True)
+def interactive_admin_session(client: TestClient, db_session):
+    session_user = User(
+        email="route-test-session@example.com",
+        full_name="Route Test Session",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_NONE.value,
+    )
+    db_session.add(session_user)
+    db_session.commit()
+    authenticate_ui_client(client, db_session, session_user, mfa_verified=True)
 
 
 @pytest.fixture

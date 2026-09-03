@@ -54,7 +54,7 @@ def test_api_token_lifecycle_and_auth_usage(auth_client, db_session):
 
     create_response = auth_client.post(
         "/api/auth/api-tokens",
-        json={"name": "ansible", "expires_in_days": 30, "scopes": ["admin:read"]},
+        json={"name": "ansible", "expires_in_days": 30, "scopes": ["admin:read", "profile:read"]},
         headers=trusted_origin_headers(csrf_token=credentials.csrf_token),
     )
     assert create_response.status_code == 201
@@ -70,11 +70,22 @@ def test_api_token_lifecycle_and_auth_usage(auth_client, db_session):
     assert token_id in listed_ids
 
     clear_ui_client(auth_client)
+    token_inventory_response = auth_client.get(
+        "/api/auth/api-tokens",
+        headers={"Authorization": f"Bearer {api_token}"},
+    )
+    assert token_inventory_response.status_code == 403
+    assert token_inventory_response.json()["detail"] == "API tokens are not allowed for this route"
     auth_response = auth_client.get(
         "/api/admin/users/minimal",
         headers={"Authorization": f"Bearer {api_token}"},
     )
-    assert auth_response.status_code == 200
+    assert auth_response.status_code == 401
+    profile_response = auth_client.get(
+        "/api/users/me",
+        headers={"Authorization": f"Bearer {api_token}"},
+    )
+    assert profile_response.status_code == 200
 
     credentials = authenticate_ui_client(auth_client, db_session, admin)
     revoke_response = auth_client.delete(
@@ -85,7 +96,7 @@ def test_api_token_lifecycle_and_auth_usage(auth_client, db_session):
 
     clear_ui_client(auth_client)
     after_revoke = auth_client.get(
-        "/api/admin/users/minimal",
+        "/api/users/me",
         headers={"Authorization": f"Bearer {api_token}"},
     )
     assert after_revoke.status_code == 401

@@ -283,11 +283,15 @@ def test_profile_webauthn_step_up_renews_current_session_without_issuing_tokens(
         .all()
     }
 
-    denied = auth_client.get("/api/admin/identity/sessions")
+    headers = trusted_origin_headers(csrf_token=credentials.csrf_token)
+    denied = auth_client.post(
+        "/api/auth/api-tokens",
+        json={"name": "step-up-proof", "scopes": ["profile:read"]},
+        headers=headers,
+    )
     assert denied.status_code == 403
     assert denied.json()["detail"] == "Recent WebAuthn verification required"
 
-    headers = trusted_origin_headers(csrf_token=credentials.csrf_token)
     options = auth_client.post(
         "/api/auth/security/webauthn/authentication/options",
         headers=headers,
@@ -318,7 +322,12 @@ def test_profile_webauthn_step_up_renews_current_session_without_issuing_tokens(
         .filter(RefreshToken.auth_session_id == credentials.session.id)
         .all()
     } == refresh_token_ids
-    assert auth_client.get("/api/admin/identity/sessions").status_code == 200
+    allowed = auth_client.post(
+        "/api/auth/api-tokens",
+        json={"name": "step-up-proof", "scopes": ["profile:read"]},
+        headers=headers,
+    )
+    assert allowed.status_code == 201
     audit = db_session.query(AuditLog).filter(AuditLog.action == "webauthn_step_up_success").one()
     assert audit.entity_id == credentials.session.id
 

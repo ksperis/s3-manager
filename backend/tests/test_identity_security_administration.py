@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from datetime import timedelta
 
 import pytest
@@ -24,6 +25,7 @@ from app.main import app
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
 from app.services.api_token_service import ApiTokenService
+from app.services import app_settings_service
 from app.services.app_settings_service import load_app_settings_for_db
 from app.services.auth_session_service import AuthSessionService
 from app.services.mfa_reset_service import MfaResetService
@@ -331,3 +333,251 @@ def test_only_superadmin_can_manage_privileged_users_and_self_protection_applies
     assert demote.status_code == 400
     assert delete.status_code == 400
     assert db_session.query(User).filter(User.id == superadmin.id).one().is_active is True
+
+
+def test_stale_admin_session_can_read_security_data_and_revoke_access(auth_client, db_session):
+    admin = _user(db_session, email="balanced-admin@example.com", role=UserRole.UI_SUPERADMIN.value)
+    target = _user(db_session, email="balanced-target@example.com", role=UserRole.UI_USER.value)
+    credentials = authenticate_ui_client(auth_client, db_session, admin, mfa_verified=False)
+    target_session = AuthSessionService(db_session).create_for_user(
+        target,
+        auth_type="password",
+        ip_address="192.0.2.20",
+        user_agent="pytest-target",
+        mfa_verified=False,
+    ).session
+    _, token_row = ApiTokenService(db_session).create_for_user(
+        admin,
+        name="balanced-revocation",
+        scopes=["admin:read"],
+    )
+    headers = trusted_origin_headers(csrf_token=credentials.csrf_token)
+
+    assert auth_client.get(f"/api/admin/users/{target.id}/security").status_code == 200
+    assert auth_client.get("/api/admin/identity/link-requests").status_code == 200
+    assert auth_client.get("/api/admin/identity/sessions").status_code == 200
+    assert auth_client.get("/api/auth/api-tokens").status_code == 200
+    assert auth_client.delete(
+        f"/api/admin/identity/sessions/{target_session.id}",
+        headers=headers,
+    ).status_code == 204
+    assert auth_client.delete(
+        f"/api/auth/api-tokens/{token_row.id}",
+        headers=headers,
+    ).status_code == 204
+
+
+def test_stale_admin_session_rejects_only_critical_link_decision(auth_client, db_session):
+    admin = _user(db_session, email="decision-admin@example.com", role=UserRole.UI_SUPERADMIN.value)
+    target = _user(db_session, email="decision-target@example.com", role=UserRole.UI_USER.value)
+    now = utcnow()
+    db_session.add_all(
+        [
+            ExternalIdentityLinkRequest(
+                id="reject-without-step-up",
+                user_id=target.id,
+                provider_type="oidc",
+                provider_id="company",
+                subject="reject-subject",
+                email=target.email,
+                status="pending",
+                created_at=now,
+                expires_at=now + timedelta(hours=1),
+            ),
+            ExternalIdentityLinkRequest(
+                id="approve-with-step-up",
+                user_id=target.id,
+                provider_type="oidc",
+                provider_id="company",
+                subject="approve-subject",
+                email=target.email,
+                status="pending",
+                created_at=now,
+                expires_at=now + timedelta(hours=1),
+            ),
+        ]
+    )
+    db_session.commit()
+    credentials = authenticate_ui_client(auth_client, db_session, admin, mfa_verified=False)
+    headers = trusted_origin_headers(csrf_token=credentials.csrf_token)
+
+    rejected = auth_client.post(
+        "/api/admin/identity/link-requests/reject-without-step-up",
+        json={"approve": False},
+        headers=headers,
+    )
+    approved = auth_client.post(
+        "/api/admin/identity/link-requests/approve-with-step-up",
+        json={"approve": True},
+        headers=headers,
+    )
+
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "rejected"
+    assert approved.status_code == 403
+    assert approved.json()["detail"] == "Recent WebAuthn verification required"
+
+
+def test_user_update_step_up_depends_on_persisted_security_change(auth_client, db_session):
+    admin = _user(db_session, email="user-guard-admin@example.com", role=UserRole.UI_SUPERADMIN.value)
+    target = _user(db_session, email="user-guard-target@example.com", role=UserRole.UI_USER.value)
+    credentials = authenticate_ui_client(auth_client, db_session, admin, mfa_verified=False)
+    headers = trusted_origin_headers(csrf_token=credentials.csrf_token)
+
+    name_only = auth_client.put(
+        f"/api/admin/users/{target.id}",
+        json={"full_name": "Updated Name"},
+        headers=headers,
+    )
+    identical_role = auth_client.put(
+        f"/api/admin/users/{target.id}",
+        json={"role": UserRole.UI_USER.value},
+        headers=headers,
+    )
+    role_change = auth_client.put(
+        f"/api/admin/users/{target.id}",
+        json={"role": UserRole.UI_NONE.value},
+        headers=headers,
+    )
+
+    assert name_only.status_code == 200
+    assert name_only.json()["full_name"] == "Updated Name"
+    assert identical_role.status_code == 200
+    assert role_change.status_code == 403
+    assert role_change.json()["detail"] == "Recent WebAuthn verification required"
+
+    _set_admin_passkey_policy(db_session, False)
+    role_change_without_policy = auth_client.put(
+        f"/api/admin/users/{target.id}",
+        json={"role": UserRole.UI_NONE.value},
+        headers=headers,
+    )
+    assert role_change_without_policy.status_code == 200
+    assert role_change_without_policy.json()["role"] == UserRole.UI_NONE.value
+
+
+def test_stale_session_must_step_up_for_user_creation_and_deletion(auth_client, db_session):
+    admin = _user(db_session, email="user-mutation-admin@example.com", role=UserRole.UI_SUPERADMIN.value)
+    target = _user(db_session, email="user-mutation-target@example.com", role=UserRole.UI_USER.value)
+    credentials = authenticate_ui_client(auth_client, db_session, admin, mfa_verified=False)
+    headers = trusted_origin_headers(csrf_token=credentials.csrf_token)
+
+    created = auth_client.post(
+        "/api/admin/users",
+        json={
+            "email": "blocked-create@example.com",
+            "password": "correct horse battery staple",
+            "role": UserRole.UI_USER.value,
+        },
+        headers=headers,
+    )
+    deleted = auth_client.delete(f"/api/admin/users/{target.id}", headers=headers)
+
+    assert created.status_code == 403
+    assert deleted.status_code == 403
+    assert db_session.query(User).filter(User.id == target.id).first() is not None
+
+
+def test_authentication_setting_change_is_guarded_before_side_effects(auth_client, db_session, monkeypatch):
+    @contextmanager
+    def settings_session():
+        yield db_session
+
+    monkeypatch.setattr(app_settings_service, "_open_settings_session", settings_session)
+    admin = _user(db_session, email="settings-guard-admin@example.com", role=UserRole.UI_SUPERADMIN.value)
+    credentials = authenticate_ui_client(auth_client, db_session, admin, mfa_verified=False)
+    headers = trusted_origin_headers(csrf_token=credentials.csrf_token)
+    current = load_app_settings_for_db(db_session)
+
+    unchanged = auth_client.put(
+        "/api/admin/settings",
+        json=current.model_dump(mode="json"),
+        headers=headers,
+    )
+    weakened = current.model_copy(deep=True)
+    weakened.general.require_passkey_for_admins = False
+    disabling_policy = auth_client.put(
+        "/api/admin/settings",
+        json=weakened.model_dump(mode="json"),
+        headers=headers,
+    )
+
+    assert unchanged.status_code == 200
+    assert disabling_policy.status_code == 403
+    assert disabling_policy.json()["detail"] == "Recent WebAuthn verification required"
+    assert load_app_settings_for_db(db_session).general.require_passkey_for_admins is True
+
+
+def test_bearer_token_is_denied_on_direct_identity_routes_but_allowed_for_automation(auth_client, db_session):
+    admin = _user(db_session, email="automation-exception@example.com", role=UserRole.UI_SUPERADMIN.value)
+    api_token, _ = ApiTokenService(db_session).create_for_user(
+        admin,
+        name="automation-exception",
+        scopes=["admin:read", "admin:write"],
+    )
+    clear_ui_client(auth_client)
+    authorization = {"Authorization": f"Bearer {api_token}"}
+
+    direct = auth_client.get("/api/admin/users/minimal", headers=authorization)
+    automation = auth_client.post(
+        "/api/admin/automation/apply",
+        json={},
+        headers=authorization,
+    )
+
+    assert direct.status_code == 401
+    assert direct.json()["detail"] == "UI session required"
+    assert automation.status_code == 200
+    assert automation.json()["success"] is True
+
+
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        (
+            "/api/admin/settings/oidc/providers",
+            {
+                "provider_id": "guarded-oidc",
+                "display_name": "Guarded OIDC",
+                "discovery_url": "https://issuer.example.test/.well-known/openid-configuration",
+                "client_id": "client-id",
+                "redirect_uri": "https://app.example.test/auth/callback",
+                "scopes": ["openid"],
+                "enabled": True,
+                "use_pkce": True,
+                "use_nonce": True,
+            },
+        ),
+        (
+            "/api/admin/settings/ldap/providers",
+            {
+                "provider_id": "guarded-ldap",
+                "display_name": "Guarded LDAP",
+                "url": "ldaps://ldap.example.test",
+                "bind_dn": "",
+                "bind_password": "",
+                "user_base_dn": "ou=people,dc=example,dc=test",
+                "user_filter": "(uid={username})",
+                "email_attribute": "mail",
+                "name_attribute": "displayName",
+                "start_tls": False,
+                "tls_verify": True,
+                "timeout_seconds": 5,
+                "enabled": True,
+                "allow_insecure": False,
+            },
+        ),
+    ],
+)
+def test_oidc_and_ldap_mutations_require_recent_passkey(auth_client, db_session, path, payload):
+    admin = _user(db_session, email=f"provider-guard-{payload['provider_id']}@example.com", role=UserRole.UI_SUPERADMIN.value)
+    credentials = authenticate_ui_client(auth_client, db_session, admin, mfa_verified=False)
+
+    response = auth_client.post(
+        path,
+        json=payload,
+        headers=trusted_origin_headers(csrf_token=credentials.csrf_token),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Recent WebAuthn verification required"

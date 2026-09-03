@@ -117,35 +117,34 @@ describe("IdentitySecurityPage", () => {
     await waitFor(() => expect(mocks.adminRevokeSession).toHaveBeenCalledWith("session-1"));
   });
 
-  it("unlocks protected data with one recent-passkey flow", async () => {
+  it("retries only an approved identity link after recent passkey verification", async () => {
     const user = userEvent.setup();
-    mocks.listAdminSessions.mockRejectedValueOnce(recentWebAuthnRequiredError());
-    mocks.listExternalLinkRequests.mockRejectedValueOnce(recentWebAuthnRequiredError());
+    mocks.decideExternalLinkRequest
+      .mockRejectedValueOnce(recentWebAuthnRequiredError())
+      .mockResolvedValueOnce({ id: "request-1", status: "approved" });
     render(<IdentitySecurityPage />);
 
-    await user.click(await screen.findByRole("button", { name: "Verify with passkey" }));
+    await user.click(await screen.findByRole("button", { name: "Approve" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Approve identity link" })).getByRole("button", { name: "Approve link" }));
+    const verificationDialog = await screen.findByRole("dialog", { name: "Verify with passkey" });
+    await user.click(within(verificationDialog).getByRole("button", { name: "Verify with passkey" }));
 
-    await waitFor(() => expect(mocks.listAdminSessions).toHaveBeenCalledTimes(2));
-    expect(mocks.listExternalLinkRequests).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mocks.decideExternalLinkRequest).toHaveBeenCalledTimes(2));
+    expect(mocks.decideExternalLinkRequest).toHaveBeenNthCalledWith(2, "request-1", true);
     expect(mocks.beginRecentWebAuthnVerification).toHaveBeenCalledOnce();
     expect(mocks.authenticatePasskey).toHaveBeenCalledOnce();
     expect(mocks.finishRecentWebAuthnVerification).toHaveBeenCalledOnce();
   });
 
-  it("keeps protected data locked when passkey verification is cancelled", async () => {
+  it("rejects an identity link without invoking passkey verification", async () => {
     const user = userEvent.setup();
-    mocks.listAdminSessions.mockRejectedValueOnce(recentWebAuthnRequiredError());
-    mocks.listExternalLinkRequests.mockRejectedValueOnce(recentWebAuthnRequiredError());
-    mocks.authenticatePasskey.mockRejectedValueOnce(new DOMException("Cancelled", "NotAllowedError"));
     render(<IdentitySecurityPage />);
 
-    await user.click(await screen.findByRole("button", { name: "Verify with passkey" }));
+    await user.click(await screen.findByRole("button", { name: "Reject" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Reject identity link request" })).getByRole("button", { name: "Reject request" }));
 
-    expect(await screen.findByText("Passkey verification was cancelled or timed out. Please try again.")).toBeInTheDocument();
-    expect(screen.queryByText("No pending identity link requests.")).not.toBeInTheDocument();
-    expect(screen.queryByText("No active sessions.")).not.toBeInTheDocument();
-    expect(mocks.listAdminSessions).toHaveBeenCalledOnce();
-    expect(mocks.listExternalLinkRequests).toHaveBeenCalledOnce();
+    await waitFor(() => expect(mocks.decideExternalLinkRequest).toHaveBeenCalledWith("request-1", false));
+    expect(mocks.beginRecentWebAuthnVerification).not.toHaveBeenCalled();
   });
 
   it("keeps inventories hidden after a load error and offers a retry", async () => {

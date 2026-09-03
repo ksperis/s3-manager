@@ -9,7 +9,10 @@ import {
   type AdminSecuritySession,
   type ExternalLinkRequest,
 } from "../../api/security";
-import { useRecentWebAuthnStepUp } from "../../auth/useRecentWebAuthnStepUp";
+import {
+  isRecentWebAuthnVerificationCancelled,
+  useRecentWebAuthnStepUp,
+} from "../../auth/useRecentWebAuthnStepUp";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -21,7 +24,7 @@ import PageTabs from "../../components/PageTabs";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import { cx, type UiTone, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
-import { extractApiError, isRecentWebAuthnRequired } from "../../utils/apiError";
+import { extractApiError } from "../../utils/apiError";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import { uiPrincipalRoleLabel } from "./AssociationSummary";
 
@@ -82,13 +85,12 @@ export default function IdentitySecurityPage() {
   const [sessions, setSessions] = useState<AdminSecuritySession[]>([]);
   const [requests, setRequests] = useState<ExternalLinkRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [locked, setLocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pendingLinkDecision, setPendingLinkDecision] = useState<PendingLinkDecision | null>(null);
   const [pendingSession, setPendingSession] = useState<AdminSecuritySession | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const { runWithStepUp, verificationDialog, verifyNow, verifying, verificationError } = useRecentWebAuthnStepUp();
+  const { runWithStepUp, verificationDialog } = useRecentWebAuthnStepUp();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,13 +102,8 @@ export default function IdentitySecurityPage() {
       ]);
       setSessions(nextSessions);
       setRequests(nextRequests);
-      setLocked(false);
     } catch (loadError) {
-      if (isRecentWebAuthnRequired(loadError)) {
-        setLocked(true);
-      } else {
-        setError(extractApiError(loadError, "Unable to load identity security data."));
-      }
+      setError(extractApiError(loadError, "Unable to load identity security data."));
     } finally {
       setLoading(false);
     }
@@ -114,28 +111,28 @@ export default function IdentitySecurityPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const unlock = async () => {
-    if (await verifyNow()) await load();
-  };
-
   const decide = async () => {
     if (!pendingLinkDecision) return;
     const { request, approve } = pendingLinkDecision;
     setBusy(request.id);
     setError(null);
     try {
-      await runWithStepUp(() => decideExternalLinkRequest(request.id, approve));
+      const operation = () => decideExternalLinkRequest(request.id, approve);
+      if (approve) await runWithStepUp(operation);
+      else await operation();
       setPendingLinkDecision(null);
       setMessage(approve ? "Identity link approved." : "Identity link rejected.");
       await load();
     } catch (actionError) {
-      setError(extractApiError(actionError, "Unable to update the identity request."));
+      if (!isRecentWebAuthnVerificationCancelled(actionError)) {
+        setError(extractApiError(actionError, "Unable to update the identity request."));
+      }
     } finally {
       setBusy(null);
     }
   };
 
-  const showData = !loading && !locked && !error;
+  const showData = !loading && !error;
 
   const requestColumns = useMemo<Array<DataTableColumn<ExternalLinkRequest>>>(
     () => [
@@ -268,7 +265,7 @@ export default function IdentitySecurityPage() {
     setBusy(pendingSession.id);
     setError(null);
     try {
-      await runWithStepUp(() => adminRevokeSession(pendingSession.id));
+      await adminRevokeSession(pendingSession.id);
       setPendingSession(null);
       setMessage("Session revoked.");
       await load();
@@ -290,16 +287,6 @@ export default function IdentitySecurityPage() {
         </UiButton>
       )}
     >
-      {locked ? (
-        <PageBanner tone={verificationError ? "error" : "warning"}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>{verificationError ?? "Verify with a passkey to view sensitive identity and session data."}</span>
-            <UiButton size="xs" variant="secondary" loading={verifying} onClick={() => void unlock()}>
-              Verify with passkey
-            </UiButton>
-          </div>
-        </PageBanner>
-      ) : null}
       {error ? (
         <PageBanner tone="error">
           <div className="flex flex-wrap items-center justify-between gap-3">

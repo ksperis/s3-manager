@@ -23,6 +23,7 @@ from app.services.oidc_provider_settings_service import (
     resolve_oidc_provider_map,
 )
 from app.services.oidc_service import OidcService
+from tests.auth_test_utils import authenticate_ui_client
 
 
 def _provider_settings(*, enabled: bool = True, display_name: str = "Google") -> OIDCProviderSettings:
@@ -102,6 +103,13 @@ def _superadmin_user() -> User:
         is_active=True,
         role=UserRole.UI_SUPERADMIN.value,
     )
+
+
+def _authenticate_superadmin(client, db_session) -> None:
+    actor = _superadmin_user()
+    db_session.add(actor)
+    db_session.commit()
+    authenticate_ui_client(client, db_session, actor, mfa_verified=True)
 
 
 def test_ui_provider_scopes_require_a_non_empty_string_list():
@@ -220,6 +228,7 @@ def test_admin_oidc_api_never_returns_secret_and_preserves_replaces_clears_it(cl
     )
     app.dependency_overrides[dependencies.get_current_user] = _superadmin_user
     app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+    _authenticate_superadmin(client, db_session)
 
     payload = {
         "provider_id": "ui",
@@ -283,7 +292,7 @@ def test_admin_oidc_api_never_returns_secret_and_preserves_replaces_clears_it(cl
     assert "oidc_provider.update" in {log.action for log in db_session.query(AuditLog).all()}
 
 
-def test_admin_oidc_api_locks_environment_managed_provider(client, monkeypatch):
+def test_admin_oidc_api_locks_environment_managed_provider(client, db_session, monkeypatch):
     monkeypatch.setattr(
         "app.services.oidc_provider_settings_service.get_settings",
         lambda: Settings(
@@ -293,6 +302,7 @@ def test_admin_oidc_api_locks_environment_managed_provider(client, monkeypatch):
     )
     app.dependency_overrides[dependencies.get_current_user] = _superadmin_user
     app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+    _authenticate_superadmin(client, db_session)
 
     response = client.get("/api/admin/settings/oidc/providers")
     assert response.status_code == 200, response.text

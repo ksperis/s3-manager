@@ -19,7 +19,6 @@ import Modal from "../../components/Modal";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
-import UiButton from "../../components/ui/UiButton";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
@@ -28,7 +27,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactToggleClasses } from "../../components/toolbarControlClasses";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
-import { extractApiError, isRecentWebAuthnRequired } from "../../utils/apiError";
+import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { stableSignature } from "../../utils/stableSignature";
 
@@ -91,7 +90,6 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
   const [tokens, setTokens] = useState<ApiTokenInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [verificationRequired, setVerificationRequired] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
@@ -113,9 +111,6 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
   const {
     runWithStepUp,
     verificationDialog,
-    verificationError,
-    verifying,
-    verifyNow,
   } = useRecentWebAuthnStepUp();
 
   const apiBase = useMemo(() => {
@@ -146,14 +141,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
     try {
       const data = await listApiTokens(includeRevoked);
       setTokens(data);
-      setVerificationRequired(false);
     } catch (loadError) {
-      if (isRecentWebAuthnRequired(loadError)) {
-        setTokens([]);
-        setVerificationRequired(true);
-        return;
-      }
-      setVerificationRequired(false);
       setLoadError(extractError(loadError));
     } finally {
       setLoading(false);
@@ -248,7 +236,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
     setActionMessage(null);
     setActionError(null);
     try {
-      await runWithStepUp(() => revokeApiToken(token.id));
+      await revokeApiToken(token.id);
       setActionMessage("API token revoked.");
       await loadTokens();
     } catch (revokeError) {
@@ -275,11 +263,6 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
     });
   };
 
-  const unlockApiTokens = async () => {
-    if (!(await verifyNow())) return;
-    await loadTokens();
-  };
-
   const copyAndNotify = async (value: string, message: string) => {
     try {
       await copyTextToClipboard(value);
@@ -293,7 +276,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
   const authHeaderSnippet = revealedToken ? `Authorization: Bearer ${revealedToken.value}` : "";
   const curlSnippet = revealedToken
     ? [
-        `curl -X GET "${apiBase}/admin/users/minimal" \\`,
+        `curl -X GET "${apiBase}/users/me" \\`,
         `  -H "Authorization: Bearer ${revealedToken.value}"`,
       ].join("\n")
     : "";
@@ -377,16 +360,6 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
         />
       ) : null}
 
-      {verificationRequired ? (
-        <PageBanner tone={verificationError ? "error" : "warning"}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>{verificationError ?? "API tokens are locked. Verify your identity with a passkey to continue."}</span>
-            <UiButton variant="secondary" size="xs" onClick={() => void unlockApiTokens()} loading={verifying}>
-              Verify with passkey
-            </UiButton>
-          </div>
-        </PageBanner>
-      ) : null}
       {loadError && sortedTokens.length > 0 ? <PageBanner tone="error">{loadError}</PageBanner> : null}
       {actionError ? <PageBanner tone="error">{actionError}</PageBanner> : null}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
@@ -471,7 +444,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
           status={tableStatus}
           loadingMessage="Loading API tokens..."
           errorMessage={loadError ?? "Unable to load API tokens."}
-          emptyMessage={verificationRequired ? "Passkey verification is required to unlock API tokens." : "No API tokens."}
+          emptyMessage="No API tokens."
           tableClassName="compact-table"
           responsiveCards
         />

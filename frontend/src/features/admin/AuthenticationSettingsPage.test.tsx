@@ -8,6 +8,7 @@ import type {
   OidcProviderAdminItem,
   OidcProviderAdminPayload,
 } from "../../api/authSettings";
+import { ApiError } from "../../api/client";
 import AuthenticationSettingsPage from "./AuthenticationSettingsPage";
 
 const setGeneralSettingsMock = vi.fn();
@@ -26,6 +27,9 @@ const updateLdapAdminProviderMock = vi.fn<
   (providerId: string, payload: LdapProviderAdminPayload) => Promise<LdapProviderAdminItem>
 >();
 const deleteLdapAdminProviderMock = vi.fn<(providerId: string) => Promise<void>>();
+const beginRecentWebAuthnVerificationMock = vi.fn();
+const finishRecentWebAuthnVerificationMock = vi.fn();
+const authenticatePasskeyMock = vi.fn();
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
@@ -51,6 +55,25 @@ vi.mock("../../api/authSettings", () => ({
     updateLdapAdminProviderMock(providerId, payload),
   deleteLdapAdminProvider: (providerId: string) => deleteLdapAdminProviderMock(providerId),
 }));
+
+vi.mock("../../api/security", () => ({
+  beginRecentWebAuthnVerification: (...args: unknown[]) => beginRecentWebAuthnVerificationMock(...args),
+  finishRecentWebAuthnVerification: (...args: unknown[]) => finishRecentWebAuthnVerificationMock(...args),
+}));
+
+vi.mock("../../auth/webauthn", () => ({
+  authenticatePasskey: (...args: unknown[]) => authenticatePasskeyMock(...args),
+}));
+
+function recentWebAuthnRequiredError() {
+  return new ApiError("Request failed", {
+    response: {
+      status: 403,
+      data: { detail: "Recent WebAuthn verification required" },
+      headers: {},
+    },
+  });
+}
 
 function buildSettings(): AppSettings {
   return {
@@ -284,6 +307,9 @@ describe("AuthenticationSettingsPage", () => {
       })
     );
     deleteLdapAdminProviderMock.mockResolvedValue();
+    beginRecentWebAuthnVerificationMock.mockResolvedValue({ challenge: "challenge" });
+    authenticatePasskeyMock.mockResolvedValue({ id: "credential" });
+    finishRecentWebAuthnVerificationMock.mockResolvedValue({ mfa_verified_at: "2026-09-02T10:00:00Z" });
   });
 
   it("renders the authentication toggles", async () => {
@@ -326,6 +352,24 @@ describe("AuthenticationSettingsPage", () => {
     expect(payload.general.allow_login_access_keys).toBe(true);
     expect(payload.general).not.toHaveProperty("allow_user_private_connections");
     expect(setGeneralSettingsMock).toHaveBeenLastCalledWith(payload.general);
+  });
+
+  it("preserves the settings draft and retries the save once after step-up", async () => {
+    const user = userEvent.setup();
+    updateAppSettingsMock
+      .mockRejectedValueOnce(recentWebAuthnRequiredError())
+      .mockImplementationOnce(async (payload: AppSettings) => payload);
+    render(<AuthenticationSettingsPage />);
+
+    await user.click(await screen.findByLabelText("Access-key login"));
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    const verificationDialog = await screen.findByRole("dialog", { name: "Verify with passkey" });
+    expect(screen.getByLabelText("Access-key login")).toBeChecked();
+    await user.click(within(verificationDialog).getByRole("button", { name: "Verify with passkey" }));
+
+    await waitFor(() => expect(updateAppSettingsMock).toHaveBeenCalledTimes(2));
+    expect(beginRecentWebAuthnVerificationMock).toHaveBeenCalledOnce();
+    expect(screen.getByText("Settings saved.")).toBeInTheDocument();
   });
 
   it("shows the custom endpoint warning only when custom endpoint login is enabled", async () => {
