@@ -23,11 +23,8 @@ import {
 } from "./portalRequests";
 
 import {
-  createPortalAccessKey,
   fetchPortalActivity,
-  deletePortalAccessKey,
   fetchPortalAlerts,
-  fetchPortalAccessKeysState,
   fetchPortalCollaborators,
   fetchPortalCollaboratorAccessReview,
   downloadPortalServerAccessRawLogs,
@@ -54,10 +51,15 @@ import {
   revokePortalStorageSpacePublicLink,
   revokePortalStorageSpaceShare,
   restorePortalStorageSpaceObject,
-  updatePortalAccessKeyStatus,
   updatePortalStorageSpace,
   updatePortalStorageSpaceShare,
 } from "./portal";
+import {
+  createPortalAccessKey,
+  deletePortalAccessKey,
+  fetchPortalAccessKeysState,
+  updatePortalAccessKeyStatus,
+} from "./portalAccessKeys";
 
 describe("portal storage spaces api", () => {
   beforeEach(() => {

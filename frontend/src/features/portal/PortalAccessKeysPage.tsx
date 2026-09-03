@@ -9,11 +9,13 @@ import {
   createPortalAccessKey,
   deletePortalAccessKey,
   fetchPortalAccessKeysState,
-  listPortalStorageSpaces,
   updatePortalAccessKeyStatus,
   type PortalAccessKey,
   type PortalAccessKeyCreate,
   type PortalAccessKeysState,
+} from "../../api/portalAccessKeys";
+import {
+  listPortalStorageSpaces,
   type PortalStorageSpaceSummary,
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";

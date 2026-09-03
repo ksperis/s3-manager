@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { LanguageProvider } from "../../components/language";
 import PortalAccessKeysPage from "./PortalAccessKeysPage";
-import type { PortalAccessKeysState } from "../../api/portal";
+import type { PortalAccessKeysState } from "../../api/portalAccessKeys";
 import { setSessionUserCache } from "../../utils/workspaces";
 
 let downloadedBlobs: Blob[] = [];
@@ -48,8 +48,11 @@ vi.mock("./PortalAccountContext", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
-  fetchPortalAccessKeysState: mocks.fetchPortalAccessKeysState,
   listPortalStorageSpaces: mocks.listPortalStorageSpaces,
+}));
+
+vi.mock("../../api/portalAccessKeys", () => ({
+  fetchPortalAccessKeysState: mocks.fetchPortalAccessKeysState,
   createPortalAccessKey: mocks.createPortalAccessKey,
   updatePortalAccessKeyStatus: mocks.updatePortalAccessKeyStatus,
   deletePortalAccessKey: mocks.deletePortalAccessKey,

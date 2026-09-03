@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { PortalAccessKey, PortalStorageSpaceSummary } from "../../api/portal";
+import type { PortalStorageSpaceSummary } from "../../api/portal";
+import type { PortalAccessKey } from "../../api/portalAccessKeys";
 import {
   buildCyberduckBookmark,
   buildGenericConnectionSheet,

@@ -2,7 +2,8 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { PortalAccessKey, PortalStorageSpaceSummary } from "../../api/portal";
+import type { PortalStorageSpaceSummary } from "../../api/portal";
+import type { PortalAccessKey } from "../../api/portalAccessKeys";
 import { triggerDownload } from "../../utils/download";
 
 export type PortalExternalToolEndpoint = {
