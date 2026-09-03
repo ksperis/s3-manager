@@ -188,7 +188,9 @@ describe("PortalStorageSpacesPage", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: "Spaces" })).toBeInTheDocument();
+    const pageHeading = screen.getByRole("heading", { name: "Spaces" });
+    expect(pageHeading).toBeInTheDocument();
+    expect(pageHeading.closest("header")?.parentElement).toHaveClass("space-y-4");
     expect(
       screen.getByRole("tab", { name: "Active spaces (1)" }),
     ).toBeInTheDocument();

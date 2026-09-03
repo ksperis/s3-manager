@@ -27,7 +27,7 @@ import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
 import Modal from "../../components/Modal";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import StorageSpaceIcon from "../../components/StorageSpaceIcon";
 import { WorkflowActions } from "../../components/WorkflowPage";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -771,19 +771,18 @@ export default function PortalStorageSpacesPage() {
   ];
 
   return (
-    <div>
-      <PageHeader
-        title={t({ en: "Spaces", fr: "Espaces", de: "Bereiche" })}
-        description={t({
-          en: "Create places for project files, upload data, and invite collaborators.",
-          fr: "Créez des espaces pour les fichiers de projet, ajoutez des données et invitez des collaborateurs.",
-          de: "Erstellen Sie Bereiche für Projektdateien, laden Sie Daten hoch und laden Sie Mitwirkende ein.",
-        })}
-        breadcrumbs={portalBreadcrumbs({
-          label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }),
-        })}
-        actions={headerActions}
-      />
+    <PageShell
+      title={t({ en: "Spaces", fr: "Espaces", de: "Bereiche" })}
+      description={t({
+        en: "Create places for project files, upload data, and invite collaborators.",
+        fr: "Créez des espaces pour les fichiers de projet, ajoutez des données et invitez des collaborateurs.",
+        de: "Erstellen Sie Bereiche für Projektdateien, laden Sie Daten hoch und laden Sie Mitwirkende ein.",
+      })}
+      breadcrumbs={portalBreadcrumbs({
+        label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }),
+      })}
+      actions={headerActions}
+    >
 
       {showStartGuide ? (
         <section
@@ -1479,6 +1478,6 @@ export default function PortalStorageSpacesPage() {
           </div>
         </UiCard>
       </PortalTabPanel>
-    </div>
+    </PageShell>
   );
 }
