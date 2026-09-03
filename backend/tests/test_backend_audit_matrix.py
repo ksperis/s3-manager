@@ -94,25 +94,10 @@ def test_backend_audit_matrix_tracks_portal_stream_delegation():
 
 
 
-def test_backend_audit_matrix_tracks_shared_bucket_config_mutation_delegation():
+def test_backend_audit_matrix_tracks_manager_bucket_config_mutation_delegation():
     backend_root = Path(__file__).resolve().parents[1]
     rows_by_function = {row.function: row for row in collect_rows(backend_root)}
 
-    assert rows_by_function["update_bucket_versioning_config"].file.relative_to(backend_root) == Path(
-        "app/routers/browser_bucket_config_core.py"
-    )
-    assert rows_by_function["update_bucket_versioning_config"].signals[
-        "delegated_bucket_config_mutation_audit"
-    ]
-    assert rows_by_function["delete_bucket_encryption_config"].signals[
-        "delegated_bucket_config_mutation_audit"
-    ]
-    assert rows_by_function["put_bucket_policy_config"].file.relative_to(backend_root) == Path(
-        "app/routers/browser_bucket_config_access.py"
-    )
-    assert rows_by_function["put_bucket_lifecycle_config"].file.relative_to(backend_root) == Path(
-        "app/routers/browser_bucket_config_rules.py"
-    )
     assert rows_by_function["put_bucket_encryption"].file.relative_to(backend_root) == Path(
         "app/routers/manager/bucket_config_core.py"
     )

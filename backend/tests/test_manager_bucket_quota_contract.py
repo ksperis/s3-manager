@@ -155,21 +155,13 @@ def test_manager_bucket_quota_update_succeeds_with_privileged_access(client, db_
     assert captured["payload"].max_size_gb == 2
 
 
-def test_browser_bucket_quota_forgery_is_always_forbidden(client, db_session):
-    user = _quota_user(db_session)
-    app.dependency_overrides[dependencies.require_portal_browser_basic_route] = lambda: None
-    app.dependency_overrides[dependencies.get_current_actor] = lambda: user
-    try:
-        response = client.put(
-            "/api/browser/buckets/config/demo-bucket/quota",
-            json={"max_size_gb": 1},
-        )
-    finally:
-        app.dependency_overrides.pop(dependencies.require_portal_browser_basic_route, None)
-        app.dependency_overrides.pop(dependencies.get_current_actor, None)
+def test_browser_bucket_quota_route_is_not_exposed(client):
+    response = client.put(
+        "/api/browser/buckets/config/demo-bucket/quota",
+        json={"max_size_gb": 1},
+    )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Bucket quota management is only available in Manager"
+    assert response.status_code == 404
 
 
 def test_embedded_browser_private_connection_cannot_forge_manager_quota_update(client, db_session):

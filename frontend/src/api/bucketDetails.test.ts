@@ -44,6 +44,16 @@ describe("bucket details api", () => {
     );
   });
 
+  it("limits browser bucket details to inspector reads", () => {
+    expect(Object.keys(browserBucketDetails).sort()).toEqual([
+      "getBucketLogging",
+      "getBucketPolicy",
+      "getBucketProperties",
+      "getBucketStats",
+      "getBucketWebsite",
+    ]);
+  });
+
   it("keeps manager writes and deletes on their detail resource", async () => {
     const policy = { Version: "2012-10-17", Statement: [] };
 

@@ -306,19 +306,6 @@ def require_manager_bucket_quota(
     return account
 
 
-def forbid_browser_bucket_quota_management(
-    actor: ManagerActor = Depends(get_current_actor),
-    db: Session = Depends(get_db),
-) -> None:
-    decision = ManagerCephManagementAccessService(db).evaluate(
-        "bucket_quota",
-        surface="browser",
-        actor=actor if isinstance(actor, User) else None,
-        account=None,
-    )
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=decision.reason)
-
-
 def is_manager_rgw_access_key_management_available(
     account: S3ExecutionTarget,
     user: Optional[User] = None,

@@ -21,7 +21,6 @@ from app.routers.dependencies_internal.auth_session import (
 )
 from app.routers.dependencies_internal.feature_gates import (
     ensure_manager_tool_allowed,
-    forbid_browser_bucket_quota_management,
     get_current_bucket_migration_scope,
     is_manager_bucket_quota_available,
     is_manager_rgw_access_key_management_available,

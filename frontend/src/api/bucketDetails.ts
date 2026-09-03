@@ -27,7 +27,8 @@ import client from "./client";
 const MANAGER_BUCKETS_PATH = "/manager/buckets";
 const BROWSER_BUCKET_CONFIG_PATH = "/browser/buckets/config";
 
-function createBucketDetailsApi(basePath: string) {
+function createManagerBucketDetailsApi() {
+  const basePath = MANAGER_BUCKETS_PATH;
   const bucketPath = (bucketName: string) =>
     `${basePath}/${encodeURIComponent(bucketName)}`;
   const requestConfig = (accountId: S3AccountSelector) => ({
@@ -289,7 +290,53 @@ function createBucketDetailsApi(basePath: string) {
   };
 }
 
-const managerBucketDetails = createBucketDetailsApi(MANAGER_BUCKETS_PATH);
+function createBrowserBucketDetailsApi() {
+  const bucketPath = (bucketName: string) =>
+    `${BROWSER_BUCKET_CONFIG_PATH}/${encodeURIComponent(bucketName)}`;
+  const requestConfig = (accountId: S3AccountSelector) => ({
+    params: withS3AccountParam(undefined, accountId),
+  });
+  const read = async <T>(
+    accountId: S3AccountSelector,
+    bucketName: string,
+    resource: string,
+  ): Promise<T> => {
+    const { data } = await client.get<T>(
+      `${bucketPath(bucketName)}/${resource}`,
+      requestConfig(accountId),
+    );
+    return data;
+  };
+
+  return {
+    async getBucketStats(
+      accountId: S3AccountSelector,
+      bucketName: string,
+      options?: { with_stats?: boolean },
+    ): Promise<Bucket> {
+      const { data } = await client.get<Bucket>(
+        `${bucketPath(bucketName)}/stats`,
+        {
+          params: withS3AccountParam(
+            { with_stats: options?.with_stats },
+            accountId,
+          ),
+        },
+      );
+      return data;
+    },
+    getBucketProperties: (accountId: S3AccountSelector, bucketName: string) =>
+      read<BucketProperties>(accountId, bucketName, "properties"),
+    getBucketPolicy: (accountId: S3AccountSelector, bucketName: string) =>
+      read<BucketPolicy>(accountId, bucketName, "policy"),
+    getBucketLogging: (accountId: S3AccountSelector, bucketName: string) =>
+      read<BucketLoggingConfiguration>(accountId, bucketName, "logging"),
+    getBucketWebsite: (accountId: S3AccountSelector, bucketName: string) =>
+      read<BucketWebsiteConfiguration>(accountId, bucketName, "website"),
+  };
+}
+
+const managerBucketDetails = createManagerBucketDetailsApi();
 
 export const {
   deleteBucketCors,
@@ -332,6 +379,4 @@ export const {
   updateBucketQuota,
 } = managerBucketDetails;
 
-export const browserBucketDetails = createBucketDetailsApi(
-  BROWSER_BUCKET_CONFIG_PATH,
-);
+export const browserBucketDetails = createBrowserBucketDetailsApi();

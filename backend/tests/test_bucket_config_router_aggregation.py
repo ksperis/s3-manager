@@ -3,12 +3,7 @@
 
 from fastapi import APIRouter
 
-from app.routers import (
-    browser_bucket_config,
-    browser_bucket_config_access,
-    browser_bucket_config_core,
-    browser_bucket_config_rules,
-)
+from app.routers import browser_bucket_config
 from app.routers.ceph_admin import (
     bucket_config as ceph_admin_bucket_config,
     bucket_config_access as ceph_admin_bucket_config_access,
@@ -31,22 +26,14 @@ def _route_operations(router: APIRouter) -> set[tuple[str, tuple[str, ...]]]:
     }
 
 
-def test_browser_bucket_config_router_aggregates_every_feature_family() -> None:
-    feature_routers = (
-        browser_bucket_config_core.router,
-        browser_bucket_config_access.router,
-        browser_bucket_config_rules.router,
-    )
-    expected_operations = set().union(
-        *(_route_operations(router) for router in feature_routers)
-    )
-    included_routers = tuple(
-        route.original_router for route in browser_bucket_config.router.routes
-    )
-
-    assert included_routers == feature_routers
-    assert sum(len(router.routes) for router in feature_routers) == 37
-    assert len(expected_operations) == 37
+def test_browser_bucket_config_exposes_only_inspector_reads() -> None:
+    assert _route_operations(browser_bucket_config.router) == {
+        ("/buckets/config/{bucket_name}/logging", ("GET",)),
+        ("/buckets/config/{bucket_name}/policy", ("GET",)),
+        ("/buckets/config/{bucket_name}/properties", ("GET",)),
+        ("/buckets/config/{bucket_name}/stats", ("GET",)),
+        ("/buckets/config/{bucket_name}/website", ("GET",)),
+    }
 
 
 def test_manager_bucket_config_router_aggregates_every_feature_family() -> None:
