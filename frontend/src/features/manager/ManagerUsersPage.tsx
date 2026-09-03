@@ -30,7 +30,7 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
-import { compareByNullableField, type SortableField } from "../../utils/sortValues";
+import { compareByNullableField, nextSortState, type SortableField } from "../../utils/sortValues";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import InlinePolicyDraftEditor from "./InlinePolicyDraftEditor";
 import ManagedPolicySelectionPanel from "./ManagedPolicySelectionPanel";
@@ -219,12 +219,7 @@ export default function ManagerUsersPage() {
   });
 
   const toggleSort = (field: SortField) => {
-    setSort((prev) => {
-      if (prev.field === field) {
-        return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
-      }
-      return { field, direction: "desc" };
-    });
+    setSort((current) => nextSortState(current, field, "desc"));
   };
 
   const handleAdvancedCreate = async (e: FormEvent) => {

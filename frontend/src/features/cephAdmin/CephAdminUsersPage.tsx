@@ -62,6 +62,7 @@ import { useCephAdminListingFilters } from "./filtering/useCephAdminListingFilte
 import { useCephAdminEntityListing } from "./listing/useCephAdminEntityListing";
 import { readClientJsonFromKey, writeClientJsonToKey } from "../../utils/clientStorage";
 import { formatBytes, formatNumber } from "../../utils/format";
+import { nextSortState } from "../../utils/sortValues";
 
 type ColumnId =
   | "tenant"
@@ -373,12 +374,7 @@ export default function CephAdminUsersPage() {
   };
 
   const toggleSort = (field: SortField) => {
-    setSort((prev) => {
-      if (prev.field === field) {
-        return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
-      }
-      return { field, direction: "asc" };
-    });
+    setSort((current) => nextSortState(current, field));
     setPage(1);
   };
 

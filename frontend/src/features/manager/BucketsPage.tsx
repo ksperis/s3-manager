@@ -51,7 +51,7 @@ import {
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
-import { compareByNullableField, type SortableField } from "../../utils/sortValues";
+import { compareByNullableField, nextSortState, type SortableField } from "../../utils/sortValues";
 import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
 import {
   readSessionJsonFromKey,
@@ -630,12 +630,7 @@ export default function BucketsPage() {
   }, [buckets, filter, sort]);
 
   const toggleSort = (field: SortField) => {
-    setSort((prev) => {
-      if (prev.field === field) {
-        return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
-      }
-      return { field, direction: "desc" };
-    });
+    setSort((current) => nextSortState(current, field, "desc"));
   };
 
   const toggleColumn = (id: ColumnId) => {

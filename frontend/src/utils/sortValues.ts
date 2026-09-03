@@ -3,6 +3,16 @@
  * Licensed under the Apache License, Version 2.0
  */
 type SortDirection = "asc" | "desc";
+type SortState<Field extends string> = { field: Field; direction: SortDirection };
+
+export const nextSortState = <Field extends string>(
+  current: SortState<Field>,
+  field: Field,
+  newFieldDirection: SortDirection = "asc"
+): SortState<Field> => ({
+  field,
+  direction: current.field === field ? (current.direction === "asc" ? "desc" : "asc") : newFieldDirection,
+});
 export type SortableValue = string | number | boolean | null | undefined;
 export type SortableField<T> = Extract<
   {

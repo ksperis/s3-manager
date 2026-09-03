@@ -90,6 +90,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
+import { nextSortState } from "../../utils/sortValues";
 import {
   clearAdminPrincipalEditRequest,
   readAdminPrincipalEditRequest,
@@ -290,11 +291,7 @@ export default function GroupsPage() {
   });
 
   const toggleSort = (field: SortField) => {
-    setSort((current) =>
-      current.field === field
-        ? { field, direction: current.direction === "asc" ? "desc" : "asc" }
-        : { field, direction: "desc" }
-    );
+    setSort((current) => nextSortState(current, field, "desc"));
     setPage(1);
   };
 

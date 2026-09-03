@@ -105,6 +105,7 @@ import {
 import { FEATURE_STATE_OPTIONS, type FeatureKey } from "./bucketOpsAdvancedFilterModel";
 import { type ColumnId, type SortField } from "./bucketOpsListState";
 import { extractApiError } from "../../utils/apiError";
+import { nextSortState } from "../../utils/sortValues";
 import {
   formatDownloadTimestamp,
   triggerJsonDownload,
@@ -619,12 +620,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const toggleSort = (field: SortField) => {
     if (!usageFeatureEnabled && isStatsSortField(field)) return;
-    setSort((prev) => {
-      if (prev.field === field) {
-        return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
-      }
-      return { field, direction: "asc" };
-    });
+    setSort((current) => nextSortState(current, field));
     setPage(1);
   };
 

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { compareByNullableField, compareNullableValues } from "./sortValues";
+import { compareByNullableField, compareNullableValues, nextSortState } from "./sortValues";
 
 type Row = {
   name: string;
@@ -41,5 +41,20 @@ describe("sortValues", () => {
   it("sorts strings and booleans without numeric casts leaking into the caller", () => {
     expect(compareNullableValues("alpha", "bravo", "asc")).toBeLessThan(0);
     expect(compareNullableValues(true, false, "asc")).toBeGreaterThan(0);
+  });
+
+  it("toggles the active field and applies the requested direction to a new field", () => {
+    expect(nextSortState({ field: "name", direction: "asc" }, "name")).toEqual({
+      field: "name",
+      direction: "desc",
+    });
+    expect(nextSortState({ field: "name", direction: "desc" }, "used")).toEqual({
+      field: "used",
+      direction: "asc",
+    });
+    expect(nextSortState({ field: "name", direction: "asc" }, "used", "desc")).toEqual({
+      field: "used",
+      direction: "desc",
+    });
   });
 });
