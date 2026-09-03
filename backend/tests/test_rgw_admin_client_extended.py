@@ -21,6 +21,11 @@ def _client(**kwargs) -> RGWAdminClient:
     return RGWAdminClient(**params)
 
 
+def test_transport_is_owned_by_dedicated_module():
+    assert RGWAdminClient._request.__module__ == "app.services.rgw_admin_transport"
+    assert RGWAdminClient._request_operation.__module__ == "app.services.rgw_admin_transport"
+
+
 class _Resp:
     def __init__(self, status_code: int = 200, payload=None, text: str = ""):
         self.status_code = status_code
