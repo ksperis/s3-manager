@@ -13,6 +13,7 @@ from .portal.iam import PortalIamMixin
 from .portal.iam_policy_documents import PortalIamPolicyDocumentsMixin
 from .portal.objects import PortalObjectsMixin
 from .portal.public_links import PortalPublicLinksMixin
+from .portal.server_access_log_queries import PortalServerAccessLogQueriesMixin
 from .portal.server_access_logging import PortalServerAccessLoggingMixin
 from .portal.settings import PortalSettingsMixin
 from .portal.sharing import PortalSharingMixin
@@ -35,6 +36,7 @@ class PortalService(
     PortalStorageSpaceAccessMixin,
     PortalIamMixin,
     PortalServerAccessLoggingMixin,
+    PortalServerAccessLogQueriesMixin,
     PortalStorageSpaceVersionCleanupMixin,
     PortalStorageSpaceSettingsMixin,
     PortalDeletedPrefixRestoreMixin,
