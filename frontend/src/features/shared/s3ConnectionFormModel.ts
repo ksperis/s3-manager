@@ -204,23 +204,7 @@ export function buildPrivateConnectionEditorState(
   return { credentialDrafts, drafts };
 }
 
-export function buildCreatePrivateConnectionSignature(
-  form: CreatePrivateConnectionForm,
-  endpointMode: S3ConnectionEndpointMode,
-  endpointId: string,
-): string {
-  return buildS3ConnectionFormSignature(form, endpointMode, endpointId);
-}
-
-export function buildCreateAdminS3ConnectionSignature(
-  form: CreateAdminS3ConnectionForm,
-  endpointMode: S3ConnectionEndpointMode,
-  endpointId: string,
-): string {
-  return buildS3ConnectionFormSignature(form, endpointMode, endpointId);
-}
-
-function buildS3ConnectionFormSignature<T extends { tags: UiTagDefinition[] }>(
+export function buildCreateS3ConnectionSignature<T extends { tags: UiTagDefinition[] }>(
   form: T,
   endpointMode: S3ConnectionEndpointMode,
   endpointId: string,

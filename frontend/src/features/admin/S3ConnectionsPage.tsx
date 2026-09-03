@@ -68,7 +68,7 @@ import S3ConnectionCredentialFields from "../shared/S3ConnectionCredentialFields
 import S3CredentialsValidationMessage from "../shared/S3CredentialsValidationMessage";
 import { useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 import {
-  buildCreateAdminS3ConnectionSignature,
+  buildCreateS3ConnectionSignature,
   buildEditAdminS3ConnectionSignature,
   buildS3CredentialsValidationPayload,
   createDefaultAdminS3ConnectionForm,
@@ -213,7 +213,7 @@ export default function S3ConnectionsPage() {
     setCreateError(null);
     setCreateForm(nextForm);
     setCreateInitialSignature(
-      buildCreateAdminS3ConnectionSignature(nextForm, "custom", ""),
+      buildCreateS3ConnectionSignature(nextForm, "custom", ""),
     );
   };
 
@@ -237,7 +237,7 @@ export default function S3ConnectionsPage() {
     setCreateError(null);
     setCreateForm(nextForm);
     setCreateInitialSignature(
-      buildCreateAdminS3ConnectionSignature(
+      buildCreateS3ConnectionSignature(
         nextForm,
         nextEndpointMode,
         nextEndpointPresetId,
@@ -428,7 +428,7 @@ export default function S3ConnectionsPage() {
   const visibleAvailableEditGroups = useMemo(() => availableEditGroups.slice(0, maxLinkOptions), [availableEditGroups, maxLinkOptions]);
   const createCurrentSignature = useMemo(
     () =>
-      buildCreateAdminS3ConnectionSignature(
+      buildCreateS3ConnectionSignature(
         createForm,
         createEndpointMode,
         createEndpointPresetId,

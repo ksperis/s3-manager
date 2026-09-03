@@ -5,8 +5,7 @@
 import { describe, expect, it } from "vitest";
 import type { S3Connection } from "../../api/connections";
 import {
-  buildCreateAdminS3ConnectionSignature,
-  buildCreatePrivateConnectionSignature,
+  buildCreateS3ConnectionSignature,
   buildEditAdminS3ConnectionSignature,
   buildEditPrivateConnectionSignature,
   buildPrivateConnectionDraft,
@@ -111,9 +110,9 @@ describe("s3ConnectionFormModel", () => {
       tags: [...createForm.tags].reverse(),
     };
     expect(
-      buildCreatePrivateConnectionSignature(createForm, "custom", ""),
+      buildCreateS3ConnectionSignature(createForm, "custom", ""),
     ).toBe(
-      buildCreatePrivateConnectionSignature(reversedCreateForm, "custom", ""),
+      buildCreateS3ConnectionSignature(reversedCreateForm, "custom", ""),
     );
 
     const draft = buildPrivateConnectionDraft(connection);
@@ -138,9 +137,9 @@ describe("s3ConnectionFormModel", () => {
       tags: connection.tags ?? [],
     };
     expect(
-      buildCreateAdminS3ConnectionSignature(adminForm, "custom", ""),
+      buildCreateS3ConnectionSignature(adminForm, "custom", ""),
     ).toBe(
-      buildCreateAdminS3ConnectionSignature(
+      buildCreateS3ConnectionSignature(
         { ...adminForm, tags: [...adminForm.tags].reverse() },
         "custom",
         "",

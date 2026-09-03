@@ -72,7 +72,7 @@ import S3ConnectionCredentialFields from "./S3ConnectionCredentialFields";
 import S3ConnectionEndpointFields from "./S3ConnectionEndpointFields";
 import S3CredentialsValidationMessage from "./S3CredentialsValidationMessage";
 import {
-  buildCreatePrivateConnectionSignature,
+  buildCreateS3ConnectionSignature,
   buildEditPrivateConnectionSignature,
   buildPrivateConnectionDraft,
   buildPrivateConnectionEditorState,
@@ -196,7 +196,7 @@ export default function ProfilePage({
   const [editConnectionEndpointMode, setEditConnectionEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [editConnectionEndpointId, setEditConnectionEndpointId] = useState("");
   const [createConnectionInitialSignature, setCreateConnectionInitialSignature] = useState(() =>
-    buildCreatePrivateConnectionSignature(createDefaultPrivateConnectionForm(), "custom", "")
+    buildCreateS3ConnectionSignature(createDefaultPrivateConnectionForm(), "custom", "")
   );
   const [editConnectionInitialSignature, setEditConnectionInitialSignature] = useState(() =>
     buildEditPrivateConnectionSignature(
@@ -338,7 +338,7 @@ export default function ProfilePage({
 
   const createConnectionCurrentSignature = useMemo(
     () =>
-      buildCreatePrivateConnectionSignature(
+      buildCreateS3ConnectionSignature(
         createConnectionForm,
         createConnectionEndpointMode,
         createConnectionEndpointId
@@ -645,7 +645,7 @@ export default function ProfilePage({
     setCreateConnectionEndpointMode(nextEndpointMode);
     setCreateConnectionEndpointId(nextEndpointId);
     setCreateConnectionInitialSignature(
-      buildCreatePrivateConnectionSignature(
+      buildCreateS3ConnectionSignature(
         nextForm,
         nextEndpointMode,
         nextEndpointId,
