@@ -19,6 +19,7 @@ from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOp
 from app.routers import dependencies
 from app.routers.storage_ops import buckets as storage_ops_router
 from app.services import storage_ops_bucket_listing_service as storage_ops_listing_service
+from app.services import storage_ops_bucket_filtering as storage_ops_filtering
 from app.routers.storage_ops import summary as storage_ops_summary_router
 from app.services import app_settings_service, effective_access_service
 from app.services.connection_identity_service import ConnectionIdentityResolution
@@ -558,9 +559,13 @@ def test_storage_ops_feature_param_filter_prefilters_base_candidates(monkeypatch
         captured["bucket_names"] = [bucket.name for bucket in buckets]
         return {}, set()
 
-    monkeypatch.setattr(storage_ops_listing_service, "load_bucket_feature_param_snapshots", fake_load_feature_param_snapshots)
     monkeypatch.setattr(
-        storage_ops_listing_service,
+        storage_ops_filtering,
+        "load_bucket_feature_param_snapshots",
+        fake_load_feature_param_snapshots,
+    )
+    monkeypatch.setattr(
+        storage_ops_filtering,
         "match_bucket_feature_param_rules",
         lambda rules, match_mode, snapshot: True,
     )
@@ -596,7 +601,7 @@ def test_storage_ops_feature_param_filter_prefilters_base_candidates(monkeypatch
             ],
         }
     )
-    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
+    result = storage_ops_filtering.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
@@ -671,7 +676,7 @@ def test_storage_ops_bucket_identity_is_endpoint_scoped_and_shared_across_contex
         {"match": "all", "rules": [{"field": "bucket_identity", "op": "in", "value": [primary_identity]}]}
     )
 
-    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
+    result = storage_ops_filtering.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
@@ -716,7 +721,7 @@ def test_storage_ops_context_filters_match_context_kind_and_endpoint():
             ],
         }
     )
-    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
+    result = storage_ops_filtering.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
@@ -758,7 +763,7 @@ def test_storage_ops_context_filters_match_context_id():
             ],
         }
     )
-    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
+    result = storage_ops_filtering.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
@@ -815,7 +820,7 @@ def test_storage_ops_lifecycle_rule_status_filter_uses_context_lifecycle_lookup(
             )
             return BucketLifecycleConfig(rules=rules)
 
-    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
+    result = storage_ops_filtering.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=FakeBucketsService(),
@@ -868,7 +873,7 @@ def test_storage_ops_sse_detail_filter_uses_context_encryption_lookup():
             )
             return BucketEncryptionConfiguration(rules=rules)
 
-    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
+    result = storage_ops_filtering.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=FakeBucketsService(),
@@ -912,7 +917,7 @@ def test_storage_ops_context_filters_match_s3_user_kind():
             ],
         }
     )
-    result = storage_ops_listing_service.apply_storage_ops_advanced_filter(
+    result = storage_ops_filtering.apply_storage_ops_advanced_filter(
         buckets,
         parsed_filter,
         service=SimpleNamespace(),
