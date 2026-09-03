@@ -94,6 +94,7 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
+import { nextSortState } from "../../utils/sortValues";
 import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
@@ -543,12 +544,7 @@ export default function S3AccountsPage() {
   }, [portalAccountSettings]);
 
   const toggleSort = (field: SortField) => {
-    setSort((prev) => {
-      if (prev.field === field) {
-        return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
-      }
-      return { field, direction: "desc" };
-    });
+    setSort((current) => nextSortState(current, field, "desc"));
     setPage(1);
   };
 

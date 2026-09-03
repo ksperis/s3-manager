@@ -52,6 +52,7 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
+import { nextSortState } from "../../utils/sortValues";
 import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
@@ -180,12 +181,7 @@ export default function S3UsersPage() {
     setPage(1);
   };
   const toggleSort = (field: SortField) => {
-    setSort((prev) => {
-      if (prev.field === field) {
-        return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
-      }
-      return { field, direction: "desc" };
-    });
+    setSort((current) => nextSortState(current, field, "desc"));
     setPage(1);
   };
   const quickFilterActive = filter.trim().length > 0;
