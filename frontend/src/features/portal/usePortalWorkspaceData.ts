@@ -6,10 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ManagerTrafficStats, ManagerUsageTrendsResponse, TrafficWindow } from "../../api/stats";
 import { fetchPortalWorkspaceHealthOverview, type WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
 import {
-  fetchPortalCollaborators,
   fetchPortalState,
   listPortalStorageSpaces,
-  type PortalCollaboratorsResponse,
   type PortalStorageSpaceSummary,
   type PortalState,
 } from "../../api/portal";
@@ -19,6 +17,10 @@ import {
   type PortalActivityItem,
   type PortalAlert,
 } from "../../api/portalActivity";
+import {
+  fetchPortalCollaborators,
+  type PortalCollaboratorsResponse,
+} from "../../api/portalCollaborators";
 import {
   fetchPortalTraffic,
   fetchPortalUsage,

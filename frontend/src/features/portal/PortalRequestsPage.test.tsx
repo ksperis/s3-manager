@@ -26,6 +26,9 @@ vi.mock("../../api/portalRequests", () => ({
 
 vi.mock("../../api/portal", () => ({
   fetchPortalState: mocks.fetchPortalState,
+}));
+
+vi.mock("../../api/portalCollaborators", () => ({
   fetchPortalCollaborators: mocks.fetchPortalCollaborators,
 }));
 

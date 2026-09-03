@@ -5,9 +5,9 @@
 import type { I18nMessage } from "../../i18n";
 import type { UiLanguage } from "../../components/language";
 import type {
-  PortalCollaboratorStorageSpaceAccessSource,
   PortalStorageSpaceVisibility,
 } from "../../api/portal";
+import type { PortalCollaboratorStorageSpaceAccessSource } from "../../api/portalCollaborators";
 import type {
   PortalWorkspaceRole,
   PortalWorkspaceStatus,

@@ -6,11 +6,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
-  fetchPortalCollaboratorAccessReview,
   revokePortalStorageSpaceShare,
+} from "../../api/portal";
+import {
+  fetchPortalCollaboratorAccessReview,
   type PortalCollaboratorAccessReview,
   type PortalCollaboratorStorageSpaceAccess,
-} from "../../api/portal";
+} from "../../api/portalCollaborators";
 import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, {

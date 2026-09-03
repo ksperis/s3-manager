@@ -19,8 +19,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/portal", () => ({
-  fetchPortalCollaboratorAccessReview: (...args: unknown[]) => mocks.fetchReview(...args),
   revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShare(...args),
+}));
+
+vi.mock("../../api/portalCollaborators", () => ({
+  fetchPortalCollaboratorAccessReview: (...args: unknown[]) => mocks.fetchReview(...args),
 }));
 
 vi.mock("../../api/portalRequests", () => ({

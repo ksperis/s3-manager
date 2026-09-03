@@ -12,9 +12,9 @@ import {
 import { Link, useSearchParams } from "react-router-dom";
 import {
   listPortalStorageSpacePublicLinks,
-  type PortalCollaborator,
   type PortalPublicLink,
 } from "../../api/portal";
+import type { PortalCollaborator } from "../../api/portalCollaborators";
 import { createPortalRequest } from "../../api/portalRequests";
 import DataTableShell, {
   dataTableDefaultActionProps,

@@ -11,11 +11,11 @@ import {
   type PortalQuotaDirection,
   type PortalQuotaUnit,
 } from "../../api/portalRequests";
+import { fetchPortalState } from "../../api/portal";
 import {
   fetchPortalCollaborators,
-  fetchPortalState,
   type PortalCollaborator,
-} from "../../api/portal";
+} from "../../api/portalCollaborators";
 import { fetchPortalUsage, type PortalUsage } from "../../api/portalUsage";
 import DataTableShell, {
   type DataTableColumn,
