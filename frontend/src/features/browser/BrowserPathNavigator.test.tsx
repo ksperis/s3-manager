@@ -67,6 +67,27 @@ describe("BrowserPathNavigator", () => {
     expect(onStartEditing).not.toHaveBeenCalled();
   });
 
+  it("keeps long paths scrollable without exposing a native scrollbar", () => {
+    render(
+      <BrowserPathNavigator
+        {...buildProps({
+          breadcrumbs: [
+            { label: "portal-server-access", prefix: "portal-server-access/" },
+            {
+              label: "2026-08-27-19-00-26-00",
+              prefix: "portal-server-access/2026-08-27-19-00-26-00/",
+            },
+          ],
+          canGoUp: true,
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByRole("navigation", { name: "Current path" }),
+    ).toHaveClass("browser-path-scroll", "overflow-x-auto");
+  });
+
   it("preserves the editable path combobox and suggestion callbacks", () => {
     const onChange = vi.fn();
     const onBlur = vi.fn();

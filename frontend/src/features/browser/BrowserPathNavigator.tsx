@@ -175,7 +175,10 @@ export default function BrowserPathNavigator({
           >
             <UpIcon className="h-3.5 w-3.5" />
           </button>
-          <div className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5">
+          <nav
+            aria-label="Current path"
+            className="browser-path-scroll min-w-0 flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5"
+          >
             {breadcrumbs.length === 0 ? (
               <span className="shrink-0 text-slate-400">(root)</span>
             ) : (
@@ -210,7 +213,7 @@ export default function BrowserPathNavigator({
                 </button>
               </span>
             ))}
-          </div>
+          </nav>
         </>
       )}
     </div>

@@ -578,6 +578,17 @@ a:hover {
   background: rgb(var(--ui-primary-500-rgb) / 0.6);
 }
 
+/* Breadcrumb paths remain horizontally scrollable with a trackpad, touch, or
+ * keyboard focus, without consuming toolbar height with a native scrollbar. */
+.browser-path-scroll {
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.browser-path-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* Keep manager data tables readable without horizontal scrolling */
 .manager-table {
   table-layout: fixed;
