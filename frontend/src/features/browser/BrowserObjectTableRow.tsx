@@ -6,12 +6,16 @@ import { storageClassChipClasses } from "./browserConstants";
 import { FileIcon, FolderIcon, MoreIcon, TrashIcon } from "./browserIcons";
 import { resolveBrowserItemOpenLabel } from "./browserObjectItemPresentation";
 import { BrowserObjectColumnValue } from "./BrowserObjectTablePresentation";
+import { objectPreviewKind } from "../shared/ObjectPreview";
 import type { BrowserActionId, BrowserActionState } from "./browserActions";
 import type {
   ColumnDefinition,
   LazyColumnCacheEntry,
 } from "./browserObjectTableModel";
 import type { BrowserItem } from "./browserTypes";
+
+const comfortableMetadataLabelClasses =
+  "inline-flex items-center rounded border px-1 ui-badge font-semibold";
 
 type BrowserObjectTableRowProps = {
   item: BrowserItem;
@@ -36,12 +40,21 @@ type BrowserObjectTableRowProps = {
   onOpenActions: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 };
 
-function resolveObjectTypeLabel(item: BrowserItem): string {
+function resolveObjectTypeLabel(
+  item: BrowserItem,
+  contentType?: string | null,
+): string {
   if (item.type === "folder") {
     if (item.isHistorical) return "Historical folder";
     return item.isDeleted ? "Deleted folder" : "Prefix";
   }
-  return item.isDeleted ? "Deleted object" : "Object";
+  if (item.isDeleted) return "Deleted object";
+  const kind = objectPreviewKind(item.name, contentType);
+  return kind === "generic"
+    ? "Binary"
+    : kind === "pdf"
+      ? "PDF"
+      : `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
 }
 
 export default function BrowserObjectTableRow({
@@ -155,8 +168,10 @@ export default function BrowserObjectTableRow({
             </span>
             {!compactMode && (
               <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden ui-caption text-slate-500 dark:text-slate-400">
-                <span className="rounded-md border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
-                  {resolveObjectTypeLabel(item)}
+                <span
+                  className={`${comfortableMetadataLabelClasses} border-slate-200 dark:border-slate-700`}
+                >
+                  {resolveObjectTypeLabel(item, lazyEntry?.contentType)}
                 </span>
                 {(isDeleted || isHistorical) && (
                   <span
@@ -175,7 +190,7 @@ export default function BrowserObjectTableRow({
                 )}
                 {item.storageClass && (
                   <span
-                    className={`rounded-md border px-2 py-0.5 font-semibold ${
+                    className={`${comfortableMetadataLabelClasses} ${
                       storageClassChipClasses[item.storageClass] ??
                       "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
                     }`}

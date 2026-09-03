@@ -2119,7 +2119,7 @@ describe("BrowserPage interactions", () => {
     expect(
       within(rowA).getByRole("button", { name: "Open file a.txt" }),
     ).not.toHaveClass("min-h-11");
-    expect(within(rowA).queryByText("Object")).not.toBeInTheDocument();
+    expect(within(rowA).queryByText("Text")).not.toBeInTheDocument();
 
     let menu = openHeaderConfigMenu();
     await user.click(
@@ -2129,7 +2129,7 @@ describe("BrowserPage interactions", () => {
     );
     rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-16");
-    expect(within(rowA).getByText("Object")).toBeInTheDocument();
+    expect(within(rowA).getByText("Text")).toBeInTheDocument();
 
     menu = openHeaderConfigMenu();
     await user.click(

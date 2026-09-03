@@ -87,14 +87,58 @@ describe("BrowserObjectTableRow", () => {
     expect(
       screen.getByRole("button", { name: "Open file object-1.txt" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Object")).toBeInTheDocument();
-    expect(screen.getByText("STANDARD")).toBeInTheDocument();
+    expect(screen.getByText("Text")).toHaveClass(
+      "ui-badge",
+      "rounded",
+      "px-1",
+    );
+    expect(screen.getByText("Text")).not.toHaveClass("py-0.5");
+    expect(screen.getByText("STANDARD")).toHaveClass(
+      "ui-badge",
+      "rounded",
+      "px-1",
+    );
+    expect(screen.getByText("STANDARD")).not.toHaveClass("py-0.5");
     expect(screen.getByText("1 KB")).toBeInTheDocument();
     expect(screen.getByText("text/plain")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Download object-1.txt" }));
     expect(props.onRunAction).toHaveBeenCalledWith("download");
     expect(props.onClick).not.toHaveBeenCalled();
+  });
+
+  it("classifies files from loaded content type or their extension", () => {
+    const { rerender } = renderRow(
+      buildProps({
+        item: { ...fileItem, name: "payload.bin", key: "reports/payload.bin" },
+        lazyEntry: {
+          ...createLazyColumnCacheEntry(),
+          contentType: "image/png",
+          metadataStatus: "ready",
+        },
+      }),
+    );
+
+    expect(screen.getByText("Image")).toBeInTheDocument();
+
+    rerender(
+      <table>
+        <tbody>
+          <BrowserObjectTableRow
+            {...buildProps({
+              item: {
+                ...fileItem,
+                name: "archive.bin",
+                key: "reports/archive.bin",
+              },
+              lazyEntry: undefined,
+            })}
+          />
+        </tbody>
+      </table>,
+    );
+
+    expect(screen.getByText("Binary")).toBeInTheDocument();
   });
 
   it("renders deleted objects as non-selectable version entries", () => {
