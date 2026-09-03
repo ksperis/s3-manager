@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { cx, type UiTone } from "../../components/ui/styles";
 import { extractApiError, isCancelledError } from "../../utils/apiError";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import { formatBytes } from "../../utils/format";
 import { diffToneClasses, type DiffTone } from "./diffPresentation";
 
@@ -320,13 +321,6 @@ export function parseOptionalIsoDateTime(value: string): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-const formatCompareDateTime = (value?: string | null): string => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-};
-
 const formatCompareEtag = (value?: string | null): string => {
   const normalized = (value ?? "").trim().replace(/^"|"$/g, "");
   if (!normalized) return "-";
@@ -508,7 +502,7 @@ function CompareObjectDetailsList({ rows, options }: CompareObjectDetailsListPro
                   </div>
                   <div>
                     <dt className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Modified</dt>
-                    <dd className="text-slate-800 dark:text-slate-100">{formatCompareDateTime(detail.last_modified)}</dd>
+                    <dd className="text-slate-800 dark:text-slate-100">{formatLocalDateTime(detail.last_modified)}</dd>
                   </div>
                   <div>
                     <dt className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">ETag</dt>

@@ -10,9 +10,9 @@ import type {
 import { MetricsEmptyState, MetricsTile } from "../../components/MetricsCard";
 import PageBanner from "../../components/PageBanner";
 import { cx, uiCardClass, uiMutedTextClass } from "../../components/ui/styles";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import {
-  formatUsageStatsDate,
   nonEmptyUsageStatsEntries,
   UsageStatsChartShell,
   UsageStatsDataTypeDonut,
@@ -165,7 +165,7 @@ export function BucketUsageStatsDataTypesCard({
   const topDataTypes = entries.slice(0, 4);
   const hasSnapshot = Boolean(aggregate && aggregate.buckets_with_snapshot > 0);
   const coverage = aggregate ? `${aggregate.buckets_with_snapshot} / ${aggregate.bucket_count} buckets covered` : "";
-  const latest = aggregate?.newest_snapshot_at ? formatUsageStatsDate(aggregate.newest_snapshot_at) : null;
+  const latest = aggregate?.newest_snapshot_at ? formatLocalDateTime(aggregate.newest_snapshot_at) : null;
 
   return (
     <section className={cx(uiCardClass, "h-full p-4", className)} data-testid={dataTestId}>

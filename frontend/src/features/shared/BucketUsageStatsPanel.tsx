@@ -7,7 +7,7 @@ import { MetricsCard, MetricsEmptyState } from "../../components/MetricsCard";
 import PageBanner from "../../components/PageBanner";
 import { cx, uiButtonBaseClass, uiButtonVariants } from "../../components/ui/styles";
 import { formatCompactNumber } from "../../utils/format";
-import { formatUsageStatsDate } from "./BucketUsageStatsCharts";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import { BucketUsageStatsCompositionVisuals } from "./BucketUsageStatsVisuals";
 
 type BucketUsageStatsPanelProps = {
@@ -79,7 +79,7 @@ export default function BucketUsageStatsPanel({
           finalMetric={{
             label: "Delete markers",
             value: formatCompactNumber(snapshot.delete_marker_count),
-            hint: `Calculated ${formatUsageStatsDate(snapshot.calculated_at)}`,
+            hint: `Calculated ${formatLocalDateTime(snapshot.calculated_at)}`,
           }}
           showVersionListingWarning={!snapshot.version_listing_available}
         />

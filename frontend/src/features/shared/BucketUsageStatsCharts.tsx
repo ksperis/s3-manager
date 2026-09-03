@@ -43,13 +43,6 @@ export function nonEmptyUsageStatsEntries(entries?: BucketUsageStatsDistribution
   return (entries ?? []).filter((entry) => entry.count > 0 || entry.bytes > 0);
 }
 
-export function formatUsageStatsDate(value?: string | null): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
-
 export function UsageStatsEmptyChart({ message = "No data available.", compact = false }: { message?: string; compact?: boolean }) {
   return (
     <MetricsEmptyState className={cx("flex items-center justify-center", compact ? "h-28" : "h-52")}>

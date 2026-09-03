@@ -12,7 +12,7 @@ import {
   uiMutedTextClass,
   uiTitleTextClass,
 } from "../../components/ui/styles";
-import { formatUsageStatsDate } from "./BucketUsageStatsCharts";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import {
   BucketUsageStatsCompositionVisuals,
   type BucketUsageStatsCompositionLabels,
@@ -53,7 +53,7 @@ export default function BucketUsageStatsAggregateCard({
   const coverageLabel = aggregate
     ? `${aggregate.buckets_with_snapshot} / ${aggregate.bucket_count} ${coverageItemLabel} covered`
     : "";
-  const lastCalculated = aggregate?.newest_snapshot_at ? `Latest ${formatUsageStatsDate(aggregate.newest_snapshot_at)}` : undefined;
+  const lastCalculated = aggregate?.newest_snapshot_at ? `Latest ${formatLocalDateTime(aggregate.newest_snapshot_at)}` : undefined;
   const accountCoverage =
     aggregate?.managed_account_count != null
       ? `${aggregate.accounts_with_listed_buckets ?? 0} / ${aggregate.managed_account_count} managed accounts listed`

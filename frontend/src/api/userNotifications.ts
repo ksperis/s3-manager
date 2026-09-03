@@ -36,7 +36,7 @@ type MarkUserNotificationsReadResponse = {
   unread_count: number;
 };
 
-export type DeleteUserNotificationsResponse = {
+type DeleteUserNotificationsResponse = {
   deleted_count: number;
   unread_count: number;
 };
