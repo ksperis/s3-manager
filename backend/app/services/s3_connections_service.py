@@ -86,7 +86,7 @@ class S3ConnectionsService:
 
     @staticmethod
     def admin_shared_predicates():
-        """Return the single scope used by every Admin/automation selector."""
+        """Return the single scope used by every Admin selector."""
         return (DBS3Connection.is_shared.is_(True),)
 
     def admin_shared_query(self):

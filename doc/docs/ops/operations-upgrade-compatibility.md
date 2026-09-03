@@ -286,9 +286,9 @@ constraint, and sets the database default to `ui_user`. Known historical names
 are mapped to their canonical role; unknown or empty values become `ui_none` so
 the migration never widens access.
 
-Deploy the migration, backend, and frontend together. Admin user APIs and
-automation payloads reject removed role names with `422`, and the frontend no
-longer repairs roles from API responses or persisted sessions. Downgrade drops
+Deploy the migration, backend, and frontend together. Admin user APIs reject
+removed role names with `422`, and the frontend no longer repairs roles from
+API responses or persisted sessions. Downgrade drops
 the constraint but does not recreate historical role spellings.
 
 ## 2026-08 control-plane audit boundary

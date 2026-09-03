@@ -58,8 +58,8 @@ attributes are not part of the contract.
 ## Canonical UI roles
 
 `users.role` stores exactly one role: `ui_none`, `ui_user`, `ui_admin`, or
-`ui_superadmin`. The database constraint, backend request models, automation
-models, and frontend API types share this contract. Historical aliases are
+`ui_superadmin`. The database constraint, backend request models, and
+frontend API types share this contract. Historical aliases are
 migrated by revision `0092`; they are not accepted or normalized at runtime.
 
 `ui_none` is the explicit no-workspace role. Unknown historical values migrate

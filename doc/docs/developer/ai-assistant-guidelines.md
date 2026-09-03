@@ -224,7 +224,7 @@ flows unless the pathway is explicit, authorized, and audited.
   authorization branches. Portal always requires an explicit `portal_role` and
   executes with the user's personal IAM identity; Manager administrators have
   no implicit Portal access.
-- Admin and automation selectors for S3 connections must use the shared-only
+- Admin selectors for S3 connections must use the shared-only
   service scope and return `404` for private targets. Never expose private
   connection identifiers through Admin search, bulk actions, tags, or exports.
 - Revalidate the creator and source/target contexts before starting or resuming
