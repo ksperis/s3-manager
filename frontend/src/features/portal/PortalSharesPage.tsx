@@ -10,11 +10,11 @@ import {
   useState,
 } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import type { PortalCollaborator } from "../../api/portalCollaborators";
 import {
   listPortalStorageSpacePublicLinks,
   type PortalPublicLink,
-} from "../../api/portal";
-import type { PortalCollaborator } from "../../api/portalCollaborators";
+} from "../../api/portalSharing";
 import { createPortalRequest } from "../../api/portalRequests";
 import DataTableShell, {
   dataTableDefaultActionProps,

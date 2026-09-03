@@ -16,12 +16,14 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createPortalStorageSpace,
   importPortalStorageSpace,
-  listPortalShareCandidates,
   type PortalStorageSpaceAccountMemberRole,
   type PortalStorageSpaceGrantRole,
   type PortalStorageSpaceRole,
-  type PortalStorageSpaceShareCandidate,
 } from "../../api/portal";
+import {
+  listPortalShareCandidates,
+  type PortalStorageSpaceShareCandidate,
+} from "../../api/portalSharing";
 import DataTableShell, {
   dataTableDefaultActionProps,
   type DataTableColumn,

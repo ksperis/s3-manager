@@ -99,10 +99,13 @@ vi.mock("../../api/portal", async () => {
       mocks.createStorageSpaceMock(...args),
     importPortalStorageSpace: (...args: unknown[]) =>
       mocks.importStorageSpaceMock(...args),
-    listPortalShareCandidates: (...args: unknown[]) =>
-      mocks.listShareCandidatesMock(...args),
   };
 });
+
+vi.mock("../../api/portalSharing", () => ({
+  listPortalShareCandidates: (...args: unknown[]) =>
+    mocks.listShareCandidatesMock(...args),
+}));
 
 vi.mock("./usePortalWorkspaceData", () => ({
   usePortalWorkspaceData: (...args: unknown[]) => {

@@ -5,18 +5,20 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
-  createPortalStorageSpacePublicLink,
   deletePortalStorageSpaceObject,
   downloadPortalStorageSpaceObject,
   fetchPortalStorageSpaceObjectDetail,
   fetchPortalStorageSpaceObjectVersions,
-  listPortalStorageSpacePublicLinks,
   restorePortalStorageSpaceObject,
-  type PortalPublicLink,
   type PortalStorageObjectDetail,
   type PortalStorageObjectVersion,
   type PortalStorageObjectVersionsResponse,
 } from "../../api/portal";
+import {
+  createPortalStorageSpacePublicLink,
+  listPortalStorageSpacePublicLinks,
+  type PortalPublicLink,
+} from "../../api/portalSharing";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageBanner from "../../components/PageBanner";
 import PageShell from "../../components/PageShell";

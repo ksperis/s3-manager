@@ -4,7 +4,7 @@
  */
 import { useMemo } from "react";
 
-import type { PortalPublicLink } from "../../api/portal";
+import type { PortalPublicLink } from "../../api/portalSharing";
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";

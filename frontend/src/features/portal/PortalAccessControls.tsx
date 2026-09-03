@@ -7,10 +7,10 @@ import {
   type PortalStorageSpaceCreate,
   type PortalStorageSpaceAccountMemberRole,
   type PortalStorageSpaceGrantRole,
-  type PortalStorageSpaceShareCandidate,
   type PortalStorageSpaceShareScope,
   type PortalStorageSpaceVisibility,
 } from "../../api/portal";
+import type { PortalStorageSpaceShareCandidate } from "../../api/portalSharing";
 import Modal from "../../components/Modal";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";

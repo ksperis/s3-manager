@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { PortalPublicLink } from "../../api/portal";
+import type { PortalPublicLink } from "../../api/portalSharing";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";

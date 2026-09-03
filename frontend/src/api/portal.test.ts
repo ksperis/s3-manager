@@ -23,26 +23,17 @@ import {
 } from "./portalRequests";
 
 import {
-  grantPortalStorageSpaceShare,
   createPortalStorageSpace,
-  createPortalStorageSpacePublicLink,
   deletePortalStorageSpace,
   deletePortalStorageSpaceObject,
   downloadPortalStorageSpaceObject,
   fetchPortalStorageSpaceObjectDetail,
   fetchPortalStorageSpaceObjectVersions,
-  fetchPortalStorageSpaceAccessSummary,
   importPortalStorageSpace,
-  listPortalShareCandidates,
-  listPortalStorageSpaceShareCandidates,
-  listPortalStorageSpacePublicLinks,
   listPortalStorageSpaces,
   portalStorageSpaceVersionCleanupConfirmationPhrase,
-  revokePortalStorageSpacePublicLink,
-  revokePortalStorageSpaceShare,
   restorePortalStorageSpaceObject,
   updatePortalStorageSpace,
-  updatePortalStorageSpaceShare,
 } from "./portal";
 import {
   createPortalAccessKey,
@@ -60,6 +51,17 @@ import {
   fetchPortalCollaborators,
   fetchPortalCollaboratorAccessReview,
 } from "./portalCollaborators";
+import {
+  createPortalStorageSpacePublicLink,
+  fetchPortalStorageSpaceAccessSummary,
+  grantPortalStorageSpaceShare,
+  listPortalShareCandidates,
+  listPortalStorageSpacePublicLinks,
+  listPortalStorageSpaceShareCandidates,
+  revokePortalStorageSpacePublicLink,
+  revokePortalStorageSpaceShare,
+  updatePortalStorageSpaceShare,
+} from "./portalSharing";
 import {
   fetchPortalStorageSpaceUsageStats,
   fetchPortalUsageHistoryTrends,

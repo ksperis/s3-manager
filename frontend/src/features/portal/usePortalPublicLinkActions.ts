@@ -8,7 +8,7 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   revokePortalStorageSpacePublicLink,
   type PortalPublicLink,
-} from "../../api/portal";
+} from "../../api/portalSharing";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";

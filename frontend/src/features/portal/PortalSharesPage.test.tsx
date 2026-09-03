@@ -84,7 +84,7 @@ vi.mock("./usePortalWorkspaceData", () => ({
   usePortalWorkspaceData: () => mocks.hookResult,
 }));
 
-vi.mock("../../api/portal", () => ({
+vi.mock("../../api/portalSharing", () => ({
   listPortalStorageSpacePublicLinks: (...args: unknown[]) =>
     mocks.listPublicLinksMock(...args),
   revokePortalStorageSpacePublicLink: (...args: unknown[]) =>

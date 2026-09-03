@@ -5,27 +5,29 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  createPortalStorageSpacePublicLink,
   deletePortalStorageSpace,
-  fetchPortalStorageSpaceAccessSummary,
   fetchPortalStorageSpaceSettings,
-  grantPortalStorageSpaceShare,
-  listPortalStorageSpacePublicLinks,
-  listPortalStorageSpaceShareCandidates,
-  revokePortalStorageSpaceShare,
   restorePortalStorageSpaceObject,
   takePortalStorageSpaceOwnership,
   updatePortalStorageSpace,
   updatePortalStorageSpaceSettings,
-  updatePortalStorageSpaceShare,
-  type PortalPublicLink,
   type PortalStorageSpaceAccountMemberRole,
-  type PortalStorageSpaceAccessSummary,
   type PortalStorageSpaceGrantRole,
-  type PortalStorageSpaceShare,
-  type PortalStorageSpaceShareCandidate,
   type PortalStorageSpaceSettings,
 } from "../../api/portal";
+import {
+  createPortalStorageSpacePublicLink,
+  fetchPortalStorageSpaceAccessSummary,
+  grantPortalStorageSpaceShare,
+  listPortalStorageSpacePublicLinks,
+  listPortalStorageSpaceShareCandidates,
+  revokePortalStorageSpaceShare,
+  updatePortalStorageSpaceShare,
+  type PortalPublicLink,
+  type PortalStorageSpaceAccessSummary,
+  type PortalStorageSpaceShare,
+  type PortalStorageSpaceShareCandidate,
+} from "../../api/portalSharing";
 import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";

@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { PortalPublicLink } from "../../api/portal";
+import type { PortalPublicLink } from "../../api/portalSharing";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import { useI18n } from "../../i18n";
 

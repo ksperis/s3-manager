@@ -180,16 +180,9 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
-  createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
   deletePortalStorageSpace: (...args: unknown[]) => mocks.deleteStorageSpaceMock(...args),
-  fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
   fetchPortalStorageSpaceSettings: (...args: unknown[]) => mocks.fetchStorageSpaceSettingsMock(...args),
-  grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
-  listPortalStorageSpacePublicLinks: (...args: unknown[]) => mocks.listPublicLinksMock(...args),
-  listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
   portalStorageSpaceVersionCleanupConfirmationPhrase: (spaceName: string) => `CLEAN HISTORY ${spaceName.toUpperCase()}`,
-  revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShareMock(...args),
-  revokePortalStorageSpacePublicLink: (...args: unknown[]) => mocks.revokePublicLinkMock(...args),
   restorePortalStorageSpaceObject: (...args: unknown[]) => mocks.restoreObjectMock(...args),
   streamPortalDeletedPrefixRestore: (...args: unknown[]) =>
     mocks.streamDeletedPrefixRestoreMock(...args),
@@ -198,6 +191,16 @@ vi.mock("../../api/portal", () => ({
   updatePortalStorageSpaceSettings: (...args: unknown[]) => mocks.updateStorageSpaceSettingsMock(...args),
   updatePortalStorageSpaceIcon: (...args: unknown[]) => mocks.updateStorageSpaceIconMock(...args),
   uploadPortalStorageSpaceIcon: (...args: unknown[]) => mocks.uploadStorageSpaceIconMock(...args),
+}));
+
+vi.mock("../../api/portalSharing", () => ({
+  createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
+  fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
+  grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
+  listPortalStorageSpacePublicLinks: (...args: unknown[]) => mocks.listPublicLinksMock(...args),
+  listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
+  revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShareMock(...args),
+  revokePortalStorageSpacePublicLink: (...args: unknown[]) => mocks.revokePublicLinkMock(...args),
   updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
 }));
 

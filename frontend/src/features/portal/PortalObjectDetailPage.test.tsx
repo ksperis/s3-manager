@@ -61,13 +61,16 @@ vi.mock("./usePortalWorkspaceData", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
-  createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
   deletePortalStorageSpaceObject: (...args: unknown[]) => mocks.deleteObjectMock(...args),
   downloadPortalStorageSpaceObject: (...args: unknown[]) => mocks.downloadObjectMock(...args),
   fetchPortalStorageSpaceObjectDetail: (...args: unknown[]) => mocks.fetchObjectDetailMock(...args),
   fetchPortalStorageSpaceObjectVersions: (...args: unknown[]) => mocks.fetchObjectVersionsMock(...args),
-  listPortalStorageSpacePublicLinks: (...args: unknown[]) => mocks.listPublicLinksMock(...args),
   restorePortalStorageSpaceObject: (...args: unknown[]) => mocks.restoreObjectMock(...args),
+}));
+
+vi.mock("../../api/portalSharing", () => ({
+  createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
+  listPortalStorageSpacePublicLinks: (...args: unknown[]) => mocks.listPublicLinksMock(...args),
   revokePortalStorageSpacePublicLink: (...args: unknown[]) => mocks.revokePublicLinkMock(...args),
 }));
 
