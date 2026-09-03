@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { ObjectTag } from "../../api/browser";
+import type { ObjectTag } from "../../api/browserContracts";
 import type { ObjectDetailsTabId } from "./browserTypes";
 import { formatDateTime } from "./browserUtils";
 

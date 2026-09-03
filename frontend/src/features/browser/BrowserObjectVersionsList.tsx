@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { BrowserObjectVersion } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { formatBytes } from "../../utils/format";
 import { bulkActionClasses, bulkDangerClasses, toolbarButtonClasses } from "./browserConstants";

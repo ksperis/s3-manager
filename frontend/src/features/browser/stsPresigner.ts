@@ -12,7 +12,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type {
   StsCredentials,
-} from "../../api/browser";
+} from "../../api/browserContracts";
 import type {
   PresignPartRequest,
   PresignPartResponse,

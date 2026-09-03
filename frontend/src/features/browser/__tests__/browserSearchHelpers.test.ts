@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BrowserBucket } from "../../../api/browser";
+import type { BrowserBucket } from "../../../api/browserContracts";
 import {
   BROWSER_QUERY_DEBOUNCE_MS,
   isStaleRequest,

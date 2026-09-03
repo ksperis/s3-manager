@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   BrowserSettings,
   BrowserUsageSummary,
-} from "../../api/browser";
+} from "../../api/browserContracts";
 import { useBrowserRuntimeData } from "./useBrowserRuntimeData";
 
 const apiMocks = vi.hoisted(() => ({

@@ -10,9 +10,11 @@ import {
   getObjectRetention,
   updateObjectLegalHold,
   updateObjectRetention,
-  type ObjectLegalHold,
-  type ObjectRetention,
 } from "../../api/browser";
+import type {
+  ObjectLegalHold,
+  ObjectRetention,
+} from "../../api/browserContracts";
 import { extractApiError } from "../../utils/apiError";
 import { formatLocalDateTime, toIsoString } from "./browserUtils";
 import { isObjectLockUnavailableMessage } from "./browserObjectDetailsModel";

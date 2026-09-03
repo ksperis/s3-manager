@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { BrowserObjectVersion } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
 
 const version: BrowserObjectVersion = {

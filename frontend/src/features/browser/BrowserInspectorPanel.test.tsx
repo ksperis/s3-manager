@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { BrowserObjectVersion } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 import BrowserInspectorPanel from "./BrowserInspectorPanel";
 import type { BrowserItem } from "./browserTypes";
 

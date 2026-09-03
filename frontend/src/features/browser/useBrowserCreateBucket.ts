@@ -8,8 +8,8 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   createBrowserBucket,
   ensureBucketCors,
-  type BucketCorsStatus,
 } from "../../api/browser";
+import type { BucketCorsStatus } from "../../api/browserContracts";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import {

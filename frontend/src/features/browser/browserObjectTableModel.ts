@@ -6,7 +6,7 @@ import type {
   BrowserActionId,
   BrowserLayoutMode,
 } from "./browserActions";
-import type { BrowserObject } from "../../api/browser";
+import type { BrowserObject } from "../../api/browserContracts";
 import { formatBytes } from "../../utils/format";
 import {
   readBrowserEmbeddedObjectColumns,

@@ -7,7 +7,7 @@ import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import Modal from "../../components/Modal";
 import { extractApiError } from "../../utils/apiError";
 import ObjectPreview from "../shared/ObjectPreview";
-import { type BrowserObjectVersion } from "../../api/browser";
+import { type BrowserObjectVersion } from "../../api/browserContracts";
 import type {
   PresignedUrl,
   PresignRequest,

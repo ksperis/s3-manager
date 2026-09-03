@@ -16,9 +16,11 @@ import {
   getBucketVersioning,
   listBrowserObjects,
   listObjectVersions,
-  type BrowserObject,
-  type BrowserObjectVersion,
 } from "../../api/browser";
+import type {
+  BrowserObject,
+  BrowserObjectVersion,
+} from "../../api/browserContracts";
 import {
   DELETED_RESULTS_TARGET,
   DELETED_VERSIONS_SCAN_LIMIT,

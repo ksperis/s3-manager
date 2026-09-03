@@ -10,11 +10,13 @@ import {
   getObjectTags,
   updateObjectMetadata,
   updateObjectTags,
-  type ObjectMetadata,
-  type ObjectMetadataUpdate,
-  type ObjectTag,
-  type ObjectTags,
 } from "../../api/browser";
+import type {
+  ObjectMetadata,
+  ObjectMetadataUpdate,
+  ObjectTag,
+  ObjectTags,
+} from "../../api/browserContracts";
 import { extractApiError } from "../../utils/apiError";
 import { formatLocalDateTime, toIsoString } from "./browserUtils";
 import { normalizeObjectDetailPairs } from "./browserObjectDetailsModel";

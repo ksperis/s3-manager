@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { BrowserBucket } from "../../api/browser";
+import type { BrowserBucket } from "../../api/browserContracts";
 
 export const BROWSER_QUERY_DEBOUNCE_MS = 250;
 

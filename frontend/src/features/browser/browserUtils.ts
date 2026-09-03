@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { isApiError } from "../../api/client";
-import type { BrowserObjectVersion } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 import type { BrowserItem, TreeNode, UploadCandidate, WebkitEntry } from "./browserTypes";
 
 export const clampParallelism = (value: number, fallback: number) => {

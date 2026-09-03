@@ -12,7 +12,7 @@ import {
 import { formatBytes } from "../../utils/format";
 import { bulkActionClasses, bulkDangerClasses, toolbarButtonClasses } from "./browserConstants";
 import { formatDateTime } from "./browserUtils";
-import type { BrowserObjectVersion } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 
 type BrowserPrefixVersionsModalProps = {
   bucketName: string;

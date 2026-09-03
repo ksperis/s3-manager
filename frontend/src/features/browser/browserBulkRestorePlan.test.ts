@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { describe, expect, it, vi } from "vitest";
-import type { BrowserObjectVersion } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 import { buildBulkRestorePlan } from "./browserBulkRestorePlan";
 import type { BrowserItem } from "./browserTypes";
 

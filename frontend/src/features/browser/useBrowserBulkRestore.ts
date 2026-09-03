@@ -8,8 +8,8 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   copyObject,
   listObjectVersions,
-  type BrowserObjectVersion,
 } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 import { runWithConcurrency } from "../../utils/concurrency";
 import { buildBulkRestorePlan } from "./browserBulkRestorePlan";
 import type { BrowserItem } from "./browserTypes";

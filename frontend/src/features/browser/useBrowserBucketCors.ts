@@ -9,8 +9,8 @@ import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import {
   ensureBucketCors,
   getBucketCorsStatus,
-  type BucketCorsStatus,
 } from "../../api/browser";
+import type { BucketCorsStatus } from "../../api/browserContracts";
 import { resolveBrowserCorsAvailability } from "./browserTransferPresentation";
 
 type ScopedValue<T> = {

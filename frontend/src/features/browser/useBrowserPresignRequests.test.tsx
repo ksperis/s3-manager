@@ -1,6 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { StsCredentials } from "../../api/browser";
+import type { StsCredentials } from "../../api/browserContracts";
 import { useBrowserPresignRequests } from "./useBrowserPresignRequests";
 
 const apiMocks = vi.hoisted(() => ({

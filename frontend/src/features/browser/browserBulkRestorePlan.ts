@@ -5,7 +5,7 @@
 import type {
   BrowserObject,
   BrowserObjectVersion,
-} from "../../api/browser";
+} from "../../api/browserContracts";
 import { normalizePrefix } from "./browserUtils";
 import type { BrowserItem } from "./browserTypes";
 

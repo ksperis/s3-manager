@@ -8,9 +8,11 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   getStsCredentials,
   getStsStatus,
-  type StsCredentials,
-  type StsStatus,
 } from "../../api/browser";
+import type {
+  StsCredentials,
+  StsStatus,
+} from "../../api/browserContracts";
 import { extractApiError } from "../../utils/apiError";
 import { isStsCredentialsExpiring } from "./browserTransferPresentation";
 

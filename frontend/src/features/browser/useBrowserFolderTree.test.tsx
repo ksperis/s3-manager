@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ListBrowserObjectsResponse } from "../../api/browser";
+import type { ListBrowserObjectsResponse } from "../../api/browserContracts";
 import { findTreeNodeByPrefix } from "./browserUtils";
 import type { TreeNode } from "./browserTypes";
 import { useBrowserFolderTree } from "./useBrowserFolderTree";

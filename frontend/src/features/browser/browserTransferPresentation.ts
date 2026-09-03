@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { BrowserSettings, BucketCorsStatus } from "../../api/browser";
+import type { BrowserSettings, BucketCorsStatus } from "../../api/browserContracts";
 import {
   DEFAULT_DIRECT_DOWNLOAD_PARALLELISM,
   DEFAULT_DIRECT_UPLOAD_PARALLELISM,

@@ -8,9 +8,11 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   fetchBrowserSettings,
   fetchBrowserUsageSummary,
-  type BrowserSettings,
-  type BrowserUsageSummary,
 } from "../../api/browser";
+import type {
+  BrowserSettings,
+  BrowserUsageSummary,
+} from "../../api/browserContracts";
 import { extractApiError } from "../../utils/apiError";
 
 type UseBrowserRuntimeDataOptions = {

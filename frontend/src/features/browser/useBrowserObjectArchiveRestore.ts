@@ -5,10 +5,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import {
-  restoreObject,
-  type ObjectRestoreRequest,
-} from "../../api/browser";
+import { restoreObject } from "../../api/browser";
+import type { ObjectRestoreRequest } from "../../api/browserContracts";
 import { runBrowserScopedSave } from "./browserScopedSave";
 
 export type ObjectRestoreTier = "Standard" | "Bulk" | "Expedited";

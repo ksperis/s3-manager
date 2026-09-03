@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 
-import type { BrowserBucket } from "../../api/browser";
+import type { BrowserBucket } from "../../api/browserContracts";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { cx, uiMenuClass, uiMutedTextClass } from "../../components/ui/styles";
 import {

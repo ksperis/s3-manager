@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { cx, uiCardClass } from "../../components/ui/styles";
-import type { BrowserBucket } from "../../api/browser";
+import type { BrowserBucket } from "../../api/browserContracts";
 import { FolderIcon, RefreshIcon } from "./browserIcons";
 import {
   treeItemActiveClasses,

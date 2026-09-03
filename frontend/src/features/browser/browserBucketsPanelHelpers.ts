@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { isApiError } from "../../api/client";
-import type { BrowserBucket } from "../../api/browser";
+import type { BrowserBucket } from "../../api/browserContracts";
 import { extractApiError } from "../../utils/apiError";
 
 export type BucketAccessStatus = "unknown" | "checking" | "available" | "unavailable";

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import { type BrowserObjectVersion } from "../../api/browser";
+import { type BrowserObjectVersion } from "../../api/browserContracts";
 import { runBrowserScopedSave } from "./browserScopedSave";
 import { useBrowserVersionListing } from "./useBrowserVersionListing";
 

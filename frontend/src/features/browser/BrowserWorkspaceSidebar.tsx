@@ -10,7 +10,7 @@ import {
 import UiMeterBar from "../../components/ui/UiMeterBar";
 import StorageSpaceIcon from "../../components/StorageSpaceIcon";
 import { cx } from "../../components/ui/styles";
-import type { BrowserBucket, BrowserUsageSummary } from "../../api/browser";
+import type { BrowserBucket, BrowserUsageSummary } from "../../api/browserContracts";
 import { formatBytes } from "../../utils/format";
 import {
   BucketCollectionIcon,

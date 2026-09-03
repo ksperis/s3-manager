@@ -5,7 +5,7 @@
 import { ZipWriter } from "@zip.js/zip.js";
 import JSZip from "jszip";
 
-import type { BrowserObject } from "../../api/browser";
+import type { BrowserObject } from "../../api/browserContracts";
 import { runWithConcurrency } from "../../utils/concurrency";
 import { triggerBlobDownload } from "../../utils/download";
 import { formatBrowserOperationError } from "./browserOperationErrors";

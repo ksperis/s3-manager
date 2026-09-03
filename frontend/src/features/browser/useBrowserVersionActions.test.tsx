@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { BrowserObjectVersion } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 import { useBrowserVersionActions } from "./useBrowserVersionActions";
 
 const apiMocks = vi.hoisted(() => ({ copyObject: vi.fn(), deleteObjects: vi.fn() }));

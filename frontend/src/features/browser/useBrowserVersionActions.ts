@@ -8,8 +8,8 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   copyObject,
   deleteObjects,
-  type BrowserObjectVersion,
 } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 import { formatBrowserOperationError } from "./browserOperationErrors";
 import type { OperationCompletionStatus } from "./browserTypes";
 import type { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";

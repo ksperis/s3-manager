@@ -5,10 +5,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import {
-  listObjectVersions,
-  type BrowserObjectVersion,
-} from "../../api/browser";
+import { listObjectVersions } from "../../api/browser";
+import type { BrowserObjectVersion } from "../../api/browserContracts";
 import { extractApiError } from "../../utils/apiError";
 import { buildVersionRows } from "./browserUtils";
 
