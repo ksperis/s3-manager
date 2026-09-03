@@ -79,6 +79,19 @@ class RGWAdminTransport:
     def _mark_account_api_support(self, supported: bool) -> None:
         self._account_api_support_state = "supported" if supported else "unsupported"
 
+    @staticmethod
+    def _merge_extra_params(
+        params: Dict[str, Any],
+        extra_params: Optional[Dict[str, Any]],
+    ) -> None:
+        if not isinstance(extra_params, dict):
+            return
+        for key, value in extra_params.items():
+            normalized_key = str(key or "").strip()
+            if not normalized_key or value is None:
+                continue
+            params[normalized_key] = value
+
     def _send_request(
         self,
         method: str,

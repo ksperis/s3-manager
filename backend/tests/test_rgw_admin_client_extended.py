@@ -26,6 +26,11 @@ def test_transport_is_owned_by_dedicated_module():
     assert RGWAdminClient._request_operation.__module__ == "app.services.rgw_admin_transport"
 
 
+def test_account_operations_are_owned_by_dedicated_module():
+    assert RGWAdminClient.create_account.__module__ == "app.services.rgw_admin_accounts"
+    assert RGWAdminClient.get_account_stats.__module__ == "app.services.rgw_admin_accounts"
+
+
 class _Resp:
     def __init__(self, status_code: int = 200, payload=None, text: str = ""):
         self.status_code = status_code
