@@ -8,6 +8,7 @@ from .portal.access_keys import PortalAccessKeysMixin
 from .portal.account_runtime import PortalAccountRuntimeMixin
 from .portal.activity import PortalActivityMixin
 from .portal.buckets_users import PortalBucketsUsersMixin
+from .portal.collaborators import PortalCollaboratorsMixin
 from .portal.iam import PortalIamMixin
 from .portal.iam_policy_documents import PortalIamPolicyDocumentsMixin
 from .portal.objects import PortalObjectsMixin
@@ -36,6 +37,7 @@ class PortalService(
     PortalStorageSpaceVersionCleanupMixin,
     PortalStorageSpaceSettingsMixin,
     PortalDeletedPrefixRestoreMixin,
+    PortalCollaboratorsMixin,
     PortalStorageSpaceIconsMixin,
     PortalStorageSpacesMixin,
     PortalObjectsMixin,
