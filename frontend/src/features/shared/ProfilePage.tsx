@@ -46,6 +46,7 @@ import type { S3CredentialsValidationPayload } from "../../api/s3CredentialsVali
 import { retryManagedPrivateAccessCleanup } from "../../api/managedPrivateAccess";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import { notifyExecutionContextsRefresh } from "../../utils/executionContextRefresh";
 import { stableSignature } from "../../utils/stableSignature";
 import { removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
@@ -123,13 +124,6 @@ function avatarSourceLabel(avatar?: UserAvatarDescriptor | null): string {
   if (avatar?.source === "provider") return "Identity provider image";
   if (avatar?.source === "gravatar") return "Gravatar";
   return "Initials";
-}
-
-function formatDateTime(value?: string | null): string {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
 }
 
 type ProfilePageProps = {
@@ -1559,10 +1553,10 @@ export default function ProfilePage({
                                 </span>
                               </td>
                               <td className="px-4 py-4 ui-caption text-slate-600 dark:text-slate-300">
-                                {formatDateTime(connection.updated_at ?? connection.created_at)}
+                                {formatLocalDateTime(connection.updated_at ?? connection.created_at)}
                               </td>
                               <td className="px-4 py-4 ui-caption text-slate-600 dark:text-slate-300">
-                                {formatDateTime(connection.last_used_at)}
+                                {formatLocalDateTime(connection.last_used_at)}
                               </td>
                               <td className="px-4 py-4 text-right">
                                 <div className="flex justify-end gap-2">

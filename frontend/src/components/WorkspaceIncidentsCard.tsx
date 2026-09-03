@@ -4,6 +4,7 @@
  */
 import { Link } from "react-router-dom";
 import type { WorkspaceEndpointIncidentEntry } from "../api/healthchecks";
+import { formatLocalDateTime } from "../utils/dateTime";
 import { OpenIcon } from "../features/browser/browserIcons";
 import { cx, uiCardClass, uiCardMutedClass, uiMutedTextClass } from "./ui/styles";
 
@@ -17,13 +18,6 @@ type WorkspaceIncidentsCardProps = {
   showEmptyState?: boolean;
   className?: string;
 };
-
-function formatTimestamp(value?: string | null) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
-}
 
 function formatIncidentWindow(minutes?: number | null) {
   const value = Math.max(1, Number(minutes ?? 720));
@@ -112,8 +106,8 @@ export default function WorkspaceIncidentsCard({
                   <div className="min-w-0">
                     <p className="truncate ui-caption font-semibold text-[var(--ui-text)]">{incident.endpoint_name}</p>
                     <p className={cx("mt-0.5 truncate ui-caption", uiMutedTextClass)}>
-                      {incident.ongoing ? "Ongoing since" : "From"} {formatTimestamp(incident.start)}
-                      {incident.end ? ` to ${formatTimestamp(incident.end)}` : ""}
+                      {incident.ongoing ? "Ongoing since" : "From"} {formatLocalDateTime(incident.start)}
+                      {incident.end ? ` to ${formatLocalDateTime(incident.end)}` : ""}
                     </p>
                   </div>
                 </div>

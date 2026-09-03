@@ -36,8 +36,8 @@ import {
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import {
-  formatPortalRequestDate,
   PortalRequestStatusBadge,
   portalRequestPayloadSummary,
   portalRequestReason,
@@ -230,7 +230,7 @@ export default function AdminPortalRequestsPage() {
       {
         id: "created",
         label: "Created",
-        render: (request) => formatPortalRequestDate(request.created_at),
+        render: (request) => formatLocalDateTime(request.created_at),
       },
       {
         id: "actions",
@@ -391,7 +391,7 @@ function AdminPortalRequestDetails({
       <div className="grid gap-3 md:grid-cols-3">
         <DetailItem label="Type" value={portalRequestTypeLabel(request.request_type)} />
         <DetailItem label="Payload" value={portalRequestPayloadSummary(request)} />
-        <DetailItem label="Decision" value={request.decided_by_email ? `${request.decided_by_email} · ${formatPortalRequestDate(request.decided_at)}` : "-"} />
+        <DetailItem label="Decision" value={request.decided_by_email ? `${request.decided_by_email} · ${formatLocalDateTime(request.decided_at)}` : "-"} />
       </div>
       {reason ? <DetailItem label="Reason" value={reason} /> : null}
       {request.error_message ? <PageBanner tone="error">{request.error_message}</PageBanner> : null}
@@ -402,7 +402,7 @@ function AdminPortalRequestDetails({
             {request.messages.map((message) => (
               <div key={message.id}>
                 <p className="ui-caption font-semibold text-[var(--ui-text)]">
-                  {message.author_email} · {formatPortalRequestDate(message.created_at)}
+                  {message.author_email} · {formatLocalDateTime(message.created_at)}
                 </p>
                 <p className={cx("mt-1 ui-body", uiMutedTextClass)}>{message.message}</p>
               </div>

@@ -33,13 +33,6 @@ export function PortalRequestStatusBadge({ status }: { status: PortalAdminReques
   return <UiBadge tone={portalRequestStatusTone(status)}>{portalRequestStatusLabel(status)}</UiBadge>;
 }
 
-export function formatPortalRequestDate(value?: string | null): string {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
-}
-
 export function portalRequestPayloadSummary(request: PortalAdminRequest): string {
   const payload = request.payload ?? {};
   if (request.request_type === "portal_user_access") {

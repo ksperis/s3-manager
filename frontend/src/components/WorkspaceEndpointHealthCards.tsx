@@ -4,6 +4,7 @@
  */
 import { Link } from "react-router-dom";
 import type { WorkspaceEndpointHealthOverviewResponse } from "../api/healthchecks";
+import { formatLocalDateTime } from "../utils/dateTime";
 import { WorkspaceStatusCounter, WorkspaceStatusDot, WorkspaceStatusPill } from "./WorkspaceDashboardKit";
 import WorkspaceIncidentsCard from "./WorkspaceIncidentsCard";
 import {
@@ -19,13 +20,6 @@ import {
 function formatLatency(value?: number | null) {
   if (value == null) return "-";
   return `${value} ms`;
-}
-
-function formatTimestamp(value?: string | null) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
 }
 
 function formatCheckMode(mode?: string | null) {
@@ -73,7 +67,7 @@ export default function WorkspaceEndpointHealthCards({
           <div className="flex items-center gap-2">
             {data?.generated_at && (
               <span className={cx("rounded-full border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-2.5 py-1 ui-caption font-medium", uiMutedTextClass)}>
-                Updated {formatTimestamp(data.generated_at)}
+                Updated {formatLocalDateTime(data.generated_at)}
               </span>
             )}
             {action && (
@@ -124,7 +118,7 @@ export default function WorkspaceEndpointHealthCards({
                       <span className="truncate">{endpoint.name}</span>
                     </p>
                     <p className={cx("truncate ui-caption", uiMutedTextClass)}>
-                      {formatLatency(endpoint.latency_ms)} · {formatCheckMode(endpoint.check_mode)} · Last check {formatTimestamp(endpoint.checked_at)}
+                      {formatLatency(endpoint.latency_ms)} · {formatCheckMode(endpoint.check_mode)} · Last check {formatLocalDateTime(endpoint.checked_at)}
                       {stale ? " · Stale" : ""}
                     </p>
                   </div>

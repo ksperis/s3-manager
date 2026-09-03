@@ -56,6 +56,7 @@ import {
   uiMutedTextClass,
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import { formatBytes, formatPercentage, formatSpacedCompactNumber } from "../../utils/format";
 import {
   BellIcon,
@@ -107,13 +108,6 @@ type QuickAction = {
 function percent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
   return Math.max(0, Math.min(100, (used / quota) * 100));
-}
-
-function formatTimestamp(value?: string | Date | null): string {
-  if (!value) return "-";
-  const parsed = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(parsed.getTime())) return typeof value === "string" ? value : "-";
-  return parsed.toLocaleString();
 }
 
 function formatRelativeTime(value?: string | null, now = Date.now()): string {
@@ -671,7 +665,7 @@ function BackendHealthCard({
         )}
         <div className="mt-3 space-y-2">
           <HealthValue label="Latency (avg)" value={showEndpoint ? formatLatency(endpoint.latency_ms) : ""} />
-          <HealthValue label="Last check" value={showEndpoint ? formatTimestamp(endpoint.checked_at) : ""} />
+          <HealthValue label="Last check" value={showEndpoint ? formatLocalDateTime(endpoint.checked_at) : ""} />
         </div>
       </div>
       <Link to="/manager/metrics" className="mt-2.5 inline-flex items-center gap-2 ui-caption font-semibold text-primary">
@@ -729,7 +723,7 @@ function IncidentStrip({
                 {incident.ongoing ? "In progress" : "Resolved"}
               </UiBadge>
               <span className={cx("ui-caption", uiMutedTextClass)}>
-                {incident.ongoing ? "Ongoing since" : "Resolved"} {formatTimestamp(incident.start)}
+                {incident.ongoing ? "Ongoing since" : "Resolved"} {formatLocalDateTime(incident.start)}
               </span>
             </>
           ) : !unavailableReason ? (
@@ -1244,7 +1238,7 @@ export default function ManagerDashboard() {
         rightContent={
           <div className="flex items-center gap-3">
             <span className={cx("hidden ui-caption sm:inline", uiMutedTextClass)}>
-              Updated {formatTimestamp(workspaceHealth?.generated_at ?? lastUpdated)}
+              Updated {formatLocalDateTime(workspaceHealth?.generated_at ?? lastUpdated)}
             </span>
             <button
               type="button"

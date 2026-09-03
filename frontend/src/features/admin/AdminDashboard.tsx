@@ -65,6 +65,7 @@ import {
   ShieldIcon,
 } from "../browser/browserIcons";
 import { extractApiError } from "../../utils/apiError";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import setupIllustration from "./assets/admin-dashboard-setup.png";
 
@@ -80,13 +81,6 @@ function parseBackendIsoDate(value?: string | null): Date | null {
   const parsed = new Date(normalized);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
-}
-
-function formatTimestamp(value?: string | Date | null): string {
-  if (!value) return "-";
-  const parsed = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(parsed.getTime())) return typeof value === "string" ? value : "-";
-  return parsed.toLocaleString();
 }
 
 function formatRelativeTime(value?: string | null, now = Date.now()): string {
@@ -392,7 +386,7 @@ function EndpointHealthCard({
           <p className={cx("ui-caption", uiMutedTextClass)}>Stored healthcheck samples and latency.</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className={cx("ui-caption", uiMutedTextClass)}>Data refreshed {data ? formatTimestamp(data.generated_at) : "-"}</span>
+          <span className={cx("ui-caption", uiMutedTextClass)}>Data refreshed {data ? formatLocalDateTime(data.generated_at) : "-"}</span>
           {staleEndpointCount > 0 && (
             <span className="rounded-full bg-amber-50 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-100">
               {staleEndpointCount} stale check{staleEndpointCount === 1 ? "" : "s"}
@@ -453,7 +447,7 @@ function EndpointRow({ endpoint }: { endpoint: WorkspaceEndpointHealthEntry }) {
           "min-w-0 truncate",
           stale ? "font-semibold text-amber-700 dark:text-amber-100" : uiMutedTextClass
         )}
-        title={formatTimestamp(endpoint.checked_at)}
+        title={formatLocalDateTime(endpoint.checked_at)}
       >
         {checkedAtLabel}
       </span>
@@ -1022,7 +1016,7 @@ export default function AdminDashboard() {
         rightContent={
           <div className="flex items-center gap-3">
             <span className={cx("hidden ui-caption sm:inline", uiMutedTextClass)}>
-              Updated {lastUpdated ? formatTimestamp(lastUpdated) : "-"}
+              Updated {lastUpdated ? formatLocalDateTime(lastUpdated) : "-"}
             </span>
             <button
               type="button"

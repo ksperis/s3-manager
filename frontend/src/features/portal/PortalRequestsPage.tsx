@@ -40,10 +40,10 @@ import {
 } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import { formatBytes } from "../../utils/format";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import {
-  formatPortalRequestDate,
   PortalRequestStatusBadge,
   portalRequestPayloadSummary,
   portalRequestReason,
@@ -512,13 +512,13 @@ export default function PortalRequestsPage() {
       {
         id: "created",
         label: t({ en: "Created", fr: "Créée", de: "Erstellt" }),
-        render: (request) => formatPortalRequestDate(request.created_at),
+        render: (request) => formatLocalDateTime(request.created_at),
       },
       {
         id: "updated",
         label: t({ en: "Updated", fr: "Mise à jour", de: "Aktualisiert" }),
         render: (request) =>
-          formatPortalRequestDate(request.decided_at ?? request.updated_at),
+          formatLocalDateTime(request.decided_at ?? request.updated_at),
       },
     ],
     [t],
@@ -1237,7 +1237,7 @@ function PortalRequestDetails({ request }: { request: PortalAdminRequest }) {
               <div key={message.id} className="min-w-0">
                 <p className="ui-caption font-semibold text-[var(--ui-text)]">
                   {message.author_email} ·{" "}
-                  {formatPortalRequestDate(message.created_at)}
+                  {formatLocalDateTime(message.created_at)}
                 </p>
                 <p className={cx("mt-1 ui-body", uiMutedTextClass)}>
                   {message.message}

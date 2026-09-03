@@ -22,6 +22,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { cx } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import { useConfirmActionDialog } from "../../components/useConfirmActionDialog";
 import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
@@ -29,12 +30,6 @@ import CreateManagedPrivateAccessModal from "./CreateManagedPrivateAccessModal";
 
 function parseError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
-}
-
-function formatDate(value?: string | null): string {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }
 
 export default function ManagerCephKeysPage() {
@@ -205,7 +200,7 @@ export default function ManagerCephKeysPage() {
       cellClassName: "text-slate-700 dark:text-slate-200",
       render: (key) => (key.is_active ? "Active" : "Inactive"),
     },
-    { id: "created", label: "Created on", render: (key) => formatDate(key.created_at) },
+    { id: "created", label: "Created on", render: (key) => formatLocalDateTime(key.created_at) },
     {
       id: "actions",
       label: "Actions",
