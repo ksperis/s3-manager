@@ -12,7 +12,7 @@ import {
 } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import { listBrowserObjects } from "../../api/browser";
+import { listBrowserObjects } from "../../api/browserObjects";
 import {
   TREE_PREFIXES_HARD_LIMIT,
   TREE_PREFIXES_PAGE_SIZE,

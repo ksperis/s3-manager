@@ -5,8 +5,8 @@ import { useBrowserVersionActions } from "./useBrowserVersionActions";
 
 const apiMocks = vi.hoisted(() => ({ copyObject: vi.fn(), deleteObjects: vi.fn() }));
 
-vi.mock("../../api/browser", async () => ({
-  ...(await vi.importActual<typeof import("../../api/browser")>("../../api/browser")),
+vi.mock("../../api/browserObjects", async () => ({
+  ...(await vi.importActual<typeof import("../../api/browserObjects")>("../../api/browserObjects")),
   ...apiMocks,
 }));
 

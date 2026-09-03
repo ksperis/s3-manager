@@ -4,20 +4,21 @@ import type { StsCredentials } from "../../api/browserContracts";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 
 const apiMocks = vi.hoisted(() => ({
-  getStsCredentials: vi.fn(),
-  getStsStatus: vi.fn(),
+  getBrowserStsCredentials: vi.fn(),
+  getBrowserStsStatus: vi.fn(),
 }));
 
-vi.mock("../../api/browser", async () => {
+vi.mock("../../api/browserSts", async () => {
   const actual =
-    await vi.importActual<typeof import("../../api/browser")>(
-      "../../api/browser",
+    await vi.importActual<typeof import("../../api/browserSts")>(
+      "../../api/browserSts",
     );
   return {
     ...actual,
-    getStsCredentials: (...args: unknown[]) =>
-      apiMocks.getStsCredentials(...args),
-    getStsStatus: (...args: unknown[]) => apiMocks.getStsStatus(...args),
+    getBrowserStsCredentials: (...args: unknown[]) =>
+      apiMocks.getBrowserStsCredentials(...args),
+    getBrowserStsStatus: (...args: unknown[]) =>
+      apiMocks.getBrowserStsStatus(...args),
   };
 });
 
@@ -43,8 +44,8 @@ function deferred<T>() {
 describe("useBrowserStsSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    apiMocks.getStsStatus.mockResolvedValue({ available: true });
-    apiMocks.getStsCredentials.mockResolvedValue(credentials("key-1"));
+    apiMocks.getBrowserStsStatus.mockResolvedValue({ available: true });
+    apiMocks.getBrowserStsCredentials.mockResolvedValue(credentials("key-1"));
   });
 
   it("prefetches and reuses unexpired credentials for the active scope", async () => {
@@ -66,13 +67,13 @@ describe("useBrowserStsSession", () => {
     });
 
     expect(cachedCredentials?.access_key_id).toBe("key-1");
-    expect(apiMocks.getStsCredentials).toHaveBeenCalledTimes(1);
+    expect(apiMocks.getBrowserStsCredentials).toHaveBeenCalledTimes(1);
   });
 
   it("does not reuse or commit an in-flight request from a previous account", async () => {
     const accountOneRequest = deferred<StsCredentials>();
     const accountTwoRequest = deferred<StsCredentials>();
-    apiMocks.getStsCredentials.mockImplementation((accountId: string) =>
+    apiMocks.getBrowserStsCredentials.mockImplementation((accountId: string) =>
       accountId === "acc-1"
         ? accountOneRequest.promise
         : accountTwoRequest.promise,
@@ -88,7 +89,7 @@ describe("useBrowserStsSession", () => {
       { initialProps: { accountId: "acc-1" } },
     );
     await waitFor(() => {
-      expect(apiMocks.getStsCredentials).toHaveBeenCalledWith(
+      expect(apiMocks.getBrowserStsCredentials).toHaveBeenCalledWith(
         "acc-1",
         undefined,
       );
@@ -96,7 +97,7 @@ describe("useBrowserStsSession", () => {
 
     rerender({ accountId: "acc-2" });
     await waitFor(() => {
-      expect(apiMocks.getStsCredentials).toHaveBeenCalledWith(
+      expect(apiMocks.getBrowserStsCredentials).toHaveBeenCalledWith(
         "acc-2",
         undefined,
       );

@@ -5,7 +5,7 @@
 import { useCallback } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import { fetchObjectMetadata } from "../../api/browser";
+import { fetchObjectMetadata } from "../../api/browserObjects";
 import {
   proxyDownload,
   type PresignedUrl,

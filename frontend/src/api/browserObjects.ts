@@ -26,8 +26,6 @@ import type {
   ObjectRestoreRequest,
   ObjectRetention,
   ObjectTags,
-  StsCredentials,
-  StsStatus,
 } from "./browserContracts";
 import type { BrowserRequestOptions } from "./browserWorkspace";
 
@@ -90,28 +88,6 @@ export async function fetchBrowserObjectColumns(
       signal: options?.signal,
     }
   );
-  return data;
-}
-
-export async function getStsStatus(
-  accountId: S3AccountSelector,
-  options?: BrowserRequestOptions,
-): Promise<StsStatus> {
-  const { data } = await client.get<StsStatus>("/browser/sts", {
-    params: withS3AccountParam(undefined, accountId),
-    headers: buildBrowserWorkspaceHeaders(options),
-  });
-  return data;
-}
-
-export async function getStsCredentials(
-  accountId: S3AccountSelector,
-  options?: BrowserRequestOptions,
-): Promise<StsCredentials> {
-  const { data } = await client.get<StsCredentials>("/browser/sts/credentials", {
-    params: withS3AccountParam(undefined, accountId),
-    headers: buildBrowserWorkspaceHeaders(options),
-  });
   return data;
 }
 

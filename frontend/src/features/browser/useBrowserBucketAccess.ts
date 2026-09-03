@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import { listBrowserObjects } from "../../api/browser";
+import { listBrowserObjects } from "../../api/browserObjects";
 import {
   normalizeBrowserListingIssue,
   resolveBucketAccessEntry,

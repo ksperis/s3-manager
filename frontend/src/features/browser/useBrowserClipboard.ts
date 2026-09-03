@@ -13,7 +13,7 @@ import {
   createFolder,
   deleteObjects,
   fetchObjectMetadata,
-} from "../../api/browser";
+} from "../../api/browserObjects";
 import { getBrowserBucketCorsStatus } from "../../api/browserBuckets";
 import {
   abortMultipartUpload,

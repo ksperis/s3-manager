@@ -5,7 +5,7 @@
 import { useCallback } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import { listBrowserObjects } from "../../api/browser";
+import { listBrowserObjects } from "../../api/browserObjects";
 import type { BrowserObject } from "../../api/browserContracts";
 
 const RECURSIVE_LIST_PAGE_SIZE = 1000;

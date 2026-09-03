@@ -5,7 +5,7 @@
 import { useCallback } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import { deleteObjects } from "../../api/browser";
+import { deleteObjects } from "../../api/browserObjects";
 import { runWithConcurrency } from "../../utils/concurrency";
 import { formatBrowserOperationError } from "./browserOperationErrors";
 import { updateOperationDetailsByKey } from "./browserOperationDetailState";

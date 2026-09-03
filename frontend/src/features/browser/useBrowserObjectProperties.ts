@@ -10,7 +10,7 @@ import {
   getObjectTags,
   updateObjectMetadata,
   updateObjectTags,
-} from "../../api/browser";
+} from "../../api/browserObjects";
 import type {
   ObjectMetadata,
   ObjectMetadataUpdate,

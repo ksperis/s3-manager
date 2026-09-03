@@ -6,9 +6,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
-  getStsCredentials,
-  getStsStatus,
-} from "../../api/browser";
+  getBrowserStsCredentials,
+  getBrowserStsStatus,
+} from "../../api/browserSts";
 import type {
   StsCredentials,
   StsStatus,
@@ -87,7 +87,7 @@ export function useBrowserStsSession({
       }
 
       const requestedScopeKey = scopeKey;
-      const request = getStsCredentials(accountIdForApi, requestOptions)
+      const request = getBrowserStsCredentials(accountIdForApi, requestOptions)
         .then((nextCredentials) => {
           if (activeScopeRef.current !== requestedScopeKey) return null;
           const scopedCredentials = {
@@ -130,7 +130,7 @@ export function useBrowserStsSession({
     if (!scopeKey) return;
 
     let active = true;
-    getStsStatus(accountIdForApi, requestOptions)
+    getBrowserStsStatus(accountIdForApi, requestOptions)
       .then((nextStatus) => {
         if (!active || activeScopeRef.current !== scopeKey) return;
         setStatusState({ scopeKey, value: nextStatus });

@@ -15,7 +15,7 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import {
   listBrowserObjects,
   listObjectVersions,
-} from "../../api/browser";
+} from "../../api/browserObjects";
 import { getBrowserBucketVersioning } from "../../api/browserBuckets";
 import type {
   BrowserObject,

@@ -11,7 +11,7 @@ import {
   updateObjectMetadata,
   updateObjectRetention,
   updateObjectTags,
-} from "../../api/browser";
+} from "../../api/browserObjects";
 import { runWithConcurrency } from "../../utils/concurrency";
 import type { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 import type { ListAllBrowserObjectsForPrefix } from "./useBrowserRecursiveObjectListing";

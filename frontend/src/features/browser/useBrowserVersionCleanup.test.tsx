@@ -6,10 +6,10 @@ const apiMocks = vi.hoisted(() => ({
   cleanupObjectVersions: vi.fn(),
 }));
 
-vi.mock("../../api/browser", async () => {
+vi.mock("../../api/browserObjects", async () => {
   const actual =
-    await vi.importActual<typeof import("../../api/browser")>(
-      "../../api/browser",
+    await vi.importActual<typeof import("../../api/browserObjects")>(
+      "../../api/browserObjects",
     );
   return {
     ...actual,

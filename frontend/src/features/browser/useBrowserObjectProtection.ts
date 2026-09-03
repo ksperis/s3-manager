@@ -10,7 +10,7 @@ import {
   getObjectRetention,
   updateObjectLegalHold,
   updateObjectRetention,
-} from "../../api/browser";
+} from "../../api/browserObjects";
 import type {
   ObjectLegalHold,
   ObjectRetention,

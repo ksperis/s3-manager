@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import { restoreObject } from "../../api/browser";
+import { restoreObject } from "../../api/browserObjects";
 import type { ObjectRestoreRequest } from "../../api/browserContracts";
 import { runBrowserScopedSave } from "./browserScopedSave";
 

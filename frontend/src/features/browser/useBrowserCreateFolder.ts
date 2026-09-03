@@ -5,7 +5,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import { createFolder } from "../../api/browser";
+import { createFolder } from "../../api/browserObjects";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { stableSignature } from "../../utils/stableSignature";
 

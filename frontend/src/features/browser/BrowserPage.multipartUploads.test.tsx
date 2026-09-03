@@ -40,8 +40,8 @@ vi.mock("./BrowserContext", () => ({
   }),
 }));
 
-vi.mock("../../api/browser", async () => {
-  const actual = await vi.importActual<typeof import("../../api/browser")>("../../api/browser");
+vi.mock("../../api/browserObjects", async () => {
+  const actual = await vi.importActual<typeof import("../../api/browserObjects")>("../../api/browserObjects");
   return {
     ...actual,
     listBrowserObjects: (...args: unknown[]) => listBrowserObjectsMock(...args),

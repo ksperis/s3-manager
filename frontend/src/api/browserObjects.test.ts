@@ -13,13 +13,12 @@ vi.mock("./client", () => ({
 
 import {
   fetchObjectMetadata,
-  getStsCredentials,
   listBrowserObjects,
   listObjectVersions,
   updateObjectTags,
-} from "./browser";
+} from "./browserObjects";
 
-describe("browser api", () => {
+describe("browser object api", () => {
   beforeEach(() => {
     clientMock.get.mockReset();
     clientMock.get.mockResolvedValue({
@@ -88,10 +87,9 @@ describe("browser api", () => {
     );
   });
 
-  it("sends the explicit Manager Browser surface on simple and advanced calls", async () => {
+  it("sends the explicit Manager Browser surface on object reads and writes", async () => {
     clientMock.get.mockResolvedValue({ data: {} });
 
-    await getStsCredentials("12", { workspaceSurface: "manager" });
     await fetchObjectMetadata(
       "12",
       "bucket-a",

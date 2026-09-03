@@ -5,7 +5,7 @@
 import { useCallback, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import { cleanupObjectVersions } from "../../api/browser";
+import { cleanupObjectVersions } from "../../api/browserObjects";
 import type { OperationCompletionStatus } from "./browserTypes";
 import type { useBrowserOperationRegistry } from "./useBrowserOperationRegistry";
 
