@@ -451,8 +451,25 @@ describe("manager shell pages", () => {
     await waitFor(() => expect(listBucketsMock).toHaveBeenCalledWith("account-1", { with_stats: false }));
     expect(screen.getByTestId("manager-dashboard")).toBeInTheDocument();
     expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
-    expect(screen.getByText("Quick actions")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Manage lifecycle" })).toHaveAttribute("href", "/manager/buckets");
+    const quickActions = screen.getByRole("heading", { name: "Quick actions" }).closest("section");
+    expect(quickActions).not.toBeNull();
+    expect(within(quickActions!).getAllByRole("link")).toHaveLength(2);
+    expect(within(quickActions!).getByRole("link", { name: "Create bucket" })).toHaveAttribute(
+      "href",
+      "/manager/buckets",
+    );
+    expect(within(quickActions!).getByRole("link", { name: "Create user" })).toHaveAttribute(
+      "href",
+      "/manager/users",
+    );
+    expect(within(quickActions!).queryByText("Upload files")).not.toBeInTheDocument();
+    expect(within(quickActions!).queryByText("Manage lifecycle")).not.toBeInTheDocument();
+    expect(within(quickActions!).queryByText("Create policy")).not.toBeInTheDocument();
+    expect(within(quickActions!).queryByText("Create SNS topic")).not.toBeInTheDocument();
+    expect(screen.getByTestId("manager-dashboard-quick-actions-list")).toHaveClass("grid-cols-1");
+    expect(screen.getByTestId("manager-dashboard-resource-grid")).toHaveClass(
+      "2xl:grid-cols-[minmax(0,1.44fr)_minmax(0,0.72fr)_minmax(0,0.9fr)_minmax(280px,1fr)]",
+    );
     expect(screen.getByText("Storage backend health")).toBeInTheDocument();
     expect(screen.queryByText("Availability (24h)")).not.toBeInTheDocument();
     expect(screen.queryByText("Error rate (24h)")).not.toBeInTheDocument();

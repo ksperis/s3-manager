@@ -553,7 +553,7 @@ function QuickActionsCard({ actions }: { actions: QuickAction[] }) {
   return (
     <section className={cx(uiCardClass, "h-full p-[14px]")}>
       <h2 className="ui-body font-semibold text-[var(--ui-text)]">Quick actions</h2>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-2" data-testid="manager-dashboard-quick-actions-list">
         {actions.map((action) => {
           const content = (
             <span
@@ -783,7 +783,6 @@ export default function ManagerDashboard() {
     accessMode,
     managerStatsEnabled,
     managerStatsMessage,
-    managerBrowserEnabled,
   } = useS3AccountContext();
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date>(() => new Date());
@@ -816,7 +815,6 @@ export default function ManagerDashboard() {
   const contextCanManageIam = selected?.capabilities?.can_manage_iam !== false;
   const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.metrics !== false : true);
   const trafficFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.usage !== false : true);
-  const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const isS3User = selectedS3AccountType === "s3_user";
   const canManageIam = !isS3User && contextCanManageIam && iamFeatureEnabled;
   const canLoadUsageStatsDataTypes =
@@ -1182,38 +1180,6 @@ export default function ManagerDashboard() {
       icon: <UserIcon className="h-4 w-4" />,
       unavailableReason: noContextReason || (!canManageIam ? "IAM is disabled for this context." : null),
     },
-    {
-      label: "Upload files",
-      to: "/manager/browser",
-      tone: "emerald",
-      icon: <UploadIcon className="h-4 w-4" />,
-      unavailableReason:
-        noContextReason ||
-        (!generalSettings.browser_enabled || !generalSettings.browser_manager_enabled || managerBrowserEnabled !== true
-          ? "Browser access is disabled for this context."
-          : null),
-    },
-    {
-      label: "Manage lifecycle",
-      to: "/manager/buckets",
-      tone: "amber",
-      icon: <HistoryIcon className="h-4 w-4" />,
-      unavailableReason: noContextReason,
-    },
-    {
-      label: "Create policy",
-      to: "/manager/iam/policies",
-      tone: "violet",
-      icon: <ShieldIcon className="h-4 w-4" />,
-      unavailableReason: noContextReason || (!canManageIam ? "IAM is disabled for this context." : null),
-    },
-    {
-      label: "Create SNS topic",
-      to: "/manager/topics",
-      tone: "emerald",
-      icon: <BellIcon className="h-4 w-4" />,
-      unavailableReason: noContextReason || (!snsFeatureEnabled ? "SNS topics are disabled for this endpoint." : null),
-    },
   ];
   const refreshing =
     loading ||
@@ -1284,7 +1250,10 @@ export default function ManagerDashboard() {
         )}
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.28fr)_minmax(0,0.9fr)_minmax(280px,1fr)]">
+      <div
+        className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.44fr)_minmax(0,0.72fr)_minmax(0,0.9fr)_minmax(280px,1fr)]"
+        data-testid="manager-dashboard-resource-grid"
+      >
         <QuotaStatusCard
           storageUsed={storageUsedBytes}
           storageQuota={storageQuotaBytes}
