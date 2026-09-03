@@ -61,7 +61,6 @@ class BrowserObjectOperationsMixin:
                 return PresignedUrl(url=url, method="DELETE", expires_in=expires, headers=headers)
             if payload.operation == "put_object":
                 if payload.content_type:
-                    params["ContentType"] = payload.content_type
                     headers["Content-Type"] = payload.content_type
                 url = client.generate_presigned_url(
                     "put_object",
