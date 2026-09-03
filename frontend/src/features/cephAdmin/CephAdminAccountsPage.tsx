@@ -62,6 +62,7 @@ import {
   type FilterCostLevel,
   type TextMatchMode,
 } from "./filtering/advancedFilterShared";
+import { useCephAdminListingFilters } from "./filtering/useCephAdminListingFilters";
 import { useCephAdminEntityListing } from "./listing/useCephAdminEntityListing";
 import { readClientJsonFromKey, writeClientJsonToKey } from "../../utils/clientStorage";
 import { formatBytes, formatNumber } from "../../utils/format";
@@ -293,12 +294,6 @@ export default function CephAdminAccountsPage() {
   const navigate = useNavigate();
   const { selectedEndpointId, selectedEndpoint, selectedEndpointAccess } = useCephAdminEndpoint();
   const canViewMetrics = Boolean(selectedEndpointAccess?.can_metrics) && (selectedEndpoint?.capabilities?.metrics !== false);
-  const [filter, setFilter] = useState("");
-  const [searchValue, setSearchValue] = useState("");
-  const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
-  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
-  const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
-  const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(DEFAULT_SORT);
@@ -309,6 +304,26 @@ export default function CephAdminAccountsPage() {
   const [deletingAccount, setDeletingAccount] = useState<CephAdminRgwAccount | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
+  const {
+    filter,
+    setFilter,
+    searchValue,
+    quickFilterMode,
+    setQuickFilterMode,
+    showAdvancedFilter,
+    setShowAdvancedFilter,
+    advancedDraft,
+    advancedApplied,
+    updateAdvancedField,
+    applyAdvancedFilter,
+    resetAdvancedFilter,
+    resetAllFilters,
+    removeActiveFilterItem,
+  } = useCephAdminListingFilters<AdvancedFilterState>({
+    endpointId: selectedEndpointId,
+    defaultAdvancedFilter,
+    setPage,
+  });
 
   useEffect(() => {
     persistVisibleColumns(visibleColumns);
@@ -322,21 +337,7 @@ export default function CephAdminAccountsPage() {
   });
 
   useEffect(() => {
-    const handle = window.setTimeout(() => {
-      setSearchValue(filter.trim());
-      setPage(1);
-    }, 300);
-    return () => window.clearTimeout(handle);
-  }, [filter]);
-
-  useEffect(() => {
-    setPage(1);
     setPageSize(25);
-    setFilter("");
-    setSearchValue("");
-    setQuickFilterMode("contains");
-    setAdvancedDraft(defaultAdvancedFilter);
-    setAdvancedApplied(null);
     setSort(DEFAULT_SORT);
     setShowCreateModal(false);
     setEditingAccountId(null);
@@ -396,9 +397,6 @@ export default function CephAdminAccountsPage() {
     setPage(1);
   };
 
-  const updateAdvancedField = (field: keyof AdvancedFilterState, value: string) => {
-    setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
-  };
   const activeFieldClass =
     "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25";
   const activeLabelClass = "text-emerald-700 dark:text-emerald-200";
@@ -486,19 +484,7 @@ export default function CephAdminAccountsPage() {
     setPage(1);
   };
   const updateAdvancedMatchMode = (field: "accountNameMatchMode" | "emailMatchMode", value: TextMatchMode) => {
-    setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const applyAdvancedFilter = () => {
-    setAdvancedApplied(advancedDraft);
-    setShowAdvancedFilter(false);
-    setPage(1);
-  };
-
-  const resetAdvancedFilter = () => {
-    setAdvancedDraft(defaultAdvancedFilter);
-    setAdvancedApplied(null);
-    setPage(1);
+    updateAdvancedField(field, value);
   };
 
   const closeAdvancedFilterDrawer = () => {
@@ -520,31 +506,6 @@ export default function CephAdminAccountsPage() {
     onClose: closeAdvancedFilterDrawer,
     zIndexClass: "z-[70]",
   });
-
-  const resetAllFilters = () => {
-    setFilter("");
-    setSearchValue("");
-    setQuickFilterMode("contains");
-    setAdvancedDraft(defaultAdvancedFilter);
-    setAdvancedApplied(null);
-    setShowAdvancedFilter(false);
-    setPage(1);
-  };
-
-  const clearAdvancedField = (field: AdvancedField) => {
-    setAdvancedDraft((prev) => ({ ...prev, [field]: "" }));
-    setAdvancedApplied((prev) => (prev ? { ...prev, [field]: "" } : prev));
-    setPage(1);
-  };
-  const removeActiveFilterItem = (action: ActiveFilterRemoveAction) => {
-    if (action.type === "quick") {
-      setFilter("");
-      setSearchValue("");
-      setPage(1);
-      return;
-    }
-    clearAdvancedField(action.field);
-  };
 
   const advancedFilterActive = hasAdvancedFilters(advancedApplied, canViewMetrics);
   const quickFilterActive = quickAppliedValue.length > 0;
