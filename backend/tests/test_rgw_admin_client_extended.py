@@ -36,6 +36,11 @@ def test_bucket_operations_are_owned_by_dedicated_module():
     assert RGWAdminClient.get_usage.__module__ == "app.services.rgw_admin_buckets"
 
 
+def test_user_operations_are_owned_by_dedicated_module():
+    assert RGWAdminClient.get_user.__module__ == "app.services.rgw_admin_users"
+    assert RGWAdminClient.extract_keys.__module__ == "app.services.rgw_admin_users"
+
+
 class _Resp:
     def __init__(self, status_code: int = 200, payload=None, text: str = ""):
         self.status_code = status_code
