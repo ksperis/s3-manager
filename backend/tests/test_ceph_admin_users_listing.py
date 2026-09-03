@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.routers.ceph_admin import user_listing_cache
+from app.routers.ceph_admin import user_listing_enrichment
 from app.routers.ceph_admin import user_profiles as user_profiles_router
 from app.routers.ceph_admin import users as users_router
 
@@ -369,7 +370,7 @@ def test_ceph_admin_users_enrichment_checks_cancel_during_loop():
             raise RuntimeError("cancelled")
 
     with pytest.raises(RuntimeError, match="cancelled"):
-        users_router._enrich_users(
+        user_listing_enrichment.enrich_users(
             users,
             {"profile"},
             ctx,

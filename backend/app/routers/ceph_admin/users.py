@@ -17,10 +17,7 @@ from app.routers.ceph_admin.dependencies import (
     get_ceph_admin_context,
 )
 from app.routers.ceph_admin.listing_common import stream_listing_response
-from app.routers.ceph_admin.user_listing import (
-    _enrich_users,
-    compute_users_listing,
-)
+from app.routers.ceph_admin.user_listing import compute_users_listing
 from app.services.bucket_listing_shared import is_advanced_filter_stream_payload
 from app.services.listing_progress import ListingProgressSnapshot
 
