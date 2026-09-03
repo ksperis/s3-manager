@@ -63,7 +63,6 @@ runbooks.
 | Debug missing menus, stale metrics, or failed jobs | [Observability](operations-observability.md) | [Healthchecks](operations-healthchecks.md), [Quota monitoring](operations-quota-monitoring.md), [Billing](operations-billing.md) |
 | Restore after a host, pod, or database issue | [Backup and restore](backup-restore.md) | [Production readiness](production-readiness.md) |
 | Prepare an upgrade | [Upgrade and compatibility](operations-upgrade-compatibility.md) | [Backup and restore](backup-restore.md), [Production readiness](production-readiness.md) |
-| Automate admin resources | [Admin automation API](operations-admin-automation.md) | [API tokens](operations-api-tokens.md), [Security](operations-security.md) |
 | Check whether a backend supports a feature | [Backends compatibility matrix](backends-compatibility.md) | [Ceph RGW](backends-ceph-rgw.md), [Other S3 implementations](backends-others.md) |
 
 ## Triage from a user report

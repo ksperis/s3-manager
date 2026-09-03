@@ -18,6 +18,10 @@ from app.main import app
         ("post", "/api/auth/register-admin"),
         ("post", "/api/admin/accounts/1/unlink"),
         ("put", "/api/connections/1/credentials"),
+        ("get", "/api/browser/buckets/example/multipart/upload/parts?key=object"),
+        ("get", "/api/portal/access-logs?date=2026-07-08"),
+        ("get", "/api/portal/requests/1"),
+        ("get", "/api/ceph-admin/endpoints/1/info"),
     ],
 )
 def test_redundant_api_routes_return_not_found(client, method: str, path: str) -> None:

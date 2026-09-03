@@ -328,30 +328,6 @@ class PortalServerAccessLogQueriesMixin:
         entries.sort(key=lambda item: item.timestamp, reverse=True)
         return entries
 
-    def list_portal_server_access_logs(
-        self,
-        user: User,
-        access: "AccountAccess",
-        *,
-        date: str,
-        space_id: Optional[str] = None,
-        timezone_offset_minutes: int = 0,
-        limit: int = 200,
-        offset: int = 0,
-        advanced_filter: Optional[PortalServerAccessLogFilterQuery] = None,
-    ) -> list[PortalServerAccessLogEntry]:
-        query_limit = min(max(int(limit), 1), 1000)
-        query_offset = max(int(offset), 0)
-        entries = self._collect_portal_server_access_logs(
-            user,
-            access,
-            date=date,
-            space_id=space_id,
-            timezone_offset_minutes=timezone_offset_minutes,
-        )
-        entries = apply_server_access_log_filter(entries, advanced_filter)
-        return entries[query_offset : query_offset + query_limit]
-
     def list_portal_server_access_log_page(
         self,
         user: User,

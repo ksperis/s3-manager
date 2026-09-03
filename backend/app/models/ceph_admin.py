@@ -324,19 +324,6 @@ class CephAdminRgwUserCreateResponse(ApiModel):
     generated_key: Optional[CephAdminRgwGeneratedAccessKey] = None
 
 
-class CephAdminRgwPlacementTarget(ApiModel):
-    name: str
-    storage_classes: list[str] = Field(default_factory=list)
-
-
-class CephAdminRgwInfoSummary(ApiModel):
-    default_placement: Optional[str] = None
-    zonegroup: Optional[str] = None
-    realm: Optional[str] = None
-    placement_targets: list[CephAdminRgwPlacementTarget] = Field(default_factory=list)
-    storage_classes: list[str] = Field(default_factory=list)
-
-
 class CephAdminRgwAccountConfigUpdate(ApiModel):
     account_name: Optional[str] = None
     email: Optional[str] = None

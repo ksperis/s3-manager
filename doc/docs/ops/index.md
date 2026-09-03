@@ -24,7 +24,6 @@ BucketReef.
 | Monitor | [Healthchecks](operations-healthchecks.md), [Observability](operations-observability.md), [Billing](operations-billing.md), [Quota monitoring and history](operations-quota-monitoring.md) |
 | Recover | [Backup and restore](backup-restore.md), [Upgrade and compatibility](operations-upgrade-compatibility.md) |
 | Integrate backends | [Compatibility matrix](backends-compatibility.md), [Ceph RGW](backends-ceph-rgw.md), [Other S3 implementations](backends-others.md) |
-| Automate | [Admin automation API](operations-admin-automation.md), [API tokens](operations-api-tokens.md) |
 
 ## First rollout checklist
 

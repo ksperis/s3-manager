@@ -29,13 +29,12 @@ without S3 data-plane logging enabled has no exhaustive object audit trail.
 
 Portal Managers can read the configured provider log stream through:
 
-- `GET /api/portal/access-logs`
 - `GET /api/portal/access-logs/page`
 - `GET /api/portal/access-logs/raw`
 
-The list/page routes include all S3 operation categories and support action,
+The paginated route includes all S3 operation categories and supports action,
 Storage Space, path, requester identity, and result filters. The removed
-`/api/portal/transfers` and
+non-paginated `/api/portal/access-logs` route, `/api/portal/transfers`, and
 `/api/portal/transfers/server-access-logs*` routes have no compatibility alias
 and return `404`.
 

@@ -12,10 +12,7 @@ from app.models.access_context import AccountAccess
 from app.models.portal_requests import PortalAdminRequestCreate, PortalAdminRequestOut, PortalAdminRequestStatus
 from app.routers.dependencies import get_portal_account_access, require_portal_manager
 from app.routers.portal_common import get_portal_requests_service_dependency
-from app.services.portal_requests_service import (
-    PortalRequestNotFound,
-    PortalRequestsService,
-)
+from app.services.portal_requests_service import PortalRequestsService
 
 router = APIRouter(prefix="/portal/requests", tags=["portal-requests"])
 
@@ -46,15 +43,3 @@ def create_portal_request(
         return service.create_request(_portal_actor(access), access, payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
-
-
-@router.get("/{request_id}", response_model=PortalAdminRequestOut)
-def get_portal_request(
-    request_id: int,
-    access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalRequestsService = Depends(get_portal_requests_service_dependency),
-) -> PortalAdminRequestOut:
-    try:
-        return service.get_for_portal_user(_portal_actor(access), access, request_id)
-    except PortalRequestNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc

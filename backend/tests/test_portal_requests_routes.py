@@ -102,8 +102,9 @@ def test_portal_request_routes_create_and_isolate_by_requester(client: TestClien
     assert [item["id"] for item in list_response.json()] == [created["id"]]
 
     _install_portal_access_override(account, other)
-    denied = client.get(f"/api/portal/requests/{created['id']}")
-    assert denied.status_code == 404
+    isolated_list = client.get("/api/portal/requests")
+    assert isolated_list.status_code == 200
+    assert isolated_list.json() == []
 
 
 def test_portal_request_routes_require_manager_for_creation(client: TestClient, db_session):

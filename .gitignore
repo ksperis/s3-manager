@@ -26,6 +26,7 @@ pytestdebug.log
 .ruff_cache/
 
 # Dependencies and builds
+doc/site/
 node_modules/
 dist/
 .vite/

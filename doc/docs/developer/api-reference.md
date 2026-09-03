@@ -104,11 +104,11 @@ the current session, and the verify response contains the updated
 
 - `/api/admin/audit/logs` keeps the existing model and pagination contract but
   contains only control-plane and security events.
-- `/api/portal/access-logs`, `/api/portal/access-logs/page`, and
-  `/api/portal/access-logs/raw` expose provider Server Access Logging to Portal
-  Managers. List/page cover all S3 categories; there is no `mode` parameter.
-- List/page can filter by action, Storage Space, path, requester identity, and
-  result.
+- `/api/portal/access-logs/page` and `/api/portal/access-logs/raw`
+  expose provider Server Access Logging to Portal Managers. The page covers all
+  S3 categories; there is no `mode` parameter.
+- The page can filter by action, Storage Space, path, requester identity, and
+  result. The former non-paginated `/api/portal/access-logs` route was removed.
 - `/api/portal/transfers` and
   `/api/portal/transfers/server-access-logs*` were removed without aliases and
   return `404`.

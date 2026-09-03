@@ -225,8 +225,8 @@ Use these replacement surfaces instead:
 - Usage, governance activity, alerts, traffic, health, and billing source:
   the remaining Portal read endpoints.
 - Manager-only provider S3 access logs:
-  `/portal/access-logs`, `/portal/access-logs/page`, and
-  `/portal/access-logs/raw`. The removed
+  `/portal/access-logs/page` and `/portal/access-logs/raw`. The removed
+  non-paginated `/portal/access-logs` route and
   `/portal/transfers/server-access-logs*` aliases deliberately return `404`.
 - External S3 credentials:
   `/portal/access-keys`, excluding the active Portal runtime key. Personal keys

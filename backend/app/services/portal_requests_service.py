@@ -119,20 +119,6 @@ class PortalRequestsService:
         rows = query.order_by(PortalAdminRequest.created_at.desc(), PortalAdminRequest.id.desc()).all()
         return [self.to_out(row) for row in rows]
 
-    def get_for_portal_user(self, actor: User, access: AccountAccess, request_id: int) -> PortalAdminRequestOut:
-        row = (
-            self.db.query(PortalAdminRequest)
-            .filter(
-                PortalAdminRequest.id == int(request_id),
-                PortalAdminRequest.account_id == int(access.account.id),
-                PortalAdminRequest.requester_user_id == int(actor.id),
-            )
-            .first()
-        )
-        if not row:
-            raise PortalRequestNotFound("Request not found")
-        return self.to_out(row)
-
     def list_for_admin(
         self,
         *,

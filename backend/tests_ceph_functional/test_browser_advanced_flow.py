@@ -30,17 +30,6 @@ from .test_bucket_configuration_flow import _delete_bucket, _skip_if_cluster_una
 
 pytestmark = pytest.mark.ceph_functional
 
-_BROWSER_STORAGE_CLASSES = {
-    "STANDARD",
-    "STANDARD_IA",
-    "ONEZONE_IA",
-    "INTELLIGENT_TIERING",
-    "GLACIER",
-    "GLACIER_IR",
-    "DEEP_ARCHIVE",
-}
-_ARCHIVE_STORAGE_CLASSES = {"GLACIER", "GLACIER_IR", "DEEP_ARCHIVE"}
-
 
 def _parse_iso_datetime(value: str) -> datetime:
     cleaned = value.strip()
@@ -160,63 +149,10 @@ def _assert_close_datetime(actual: object, expected: datetime, *, tolerance_seco
     )
 
 
-def _pick_storage_class_target(
-    endpoint_info: dict[str, Any] | None,
-    *,
-    current_storage_class: str | None,
-) -> str:
-    available: set[str] = set()
-    if endpoint_info:
-        for value in endpoint_info.get("storage_classes") or []:
-            cleaned = str(value or "").strip().upper()
-            if cleaned:
-                available.add(cleaned)
-        for placement in endpoint_info.get("placement_targets") or []:
-            for value in (placement or {}).get("storage_classes") or []:
-                cleaned = str(value or "").strip().upper()
-                if cleaned:
-                    available.add(cleaned)
-
-    supported = sorted(value for value in available if value in _BROWSER_STORAGE_CLASSES)
-    current = str(current_storage_class or "").strip().upper() or None
-
-    safe_candidates = [value for value in supported if value not in _ARCHIVE_STORAGE_CLASSES]
-    for candidate in safe_candidates:
-        if candidate != current:
-            return candidate
-    if safe_candidates:
-        return safe_candidates[0]
-
-    for candidate in supported:
-        if candidate != current:
-            return candidate
-    if supported:
-        return supported[0]
-    return "STANDARD"
-
-
-def _get_ceph_endpoint_info(
-    session: BackendSession,
-    endpoint_id: int,
-) -> dict[str, Any] | None:
-    try:
-        info = run_or_skip(
-            "ceph-admin endpoint info for browser object settings",
-            lambda: session.get(f"/ceph-admin/endpoints/{endpoint_id}/info"),
-        )
-    except pytest.skip.Exception:
-        return None
-    if isinstance(info, dict):
-        return info
-    return None
-
-
 def test_browser_object_properties_roundtrip_flow(
     ceph_test_settings: CephTestSettings,
-    super_admin_session: BackendSession,
     provisioned_account,
     resource_tracker: ResourceTracker,
-    storage_endpoint_id: int,
 ) -> None:
     manager_session: BackendSession = provisioned_account.manager_session
     account_id = provisioned_account.account_id
@@ -231,7 +167,6 @@ def test_browser_object_properties_roundtrip_flow(
     expected_metadata = {"owner": "qa", "purpose": "properties"}
     expected_tags = {"env": "ceph", "flow": "properties"}
     expected_expires = (datetime.now(timezone.utc) + timedelta(days=3)).replace(microsecond=0)
-    endpoint_info = _get_ceph_endpoint_info(super_admin_session, storage_endpoint_id)
 
     try:
         _upload_bytes(
@@ -318,10 +253,7 @@ def test_browser_object_properties_roundtrip_flow(
             expected_tags=expected_tags,
         )
 
-        target_storage_class = _pick_storage_class_target(
-            endpoint_info,
-            current_storage_class=metadata_after_tags.get("storage_class"),
-        )
+        target_storage_class = "STANDARD"
         storage_payload = manager_session.put(
             f"/browser/buckets/{bucket_name}/object-meta",
             params=_account_params(account_id),
@@ -788,7 +720,7 @@ def test_browser_object_governance_flow(
         _delete_bucket(manager_session, resource_tracker, account_id, bucket_name)
 
 
-def test_browser_multipart_listing_and_parts_flow(
+def test_browser_multipart_listing_and_completion_flow(
     ceph_test_settings: CephTestSettings,
     provisioned_account,
     resource_tracker: ResourceTracker,
@@ -837,13 +769,6 @@ def test_browser_multipart_listing_and_parts_flow(
         )
         upload_ids = {str(entry.get("upload_id") or "") for entry in (uploads.get("uploads") or [])}
         assert upload_id in upload_ids
-
-        listed_parts = manager_session.get(
-            f"/browser/buckets/{bucket_name}/multipart/{upload_id}/parts",
-            params={"account_id": account_id, "key": object_key},
-        )
-        assert [part["part_number"] for part in listed_parts["parts"]] == [1, 2]
-        assert [part["size"] for part in listed_parts["parts"]] == [len(part_one), len(part_two)]
 
         manager_session.post(
             f"/browser/buckets/{bucket_name}/multipart/{upload_id}/complete",

@@ -242,19 +242,6 @@ class ListMultipartUploadsResponse(ApiModel):
     next_upload_id: Optional[str] = None
 
 
-class MultipartPart(ApiModel):
-    part_number: int
-    etag: str
-    size: int
-    last_modified: Optional[datetime] = None
-
-
-class ListPartsResponse(ApiModel):
-    parts: list[MultipartPart] = Field(default_factory=list)
-    is_truncated: bool = False
-    next_part_number: Optional[int] = None
-
-
 class PresignPartRequest(ApiModel):
     key: str
     upload_id: Optional[str] = None

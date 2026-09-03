@@ -345,7 +345,9 @@ def test_portal_storage_space_configures_server_access_logging_on_lab(
         try:
             server_logs = _wait_for_value(
                 "Portal Server Access Logging identity attribution",
-                lambda: manager_session.get("/portal/access-logs", params=server_log_params),
+                lambda: (
+                    manager_session.get("/portal/access-logs/page", params=server_log_params).get("entries") or []
+                ),
                 lambda current: (
                     _has_attributed_upload(
                         current,

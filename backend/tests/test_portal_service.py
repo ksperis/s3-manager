@@ -3239,7 +3239,6 @@ def test_portal_server_access_logs_parse_all_standard_records_and_filters(monkey
     access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     monkeypatch.setattr(service, "_portal_server_access_client", lambda _account: client)
 
-    operations = service.list_portal_server_access_logs(user, access, date="2026-07-08")
     page = service.list_portal_server_access_log_page(
         user,
         access,
@@ -3270,17 +3269,6 @@ def test_portal_server_access_logs_parse_all_standard_records_and_filters(monkey
     )
 
     assert client.prefixes
-    assert len(operations) == 3
-    assert operations[0].direction == "Upload"
-    assert operations[0].object_key == "captures/bucketreef/maquette/manager_dashboard.png"
-    assert operations[0].request_uri == "POST /research-data HTTP/1.1"
-    assert operations[2].operation == "REST.PUT.OBJECT"
-    assert operations[2].object_key == "reports/external.csv"
-    assert operations[2].object_size == 512
-    assert operations[2].requester == "external"
-    assert operations[2].client_ip == "10.0.0.5"
-    assert operations[2].auth_type == "AuthHeader"
-    assert operations[1].operation_category == "delete"
     assert page.total == 3
     assert page.limit == 1
     assert page.offset == 1
@@ -3300,8 +3288,6 @@ def test_portal_server_access_logs_require_portal_manager(db_session):
     access = _portal_access(account, user, portal_role=PortalAccountRole.PORTAL_USER.value)
     service = PortalService(db_session)
 
-    with pytest.raises(RuntimeError, match="Only project managers"):
-        service.list_portal_server_access_logs(user, access, date="2026-07-08")
     with pytest.raises(RuntimeError, match="Only project managers"):
         service.list_portal_server_access_log_page(user, access, date="2026-07-08")
     with pytest.raises(RuntimeError, match="Only project managers"):

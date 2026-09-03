@@ -11,7 +11,6 @@ from app.core.sensitive_data import sanitize_error_detail
 from app.db import User
 from app.models.access_context import AccountAccess
 from app.models.portal_access_logs import (
-    PortalServerAccessLogEntry,
     PortalServerAccessLogFilterQuery,
     PortalServerAccessLogPage,
 )
@@ -30,37 +29,6 @@ router = APIRouter()
 def _parse_server_access_log_filter(raw: Optional[str]) -> Optional[PortalServerAccessLogFilterQuery]:
     return parse_filter_query(raw, query_cls=PortalServerAccessLogFilterQuery)
 
-
-@router.get("/access-logs", response_model=list[PortalServerAccessLogEntry])
-def portal_server_access_logs(
-    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    space_id: Optional[str] = Query(None),
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-    timezone_offset_minutes: int = Query(0, ge=-840, le=840),
-    advanced_filter: Optional[str] = Query(None),
-    access: AccountAccess = Depends(require_portal_manager),
-    service: PortalService = Depends(get_portal_service_dependency),
-) -> list[PortalServerAccessLogEntry]:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        parsed_filter = _parse_server_access_log_filter(advanced_filter)
-        return service.list_portal_server_access_logs(
-            actor,
-            access,
-            date=date,
-            space_id=space_id,
-            timezone_offset_minutes=timezone_offset_minutes,
-            limit=limit,
-            offset=offset,
-            advanced_filter=parsed_filter,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
-    except RuntimeError as exc:
-        raise_portal_storage_runtime(exc)
 
 
 @router.get("/access-logs/page", response_model=PortalServerAccessLogPage)

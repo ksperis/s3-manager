@@ -12,8 +12,6 @@ from app.models.browser import (
     CopyObjectPayload,
     DeleteObjectsPayload,
     ListMultipartUploadsResponse,
-    ListPartsResponse,
-    MultipartPart,
     MultipartUploadInitRequest,
     MultipartUploadInitResponse,
     MultipartUploadItem,
@@ -276,44 +274,6 @@ class BrowserObjectOperationsMixin:
             is_truncated=bool(resp.get("IsTruncated")),
             next_key=resp.get("NextKeyMarker"),
             next_upload_id=resp.get("NextUploadIdMarker"),
-        )
-
-    def list_parts(
-        self,
-        bucket_name: str,
-        account: S3ExecutionTarget,
-        key: str,
-        upload_id: str,
-        part_number_marker: Optional[int] = None,
-        max_parts: int = 1000,
-    ) -> ListPartsResponse:
-        client = self._client(account)
-        kwargs = {
-            "Bucket": bucket_name,
-            "Key": key,
-            "UploadId": upload_id,
-            "MaxParts": max_parts,
-        }
-        if part_number_marker:
-            kwargs["PartNumberMarker"] = part_number_marker
-        try:
-            resp = client.list_parts(**kwargs)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to list parts for '{key}': {exc}") from exc
-        parts: list[MultipartPart] = []
-        for part in resp.get("Parts", []):
-            parts.append(
-                MultipartPart(
-                    part_number=int(part.get("PartNumber") or 0),
-                    etag=self._clean_etag(part.get("ETag")) or "",
-                    size=int(part.get("Size") or 0),
-                    last_modified=part.get("LastModified"),
-                )
-            )
-        return ListPartsResponse(
-            parts=parts,
-            is_truncated=bool(resp.get("IsTruncated")),
-            next_part_number=resp.get("NextPartNumberMarker"),
         )
 
     def presign_part(

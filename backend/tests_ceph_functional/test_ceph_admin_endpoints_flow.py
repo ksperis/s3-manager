@@ -23,13 +23,6 @@ def test_ceph_admin_endpoint_and_cluster_metrics(
     access = super_admin_session.get(f"/ceph-admin/endpoints/{endpoint_id}/access")
     assert access["can_admin"] is True
 
-    info = run_or_skip(
-        "ceph-admin endpoint info",
-        lambda: super_admin_session.get(f"/ceph-admin/endpoints/{endpoint_id}/info"),
-    )
-    assert "placement_targets" in info
-    assert "storage_classes" in info
-
     if ceph_admin_endpoint.can_metrics:
         storage = run_or_skip(
             "ceph-admin cluster storage metrics",

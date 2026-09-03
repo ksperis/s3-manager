@@ -15,7 +15,6 @@ from app.routers.ceph_admin import account_listing_cache
 from app.routers.ceph_admin import account_profiles as account_profiles_router
 from app.routers.ceph_admin import accounts as accounts_router
 from app.routers.ceph_admin import buckets as buckets_router
-from app.routers.ceph_admin import endpoints as endpoints_router
 from app.routers.ceph_admin import user_listing_cache
 from app.routers.ceph_admin import user_profiles as user_profiles_router
 from app.services import ceph_admin_bucket_listing_cache
@@ -446,34 +445,3 @@ def test_update_rgw_user_quota_clears_object_limit_with_explicit_null():
         "max_objects": 0,
         "enabled": True,
     }
-
-
-def test_summarize_rgw_info_collects_placements_and_storage_classes():
-    payload = {
-        "default_placement_rule": "hot",
-        "zonegroup": {
-            "name": "zg-a",
-            "placement_targets": [
-                {"key": "hot", "val": {"storage_classes": {"STANDARD": {}, "COLD": {}}}},
-                {"name": "cold", "storage_classes": ["ARCHIVE"]},
-            ],
-            "storage_classes": {"STANDARD_IA": {}},
-        },
-        "placement_targets": {
-            "archive": {"storage_classes": {"DEEP_ARCHIVE": {}}},
-        },
-        "storage_classes": ["STANDARD"],
-        "realm_name": "realm-a",
-    }
-
-    summary = endpoints_router._summarize_rgw_info(payload)
-
-    assert summary.default_placement == "hot"
-    assert summary.zonegroup == "zg-a"
-    assert summary.realm == "realm-a"
-    assert [item.name for item in summary.placement_targets] == ["archive", "cold", "hot"]
-    placement_classes = {item.name: item.storage_classes for item in summary.placement_targets}
-    assert placement_classes["archive"] == ["DEEP_ARCHIVE"]
-    assert placement_classes["cold"] == ["ARCHIVE"]
-    assert placement_classes["hot"] == ["COLD", "STANDARD"]
-    assert summary.storage_classes == ["ARCHIVE", "COLD", "DEEP_ARCHIVE", "STANDARD", "STANDARD_IA"]

@@ -14,7 +14,6 @@ from app.models.browser import (
     BrowserStsCredentials,
     CompleteMultipartUploadRequest,
     ListMultipartUploadsResponse,
-    ListPartsResponse,
     MultipartUploadInitRequest,
     MultipartUploadInitResponse,
     PresignPartRequest,
@@ -194,29 +193,6 @@ def list_multipart_uploads(
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
-
-@router.get("/buckets/{bucket_name}/multipart/{upload_id}/parts", response_model=ListPartsResponse)
-def list_parts_for_upload(
-    bucket_name: str,
-    upload_id: str,
-    key: str,
-    part_number_marker: Optional[int] = None,
-    max_parts: int = Query(default=1000, ge=1, le=1000),
-    account: S3ExecutionContext = Depends(get_account_context),
-    service: BrowserService = Depends(get_browser_service),
-    _: ManagerActor = Depends(get_current_account_admin),
-) -> ListPartsResponse:
-    try:
-        return service.list_parts(
-            bucket_name,
-            account,
-            key=key,
-            upload_id=upload_id,
-            part_number_marker=part_number_marker,
-            max_parts=max_parts,
-        )
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
 
 
 @router.post("/buckets/{bucket_name}/multipart/{upload_id}/presign", response_model=PresignPartResponse)

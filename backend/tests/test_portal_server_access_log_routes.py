@@ -34,7 +34,6 @@ def _portal_access(account: S3Account, user: User, role: str) -> AccountAccess:
 @pytest.mark.parametrize(
     "url",
     [
-        "/api/portal/access-logs?date=2026-07-08",
         "/api/portal/access-logs/page?date=2026-07-08",
         "/api/portal/access-logs/raw?date_from=2026-07-08&date_to=2026-07-08",
     ],
@@ -55,9 +54,6 @@ def test_portal_server_access_log_routes_require_manager(
     db_session.commit()
 
     class _Service:
-        def list_portal_server_access_logs(self, *_args, **_kwargs):
-            return []
-
         def list_portal_server_access_log_page(self, *_args, **kwargs):
             return PortalServerAccessLogPage(
                 entries=[],
@@ -95,7 +91,6 @@ def test_portal_server_access_log_routes_require_manager(
 
 def test_portal_server_access_log_routes_are_owned_by_dedicated_router() -> None:
     expected_paths = {
-        "/portal/access-logs",
         "/portal/access-logs/page",
         "/portal/access-logs/raw",
     }
