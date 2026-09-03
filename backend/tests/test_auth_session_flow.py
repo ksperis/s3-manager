@@ -12,6 +12,7 @@ from app.routers import dependencies
 from app.routers import auth as auth_router
 from app.services import session_service as session_module
 from tests.auth_test_utils import trusted_origin_headers
+from tests.router_test_utils import effective_routes
 from tests.s3_account_factory import make_s3_account
 
 
@@ -423,3 +424,21 @@ def test_iam_overview_handles_partial_failures(monkeypatch, client, db_session):
     assert data["iam_groups"] == 0
     assert data["iam_roles"] == 0
     assert len(data["warnings"]) == 2
+
+
+def test_primary_mfa_routes_are_owned_by_dedicated_router():
+    expected_paths = {
+        "/auth/webauthn/registration/options",
+        "/auth/webauthn/registration/verify",
+        "/auth/webauthn/authentication/options",
+        "/auth/webauthn/authentication/verify",
+        "/auth/recovery/verify",
+    }
+    route_modules = {
+        route.path: route.endpoint.__module__
+        for route in effective_routes(auth_router.router)
+        if route.path in expected_paths
+    }
+
+    assert set(route_modules) == expected_paths
+    assert set(route_modules.values()) == {"app.routers.auth_mfa"}

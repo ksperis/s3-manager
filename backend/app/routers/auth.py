@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import (
     APIRouter,
-    Cookie,
     Depends,
     Header,
     HTTPException,
@@ -20,14 +19,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.security import decode_typed_token
 from app.db import S3Session, User, is_admin_ui_role
-from app.models.auth import (
-    AuthenticationResponse,
-    RecoveryCodeRequest,
-    WebAuthnAuthenticationRequest,
-    WebAuthnCredentialRequest,
-)
+from app.models.auth import AuthenticationResponse
 from app.models.first_admin_bootstrap import (
     FirstAdminBootstrapCreate,
     FirstAdminBootstrapStatus,
@@ -35,8 +28,9 @@ from app.models.first_admin_bootstrap import (
 from app.models.ldap import LDAPLoginRequest, LDAPProviderInfo
 from app.models.oidc import OIDCCallbackRequest, OIDCProviderInfo, OIDCStartRequest, OIDCStartResponse
 from app.models.session import S3KeyLogin, SessionDescriptor
-from app.routers import auth_api_tokens, auth_sessions
+from app.routers import auth_api_tokens, auth_mfa, auth_sessions
 from app.routers.auth_cookies import set_auth_cookies, set_pre_auth_cookie
+from app.routers.auth_request_context import request_context
 from app.routers.auth_session_guards import require_recent_mfa
 from app.routers.dependencies import (
     get_audit_service,
@@ -70,11 +64,11 @@ from app.services.oidc_service import (
 )
 from app.services.session_service import SessionIntrospectionError, SessionService
 from app.services.storage_endpoints_service import get_storage_endpoints_service
-from app.services.users_service import UsersService, get_users_service
-from app.services.webauthn_service import WebAuthnSecurityError, WebAuthnService
+from app.services.users_service import UsersService
+from app.services.webauthn_service import WebAuthnService
 from app.services.identity_security_policy import passkey_required_for_role
 from app.utils.http_errors import raise_http_exception_from_exception
-from app.utils.request_security import client_ip, require_trusted_origin
+from app.utils.request_security import require_trusted_origin
 from app.utils.s3_endpoint import validate_custom_login_s3_endpoint
 
 
@@ -95,22 +89,6 @@ def get_oidc_service_dependency(
     return get_oidc_service(db)
 
 
-def _pre_auth_user(db: Session, token: Optional[str], *, purposes: set[str]) -> tuple[User, dict[str, Any]]:
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Pre-authentication required")
-    claims = decode_typed_token(token, expected_type="pre_auth")
-    if claims is None or claims.get("purpose") not in purposes:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid pre-authentication")
-    user = db.query(User).filter(User.id == claims.get("uid")).first()
-    if not user or not user.is_active or user.auth_version != claims.get("auth_version"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Pre-authentication expired")
-    return user, claims
-
-
-def _request_context(request: Request) -> tuple[str, Optional[str], Optional[str]]:
-    return client_ip(request, settings), request.headers.get("user-agent"), request.headers.get("x-request-id")
-
-
 def _finish_user_primary_auth(
     *,
     request: Request,
@@ -125,7 +103,7 @@ def _finish_user_primary_auth(
         result_status = "mfa_required" if has_passkey else "mfa_enrollment_required"
         set_pre_auth_cookie(response, user, "mfa_authentication" if has_passkey else "mfa_enrollment")
         return AuthenticationResponse(status=result_status, user=users_service.user_to_out(user), redirect_path=redirect_path)
-    ip_address, user_agent, _ = _request_context(request)
+    ip_address, user_agent, _ = request_context(request, settings=settings)
     credentials = AuthSessionService(users_service.db).create_for_user(
         user,
         auth_type=auth_type,
@@ -170,7 +148,7 @@ def create_first_admin_from_bootstrap(
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuthenticationResponse:
     require_trusted_origin(request)
-    ip_address, user_agent, request_id = _request_context(request)
+    ip_address, user_agent, request_id = request_context(request, settings=settings)
     limiter = AuthRateLimitService(users_service.db, settings=settings)
     rate_limit_account = "first-admin-bootstrap"
     try:
@@ -256,7 +234,7 @@ def login(
 ) -> AuthenticationResponse:
     require_trusted_origin(request)
     username = (form_data.username or "").strip()
-    ip_address, user_agent, request_id = _request_context(request)
+    ip_address, user_agent, request_id = request_context(request, settings=settings)
     limiter = AuthRateLimitService(users_service.db, settings=settings)
     try:
         limiter.check(account=username, ip_address=ip_address)
@@ -334,7 +312,7 @@ def login_with_ldap(
 ) -> AuthenticationResponse:
     require_trusted_origin(request)
     username = (payload.username or "").strip()
-    ip_address, user_agent, request_id = _request_context(request)
+    ip_address, user_agent, request_id = request_context(request, settings=settings)
     account_key = f"ldap:{provider_id.lower()}:{username.lower()}"
     limiter = AuthRateLimitService(users_service.db, settings=settings)
     try:
@@ -464,7 +442,7 @@ def login_with_s3_keys(
             endpoint_url = validate_custom_login_s3_endpoint(endpoint_url)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid S3 endpoint") from exc
-    ip_address, user_agent, request_id = _request_context(request)
+    ip_address, user_agent, request_id = request_context(request, settings=settings)
     account_key = f"s3:{hashlib.sha256(payload.access_key.encode()).hexdigest()}"
     limiter = AuthRateLimitService(db, settings=settings)
     try:
@@ -571,7 +549,7 @@ def start_oidc_login(
     oidc_service: OidcService = Depends(get_oidc_service_dependency),
 ) -> dict[str, str]:
     require_trusted_origin(request)
-    ip_address, _, _ = _request_context(request)
+    ip_address, _, _ = request_context(request, settings=settings)
     account_key = f"oidc-start:{provider_id.lower()}"
     limiter = AuthRateLimitService(oidc_service.db, settings=settings)
     try:
@@ -605,7 +583,7 @@ def complete_oidc_login(
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuthenticationResponse:
     require_trusted_origin(request)
-    ip_address, user_agent, request_id = _request_context(request)
+    ip_address, user_agent, request_id = request_context(request, settings=settings)
     account_key = f"oidc-callback:{provider_id.lower()}"
     limiter = AuthRateLimitService(oidc_service.db, settings=settings)
     try:
@@ -712,151 +690,5 @@ def complete_oidc_login(
     return result
 
 
-@router.post("/webauthn/registration/options")
-def webauthn_registration_options(
-    request: Request,
-    db: Session = Depends(get_db),
-    pre_auth: Optional[str] = Cookie(None, alias=settings.pre_auth_cookie_name),
-) -> dict[str, Any]:
-    require_trusted_origin(request)
-    user, claims = _pre_auth_user(db, pre_auth, purposes={"mfa_enrollment"})
-    return WebAuthnService(db).begin_registration(user, binding_sid=str(claims["sid"]))
-
-
-@router.post("/webauthn/registration/verify", response_model=AuthenticationResponse)
-def webauthn_registration_verify(
-    request: Request,
-    response: Response,
-    payload: WebAuthnCredentialRequest,
-    db: Session = Depends(get_db),
-    pre_auth: Optional[str] = Cookie(None, alias=settings.pre_auth_cookie_name),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> AuthenticationResponse:
-    require_trusted_origin(request)
-    user, claims = _pre_auth_user(db, pre_auth, purposes={"mfa_enrollment"})
-    service = WebAuthnService(db)
-    try:
-        credential_row = service.finish_registration(
-            user,
-            credential=payload.credential,
-            name=payload.name,
-            binding_sid=str(claims["sid"]),
-        )
-    except WebAuthnSecurityError as exc:
-        raise HTTPException(status_code=400, detail="Invalid WebAuthn registration response") from exc
-    user = get_users_service(db).get_by_id(user.id)
-    if user is None:
-        raise HTTPException(status_code=401, detail="User is unavailable")
-    codes = service.issue_recovery_codes(user)
-    ip_address, user_agent, _ = _request_context(request)
-    credentials = AuthSessionService(db).create_for_user(
-        user,
-        auth_type="password+webauthn",
-        ip_address=ip_address,
-        user_agent=user_agent,
-        mfa_verified=True,
-    )
-    set_auth_cookies(response, credentials)
-    response.delete_cookie(settings.pre_auth_cookie_name, path="/api/auth")
-    audit_service.record_action(
-        user=user,
-        scope="security",
-        action="webauthn_enrollment_completed",
-        entity_type="webauthn_credential",
-        entity_id=credential_row.id,
-        metadata={"recovery_codes_issued": len(codes)},
-    )
-    return AuthenticationResponse(
-        status="authenticated",
-        user=get_users_service(db).user_to_out(user),
-        recovery_codes=codes,
-    )
-
-
-@router.post("/webauthn/authentication/options")
-def webauthn_authentication_options(
-    request: Request,
-    db: Session = Depends(get_db),
-    pre_auth: Optional[str] = Cookie(None, alias=settings.pre_auth_cookie_name),
-) -> dict[str, Any]:
-    require_trusted_origin(request)
-    user, claims = _pre_auth_user(db, pre_auth, purposes={"mfa_authentication"})
-    try:
-        return WebAuthnService(db).begin_authentication(user, binding_sid=str(claims["sid"]))
-    except WebAuthnSecurityError as exc:
-        raise HTTPException(status_code=400, detail="WebAuthn authentication is unavailable") from exc
-
-
-@router.post("/webauthn/authentication/verify", response_model=AuthenticationResponse)
-def webauthn_authentication_verify(
-    request: Request,
-    response: Response,
-    payload: WebAuthnAuthenticationRequest,
-    db: Session = Depends(get_db),
-    pre_auth: Optional[str] = Cookie(None, alias=settings.pre_auth_cookie_name),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> AuthenticationResponse:
-    require_trusted_origin(request)
-    user, claims = _pre_auth_user(db, pre_auth, purposes={"mfa_authentication"})
-    try:
-        WebAuthnService(db).finish_authentication(
-            user,
-            credential=payload.credential,
-            binding_sid=str(claims["sid"]),
-        )
-    except WebAuthnSecurityError as exc:
-        raise HTTPException(status_code=401, detail="Invalid WebAuthn authentication response") from exc
-    ip_address, user_agent, _ = _request_context(request)
-    credentials = AuthSessionService(db).create_for_user(
-        user,
-        auth_type="webauthn",
-        ip_address=ip_address,
-        user_agent=user_agent,
-        mfa_verified=True,
-    )
-    set_auth_cookies(response, credentials)
-    response.delete_cookie(settings.pre_auth_cookie_name, path="/api/auth")
-    audit_service.record_action(
-        user=user,
-        scope="auth",
-        action="webauthn_authentication_success",
-        entity_type="ui_session",
-        entity_id=credentials.session.id,
-    )
-    return AuthenticationResponse(status="authenticated", user=get_users_service(db).user_to_out(user))
-
-
-@router.post("/recovery/verify", response_model=AuthenticationResponse)
-def verify_recovery_code(
-    request: Request,
-    response: Response,
-    payload: RecoveryCodeRequest,
-    db: Session = Depends(get_db),
-    pre_auth: Optional[str] = Cookie(None, alias=settings.pre_auth_cookie_name),
-    audit_service: AuditService = Depends(get_audit_service),
-) -> AuthenticationResponse:
-    require_trusted_origin(request)
-    user, _ = _pre_auth_user(db, pre_auth, purposes={"mfa_authentication"})
-    if not WebAuthnService(db).consume_recovery_code(user, payload.code):
-        raise HTTPException(status_code=401, detail="Invalid recovery code")
-    ip_address, user_agent, _ = _request_context(request)
-    credentials = AuthSessionService(db).create_for_user(
-        user,
-        auth_type="recovery_code",
-        ip_address=ip_address,
-        user_agent=user_agent,
-        mfa_verified=True,
-    )
-    set_auth_cookies(response, credentials)
-    response.delete_cookie(settings.pre_auth_cookie_name, path="/api/auth")
-    audit_service.record_action(
-        user=user,
-        scope="auth",
-        action="recovery_code_authentication_success",
-        entity_type="ui_session",
-        entity_id=credentials.session.id,
-    )
-    return AuthenticationResponse(status="authenticated", user=get_users_service(db).user_to_out(user))
-
-
+router.include_router(auth_mfa.router)
 router.include_router(auth_sessions.router)
