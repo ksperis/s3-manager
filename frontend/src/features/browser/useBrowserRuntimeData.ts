@@ -3,11 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   fetchBrowserSettings,
   fetchBrowserUsageSummary,
-  type BrowserRequestOptions,
   type BrowserSettings,
   type BrowserUsageSummary,
 } from "../../api/browser";

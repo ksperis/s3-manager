@@ -3,11 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import {
-  listObjectVersions,
-  type BrowserRequestOptions,
-} from "../../api/browser";
+import { listObjectVersions } from "../../api/browser";
 import { VERSIONS_PAGE_SIZE } from "./browserConstants";
 import type { ListAllBrowserObjectsForPrefix } from "./useBrowserRecursiveObjectListing";
 

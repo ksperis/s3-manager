@@ -4,12 +4,13 @@
  */
 import { useCallback } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
-import type { BrowserRequestOptions, StsCredentials } from "../../api/browser";
+import type { StsCredentials } from "../../api/browser";
 import {
   presignPart,
   type PresignPartRequest,
   type PresignPartResponse,
 } from "../../api/browserMultipart";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import {
   presignObject,
   type PresignRequest,

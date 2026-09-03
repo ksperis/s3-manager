@@ -10,12 +10,8 @@ import {
 } from "./browserRequestHeaders";
 import { buildSseCustomerBackendHeaders } from "./browserSseCustomer";
 import type { BucketVersioningStatus } from "./bucketContracts";
+import type { BrowserRequestOptions } from "./browserWorkspace";
 import type { StorageSpaceIconDescriptor } from "./storageSpaceIcons";
-
-export type BrowserWorkspaceSurface = "browser" | "manager" | "ceph-admin" | "portal";
-export type BrowserRequestOptions = {
-  workspaceSurface?: BrowserWorkspaceSurface;
-};
 
 export type BrowserBucket = {
   name: string;

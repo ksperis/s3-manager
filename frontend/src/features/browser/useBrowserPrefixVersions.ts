@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
-import type { BrowserRequestOptions } from "../../api/browser";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import {
   VERSIONS_LIST_HARD_LIMIT,
   VERSIONS_PAGE_SIZE,

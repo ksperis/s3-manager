@@ -3,13 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import Modal from "../../components/Modal";
 import { extractApiError } from "../../utils/apiError";
 import ObjectPreview from "../shared/ObjectPreview";
-import {
-  type BrowserObjectVersion,
-  type BrowserRequestOptions,
-} from "../../api/browser";
+import { type BrowserObjectVersion } from "../../api/browser";
 import type {
   PresignedUrl,
   PresignRequest,

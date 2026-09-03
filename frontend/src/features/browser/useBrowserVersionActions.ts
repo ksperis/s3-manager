@@ -3,12 +3,12 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   copyObject,
   deleteObjects,
   type BrowserObjectVersion,
-  type BrowserRequestOptions,
 } from "../../api/browser";
 import { formatBrowserOperationError } from "./browserOperationErrors";
 import type { OperationCompletionStatus } from "./browserTypes";

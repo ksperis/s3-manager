@@ -10,11 +10,9 @@ import {
   useRef,
   useState,
 } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import {
-  listBrowserObjects,
-  type BrowserRequestOptions,
-} from "../../api/browser";
+import { listBrowserObjects } from "../../api/browser";
 import {
   TREE_PREFIXES_HARD_LIMIT,
   TREE_PREFIXES_PAGE_SIZE,

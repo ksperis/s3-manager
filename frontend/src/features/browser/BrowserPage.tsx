@@ -32,7 +32,7 @@ import {
 } from "../../utils/clientStorage";
 import { readStoredUser } from "../../utils/workspaces";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import type { BrowserRequestOptions } from "../../api/browser";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import { useBrowserContext } from "./BrowserContext";
 import {
   useBrowserSidebarSlot,

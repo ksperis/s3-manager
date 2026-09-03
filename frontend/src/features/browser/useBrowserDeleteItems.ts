@@ -3,11 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import {
-  deleteObjects,
-  type BrowserRequestOptions,
-} from "../../api/browser";
+import { deleteObjects } from "../../api/browser";
 import { runWithConcurrency } from "../../utils/concurrency";
 import { formatBrowserOperationError } from "./browserOperationErrors";
 import { updateOperationDetailsByKey } from "./browserOperationDetailState";

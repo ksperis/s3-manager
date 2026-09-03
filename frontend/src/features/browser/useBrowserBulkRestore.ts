@@ -3,12 +3,12 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useMemo, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   copyObject,
   listObjectVersions,
   type BrowserObjectVersion,
-  type BrowserRequestOptions,
 } from "../../api/browser";
 import { runWithConcurrency } from "../../utils/concurrency";
 import { buildBulkRestorePlan } from "./browserBulkRestorePlan";

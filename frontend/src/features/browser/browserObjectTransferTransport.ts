@@ -6,7 +6,7 @@ import {
   withS3AccountParam,
   type S3AccountSelector,
 } from "../../api/accountParams";
-import type { BrowserRequestOptions } from "../../api/browser";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import {
   buildBrowserFetchHeaders,
   presignObject,

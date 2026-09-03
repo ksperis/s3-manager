@@ -3,11 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useMemo, useRef, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
-import {
-  createFolder,
-  type BrowserRequestOptions,
-} from "../../api/browser";
+import { createFolder } from "../../api/browser";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { stableSignature } from "../../utils/stableSignature";
 

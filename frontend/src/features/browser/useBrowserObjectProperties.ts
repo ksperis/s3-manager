@@ -3,13 +3,13 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useRef, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   fetchObjectMetadata,
   getObjectTags,
   updateObjectMetadata,
   updateObjectTags,
-  type BrowserRequestOptions,
   type ObjectMetadata,
   type ObjectMetadataUpdate,
   type ObjectTag,

@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback } from "react";
-import type { BrowserRequestOptions } from "../../api/browser";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import {
   proxyUpload,
   type PresignRequest,

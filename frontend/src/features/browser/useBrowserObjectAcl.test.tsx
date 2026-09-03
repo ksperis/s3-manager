@@ -37,7 +37,7 @@ describe("useBrowserObjectAcl", () => {
         accountId: "acc-1",
         bucketName: "bucket-a",
         objectKey: "docs/report.txt",
-        requestOptions: { workspaceSurface: "manager-browser" },
+        requestOptions: { workspaceSurface: "manager" },
         versionId: "version-2",
       }),
     );
@@ -56,7 +56,7 @@ describe("useBrowserObjectAcl", () => {
         version_id: "version-2",
       },
       undefined,
-      { workspaceSurface: "manager-browser" },
+      { workspaceSurface: "manager" },
     );
     expect(result.current.saving).toBe(false);
   });

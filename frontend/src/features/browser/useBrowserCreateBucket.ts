@@ -3,11 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useMemo, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   createBrowserBucket,
   ensureBucketCors,
-  type BrowserRequestOptions,
   type BucketCorsStatus,
 } from "../../api/browser";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";

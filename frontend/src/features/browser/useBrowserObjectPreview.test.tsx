@@ -48,7 +48,7 @@ describe("useBrowserObjectPreview", () => {
     const { result } = renderHook(() =>
       useBrowserObjectPreview({
         ...baseOptions,
-        requestOptions: { workspaceSurface: "manager-browser" },
+        requestOptions: { workspaceSurface: "manager" },
         sseCustomerKeyBase64: "customer-key",
         useProxyTransfers: true,
       }),
@@ -66,7 +66,7 @@ describe("useBrowserObjectPreview", () => {
       "docs/report.txt",
       controller.signal,
       "customer-key",
-      { workspaceSurface: "manager-browser" },
+      { workspaceSurface: "manager" },
     );
     expect(baseOptions.presignObjectRequest).not.toHaveBeenCalled();
   });

@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { S3AccountSelector } from "../../api/accountParams";
-import type { BrowserRequestOptions } from "../../api/browser";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import {
   presignObject,
   type PresignedUrl,

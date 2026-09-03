@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { S3AccountSelector } from "../../api/accountParams";
-import type { BrowserWorkspaceSurface } from "../../api/browser";
+import type { BrowserWorkspaceSurface } from "../../api/browserWorkspace";
 import type {
   BrowserCapabilityFacts,
   BrowserDensity,

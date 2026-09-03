@@ -39,7 +39,7 @@ describe("useBrowserObjectArchiveRestore", () => {
         bucketName: "bucket-a",
         loadProperties,
         objectKey: "archives/report.csv",
-        requestOptions: { workspaceSurface: "manager-browser" },
+        requestOptions: { workspaceSurface: "manager" },
         versionId: "version-2",
       }),
     );
@@ -61,7 +61,7 @@ describe("useBrowserObjectArchiveRestore", () => {
         tier: "Bulk",
         version_id: "version-2",
       },
-      { workspaceSurface: "manager-browser" },
+      { workspaceSurface: "manager" },
     );
     expect(loadProperties).toHaveBeenCalledWith(true);
     expect(result.current.saving).toBe(false);

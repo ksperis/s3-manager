@@ -3,11 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   listBrowserObjects,
   type BrowserObject,
-  type BrowserRequestOptions,
 } from "../../api/browser";
 
 const RECURSIVE_LIST_PAGE_SIZE = 1000;

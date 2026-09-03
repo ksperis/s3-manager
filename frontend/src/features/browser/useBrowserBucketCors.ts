@@ -3,12 +3,12 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import { useDismissibleLayer } from "../../components/ui/useDismissibleLayer";
 import {
   ensureBucketCors,
   getBucketCorsStatus,
-  type BrowserRequestOptions,
   type BucketCorsStatus,
 } from "../../api/browser";
 import { resolveBrowserCorsAvailability } from "./browserTransferPresentation";

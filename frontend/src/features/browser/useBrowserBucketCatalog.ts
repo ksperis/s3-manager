@@ -12,11 +12,11 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   searchBrowserBuckets,
   type BrowserBucket,
-  type BrowserRequestOptions,
 } from "../../api/browser";
 import { BUCKET_MENU_LIMIT } from "./browserConstants";
 import { extractBucketListError } from "./browserBucketsPanelHelpers";

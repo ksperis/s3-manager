@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   getBucketVersioning,
@@ -17,7 +18,6 @@ import {
   listObjectVersions,
   type BrowserObject,
   type BrowserObjectVersion,
-  type BrowserRequestOptions,
 } from "../../api/browser";
 import {
   DELETED_RESULTS_TARGET,

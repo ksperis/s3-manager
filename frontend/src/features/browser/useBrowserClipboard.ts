@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useMemo, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import {
   normalizeS3AccountSelectorId,
   type S3AccountSelector,
@@ -13,7 +14,6 @@ import {
   deleteObjects,
   fetchObjectMetadata,
   getBucketCorsStatus,
-  type BrowserRequestOptions,
 } from "../../api/browser";
 import {
   abortMultipartUpload,

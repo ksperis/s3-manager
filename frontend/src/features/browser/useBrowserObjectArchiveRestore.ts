@@ -3,10 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
   restoreObject,
-  type BrowserRequestOptions,
   type ObjectRestoreRequest,
 } from "../../api/browser";
 import { runBrowserScopedSave } from "./browserScopedSave";

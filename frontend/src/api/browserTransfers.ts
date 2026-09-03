@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
-import type { BrowserRequestOptions } from "./browser";
+import type { BrowserRequestOptions } from "./browserWorkspace";
 import {
   buildBrowserWorkspaceHeaders,
   mergeBrowserHeaders,

@@ -3,12 +3,13 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
-import type { BrowserRequestOptions, ObjectTag } from "./browser";
+import type { ObjectTag } from "./browser";
 import {
   buildBrowserWorkspaceHeaders,
   mergeBrowserHeaders,
 } from "./browserRequestHeaders";
 import { buildSseCustomerBackendHeaders } from "./browserSseCustomer";
+import type { BrowserRequestOptions } from "./browserWorkspace";
 import client from "./client";
 
 type MultipartUploadInitRequest = {
