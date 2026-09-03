@@ -42,6 +42,7 @@ import {
   getRunStatusTone,
   getVisibleCompareObjectKeys,
   matchesBucketCompareRunFilters,
+  parseOptionalIsoDateTime,
   renderCompareObjectDetails,
   renderDiffLines,
   sourceCompareObjectDetailFromDiff,
@@ -311,13 +312,10 @@ export default function ManagerBucketCompareModal({
   }, [progress.completed, progress.total]);
   const hasScopeSelected = includeContent || includeConfig;
   const hasConfigFeatureSelected = selectedConfigFeatures.length > 0;
-  const ignoreModifiedAfterIso = useMemo(() => {
-    const value = ignoreModifiedAfter.trim();
-    if (!value) return null;
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toISOString();
-  }, [ignoreModifiedAfter]);
+  const ignoreModifiedAfterIso = useMemo(
+    () => parseOptionalIsoDateTime(ignoreModifiedAfter),
+    [ignoreModifiedAfter],
+  );
   const ignoreModifiedAfterInvalid = Boolean(ignoreModifiedAfter.trim()) && !ignoreModifiedAfterIso;
   const hasActionInFlight = useMemo(() => items.some((item) => Boolean(item.actionRunning)), [items]);
   const canRunComparison =

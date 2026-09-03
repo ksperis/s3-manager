@@ -6,6 +6,7 @@ import {
   buildBucketCompareMappingModel,
   compareObjectDetailsFromKeys,
   matchesBucketCompareRunFilters,
+  parseOptionalIsoDateTime,
   mergeRawBucketCompareMappings,
   reconcileBucketCompareManualMapping,
   resolveBucketCompareRunSettlement,
@@ -408,5 +409,16 @@ describe("bucket comparison object detail projection", () => {
       last_modified: "2026-01-02T00:00:00Z",
       storage_class: "GLACIER",
     });
+  });
+});
+
+describe("parseOptionalIsoDateTime", () => {
+  it.each([
+    ["", null],
+    ["   ", null],
+    ["not-a-date", null],
+    ["2026-09-03T10:15:00Z", "2026-09-03T10:15:00.000Z"],
+  ] as const)("parses %s", (value, expected) => {
+    expect(parseOptionalIsoDateTime(value)).toBe(expected);
   });
 });

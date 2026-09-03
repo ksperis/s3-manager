@@ -313,6 +313,13 @@ export const formatUnknown = (value: unknown) => {
   }
 };
 
+export function parseOptionalIsoDateTime(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 const formatCompareDateTime = (value?: string | null): string => {
   if (!value) return "-";
   const date = new Date(value);
