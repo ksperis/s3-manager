@@ -4,7 +4,7 @@ import json
 
 from app.core.config import get_settings
 from app.db import AuditLog, AuthSession, User, UserRole
-from app.routers import auth as auth_router
+from app.routers import auth_ldap as auth_router
 from app.services.ldap_service import LDAPAuthenticationError, LDAPConfigurationError
 from tests.auth_test_utils import trusted_origin_headers
 

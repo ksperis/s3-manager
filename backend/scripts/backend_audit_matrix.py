@@ -64,7 +64,7 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/admin/healthchecks.py", "run_healthchecks", "/run"): "operational health probe excluded by audit policy",
     ("POST", "app/routers/admin/settings.py", "send_quota_notifications_test_email", "/quota-notifications/test-email"): "notification delivery probe",
     ("POST", "app/routers/admin/usage_history.py", "collect_usage_history", "/collect"): "operational collection excluded by audit policy",
-    ("POST", "app/routers/auth.py", "start_oidc_login", "/oidc/{provider_id}/start"): "short-lived authentication operation excluded by audit policy",
+    ("POST", "app/routers/auth_oidc.py", "start_oidc_login", "/oidc/{provider_id}/start"): "short-lived authentication operation excluded by audit policy",
     ("POST", "app/routers/auth_sessions.py", "refresh_access_token", "/refresh"): "short-lived authentication operation excluded by audit policy",
     ("POST", "app/routers/auth_mfa.py", "webauthn_registration_options", "/webauthn/registration/options"): "short-lived authentication challenge",
     ("POST", "app/routers/auth_mfa.py", "webauthn_authentication_options", "/webauthn/authentication/options"): "short-lived authentication challenge",

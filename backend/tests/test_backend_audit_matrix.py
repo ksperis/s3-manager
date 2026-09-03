@@ -19,7 +19,7 @@ def test_backend_audit_matrix_collects_mutating_routes():
     rows = collect_rows(backend_root)
 
     assert rows
-    assert any(row.method == "POST" and row.file.name == "auth.py" for row in rows)
+    assert any(row.method == "POST" and row.file.name == "auth_local.py" for row in rows)
     assert all(row.method in {"POST", "PUT", "PATCH", "DELETE"} for row in rows)
 
 

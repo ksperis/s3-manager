@@ -10,6 +10,7 @@ from app.db import AuditLog, S3Account, UserS3Account, User, UserRole
 from app.main import app
 from app.routers import dependencies
 from app.routers import auth as auth_router
+from app.routers import auth_common, auth_s3
 from app.services import session_service as session_module
 from tests.auth_test_utils import trusted_origin_headers
 from tests.router_test_utils import effective_routes
@@ -28,7 +29,7 @@ def _enable_access_key_login(
         allow_login_custom_endpoint=allow_custom_endpoint,
     )
     monkeypatch.setattr(
-        "app.routers.auth.load_app_settings",
+        "app.routers.auth_s3.load_app_settings",
         lambda: SimpleNamespace(general=general),
     )
 
@@ -79,7 +80,7 @@ def _mock_external(monkeypatch, *, iam_allowed: bool) -> None:
 def test_login_s3_grants_iam_capability_when_iam_client_succeeds(monkeypatch, client, db_session):
     _enable_access_key_login(monkeypatch)
     _mock_external(monkeypatch, iam_allowed=True)
-    monkeypatch.setattr(auth_router, "validate_custom_login_s3_endpoint", lambda value: value.rstrip("/"))
+    monkeypatch.setattr(auth_s3, "validate_custom_login_s3_endpoint", lambda value: value.rstrip("/"))
 
     response = client.post(
         "/api/auth/login-s3",
@@ -98,7 +99,7 @@ def test_login_s3_grants_iam_capability_when_iam_client_succeeds(monkeypatch, cl
 def test_login_s3_disables_iam_capability_when_iam_client_denied(monkeypatch, client, db_session):
     _enable_access_key_login(monkeypatch)
     _mock_external(monkeypatch, iam_allowed=False)
-    monkeypatch.setattr(auth_router, "validate_custom_login_s3_endpoint", lambda value: value.rstrip("/"))
+    monkeypatch.setattr(auth_s3, "validate_custom_login_s3_endpoint", lambda value: value.rstrip("/"))
 
     response = client.post(
         "/api/auth/login-s3",
@@ -138,7 +139,7 @@ def test_login_s3_rejects_invalid_custom_endpoint(monkeypatch, client, endpoint_
 def test_login_s3_records_custom_endpoint_audit_event(monkeypatch, client, db_session):
     _enable_access_key_login(monkeypatch, allow_custom_endpoint=True)
     _mock_external(monkeypatch, iam_allowed=True)
-    monkeypatch.setattr(auth_router, "validate_custom_login_s3_endpoint", lambda value: value.rstrip("/"))
+    monkeypatch.setattr(auth_s3, "validate_custom_login_s3_endpoint", lambda value: value.rstrip("/"))
 
     response = client.post(
         "/api/auth/login-s3",
@@ -253,8 +254,8 @@ def test_login_rate_limit_returns_429_after_max_failed_attempts(monkeypatch, cli
     db_session.add(user)
     db_session.commit()
 
-    monkeypatch.setattr(auth_router.settings, "login_rate_limit_max_attempts", 2)
-    monkeypatch.setattr(auth_router.settings, "login_rate_limit_window_seconds", 3600)
+    monkeypatch.setattr(auth_common.settings, "login_rate_limit_max_attempts", 2)
+    monkeypatch.setattr(auth_common.settings, "login_rate_limit_window_seconds", 3600)
 
     common_headers = {
         **trusted_origin_headers(),
@@ -308,9 +309,9 @@ def test_trusted_proxy_rate_limits_real_clients_and_ignores_injected_leftmost_xf
     db_session.add(user)
     db_session.commit()
 
-    monkeypatch.setattr(auth_router.settings, "trusted_proxy_cidrs", ["10.0.0.0/24"])
-    monkeypatch.setattr(auth_router.settings, "login_rate_limit_max_attempts", 1)
-    monkeypatch.setattr(auth_router.settings, "login_rate_limit_window_seconds", 3600)
+    monkeypatch.setattr(auth_common.settings, "trusted_proxy_cidrs", ["10.0.0.0/24"])
+    monkeypatch.setattr(auth_common.settings, "login_rate_limit_max_attempts", 1)
+    monkeypatch.setattr(auth_common.settings, "login_rate_limit_window_seconds", 3600)
     monkeypatch.setattr(client._transport, "client", ("10.0.0.10", 50000))
 
     def attempt(forwarded_for: str):

@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db import AuditLog, Base, FirstAdminBootstrap, User, UserRole
-from app.routers import auth as auth_router
+from app.routers import auth_common
 from app.scripts import create_first_admin as create_first_admin_script
 from app.services.first_admin_bootstrap_service import (
     FIRST_ADMIN_BOOTSTRAP_ID,
@@ -284,8 +284,8 @@ def test_bootstrap_api_rejects_untrusted_origin_and_uses_generic_token_error(cli
 
 def test_bootstrap_api_rate_limits_invalid_attempts(monkeypatch, client, db_session):
     FirstAdminBootstrapService(db_session).issue_token()
-    monkeypatch.setattr(auth_router.settings, "login_rate_limit_max_attempts", 1)
-    monkeypatch.setattr(auth_router.settings, "login_rate_limit_window_seconds", 3600)
+    monkeypatch.setattr(auth_common.settings, "login_rate_limit_max_attempts", 1)
+    monkeypatch.setattr(auth_common.settings, "login_rate_limit_window_seconds", 3600)
     headers = {
         **trusted_origin_headers(),
         "X-BucketReef-Bootstrap-Token": "invalid",

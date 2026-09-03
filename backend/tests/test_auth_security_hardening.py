@@ -29,7 +29,7 @@ from app.main import app
 from app.models.app_settings import AppSettings
 from app.models.user import UserUpdate
 from app.routers import dependencies
-from app.routers import auth as auth_router
+from app.routers import auth_oidc as auth_router
 from app.services.api_token_service import ApiTokenService
 from app.services.app_settings_service import load_app_settings_for_db
 from app.services.auth_session_service import AuthSessionError, AuthSessionService, RefreshReplayError
