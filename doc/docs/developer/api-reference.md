@@ -71,8 +71,7 @@ step-up, so unchanged payloads and full-name-only user updates remain free of
 the prompt.
 
 Direct identity routes reject Bearer tokens even when the Admin passkey policy
-is disabled. `POST /api/admin/automation/apply` with `admin:write` is the sole
-documented non-interactive exception for its supported idempotent resources.
+is disabled. No non-interactive identity-mutation exception is exposed.
 
 `GET /api/admin/navigation/pending-requests` provides the lightweight Admin
 navigation counters `identity_link_requests` and `portal_requests`. Identity

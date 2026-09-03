@@ -21,9 +21,9 @@ Choose the minimum `read` and `write` scopes from `profile`, `admin`,
 `manager`, `browser`, `portal`, `ceph-admin`, and `storage-ops`. A token is
 denied on every protected route that has no explicit scope mapping.
 
-Bearer tokens cannot call the direct UI-user and identity-security routes. Use
-`POST /api/admin/automation/apply` with `admin:write` for supported
-non-interactive identity changes.
+Bearer tokens cannot call the direct UI-user and identity-security routes.
+No non-interactive identity-mutation endpoint is exposed; use an authorized
+browser-backed Admin session.
 
 ## Runtime controls
 
@@ -39,5 +39,4 @@ non-interactive identity changes.
 
 ## Related pages
 
-- [Operations: Admin automation API](operations-admin-automation.md)
 - [Operations: security](operations-security.md)

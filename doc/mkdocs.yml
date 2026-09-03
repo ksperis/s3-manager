@@ -132,7 +132,6 @@ nav:
           - "Operations: billing": ops/operations-billing.md
           - "Operations: quota monitoring and history": ops/operations-quota-monitoring.md
           - "Operations: API tokens": ops/operations-api-tokens.md
-          - "Operations: admin automation API": ops/operations-admin-automation.md
           - "Operations: observability": ops/operations-observability.md
           - "Operations: upgrade and compatibility": ops/operations-upgrade-compatibility.md
       - Security and Recovery:

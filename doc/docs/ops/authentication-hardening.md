@@ -72,7 +72,7 @@ administrator is a separate operator action.
 - Admins decide requests only for standard users; Superadmins can also decide requests for privileged accounts. The immutable mapping key remains `(provider_type, provider_id, subject)`. Subjects are not written to audit metadata.
 - Every new manual link request, and every request reopened after expiry, creates one warning in the notification center for each active administrator allowed to decide it. An unchanged pending request is not repeated; privileged targets notify Superadmins only.
 
-The canonical administration routes are `/api/admin/identity/link-requests`, `/api/admin/identity/sessions`, and `/api/admin/users/{id}/security`. The former global routes under `/api/auth` are not aliases. Direct identity and critical security routes require a browser-backed UI session and reject Bearer tokens. Scoped non-interactive changes use only `POST /api/admin/automation/apply`.
+The canonical administration routes are `/api/admin/identity/link-requests`, `/api/admin/identity/sessions`, and `/api/admin/users/{id}/security`. The former global routes under `/api/auth` are not aliases. Direct identity and critical security routes require a browser-backed UI session and reject Bearer tokens. No Bearer-token exception is exposed for direct identity or critical security mutations.
 
 ## API-token scopes
 

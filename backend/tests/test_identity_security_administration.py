@@ -508,7 +508,7 @@ def test_authentication_setting_change_is_guarded_before_side_effects(auth_clien
     assert load_app_settings_for_db(db_session).general.require_passkey_for_admins is True
 
 
-def test_bearer_token_is_denied_on_direct_identity_routes_but_allowed_for_automation(auth_client, db_session):
+def test_bearer_token_is_denied_on_direct_identity_routes(auth_client, db_session):
     admin = _user(db_session, email="automation-exception@example.com", role=UserRole.UI_SUPERADMIN.value)
     api_token, _ = ApiTokenService(db_session).create_for_user(
         admin,
@@ -519,16 +519,8 @@ def test_bearer_token_is_denied_on_direct_identity_routes_but_allowed_for_automa
     authorization = {"Authorization": f"Bearer {api_token}"}
 
     direct = auth_client.get("/api/admin/users/minimal", headers=authorization)
-    automation = auth_client.post(
-        "/api/admin/automation/apply",
-        json={},
-        headers=authorization,
-    )
-
     assert direct.status_code == 401
     assert direct.json()["detail"] == "UI session required"
-    assert automation.status_code == 200
-    assert automation.json()["success"] is True
 
 
 @pytest.mark.parametrize(

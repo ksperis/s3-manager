@@ -37,7 +37,6 @@ from app.routers.admin import storage_endpoints as admin_storage_endpoints
 from app.routers.admin import settings as admin_settings
 from app.routers.admin import key_rotation as admin_key_rotation
 from app.routers.admin import onboarding as admin_onboarding
-from app.routers.admin import automation as admin_automation
 from app.routers.admin import healthchecks as admin_healthchecks
 from app.routers.admin import portal_requests as admin_portal_requests
 from app.routers.admin import identity_security as admin_identity_security
@@ -217,7 +216,6 @@ app.include_router(admin_storage_endpoints.router, prefix=settings.api_v1_prefix
 app.include_router(admin_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_key_rotation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_onboarding.router, prefix=settings.api_v1_prefix)
-app.include_router(admin_automation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_portal_requests.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_portal_enabled)])
 app.include_router(admin_identity_security.router, prefix=settings.api_v1_prefix)

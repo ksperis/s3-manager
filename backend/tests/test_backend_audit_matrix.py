@@ -93,14 +93,6 @@ def test_backend_audit_matrix_tracks_portal_stream_delegation():
     ]
 
 
-def test_backend_audit_matrix_tracks_admin_automation_delegation():
-    backend_root = Path(__file__).resolve().parents[1]
-    rows_by_function = {row.function: row for row in collect_rows(backend_root)}
-
-    assert rows_by_function["apply_admin_automation"].signals[
-        "delegated_admin_automation_audit"
-    ]
-
 
 def test_backend_audit_matrix_tracks_shared_bucket_config_mutation_delegation():
     backend_root = Path(__file__).resolve().parents[1]

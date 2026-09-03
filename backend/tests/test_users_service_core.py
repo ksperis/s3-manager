@@ -20,7 +20,6 @@ from app.db import (
     UserS3Connection,
     UserS3User,
 )
-from app.models.admin_automation import UiUserSpec
 from app.models.user import PASSWORD_POLICY_ERROR, S3UserMembership, UserCreate, UserUpdate
 from app.services.user_output_service import UserOutputService
 from app.services.users_service import UsersService
@@ -131,9 +130,6 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
 
     with pytest.raises(ValidationError):
         UserUpdate(role="admin")  # type: ignore[arg-type]
-
-    with pytest.raises(ValidationError):
-        UiUserSpec(role="user")  # type: ignore[arg-type]
 
     created = service.create_user(
         UserCreate(
