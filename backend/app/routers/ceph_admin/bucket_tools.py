@@ -18,7 +18,6 @@ from app.services.ceph_admin_bucket_listing_cache import invalidate_bucket_listi
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
     _resolve_storage_endpoint,
-    build_ceph_admin_s3_context,
     get_ceph_admin_context,
 )
 from app.services.bucket_config_backup_service import (
@@ -30,18 +29,10 @@ from app.services.rgw_bucket_metadata import build_bucket_summary
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.rgw_admin import RGWAdminError
-from app.services.s3_execution_context import S3ExecutionContext
+from app.services.s3_execution_context import S3ExecutionContext, build_ceph_admin_s3_context
 from app.utils.http_errors import raise_bad_gateway_from_runtime
 
 router = APIRouter()
-
-
-def _build_endpoint_context_from_credentials(endpoint, access_key: str, secret_key: str) -> S3ExecutionContext:
-    return S3ExecutionContext.from_ceph_admin_endpoint(
-        endpoint,
-        access_key=access_key,
-        secret_key=secret_key,
-    )
 
 
 @router.post("/cache/refresh")
@@ -102,10 +93,10 @@ def compare_bucket_pair(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Target endpoint Ceph Admin credentials are not configured",
         )
-    target_account = _build_endpoint_context_from_credentials(
+    target_account = S3ExecutionContext.from_ceph_admin_endpoint(
         target_endpoint,
-        target_access_key,
-        target_secret_key,
+        access_key=target_access_key,
+        secret_key=target_secret_key,
     )
 
     service = get_bucket_comparison_service()

@@ -17,10 +17,10 @@ from app.routers.bucket_purge_stream import (
 )
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
-    build_ceph_admin_s3_context,
     get_ceph_admin_context,
 )
 from app.routers.dependencies import get_current_ceph_admin, require_bucket_purge_global_enabled
+from app.services.s3_execution_context import build_ceph_admin_s3_context
 from app.services.bucket_purge_service import BucketPurgeOptions, BucketPurgeResolvedTarget, BucketPurgeService
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets/purge", tags=["ceph-admin-bucket-purge"])

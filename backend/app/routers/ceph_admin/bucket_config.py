@@ -32,13 +32,12 @@ from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.services.ceph_admin_bucket_listing_cache import invalidate_bucket_listing_cache
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
-    build_ceph_admin_s3_context,
     get_ceph_admin_context,
 )
 from app.services import bucket_config_actions
 from app.services.bucket_configuration_service import BucketConfigurationService
 from app.services.rgw_admin import RGWAdminError
-from app.services.s3_execution_context import S3ExecutionContext
+from app.services.s3_execution_context import S3ExecutionContext, build_ceph_admin_s3_context
 from app.services.rgw_bucket_metadata import resolve_bucket_owner_identity
 from app.utils.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.utils.storage_endpoint_features import resolve_feature_flags

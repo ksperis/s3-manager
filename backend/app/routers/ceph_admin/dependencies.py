@@ -14,7 +14,6 @@ from app.db import StorageEndpoint, StorageProvider, User
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.audit_service import AuditService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
-from app.services.s3_execution_context import S3ExecutionContext
 from app.utils.normalize import normalize_storage_provider
 from app.utils.storage_endpoint_features import (
     features_to_capabilities,
@@ -40,14 +39,6 @@ class CephAdminIdentityProbe:
     status: Literal["available", "unavailable", "denied", "misconfigured"]
     warning: Optional[str] = None
     user_payload: Optional[dict] = None
-
-
-def build_ceph_admin_s3_context(ctx: CephAdminContext) -> S3ExecutionContext:
-    return S3ExecutionContext.from_ceph_admin_endpoint(
-        ctx.endpoint,
-        access_key=ctx.access_key,
-        secret_key=ctx.secret_key,
-    )
 
 
 def _to_bool(value: object) -> bool:

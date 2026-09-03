@@ -19,12 +19,12 @@ from app.models.bucket_usage_stats import (
 from app.routers.bucket_usage_stats_stream import stream_bucket_usage_stats
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
-    build_ceph_admin_s3_context,
     get_ceph_admin_context,
 )
 from app.services.ceph_admin_bucket_listing_cache import get_cached_rgw_bucket_entries
 from app.routers.dependencies import get_current_ceph_admin
 from app.core.sensitive_data import sanitize_error_detail
+from app.services.s3_execution_context import build_ceph_admin_s3_context
 from app.services.bucket_usage_stats_service import (
     BucketUsageStatsOptions,
     BucketUsageStatsResolvedTarget,

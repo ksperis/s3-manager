@@ -11,9 +11,9 @@ from app.models.bucket_integrity import BucketIntegrityCheckRequest
 from app.routers.bucket_integrity_stream import stream_bucket_integrity_check
 from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
-    build_ceph_admin_s3_context,
     get_ceph_admin_context,
 )
+from app.services.s3_execution_context import build_ceph_admin_s3_context
 from app.services.bucket_integrity_service import (
     BucketIntegrityCheckService,
     BucketIntegrityOptions,

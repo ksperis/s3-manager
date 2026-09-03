@@ -48,7 +48,7 @@ from app.services.listing_progress import (
     invoke_cancel_check,
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
-from app.services.s3_execution_context import S3ExecutionContext
+from app.services.s3_execution_context import S3ExecutionContext, build_ceph_admin_s3_context
 from app.utils.http_errors import is_upstream_timeout
 
 logger = logging.getLogger(__name__)
@@ -68,14 +68,6 @@ class CephAdminBucketListingContext(Protocol):
 
 class RequiredBucketStatsUnavailableError(RuntimeError):
     """Raised when a listing contract requires unavailable RGW bucket statistics."""
-
-
-def _build_s3_context(ctx: CephAdminBucketListingContext) -> S3ExecutionContext:
-    return S3ExecutionContext.from_ceph_admin_endpoint(
-        ctx.endpoint,
-        access_key=ctx.access_key,
-        secret_key=ctx.secret_key,
-    )
 
 
 def _progress_options(
@@ -339,7 +331,7 @@ class _CephAdminBucketSnapshotBuilder:
             field_matched, candidates = self._partition_cheap_matches(results, plan.cheap_field_rules)
 
         service = BucketConfigurationService()
-        account = _build_s3_context(self.ctx)
+        account = build_ceph_admin_s3_context(self.ctx)
         candidates = self._enrich_expensive_candidates(
             candidates,
             plan,
@@ -742,7 +734,7 @@ class _CephAdminBucketPageBuilder:
             requested,
             include_tags=self.request.include_tags,
             service=BucketConfigurationService(),
-            account=_build_s3_context(self.ctx),
+            account=build_ceph_admin_s3_context(self.ctx),
             **_progress_options(
                 progress=self.progress,
                 include_progress_hooks=self.include_progress_hooks,

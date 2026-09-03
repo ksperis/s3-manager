@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Protocol
 
 from app.db import S3Account, S3Connection, S3User, StorageEndpoint
 from app.models.account_capabilities import AccountCapabilities
 from app.utils.s3_connection_endpoint import resolve_connection_endpoint
+
+
+class CephAdminS3ContextSource(Protocol):
+    endpoint: StorageEndpoint
+    access_key: str
+    secret_key: str
 
 
 S3ExecutionContextKind = Literal[
@@ -148,6 +154,14 @@ class S3ExecutionContext:
 
     def session_token(self) -> Optional[str]:
         return self.session_token_value
+
+
+def build_ceph_admin_s3_context(context: CephAdminS3ContextSource) -> S3ExecutionContext:
+    return S3ExecutionContext.from_ceph_admin_endpoint(
+        context.endpoint,
+        access_key=context.access_key,
+        secret_key=context.secret_key,
+    )
 
 
 S3ExecutionTarget = S3Account | S3ExecutionContext
