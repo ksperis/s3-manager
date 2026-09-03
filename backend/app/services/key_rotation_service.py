@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -169,68 +169,15 @@ class KeyRotationService:
         key_type: KeyRotationType,
         deactivate_only: bool,
     ) -> tuple[list[KeyRotationResultItem], int, int]:
-        error = self._validate_ceph_admin_api(endpoint)
-        if error:
-            return (
-                [
-                    self._build_result(
-                        endpoint=endpoint,
-                        key_type=key_type,
-                        target_type="endpoint",
-                        target_id=str(endpoint.id),
-                        target_label=endpoint.name,
-                        status="failed",
-                        message=error,
-                    )
-                ],
-                0,
-                0,
-            )
-
-        try:
-            admin = self._build_endpoint_admin_client(endpoint)
-        except ValueError as exc:
-            return (
-                [
-                    self._build_result(
-                        endpoint=endpoint,
-                        key_type=key_type,
-                        target_type="endpoint",
-                        target_id=str(endpoint.id),
-                        target_label=endpoint.name,
-                        status="failed",
-                        message=sanitized_error_log_detail(exc),
-                    )
-                ],
-                0,
-                0,
-            )
-
-        accounts = self._list_accounts_for_endpoint(endpoint)
-        if not accounts:
-            return (
-                [
-                    self._build_result(
-                        endpoint=endpoint,
-                        key_type=key_type,
-                        target_type="account",
-                        status="skipped",
-                        message="No accounts found for this endpoint.",
-                    )
-                ],
-                0,
-                0,
-            )
-
-        return self._rotate_persisted_identity_keys(
+        return self._rotate_persisted_identity_type(
             endpoint=endpoint,
             key_type=key_type,
             deactivate_only=deactivate_only,
-            admin=admin,
-            identities=accounts,
+            load_identities=self._list_accounts_for_endpoint,
             target_type="account",
             target_label=lambda account: account.name,
             preferred_tenant=lambda account: account.rgw_account_id,
+            empty_message="No accounts found for this endpoint.",
             success_message="Account interface key rotated.",
         )
 
@@ -364,6 +311,33 @@ class KeyRotationService:
         key_type: KeyRotationType,
         deactivate_only: bool,
     ) -> tuple[list[KeyRotationResultItem], int, int]:
+        return self._rotate_persisted_identity_type(
+            endpoint=endpoint,
+            key_type=key_type,
+            deactivate_only=deactivate_only,
+            load_identities=self._list_s3_users_for_endpoint,
+            target_type="s3_user",
+            target_label=lambda s3_user: s3_user.name or s3_user.rgw_user_uid,
+            preferred_tenant=lambda _s3_user: None,
+            empty_message="No S3 users found for this endpoint.",
+            success_message="S3 user interface key rotated.",
+        )
+
+    def _rotate_persisted_identity_type(
+        self,
+        *,
+        endpoint: StorageEndpoint,
+        key_type: KeyRotationType,
+        deactivate_only: bool,
+        load_identities: Callable[
+            [StorageEndpoint], Sequence[S3Account | S3User]
+        ],
+        target_type: str,
+        target_label: Callable[[S3Account | S3User], Optional[str]],
+        preferred_tenant: Callable[[S3Account | S3User], Optional[str]],
+        empty_message: str,
+        success_message: str,
+    ) -> tuple[list[KeyRotationResultItem], int, int]:
         error = self._validate_ceph_admin_api(endpoint)
         if error:
             return (
@@ -401,16 +375,16 @@ class KeyRotationService:
                 0,
             )
 
-        s3_users = self._list_s3_users_for_endpoint(endpoint)
-        if not s3_users:
+        identities = load_identities(endpoint)
+        if not identities:
             return (
                 [
                     self._build_result(
                         endpoint=endpoint,
                         key_type=key_type,
-                        target_type="s3_user",
+                        target_type=target_type,
                         status="skipped",
-                        message="No S3 users found for this endpoint.",
+                        message=empty_message,
                     )
                 ],
                 0,
@@ -422,11 +396,11 @@ class KeyRotationService:
             key_type=key_type,
             deactivate_only=deactivate_only,
             admin=admin,
-            identities=s3_users,
-            target_type="s3_user",
-            target_label=lambda s3_user: s3_user.name or s3_user.rgw_user_uid,
-            preferred_tenant=lambda _s3_user: None,
-            success_message="S3 user interface key rotated.",
+            identities=identities,
+            target_type=target_type,
+            target_label=target_label,
+            preferred_tenant=preferred_tenant,
+            success_message=success_message,
         )
 
     def _rotate_persisted_identity_keys(
@@ -436,7 +410,7 @@ class KeyRotationService:
         key_type: KeyRotationType,
         deactivate_only: bool,
         admin: RGWAdminClient,
-        identities: list[S3Account] | list[S3User],
+        identities: Sequence[S3Account | S3User],
         target_type: str,
         target_label: Callable[[S3Account | S3User], Optional[str]],
         preferred_tenant: Callable[[S3Account | S3User], Optional[str]],
