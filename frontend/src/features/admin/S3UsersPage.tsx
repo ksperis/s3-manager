@@ -56,11 +56,9 @@ import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textM
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import {
+  AdminAssociationCheckboxOptions,
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
-  adminAssociationCheckboxClass,
-  adminAssociationOptionLabelClass,
-  adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
   adminAssociationTableActionCellClass,
   adminAssociationTableBodyClass,
@@ -1338,25 +1336,12 @@ export default function S3UsersPage() {
                     }}
                     addDisabled={editPortalUserSelections.length === 0}
                   >
-                      {visiblePortalUsers.map((option) => {
-                        const isSelected = editPortalUserSelections.includes(option.id);
-                        return (
-                          <div
-                            key={option.id}
-                            className={adminAssociationOptionRowClass(isSelected)}
-                          >
-                            <label className={adminAssociationOptionLabelClass}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleEditPortalUserSelection(option.id)}
-                                className={adminAssociationCheckboxClass}
-                              />
-                              <span>{option.label}</span>
-                            </label>
-                          </div>
-                        );
-                      })}
+                    <AdminAssociationCheckboxOptions
+                      options={visiblePortalUsers}
+                      selectedIds={editPortalUserSelections}
+                      onToggle={toggleEditPortalUserSelection}
+                      getLabel={(option) => option.label}
+                    />
                   </AdminAssociationPickerPanel>
                 )}
               </div>
@@ -1470,25 +1455,12 @@ export default function S3UsersPage() {
                     }}
                     addDisabled={editGroupSelections.length === 0}
                   >
-                      {visibleGroups.map((group) => {
-                        const isSelected = editGroupSelections.includes(group.id);
-                        return (
-                          <div
-                            key={group.id}
-                            className={adminAssociationOptionRowClass(isSelected)}
-                          >
-                            <label className={adminAssociationOptionLabelClass}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleEditGroupSelection(group.id)}
-                                className={adminAssociationCheckboxClass}
-                              />
-                              <span>{group.name}</span>
-                            </label>
-                          </div>
-                        );
-                      })}
+                    <AdminAssociationCheckboxOptions
+                      options={visibleGroups}
+                      selectedIds={editGroupSelections}
+                      onToggle={toggleEditGroupSelection}
+                      getLabel={(group) => group.name}
+                    />
                   </AdminAssociationPickerPanel>
                 )}
               </div>

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
+  AdminAssociationCheckboxOptions,
   AdminAssociationLinkedTable,
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
@@ -91,5 +92,26 @@ describe("AdminAssociationPicker", () => {
 
     await user.click(screen.getByRole("button", { name: "Add selected" }));
     expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders shared checkbox options and forwards the selected id", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+
+    render(
+      <AdminAssociationCheckboxOptions
+        options={[
+          { id: 1, label: "Operators" },
+          { id: 2, label: "Readers" },
+        ]}
+        selectedIds={[1]}
+        onToggle={onToggle}
+        getLabel={(option) => option.label}
+      />
+    );
+
+    expect(screen.getByRole("checkbox", { name: "Operators" })).toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: "Readers" }));
+    expect(onToggle).toHaveBeenCalledWith(2);
   });
 });

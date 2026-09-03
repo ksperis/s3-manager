@@ -8,11 +8,9 @@ import PageTabs from "../../components/PageTabs";
 import { tableDeleteActionClasses } from "../../components/tableActionClasses";
 import AdminAssociationAdvancedSettings from "./AdminAssociationAdvancedSettings";
 import {
+  AdminAssociationCheckboxOptions,
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
-  adminAssociationCheckboxClass,
-  adminAssociationOptionLabelClass,
-  adminAssociationOptionRowClass,
   adminAssociationTableActionCellClass,
   adminAssociationTableBodyClass,
   adminAssociationTableClass,
@@ -217,25 +215,12 @@ export default function UserAssociationsTabs({
                       s3Users.setShowPanel(false);
                     }}
                   >
-                    {s3Users.visible.map((option) => {
-                      const isSelected = s3Users.selections.includes(option.id);
-                      return (
-                        <div
-                          key={option.id}
-                          className={adminAssociationOptionRowClass(isSelected)}
-                        >
-                          <label className={adminAssociationOptionLabelClass}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => s3Users.toggleSelection(option.id)}
-                              className={adminAssociationCheckboxClass}
-                            />
-                            <span>{option.label}</span>
-                          </label>
-                        </div>
-                      );
-                    })}
+                    <AdminAssociationCheckboxOptions
+                      options={s3Users.visible}
+                      selectedIds={s3Users.selections}
+                      onToggle={s3Users.toggleSelection}
+                      getLabel={(option) => option.label}
+                    />
                   </AdminAssociationPickerPanel>
                 ) : null}
               </div>
@@ -325,25 +310,12 @@ export default function UserAssociationsTabs({
                       connections.setShowPanel(false);
                     }}
                   >
-                    {connections.visible.map((option) => {
-                      const isSelected = connections.selections.includes(option.id);
-                      return (
-                        <div
-                          key={option.id}
-                          className={adminAssociationOptionRowClass(isSelected)}
-                        >
-                          <label className={adminAssociationOptionLabelClass}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => connections.toggleSelection(option.id)}
-                              className={adminAssociationCheckboxClass}
-                            />
-                            <span>{option.label}</span>
-                          </label>
-                        </div>
-                      );
-                    })}
+                    <AdminAssociationCheckboxOptions
+                      options={connections.visible}
+                      selectedIds={connections.selections}
+                      onToggle={connections.toggleSelection}
+                      getLabel={(option) => option.label}
+                    />
                   </AdminAssociationPickerPanel>
                 ) : null}
               </div>

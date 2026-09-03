@@ -137,6 +137,41 @@ export function AdminAssociationLinkedTable({
   );
 }
 
+type AdminAssociationCheckboxOptionsProps<T extends { id: number }> = {
+  options: readonly T[];
+  selectedIds: readonly number[];
+  onToggle: (id: number) => void;
+  getLabel: (option: T) => ReactNode;
+};
+
+export function AdminAssociationCheckboxOptions<T extends { id: number }>({
+  options,
+  selectedIds,
+  onToggle,
+  getLabel,
+}: AdminAssociationCheckboxOptionsProps<T>) {
+  return (
+    <>
+      {options.map((option) => {
+        const isSelected = selectedIds.includes(option.id);
+        return (
+          <div key={option.id} className={adminAssociationOptionRowClass(isSelected)}>
+            <label className={adminAssociationOptionLabelClass}>
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggle(option.id)}
+                className={adminAssociationCheckboxClass}
+              />
+              <span>{getLabel(option)}</span>
+            </label>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 type AdminAssociationPickerPanelProps = {
   title: ReactNode;
   hint?: ReactNode;

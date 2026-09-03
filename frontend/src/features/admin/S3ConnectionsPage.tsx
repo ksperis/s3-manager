@@ -48,11 +48,9 @@ import { extractApiError } from "../../utils/apiError";
 import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags } from "../../utils/uiTags";
 import {
+  AdminAssociationCheckboxOptions,
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
-  adminAssociationCheckboxClass,
-  adminAssociationOptionLabelClass,
-  adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
   adminAssociationTableActionCellClass,
   adminAssociationTableBodyClass,
@@ -1426,25 +1424,12 @@ export default function S3ConnectionsPage() {
                     }}
                     addDisabled={editUserSelections.length === 0}
                   >
-                      {visibleAvailableEditUsers.map((option) => {
-                        const isSelected = editUserSelections.includes(option.id);
-                        return (
-                          <div
-                            key={option.id}
-                            className={adminAssociationOptionRowClass(isSelected)}
-                          >
-                            <label className={adminAssociationOptionLabelClass}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleEditUserSelection(option.id)}
-                                className={adminAssociationCheckboxClass}
-                              />
-                              <span>{option.label}</span>
-                            </label>
-                          </div>
-                        );
-                      })}
+                    <AdminAssociationCheckboxOptions
+                      options={visibleAvailableEditUsers}
+                      selectedIds={editUserSelections}
+                      onToggle={toggleEditUserSelection}
+                      getLabel={(option) => option.label}
+                    />
                   </AdminAssociationPickerPanel>
                 )}
               </div>
@@ -1524,25 +1509,12 @@ export default function S3ConnectionsPage() {
                     }}
                     addDisabled={editGroupSelections.length === 0}
                   >
-                      {visibleAvailableEditGroups.map((group) => {
-                        const isSelected = editGroupSelections.includes(group.id);
-                        return (
-                          <div
-                            key={group.id}
-                            className={adminAssociationOptionRowClass(isSelected)}
-                          >
-                            <label className={adminAssociationOptionLabelClass}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleEditGroupSelection(group.id)}
-                                className={adminAssociationCheckboxClass}
-                              />
-                              <span>{group.name}</span>
-                            </label>
-                          </div>
-                        );
-                      })}
+                    <AdminAssociationCheckboxOptions
+                      options={visibleAvailableEditGroups}
+                      selectedIds={editGroupSelections}
+                      onToggle={toggleEditGroupSelection}
+                      getLabel={(group) => group.name}
+                    />
                   </AdminAssociationPickerPanel>
                 )}
               </div>
