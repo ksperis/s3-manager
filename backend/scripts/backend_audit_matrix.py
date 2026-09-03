@@ -103,6 +103,7 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("POST", "app/routers/internal/healthchecks.py", "run_healthchecks", "/run"): "internal token-protected job",
     ("POST", "app/routers/internal/quota_monitor.py", "run_quota_monitor", "/run"): "internal token-protected job",
     ("POST", "app/routers/internal/usage_history.py", "collect_usage_history", "/collect"): "internal token-protected job",
+    ("POST", "app/routers/internal/user_notifications.py", "purge_user_notifications", "/purge"): "internal token-protected retention job",
     ("POST", "app/routers/manager/buckets.py", "compare_bucket_pair", "/compare"): "read-only comparison",
     ("POST", "app/routers/manager/usage_stats.py", "stream_manager_bucket_usage_stats_for_bucket", "/manager/buckets/{bucket_name}/usage-stats/stream"): "read-only stream",
     ("POST", "app/routers/manager/usage_stats.py", "stream_manager_usage_stats_aggregate", "/manager/usage-stats/stream"): "read-only stream",
@@ -113,6 +114,8 @@ ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
     ("DELETE", "app/routers/portal_objects.py", "portal_delete_storage_space_object", "/storage-spaces/{space_id}/objects"): "data-plane operation covered by provider access logs",
     ("POST", "app/routers/portal_objects.py", "portal_restore_storage_space_object", "/storage-spaces/{space_id}/objects/restore"): "data-plane operation covered by provider access logs",
     ("POST", "app/routers/storage_ops/usage_stats.py", "stream_storage_ops_bucket_usage_stats", "/stream"): "read-only stream",
+    ("DELETE", "app/routers/users.py", "delete_my_read_notifications", "/me/notifications"): "user-local notification cleanup",
+    ("DELETE", "app/routers/users.py", "delete_my_notification", "/me/notifications/{notification_id}"): "user-local notification cleanup",
     ("POST", "app/routers/users.py", "mark_my_notifications_read", "/me/notifications/read"): "user-local read marker",
 }
 
