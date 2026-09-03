@@ -2,12 +2,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PortalAccount } from "../../api/portal";
+import type { PortalAccount } from "../../api/portalAccounts";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 
 const listPortalAccountsMock = vi.fn();
 
-vi.mock("../../api/portal", () => ({
+vi.mock("../../api/portalAccounts", () => ({
   listPortalAccounts: (...args: unknown[]) => listPortalAccountsMock(...args),
 }));
 

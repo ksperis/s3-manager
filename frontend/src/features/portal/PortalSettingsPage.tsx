@@ -8,7 +8,7 @@ import {
   fetchPortalProjectSettings,
   updatePortalProjectSettings,
   type PortalProjectSettings,
-} from "../../api/portal";
+} from "../../api/portalAccounts";
 import { fetchCurrentUser, type User } from "../../api/users";
 import PageBanner from "../../components/PageBanner";
 import PageShell from "../../components/PageShell";

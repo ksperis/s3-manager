@@ -29,7 +29,7 @@ import {
   type AccountAccessGrant,
 } from "../../api/accountAccess";
 import type { PortalSettingsAdminUpdate, PortalSettingsOverride } from "../../api/appSettings";
-import type { PortalAccountSettings } from "../../api/portal";
+import type { PortalAccountSettings } from "../../api/portalAccounts";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { listMinimalUsers, UserSummary } from "../../api/users";

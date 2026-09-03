@@ -25,8 +25,11 @@ vi.mock("./PortalAccountContext", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
-  fetchPortalState: (...args: unknown[]) => mocks.fetchPortalStateMock(...args),
   listPortalStorageSpaces: (...args: unknown[]) => mocks.listPortalStorageSpacesMock(...args),
+}));
+
+vi.mock("../../api/portalAccounts", () => ({
+  fetchPortalState: (...args: unknown[]) => mocks.fetchPortalStateMock(...args),
 }));
 
 vi.mock("../../api/portalCollaborators", () => ({

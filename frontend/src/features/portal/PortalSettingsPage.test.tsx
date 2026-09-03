@@ -41,7 +41,7 @@ vi.mock("../../api/users", () => ({
   fetchCurrentUser: () => mocks.fetchCurrentUserMock(),
 }));
 
-vi.mock("../../api/portal", () => ({
+vi.mock("../../api/portalAccounts", () => ({
   fetchPortalProjectSettings: (...args: unknown[]) => mocks.fetchProjectSettingsMock(...args),
   updatePortalProjectSettings: (...args: unknown[]) => mocks.updateProjectSettingsMock(...args),
 }));

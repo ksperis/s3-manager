@@ -4,7 +4,7 @@
  */
 import client, { timeoutForRequestProfile } from "./client";
 import type { PortalSettingsAdminUpdate } from "./appSettings";
-import type { PortalAccountSettings } from "./portal";
+import type { PortalAccountSettings } from "./portalAccounts";
 import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 import type { UiGroupAvatarDescriptor } from "./groups";

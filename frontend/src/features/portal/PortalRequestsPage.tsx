@@ -11,7 +11,7 @@ import {
   type PortalQuotaDirection,
   type PortalQuotaUnit,
 } from "../../api/portalRequests";
-import { fetchPortalState } from "../../api/portal";
+import { fetchPortalState } from "../../api/portalAccounts";
 import {
   fetchPortalCollaborators,
   type PortalCollaborator,

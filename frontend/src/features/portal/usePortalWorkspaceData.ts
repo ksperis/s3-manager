@@ -5,12 +5,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ManagerTrafficStats, ManagerUsageTrendsResponse, TrafficWindow } from "../../api/stats";
 import { fetchPortalWorkspaceHealthOverview, type WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
-import {
-  fetchPortalState,
-  listPortalStorageSpaces,
-  type PortalStorageSpaceSummary,
-  type PortalState,
-} from "../../api/portal";
+import { listPortalStorageSpaces, type PortalStorageSpaceSummary } from "../../api/portal";
+import { fetchPortalState, type PortalState } from "../../api/portalAccounts";
 import {
   fetchPortalActivity,
   fetchPortalAlerts,

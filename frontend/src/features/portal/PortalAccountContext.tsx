@@ -6,7 +6,7 @@ import { ReactNode, createContext, useContext, useEffect, useMemo, useState } fr
 import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { useI18n } from "../../i18n";
-import { listPortalAccounts, type PortalAccount } from "../../api/portal";
+import { listPortalAccounts, type PortalAccount } from "../../api/portalAccounts";
 import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 import { readStoredUser } from "../../utils/workspaces";
