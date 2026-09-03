@@ -30,7 +30,6 @@ import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import {
   FILTER_COST_LABEL,
-  INACTIVE_ADVANCED_PROGRESS,
   advancedFilterBackdropClass,
   advancedFilterBodyClass,
   advancedFilterControlClass,
@@ -49,7 +48,6 @@ import {
   formatTextMatchModeSymbol,
   formatTextFilterSummary,
   parseExactListInput,
-  progressFromAdvancedSearchEvent,
   quickFilterMatchModeButtonClass,
   renderAdvancedFilterDraftSummary,
   renderAdvancedFilterCostBadge,
@@ -59,13 +57,9 @@ import {
   type FilterCostLevel,
   type TextMatchMode,
 } from "./filtering/advancedFilterShared";
-import { extractApiError, isCancelledError } from "../../utils/apiError";
+import { useCephAdminEntityListing } from "./listing/useCephAdminEntityListing";
 import { readClientJsonFromKey, writeClientJsonToKey } from "../../utils/clientStorage";
 import { formatBytes, formatNumber } from "../../utils/format";
-
-const extractError = (err: unknown): string => {
-  return extractApiError(err, "Unexpected error");
-};
 
 type ColumnId =
   | "tenant"
@@ -290,11 +284,6 @@ export default function CephAdminUsersPage() {
   const navigate = useNavigate();
   const { selectedEndpointId, selectedEndpoint, selectedEndpointAccess } = useCephAdminEndpoint();
   const canViewMetrics = Boolean(selectedEndpointAccess?.can_metrics) && (selectedEndpoint?.capabilities?.metrics !== false);
-  const [items, setItems] = useState<CephAdminRgwUser[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [advancedProgress, setAdvancedProgress] = useState(INACTIVE_ADVANCED_PROGRESS);
-  const [error, setError] = useState<string | null>(null);
   const [editingTarget, setEditingTarget] = useState<CephAdminRgwUser | null>(null);
   const [deletingTarget, setDeletingTarget] = useState<CephAdminRgwUser | null>(null);
   const [filter, setFilter] = useState("");
@@ -305,15 +294,12 @@ export default function CephAdminUsersPage() {
   const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [total, setTotal] = useState(0);
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(DEFAULT_SORT);
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
-  const requestSeqRef = useRef(0);
-  const requestAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     persistVisibleColumns(visibleColumns);
@@ -368,143 +354,21 @@ export default function CephAdminUsersPage() {
     [advancedApplied, searchValue, effectiveQuickFilterMode, canViewMetrics]
   );
 
-  useEffect(() => {
-    if (!selectedEndpointId) {
-      requestAbortRef.current?.abort();
-      requestAbortRef.current = null;
-      setItems([]);
-      setTotal(0);
-      setLoading(false);
-      setLoadingDetails(false);
-      setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
-      return;
-    }
-
-    const requestId = requestSeqRef.current + 1;
-    requestSeqRef.current = requestId;
-    requestAbortRef.current?.abort();
-    const requestAbort = new AbortController();
-    requestAbortRef.current = requestAbort;
-
-    const load = async () => {
-      setLoading(true);
-      setLoadingDetails(false);
-      setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
-      setError(null);
-      setItems([]);
-      setTotal(0);
-      try {
-        const baseParams = {
-          page,
-          page_size: pageSize,
-          search: effectiveSearchValue || undefined,
-          advanced_filter: advancedFilterParam,
-          sort_by: sort.field,
-          sort_dir: sort.direction,
-        };
-        const canUseAdvancedStream = typeof advancedFilterParam === "string" && advancedFilterParam.trim().startsWith("{");
-
-        let baseResponse;
-        if (canUseAdvancedStream) {
-          setAdvancedProgress({
-            active: true,
-            determinate: true,
-            percent: 0,
-            stage: "prepare",
-            message: "Preparing advanced search...",
-            processed: 0,
-            total: 0,
-          });
-          try {
-            baseResponse = await streamCephAdminUsers(selectedEndpointId, baseParams, {
-              signal: requestAbort.signal,
-              onProgress: (event) => {
-                if (requestId !== requestSeqRef.current || requestAbort.signal.aborted) return;
-                setAdvancedProgress(progressFromAdvancedSearchEvent(event));
-              },
-            });
-          } catch (streamErr) {
-            if (isCancelledError(streamErr)) return;
-            if (requestId !== requestSeqRef.current) return;
-            setAdvancedProgress({
-              active: true,
-              determinate: false,
-              percent: 0,
-              stage: "fallback",
-              message: "Advanced search in progress...",
-              processed: 0,
-              total: 0,
-            });
-            baseResponse = await listCephAdminUsers(selectedEndpointId, baseParams, { signal: requestAbort.signal });
-          }
-        } else {
-          baseResponse = await listCephAdminUsers(selectedEndpointId, baseParams, { signal: requestAbort.signal });
-        }
-        if (requestAbort.signal.aborted) return;
-        if (requestId !== requestSeqRef.current) return;
-
-        const baseItems = baseResponse.items ?? [];
-        setItems(baseItems);
-        setTotal(baseResponse.total ?? 0);
-        setLoading(false);
-        setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
-
-        if (includeParams.length === 0 || baseItems.length === 0) return;
-
-        setLoadingDetails(true);
-        try {
-          if (requestAbort.signal.aborted) return;
-          const detailResponse = await listCephAdminUsers(selectedEndpointId, {
-            page,
-            page_size: pageSize,
-            search: effectiveSearchValue || undefined,
-            advanced_filter: advancedFilterParam,
-            sort_by: sort.field,
-            sort_dir: sort.direction,
-            include: includeParams,
-          }, { signal: requestAbort.signal });
-          if (requestAbort.signal.aborted) return;
-          if (requestId !== requestSeqRef.current) return;
-
-          const detailsByKey = new Map((detailResponse.items ?? []).map((user) => [rowKey(user), user]));
-          setItems(baseItems.map((user) => detailsByKey.get(rowKey(user)) ?? user));
-        } finally {
-          if (requestId === requestSeqRef.current) {
-            setLoadingDetails(false);
-          }
-        }
-      } catch (err) {
-        if (isCancelledError(err)) return;
-        if (requestId !== requestSeqRef.current) return;
-        setError(extractError(err));
-        setItems([]);
-        setTotal(0);
-        setLoading(false);
-        setLoadingDetails(false);
-        setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
-      }
-    };
-
-    void load();
-  }, [
-    selectedEndpointId,
-    page,
-    pageSize,
-    effectiveSearchValue,
-    searchValue,
-    advancedFilterParam,
-    sort.field,
-    sort.direction,
-    includeParams,
-    reloadNonce,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      requestAbortRef.current?.abort();
-      requestAbortRef.current = null;
-    };
-  }, []);
+  const { items, total, loading, loadingDetails, advancedProgress, error, updateEntity } =
+    useCephAdminEntityListing<CephAdminRgwUser>({
+      endpointId: selectedEndpointId,
+      page,
+      pageSize,
+      search: effectiveSearchValue,
+      advancedFilter: advancedFilterParam,
+      sortBy: sort.field,
+      sortDirection: sort.direction,
+      includes: includeParams,
+      reloadNonce,
+      listEntities: listCephAdminUsers,
+      streamEntities: streamCephAdminUsers,
+      entityKey: rowKey,
+    });
 
   const toggleColumn = (id: ColumnId) => {
     setVisibleColumns((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -887,26 +751,18 @@ export default function CephAdminUsersPage() {
   };
 
   const applyUpdatedUser = (updated: CephAdminRgwUserDetail) => {
-    setItems((prev) =>
-      prev.map((user) => {
-        const sameUid = user.uid === updated.uid;
-        const sameTenant = (user.tenant ?? null) === (updated.tenant ?? null);
-        if (!sameUid || !sameTenant) {
-          return user;
-        }
-        return {
-          ...user,
-          account_id: updated.account_id ?? null,
-          account_name: updated.account_name ?? null,
-          full_name: updated.display_name ?? null,
-          email: updated.email ?? null,
-          suspended: updated.suspended ?? null,
-          max_buckets: updated.max_buckets ?? null,
-          quota_max_size_bytes: updated.quota?.max_size_bytes ?? null,
-          quota_max_objects: updated.quota?.max_objects ?? null,
-        };
-      })
-    );
+    const updatedKey = String(updated.tenant ?? "") + ":" + updated.uid;
+    updateEntity(updatedKey, (user) => ({
+      ...user,
+      account_id: updated.account_id ?? null,
+      account_name: updated.account_name ?? null,
+      full_name: updated.display_name ?? null,
+      email: updated.email ?? null,
+      suspended: updated.suspended ?? null,
+      max_buckets: updated.max_buckets ?? null,
+      quota_max_size_bytes: updated.quota?.max_size_bytes ?? null,
+      quota_max_objects: updated.quota?.max_objects ?? null,
+    }));
   };
 
   type ColumnDef = DataTableColumn<CephAdminRgwUser, SortField>;
