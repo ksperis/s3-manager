@@ -12,7 +12,7 @@ import {
 import {
   getCephAdminBucketAcl,
   updateCephAdminBucketAcl,
-} from "../../../api/cephAdmin";
+} from "../../../api/cephAdminBuckets";
 import { extractApiError } from "../../../utils/apiError";
 import { stableBucketJsonSignature } from "./bucketFeatureState";
 

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import type { ColumnId } from "./bucketOpsListState";
 import {
   buildBucketOpsDataColumns,

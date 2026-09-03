@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CephAdminBucket,
   ListCephAdminBucketsParams,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import type { BucketIndexCheckTarget } from "../../api/bucketIndexCheck";
 import type { BucketUiTagDefinition } from "../../api/bucketUiTags";
 import { triggerDownload } from "../../utils/download";

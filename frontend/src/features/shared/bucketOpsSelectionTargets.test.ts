@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   CephAdminBucket,
   ListCephAdminBucketsParams,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import { resolveBucketOpsSelectionTargets } from "./bucketOpsSelectionTargets";
 
 describe("resolveBucketOpsSelectionTargets", () => {

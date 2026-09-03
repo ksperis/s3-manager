@@ -29,7 +29,7 @@ import {
   updateCephAdminBucketObjectLock,
   updateCephAdminBucketPublicAccessBlock,
   updateCephAdminBucketQuota,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import {
   deleteStorageOpsBucketCors,
   deleteStorageOpsBucketLifecycle,

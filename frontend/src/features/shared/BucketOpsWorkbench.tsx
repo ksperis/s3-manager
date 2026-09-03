@@ -24,7 +24,7 @@ import {
   backupCephAdminBucketConfigs,
   CephAdminBucket,
   type CephAdminBucketConfigBackupFeature,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import {
   STORAGE_OPS_SCOPE_ID,
   type StorageOpsBucket,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import {
   areStringMapEqual,
   buildBucketUiTagKey,

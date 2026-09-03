@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import { tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
 import UiActionMenu, { type UiActionMenuSection } from "../../components/ui/UiActionMenu";
 import type { BucketAdminOpsKind } from "../cephAdmin/CephAdminAdminOpsModal";

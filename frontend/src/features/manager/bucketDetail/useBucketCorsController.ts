@@ -13,7 +13,7 @@ import {
   deleteCephAdminBucketCors,
   getCephAdminBucketCors,
   putCephAdminBucketCors,
-} from "../../../api/cephAdmin";
+} from "../../../api/cephAdminBuckets";
 import { extractApiError } from "../../../utils/apiError";
 import {
   jsonTextSignature,

@@ -12,7 +12,7 @@ import type {
   CephAdminBucketsStreamProgress,
   ListCephAdminBucketsParams,
   PaginatedCephAdminBucketsResponse,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 
 type BucketSort = {
   field: string;

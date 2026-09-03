@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CephAdminBucket,
   ListCephAdminBucketsParams,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import type { ActionProgressState } from "./actionProgress";
 import type { TextMatchMode } from "./bucketOpsAdvancedFilterModel";
 import { loadBucketOpsFilteredBuckets } from "./bucketOpsFilteredBucketLoader";

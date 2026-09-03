@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   CephAdminBucket,
   ListCephAdminBucketsParams,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import { prepareBucketOpsSelectionExport } from "./bucketOpsSelectionExport";
 
 type ExportInput = Parameters<typeof prepareBucketOpsSelectionExport>[0];

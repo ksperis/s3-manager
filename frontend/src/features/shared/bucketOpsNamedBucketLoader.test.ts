@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { describe, expect, it, vi } from "vitest";
-import type { CephAdminBucket, ListCephAdminBucketsParams } from "../../api/cephAdmin";
+import type { CephAdminBucket, ListCephAdminBucketsParams } from "../../api/cephAdminBuckets";
 import { loadBucketOpsBucketsByNames } from "./bucketOpsNamedBucketLoader";
 
 const bucket = (name: string): CephAdminBucket => ({ name });

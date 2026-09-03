@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { CephAdminBucketConfigBackupFeature } from "../../api/cephAdmin";
+import type { CephAdminBucketConfigBackupFeature } from "../../api/cephAdminBuckets";
 import {
   readSessionJsonFromKey,
   removeSessionStorageKey,

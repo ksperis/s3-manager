@@ -11,7 +11,7 @@ vi.mock("../../../../api/buckets", () => ({
   getBucketStats: (...args: unknown[]) => apiMocks.getBucketStats(...args),
 }));
 
-vi.mock("../../../../api/cephAdmin", () => ({
+vi.mock("../../../../api/cephAdminBuckets", () => ({
   listCephAdminBuckets: (...args: unknown[]) =>
     apiMocks.listCephAdminBuckets(...args),
 }));

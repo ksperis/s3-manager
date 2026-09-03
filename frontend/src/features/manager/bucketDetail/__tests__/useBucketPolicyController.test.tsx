@@ -21,7 +21,7 @@ vi.mock("../../../../api/buckets", () => ({
   putBucketPolicy: (...args: unknown[]) => apiMocks.putBucketPolicy(...args),
 }));
 
-vi.mock("../../../../api/cephAdmin", () => ({
+vi.mock("../../../../api/cephAdminBuckets", () => ({
   deleteCephAdminBucketPolicy: (...args: unknown[]) =>
     apiMocks.deleteCephAdminBucketPolicy(...args),
   getCephAdminBucketPolicy: (...args: unknown[]) =>

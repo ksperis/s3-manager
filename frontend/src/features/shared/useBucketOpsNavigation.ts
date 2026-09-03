@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import {
   buildBucketDetailLocationState,
   loadBucketListReturnContext,

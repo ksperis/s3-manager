@@ -4,7 +4,7 @@
  */
 import { useRef } from "react";
 import type { Ref, RefObject } from "react";
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {

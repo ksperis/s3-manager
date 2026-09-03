@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { streamCephAdminBuckets } from "./cephAdmin";
+import { streamCephAdminBuckets } from "./cephAdminBuckets";
 import { streamCephAdminAccounts } from "./cephAdminAccounts";
 import { streamCephAdminUsers } from "./cephAdminUsers";
 

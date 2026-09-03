@@ -68,8 +68,8 @@ vi.mock("../../../api/buckets", async () => {
   };
 });
 
-vi.mock("../../../api/cephAdmin", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/cephAdmin")>("../../../api/cephAdmin");
+vi.mock("../../../api/cephAdminBuckets", async () => {
+  const actual = await vi.importActual<typeof import("../../../api/cephAdminBuckets")>("../../../api/cephAdminBuckets");
   return {
     ...actual,
     listCephAdminBuckets: (...args: unknown[]) => listCephAdminBucketsMock(...args),

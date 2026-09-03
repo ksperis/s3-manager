@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { describe, expect, it } from "vitest";
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import {
   buildBucketExportColumns,
   buildBucketSelectionJsonPayload,

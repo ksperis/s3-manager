@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   type CephAdminBucket,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import {
   listCephAdminAccounts,
   type CephAdminRgwAccount,

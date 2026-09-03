@@ -20,7 +20,7 @@ vi.mock("../../../../api/buckets", () => ({
     apiMocks.updateBucketObjectLock(...args),
 }));
 
-vi.mock("../../../../api/cephAdmin", () => ({
+vi.mock("../../../../api/cephAdminBuckets", () => ({
   getCephAdminBucketObjectLock: (...args: unknown[]) =>
     apiMocks.getCephAdminBucketObjectLock(...args),
   setCephAdminBucketVersioning: (...args: unknown[]) =>

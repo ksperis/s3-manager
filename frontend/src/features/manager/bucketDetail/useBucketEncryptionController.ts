@@ -13,7 +13,7 @@ import {
   deleteCephAdminBucketEncryption,
   getCephAdminBucketEncryption,
   putCephAdminBucketEncryption,
-} from "../../../api/cephAdmin";
+} from "../../../api/cephAdminBuckets";
 import { extractApiError } from "../../../utils/apiError";
 import {
   jsonTextSignature,

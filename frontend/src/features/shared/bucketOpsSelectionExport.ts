@@ -5,7 +5,7 @@
 import type {
   CephAdminBucket,
   ListCephAdminBucketsParams,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import type { SelectionExportFormat } from "./bucketBulkOperationsModel";
 import {
   buildBucketExportColumns,

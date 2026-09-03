@@ -8,7 +8,7 @@ import Modal from "../../components/Modal";
 import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
-import type { CephAdminBucketConfigBackupFeature } from "../../api/cephAdmin";
+import type { CephAdminBucketConfigBackupFeature } from "../../api/cephAdminBuckets";
 import { extractApiError } from "../../utils/apiError";
 
 export type BucketConfigBackupFeatureOption = {

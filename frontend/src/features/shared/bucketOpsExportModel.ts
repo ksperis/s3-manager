@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import { formatBytes, formatNumber } from "../../utils/format";
 import type { FeatureKey } from "./bucketOpsAdvancedFilterModel";
 import {

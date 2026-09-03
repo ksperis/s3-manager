@@ -14,7 +14,7 @@ import {
   getCephAdminBucketObjectLock,
   setCephAdminBucketVersioning,
   updateCephAdminBucketObjectLock,
-} from "../../../api/cephAdmin";
+} from "../../../api/cephAdminBuckets";
 import { extractApiError } from "../../../utils/apiError";
 import { stableBucketJsonSignature } from "./bucketFeatureState";
 

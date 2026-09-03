@@ -12,7 +12,7 @@ import {
 import {
   getCephAdminBucketPublicAccessBlock,
   updateCephAdminBucketPublicAccessBlock,
-} from "../../../api/cephAdmin";
+} from "../../../api/cephAdminBuckets";
 import { extractApiError } from "../../../utils/apiError";
 import {
   normalizePublicAccessDraft,

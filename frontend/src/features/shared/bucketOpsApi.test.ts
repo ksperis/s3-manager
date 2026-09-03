@@ -3,7 +3,7 @@ import {
   getCephAdminBucketProperties,
   listCephAdminBuckets,
   updateCephAdminBucketQuota,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import {
   getStorageOpsBucketProperties,
   listStorageOpsBuckets,

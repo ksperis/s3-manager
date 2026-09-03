@@ -19,7 +19,7 @@ import {
   buildBucketListingQuery,
   shouldUsePostBucketListing,
 } from "./bucketListingTransport";
-import { listCephAdminBuckets, refreshCephAdminBucketListingCache } from "./cephAdmin";
+import { listCephAdminBuckets, refreshCephAdminBucketListingCache } from "./cephAdminBuckets";
 import { listStorageOpsBuckets, refreshStorageOpsBucketListingCache } from "./storageOps";
 
 const emptyResponse = {

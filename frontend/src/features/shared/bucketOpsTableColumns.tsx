@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { ReactNode } from "react";
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import { formatBytes, formatNumber } from "../../utils/format";
 import type { FeatureKey } from "./bucketOpsAdvancedFilterModel";

@@ -5,7 +5,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { BucketProperties, CephAdminBucket } from "../../api/cephAdmin";
+import type { BucketProperties, CephAdminBucket } from "../../api/cephAdminBuckets";
 import { useBucketOpsTooltips } from "./useBucketOpsTooltips";
 
 function createDeferred<T>() {

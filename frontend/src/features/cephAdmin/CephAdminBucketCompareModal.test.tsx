@@ -5,15 +5,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CephAdminBucketCompareResult,
   PaginatedCephAdminBucketsResponse,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import type { CephAdminEndpoint } from "../../api/cephAdminEndpoints";
 import CephAdminBucketCompareModal from "./CephAdminBucketCompareModal";
 
 const listCephAdminBucketsMock = vi.fn<(...args: unknown[]) => Promise<PaginatedCephAdminBucketsResponse>>();
 const compareCephAdminBucketPairMock = vi.fn();
 
-vi.mock("../../api/cephAdmin", async () => {
-  const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
+vi.mock("../../api/cephAdminBuckets", async () => {
+  const actual = await vi.importActual<typeof import("../../api/cephAdminBuckets")>("../../api/cephAdminBuckets");
   return {
     ...actual,
     listCephAdminBuckets: (...args: unknown[]) => listCephAdminBucketsMock(...args),

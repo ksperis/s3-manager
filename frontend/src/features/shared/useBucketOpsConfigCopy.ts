@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CephAdminBucket,
   ListCephAdminBucketsParams,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import type { ActionProgressState } from "./actionProgress";
 import {
   loadBulkConfigClipboard,

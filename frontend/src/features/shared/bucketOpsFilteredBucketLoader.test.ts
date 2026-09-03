@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import { loadBucketOpsFilteredBuckets } from "./bucketOpsFilteredBucketLoader";
 
 const bucket = (name: string): CephAdminBucket => ({ name });

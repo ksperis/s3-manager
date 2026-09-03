@@ -46,7 +46,7 @@ import type {
   BucketListingCacheRefreshResponse,
   ListCephAdminBucketsParams,
   PaginatedCephAdminBucketsResponse,
-} from "./cephAdmin";
+} from "./cephAdminBuckets";
 import {
   buildBucketListingQuery,
   buildBucketListingRequestBody,

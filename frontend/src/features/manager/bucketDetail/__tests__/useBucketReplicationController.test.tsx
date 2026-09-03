@@ -20,7 +20,7 @@ vi.mock("../../../../api/buckets", () => ({
     apiMocks.putBucketReplication(...args),
 }));
 
-vi.mock("../../../../api/cephAdmin", () => ({
+vi.mock("../../../../api/cephAdminBuckets", () => ({
   deleteCephAdminBucketReplication: (...args: unknown[]) =>
     apiMocks.deleteCephAdminBucketReplication(...args),
   getCephAdminBucketReplication: (...args: unknown[]) =>

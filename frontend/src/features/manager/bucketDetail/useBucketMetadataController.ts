@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { S3AccountSelector } from "../../../api/accountParams";
 import { getBucketStats, type Bucket } from "../../../api/buckets";
-import { listCephAdminBuckets } from "../../../api/cephAdmin";
+import { listCephAdminBuckets } from "../../../api/cephAdminBuckets";
 import { extractApiError } from "../../../utils/apiError";
 
 type UseBucketMetadataControllerOptions = {

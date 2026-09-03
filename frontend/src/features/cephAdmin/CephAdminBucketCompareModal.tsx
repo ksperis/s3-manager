@@ -17,7 +17,7 @@ import {
   compareCephAdminBucketPair,
   listCephAdminBuckets,
   type CephAdminBucketCompareConfigFeature,
-} from "../../api/cephAdmin";
+} from "../../api/cephAdminBuckets";
 import type { CephAdminEndpoint } from "../../api/cephAdminEndpoints";
 import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 import {

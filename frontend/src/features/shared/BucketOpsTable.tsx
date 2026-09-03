@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { ReactNode } from "react";
-import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { CephAdminBucket } from "../../api/cephAdminBuckets";
 import type { ListTableStatus } from "../../components/list/listTableStatus";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
