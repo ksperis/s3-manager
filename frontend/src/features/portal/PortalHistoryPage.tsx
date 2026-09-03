@@ -20,7 +20,7 @@ import {
   fetchPortalServerAccessLogPage,
   type PortalServerAccessLogEntry,
   type PortalServerAccessRequesterIdentity,
-} from "../../api/portal";
+} from "../../api/portalActivity";
 import { extractApiError } from "../../utils/apiError";
 import { triggerBlobDownload } from "../../utils/download";
 import { formatBytes } from "../../utils/format";

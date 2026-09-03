@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   anchorClick: vi.fn(),
 }));
 
-vi.mock("../../api/portal", () => ({
+vi.mock("../../api/portalActivity", () => ({
   fetchPortalServerAccessLogPage: (...args: unknown[]) => mocks.fetchPortalServerAccessLogPage(...args),
   downloadPortalServerAccessRawLogs: (...args: unknown[]) => mocks.downloadPortalServerAccessRawLogs(...args),
 }));

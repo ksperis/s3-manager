@@ -25,11 +25,14 @@ vi.mock("./PortalAccountContext", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
-  fetchPortalActivity: (...args: unknown[]) => mocks.fetchPortalActivityMock(...args),
-  fetchPortalAlerts: (...args: unknown[]) => mocks.fetchPortalAlertsMock(...args),
   fetchPortalCollaborators: (...args: unknown[]) => mocks.fetchPortalCollaboratorsMock(...args),
   fetchPortalState: (...args: unknown[]) => mocks.fetchPortalStateMock(...args),
   listPortalStorageSpaces: (...args: unknown[]) => mocks.listPortalStorageSpacesMock(...args),
+}));
+
+vi.mock("../../api/portalActivity", () => ({
+  fetchPortalActivity: (...args: unknown[]) => mocks.fetchPortalActivityMock(...args),
+  fetchPortalAlerts: (...args: unknown[]) => mocks.fetchPortalAlertsMock(...args),
 }));
 
 vi.mock("../../api/portalUsage", () => ({

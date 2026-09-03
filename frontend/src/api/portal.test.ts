@@ -23,12 +23,8 @@ import {
 } from "./portalRequests";
 
 import {
-  fetchPortalActivity,
-  fetchPortalAlerts,
   fetchPortalCollaborators,
   fetchPortalCollaboratorAccessReview,
-  downloadPortalServerAccessRawLogs,
-  fetchPortalServerAccessLogPage,
   grantPortalStorageSpaceShare,
   createPortalStorageSpace,
   createPortalStorageSpacePublicLink,
@@ -56,6 +52,12 @@ import {
   fetchPortalAccessKeysState,
   updatePortalAccessKeyStatus,
 } from "./portalAccessKeys";
+import {
+  downloadPortalServerAccessRawLogs,
+  fetchPortalActivity,
+  fetchPortalAlerts,
+  fetchPortalServerAccessLogPage,
+} from "./portalActivity";
 import {
   fetchPortalStorageSpaceUsageStats,
   fetchPortalUsageHistoryTrends,
