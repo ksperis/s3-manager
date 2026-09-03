@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   fetchPortalStateMock: vi.fn(),
   fetchPortalUsageMock: vi.fn(),
   fetchPortalUsageTrendsMock: vi.fn(),
+  fetchPortalTrafficMock: vi.fn(),
   listPortalStorageSpacesMock: vi.fn(),
 }));
 
@@ -28,9 +29,13 @@ vi.mock("../../api/portal", () => ({
   fetchPortalAlerts: (...args: unknown[]) => mocks.fetchPortalAlertsMock(...args),
   fetchPortalCollaborators: (...args: unknown[]) => mocks.fetchPortalCollaboratorsMock(...args),
   fetchPortalState: (...args: unknown[]) => mocks.fetchPortalStateMock(...args),
+  listPortalStorageSpaces: (...args: unknown[]) => mocks.listPortalStorageSpacesMock(...args),
+}));
+
+vi.mock("../../api/portalUsage", () => ({
   fetchPortalUsage: (...args: unknown[]) => mocks.fetchPortalUsageMock(...args),
   fetchPortalUsageTrends: (...args: unknown[]) => mocks.fetchPortalUsageTrendsMock(...args),
-  listPortalStorageSpaces: (...args: unknown[]) => mocks.listPortalStorageSpacesMock(...args),
+  fetchPortalTraffic: (...args: unknown[]) => mocks.fetchPortalTrafficMock(...args),
 }));
 
 vi.mock("../../api/healthchecks", () => ({
@@ -54,6 +59,7 @@ describe("usePortalWorkspaceData", () => {
     mocks.fetchPortalStateMock.mockResolvedValue({});
     mocks.fetchPortalUsageMock.mockResolvedValue(null);
     mocks.fetchPortalUsageTrendsMock.mockResolvedValue(null);
+    mocks.fetchPortalTrafficMock.mockResolvedValue(null);
     mocks.listPortalStorageSpacesMock.mockResolvedValue([]);
   });
 

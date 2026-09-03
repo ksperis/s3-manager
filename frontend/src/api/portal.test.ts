@@ -38,10 +38,6 @@ import {
   fetchPortalStorageSpaceObjectDetail,
   fetchPortalStorageSpaceObjectVersions,
   fetchPortalStorageSpaceAccessSummary,
-  fetchPortalStorageSpaceUsageStats,
-  fetchPortalUsageHistoryTrends,
-  fetchPortalUsageTrends,
-  getPortalUsageStatsAggregate,
   importPortalStorageSpace,
   listPortalShareCandidates,
   listPortalStorageSpaceShareCandidates,
@@ -60,6 +56,12 @@ import {
   fetchPortalAccessKeysState,
   updatePortalAccessKeyStatus,
 } from "./portalAccessKeys";
+import {
+  fetchPortalStorageSpaceUsageStats,
+  fetchPortalUsageHistoryTrends,
+  fetchPortalUsageTrends,
+  getPortalUsageStatsAggregate,
+} from "./portalUsage";
 
 describe("portal storage spaces api", () => {
   beforeEach(() => {

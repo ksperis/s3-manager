@@ -25,9 +25,12 @@ vi.mock("../../api/portalRequests", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
-  fetchPortalUsage: mocks.fetchPortalUsage,
   fetchPortalState: mocks.fetchPortalState,
   fetchPortalCollaborators: mocks.fetchPortalCollaborators,
+}));
+
+vi.mock("../../api/portalUsage", () => ({
+  fetchPortalUsage: mocks.fetchPortalUsage,
 }));
 
 const pendingRequest: PortalAdminRequest = {

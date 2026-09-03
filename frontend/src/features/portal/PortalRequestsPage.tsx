@@ -14,10 +14,9 @@ import {
 import {
   fetchPortalCollaborators,
   fetchPortalState,
-  fetchPortalUsage,
   type PortalCollaborator,
-  type PortalUsage,
 } from "../../api/portal";
+import { fetchPortalUsage, type PortalUsage } from "../../api/portalUsage";
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";

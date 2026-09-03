@@ -5,7 +5,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { HealthCheckStatus } from "../../api/healthchecks";
-import type { PortalUsageStorageSpace } from "../../api/portal";
+import type { PortalUsageStorageSpace } from "../../api/portalUsage";
 import type { ManagerUsageTrendBaseline } from "../../api/stats";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageBanner from "../../components/PageBanner";

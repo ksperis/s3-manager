@@ -9,7 +9,7 @@ import {
   fetchPortalStorageSpaceUsageStats,
   fetchPortalTraffic,
   type PortalStorageSpaceUsageStatsSnapshot,
-} from "../../api/portal";
+} from "../../api/portalUsage";
 import type { ManagerTrafficStats, TrafficWindow } from "../../api/stats";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { MetricsCard, MetricsEmptyState, MetricsTile } from "../../components/MetricsCard";

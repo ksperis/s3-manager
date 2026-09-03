@@ -135,7 +135,7 @@ vi.mock("../../api/billing", () => ({
   getPortalBillingMe: (...args: unknown[]) => mocks.billingMock(...args),
 }));
 
-vi.mock("../../api/portal", () => ({
+vi.mock("../../api/portalUsage", () => ({
   fetchPortalUsageHistoryTrends: (...args: unknown[]) => mocks.usageHistoryMock(...args),
   getPortalUsageStatsAggregate: (...args: unknown[]) => mocks.usageStatsMock(...args),
 }));

@@ -183,9 +183,7 @@ vi.mock("../../api/portal", () => ({
   createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
   deletePortalStorageSpace: (...args: unknown[]) => mocks.deleteStorageSpaceMock(...args),
   fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
-  fetchPortalStorageSpaceUsageStats: (...args: unknown[]) => mocks.fetchUsageStatsMock(...args),
   fetchPortalStorageSpaceSettings: (...args: unknown[]) => mocks.fetchStorageSpaceSettingsMock(...args),
-  fetchPortalTraffic: (...args: unknown[]) => mocks.fetchTrafficMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
   listPortalStorageSpacePublicLinks: (...args: unknown[]) => mocks.listPublicLinksMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
@@ -201,6 +199,11 @@ vi.mock("../../api/portal", () => ({
   updatePortalStorageSpaceIcon: (...args: unknown[]) => mocks.updateStorageSpaceIconMock(...args),
   uploadPortalStorageSpaceIcon: (...args: unknown[]) => mocks.uploadStorageSpaceIconMock(...args),
   updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
+}));
+
+vi.mock("../../api/portalUsage", () => ({
+  fetchPortalStorageSpaceUsageStats: (...args: unknown[]) => mocks.fetchUsageStatsMock(...args),
+  fetchPortalTraffic: (...args: unknown[]) => mocks.fetchTrafficMock(...args),
 }));
 
 vi.mock("../../api/portalRequests", () => ({

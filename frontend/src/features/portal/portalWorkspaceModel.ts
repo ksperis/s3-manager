@@ -9,8 +9,8 @@ import type {
   PortalStorageSpaceShareScope,
   PortalStorageSpaceSummary,
   PortalStorageSpaceVisibility,
-  PortalUsage,
 } from "../../api/portal";
+import type { PortalUsage } from "../../api/portalUsage";
 import type { UiLanguage } from "../../components/language";
 import type { StorageSpaceIconDescriptor } from "../../api/storageSpaceIcons";
 import { translate, type I18nMessage } from "../../i18n";

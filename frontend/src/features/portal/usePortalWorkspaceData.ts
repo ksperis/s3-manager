@@ -11,16 +11,18 @@ import {
   fetchPortalCollaborators,
   fetchPortalState,
   listPortalStorageSpaces,
-  fetchPortalTraffic,
-  fetchPortalUsage,
-  fetchPortalUsageTrends,
   type PortalActivityItem,
   type PortalAlert,
   type PortalCollaboratorsResponse,
   type PortalStorageSpaceSummary,
   type PortalState,
-  type PortalUsage,
 } from "../../api/portal";
+import {
+  fetchPortalTraffic,
+  fetchPortalUsage,
+  fetchPortalUsageTrends,
+  type PortalUsage,
+} from "../../api/portalUsage";
 import { WORKSPACE_TRAFFIC_TREND_WINDOWS } from "../../components/workspaceDashboardKpis";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";

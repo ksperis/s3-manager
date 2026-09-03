@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getPortalBillingMe, type BillingSubjectDetail } from "../../api/billing";
 import type { BucketUsageStatsAggregate } from "../../api/bucketUsageStats";
 import type { HealthCheckStatus } from "../../api/healthchecks";
-import { fetchPortalUsageHistoryTrends, getPortalUsageStatsAggregate } from "../../api/portal";
+import { fetchPortalUsageHistoryTrends, getPortalUsageStatsAggregate } from "../../api/portalUsage";
 import type { TrafficWindow } from "../../api/stats";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "../../api/usageHistory";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
