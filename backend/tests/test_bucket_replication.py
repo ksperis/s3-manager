@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 from app.db import S3Account, StorageEndpoint
 from app.main import app
 from app.models.bucket import BucketReplicationConfiguration
-from app.routers.ceph_admin import bucket_config as ceph_admin_buckets_router
+from app.routers.ceph_admin import bucket_config_common as ceph_admin_bucket_config_common
+from app.routers.ceph_admin import bucket_config_rules as ceph_admin_buckets_router
 from app.routers.manager import buckets as manager_buckets_router
 from app.services.bucket_configuration_service import BucketConfigurationService
 
@@ -179,7 +180,7 @@ def test_ceph_admin_put_bucket_replication_invalidates_listing_cache(monkeypatch
     invalidated: list[int] = []
 
     monkeypatch.setattr(
-        ceph_admin_buckets_router,
+        ceph_admin_bucket_config_common,
         "invalidate_bucket_listing_cache",
         lambda endpoint_id: invalidated.append(endpoint_id),
     )
@@ -238,7 +239,7 @@ def test_ceph_admin_delete_bucket_replication_invalidates_listing_cache(monkeypa
     deleted: dict[str, str] = {}
 
     monkeypatch.setattr(
-        ceph_admin_buckets_router,
+        ceph_admin_bucket_config_common,
         "invalidate_bucket_listing_cache",
         lambda endpoint_id: invalidated.append(endpoint_id),
     )

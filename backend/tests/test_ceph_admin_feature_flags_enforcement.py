@@ -5,9 +5,12 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from app.models.bucket import BucketEncryptionConfiguration
 from app.routers.ceph_admin import accounts as accounts_router
 from app.routers.ceph_admin import account_profiles as account_profiles_router
-from app.routers.ceph_admin import bucket_config as bucket_config_router
+from app.routers.ceph_admin import bucket_config_access as bucket_config_access_router
+from app.routers.ceph_admin import bucket_config_core as bucket_config_core_router
+from app.routers.ceph_admin import bucket_config_rules as bucket_config_rules_router
 from app.routers.ceph_admin import bucket_tools as bucket_tools_router
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import user_keys as user_keys_router
@@ -184,12 +187,16 @@ def test_ceph_admin_bucket_encryption_requires_sse_feature(monkeypatch):
     class _FakeBucketsService:
         def get_bucket_encryption(self, bucket_name, account):
             calls["get"] += 1
-            return bucket_config_router.BucketEncryptionConfiguration(rules=[])
+            return BucketEncryptionConfiguration(rules=[])
 
-    monkeypatch.setattr(bucket_config_router, "BucketConfigurationService", lambda: _FakeBucketsService())
+    monkeypatch.setattr(
+        bucket_config_core_router,
+        "BucketConfigurationService",
+        lambda: _FakeBucketsService(),
+    )
 
     with pytest.raises(HTTPException) as exc:
-        bucket_config_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
+        bucket_config_core_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
 
     assert exc.value.status_code == 403
     assert calls["get"] == 0
@@ -200,28 +207,43 @@ def test_ceph_admin_bucket_encryption_allows_when_sse_feature_enabled(monkeypatc
 
     class _FakeBucketsService:
         def get_bucket_encryption(self, bucket_name, account):
-            return bucket_config_router.BucketEncryptionConfiguration(
+            return BucketEncryptionConfiguration(
                 rules=[{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
             )
 
-    monkeypatch.setattr(bucket_config_router, "BucketConfigurationService", lambda: _FakeBucketsService())
+    monkeypatch.setattr(
+        bucket_config_core_router,
+        "BucketConfigurationService",
+        lambda: _FakeBucketsService(),
+    )
 
-    payload = bucket_config_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
+    payload = bucket_config_core_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
 
     assert payload.rules == [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
 
 
-def test_ceph_admin_bucket_config_routes_are_owned_by_dedicated_router():
-    assert len(bucket_config_router.router.routes) == 37
+def test_ceph_admin_bucket_config_routes_are_owned_by_dedicated_router() -> None:
+    feature_routers = (
+        bucket_config_core_router.router,
+        bucket_config_access_router.router,
+        bucket_config_rules_router.router,
+    )
+    feature_modules = {
+        "app.routers.ceph_admin.bucket_config_core",
+        "app.routers.ceph_admin.bucket_config_access",
+        "app.routers.ceph_admin.bucket_config_rules",
+    }
+    assert sum(len(router.routes) for router in feature_routers) == 37
     assert all(
-        route.endpoint.__module__ == "app.routers.ceph_admin.bucket_config"
-        for route in bucket_config_router.router.routes
+        route.endpoint.__module__ in feature_modules
+        for router in feature_routers
+        for route in router.routes
     )
     bucket_routes = effective_routes(buckets_router.router)
     included_config_routes = [
         route
         for route in bucket_routes
-        if route.endpoint.__module__ == "app.routers.ceph_admin.bucket_config"
+        if route.endpoint.__module__ in feature_modules
     ]
     assert len(included_config_routes) == 37
     assert len(bucket_tools_router.router.routes) == 4

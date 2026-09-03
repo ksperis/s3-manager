@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from app.models.bucket import BucketQuotaUpdate
-from app.routers.ceph_admin import bucket_config as buckets_router
+from app.routers.ceph_admin import bucket_config_core as buckets_router
 
 
 class _FakeRGWAdmin:

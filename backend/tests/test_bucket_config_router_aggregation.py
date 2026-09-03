@@ -9,6 +9,12 @@ from app.routers import (
     browser_bucket_config_core,
     browser_bucket_config_rules,
 )
+from app.routers.ceph_admin import (
+    bucket_config as ceph_admin_bucket_config,
+    bucket_config_access as ceph_admin_bucket_config_access,
+    bucket_config_core as ceph_admin_bucket_config_core,
+    bucket_config_rules as ceph_admin_bucket_config_rules,
+)
 from app.routers.manager import (
     bucket_config as manager_bucket_config,
     bucket_config_access as manager_bucket_config_access,
@@ -59,3 +65,21 @@ def test_manager_bucket_config_router_aggregates_every_feature_family() -> None:
     assert included_routers == feature_routers
     assert sum(len(router.routes) for router in feature_routers) == 36
     assert len(expected_operations) == 36
+
+
+def test_ceph_admin_bucket_config_router_aggregates_every_feature_family() -> None:
+    feature_routers = (
+        ceph_admin_bucket_config_core.router,
+        ceph_admin_bucket_config_access.router,
+        ceph_admin_bucket_config_rules.router,
+    )
+    expected_operations = set().union(
+        *(_route_operations(router) for router in feature_routers)
+    )
+    included_routers = tuple(
+        route.original_router for route in ceph_admin_bucket_config.router.routes
+    )
+
+    assert included_routers == feature_routers
+    assert sum(len(router.routes) for router in feature_routers) == 37
+    assert len(expected_operations) == 37
