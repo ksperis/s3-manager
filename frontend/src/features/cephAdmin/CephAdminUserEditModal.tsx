@@ -6,18 +6,20 @@ import { useEffect, useMemo, useState } from "react";
 import { cx, uiDataTableClass, uiPanelMutedClass, uiTableContainerClass } from "../../components/ui/styles";
 import {
   CephAdminEntityMetrics,
-  CephAdminRgwAccessKey,
-  CephAdminRgwGeneratedAccessKey,
   CephAdminRgwUserDetail,
   UpdateCephAdminUserPayload,
-  createCephAdminUserKey,
-  deleteCephAdminUserKey,
   getCephAdminUserDetail,
   getCephAdminUserMetrics,
-  listCephAdminUserKeys,
   updateCephAdminUserConfig,
-  updateCephAdminUserKeyStatus,
 } from "../../api/cephAdmin";
+import {
+  type CephAdminRgwAccessKey,
+  type CephAdminRgwGeneratedAccessKey,
+  createCephAdminUserKey,
+  deleteCephAdminUserKey,
+  listCephAdminUserKeys,
+  updateCephAdminUserKeyStatus,
+} from "../../api/cephAdminUserKeys";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import WorkflowPage from "../../components/WorkflowPage";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";

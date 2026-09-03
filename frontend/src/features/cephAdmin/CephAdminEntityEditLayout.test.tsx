@@ -12,15 +12,22 @@ const createCephAdminUserKeyMock = vi.fn();
 const deleteCephAdminUserKeyMock = vi.fn();
 const listCephAdminUserKeysMock = vi.fn();
 
+vi.mock("../../api/cephAdminUserKeys", async () => {
+  const actual = await vi.importActual<typeof import("../../api/cephAdminUserKeys")>("../../api/cephAdminUserKeys");
+  return {
+    ...actual,
+    createCephAdminUserKey: (...args: unknown[]) => createCephAdminUserKeyMock(...args),
+    deleteCephAdminUserKey: (...args: unknown[]) => deleteCephAdminUserKeyMock(...args),
+    listCephAdminUserKeys: (...args: unknown[]) => listCephAdminUserKeysMock(...args),
+  };
+});
+
 vi.mock("../../api/cephAdmin", async () => {
   const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
   return {
     ...actual,
     getCephAdminAccountDetail: (...args: unknown[]) => getCephAdminAccountDetailMock(...args),
     getCephAdminUserDetail: (...args: unknown[]) => getCephAdminUserDetailMock(...args),
-    createCephAdminUserKey: (...args: unknown[]) => createCephAdminUserKeyMock(...args),
-    deleteCephAdminUserKey: (...args: unknown[]) => deleteCephAdminUserKeyMock(...args),
-    listCephAdminUserKeys: (...args: unknown[]) => listCephAdminUserKeysMock(...args),
   };
 });
 

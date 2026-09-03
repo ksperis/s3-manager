@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client, { timeoutForRequestProfile } from "./client";
+import type { CephAdminRgwAccessKey, CephAdminRgwGeneratedAccessKey } from "./cephAdminUserKeys";
 import type { PaginatedResponse } from "./types";
 import type { ManagerTrafficStats, TrafficWindow } from "./stats";
 import type { TagDefinitionSummary } from "./tags";
@@ -321,23 +322,6 @@ export type CephAdminRgwUser = {
   quota_max_objects?: number | null;
 };
 
-export type CephAdminRgwAccessKey = {
-  access_key: string;
-  secret_key?: string | null;
-  status?: string | null;
-  is_active?: boolean | null;
-  created_at?: string | null;
-  user?: string | null;
-  subuser?: string | null;
-  is_private_access_managed?: boolean;
-  managed_connection_id?: number | null;
-};
-
-export type CephAdminRgwGeneratedAccessKey = {
-  access_key: string;
-  secret_key: string;
-};
-
 export type CephAdminRgwUserCapsUpdate = {
   mode?: "replace" | "add" | "remove";
   values: string[];
@@ -492,58 +476,6 @@ export async function getCephAdminUserMetrics(
     { params: tenant ? { tenant } : undefined }
   );
   return data;
-}
-
-export async function listCephAdminUserKeys(
-  endpointId: number,
-  uid: string,
-  tenant?: string | null
-): Promise<CephAdminRgwAccessKey[]> {
-  const { data } = await client.get<CephAdminRgwAccessKey[]>(
-    `/ceph-admin/endpoints/${endpointId}/users/${encodeURIComponent(uid)}/keys`,
-    { params: tenant ? { tenant } : undefined }
-  );
-  return data;
-}
-
-export async function createCephAdminUserKey(
-  endpointId: number,
-  uid: string,
-  tenant?: string | null
-): Promise<CephAdminRgwGeneratedAccessKey> {
-  const { data } = await client.post<CephAdminRgwGeneratedAccessKey>(
-    `/ceph-admin/endpoints/${endpointId}/users/${encodeURIComponent(uid)}/keys`,
-    undefined,
-    { params: tenant ? { tenant } : undefined }
-  );
-  return data;
-}
-
-export async function updateCephAdminUserKeyStatus(
-  endpointId: number,
-  uid: string,
-  accessKey: string,
-  active: boolean,
-  tenant?: string | null
-): Promise<CephAdminRgwAccessKey> {
-  const { data } = await client.put<CephAdminRgwAccessKey>(
-    `/ceph-admin/endpoints/${endpointId}/users/${encodeURIComponent(uid)}/keys/${encodeURIComponent(accessKey)}/status`,
-    { active },
-    { params: tenant ? { tenant } : undefined }
-  );
-  return data;
-}
-
-export async function deleteCephAdminUserKey(
-  endpointId: number,
-  uid: string,
-  accessKey: string,
-  tenant?: string | null
-): Promise<void> {
-  await client.delete(
-    `/ceph-admin/endpoints/${endpointId}/users/${encodeURIComponent(uid)}/keys/${encodeURIComponent(accessKey)}`,
-    { params: tenant ? { tenant } : undefined }
-  );
 }
 
 export type CephAdminBucket = {
