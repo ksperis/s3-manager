@@ -79,8 +79,8 @@ helm-contract:
     - test -s /tmp/bucketreef-rendered.yaml
     - "grep -q 'name: TRUSTED_PROXY_CIDRS' /tmp/bucketreef-rendered.yaml"
     - grep -Fq '[\"10.244.0.0/16\"]' /tmp/bucketreef-rendered.yaml
-    - grep -q 'ghcr.io/ksperis/bucketreef-backend:0.2.2' /tmp/bucketreef-rendered.yaml
-    - grep -q 'ghcr.io/ksperis/bucketreef-frontend:0.2.2' /tmp/bucketreef-rendered.yaml
+    - grep -q 'ghcr.io/ksperis/bucketreef-backend:0.2.3' /tmp/bucketreef-rendered.yaml
+    - grep -q 'ghcr.io/ksperis/bucketreef-frontend:0.2.3' /tmp/bucketreef-rendered.yaml
     - "grep -q 'kind: NetworkPolicy' /tmp/bucketreef-rendered.yaml"
     - "grep -q 'readOnlyRootFilesystem: true' /tmp/bucketreef-rendered.yaml"
     - "grep -q 'automountServiceAccountToken: false' /tmp/bucketreef-rendered.yaml"

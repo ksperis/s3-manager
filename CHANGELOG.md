@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.3 - 2026-09-04
+
+### Added
+
+- Added authorized Admin navigation badges for pending identity and Portal access requests.
+- Added scoped notifications for identity requests, endpoint health transitions, and quota alerts, with user deletion controls and daily 90-day retention scheduling.
+- Added shared responsive detail drawers for Browser and Portal objects, paths, and bucket settings while preserving URL-backed Portal views.
+
+### Changed
+
+- Split RGW, authentication, Ceph Admin, Manager, Portal, Browser, bucket configuration, migration, and persisted-key rotation internals into narrower service and transport contracts.
+- Refined Browser row density, content-type badges, selection, navigation, overflow actions, and contextual details across desktop and mobile layouts.
+- Prioritized quota status on the Manager dashboard and made individual bucket quota controls depend on the Ceph Admin Ops `buckets=write` capability.
+
+### Fixed/Security
+
+- Kept direct signed transfers available when Portal identities cannot inspect bucket CORS, excluded `Content-Type` from presigned upload signatures, and required exposed `ETag` headers for multipart uploads.
+- Preserved S3 provider error details for multipart failures and verified Browser uploads against Ceph RGW.
+- Limited recent WebAuthn step-up prompts to sensitive Admin mutations while retaining session checks, retry protection, and defensive factor revocation.
+
+### Breaking changes
+
+- Removed the retired `POST /api/admin/automation/apply` endpoint and its generic Admin Automation request and response contracts.
+- Removed redundant mutation endpoints for Admin registration, account unlinking, and standalone private-connection credential rotation; use the documented bootstrap and canonical update/delete workflows instead.
+- Removed unused multipart-part listing, non-paginated Portal access-log, Portal request-detail, and Ceph endpoint-info read routes; clients must use the canonical paginated or provider-specific alternatives.
+
+### Tests
+
+- Expanded backend, frontend, deployment, notification, CORS, multipart, authorization, responsive drawer, API-removal, and documentation contract coverage.
+- Retained CI validation for immutable SHA images, vulnerability and secret scans, Helm/Kind smoke tests, and the advisory Ceph functional suite.
+
 ## 0.2.2 - 2026-09-02
 
 ### Added
