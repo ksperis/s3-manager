@@ -15,14 +15,15 @@ test("navigates to a seeded object and exposes metadata from Details", async ({
   await objectRow.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menu").getByRole("button", { name: "Properties" }).click();
 
-  const detailsDialog = page.getByRole("dialog", {
-    name: "Object details · report-2026-03-08.json",
+  const detailsDrawer = page.getByRole("complementary", {
+    name: "report-2026-03-08.json",
+    exact: true,
   });
-  await expect(detailsDialog).toBeVisible();
+  await expect(detailsDrawer).toBeVisible();
   await expect(
-    detailsDialog.getByRole("tab", { name: "Properties" }),
+    detailsDrawer.getByRole("tab", { name: "Properties" }),
   ).toHaveAttribute("aria-selected", "true");
-  await expect(detailsDialog).toContainText("Standard metadata");
-  await expect(detailsDialog).toContainText("Content type");
-  await expect(detailsDialog).toContainText("Storage class");
+  await expect(detailsDrawer).toContainText("Standard metadata");
+  await expect(detailsDrawer).toContainText("Content type");
+  await expect(detailsDrawer).toContainText("Storage class");
 });

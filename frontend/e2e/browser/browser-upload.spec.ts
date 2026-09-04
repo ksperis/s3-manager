@@ -155,7 +155,7 @@ test("deletes freshly uploaded files from the current prefix", async ({ page }) 
   }
 
   await page
-    .getByRole("toolbar", { name: "Browser actions bar" })
+    .getByRole("toolbar", { name: "Browser context bar" })
     .getByRole("button", { name: "Delete", exact: true })
     .click();
 

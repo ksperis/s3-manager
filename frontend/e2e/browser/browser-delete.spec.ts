@@ -14,7 +14,7 @@ test("deletes a seeded object and records the operation", async ({ page }) => {
   await page.getByRole("checkbox", { name: "Select delete-me.txt" }).check();
   await page.getByRole("checkbox", { name: "Select delete-me-too.txt" }).check();
   await page
-    .getByRole("toolbar", { name: "Browser actions bar" })
+    .getByRole("toolbar", { name: "Browser context bar" })
     .getByRole("button", { name: "Delete", exact: true })
     .click();
 

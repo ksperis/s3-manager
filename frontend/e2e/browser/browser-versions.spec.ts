@@ -11,18 +11,19 @@ test("opens object versions for a versioned Moto object", async ({ page }) => {
   });
   await objectRow.getByRole("checkbox", { name: "Select report.json" }).check();
   await page
-    .getByRole("toolbar", { name: "Browser actions bar" })
+    .getByRole("toolbar", { name: "Browser context bar" })
     .getByRole("button", { name: "Open", exact: true })
     .click();
 
-  const versionsDialog = page.getByRole("dialog", {
-    name: "Object details · report.json",
+  const versionsDrawer = page.getByRole("complementary", {
+    name: "report.json",
+    exact: true,
   });
-  await expect(versionsDialog).toBeVisible();
-  const versionsTab = versionsDialog.getByRole("tab", { name: "Versions" });
+  await expect(versionsDrawer).toBeVisible();
+  const versionsTab = versionsDrawer.getByRole("tab", { name: "Versions" });
   await versionsTab.click();
   await expect(versionsTab).toHaveAttribute("aria-selected", "true");
-  await expect(versionsDialog).toContainText("Versions");
-  const restoreButtons = versionsDialog.getByRole("button", { name: "Restore" });
-  await expect(restoreButtons).toHaveCount(3);
+  await expect(versionsDrawer).toContainText("Versions");
+  const restoreButtons = versionsDrawer.getByRole("button", { name: "Restore" });
+  await expect(restoreButtons).toHaveCount(2);
 });
