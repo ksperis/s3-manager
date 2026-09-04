@@ -307,9 +307,13 @@ class BrowserContextMixin:
                 if not required_methods.issubset(allowed_methods):
                     return False
                 allowed_headers = rule.get("AllowedHeaders") or []
-                if allowed_headers:
-                    return matches_header(allowed_headers, "content-type")
-                return False
+                if not allowed_headers or not matches_header(allowed_headers, "content-type"):
+                    return False
+                exposed_headers = {
+                    str(header).strip().lower()
+                    for header in (rule.get("ExposeHeaders") or [])
+                }
+                return "*" in exposed_headers or "etag" in exposed_headers
 
             enabled = any(rule_allows(rule) for rule in raw_rules)
         return BucketCorsStatus(enabled=enabled, rules=rules)

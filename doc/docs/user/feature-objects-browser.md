@@ -103,6 +103,10 @@ Check the selected object state, current surface, Browser feature flags, and IAM
 
 !!! note
     Browser availability and operation sets depend on workspace browser flags and endpoint capabilities.
+    Direct transfers also require bucket CORS rules for the Browser origin. Multipart
+    uploads require those rules to expose `ETag`; when BucketReef can read an
+    incompatible configuration, it offers the existing CORS repair action and uses
+    proxy transfers when they are enabled.
 
 ## Related pages
 

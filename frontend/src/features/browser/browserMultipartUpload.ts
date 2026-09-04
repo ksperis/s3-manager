@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { runWithConcurrency } from "../../utils/concurrency";
+import { ensureSuccessfulBrowserTransferResponse } from "./browserFetchTransferResponse";
 import { normalizeEtag } from "./browserUtils";
 
 type CompletedPart = { part_number: number; etag: string };
@@ -110,7 +111,10 @@ export const uploadBrowserFileMultipart = async ({
             credentials: "omit",
             signal: controller.signal,
           });
-          if (!response.ok) throw new Error(`Multipart upload failed with status ${response.status}`);
+          await ensureSuccessfulBrowserTransferResponse(
+            response,
+            "Multipart upload failed",
+          );
           const etag = normalizeEtag(response.headers.get("etag") ?? undefined);
           if (!etag) {
             throw new Error("Missing ETag from multipart upload.");
@@ -168,7 +172,10 @@ export const uploadBrowserStreamMultipart = async ({
       credentials: "omit",
       signal,
     });
-    if (!response.ok) throw new Error(`Multipart upload failed with status ${response.status}`);
+    await ensureSuccessfulBrowserTransferResponse(
+      response,
+      "Multipart upload failed",
+    );
     const etag = normalizeEtag(response.headers.get("etag") ?? undefined);
     if (!etag) {
       throw new Error("Missing ETag from multipart upload.");

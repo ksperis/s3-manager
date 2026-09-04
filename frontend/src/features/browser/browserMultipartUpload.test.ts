@@ -81,6 +81,34 @@ describe("browser multipart uploads", () => {
     expect(lifecycle.complete).not.toHaveBeenCalled();
   });
 
+  it("surfaces S3 error details when a file part is rejected", async () => {
+    const lifecycle = createLifecycle();
+    const controller = new AbortController();
+    fetchMock.mockResolvedValue(
+      new Response(
+        "<Error><Code>QuotaExceeded</Code><Message></Message></Error>",
+        { status: 403, statusText: "Forbidden" },
+      ),
+    );
+
+    await expect(
+      uploadBrowserFileMultipart({
+        file: new File([new Uint8Array(8)], "too-large.bin"),
+        partSize: 8,
+        concurrency: 1,
+        controller,
+        lifecycle,
+        onProgress: vi.fn(),
+      }),
+    ).rejects.toThrow(
+      "Multipart upload failed: HTTP 403 Forbidden - QuotaExceeded",
+    );
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(lifecycle.abort).toHaveBeenCalledWith("upload-1");
+    expect(lifecycle.complete).not.toHaveBeenCalled();
+  });
+
   it("reassembles stream chunks into fixed-size multipart uploads", async () => {
     const lifecycle = createLifecycle();
     const uploadedSizes: number[] = [];
@@ -116,6 +144,37 @@ describe("browser multipart uploads", () => {
       { part_number: 3, etag: "etag-3" },
     ]);
     expect(lifecycle.abort).not.toHaveBeenCalled();
+    expect(stream.locked).toBe(false);
+  });
+
+  it("surfaces S3 error details when a stream part is rejected", async () => {
+    const lifecycle = createLifecycle();
+    fetchMock.mockResolvedValue(
+      new Response(
+        "<Error><Code>QuotaExceeded</Code><Message></Message></Error>",
+        { status: 403, statusText: "Forbidden" },
+      ),
+    );
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+        controller.close();
+      },
+    });
+
+    await expect(
+      uploadBrowserStreamMultipart({
+        stream,
+        sizeBytes: 4,
+        partSize: 4,
+        lifecycle,
+      }),
+    ).rejects.toThrow(
+      "Multipart upload failed: HTTP 403 Forbidden - QuotaExceeded",
+    );
+
+    expect(lifecycle.abort).toHaveBeenCalledWith("upload-1");
+    expect(lifecycle.complete).not.toHaveBeenCalled();
     expect(stream.locked).toBe(false);
   });
 });
