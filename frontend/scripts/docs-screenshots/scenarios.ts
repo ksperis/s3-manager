@@ -86,7 +86,7 @@ function withBaseRules(...extraRules: MockRule[]): MockRule[] {
   return [...extraRules, ...buildBaseRules()];
 }
 
-const BROWSER_ROOT_UI_STATE_STORAGE_KEY = "browser:root-ui-state:v2";
+const BROWSER_ROOT_UI_STATE_STORAGE_KEY = "browser:root-ui-state:v3";
 const BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY = "browser:root-context-selections:v2";
 const BROWSER_FOCUSED_BUCKET = "helios-retail-logs";
 const BROWSER_FOCUSED_PREFIX = "daily/";
@@ -94,19 +94,13 @@ const BROWSER_FOCUSED_OBJECT_KEY = "daily/report-2026-03-08.json";
 
 function buildBrowserRootUiStateEntry(layout: {
   showFolders: boolean;
-  showInspector: boolean;
-  showActionBar: boolean;
 }) {
   return JSON.stringify({
-    activeLayout: "workbench",
     density: "compact",
-    layouts: {
-      standard: {},
-      workbench: {
-        showFolders: layout.showFolders,
-        showInspector: layout.showInspector,
-      },
-    },
+    showFolders: layout.showFolders,
+    foldersPanelWidthPx: 280,
+    objectColumns: [],
+    objectColumnWidths: {},
   });
 }
 
@@ -117,10 +111,8 @@ const browserContextSelectionsEntry = JSON.stringify({
   },
 });
 
-const browserAllPanelsStateEntry = buildBrowserRootUiStateEntry({
+const browserFoldersPanelStateEntry = buildBrowserRootUiStateEntry({
   showFolders: true,
-  showInspector: true,
-  showActionBar: true,
 });
 
 const browserVersioningEnabledRule: MockRule = {
@@ -857,7 +849,7 @@ export const scenarios: DocScreenshotScenario[] = [
       ...baseStorage(storageUser),
       selectedWorkspace: "browser",
       extraEntries: {
-        [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserAllPanelsStateEntry,
+        [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserFoldersPanelStateEntry,
       },
       extraSessionEntries: {
         [BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY]: browserContextSelectionsEntry,
@@ -1132,7 +1124,7 @@ export const scenarios: DocScreenshotScenario[] = [
       ...baseStorage(storageUser),
       selectedWorkspace: "browser",
       extraEntries: {
-        [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserAllPanelsStateEntry,
+        [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserFoldersPanelStateEntry,
       },
       extraSessionEntries: {
         [BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY]: browserContextSelectionsEntry,
@@ -1167,7 +1159,7 @@ export const scenarios: DocScreenshotScenario[] = [
       ...baseStorage(storageUser),
       selectedWorkspace: "browser",
       extraEntries: {
-        [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserAllPanelsStateEntry,
+        [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserFoldersPanelStateEntry,
       },
       extraSessionEntries: {
         [BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY]: browserContextSelectionsEntry,

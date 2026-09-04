@@ -63,6 +63,7 @@ type BrowserContextMenuProps = {
   copyUrlDisabledReason?: string;
   multipartUploadsAvailable?: boolean;
   bucketConfigurationAvailable?: boolean;
+  bucketConfigurationReadOnly?: boolean;
   functionalProfile: BrowserFunctionalProfile;
   capabilityFacts: BrowserCapabilityFacts;
   clipboard: ClipboardState | null;
@@ -75,6 +76,7 @@ type BrowserContextMenuProps = {
   onOpenCleanupVersions: () => void;
   onOpenMultipartUploads: () => void;
   onConfigureBucket: () => void;
+  onOpenPathDetails: () => void;
   onResolveItemActions: (item: BrowserItem) => BrowserActionMap;
   onRunItemAction: (item: BrowserItem, actionId: BrowserActionId) => void;
   onCopyUrl: (item: BrowserItem | null) => void;
@@ -114,6 +116,7 @@ export default function BrowserContextMenu({
   copyUrlDisabledReason,
   multipartUploadsAvailable = false,
   bucketConfigurationAvailable = false,
+  bucketConfigurationReadOnly = false,
   functionalProfile,
   capabilityFacts,
   clipboard,
@@ -126,6 +129,7 @@ export default function BrowserContextMenu({
   onOpenCleanupVersions,
   onOpenMultipartUploads,
   onConfigureBucket,
+  onOpenPathDetails,
   onResolveItemActions,
   onRunItemAction,
   onCopyUrl,
@@ -167,6 +171,7 @@ export default function BrowserContextMenu({
     capabilityFacts,
     multipartUploadsAvailable,
     bucketConfigurationAvailable,
+    bucketConfigurationReadOnly,
   });
   const itemActionStates = contextItem
     ? onResolveItemActions(contextItem)
@@ -206,6 +211,7 @@ export default function BrowserContextMenu({
       cleanOldVersions: onOpenCleanupVersions,
       multipartUploads: onOpenMultipartUploads,
       configureBucket: onConfigureBucket,
+      details: onOpenPathDetails,
       copyPath: () => onCopyPath(currentPath),
       toggleShowFolders: onToggleShowFolders,
       toggleShowDeleted: onToggleShowDeleted,

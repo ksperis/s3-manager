@@ -19,11 +19,11 @@ Open the exact bucket and object key from the intended context. Version history 
 1. Open a Browser surface and navigate to the target bucket and object.
 2. Open **Versions** from the item actions.
    - On `/browser`, you can use the item `More actions` menu, the context menu, or version-aware flows triggered from deleted objects.
-3. Review the entries shown in the `Versions` tab of the file `Object details` modal.
+3. Review the entries shown in the `Versions` tab of the file details drawer.
    - Latest versions and delete markers are clearly identified.
    - Each row keeps restore and delete actions next to the corresponding version metadata.
 4. Restore or remove the required version directly from the tab.
-   - If the current object state is deleted, Browser opens `Object details` directly on `Versions`.
+   - If the current object state is deleted, Browser opens the details drawer directly on `Versions`.
 
 ## Expected result
 

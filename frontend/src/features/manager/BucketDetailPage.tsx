@@ -24,6 +24,7 @@ import { MetricsCard } from "../../components/MetricsCard";
 import UsageTile from "../../components/UsageTile";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { formatCompactNumber } from "../../utils/format";
+import { formatLocalDateTime } from "../../utils/dateTime";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
@@ -256,6 +257,7 @@ type BucketDetailPageProps = {
   hideObjectsTab?: boolean;
   bucketListPathOverride?: string;
   onBackToBuckets?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 type BucketDetailPageContentProps = BucketDetailPageProps & {
@@ -266,7 +268,7 @@ type BucketDetailPageContentProps = BucketDetailPageProps & {
   s3AccountContext: ReturnType<typeof useS3AccountContext>;
 };
 
-export default function BucketDetailPage(props: BucketDetailPageProps) {
+export function BucketDetailContent(props: BucketDetailPageProps) {
   const [activeTab, setActiveTab] = useState<BucketDetailTabId>("overview");
   const params = useParams<{ bucketName: string }>();
   const s3AccountContext = useS3AccountContext();
@@ -298,6 +300,10 @@ export default function BucketDetailPage(props: BucketDetailPageProps) {
   );
 }
 
+export default function BucketDetailPage(props: BucketDetailPageProps) {
+  return <BucketDetailContent {...props} />;
+}
+
 function BucketDetailPageContent({
   mode = "manager",
   bucketNameOverride,
@@ -307,6 +313,7 @@ function BucketDetailPageContent({
   hideObjectsTab = false,
   bucketListPathOverride,
   onBackToBuckets,
+  onDirtyChange,
   activeTab,
   cephAdminEndpoint,
   onActiveTabChange,
@@ -1044,6 +1051,27 @@ function BucketDetailPageContent({
     configured: quotaConfigured,
     unsaved: quotaDirty,
   });
+  const hasUnsavedChanges = Boolean(
+    versioningDirty ||
+    encryptionDirty ||
+    objectLockDirty ||
+    lifecycleDirty ||
+    tagsDirty ||
+    publicAccessDirty ||
+    aclDirty ||
+    policyDirty ||
+    websiteDirty ||
+    replicationDirty ||
+    corsDirty ||
+    accessLoggingDirty ||
+    notificationsDirty ||
+    quotaDirty,
+  );
+
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+    return () => onDirtyChange?.(false);
+  }, [hasUnsavedChanges, onDirtyChange]);
 
   const propertySummary = useMemo<PropertySummary[]>(() => {
     const versioningState = versioningLoading
@@ -1366,9 +1394,16 @@ function BucketDetailPageContent({
                   <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
                     {bucketName ? `Bucket ${bucketName}` : "Bucket overview"}
                   </h3>
-                  <p className={bucketDetailHintClass}>
-                    Owner: <span className="font-semibold text-slate-700 dark:text-slate-200">{bucketOwner ?? (loadingBucket || bucketAclLoading ? "Loading..." : "Unknown")}</span>
-                  </p>
+                  <dl className="flex flex-wrap gap-x-6 gap-y-1">
+                    <div className={bucketDetailHintClass}>
+                      <dt className="inline">Owner: </dt>
+                      <dd className="inline font-semibold text-slate-700 dark:text-slate-200">{bucketOwner ?? (loadingBucket || bucketAclLoading ? "Loading..." : "Unknown")}</dd>
+                    </div>
+                    <div className={bucketDetailHintClass}>
+                      <dt className="inline">Created: </dt>
+                      <dd className="inline font-semibold text-slate-700 dark:text-slate-200">{loadingBucket ? "Loading..." : formatLocalDateTime(bucket?.creation_date)}</dd>
+                    </div>
+                  </dl>
                 </header>
                 <div className={bucketDetailTwoColumnGridClass}>
                   <UsageTile

@@ -2,22 +2,30 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { ReactNode, RefObject } from "react";
+import { useCallback, useState, type ReactNode, type RefObject } from "react";
 import type { BrowserWorkspaceSurface } from "../../api/browserWorkspace";
+import type { S3AccountSelector } from "../../api/accountParams";
 import Modal from "../../components/Modal";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiButton from "../../components/ui/UiButton";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
-import BucketDetailPage from "../manager/BucketDetailPage";
+import { BucketDetailContent } from "../manager/BucketDetailPage";
 import { S3AccountProvider } from "../manager/S3AccountContext";
 import { resolveSseCustomerKeyInputType } from "./sseCustomerKeyActions";
+import DetailsDrawerShell from "../shared/DetailsDrawerShell";
+import BrowserBucketDetailsContent from "./BrowserBucketDetailsContent";
 
-type BrowserBucketConfigurationModalProps = {
+type BrowserBucketConfigurationDrawerProps = {
+  accountId: S3AccountSelector;
   bucketName: string;
+  includeStaticWebsite: boolean;
+  includeUsage: boolean;
   workspaceSurface: BrowserWorkspaceSurface;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 type BrowserCreateBucketModalProps = {
@@ -65,28 +73,63 @@ type BrowserCreateFolderModalProps = {
   onClose: () => void;
 };
 
-export function BrowserBucketConfigurationModal({
+export function BrowserBucketConfigurationDrawer({
+  accountId,
   bucketName,
+  includeStaticWebsite,
+  includeUsage,
   workspaceSurface,
   onClose,
-}: BrowserBucketConfigurationModalProps) {
+  onDirtyChange,
+}: BrowserBucketConfigurationDrawerProps) {
+  const [dirty, setDirty] = useState(false);
+  const handleDirtyChange = useCallback(
+    (nextDirty: boolean) => {
+      setDirty(nextDirty);
+      onDirtyChange?.(nextDirty);
+    },
+    [onDirtyChange],
+  );
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: dirty,
+    onClose,
+    description: "You have unsaved bucket settings. Closing the drawer will discard them.",
+  });
+  const browserReadOnly = workspaceSurface === "browser";
   const content = (
-    <BucketDetailPage bucketNameOverride={bucketName} embedded hideObjectsTab />
+    <BucketDetailContent
+      mode={workspaceSurface === "ceph-admin" ? "ceph-admin" : "manager"}
+      bucketNameOverride={bucketName}
+      embedded
+      hideObjectsTab
+      onDirtyChange={handleDirtyChange}
+    />
   );
 
   return (
-    <Modal
-      title={`Configure bucket · ${bucketName}`}
-      onClose={onClose}
-      maxWidthClass="max-w-7xl"
-      maxBodyHeightClass="h-[88vh]"
+    <DetailsDrawerShell
+      title={bucketName}
+      subtitle={
+        <p className="ui-caption text-[var(--ui-text-muted)]">
+          {browserReadOnly ? "Bucket details" : "Bucket settings"}
+        </p>
+      }
+      onClose={closeGuard.requestClose}
     >
-      {workspaceSurface === "manager" ? (
+      {browserReadOnly ? (
+        <BrowserBucketDetailsContent
+          accountId={accountId}
+          bucketName={bucketName}
+          includeStaticWebsite={includeStaticWebsite}
+          includeUsage={includeUsage}
+        />
+      ) : workspaceSurface === "manager" ? (
         content
       ) : (
         <S3AccountProvider scope="browser">{content}</S3AccountProvider>
       )}
-    </Modal>
+      {closeGuard.confirmationDialog}
+    </DetailsDrawerShell>
   );
 }
 

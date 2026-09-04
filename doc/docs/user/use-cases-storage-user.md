@@ -13,7 +13,7 @@ Use this page when your main goal is object access, limited bucket actions, or d
 
 1. For object work, open **Browser**:
    - Browse buckets and prefixes.
-   - Keep folders, the action bar, and the inspector visible on `/browser` when you want faster day-to-day object workflows.
+   - Keep folders visible on `/browser` when the tree helps; object details open on demand without shrinking the list.
    - Upload, download, preview, delete, restore versions.
 2. For guided account self-service, open **Portal**:
    - Select the assigned RGW account.
@@ -43,6 +43,6 @@ You can complete daily storage tasks without navigating admin-only areas.
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/use-cases-storage-user.light.png" alt="Browser workspace with folders, action bar, and inspector open for a daily object workflow" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/use-cases-storage-user.dark.png" alt="Browser workspace with folders, action bar, and inspector open for a daily object workflow" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/use-cases-storage-user.light.png" alt="Browser workspace with folders visible for a daily object workflow" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/use-cases-storage-user.dark.png" alt="Browser workspace with folders visible for a daily object workflow" loading="lazy">
 </div>

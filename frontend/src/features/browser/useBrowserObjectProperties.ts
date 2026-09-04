@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
 import type { S3AccountSelector } from "../../api/accountParams";
 import {
@@ -53,6 +53,24 @@ const emptyMetadataDraft = (): BrowserObjectMetadataDraft => ({
   expires: "",
 });
 
+const draftSignature = ({
+  metadataDraft,
+  metadataItems,
+  storageClass,
+  tags,
+}: {
+  metadataDraft: BrowserObjectMetadataDraft;
+  metadataItems: Array<Pick<ObjectTag, "key" | "value">>;
+  storageClass: string;
+  tags: Array<Pick<ObjectTag, "key" | "value">>;
+}) =>
+  JSON.stringify({
+    metadataDraft,
+    metadataItems: metadataItems.map(({ key, value }) => ({ key, value })),
+    storageClass,
+    tags: tags.map(({ key, value }) => ({ key, value })),
+  });
+
 export function useBrowserObjectProperties({
   accountId,
   bucketName,
@@ -84,6 +102,7 @@ export function useBrowserObjectProperties({
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [savingTags, setSavingTags] = useState(false);
   const [savingStorageClass, setSavingStorageClass] = useState(false);
+  const [baselineSignature, setBaselineSignature] = useState<string | null>(null);
   const tagIdRef = useRef(0);
   const metadataIdRef = useRef(0);
   const loadingRef = useRef(false);
@@ -217,6 +236,7 @@ export function useBrowserObjectProperties({
       setSavingMetadata(false);
       setSavingTags(false);
       setSavingStorageClass(false);
+      setBaselineSignature(null);
       resetPropertiesDrafts(null, baseItem);
       resetTagsDraft([]);
     },
@@ -265,6 +285,24 @@ export function useBrowserObjectProperties({
         setTagsVersionId(nextTags.version_id ?? null);
         resetPropertiesDrafts(nextMetadata, item);
         resetTagsDraft(nextTags.tags ?? []);
+        setBaselineSignature(
+          draftSignature({
+            metadataDraft: {
+              contentType: nextMetadata.content_type ?? "",
+              cacheControl: nextMetadata.cache_control ?? "",
+              contentDisposition: nextMetadata.content_disposition ?? "",
+              contentEncoding: nextMetadata.content_encoding ?? "",
+              contentLanguage: nextMetadata.content_language ?? "",
+              expires: formatLocalDateTime(nextMetadata.expires),
+            },
+            metadataItems: Object.entries(nextMetadata.metadata || {}).map(
+              ([key, value]) => ({ key, value }),
+            ),
+            storageClass:
+              nextMetadata.storage_class ?? item.storageClass ?? "",
+            tags: nextTags.tags ?? [],
+          }),
+        );
         loadedRef.current = true;
         setLoaded(true);
       } catch (loadError) {
@@ -409,6 +447,27 @@ export function useBrowserObjectProperties({
     tagsVersionId,
   ]);
 
+  const hasUnsavedChanges = useMemo(
+    () =>
+      loaded &&
+      baselineSignature !== null &&
+      baselineSignature !==
+        draftSignature({
+          metadataDraft,
+          metadataItems,
+          storageClass,
+          tags: tagsDraft,
+        }),
+    [
+      baselineSignature,
+      loaded,
+      metadataDraft,
+      metadataItems,
+      storageClass,
+      tagsDraft,
+    ],
+  );
+
   return {
     metadata,
     loading,
@@ -430,6 +489,7 @@ export function useBrowserObjectProperties({
     savingMetadata,
     savingTags,
     savingStorageClass,
+    hasUnsavedChanges,
     load,
     reset,
     isCurrentScope,

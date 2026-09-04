@@ -63,6 +63,11 @@ const completeMultipartUploadMock = vi.fn();
 const abortMultipartUploadMock = vi.fn();
 const createObjectUrlMock = vi.fn();
 const revokeObjectUrlMock = vi.fn();
+const listPortalStorageSpacesMock = vi.fn();
+const fetchPortalObjectDetailMock = vi.fn();
+const fetchPortalObjectVersionsMock = vi.fn();
+const listPortalPublicLinksMock = vi.fn();
+const fetchPortalAccessSummaryMock = vi.fn();
 
 const getBucketStatsMock = vi.fn();
 const getBucketPropertiesMock = vi.fn();
@@ -191,6 +196,34 @@ vi.mock("../../api/browserBuckets", async () => {
   };
 });
 
+vi.mock("../../api/portal", async () => {
+  const actual = await vi.importActual<typeof import("../../api/portal")>(
+    "../../api/portal",
+  );
+  return {
+    ...actual,
+    listPortalStorageSpaces: (...args: unknown[]) =>
+      listPortalStorageSpacesMock(...args),
+    fetchPortalStorageSpaceObjectDetail: (...args: unknown[]) =>
+      fetchPortalObjectDetailMock(...args),
+    fetchPortalStorageSpaceObjectVersions: (...args: unknown[]) =>
+      fetchPortalObjectVersionsMock(...args),
+  };
+});
+
+vi.mock("../../api/portalSharing", async () => {
+  const actual = await vi.importActual<typeof import("../../api/portalSharing")>(
+    "../../api/portalSharing",
+  );
+  return {
+    ...actual,
+    fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) =>
+      fetchPortalAccessSummaryMock(...args),
+    listPortalStorageSpacePublicLinks: (...args: unknown[]) =>
+      listPortalPublicLinksMock(...args),
+  };
+});
+
 vi.mock("../../api/browserTransfers", () => ({
   presignObject: (...args: unknown[]) => presignObjectMock(...args),
   proxyDownload: (...args: unknown[]) => proxyDownloadMock(...args),
@@ -294,38 +327,34 @@ function setBrowserContext(overrides: Partial<typeof browserContextMock.value> =
 }
 
 type RenderPageOptions = {
-  defaultShowInspector?: boolean;
   defaultShowFolders?: boolean;
   initialEntry?: string;
-  allowInspectorPanel?: boolean;
   allowFoldersPanel?: boolean;
   accountIdForApi?: string;
   executionContextKind?: ComponentProps<typeof BrowserPage>["executionContextKind"];
   workspaceSurface?: ComponentProps<typeof BrowserPage>["workspaceSurface"];
   functionalProfile?: ComponentProps<typeof BrowserPage>["functionalProfile"];
+  canCreatePublicLinks?: boolean;
   lockedBucketName?: string;
   lockedBucketLabel?: string;
   storageEndpointCapabilities?: ComponentProps<typeof BrowserPage>["storageEndpointCapabilities"];
-  onOpenObjectDetailsRoute?: ComponentProps<typeof BrowserPage>["onOpenObjectDetailsRoute"];
-  onCreatePublicLinkForObject?: ComponentProps<typeof BrowserPage>["onCreatePublicLinkForObject"];
+  onOpenObjectDetails?: ComponentProps<typeof BrowserPage>["onOpenObjectDetails"];
   deletedObjectsOptions?: ComponentProps<typeof BrowserPage>["deletedObjectsOptions"];
 };
 
 function renderPageElement({
-  defaultShowInspector = false,
   defaultShowFolders = false,
   initialEntry = "/browser",
-  allowInspectorPanel = true,
   allowFoldersPanel = true,
   accountIdForApi,
   executionContextKind,
   workspaceSurface,
   functionalProfile,
+  canCreatePublicLinks = false,
   lockedBucketName,
   lockedBucketLabel,
   storageEndpointCapabilities,
-  onOpenObjectDetailsRoute,
-  onCreatePublicLinkForObject,
+  onOpenObjectDetails,
   deletedObjectsOptions,
 }: RenderPageOptions = {}) {
   return (
@@ -334,9 +363,7 @@ function renderPageElement({
         <BrowserPage
           accountIdForApi={accountIdForApi}
           executionContextKind={executionContextKind}
-          defaultShowInspector={defaultShowInspector}
           defaultShowFolders={defaultShowFolders}
-          allowInspectorPanel={allowInspectorPanel}
           allowFoldersPanel={allowFoldersPanel}
           workspaceSurface={workspaceSurface}
           functionalProfile={functionalProfile}
@@ -353,15 +380,14 @@ function renderPageElement({
                   canWriteObjects: true,
                   canDeleteObjects: true,
                   canRestoreObjects: true,
-                  canCreatePublicLinks: Boolean(onCreatePublicLinkForObject),
+                  canCreatePublicLinks,
                 }
               : undefined
           }
           lockedBucketName={lockedBucketName}
           lockedBucketLabel={lockedBucketLabel}
           storageEndpointCapabilities={storageEndpointCapabilities}
-          onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
-          onCreatePublicLinkForObject={onCreatePublicLinkForObject}
+          onOpenObjectDetails={onOpenObjectDetails}
           deletedObjectsOptions={deletedObjectsOptions}
         />
         <LocationProbe />
@@ -473,7 +499,6 @@ function seedBrowserRootUiState(value: unknown) {
     JSON.stringify({
       density: record.density === "comfortable" ? "comfortable" : "compact",
       showFolders: layout.showFolders === true,
-      showInspector: layout.showInspector === true,
       foldersPanelWidthPx: layout.foldersPanelWidthPx,
       objectColumns: record.objectColumns,
       objectColumnWidths: record.objectColumnWidths,
@@ -557,7 +582,7 @@ async function enableActionBar(user: ReturnType<typeof userEvent.setup>) {
   if (within(toolbar).queryByRole("status")) {
     return;
   }
-  await user.click(row);
+  await user.click(within(row).getByRole("checkbox", { name: "Select a.txt" }));
   await waitFor(() => {
     expect(within(getContextToolbar()).getByRole("status")).toBeInTheDocument();
   });
@@ -868,6 +893,34 @@ describe("BrowserPage interactions", () => {
       target_bucket: null,
     });
     getBucketWebsiteMock.mockResolvedValue({});
+    listPortalStorageSpacesMock.mockResolvedValue([]);
+    fetchPortalObjectDetailMock.mockResolvedValue({
+      key: "a.txt",
+      name: "a.txt",
+      size: 10,
+      last_modified: "2026-03-10T10:00:00Z",
+      content_type: "text/plain",
+      storage_class: "STANDARD",
+      encryption: null,
+      preview_type: "text",
+      preview_text: "portal preview",
+    });
+    fetchPortalObjectVersionsMock.mockResolvedValue({
+      key: "a.txt",
+      versioning_status: "Disabled",
+      can_restore: false,
+      versions: [],
+      is_truncated: false,
+    });
+    listPortalPublicLinksMock.mockResolvedValue([]);
+    fetchPortalAccessSummaryMock.mockResolvedValue({
+      mode: "restricted",
+      effective_member_count: 1,
+      explicit_shares: [],
+      public_link_count: 0,
+      can_manage_access: true,
+      can_create_public_links: true,
+    });
   });
 
   it("exposes a page heading without changing the browser chrome", async () => {
@@ -908,25 +961,30 @@ describe("BrowserPage interactions", () => {
     ).toBeInTheDocument();
   });
 
-  it("selects from the row while the accessible primary button activates without changing selection", async () => {
+  it("opens from the whole row while checkboxes alone control selection", async () => {
     const user = userEvent.setup();
-    const onOpenObjectDetailsRoute = vi.fn();
-    renderPage({ onOpenObjectDetailsRoute });
+    const onOpenObjectDetails = vi.fn();
+    renderPage({ onOpenObjectDetails });
 
     const rowA = await findRowByLabel("a.txt");
     await user.click(rowA);
     expect(
       screen.getByRole("checkbox", { name: "Select a.txt" }),
-    ).toBeChecked();
+    ).not.toBeChecked();
+    expect(onOpenObjectDetails).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "a.txt", initialTab: "preview" }),
+    );
 
-    await user.click(rowA);
+    await user.click(
+      within(rowA).getByRole("checkbox", { name: "Select a.txt" }),
+    );
     expect(
       screen.getByRole("checkbox", { name: "Select a.txt" }),
     ).toBeChecked();
 
     await user.click(screen.getByRole("button", { name: "Open file b.txt" }));
-    expect(onOpenObjectDetailsRoute).toHaveBeenCalledTimes(1);
-    expect(onOpenObjectDetailsRoute).toHaveBeenCalledWith(
+    expect(onOpenObjectDetails).toHaveBeenCalledTimes(2);
+    expect(onOpenObjectDetails).toHaveBeenCalledWith(
       expect.objectContaining({ key: "b.txt", initialTab: "preview" }),
     );
     expect(
@@ -940,15 +998,15 @@ describe("BrowserPage interactions", () => {
 
   it("activates the primary name button only once during a double-click", async () => {
     const user = userEvent.setup();
-    const onOpenObjectDetailsRoute = vi.fn();
-    renderPage({ onOpenObjectDetailsRoute });
+    const onOpenObjectDetails = vi.fn();
+    renderPage({ onOpenObjectDetails });
 
     await user.dblClick(
       await screen.findByRole("button", { name: "Open file a.txt" }),
     );
 
-    expect(onOpenObjectDetailsRoute).toHaveBeenCalledTimes(1);
-    expect(onOpenObjectDetailsRoute).toHaveBeenCalledWith(
+    expect(onOpenObjectDetails).toHaveBeenCalledTimes(1);
+    expect(onOpenObjectDetails).toHaveBeenCalledWith(
       expect.objectContaining({ key: "a.txt", initialTab: "preview" }),
     );
   });
@@ -980,7 +1038,7 @@ describe("BrowserPage interactions", () => {
       effective_access: { browser_advanced_features_enabled: false },
     });
     seedBrowserRootUiState({
-      layout: { showFolders: true, showInspector: true, showActionBar: true },
+      layout: { showFolders: true },
     });
 
     renderPage({ initialEntry: "/browser" });
@@ -995,6 +1053,9 @@ describe("BrowserPage interactions", () => {
     ).toHaveAttribute("aria-checked", "true");
     fireEvent.keyDown(document.body, { key: "Escape" });
     const moreMenu = await openContextMoreMenu(user);
+    expect(
+      within(moreMenu).queryByRole("menuitem", { name: "Path details" }),
+    ).not.toBeInTheDocument();
     await user.click(
       within(moreMenu).getByRole("menuitemradio", {
         name: "Comfortable",
@@ -1003,10 +1064,20 @@ describe("BrowserPage interactions", () => {
     expect(await findRowByLabel("a.txt")).toHaveClass("h-16");
     expect(screen.queryByRole("button", { name: "Create bucket" })).not.toBeInTheDocument();
     expect(
-      screen.getByRole("group", { name: "Details view" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("group", { name: "Details view" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Search options" })).not.toBeInTheDocument();
     expect(screen.queryByText("Versions", { exact: true })).not.toBeInTheDocument();
+    await user.click(
+      within(await findRowByLabel("docs")).getByRole("button", {
+        name: "More actions for docs",
+      }),
+    );
+    expect(
+      within(await screen.findByRole("menu")).queryByRole("button", {
+        name: "Details",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("uses compact mode by default on /manager/browser", async () => {
@@ -1040,7 +1111,7 @@ describe("BrowserPage interactions", () => {
       functionalProfile: "portal",
       lockedBucketName: "portal-bucket",
       lockedBucketLabel: "Research Data",
-      onOpenObjectDetailsRoute: openObjectDetailsRoute,
+      onOpenObjectDetails: openObjectDetailsRoute,
     });
 
     const rowA = await findRowByLabel("a.txt");
@@ -1455,6 +1526,70 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByText("Buckets", { exact: true })).not.toBeInTheDocument();
   });
 
+  it("uses the shared Storage Space drawer in the full Browser", async () => {
+    const user = userEvent.setup();
+    searchBrowserBucketsMock.mockResolvedValue({
+      items: [
+        {
+          name: "internal-research",
+          display_name: "Research Data",
+          workspace_label: "Storage Space",
+          role: "Manager",
+          status: "Active",
+          internal_bucket_name: "internal-research",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      has_next: false,
+    });
+    listPortalStorageSpacesMock.mockResolvedValue([
+      {
+        id: "research-data",
+        name: "Research Data",
+        role: "Manager",
+        status: "Active",
+        visibility: "shared",
+        share_scope: "restricted",
+        internal_bucket_name: "internal-research",
+      },
+    ]);
+    setBrowserContext({
+      selectorForApi: "acc-portal",
+      selectedContextId: "portal-101",
+      selectedContext: makeExecutionContext({
+        id: "portal-101",
+        display_name: "Research Portal",
+      }),
+      selectedKind: "portal_account",
+    });
+
+    renderPage({ initialEntry: "/browser" });
+    await user.click(
+      within(await findRowByLabel("a.txt")).getByRole("button", {
+        name: "Open file a.txt",
+      }),
+    );
+
+    const drawer = await screen.findByRole("complementary", { name: "a.txt" });
+    expect(within(drawer).getByRole("tab", { name: "Preview" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("tab", { name: "History" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("tab", { name: "Sharing" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("tab", { name: "Details" })).toBeInTheDocument();
+    expect(within(drawer).queryByRole("tab", { name: "Properties" })).not.toBeInTheDocument();
+
+    await user.click(within(drawer).getByRole("tab", { name: "Sharing" }));
+    await waitFor(() =>
+      expect(listPortalPublicLinksMock).toHaveBeenCalledWith(
+        "acc-portal",
+        "research-data",
+        { objectKey: "a.txt", includeRevoked: true },
+      ),
+    );
+    expect(within(drawer).getByRole("button", { name: "Create link" })).toBeEnabled();
+  });
+
   it.each(["standard", "advanced"] as const)(
     "exposes direct Download and Delete actions in the %s profile without selecting the row",
     async (functionalProfile) => {
@@ -1517,9 +1652,10 @@ describe("BrowserPage interactions", () => {
       accountIdForApi: "acc-portal",
       workspaceSurface: "portal",
       functionalProfile: "portal",
+      canCreatePublicLinks: true,
       lockedBucketName: "portal-bucket",
       lockedBucketLabel: "Research Data",
-      onCreatePublicLinkForObject: createPublicLinkForObject,
+      onOpenObjectDetails: createPublicLinkForObject,
     });
 
     const rowA = await findRowByLabel("a.txt");
@@ -1533,6 +1669,9 @@ describe("BrowserPage interactions", () => {
       bucketName: "portal-bucket",
       key: "a.txt",
       name: "a.txt",
+      initialTab: "properties",
+      isDeleted: false,
+      intent: "create-public-link",
     });
 
     await user.click(
@@ -2218,6 +2357,16 @@ describe("BrowserPage interactions", () => {
     ).toHaveAttribute("aria-checked", "true");
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
     expect(within(menu).getByText("Current path")).toBeInTheDocument();
+    expect(within(menu).getByText("Technical tools")).toBeInTheDocument();
+    expect(
+      within(menu).queryByRole("menuitem", { name: "Upload files" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(menu).queryByRole("menuitem", { name: "New folder" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Path details" }),
+    ).toBeInTheDocument();
     expect(
       within(menu).getByRole("menuitem", { name: "Paste" }),
     ).toBeDisabled();
@@ -2225,15 +2374,11 @@ describe("BrowserPage interactions", () => {
       within(menu).getByRole("menuitem", { name: "Copy path" }),
     ).toBeInTheDocument();
     expect(
-      within(menu).getByRole("menuitem", { name: "Configure bucket" }),
+      within(menu).getByRole("menuitem", { name: "Bucket details" }),
     ).toBeInTheDocument();
     expect(
       within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
     ).toHaveAttribute("aria-checked", "false");
-    expect(
-      within(menu).getByRole("menuitemcheckbox", { name: "Details panel" }),
-    ).toHaveAttribute("aria-checked", "false");
-
   });
 
   it("uses shared controls in the create folder modal", async () => {
@@ -2484,24 +2629,42 @@ describe("BrowserPage interactions", () => {
     expect(proxyUploadMock).not.toHaveBeenCalled();
   });
 
-  it("opens bucket configuration from More on /browser", async () => {
+  it("opens read-only bucket details from More on /browser", async () => {
     const user = userEvent.setup();
     renderPage();
     await findRowByLabel("a.txt");
 
     const menu = await openContextMoreMenu(user);
     await user.click(
-      within(menu).getByRole("menuitem", { name: "Configure bucket" }),
+      within(menu).getByRole("menuitem", { name: "Bucket details" }),
     );
 
     expect(
-      await screen.findByRole("dialog", {
-        name: "Configure bucket · bucket-1",
+      await screen.findByRole("complementary", {
+        name: "bucket-1",
       }),
     ).toBeInTheDocument();
   });
 
-  it("shows Configure bucket disabled in More when no bucket is selected", async () => {
+  it("opens the current path details from More in Advanced", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const menu = await openContextMoreMenu(user);
+    await user.click(
+      within(menu).getByRole("menuitem", { name: "Path details" }),
+    );
+
+    const drawer = await screen.findByRole("complementary", {
+      name: "Bucket root",
+    });
+    expect(within(drawer).getByText("Path details")).toBeInTheDocument();
+    expect(within(drawer).getAllByText("Bucket root")).not.toHaveLength(0);
+    expect(within(drawer).getAllByText("bucket-1")).not.toHaveLength(0);
+  });
+
+  it("shows Bucket details disabled in More when no bucket is selected", async () => {
     const user = userEvent.setup();
     searchBrowserBucketsMock.mockResolvedValue({
       items: [],
@@ -2516,11 +2679,11 @@ describe("BrowserPage interactions", () => {
 
     const menu = await openContextMoreMenu(user);
     expect(
-      within(menu).getByRole("menuitem", { name: "Configure bucket" }),
+      within(menu).getByRole("menuitem", { name: "Bucket details" }),
     ).toBeDisabled();
   });
 
-  it("keeps Configure bucket available in embedded Advanced browsers", async () => {
+  it("keeps Bucket settings available in embedded Advanced browsers", async () => {
     const user = userEvent.setup();
     const entries = ["/manager/browser", "/ceph-admin/browser"];
 
@@ -2530,7 +2693,7 @@ describe("BrowserPage interactions", () => {
 
       const menu = await openContextMoreMenu(user);
       expect(
-        within(menu).getByRole("menuitem", { name: "Configure bucket" }),
+        within(menu).getByRole("menuitem", { name: "Bucket settings" }),
       ).toBeEnabled();
 
       view.unmount();
@@ -2647,115 +2810,30 @@ describe("BrowserPage interactions", () => {
     expect(browserLayoutParent).not.toHaveClass("p-3");
   });
 
-  it("persists folders and details as independent display preferences", async () => {
+  it("persists the folders display preference", async () => {
     const user = userEvent.setup();
     const firstRender = renderPage();
-
-    const firstRow = await findRowByLabel("a.txt");
-
+    await findRowByLabel("a.txt");
     const menu = await openContextMoreMenu(user);
-    await user.click(
-      within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
-    );
-    await user.click(
-      within(menu).getByRole("menuitemcheckbox", {
-        name: "Details panel",
-      }),
-    );
-
-    expect(
-      await screen.findByRole("group", { name: "Details view" }),
-    ).toBeInTheDocument();
-    await user.click(firstRow);
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("region", { name: "Current bucket" }),
-      ).toBeInTheDocument();
-      expect(within(getContextToolbar()).getByRole("status")).toBeInTheDocument();
-    });
-
-    firstRender.unmount();
-
-    renderPage();
-    const remountedRow = await findRowByLabel("a.txt");
-
+    await user.click(within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }));
     expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("group", { name: "Details view" }),
-    ).toBeInTheDocument();
-    expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
-    await user.click(remountedRow);
-    expect(within(getContextToolbar()).getByRole("status")).toBeInTheDocument();
-  });
-
-  it("closes optional panels directly from their headers", async () => {
-    const user = userEvent.setup();
-    renderPage();
-    await findRowByLabel("a.txt");
-
-    const menu = await openContextMoreMenu(user);
-    await user.click(
-      within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
-    );
-    await user.click(
-      within(menu).getByRole("menuitemcheckbox", { name: "Details panel" }),
-    );
-
-    await user.click(
-      await screen.findByRole("button", { name: "Close folders panel" }),
-    );
-    expect(
-      screen.queryByRole("region", { name: "Current bucket" }),
-    ).not.toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: "Close details panel" }),
-    );
-    expect(
-      screen.queryByRole("group", { name: "Details view" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("keeps a stored inspector preference when the workspace temporarily disallows it", async () => {
-    const user = userEvent.setup();
-    const firstRender = renderPage({ defaultShowInspector: true });
-
-    await findRowByLabel("a.txt");
-
-    expect(
-      await screen.findByRole("group", { name: "Details view" }),
-    ).toBeInTheDocument();
-
     firstRender.unmount();
-
-    const blockedRender = renderPage({ allowInspectorPanel: false, defaultShowInspector: true });
-    await findRowByLabel("a.txt");
-
-    expect(
-      screen.queryByRole("group", { name: "Details view" }),
-    ).not.toBeInTheDocument();
-
-    const blockedMenu = await openContextMoreMenu(user);
-    expect(
-      within(blockedMenu).queryByRole("menuitemcheckbox", {
-        name: /Details panel/i,
-      }),
-    ).not.toBeInTheDocument();
-
-    blockedRender.unmount();
-
     renderPage();
     await findRowByLabel("a.txt");
+    expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
+  });
 
-    expect(
-      screen.getByRole("group", { name: "Details view" }),
-    ).toBeInTheDocument();
+  it("closes the folders panel directly from its header", async () => {
+    const user = userEvent.setup();
+    renderPage({ defaultShowFolders: true });
+    await findRowByLabel("a.txt");
+    await user.click(screen.getByRole("button", { name: "Close folders panel" }));
+    expect(screen.queryByRole("region", { name: "Current bucket" })).not.toBeInTheDocument();
   });
 
   it("keeps /browser preferences isolated from embedded browser surfaces", async () => {
     seedBrowserRootUiState({
-      layout: { showFolders: true, showInspector: true, showActionBar: true },
+      layout: { showFolders: true },
       contextSelections: {},
     });
 
@@ -2763,9 +2841,6 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("group", { name: "Details view" }),
-    ).toBeInTheDocument();
     expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
     const rootPreferenceSnapshot = window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V3_STORAGE_KEY);
 
@@ -2776,9 +2851,6 @@ describe("BrowserPage interactions", () => {
 
     expect(
       screen.queryByRole("region", { name: "Current bucket" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("group", { name: "Details view" }),
     ).not.toBeInTheDocument();
     expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
 
@@ -2794,9 +2866,6 @@ describe("BrowserPage interactions", () => {
 
     expect(
       screen.queryByRole("region", { name: "Current bucket" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("group", { name: "Details view" }),
     ).not.toBeInTheDocument();
     expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
 
@@ -2819,14 +2888,11 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("group", { name: "Details view" }),
-    ).toBeInTheDocument();
     expect(within(getContextToolbar()).queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("uses the default panel widths when nothing is stored", async () => {
-    renderPage({ defaultShowFolders: true, defaultShowInspector: true });
+    renderPage({ defaultShowFolders: true });
     await findRowByLabel("a.txt");
 
     const layout = setBrowserLayoutRect(1400);
@@ -2839,11 +2905,10 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.getByRole("separator", { name: "Resize folders panel" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Details view" })).toBeInTheDocument();
   });
 
   it("resizes the folders panel and persists the width", async () => {
-    renderPage({ defaultShowFolders: true, defaultShowInspector: true });
+    renderPage({ defaultShowFolders: true });
     await findRowByLabel("a.txt");
 
     const layout = setBrowserLayoutRect(1400);
@@ -2873,10 +2938,7 @@ describe("BrowserPage interactions", () => {
     seedBrowserRootUiState({
       layout: {
         showFolders: true,
-        showInspector: true,
-        showActionBar: false,
         foldersPanelWidthPx: 360,
-        inspectorPanelWidthPx: 410,
       },
       contextSelections: {},
     });
@@ -2897,10 +2959,7 @@ describe("BrowserPage interactions", () => {
     seedBrowserRootUiState({
       layout: {
         showFolders: true,
-        showInspector: true,
-        showActionBar: false,
         foldersPanelWidthPx: 360,
-        inspectorPanelWidthPx: 410,
       },
       contextSelections: {},
     });
@@ -2920,28 +2979,19 @@ describe("BrowserPage interactions", () => {
     });
   });
 
-  it("only renders resizers for visible and allowed panels", async () => {
-    const inspectorOnlyRender = renderPage({
-      defaultShowInspector: true,
-      defaultShowFolders: false,
-    });
+  it("only renders the folders resizer when the panel is visible and allowed", async () => {
+    const foldersHiddenRender = renderPage({ defaultShowFolders: false });
     await findRowByLabel("a.txt");
     expect(
       screen.queryByRole("separator", { name: "Resize folders panel" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Details view" })).toBeInTheDocument();
-
-    inspectorOnlyRender.unmount();
+    foldersHiddenRender.unmount();
 
     const embeddedRender = renderEmbeddedPage();
     await findRowByLabel("a.txt");
     expect(
       screen.queryByRole("separator", { name: "Resize folders panel" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("separator", { name: "Resize inspector panel" }),
-    ).not.toBeInTheDocument();
-
     embeddedRender.unmount();
 
     const matchMediaSpy = vi.spyOn(window, "matchMedia").mockImplementation(
@@ -2955,14 +3005,11 @@ describe("BrowserPage interactions", () => {
           dispatchEvent: vi.fn(),
         }) as MediaQueryList,
     );
-    renderPage({ defaultShowFolders: true, defaultShowInspector: true });
+    renderPage({ defaultShowFolders: true });
     await findRowByLabel("a.txt");
 
     expect(
       screen.queryByRole("separator", { name: "Resize folders panel" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("separator", { name: "Resize inspector panel" }),
     ).not.toBeInTheDocument();
     matchMediaSpy.mockRestore();
   });
@@ -3002,7 +3049,9 @@ describe("BrowserPage interactions", () => {
         within(row).getByRole("button", { name: "More actions for a.txt" }),
       ).toHaveClass("min-h-11", "min-w-11");
 
-      await user.click(row);
+      await user.click(
+        within(row).getByRole("checkbox", { name: "Select a.txt" }),
+      );
       const toolbar = screen.getByRole("toolbar", {
         name: "Selected object actions",
       });
@@ -3051,10 +3100,7 @@ describe("BrowserPage interactions", () => {
       },
     );
 
-    const firstRender = renderPage({
-      accountIdForApi: "acc-1",
-      defaultShowInspector: true,
-    });
+    const firstRender = renderPage({ accountIdForApi: "acc-1" });
     await user.click(
       within(getContextToolbar()).getByRole("button", {
         name: "Select bucket",
@@ -3070,7 +3116,7 @@ describe("BrowserPage interactions", () => {
     });
     await findRowByLabel("docs");
 
-    await user.dblClick(await findRowByLabel("docs"));
+    await user.click(await findRowByLabel("docs"));
     await waitFor(() => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
@@ -3083,10 +3129,7 @@ describe("BrowserPage interactions", () => {
 
     firstRender.unmount();
 
-    const secondRender = renderPage({
-      accountIdForApi: "acc-2",
-      defaultShowInspector: true,
-    });
+    const secondRender = renderPage({ accountIdForApi: "acc-2" });
     await findRowByLabel("a.txt");
 
     expect(within(getContextPanel()).getByText("bucket-a")).toBeInTheDocument();
@@ -3096,7 +3139,7 @@ describe("BrowserPage interactions", () => {
 
     secondRender.unmount();
 
-    renderPage({ accountIdForApi: "acc-1", defaultShowInspector: true });
+    renderPage({ accountIdForApi: "acc-1" });
     await screen.findByText("readme.txt");
 
     await waitFor(() => {
@@ -3164,13 +3207,13 @@ describe("BrowserPage interactions", () => {
       },
     );
     seedBrowserRootUiState({
-      layout: { showFolders: false, showInspector: true, showActionBar: false },
+      layout: { showFolders: false },
       contextSelections: {
         "acc-1": { bucketName: "missing-bucket", prefix: "docs/" },
       },
     });
 
-    renderPage({ accountIdForApi: "acc-1", defaultShowInspector: true });
+    renderPage({ accountIdForApi: "acc-1" });
 
     await waitFor(() => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
@@ -3207,7 +3250,7 @@ describe("BrowserPage interactions", () => {
       },
     );
     seedBrowserRootUiState({
-      layout: { showFolders: false, showInspector: true, showActionBar: false },
+      layout: { showFolders: false },
       contextSelections: {
         "acc-1": { bucketName: "bucket-2", prefix: "docs/" },
       },
@@ -3215,7 +3258,6 @@ describe("BrowserPage interactions", () => {
 
     renderPage({
       accountIdForApi: "acc-1",
-      defaultShowInspector: true,
       initialEntry: "/browser?bucket=bucket-1",
     });
     await findRowByLabel("a.txt");
@@ -3723,8 +3765,6 @@ describe("BrowserPage interactions", () => {
     renderPage();
     await enableActionBar(user);
 
-    await user.click(await findRowByLabel("a.txt"));
-
     const actionsToolbar = getActionsToolbar();
     const orderedButtons = [
       "Open",
@@ -3762,18 +3802,12 @@ describe("BrowserPage interactions", () => {
 
     const menu = await openActionsMoreMenu(user);
 
+    expect(within(menu).getByText("Selection")).toBeInTheDocument();
+    expect(within(menu).queryByText("Current path")).not.toBeInTheDocument();
     expect(
-      within(menu).getByRole("menuitem", { name: "Upload files" }),
-    ).toBeInTheDocument();
-    expect(
-      within(menu).getByRole("menuitem", { name: "Upload folder" }),
-    ).toBeInTheDocument();
-    expect(
-      within(menu).getByRole("menuitem", { name: "New folder" }),
-    ).toBeInTheDocument();
-    expect(
-      within(menu).getByRole("menuitem", { name: "Paste" }),
-    ).toBeDisabled();
+      within(menu).queryByRole("menuitem", { name: "Upload files" }),
+    ).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Browser view")).not.toBeInTheDocument();
 
     expect(
       within(menu).getByRole("menuitem", { name: "Copy URL" }),
@@ -3792,9 +3826,11 @@ describe("BrowserPage interactions", () => {
   it("keeps a single folder selection downloadable with a stable toolbar label", async () => {
     const user = userEvent.setup();
     renderPage();
-    await enableActionBar(user);
-
-    await user.click(await findRowByLabel("docs"));
+    await user.click(
+      within(await findRowByLabel("docs")).getByRole("checkbox", {
+        name: "Select docs",
+      }),
+    );
 
     const actionsToolbar = getActionsToolbar();
 
@@ -3897,14 +3933,12 @@ describe("BrowserPage interactions", () => {
     const user = userEvent.setup();
     renderPage();
     await enableActionBar(user);
-
-    await user.click(await findRowByLabel("a.txt"));
     await user.click(
       within(getActionsToolbar()).getByRole("button", { name: "Open" }),
     );
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
+    const dialog = await screen.findByRole("complementary", {
+      name: "a.txt",
     });
     expect(
       within(dialog).getByRole("tab", { name: "Preview" }),
@@ -3934,7 +3968,9 @@ describe("BrowserPage interactions", () => {
     const moreMenu = await openContextMoreMenu(user);
     expect(moreMenu).toBeInTheDocument();
 
-    await user.click(row);
+    await user.click(
+      within(row).getByRole("checkbox", { name: "Select a.txt" }),
+    );
 
     await waitFor(() => {
       expect(moreMenu).not.toBeInTheDocument();
@@ -3944,12 +3980,15 @@ describe("BrowserPage interactions", () => {
   it("uses the automatic selection bar More menu for secondary actions", async () => {
     const user = userEvent.setup();
     renderPage();
-
-    const rowA = await findRowByLabel("a.txt");
+    await findRowByLabel("a.txt");
     const rowB = await findRowByLabel("b.txt");
 
-    await user.click(rowA);
-    fireEvent.click(rowB, { ctrlKey: true });
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select a.txt" }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select b.txt" }),
+    );
 
     const contextToolbar = getContextToolbar();
     expect(
@@ -4038,12 +4077,13 @@ describe("BrowserPage interactions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("supports Cmd/Ctrl click toggle selection", async () => {
+  it("uses checkboxes for additive toggle selection", async () => {
     const user = userEvent.setup();
     renderPage();
+    await findRowByLabel("a.txt");
 
-    await user.click(await findRowByLabel("a.txt"));
-    fireEvent.click(await findRowByLabel("b.txt"), { ctrlKey: true });
+    await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
 
     expect(
       screen.getByRole("checkbox", { name: "Select a.txt" }),
@@ -4052,7 +4092,7 @@ describe("BrowserPage interactions", () => {
       screen.getByRole("checkbox", { name: "Select b.txt" }),
     ).toBeChecked();
 
-    fireEvent.click(await findRowByLabel("b.txt"), { ctrlKey: true });
+    await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
 
     expect(
       screen.getByRole("checkbox", { name: "Select a.txt" }),
@@ -4062,12 +4102,15 @@ describe("BrowserPage interactions", () => {
     ).not.toBeChecked();
   });
 
-  it("supports Shift click range selection", async () => {
+  it("supports Shift-click range selection from checkboxes", async () => {
     const user = userEvent.setup();
     renderPage();
+    await findRowByLabel("a.txt");
 
-    await user.click(await findRowByLabel("a.txt"));
-    fireEvent.click(await findRowByLabel("c.txt"), { shiftKey: true });
+    await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select c.txt" }), {
+      shiftKey: true,
+    });
 
     expect(
       screen.getByRole("checkbox", { name: "Select a.txt" }),
@@ -4080,7 +4123,7 @@ describe("BrowserPage interactions", () => {
     ).toBeChecked();
   });
 
-  it("navigates into a folder on double-click without leaving the previous listing visible", async () => {
+  it("navigates into a folder on click without leaving the previous listing visible", async () => {
     const user = userEvent.setup();
     let resolveDocsListing:
       | ((value: {
@@ -4144,7 +4187,7 @@ describe("BrowserPage interactions", () => {
 
     renderPage();
 
-    await user.dblClick(await findRowByLabel("docs"));
+    await user.click(await findRowByLabel("docs"));
 
     await waitFor(() => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
@@ -4180,30 +4223,32 @@ describe("BrowserPage interactions", () => {
     });
   });
 
-  it("opens the unified preview modal on file double-click", async () => {
+  it("opens the unified preview drawer without repeating metadata below its tabs", async () => {
     const user = userEvent.setup();
-    renderPage({ defaultShowInspector: true });
+    renderPage();
 
-    await user.dblClick(await findRowByLabel("a.txt"));
+    await user.click(await findRowByLabel("a.txt"));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
+    const dialog = await screen.findByRole("complementary", {
+      name: "a.txt",
     });
     expect(
       within(dialog).getByRole("tab", { name: "Preview" }),
     ).toHaveAttribute("aria-selected", "true");
+    const header = dialog.querySelector("header");
+    expect(header).not.toBeNull();
+    expect(header).not.toHaveTextContent("10 B");
+    expect(header).not.toHaveTextContent("STANDARD");
+    expect(header).not.toHaveTextContent("2026-03-10");
   });
 
-  it("opens the single-row actions menu from More actions and routes Details to the inspector", async () => {
+  it("opens the single-row actions menu and maps Details to Advanced properties", async () => {
     const user = userEvent.setup();
     getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
-    renderPage({ defaultShowInspector: true });
-
-    await user.click(await findRowByLabel("a.txt"));
-    expect(screen.getByRole("group", { name: "Details view" })).toBeInTheDocument();
+    renderPage();
 
     await user.click(
       within(await findRowByLabel("a.txt")).getByRole("button", {
@@ -4251,16 +4296,11 @@ describe("BrowserPage interactions", () => {
     expect(menuButtons).not.toContain("Advanced");
     await user.click(within(menu).getByRole("button", { name: "Details" }));
 
-    expect(
-      await screen.findByRole("group", { name: "Details view" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Object" })).toHaveAttribute(
-      "aria-pressed",
+    const drawer = await screen.findByRole("complementary", { name: "a.txt" });
+    expect(within(drawer).getByRole("tab", { name: "Properties" })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
-    expect(
-      screen.queryByRole("dialog", { name: "Object details · a.txt" }),
-    ).not.toBeInTheDocument();
   });
 
   it("opens Preview and Properties from the file actions menu into the unified modal", async () => {
@@ -4269,7 +4309,7 @@ describe("BrowserPage interactions", () => {
       enabled: true,
       status: "Enabled",
     });
-    renderPage({ defaultShowInspector: false });
+    renderPage();
 
     const row = await findRowByLabel("a.txt");
 
@@ -4277,21 +4317,21 @@ describe("BrowserPage interactions", () => {
     let menu = await screen.findByRole("menu");
     await user.click(within(menu).getByRole("button", { name: "Preview" }));
 
-    let dialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
+    let dialog = await screen.findByRole("complementary", {
+      name: "a.txt",
     });
     expect(within(dialog).getByRole("tab", { name: "Preview" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+    await user.click(within(dialog).getByRole("button", { name: "Close details" }));
 
     await user.click(within(row).getByRole("button", { name: "More actions for a.txt" }));
     menu = await screen.findByRole("menu");
     await user.click(within(menu).getByRole("button", { name: "Properties" }));
 
-    dialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
+    dialog = await screen.findByRole("complementary", {
+      name: "a.txt",
     });
     expect(
       within(dialog).getByRole("tab", { name: "Properties" }),
@@ -4300,7 +4340,7 @@ describe("BrowserPage interactions", () => {
 
   it("shows folder row actions from More actions with the same single-item menu content", async () => {
     const user = userEvent.setup();
-    renderPage({ defaultShowInspector: true });
+    renderPage();
 
     await user.click(
       within(await findRowByLabel("docs")).getByRole("button", {
@@ -4327,11 +4367,15 @@ describe("BrowserPage interactions", () => {
     expect(
       within(menu).getByRole("button", { name: "Delete" }),
     ).toBeInTheDocument();
+    await user.click(within(menu).getByRole("button", { name: "Details" }));
+    const drawer = await screen.findByRole("complementary", { name: "docs" });
+    expect(within(drawer).getByText("Folder prefix")).toBeInTheDocument();
+    expect(within(drawer).getAllByText("bucket-1/docs")).not.toHaveLength(0);
   });
 
-  it("keeps More actions available when the inspector panel is disabled and omits Details for files", async () => {
+  it("keeps More actions and Details available without a persistent inspector", async () => {
     const user = userEvent.setup();
-    renderPage({ defaultShowInspector: false, allowInspectorPanel: false });
+    renderPage();
 
     const row = await findRowByLabel("a.txt");
     const moreButton = within(row).getByRole("button", {
@@ -4342,69 +4386,39 @@ describe("BrowserPage interactions", () => {
     await user.click(moreButton);
     const menu = await screen.findByRole("menu");
 
-    expect(within(menu).queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
     expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
     expect(within(menu).getByRole("button", { name: "Properties" })).toBeInTheDocument();
     expect(
       within(menu).getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("group", { name: "Details view" }),
-    ).not.toBeInTheDocument();
-
-    expect(
-      screen.queryByRole("dialog", { name: "Object details · a.txt" }),
+      screen.queryByRole("complementary", { name: "a.txt" }),
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the simplified Object and Bucket views on one line", async () => {
+  it("keeps row selection independent from object details", async () => {
     const user = userEvent.setup();
-    renderPage({ defaultShowInspector: true });
+    renderPage();
 
-    await user.click(await findRowByLabel("a.txt"));
-
-    const viewSwitcher = screen.getByRole("group", { name: "Details view" });
-    const views = within(viewSwitcher).getAllByRole("button");
-
-    expect(viewSwitcher).toHaveClass("flex-nowrap");
-    expect(views.map((view) => view.textContent)).toEqual(["Object", "Bucket"]);
-    expect(within(viewSwitcher).getByRole("button", { name: "Object" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    const rowA = await findRowByLabel("a.txt");
+    await user.click(
+      within(rowA).getByRole("checkbox", { name: "Select a.txt" }),
     );
-  });
-
-  it("updates Details on simple row click when Details tab is active", async () => {
-    const user = userEvent.setup();
-    renderPage({ defaultShowInspector: true });
-
-    await user.click(await findRowByLabel("a.txt"));
-    await waitFor(() => {
-      expect(
-        within(screen.getByRole("complementary", { name: "Details panel" })).getByText("a.txt"),
-      ).toBeInTheDocument();
-    });
-
     await user.click(await findRowByLabel("b.txt"));
-
-    expect(screen.getByRole("button", { name: "Object" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await waitFor(() => {
-      expect(
-        within(screen.getByRole("complementary", { name: "Details panel" })).getByText("b.txt"),
-      ).toBeInTheDocument();
-    });
+    expect(screen.getByRole("checkbox", { name: "Select a.txt" })).toBeChecked();
+    expect(
+      await screen.findByRole("complementary", { name: "b.txt" }),
+    ).toBeInTheDocument();
   });
 
-  it("keeps the Details inspector informative and routes its only link to full details", async () => {
+  it("keeps preview and Advanced protection loading lazy in the object drawer", async () => {
     const user = userEvent.setup();
     getBrowserBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
     });
-    renderPage({ defaultShowInspector: true });
+    renderPage();
 
     const rowA = await findRowByLabel("a.txt");
     await user.click(
@@ -4415,8 +4429,8 @@ describe("BrowserPage interactions", () => {
     const previewMenu = await screen.findByRole("menu");
     await user.click(within(previewMenu).getByRole("button", { name: "Preview" }));
 
-    let dialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
+    const dialog = await screen.findByRole("complementary", {
+      name: "a.txt",
     });
     expect(
       within(dialog).getByRole("tab", { name: "Preview" }),
@@ -4448,34 +4462,7 @@ describe("BrowserPage interactions", () => {
       ).not.toBeInTheDocument();
     });
     expect(within(dialog).queryByTitle("Object preview")).not.toBeInTheDocument();
-    expect(listObjectVersionsMock).toHaveBeenCalledTimes(1);
-    expect(getObjectLegalHoldMock).not.toHaveBeenCalled();
-    expect(getObjectRetentionMock).not.toHaveBeenCalled();
-
-    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
-
-    await user.click(rowA);
-    const panel = screen.getByRole("complementary", { name: "Details panel" });
-
-    await waitFor(() => {
-      expect(listObjectVersionsMock).toHaveBeenCalledTimes(1);
-    });
-    expect(within(panel).getByText("No versions found.")).toBeInTheDocument();
-    expect(within(panel).queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
-    expect(within(panel).queryByRole("button", { name: "Versions" })).not.toBeInTheDocument();
-
-    await user.click(
-      within(panel).getByRole("button", { name: "Open full details" }),
-    );
-    dialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
-    });
-    expect(
-      within(dialog).getByRole("tab", { name: "Properties" }),
-    ).toHaveAttribute("aria-selected", "true");
-    await waitFor(() => {
-      expect(getObjectTagsMock).toHaveBeenCalledTimes(1);
-    });
+    expect(listObjectVersionsMock).not.toHaveBeenCalled();
     expect(getObjectLegalHoldMock).not.toHaveBeenCalled();
     expect(getObjectRetentionMock).not.toHaveBeenCalled();
 
@@ -4488,7 +4475,7 @@ describe("BrowserPage interactions", () => {
     });
   });
 
-  it("submits an archive restore from the object details modal", async () => {
+  it("submits an archive restore from the object details drawer", async () => {
     const user = userEvent.setup();
     fetchObjectMetadataMock.mockResolvedValue({
       key: "a.txt",
@@ -4510,8 +4497,8 @@ describe("BrowserPage interactions", () => {
       }),
     );
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
+    const dialog = await screen.findByRole("complementary", {
+      name: "a.txt",
     });
     await user.click(await within(dialog).findByRole("tab", { name: "Archive" }));
     await user.clear(within(dialog).getByRole("spinbutton", { name: "Days" }));
@@ -4546,7 +4533,7 @@ describe("BrowserPage interactions", () => {
     expect(fetchObjectMetadataMock).toHaveBeenCalledTimes(2);
   });
 
-  it("updates a canned ACL from the object details modal", async () => {
+  it("updates a canned ACL from the object details drawer", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -4560,8 +4547,8 @@ describe("BrowserPage interactions", () => {
       }),
     );
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
+    const dialog = await screen.findByRole("complementary", {
+      name: "a.txt",
     });
     await user.click(
       within(dialog).getByRole("tab", { name: "Access & Protection" }),
@@ -4619,8 +4606,8 @@ describe("BrowserPage interactions", () => {
         }),
       );
 
-      const dialog = await screen.findByRole("dialog", {
-        name: "Object details · large-video.mp4",
+      const dialog = await screen.findByRole("complementary", {
+        name: "large-video.mp4",
       });
       expect(
         within(dialog).getByRole("tab", { name: "Preview" }),
@@ -4635,20 +4622,6 @@ describe("BrowserPage interactions", () => {
     },
   );
 
-  it("returns the Details panel to the bucket view for multi-selection", async () => {
-    const user = userEvent.setup();
-    renderPage({ defaultShowInspector: true });
-
-    await user.click(await findRowByLabel("a.txt"));
-    fireEvent.click(await findRowByLabel("b.txt"), { ctrlKey: true });
-
-    expect(screen.getByRole("button", { name: "Bucket" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByText("Bucket overview")).toBeInTheDocument();
-  });
-
   it("shows disabled legal hold and retention controls when object lock is not enabled on the bucket", async () => {
     const user = userEvent.setup();
     const objectLockError = new Error(
@@ -4657,17 +4630,15 @@ describe("BrowserPage interactions", () => {
     getObjectLegalHoldMock.mockRejectedValue(objectLockError);
     getObjectRetentionMock.mockRejectedValue(objectLockError);
 
-    renderPage({ defaultShowInspector: true });
-
-    await user.click(await findRowByLabel("a.txt"));
-    const panel = screen.getByRole("complementary", { name: "Details panel" });
-
+    renderPage();
+    const row = await findRowByLabel("a.txt");
     await user.click(
-      within(panel).getByRole("button", { name: "Open full details" }),
+      within(row).getByRole("button", { name: "More actions for a.txt" }),
     );
+    await user.click(within(await screen.findByRole("menu")).getByRole("button", { name: "Properties" }));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
+    const dialog = await screen.findByRole("complementary", {
+      name: "a.txt",
     });
 
     await user.click(
@@ -4699,23 +4670,18 @@ describe("BrowserPage interactions", () => {
     expect(within(dialog).getByLabelText("Bypass governance retention")).toBeDisabled();
   });
 
-  it("returns the Details panel to the bucket view when Escape clears selection", async () => {
+  it("clears row selection with Escape", async () => {
     const user = userEvent.setup();
-    renderPage({ defaultShowInspector: true });
+    renderPage();
 
     await user.click(await findRowByLabel("a.txt"));
     const objectsList = screen.getByLabelText("Objects list");
     (objectsList as HTMLDivElement).focus();
     fireEvent.keyDown(objectsList, { key: "Escape" });
 
-    expect(screen.getByRole("button", { name: "Bucket" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
     expect(
       screen.getByRole("checkbox", { name: "Select a.txt" }),
     ).not.toBeChecked();
-    expect(screen.getByText("Bucket overview")).toBeInTheDocument();
   });
 
   it("supports full keyboard navigation: arrows, range, home/end, space, enter and escape", async () => {
@@ -4783,7 +4749,7 @@ describe("BrowserPage interactions", () => {
     renderPage({ accountIdForApi: "acc-1" });
 
     await copyOrCutItem(user, "a.txt", "Copy");
-    await user.dblClick(await findRowByLabel("docs"));
+    await user.click(await findRowByLabel("docs"));
     await findRowByLabel("readme.txt");
     await pasteFromCurrentPath(user);
 
@@ -4964,7 +4930,7 @@ describe("BrowserPage interactions", () => {
 
     view.rerender(renderPageElement({ accountIdForApi: "acc-2" }));
 
-    await user.dblClick(await findRowByLabel("docs"));
+    await user.click(await findRowByLabel("docs"));
     await findRowByLabel("readme.txt");
     await pasteFromCurrentPath(user);
 
@@ -5010,10 +4976,10 @@ describe("BrowserPage interactions", () => {
         }),
     );
 
-    renderPage({ accountIdForApi: "acc-1", defaultShowInspector: true });
+    renderPage({ accountIdForApi: "acc-1" });
 
     await copyOrCutSelection(user, ["a.txt", "b.txt"], "Copy");
-    await user.dblClick(await findRowByLabel("docs"));
+    await user.click(await findRowByLabel("docs"));
     await findRowByLabel("readme.txt");
     await pasteFromCurrentPath(user);
 
@@ -5300,18 +5266,15 @@ describe("BrowserPage interactions", () => {
       },
     );
 
-    const view = renderPage({
-      accountIdForApi: "acc-1",
-      defaultShowInspector: true,
-    });
+    const view = renderPage({ accountIdForApi: "acc-1" });
 
     await copyOrCutSelection(user, ["a.txt", "b.txt"], "Cut");
 
     view.rerender(
-      renderPageElement({ accountIdForApi: "acc-2", defaultShowInspector: true }),
+      renderPageElement({ accountIdForApi: "acc-2" }),
     );
 
-    await user.dblClick(await findRowByLabel("docs"));
+    await user.click(await findRowByLabel("docs"));
     await findRowByLabel("readme.txt");
     await pasteFromCurrentPath(user);
 
@@ -5542,7 +5505,7 @@ describe("BrowserPage interactions", () => {
   it("shows Stop all for multi-object delete and marks remaining items as cancelled", async () => {
     const user = userEvent.setup();
     seedBrowserRootUiState({
-      layout: { showFolders: false, showInspector: false, showActionBar: true },
+      layout: { showFolders: false },
       contextSelections: {},
     });
     fetchBrowserSettingsMock.mockResolvedValue({
@@ -5624,7 +5587,6 @@ describe("BrowserPage interactions", () => {
 
     renderPage();
     await enableActionBar(user);
-    await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
     await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
     const menu = await openActionsMoreMenu(user);
     const bulkAttributesAction = within(menu).getByRole("menuitem", {
@@ -5667,7 +5629,7 @@ describe("BrowserPage interactions", () => {
   it("supports Stop for restore-to-date batches", async () => {
     const user = userEvent.setup();
     seedBrowserRootUiState({
-      layout: { showFolders: false, showInspector: false, showActionBar: true },
+      layout: { showFolders: false },
       contextSelections: {},
     });
     getBrowserBucketVersioningMock.mockResolvedValue({
@@ -5776,7 +5738,7 @@ describe("BrowserPage interactions", () => {
       ) => createAbortablePromise(signal),
     );
 
-    renderPage({ defaultShowInspector: true });
+    renderPage();
     await waitFor(() => {
       expect(getBrowserBucketVersioningMock).toHaveBeenCalledTimes(1);
     });
@@ -5849,19 +5811,14 @@ describe("BrowserPage interactions", () => {
       ) => createAbortablePromise(signal),
     );
 
-    renderPage({ defaultShowInspector: true });
-    await user.click(await findRowByLabel("a.txt"));
-    await user.click(
-      within(screen.getByRole("complementary", { name: "Details panel" })).getByRole(
-        "button",
-        { name: "Open full details" },
-      ),
-    );
+    renderPage();
+    const row = await findRowByLabel("a.txt");
+    await user.click(within(row).getByRole("button", { name: "More actions for a.txt" }));
+    await user.click(within(await screen.findByRole("menu")).getByRole("button", { name: "Versions" }));
 
-    const detailsDialog = await screen.findByRole("dialog", {
-      name: "Object details · a.txt",
+    const detailsDialog = await screen.findByRole("complementary", {
+      name: "a.txt",
     });
-    await user.click(within(detailsDialog).getByRole("tab", { name: "Versions" }));
     await within(detailsDialog).findByRole("button", { name: "Restore" });
 
     await user.click(within(detailsDialog).getByRole("button", { name: "Restore" }));
@@ -5919,7 +5876,7 @@ describe("BrowserPage interactions", () => {
     await user.click(
       within(getActionsToolbar()).getByRole("button", { name: "Copy" }),
     );
-    await user.dblClick(await findRowByLabel("docs"));
+    await user.click(await findRowByLabel("docs"));
     await findRowByLabel("readme.txt");
     await pasteFromCurrentPath(user);
 

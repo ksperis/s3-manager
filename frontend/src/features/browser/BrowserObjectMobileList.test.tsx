@@ -33,8 +33,6 @@ function buildProps(
     workspaceObjectNounPlural: "objects",
     rowActionButtonClasses: "row-action",
     onGoUp: vi.fn(),
-    onSelectItem: vi.fn(),
-    onItemDoubleClick: vi.fn(),
     onItemContextMenu: vi.fn(),
     onToggleSelection: vi.fn(),
     onItemNameClick: vi.fn(),
@@ -86,7 +84,6 @@ describe("BrowserObjectMobileList", () => {
     expect(row).toHaveClass("bg-primary-100/90");
 
     fireEvent.click(row);
-    fireEvent.doubleClick(row);
     fireEvent.contextMenu(row);
     fireEvent.click(
       screen.getByRole("checkbox", { name: "Select object-1.txt" }),
@@ -98,12 +95,9 @@ describe("BrowserObjectMobileList", () => {
       screen.getByRole("button", { name: "More actions for object-1.txt" }),
     );
 
-    expect(props.onSelectItem).toHaveBeenCalledTimes(1);
-    expect(props.onSelectItem).toHaveBeenCalledWith(
-      expect.anything(),
-      fileItem,
-    );
-    expect(props.onItemDoubleClick).toHaveBeenCalledWith(
+    expect(props.onItemNameClick).toHaveBeenCalledTimes(2);
+    expect(props.onItemNameClick).toHaveBeenNthCalledWith(
+      1,
       expect.anything(),
       fileItem,
     );
@@ -111,8 +105,9 @@ describe("BrowserObjectMobileList", () => {
       expect.anything(),
       fileItem,
     );
-    expect(props.onToggleSelection).toHaveBeenCalledWith(fileItem);
-    expect(props.onItemNameClick).toHaveBeenCalledWith(
+    expect(props.onToggleSelection).toHaveBeenCalledWith(fileItem, false);
+    expect(props.onItemNameClick).toHaveBeenNthCalledWith(
+      2,
       expect.anything(),
       fileItem,
     );
@@ -155,6 +150,9 @@ describe("BrowserObjectMobileList", () => {
     expect(container.querySelector('[data-lazy-item-id="deleted-1"]')).toBeNull();
 
     fireEvent.click(screen.getAllByRole("listitem")[0]);
-    expect(props.onSelectItem).not.toHaveBeenCalled();
+    expect(props.onItemNameClick).toHaveBeenCalledWith(
+      expect.anything(),
+      deletedItem,
+    );
   });
 });

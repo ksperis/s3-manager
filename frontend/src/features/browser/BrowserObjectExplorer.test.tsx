@@ -109,8 +109,6 @@ function buildProps(overrides: Partial<ExplorerProps> = {}): ExplorerProps {
     onListBackgroundClick: vi.fn(),
     onListKeyDown: vi.fn(),
     onGoUp: vi.fn(),
-    onSelectItem: vi.fn(),
-    onItemDoubleClick: vi.fn(),
     onItemContextMenu: vi.fn(),
     onToggleSelection: vi.fn(),
     onItemNameClick: vi.fn(),
@@ -136,7 +134,6 @@ describe("BrowserObjectExplorer", () => {
     if (!row) throw new Error("Expected the object table row.");
 
     fireEvent.click(row);
-    fireEvent.doubleClick(row);
     fireEvent.contextMenu(row);
     fireEvent.click(
       screen.getByRole("checkbox", { name: "Select object-1.txt" }),
@@ -145,12 +142,8 @@ describe("BrowserObjectExplorer", () => {
       screen.getByRole("button", { name: "Download object-1.txt" }),
     );
 
-    expect(props.onSelectItem).toHaveBeenCalledTimes(1);
-    expect(props.onSelectItem).toHaveBeenCalledWith(
-      expect.anything(),
-      fileItem,
-    );
-    expect(props.onItemDoubleClick).toHaveBeenCalledWith(
+    expect(props.onItemNameClick).toHaveBeenCalledTimes(1);
+    expect(props.onItemNameClick).toHaveBeenCalledWith(
       expect.anything(),
       fileItem,
     );
@@ -158,7 +151,7 @@ describe("BrowserObjectExplorer", () => {
       expect.anything(),
       fileItem,
     );
-    expect(props.onToggleSelection).toHaveBeenCalledWith(fileItem);
+    expect(props.onToggleSelection).toHaveBeenCalledWith(fileItem, false);
     expect(props.onRunItemAction).toHaveBeenCalledWith(fileItem, "download");
   });
 
@@ -177,7 +170,10 @@ describe("BrowserObjectExplorer", () => {
     }).closest("tr");
     if (!deletedRow) throw new Error("Expected the deleted object row.");
     fireEvent.click(deletedRow);
-    expect(props.onSelectItem).not.toHaveBeenCalled();
+    expect(props.onItemNameClick).toHaveBeenCalledWith(
+      expect.anything(),
+      deletedItem,
+    );
     expect(
       screen.getByRole("checkbox", { name: "Select object-1.txt" }),
     ).toBeDisabled();

@@ -43,7 +43,6 @@ import {
   FolderIcon,
   FolderPlusIcon,
   HistoryIcon,
-  InfoIcon,
   ListIcon,
   MoreIcon,
   OpenIcon,
@@ -61,6 +60,16 @@ const overflowStatusRowClasses =
   "flex items-start gap-3 px-1 py-1 ui-caption text-slate-600 dark:text-slate-300";
 const overflowSectionTitleClasses =
   "px-1 py-1 ui-caption font-semibold text-slate-500 dark:text-slate-400";
+const directToolbarPathActionIds = new Set<BrowserActionId>([
+  "uploadFiles",
+  "uploadFolder",
+  "newFolder",
+]);
+const currentPathMenuActionIds = new Set<BrowserActionId>([
+  "details",
+  "paste",
+  "copyPath",
+]);
 
 type ToolbarToggle = {
   checked: boolean;
@@ -114,7 +123,6 @@ type BrowserToolbarProps = {
     };
     layout: {
       folders?: ToolbarToggle;
-      inspector?: ToolbarToggle;
     };
     columns?: ToolbarColumns;
     pathActions: BrowserActionState[];
@@ -161,25 +169,38 @@ export default function BrowserToolbar({
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
   const toolbarShellClasses = compactMode
     ? "flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
-    : "flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between";
+    : "flex flex-col gap-2 2xl:flex-row 2xl:items-center 2xl:justify-between";
   const toolbarActionsClasses = compactMode
     ? "flex shrink-0 flex-wrap items-center justify-end gap-2"
-    : "flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto";
+    : "flex w-full flex-wrap items-center justify-end gap-2 2xl:w-auto";
   const selectionActionsClasses = compactMode
     ? "hidden shrink-0 items-center gap-1.5 md:flex"
-    : "hidden w-full shrink-0 flex-wrap items-center justify-end gap-2 md:flex xl:w-auto";
+    : "hidden w-full shrink-0 flex-wrap items-center justify-end gap-2 md:flex 2xl:w-auto";
 
   const hasViewSection = Boolean(moreMenu.view);
   const hasStatusSection = moreMenu.status.visible;
-  const hasLayoutSection = Boolean(
-    moreMenu.layout.folders || moreMenu.layout.inspector,
-  );
+  const hasLayoutSection = Boolean(moreMenu.layout.folders);
   const hasColumnsSection = Boolean(moreMenu.columns);
-  const hasPathActions = moreMenu.pathActions.length > 0;
+  const menuPathActions = moreMenu.pathActions.filter(
+    (action) => !directToolbarPathActionIds.has(action.id),
+  );
+  const currentPathMenuActions = menuPathActions.filter((action) =>
+    currentPathMenuActionIds.has(action.id),
+  );
+  const technicalPathMenuActions = menuPathActions.filter(
+    (action) => !currentPathMenuActionIds.has(action.id),
+  );
+  const hasCurrentPathActions = currentPathMenuActions.length > 0;
+  const hasTechnicalPathActions = technicalPathMenuActions.length > 0;
+  const hasPathActions = hasCurrentPathActions || hasTechnicalPathActions;
   const hasSelectionActions = moreMenu.selectionActions.length > 0;
   const sse = moreMenu.sse;
   const hasSecondaryActionsSection =
     hasPathActions || hasSelectionActions || Boolean(sse);
+  const hasPrioritizedSelectionActions =
+    moreMenu.selectionOverflow && hasSelectionActions;
+  const hasTrailingActionsSection =
+    (hasSelectionActions && !hasPrioritizedSelectionActions) || Boolean(sse);
   const hasMoreMenu =
     hasViewSection ||
     hasStatusSection ||
@@ -453,11 +474,69 @@ export default function BrowserToolbar({
             ref={moreMenuRef}
             role="menu"
             aria-label="More"
-            className="max-h-[min(70vh,28rem)] overflow-y-auto"
+            className="max-h-[min(76vh,36rem)] overflow-y-auto"
           >
-            {moreMenu.view && (
+            {hasPrioritizedSelectionActions && (
               <>
-                <p className={overflowSectionTitleClasses}>View</p>
+                <p className={overflowSectionTitleClasses}>Selection</p>
+                {moreMenu.selectionActions.map((action) => (
+                  <BrowserToolbarActionMenuItem
+                    key={action.id}
+                    action={action}
+                    onSelect={() =>
+                      runMoreAction(() => onRunSelectionAction(action.id))
+                    }
+                  />
+                ))}
+              </>
+            )}
+
+            {hasCurrentPathActions && !hasPrioritizedSelectionActions && (
+              <>
+                <p className={overflowSectionTitleClasses}>Current path</p>
+                {currentPathMenuActions.map((action) => (
+                  <BrowserToolbarActionMenuItem
+                    key={action.id}
+                    action={action}
+                    onSelect={() =>
+                      runMoreAction(() => onRunPathAction(action.id))
+                    }
+                  />
+                ))}
+              </>
+            )}
+
+            {hasTechnicalPathActions && !hasPrioritizedSelectionActions && (
+              <>
+                {hasCurrentPathActions && (
+                  <div className={contextMenuSeparatorClasses} />
+                )}
+                <p className={overflowSectionTitleClasses}>Technical tools</p>
+                {technicalPathMenuActions.map((action) => (
+                  <BrowserToolbarActionMenuItem
+                    key={action.id}
+                    action={action}
+                    onSelect={() =>
+                      runMoreAction(() => onRunPathAction(action.id))
+                    }
+                  />
+                ))}
+              </>
+            )}
+
+            {!hasPrioritizedSelectionActions &&
+              hasPathActions &&
+              (hasViewSection ||
+                hasStatusSection ||
+                hasLayoutSection ||
+                hasColumnsSection ||
+                hasTrailingActionsSection) && (
+                <div className={contextMenuSeparatorClasses} />
+              )}
+
+            {!hasPrioritizedSelectionActions && moreMenu.view && (
+              <>
+                <p className={overflowSectionTitleClasses}>Browser view</p>
                 <button
                   type="button"
                   role="menuitemradio"
@@ -505,7 +584,7 @@ export default function BrowserToolbar({
               </>
             )}
 
-            {hasStatusSection && (
+            {!hasPrioritizedSelectionActions && hasStatusSection && (
               <>
                 {hasViewSection && (
                   <div className={contextMenuSeparatorClasses} />
@@ -565,7 +644,7 @@ export default function BrowserToolbar({
               </>
             )}
 
-            {hasLayoutSection && (
+            {!hasPrioritizedSelectionActions && hasLayoutSection && (
               <>
                 {(hasViewSection || hasStatusSection) && (
                   <div className={contextMenuSeparatorClasses} />
@@ -578,17 +657,10 @@ export default function BrowserToolbar({
                     {...moreMenu.layout.folders}
                   />
                 )}
-                {moreMenu.layout.inspector && (
-                  <BrowserToolbarToggleMenuItem
-                    label="Details panel"
-                    icon={<InfoIcon className="h-3.5 w-3.5" />}
-                    {...moreMenu.layout.inspector}
-                  />
-                )}
               </>
             )}
 
-            {moreMenu.columns && (
+            {!hasPrioritizedSelectionActions && moreMenu.columns && (
               <>
                 {(hasViewSection || hasStatusSection || hasLayoutSection) && (
                   <div className={contextMenuSeparatorClasses} />
@@ -628,7 +700,7 @@ export default function BrowserToolbar({
               </>
             )}
 
-            {hasSecondaryActionsSection && (
+            {!hasPrioritizedSelectionActions && hasTrailingActionsSection && (
               <>
                 {(hasStatusSection ||
                   hasViewSection ||
@@ -636,30 +708,9 @@ export default function BrowserToolbar({
                   hasColumnsSection) && (
                   <div className={contextMenuSeparatorClasses} />
                 )}
-                {hasPathActions && (
+                {hasSelectionActions && !hasPrioritizedSelectionActions && (
                   <>
-                    <p className={overflowSectionTitleClasses}>Current path</p>
-                    {moreMenu.pathActions.map((action) => (
-                      <BrowserToolbarActionMenuItem
-                        key={action.id}
-                        action={action}
-                        onSelect={() =>
-                          runMoreAction(() => onRunPathAction(action.id))
-                        }
-                      />
-                    ))}
-                  </>
-                )}
-                {hasSelectionActions && (
-                  <>
-                    {hasPathActions && (
-                      <div className={contextMenuSeparatorClasses} />
-                    )}
-                    <p className={overflowSectionTitleClasses}>
-                      {moreMenu.selectionOverflow
-                        ? "Selection overflow"
-                        : "Selection actions"}
-                    </p>
+                    <p className={overflowSectionTitleClasses}>Selection</p>
                     {moreMenu.selectionActions.map((action) => (
                       <BrowserToolbarActionMenuItem
                         key={action.id}
@@ -673,7 +724,7 @@ export default function BrowserToolbar({
                 )}
                 {sse && (
                   <>
-                    {(hasPathActions || hasSelectionActions) && (
+                    {hasSelectionActions && !hasPrioritizedSelectionActions && (
                       <div className={contextMenuSeparatorClasses} />
                     )}
                     <p className={overflowSectionTitleClasses}>Security</p>

@@ -88,10 +88,10 @@ vi.mock("../../api/bucketDetails", async () => {
   };
 });
 
-function renderPage({ defaultShowInspector = true }: { defaultShowInspector?: boolean } = {}) {
+function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/browser"]}>
-      <BrowserPage defaultShowInspector={defaultShowInspector} />
+      <BrowserPage />
     </MemoryRouter>
   );
 }
@@ -206,7 +206,7 @@ describe("BrowserPage multipart uploads modal", () => {
     expect(await screen.findByText("Multipart upload aborted for uploads/big-file.bin.")).toBeInTheDocument();
   });
 
-  it("keeps the optional Details panel closed until its action is chosen", async () => {
+  it("keeps object details closed until its action is chosen", async () => {
     const user = userEvent.setup();
 
     listBrowserObjectsMock.mockResolvedValue({
@@ -224,7 +224,7 @@ describe("BrowserPage multipart uploads modal", () => {
       next_continuation_token: null,
     });
 
-    renderPage({ defaultShowInspector: false });
+    renderPage();
 
     expect(screen.queryByRole("group", { name: "Details view" })).not.toBeInTheDocument();
 
@@ -250,8 +250,12 @@ describe("BrowserPage multipart uploads modal", () => {
     await user.click(within(menu).getByRole("button", { name: "Properties" }));
 
     expect(
-      await screen.findByRole("dialog", {
-        name: /Object details · .*monthly\.csv/i,
+      await screen.findByRole("button", { name: "Close details" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: "reports/monthly.csv",
       }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Details view" })).not.toBeInTheDocument();

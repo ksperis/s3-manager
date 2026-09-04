@@ -4,9 +4,11 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import type { BrowserRequestOptions } from "../../api/browserWorkspace";
-import Modal from "../../components/Modal";
+import PageBanner from "../../components/PageBanner";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import ObjectPreview from "../shared/ObjectPreview";
+import ObjectDetailsDrawer from "../shared/ObjectDetailsDrawer";
 import { type BrowserObjectVersion } from "../../api/browserContracts";
 import type {
   PresignedUrl,
@@ -15,9 +17,9 @@ import type {
 import type { S3AccountSelector } from "../../api/accountParams";
 import { BrowserCopyValueModal } from "./BrowserDialogModals";
 import BrowserObjectArchiveTab from "./BrowserObjectArchiveTab";
-import BrowserObjectDetailsHeader, {
-  type BrowserObjectDetailsStatus,
-} from "./BrowserObjectDetailsHeader";
+import BrowserObjectReadOnlyDetailsTab, {
+  BrowserObjectFactsCard,
+} from "./BrowserObjectReadOnlyDetailsTab";
 import BrowserObjectPropertiesTab from "./BrowserObjectPropertiesTab";
 import BrowserObjectProtectionTab from "./BrowserObjectProtectionTab";
 import BrowserObjectVersionsTab from "./BrowserObjectVersionsTab";
@@ -39,7 +41,12 @@ import { useBrowserObjectArchiveRestore } from "./useBrowserObjectArchiveRestore
 import { useBrowserObjectAcl } from "./useBrowserObjectAcl";
 import { useBrowserObjectPreview } from "./useBrowserObjectPreview";
 
-type BrowserObjectDetailsModalProps = {
+type BrowserObjectDetailsStatus = {
+  message: string;
+  tone: "success" | "error";
+};
+
+type BrowserObjectDetailsDrawerProps = {
   accountId: S3AccountSelector;
   bucketName: string;
   item: BrowserItem;
@@ -50,6 +57,7 @@ type BrowserObjectDetailsModalProps = {
   sseActive: boolean;
   copyUrlDisabled: boolean;
   copyUrlDisabledReason?: string;
+  canDelete: boolean;
   presignObjectRequest: (
     targetBucket: string,
     payload: PresignRequest,
@@ -57,14 +65,17 @@ type BrowserObjectDetailsModalProps = {
   onClose: () => void;
   onDownload: (item: BrowserItem) => void;
   onCopyUrl: (item: BrowserItem | null) => Promise<void> | void;
+  onCopyPath: (path: string) => Promise<void> | void;
+  onDelete: (item: BrowserItem) => Promise<void> | void;
+  onDirtyChange?: (dirty: boolean) => void;
   onRefreshBrowserObjects: (targetKey: string) => Promise<void>;
   onRestoreVersion: (version: BrowserObjectVersion) => Promise<void> | void;
   onDeleteVersion: (version: BrowserObjectVersion) => Promise<void> | void;
-  readOnly?: boolean;
+  profile: "standard" | "advanced";
   requestOptions?: BrowserRequestOptions;
 };
 
-export default function BrowserObjectDetailsModal({
+export default function BrowserObjectDetailsDrawer({
   accountId,
   bucketName,
   item,
@@ -75,21 +86,27 @@ export default function BrowserObjectDetailsModal({
   sseActive,
   copyUrlDisabled,
   copyUrlDisabledReason,
+  canDelete,
   presignObjectRequest,
   onClose,
   onDownload,
   onCopyUrl,
+  onCopyPath,
+  onDelete,
+  onDirtyChange,
   onRefreshBrowserObjects,
   onRestoreVersion,
   onDeleteVersion,
-  readOnly = false,
+  profile,
   requestOptions,
-}: BrowserObjectDetailsModalProps) {
+}: BrowserObjectDetailsDrawerProps) {
   const [activeTab, setActiveTab] = useState<ObjectDetailsTabId>(initialTab);
   const [itemSnapshot, setItemSnapshot] = useState(item);
   const [actionStatus, setActionStatus] =
     useState<BrowserObjectDetailsStatus | null>(null);
   const [copyDialogValue, setCopyDialogValue] = useState<string | null>(null);
+  const readOnly = profile === "standard";
+  const canCopyUrl = profile === "advanced";
 
   const {
     rows: versionRows,
@@ -135,6 +152,7 @@ export default function BrowserObjectDetailsModal({
     savingMetadata,
     savingTags,
     savingStorageClass: savingStorage,
+    hasUnsavedChanges,
     load: loadProperties,
     reset: resetObjectProperties,
     isCurrentScope: isPropertiesScopeCurrent,
@@ -254,6 +272,44 @@ export default function BrowserObjectDetailsModal({
     setActionStatus({ message, tone });
   };
 
+  const runBooleanSave = async ({
+    save,
+    isCurrentScope,
+    successMessage,
+    errorMessage,
+    refreshObjectList = false,
+  }: {
+    save: () => Promise<boolean>;
+    isCurrentScope: () => boolean;
+    successMessage: string;
+    errorMessage: string;
+    refreshObjectList?: boolean;
+  }) => {
+    setActionStatus(null);
+    try {
+      if (!(await save()) || !isCurrentScope()) return;
+      if (refreshObjectList) {
+        await onRefreshBrowserObjects(itemSnapshot.key);
+        if (!isCurrentScope()) return;
+      }
+      pushStatus(successMessage, "success");
+    } catch (err) {
+      pushStatus(extractApiError(err, errorMessage), "error");
+    }
+  };
+
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges,
+    onClose,
+    description:
+      "You have unapplied object property changes. Closing details will discard them.",
+  });
+
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+    return () => onDirtyChange?.(false);
+  }, [hasUnsavedChanges, onDirtyChange]);
+
   useEffect(() => {
     setItemSnapshot(item);
     setActiveTab(initialTab);
@@ -281,7 +337,9 @@ export default function BrowserObjectDetailsModal({
       void loadVersions();
     }
     if (
-      (activeTab === "properties" || activeTab === "archive") &&
+      (activeTab === "details" ||
+        activeTab === "properties" ||
+        activeTab === "archive") &&
       !metadataLoaded &&
       !isDeletedCurrent
     ) {
@@ -298,29 +356,23 @@ export default function BrowserObjectDetailsModal({
     versionsLoaded,
   ]);
 
-  const handleSaveMetadata = async () => {
-    setActionStatus(null);
-    try {
-      if (!(await saveMetadata()) || !isPropertiesScopeCurrent()) return;
-      await onRefreshBrowserObjects(itemSnapshot.key);
-      if (!isPropertiesScopeCurrent()) return;
-      pushStatus("Metadata updated.", "success");
-    } catch (err) {
-      pushStatus(extractApiError(err, "Unable to update metadata."), "error");
-    }
-  };
+  const handleSaveMetadata = () =>
+    runBooleanSave({
+      save: saveMetadata,
+      isCurrentScope: isPropertiesScopeCurrent,
+      successMessage: "Metadata updated.",
+      errorMessage: "Unable to update metadata.",
+      refreshObjectList: true,
+    });
 
-  const handleSaveTags = async () => {
-    setActionStatus(null);
-    try {
-      if (!(await saveTags()) || !isPropertiesScopeCurrent()) return;
-      await onRefreshBrowserObjects(itemSnapshot.key);
-      if (!isPropertiesScopeCurrent()) return;
-      pushStatus("Tags updated.", "success");
-    } catch (err) {
-      pushStatus(extractApiError(err, "Unable to update tags."), "error");
-    }
-  };
+  const handleSaveTags = () =>
+    runBooleanSave({
+      save: saveTags,
+      isCurrentScope: isPropertiesScopeCurrent,
+      successMessage: "Tags updated.",
+      errorMessage: "Unable to update tags.",
+      refreshObjectList: true,
+    });
 
   const handleSaveStorageClass = async () => {
     setActionStatus(null);
@@ -342,28 +394,21 @@ export default function BrowserObjectDetailsModal({
     }
   };
 
-  const handleSaveAcl = async () => {
-    setActionStatus(null);
-    try {
-      if (!(await saveAcl()) || !isAclScopeCurrent()) return;
-      pushStatus("ACL updated.", "success");
-    } catch (err) {
-      pushStatus(extractApiError(err, "Unable to update ACL."), "error");
-    }
-  };
+  const handleSaveAcl = () =>
+    runBooleanSave({
+      save: saveAcl,
+      isCurrentScope: isAclScopeCurrent,
+      successMessage: "ACL updated.",
+      errorMessage: "Unable to update ACL.",
+    });
 
-  const handleSaveLegalHold = async () => {
-    setActionStatus(null);
-    try {
-      if (!(await saveLegalHold()) || !isProtectionScopeCurrent()) return;
-      pushStatus("Legal hold updated.", "success");
-    } catch (err) {
-      pushStatus(
-        extractApiError(err, "Unable to update legal hold."),
-        "error",
-      );
-    }
-  };
+  const handleSaveLegalHold = () =>
+    runBooleanSave({
+      save: saveLegalHold,
+      isCurrentScope: isProtectionScopeCurrent,
+      successMessage: "Legal hold updated.",
+      errorMessage: "Unable to update legal hold.",
+    });
 
   const handleSaveRetention = async () => {
     setActionStatus(null);
@@ -432,11 +477,16 @@ export default function BrowserObjectDetailsModal({
       buildObjectDetailsTabs({
         hasArchiveTab,
         isDeleted: isDeletedCurrent,
-        readOnly,
+        profile,
         versioningEnabled,
       }),
-    [hasArchiveTab, isDeletedCurrent, readOnly, versioningEnabled],
+    [hasArchiveTab, isDeletedCurrent, profile, versioningEnabled],
   );
+
+  useEffect(() => {
+    if (tabs.some((tab) => tab.id === activeTab)) return;
+    setActiveTab(tabs[0]?.id ?? "preview");
+  }, [activeTab, tabs]);
 
   const renderPreviewContent = () => {
     if (isDeletedCurrent) {
@@ -481,29 +531,49 @@ export default function BrowserObjectDetailsModal({
   );
 
   const renderPropertiesContent = () => (
-    <BrowserObjectPropertiesTab
-      readOnly={readOnly}
+    <div className="space-y-4">
+      <BrowserObjectFactsCard
+        bucketName={bucketName}
+        item={itemSnapshot}
+        metadata={metadata}
+      />
+      <BrowserObjectPropertiesTab
+        readOnly={false}
+        loading={metadataLoading}
+        loaded={metadataLoaded}
+        error={metadataError}
+        metadataDraft={metadataDraft}
+        onMetadataDraftChange={updateMetadataDraft}
+        savingMetadata={savingMetadata}
+        onSaveMetadata={handleSaveMetadata}
+        metadataItems={metadataItems}
+        onAddMetadata={addMetadataItem}
+        onMetadataItemChange={updateMetadataItem}
+        onRemoveMetadata={removeMetadataItem}
+        tags={tagsDraft}
+        onAddTag={addTag}
+        onTagChange={updateTag}
+        onRemoveTag={removeTag}
+        savingTags={savingTags}
+        onSaveTags={handleSaveTags}
+        storageClass={storageClass}
+        onStorageClassChange={setStorageClass}
+        savingStorageClass={savingStorage}
+        onSaveStorageClass={handleSaveStorageClass}
+        onRefresh={() => loadProperties(true)}
+      />
+    </div>
+  );
+
+  const renderReadOnlyDetailsContent = () => (
+    <BrowserObjectReadOnlyDetailsTab
+      bucketName={bucketName}
+      item={itemSnapshot}
+      metadata={metadata}
+      tags={tagsDraft}
       loading={metadataLoading}
       loaded={metadataLoaded}
       error={metadataError}
-      metadataDraft={metadataDraft}
-      onMetadataDraftChange={updateMetadataDraft}
-      savingMetadata={savingMetadata}
-      onSaveMetadata={handleSaveMetadata}
-      metadataItems={metadataItems}
-      onAddMetadata={addMetadataItem}
-      onMetadataItemChange={updateMetadataItem}
-      onRemoveMetadata={removeMetadataItem}
-      tags={tagsDraft}
-      onAddTag={addTag}
-      onTagChange={updateTag}
-      onRemoveTag={removeTag}
-      savingTags={savingTags}
-      onSaveTags={handleSaveTags}
-      storageClass={storageClass}
-      onStorageClassChange={setStorageClass}
-      savingStorageClass={savingStorage}
-      onSaveStorageClass={handleSaveStorageClass}
       onRefresh={() => loadProperties(true)}
     />
   );
@@ -560,10 +630,10 @@ export default function BrowserObjectDetailsModal({
     if (isDeletedCurrent) {
       return (
         <div className="space-y-4">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 ui-caption font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/20 dark:text-amber-100">
+          <PageBanner tone="warning">
             Latest state is deleted. Use <span className="font-bold">Versions</span> to
             restore the object or remove the delete marker.
-          </div>
+          </PageBanner>
           {versioningEnabled ? renderVersionsContent() : null}
         </div>
       );
@@ -572,6 +642,8 @@ export default function BrowserObjectDetailsModal({
     switch (activeTab) {
       case "preview":
         return renderPreviewContent();
+      case "details":
+        return renderReadOnlyDetailsContent();
       case "versions":
         return renderVersionsContent();
       case "properties":
@@ -585,34 +657,70 @@ export default function BrowserObjectDetailsModal({
     }
   };
 
+  const path = `${bucketName}/${itemSnapshot.key}`;
+  const statusNotice = actionStatus ? (
+    <PageBanner tone={actionStatus.tone}>
+      {actionStatus.message}
+    </PageBanner>
+  ) : null;
+
   return (
     <>
-      <Modal
-        title={`Object details · ${itemSnapshot.name}`}
-        onClose={onClose}
-        maxWidthClass="max-w-7xl"
-        maxBodyHeightClass="h-[88vh]"
+      <ObjectDetailsDrawer
+        name={itemSnapshot.name}
+        path={path}
+        copyPathLabel="Copy path"
+        moreLabel="More"
+        onCopyPath={() => void onCopyPath(path)}
+        primaryAction={
+          !isDeletedCurrent
+            ? { label: "Download", onSelect: () => onDownload(itemSnapshot) }
+            : undefined
+        }
+        secondaryActions={
+          !isDeletedCurrent
+            ? [
+                ...(canCopyUrl
+                  ? [{
+                      id: "copy-url",
+                      label: "Copy URL",
+                      disabled: copyUrlDisabled,
+                      title: copyUrlDisabled ? copyUrlDisabledReason : undefined,
+                      onSelect: () => void onCopyUrl(itemSnapshot),
+                    }]
+                  : []),
+                ...(canDelete
+                  ? [{
+                      id: "delete",
+                      label: "Delete",
+                      tone: "danger" as const,
+                      onSelect: () => void onDelete(itemSnapshot),
+                    }]
+                  : []),
+              ]
+            : []
+        }
+        activeTab={activeTab}
+        tabs={tabs}
+        tabsAriaLabel="Object details views"
+        onTabChange={(tab) => setActiveTab(tab as ObjectDetailsTabId)}
+        notice={
+          isDeletedCurrent || restoreStatusLabel || statusNotice ? (
+            <div className="space-y-2">
+              {isDeletedCurrent || restoreStatusLabel ? (
+                <div className="flex flex-wrap gap-2 ui-caption text-[var(--ui-text-muted)]">
+                  {isDeletedCurrent ? <span className="rounded-md bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-900/30 dark:text-rose-100">Deleted</span> : null}
+                  {restoreStatusLabel ? <span className="rounded-md bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-900/20 dark:text-amber-100">{restoreStatusLabel}</span> : null}
+                </div>
+              ) : null}
+              {statusNotice}
+            </div>
+          ) : undefined
+        }
+        onClose={closeGuard.requestClose}
       >
-        <div className="space-y-4">
-          <BrowserObjectDetailsHeader
-            activeTab={activeTab}
-            bucketName={bucketName}
-            copyUrlDisabled={copyUrlDisabled}
-            copyUrlDisabledReason={copyUrlDisabledReason}
-            currentStorageClass={currentStorageClass}
-            isDeleted={isDeletedCurrent}
-            item={itemSnapshot}
-            onCopyUrl={() => onCopyUrl(itemSnapshot)}
-            onDownload={() => onDownload(itemSnapshot)}
-            onTabChange={setActiveTab}
-            restoreStatusLabel={restoreStatusLabel}
-            status={actionStatus}
-            tabs={tabs}
-          />
-
-          <div>{renderContent()}</div>
-        </div>
-      </Modal>
+        {renderContent()}
+      </ObjectDetailsDrawer>
 
       {copyDialogValue && (
         <BrowserCopyValueModal
@@ -623,6 +731,7 @@ export default function BrowserObjectDetailsModal({
           onClose={() => setCopyDialogValue(null)}
         />
       )}
+      {closeGuard.confirmationDialog}
     </>
   );
 }

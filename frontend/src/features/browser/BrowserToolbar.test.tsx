@@ -24,6 +24,22 @@ const selectionAction: BrowserActionState = {
   enabled: true,
 };
 
+const directPathAction: BrowserActionState = {
+  id: "uploadFiles",
+  section: "path",
+  label: "Upload files",
+  visible: true,
+  enabled: true,
+};
+
+const technicalPathAction: BrowserActionState = {
+  id: "versions",
+  section: "path",
+  label: "Versions",
+  visible: true,
+  enabled: true,
+};
+
 function buildProps(overrides: Partial<ToolbarProps> = {}): ToolbarProps {
   return {
     compactMode: true,
@@ -234,9 +250,9 @@ describe("BrowserToolbar", () => {
           onToggleColumn: vi.fn(),
           onReset: vi.fn(),
         },
-        pathActions: [pathAction],
+        pathActions: [directPathAction, pathAction, technicalPathAction],
         selectionActions: [selectionAction],
-        selectionOverflow: true,
+        selectionOverflow: false,
         sse: { enabled: true, active: true, onOpen: onOpenSse },
       },
     });
@@ -253,7 +269,21 @@ describe("BrowserToolbar", () => {
         name: "Comfortable",
       }),
     ).toHaveAttribute("aria-checked", "false");
-    expect(within(menu).getByText("Selection overflow")).toBeInTheDocument();
+    const pathHeading = within(menu).getByText("Current path");
+    const technicalHeading = within(menu).getByText("Technical tools");
+    const browserViewHeading = within(menu).getByText("Browser view");
+    expect(
+      pathHeading.compareDocumentPosition(technicalHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      technicalHeading.compareDocumentPosition(browserViewHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(menu).queryByRole("menuitem", { name: "Upload files" }),
+    ).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Selection overflow")).not.toBeInTheDocument();
     expect(
       within(menu).getByRole("menuitemcheckbox", { name: "Folders panel" }),
     ).toHaveAttribute("aria-checked", "true");
@@ -300,6 +330,51 @@ describe("BrowserToolbar", () => {
     expect(onOpenSse).toHaveBeenCalledOnce();
   });
 
+  it("keeps the selection More menu focused on secondary item actions", () => {
+    const props = buildProps({
+      contextActions: {
+        visible: false,
+        canUploadFiles: true,
+        canUploadFolder: true,
+        canCreateFolder: true,
+        canRefresh: true,
+      },
+      selectionActions: {
+        visible: true,
+        mobileViewport: false,
+        summary: "report.json",
+        canOpen: true,
+        canCopy: true,
+        canDownload: true,
+        canDelete: true,
+      },
+      moreMenu: {
+        view: { compactMode: false, onSetCompactMode: vi.fn() },
+        status: {
+          visible: true,
+          accessBadge: null,
+          onOpenOperations: vi.fn(),
+        },
+        layout: {},
+        pathActions: [pathAction],
+        selectionActions: [selectionAction],
+        selectionOverflow: true,
+      },
+    });
+    render(<BrowserToolbar {...props} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const menu = screen.getByRole("menu", { name: "More" });
+
+    expect(within(menu).getByText("Selection")).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Copy" }),
+    ).toBeInTheDocument();
+    expect(within(menu).queryByText("Current path")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Browser view")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("Status")).not.toBeInTheDocument();
+  });
+
   it("routes the root Browser density choice from More", () => {
     const onSetCompactMode = vi.fn();
     render(
@@ -337,6 +412,7 @@ describe("BrowserToolbar", () => {
       ).toHaveTextContent(actionName);
     }
     expect(toolbar).toHaveAttribute("data-density", "comfortable");
-    expect(toolbar).toHaveClass("xl:flex-row");
+    expect(toolbar).toHaveClass("2xl:flex-row");
+    expect(toolbar).not.toHaveClass("xl:flex-row");
   });
 });

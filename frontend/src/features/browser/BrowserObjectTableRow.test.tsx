@@ -56,7 +56,6 @@ function buildProps(overrides: Partial<RowProps> = {}): RowProps {
     primaryItemButtonHeightClasses: "name-height",
     rowActionButtonClasses: "row-action",
     onClick: vi.fn(),
-    onDoubleClick: vi.fn(),
     onContextMenu: vi.fn(),
     onToggleSelection: vi.fn(),
     onNameClick: vi.fn(),
@@ -160,7 +159,12 @@ describe("BrowserObjectTableRow", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("(deleted)")).toBeInTheDocument();
     expect(screen.getByText("Deleted object")).toBeInTheDocument();
-    expect(screen.getByText("Delete marker")).toBeInTheDocument();
+    expect(screen.getByText("Delete marker")).toHaveClass(
+      "ui-badge",
+      "rounded",
+      "px-1",
+    );
+    expect(screen.getByText("Delete marker")).not.toHaveClass("py-0.5");
   });
 
   it("preserves historical folder presentation", () => {
@@ -182,6 +186,10 @@ describe("BrowserObjectTableRow", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("(history)")).toBeInTheDocument();
     expect(screen.getByText("Historical folder")).toBeInTheDocument();
-    expect(screen.getByText("Version history")).toBeInTheDocument();
+    expect(screen.getByText("Version history")).toHaveClass(
+      "ui-badge",
+      "rounded",
+      "px-1",
+    );
   });
 });

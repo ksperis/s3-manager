@@ -1,7 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
-import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { BrowserInspectorTab } from "./BrowserInspectorPanel";
 import type { BrowserItem } from "./browserTypes";
 import { useBrowserSelection } from "./useBrowserSelection";
 
@@ -79,17 +78,12 @@ function useSelectionHarness({
   currentItems?: BrowserItem[];
   scopeKey?: string;
 }) {
-  const [inspectorTab, setInspectorTab] =
-    useState<BrowserInspectorTab>("bucket");
   const selection = useBrowserSelection({
-    inspectorTab,
-    inspectorVisible: true,
     items: currentItems,
     listItems: currentItems,
     scopeKey,
-    setInspectorTab,
   });
-  return { ...selection, inspectorTab };
+  return selection;
 }
 
 describe("useBrowserSelection", () => {
@@ -98,8 +92,6 @@ describe("useBrowserSelection", () => {
 
     act(() => result.current.handleItemSelectionClick(mouseEvent(), "b"));
     expect(result.current.selectedIds).toEqual(["b"]);
-    expect(result.current.inspectorTab).toBe("details");
-    expect(result.current.inspectedItem).toEqual(items[1]);
 
     act(() =>
       result.current.handleItemSelectionClick(
@@ -117,6 +109,20 @@ describe("useBrowserSelection", () => {
     );
     expect(result.current.selectedIds).toEqual(["a", "b", "c"]);
     expect(result.current.selectedBytes).toBe(3);
+  });
+
+  it("keeps checkbox selection additive and supports Shift ranges", () => {
+    const { result } = renderHook(() => useSelectionHarness({}));
+
+    act(() => result.current.handleItemCheckboxClick("a", false));
+    act(() => result.current.handleItemCheckboxClick("c", false));
+    expect(result.current.selectedIds).toEqual(["a", "c"]);
+
+    act(() => result.current.handleItemCheckboxClick("b", true));
+    expect(result.current.selectedIds).toEqual(["b", "c"]);
+
+    act(() => result.current.handleItemCheckboxClick("c", false));
+    expect(result.current.selectedIds).toEqual(["b"]);
   });
 
   it("owns keyboard navigation, activation, and clearing", () => {
@@ -156,25 +162,20 @@ describe("useBrowserSelection", () => {
       result.current.handleListKeyDown(keyboardEvent("Escape"), onOpenItem),
     );
     expect(result.current.selectedIds).toEqual([]);
-    expect(result.current.inspectorTab).toBe("bucket");
   });
 
-  it("resets selection and inspector state when the browsing scope changes", () => {
+  it("resets selection when the browsing scope changes", () => {
     const { result, rerender } = renderHook(
       ({ scopeKey }) => useSelectionHarness({ scopeKey }),
       { initialProps: { scopeKey: "account-a:bucket-a:root" } },
     );
 
-    act(() => result.current.selectItemDetails(items[1]));
+    act(() => result.current.handleItemSelectionClick(mouseEvent(), "b"));
     expect(result.current.selectedIds).toEqual(["b"]);
-    expect(result.current.inspectedItem).toEqual(items[1]);
-    expect(result.current.inspectorTab).toBe("details");
 
     rerender({ scopeKey: "account-b:bucket-a:root" });
 
     expect(result.current.selectedIds).toEqual([]);
-    expect(result.current.inspectedItem).toBeNull();
-    expect(result.current.inspectorTab).toBe("bucket");
   });
 
   it("prepares contextual menus without leaking stale multi-selection", () => {

@@ -89,7 +89,6 @@ export default function ManagerBrowserPage() {
                   canCreatePublicLinks: false,
                 }}
                 storageEndpointCapabilities={selectedContext?.storage_endpoint_capabilities ?? null}
-                endpointProvider={selectedContext?.endpoint_provider ?? null}
                 onSelectedBucketNameChange={setSelectedBrowserBucketName}
               />
             </div>

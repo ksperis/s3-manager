@@ -28,23 +28,18 @@ const MIN_BROWSER_CENTER_WIDTH_PX = 320;
 
 type UseBrowserPanelLayoutOptions = {
   allowFoldersPanel: boolean;
-  allowInspectorPanel: boolean;
   initialFoldersPanelWidthPx: number;
   initialShowFolders: boolean;
-  initialShowInspector: boolean;
   persistLayout: boolean;
 };
 
 export function useBrowserPanelLayout({
   allowFoldersPanel,
-  allowInspectorPanel,
   initialFoldersPanelWidthPx,
   initialShowFolders,
-  initialShowInspector,
   persistLayout,
 }: UseBrowserPanelLayoutOptions) {
   const [showFolders, setShowFolders] = useState(initialShowFolders);
-  const [showInspector, setShowInspector] = useState(initialShowInspector);
   const [foldersPanelWidthPx, setFoldersPanelWidthPx] = useState(
     initialFoldersPanelWidthPx,
   );
@@ -57,9 +52,7 @@ export function useBrowserPanelLayout({
   const isFoldersPanelVisibleRef = useRef(false);
 
   const canUseFoldersPanel = allowFoldersPanel && !isNarrowViewport;
-  const canUseInspectorPanel = allowInspectorPanel && !isNarrowViewport;
   const isFoldersPanelVisible = canUseFoldersPanel && showFolders;
-  const isInspectorPanelVisible = canUseInspectorPanel && showInspector;
   foldersPanelWidthRef.current = foldersPanelWidthPx;
   isFoldersPanelVisibleRef.current = isFoldersPanelVisible;
 
@@ -111,14 +104,12 @@ export function useBrowserPanelLayout({
     writeBrowserRootUiLayout({
       foldersPanelWidthPx,
       showFolders,
-      showInspector,
     });
   }, [
     foldersPanelResizeActive,
     foldersPanelWidthPx,
     persistLayout,
     showFolders,
-    showInspector,
   ]);
 
   useEffect(() => {
@@ -180,35 +171,17 @@ export function useBrowserPanelLayout({
     if (!canUseFoldersPanel) return;
     setShowFolders((current) => !current);
   }, [canUseFoldersPanel]);
-  const toggleInspectorPanel = useCallback(() => {
-    if (!canUseInspectorPanel) return;
-    setShowInspector((current) => !current);
-  }, [canUseInspectorPanel]);
-  const openInspectorPanel = useCallback(() => {
-    if (!canUseInspectorPanel) return;
-    setShowInspector(true);
-  }, [canUseInspectorPanel]);
-  const closeInspectorPanel = useCallback(() => {
-    setShowInspector(false);
-  }, []);
-
   return {
     adjustFoldersPanelWidth,
     canUseFoldersPanel,
-    canUseInspectorPanel,
-    closeInspectorPanel,
     foldersPanelResizeActive,
     isFoldersPanelVisible,
-    isInspectorPanelVisible,
     layoutContainerRef,
     layoutTemplateColumns,
-    openInspectorPanel,
     resetFoldersPanelWidth,
     resolvedFoldersWidth,
     showFolders,
-    showInspector,
     startFoldersPanelResize,
     toggleFoldersPanel,
-    toggleInspectorPanel,
   };
 }

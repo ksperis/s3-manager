@@ -69,7 +69,7 @@ export default function BrowserObjectVersionsList({
                 )}
               </div>}
               <div className="flex flex-wrap items-center gap-2">
-                {!ver.is_delete_marker && (
+                {!ver.is_delete_marker && !ver.is_latest && (
                   <button type="button" className={bulkActionClasses} onClick={() => onRestoreVersion(ver)}>
                     Restore
                   </button>

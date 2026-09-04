@@ -63,7 +63,6 @@ export default function CephAdminBrowserPage() {
               canCreatePublicLinks: false,
             }}
             storageEndpointCapabilities={selectedEndpoint?.capabilities ?? null}
-            endpointProvider="ceph"
             onSelectedBucketNameChange={setSelectedBrowserBucketName}
           />
         )}

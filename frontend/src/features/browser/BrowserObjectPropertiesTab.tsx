@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { ReactNode } from "react";
+import PageBanner from "../../components/PageBanner";
 import {
   browserPanelCardClasses,
   formInputClasses,
@@ -197,9 +198,9 @@ export default function BrowserObjectPropertiesTab({
   return (
     <>
       {readOnly && (
-        <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+        <PageBanner tone="info" className="mb-3">
           Properties are read-only in the Standard Browser profile.
-        </p>
+        </PageBanner>
       )}
       <fieldset disabled={readOnly} className="space-y-4">
         {loading && !loaded && (
@@ -208,7 +209,10 @@ export default function BrowserObjectPropertiesTab({
           </p>
         )}
         {error && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-caption font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-900/30 dark:text-rose-100">
+          <PageBanner
+            tone="error"
+            className="flex flex-wrap items-center justify-between gap-2 font-semibold"
+          >
             <span>{error}</span>
             <button
               type="button"
@@ -218,7 +222,7 @@ export default function BrowserObjectPropertiesTab({
             >
               Retry
             </button>
-          </div>
+          </PageBanner>
         )}
         <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="space-y-4">

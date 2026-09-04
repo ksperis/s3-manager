@@ -7,22 +7,16 @@ import {
   useEffect,
   useMemo,
   useState,
-  type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-  type SetStateAction,
 } from "react";
-import type { BrowserInspectorTab } from "./BrowserInspectorPanel";
 import { isBrowserInteractiveTarget } from "./browserObjectItemPresentation";
 import type { BrowserItem } from "./browserTypes";
 
 type UseBrowserSelectionOptions = {
-  inspectorTab: BrowserInspectorTab;
-  inspectorVisible: boolean;
   items: BrowserItem[];
   listItems: BrowserItem[];
   scopeKey: string;
-  setInspectorTab: Dispatch<SetStateAction<BrowserInspectorTab>>;
 };
 
 type ItemContextMenuSelection = {
@@ -32,14 +26,11 @@ type ItemContextMenuSelection = {
 };
 
 export function useBrowserSelection({
-  inspectorTab,
-  inspectorVisible,
   items,
   listItems,
   scopeKey,
-  setInspectorTab,
 }: UseBrowserSelectionOptions) {
-  const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
+  const [, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(
     null,
@@ -63,49 +54,17 @@ export function useBrowserSelection({
       selectedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0),
     [selectedItems],
   );
-  const inspectedItem = useMemo(() => {
-    if (selectedItems.length === 1) return selectedItems[0] ?? null;
-    if (
-      activeItem &&
-      selectedSet.has(activeItem.id) &&
-      items.some((item) => item.id === activeItem.id)
-    ) {
-      return activeItem;
-    }
-    return null;
-  }, [activeItem, items, selectedItems, selectedSet]);
-
-  const syncInspectorTab = useCallback(
-    (selectedCount: number) => {
-      setInspectorTab((currentTab) => {
-        if (
-          inspectorVisible &&
-          currentTab === "details" &&
-          selectedCount === 1
-        ) {
-          return "details";
-        }
-        return selectedCount === 1 ? "details" : "bucket";
-      });
-    },
-    [inspectorVisible, setInspectorTab],
-  );
-
   const applyRowSelection = useCallback(
     (
       nextIds: string[],
       anchorId: string | null,
       nextActiveRowId: string | null,
-      syncInspector = true,
     ) => {
       setSelectedIds(nextIds);
       setSelectionAnchorId(anchorId);
       setActiveRowId(nextActiveRowId);
-      if (syncInspector) {
-        syncInspectorTab(nextIds.length);
-      }
     },
-    [syncInspectorTab],
+    [],
   );
 
   const activateItem = useCallback((item: BrowserItem | null) => {
@@ -201,13 +160,28 @@ export function useBrowserSelection({
     ],
   );
 
-  const selectItemDetails = useCallback(
-    (item: BrowserItem) => {
-      applyRowSelection([item.id], item.id, item.id, false);
-      setActiveItem(item);
-      setInspectorTab("details");
+  const handleItemCheckboxClick = useCallback(
+    (itemId: string, extendRange: boolean) => {
+      if (extendRange) {
+        const anchorId =
+          (selectionAnchorId &&
+          listItems.some((item) => item.id === selectionAnchorId)
+            ? selectionAnchorId
+            : null) ??
+          listItems.find((item) => selectedSet.has(item.id))?.id ??
+          itemId;
+        selectRangeBetweenRows(anchorId, itemId);
+        return;
+      }
+      toggleSelection(itemId);
     },
-    [applyRowSelection, setInspectorTab],
+    [
+      listItems,
+      selectRangeBetweenRows,
+      selectedSet,
+      selectionAnchorId,
+      toggleSelection,
+    ],
   );
 
   const prepareItemContextMenu = useCallback(
@@ -215,7 +189,7 @@ export function useBrowserSelection({
       const isSelected = selectedSet.has(item.id);
       const menuItems = isSelected ? selectedItems : [item];
       if (!isSelected && !item.isDeleted) {
-        applyRowSelection([item.id], item.id, item.id, false);
+        applyRowSelection([item.id], item.id, item.id);
       }
       return {
         kind: isSelected && selectedItems.length > 1 ? "selection" : "item",
@@ -382,8 +356,7 @@ export function useBrowserSelection({
     setSelectionAnchorId(null);
     setActiveRowId(null);
     setActiveItem(null);
-    setInspectorTab("bucket");
-  }, [scopeKey, setInspectorTab]);
+  }, [scopeKey]);
 
   useEffect(() => {
     const nextIds = selectedIds.filter((id) =>
@@ -394,24 +367,11 @@ export function useBrowserSelection({
       nextIds.some((id, index) => id !== selectedIds[index])
     ) {
       setSelectedIds(nextIds);
-      syncInspectorTab(nextIds.length);
     }
     setActiveItem((current) =>
       current && items.some((item) => item.id === current.id) ? current : null,
     );
-  }, [items, selectedIds, syncInspectorTab]);
-
-  useEffect(() => {
-    if (!inspectorVisible || inspectorTab !== "details") return;
-    if (selectedIds.length !== 1) {
-      setActiveItem(null);
-      return;
-    }
-    const nextItem = items.find((item) => item.id === selectedIds[0]) ?? null;
-    setActiveItem((current) =>
-      current?.id === nextItem?.id ? current : nextItem,
-    );
-  }, [inspectorTab, inspectorVisible, items, selectedIds]);
+  }, [items, selectedIds]);
 
   useEffect(() => {
     setSelectionAnchorId((current) =>
@@ -434,10 +394,10 @@ export function useBrowserSelection({
     allSelected,
     clearActiveItem,
     clearSelection,
+    handleItemCheckboxClick,
     handleItemSelectionClick,
     handleListBackgroundClick,
     handleListKeyDown,
-    inspectedItem,
     prepareItemActionsMenu,
     prepareItemContextMenu,
     removeItemsFromSelection,
@@ -448,7 +408,6 @@ export function useBrowserSelection({
     selectedIds,
     selectedItems,
     selectedSet,
-    selectItemDetails,
     selectSingleRow,
     toggleAllSelection,
     toggleSelection,

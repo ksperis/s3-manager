@@ -16,7 +16,6 @@ import {
   type PortalStorageSpaceSettings,
 } from "../../api/portal";
 import {
-  createPortalStorageSpacePublicLink,
   fetchPortalStorageSpaceAccessSummary,
   grantPortalStorageSpaceShare,
   listPortalStorageSpacePublicLinks,
@@ -53,13 +52,17 @@ import {
 } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
-import { copyTextToClipboard } from "../../utils/clipboard";
 import {
   readClientStorageKey,
   writeClientStorageKey,
 } from "../../utils/clientStorage";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BrowserEmbed from "../browser/BrowserEmbed";
+import StorageSpaceObjectDetailsDrawer from "../shared/StorageSpaceObjectDetailsDrawer";
+import {
+  resolveStorageSpaceObjectDetailsView,
+  type StorageSpaceObjectDetailsView,
+} from "../shared/objectDetailsContract";
 import type {
   BrowserDeletedObjectTarget,
   BrowserObjectDetailsRouteTarget,
@@ -78,12 +81,10 @@ import {
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import PortalDeletedPrefixRestoreWorkflow from "./PortalDeletedPrefixRestoreWorkflow";
-import PortalPublicLinkCreateDialog from "./PortalPublicLinkCreateDialog";
 import PortalPublicLinkRevokeDialog from "./PortalPublicLinkRevokeDialog";
 import PortalPublicLinksTable from "./PortalPublicLinksTable";
 import {
   decodePortalRouteValue,
-  storageSpaceObjectPath,
   storageSpacePath,
 } from "./portalWorkspaceModel";
 import PortalStorageSpaceStatistics from "./PortalStorageSpaceStatistics";
@@ -111,12 +112,6 @@ type PendingAccessChange = {
 type PendingAccessRoleChange = {
   share: PortalStorageSpaceShare;
   role: PortalStorageSpaceGrantRole;
-};
-
-type PublicLinkTarget = {
-  bucketName: string;
-  key: string;
-  name: string;
 };
 
 type SpaceDetailTab =
@@ -181,12 +176,8 @@ export default function PortalStorageSpaceDetailPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [takeOwnershipDialogOpen, setTakeOwnershipDialogOpen] = useState(false);
   const [takeOwnershipBusy, setTakeOwnershipBusy] = useState(false);
-  const [publicLinkTarget, setPublicLinkTarget] = useState<PublicLinkTarget | null>(null);
-  const [publicLinkExpiration, setPublicLinkExpiration] = useState("");
-  const [publicLinkBusy, setPublicLinkBusy] = useState(false);
-  const [publicLinkError, setPublicLinkError] = useState<string | null>(null);
-  const [createdPublicLink, setCreatedPublicLink] = useState<PortalPublicLink | null>(null);
-  const [publicLinkCopyMessage, setPublicLinkCopyMessage] = useState<string | null>(null);
+  const [objectCreateLinkRequestToken, setObjectCreateLinkRequestToken] =
+    useState(0);
   const [externalLinks, setExternalLinks] = useState<PortalPublicLink[]>([]);
   const [externalLinksLoading, setExternalLinksLoading] = useState(false);
   const [externalLinksError, setExternalLinksError] = useState<string | null>(null);
@@ -250,11 +241,30 @@ export default function PortalStorageSpaceDetailPage() {
     const params = new URLSearchParams(location.search);
     return params.get("show_deleted") === "1";
   }, [location.search]);
+  const objectDrawerState = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const objectKey = params.get("object")?.trim() || null;
+    const requestedView = params.get("object_view");
+    const activeView: StorageSpaceObjectDetailsView =
+      requestedView === "history" || requestedView === "sharing" || requestedView === "details"
+        ? requestedView
+        : "preview";
+    return {
+      activeView: params.get("object_deleted") === "1" && requestedView == null ? "history" as const : activeView,
+      isDeleted: params.get("object_deleted") === "1",
+      objectKey,
+    };
+  }, [location.search]);
 
   const selectSpaceDetailTab = useCallback(
     (tab: SpaceDetailTab) => {
       setActiveTab(tab);
       const params = new URLSearchParams(location.search);
+      if (tab !== "files") {
+        params.delete("object");
+        params.delete("object_view");
+        params.delete("object_deleted");
+      }
       if (tab === "files") {
         params.delete("tab");
       } else {
@@ -879,65 +889,6 @@ export default function PortalStorageSpaceDetailPage() {
     writeClientStorageKey(startGuideStorageKey, "true");
   };
 
-  const openPublicLinkDialog = (target: PublicLinkTarget) => {
-    if (target.bucketName !== lockedBucketName || !canCreatePublicLinks) return;
-    setPublicLinkTarget(target);
-    setPublicLinkExpiration("");
-    setPublicLinkError(null);
-    setCreatedPublicLink(null);
-    setPublicLinkCopyMessage(null);
-  };
-
-  const closePublicLinkDialog = () => {
-    if (publicLinkBusy) return;
-    setPublicLinkTarget(null);
-    setPublicLinkExpiration("");
-    setPublicLinkError(null);
-    setCreatedPublicLink(null);
-    setPublicLinkCopyMessage(null);
-  };
-
-  const handleCreatePublicLink = async () => {
-    if (!publicLinkTarget || !accountIdForApi || publicLinkBusy || !canCreatePublicLinks) return;
-    let expiresAt: string | null = null;
-    if (publicLinkExpiration) {
-      const expiration = new Date(publicLinkExpiration);
-      if (Number.isNaN(expiration.getTime())) {
-        setPublicLinkError(t({ en: "Choose a valid expiration date.", fr: "Choisissez une date d'expiration valide.", de: "Wählen Sie ein gültiges Ablaufdatum." }));
-        return;
-      }
-      expiresAt = expiration.toISOString();
-    }
-    setPublicLinkBusy(true);
-    setPublicLinkError(null);
-    setPublicLinkCopyMessage(null);
-    try {
-      const link = await createPortalStorageSpacePublicLink(accountIdForApi, space.id, {
-        object_key: publicLinkTarget.key,
-        label: publicLinkTarget.name,
-        expires_at: expiresAt,
-      });
-      setCreatedPublicLink(link);
-      setMessage(t({ en: "Public link created.", fr: "Lien public créé.", de: "Öffentlicher Link erstellt." }));
-      void loadAccessSummary();
-    } catch (err) {
-      console.error(err);
-      setPublicLinkError(extractApiError(err, t({ en: "Unable to create public link.", fr: "Impossible de créer le lien public.", de: "Öffentlicher Link kann nicht erstellt werden." })));
-    } finally {
-      setPublicLinkBusy(false);
-    }
-  };
-
-  const copyCreatedPublicLink = async () => {
-    if (!createdPublicLink?.url) return;
-    try {
-      await copyTextToClipboard(createdPublicLink.url);
-      setPublicLinkCopyMessage(t({ en: "Link copied.", fr: "Lien copié.", de: "Link kopiert." }));
-    } catch {
-      setPublicLinkCopyMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
-    }
-  };
-
   const openHistoryCleanupDialog = () => {
     if (!canCleanHistory) return;
     setHistoryCleanupConfirmOpen(true);
@@ -1238,25 +1189,29 @@ export default function PortalStorageSpaceDetailPage() {
             lockedBucketName={lockedBucketName}
             lockedBucketLabel={space.name}
             storageEndpointCapabilities={selectedAccount?.storage_endpoint_capabilities ?? null}
-            quotaMaxSizeGb={
-              space.quotaBytes != null
-                ? space.quotaBytes / 1024 ** 3
-                : null
-            }
-            quotaMaxObjects={space.quotaObjects ?? null}
-            onOpenObjectDetailsRoute={(target) => {
+            onOpenObjectDetails={(target) => {
               if (target.bucketName !== lockedBucketName) return;
-              const params = new URLSearchParams();
-              if (target.isDeleted || target.initialTab === "versions") {
-                params.set("tab", "history");
-                params.set("deleted", "1");
-              } else if (target.initialTab) {
-                params.set("tab", target.initialTab);
+              const params = new URLSearchParams(location.search);
+              const replacingOpenDrawer = Boolean(params.get("object"));
+              params.delete("tab");
+              params.set("object", target.key);
+              params.set(
+                "object_view",
+                resolveStorageSpaceObjectDetailsView(target),
+              );
+              if (target.isDeleted) params.set("object_deleted", "1");
+              else params.delete("object_deleted");
+              navigate(
+                { pathname: location.pathname, search: `?${params.toString()}` },
+                {
+                  replace: replacingOpenDrawer,
+                  state: { ...(location.state ?? {}), objectDrawerOpenedFromList: true },
+                },
+              );
+              if (target.intent === "create-public-link") {
+                setObjectCreateLinkRequestToken((current) => current + 1);
               }
-              const query = params.toString();
-              navigate(`${storageSpaceObjectPath(space, target.key)}${query ? `?${query}` : ""}`);
             }}
-            onCreatePublicLinkForObject={canCreatePublicLinks ? openPublicLinkDialog : undefined}
             refreshToken={browserRefreshToken}
             deletedObjectsOptions={{
               visible: showDeletedFiles,
@@ -1803,21 +1758,51 @@ export default function PortalStorageSpaceDetailPage() {
         />
       ) : null}
 
-      {publicLinkTarget ? (
-        <PortalPublicLinkCreateDialog
-          fileName={publicLinkTarget.name}
-          path={publicLinkTarget.key}
-          spaceName={space.name}
-          expiration={publicLinkExpiration}
-          busy={publicLinkBusy}
-          canCreate={canCreatePublicLinks}
-          error={publicLinkError}
-          message={publicLinkCopyMessage}
-          createdLink={createdPublicLink}
-          onExpirationChange={setPublicLinkExpiration}
-          onClose={closePublicLinkDialog}
-          onCreate={handleCreatePublicLink}
-          onCopy={copyCreatedPublicLink}
+      {activeTab === "files" && objectDrawerState.objectKey ? (
+        <StorageSpaceObjectDetailsDrawer
+          accountId={accountIdForApi}
+          activeView={objectDrawerState.activeView}
+          canCreatePublicLinks={canCreatePublicLinks}
+          canModify={canModifyObjects}
+          createPublicLinkRequestToken={objectCreateLinkRequestToken}
+          isDeleted={objectDrawerState.isDeleted}
+          objectKey={objectDrawerState.objectKey}
+          space={space}
+          onClose={() => {
+            const openedFromList = Boolean(
+              (location.state as { objectDrawerOpenedFromList?: boolean } | null)?.objectDrawerOpenedFromList,
+            );
+            if (openedFromList) {
+              navigate(-1);
+              return;
+            }
+            const params = new URLSearchParams(location.search);
+            params.delete("object");
+            params.delete("object_view");
+            params.delete("object_deleted");
+            const search = params.toString();
+            navigate(
+              { pathname: location.pathname, search: search ? `?${search}` : "" },
+              { replace: true, state: location.state },
+            );
+          }}
+          onCreatePublicLinkRequestHandled={() =>
+            setObjectCreateLinkRequestToken(0)
+          }
+          onMessage={setMessage}
+          onPublicLinkCreated={() => void loadAccessSummary()}
+          onRefreshObjects={() => {
+            setBrowserRefreshToken((current) => current + 1);
+            refreshWorkspaceData();
+          }}
+          onViewChange={(view) => {
+            const params = new URLSearchParams(location.search);
+            params.set("object_view", view);
+            navigate(
+              { pathname: location.pathname, search: `?${params.toString()}` },
+              { replace: true, state: location.state },
+            );
+          }}
         />
       ) : null}
 

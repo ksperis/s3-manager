@@ -40,17 +40,28 @@ describe("BrowserObjectVersionsList", () => {
     expect(screen.getByText("Unable to list versions")).toHaveClass("border-rose-200");
   });
 
-  it("renders versions and triggers restore and delete actions", async () => {
+  it("does not offer restoring the current version", async () => {
     const user = userEvent.setup();
     const { props } = renderList({ versions: [version] });
 
     expect(screen.getByText(/version-a/)).toBeInTheDocument();
     expect(screen.getByText("latest")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(
+      screen.queryByRole("button", { name: "Restore" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Delete version" }));
 
-    expect(props.onRestoreVersion).toHaveBeenCalledWith(version);
     expect(props.onDeleteVersion).toHaveBeenCalledWith(version);
+  });
+
+  it("offers restoring an older version", async () => {
+    const user = userEvent.setup();
+    const olderVersion = { ...version, version_id: "version-old", is_latest: false };
+    const { props } = renderList({ versions: [olderVersion] });
+
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+
+    expect(props.onRestoreVersion).toHaveBeenCalledWith(olderVersion);
   });
 });

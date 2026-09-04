@@ -29,6 +29,7 @@ type PortalPublicLinksTableProps = {
   busyLinkId?: number | null;
   showSpaceColumn?: boolean;
   showCopyForInactive?: boolean;
+  fitContainer?: boolean;
   expirationFormat?: "date" | "datetime";
   copyLabel?: string;
   onCopy: (link: PortalPublicLink) => void;
@@ -43,6 +44,7 @@ export default function PortalPublicLinksTable({
   busyLinkId = null,
   showSpaceColumn = false,
   showCopyForInactive = false,
+  fitContainer = false,
   expirationFormat = "datetime",
   copyLabel,
   onCopy,
@@ -65,7 +67,12 @@ export default function PortalPublicLinksTable({
         id: "file",
         label: t({ en: "File", fr: "Fichier", de: "Datei" }),
         primary: !showSpaceColumn,
-        render: (link) => link.object_name,
+        cellClassName: fitContainer ? "min-w-0" : undefined,
+        render: (link) => (
+          <span className={fitContainer ? "block min-w-0 truncate" : undefined} title={link.object_name}>
+            {link.object_name}
+          </span>
+        ),
       },
       {
         id: "status",
@@ -89,17 +96,30 @@ export default function PortalPublicLinksTable({
       {
         id: "url",
         label: t({ en: "URL", fr: "URL", de: "URL" }),
-        cellClassName:
-          "max-w-[260px] truncate text-primary dark:text-primary-200",
-        render: (link) => link.url,
+        cellClassName: fitContainer
+          ? "min-w-0 max-w-0 text-primary dark:text-primary-200"
+          : "max-w-[260px] text-primary dark:text-primary-200",
+        render: (link) => (
+          <span className="block min-w-0 truncate" title={link.url}>
+            {link.url}
+          </span>
+        ),
       },
       {
         id: "action",
         label: t({ en: "Action", fr: "Action", de: "Aktion" }),
         align: "right",
         mobileRole: "actions",
+        headerClassName: fitContainer ? "!w-56" : undefined,
+        cellClassName: fitContainer ? "!w-56" : undefined,
         render: (link) => (
-          <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
+          <div
+            className={
+              fitContainer
+                ? "flex flex-nowrap justify-end gap-2 max-md:flex-wrap max-md:justify-start"
+                : "flex flex-wrap justify-end gap-2 max-md:justify-start"
+            }
+          >
             {showCopyForInactive || link.status === "Active" ? (
               <button
                 type="button"
@@ -132,6 +152,7 @@ export default function PortalPublicLinksTable({
       busyLinkId,
       copyLabel,
       expirationFormat,
+      fitContainer,
       locale,
       onCopy,
       onRevoke,
@@ -162,6 +183,10 @@ export default function PortalPublicLinksTable({
       }
       emptyMessage={emptyMessage}
       responsiveCards
+      tableLayout={fitContainer ? "fixed" : "auto"}
+      tableClassName={fitContainer ? "!table-fixed !w-full" : undefined}
+      overflowXHidden={fitContainer}
+      stickyActions={!fitContainer}
     />
   );
 }

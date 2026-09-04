@@ -15,24 +15,18 @@ vi.mock("./browserRootUiState", async () => {
 function PanelLayoutHarness({ allowPanels = true }: { allowPanels?: boolean }) {
   const layout = useBrowserPanelLayout({
     allowFoldersPanel: allowPanels,
-    allowInspectorPanel: allowPanels,
     initialFoldersPanelWidthPx: 280,
     initialShowFolders: true,
-    initialShowInspector: true,
     persistLayout: true,
   });
   return (
     <div
       ref={layout.layoutContainerRef}
       data-testid="layout"
-      data-inspector-visible={layout.isInspectorPanelVisible}
       style={{ gridTemplateColumns: layout.layoutTemplateColumns }}
     >
       <button type="button" onClick={layout.toggleFoldersPanel}>
         Toggle folders
-      </button>
-      <button type="button" onClick={layout.toggleInspectorPanel}>
-        Toggle details
       </button>
       {layout.isFoldersPanelVisible && (
         <div
@@ -109,12 +103,11 @@ describe("useBrowserPanelLayout", () => {
     expect(writeBrowserRootUiLayout).toHaveBeenLastCalledWith({
       foldersPanelWidthPx: 354,
       showFolders: true,
-      showInspector: true,
     });
     expect(document.body.style.cursor).toBe("");
   });
 
-  it("hides both optional panels on a narrow viewport without erasing preferences", async () => {
+  it("hides the optional folders panel on a narrow viewport without erasing its preference", async () => {
     const { unmount } = render(<PanelLayoutHarness />);
     expect(mediaQueryListeners).toHaveLength(1);
 
@@ -126,24 +119,19 @@ describe("useBrowserPanelLayout", () => {
         screen.queryByRole("separator", { name: "Resize folders panel" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.getByTestId("layout")).toHaveAttribute(
-      "data-inspector-visible",
-      "false",
-    );
     expect(screen.getByTestId("layout").style.gridTemplateColumns).toBe(
       "minmax(0, 1fr)",
     );
     expect(writeBrowserRootUiLayout).toHaveBeenLastCalledWith({
       foldersPanelWidthPx: 280,
       showFolders: true,
-      showInspector: true,
     });
 
     unmount();
     expect(mediaQueryListeners).toHaveLength(0);
   });
 
-  it("toggles folders and details independently", async () => {
+  it("toggles folders independently", async () => {
     render(<PanelLayoutHarness />);
     writeBrowserRootUiLayout.mockClear();
 
@@ -153,22 +141,9 @@ describe("useBrowserPanelLayout", () => {
         screen.queryByRole("separator", { name: "Resize folders panel" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.getByTestId("layout")).toHaveAttribute(
-      "data-inspector-visible",
-      "true",
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Toggle details" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("layout")).toHaveAttribute(
-        "data-inspector-visible",
-        "false",
-      ),
-    );
     expect(writeBrowserRootUiLayout).toHaveBeenLastCalledWith({
       foldersPanelWidthPx: 280,
       showFolders: false,
-      showInspector: false,
     });
   });
 });

@@ -30,7 +30,6 @@ type BrowserRootUiContextSelection = {
 type BrowserRootUiState = {
   density: BrowserDensity;
   showFolders: boolean;
-  showInspector: boolean;
   foldersPanelWidthPx: number;
   objectColumns: string[];
   objectColumnWidths: Record<string, number>;
@@ -113,7 +112,6 @@ const readContextSelections = () =>
 const createDefaultState = (): BrowserRootUiState => ({
   density: "compact",
   showFolders: false,
-  showInspector: false,
   foldersPanelWidthPx: DEFAULT_FOLDERS_PANEL_WIDTH_PX,
   objectColumns: [],
   objectColumnWidths: {},
@@ -126,8 +124,6 @@ const normalizeV3State = (value: unknown): BrowserRootUiState | null => {
     density: value.density === "comfortable" ? "comfortable" : "compact",
     showFolders:
       typeof value.showFolders === "boolean" ? value.showFolders : false,
-    showInspector:
-      typeof value.showInspector === "boolean" ? value.showInspector : false,
     foldersPanelWidthPx: clampPanelWidth(
       value.foldersPanelWidthPx,
       DEFAULT_FOLDERS_PANEL_WIDTH_PX,
@@ -154,10 +150,6 @@ const normalizeV2State = (value: unknown): BrowserRootUiState | null => {
       typeof selectedLayout.showFolders === "boolean"
         ? selectedLayout.showFolders
         : activeLayout === "workbench",
-    showInspector:
-      typeof selectedLayout.showInspector === "boolean"
-        ? selectedLayout.showInspector
-        : activeLayout === "workbench",
     foldersPanelWidthPx: clampPanelWidth(
       selectedLayout.foldersPanelWidthPx,
       DEFAULT_FOLDERS_PANEL_WIDTH_PX,
@@ -175,7 +167,6 @@ const normalizeV2State = (value: unknown): BrowserRootUiState | null => {
 const serializeV3State = (state: BrowserRootUiState) => ({
   density: state.density,
   showFolders: state.showFolders,
-  showInspector: state.showInspector,
   foldersPanelWidthPx: state.foldersPanelWidthPx,
   objectColumns: state.objectColumns,
   objectColumnWidths: state.objectColumnWidths,
@@ -212,7 +203,7 @@ export const writeBrowserRootUiLayout = (
   layout: Partial<
     Pick<
       BrowserRootUiState,
-      "showFolders" | "showInspector" | "foldersPanelWidthPx"
+      "showFolders" | "foldersPanelWidthPx"
     >
   >,
 ) => {

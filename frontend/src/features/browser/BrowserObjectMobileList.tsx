@@ -20,21 +20,13 @@ type BrowserObjectMobileListProps = {
   workspaceObjectNounPlural: string;
   rowActionButtonClasses: string;
   onGoUp: () => void;
-  onSelectItem: (
-    event: ReactMouseEvent<HTMLDivElement>,
-    item: BrowserItem,
-  ) => void;
-  onItemDoubleClick: (
-    event: ReactMouseEvent<HTMLDivElement>,
-    item: BrowserItem,
-  ) => void;
   onItemContextMenu: (
     event: ReactMouseEvent<HTMLDivElement>,
     item: BrowserItem,
   ) => void;
-  onToggleSelection: (item: BrowserItem) => void;
+  onToggleSelection: (item: BrowserItem, extendRange: boolean) => void;
   onItemNameClick: (
-    event: ReactMouseEvent<HTMLButtonElement>,
+    event: ReactMouseEvent<HTMLElement>,
     item: BrowserItem,
   ) => void;
   onOpenActions: (
@@ -55,8 +47,6 @@ export default function BrowserObjectMobileList({
   workspaceObjectNounPlural,
   rowActionButtonClasses,
   onGoUp,
-  onSelectItem,
-  onItemDoubleClick,
   onItemContextMenu,
   onToggleSelection,
   onItemNameClick,
@@ -106,12 +96,12 @@ export default function BrowserObjectMobileList({
               item.type === "file" && !isDeleted ? item.id : undefined
             }
             onClick={(event) => {
-              if (isBrowserInteractiveTarget(event.target) || isDeleted) return;
-              onSelectItem(event, item);
+              if (isBrowserInteractiveTarget(event.target) || event.detail > 1)
+                return;
+              onItemNameClick(event, item);
             }}
-            onDoubleClick={(event) => onItemDoubleClick(event, item)}
             onContextMenu={(event) => onItemContextMenu(event, item)}
-            className={`grid min-h-16 grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-1 px-2 py-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-[-2px] focus-within:outline-primary ${
+            className={`grid min-h-16 cursor-pointer grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-1 px-2 py-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-[-2px] focus-within:outline-primary ${
               isSelected
                 ? "bg-primary-100/90 dark:bg-primary-500/30"
                 : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
@@ -121,7 +111,8 @@ export default function BrowserObjectMobileList({
               <input
                 type="checkbox"
                 checked={!isDeleted && isSelected}
-                onChange={() => onToggleSelection(item)}
+                onClick={(event) => onToggleSelection(item, event.shiftKey)}
+                onChange={() => undefined}
                 aria-label={`Select ${item.name}`}
                 className={uiCheckboxClass}
                 disabled={isDeleted}

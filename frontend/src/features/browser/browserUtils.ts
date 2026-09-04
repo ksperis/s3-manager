@@ -224,24 +224,6 @@ export const collectDroppedFiles = async (dataTransfer: DataTransfer): Promise<U
   return buildUploadCandidates(Array.from(dataTransfer.files || []));
 };
 
-const getExtension = (name: string) => {
-  const idx = name.lastIndexOf(".");
-  if (idx === -1) return "";
-  return name.slice(idx + 1).toLowerCase();
-};
-
-export const isImageFile = (name: string) => {
-  const ext = getExtension(name);
-  return ["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext);
-};
-
-export const previewLabelForItem = (item: BrowserItem) => {
-  if (item.type === "folder") return "FOLDER";
-  const ext = getExtension(item.name);
-  if (!ext) return "FILE";
-  return ext.toUpperCase();
-};
-
 export const buildVersionRows = (versions: BrowserObjectVersion[], deleteMarkers: BrowserObjectVersion[]) => {
   const entries = [...versions, ...deleteMarkers].map((entry) => ({
     ...entry,

@@ -21,24 +21,30 @@ Select the execution context before choosing a bucket. The same bucket name may 
    - Non-active buckets stay collapsed; inaccessible buckets are dimmed until selected.
 3. Use actions as needed:
    - Use the context menu for the full action set on the current path, object, or selection.
-   - Activate the icon and name to open the primary destination. A folder
-     navigates, a previewable file up to 50 MiB opens on `Preview`, another file
-     opens `Properties`, and a deleted object opens `Versions` or Portal
-     `History`. A double-click on the same control still executes only once.
-   - Select from the rest of a row or mobile card. On desktop, selection actions
-     replace the right side of the stable context bar so the list does not move.
-     The mobile bottom bar exposes the essential actions without horizontal
+   - Click anywhere on a row or mobile card, outside its interactive controls,
+     to open the primary destination. A folder navigates, a file opens on
+     `Preview`, and a deleted object opens `Versions` or Portal `History`.
+   - Use the checkbox only for selection. On desktop, selection actions replace
+     the right side of the stable context bar so the list does not move. The
+     mobile bottom bar exposes the essential actions without horizontal
      scrolling. Use `More` for every secondary action.
    - With Technical S3 tools, use `More > Columns` to choose which object columns are visible. The default column set stays unchanged until you customize it.
    - Drag a column separator in the objects table header to resize `Name` and visible object columns. Double-click a separator to restore that column default width.
-   - On `/browser`, use `More > Panels` to enable Folders or the overlay Details
-     panel. Both are optional for every user. Details keeps only the useful
-     object and bucket summaries and may open the full file details.
+   - On `/browser`, use `More > Panels` to enable Folders. Object details open
+     in one contextual drawer that is independent from row selection.
+   - With Technical S3 tools, **Details** on a folder and **Path details** for
+     the current context open the same drawer shell with the effective bucket
+     and S3 prefix. An on-demand recursive count reports the current objects and,
+     when relevant, versions and delete markers without changing the listing.
+     Standard and Portal do not expose this technical path view.
+   - In a Portal project context, that shared drawer exposes `Preview`,
+     `History`, `Sharing`, and `Details`, just as it does inside the Storage
+     Space page.
    - Upload files
    - Download objects
    - Preview supported files
    - Delete objects or delete markers
-   - Manage versions, restores, metadata, tags, ACL, retention, signed URLs, and archive restore workflows from the unified `Object details` modal for files
+   - Manage versions, restores, metadata, tags, ACL, retention, signed URLs, and archive restore workflows from the unified details drawer for files
 4. Use bulk actions when handling many objects.
 5. You can copy or cut items and paste into the target bucket or prefix.
    - Same-context paste keeps the existing storage-side copy path.
@@ -48,20 +54,22 @@ Select the execution context before choosing a bucket. The same bucket name may 
 
 ## Action access
 
-- Path actions include upload, folder creation, paste, versions, restore, cleanup, and copy path.
+- Path actions include upload, folder creation, paste, versions, restore,
+  cleanup, copy path, and Advanced path details.
 - The desktop selection bar exposes primary selection shortcuts only while a
   selection exists. Mobile uses a safe-area bottom bar and bottom sheet.
 - Selection actions include download, open, copy URL, copy, cut, bulk attributes, advanced actions, restore, and delete when the current selection allows them.
-- File entry points such as `Preview`, `Versions`, and advanced object actions converge into the same `Object details` modal, each opening the most relevant tab first.
+- File entry points such as `Preview`, `Versions`, and advanced object actions converge into the same details drawer, each opening the most relevant tab first.
 - Long-running bulk actions surface in **Operations overview**, where queued, active, completed, and failed work stays visible without leaving Browser.
 - `More` remains available in embedded Manager, Ceph Admin, and Portal Browser
   surfaces, where profile and resolved capability facts decide the visible set.
 - On the main `/browser` page, `More > View` lets every user choose
-  Comfortable or Compact and `More > Panels` independently controls
-  Folders and Details. Compact keeps the path and icon actions on one row;
+  Comfortable or Compact and `More > Panels` controls Folders. Compact keeps
+  the path and icon actions on one row;
   Comfortable keeps labeled actions on that row when the window is wide and
   moves them to a second row when space is tighter. These choices are stored
-  for the root Browser only. The default is a compact, panel-free view suitable
+  for the root Browser only. The default is a compact view with Folders hidden,
+  suitable
   for small windows and dense object lists.
 - With Technical S3 tools, object columns available from `More > Columns` include base listing columns such as `Size`, `Modified`, `Storage class`, and `ETag`, plus lazy detail columns such as `Content-Type`, `Tags`, `Metadata`, `Cache-Control`, `Expires`, and `Restore status`.
 - Custom column widths are stored locally in the current browser and stay separate between the main `/browser` page and embedded browser surfaces.
@@ -70,8 +78,14 @@ Select the execution context before choosing a bucket. The same bucket name may 
 - Actions can be disabled for the current state. For example, `Copy URL` is disabled when SSE-C is active, and deleted items must be restored from versions before direct download or delete operations.
 - Standard includes normal file operations and read-only properties. Advanced
   adds technical S3 tools, editable properties, bulk and cross-context
-  operations, multipart supervision, and bucket configuration. Portal exposes
+  operations, multipart supervision, path details, and bucket configuration.
+  On the dedicated Browser, **Bucket details** is a read-only summary. Manager
+  and Ceph Admin embeds expose **Bucket settings** with the supported editors in
+  the same guarded drawer. Portal exposes
   only end-user actions authorized by the Portal-provided capabilities.
+- A row click always opens its primary destination. Selection is explicit via
+  the checkbox, including Shift-click for a range, so clicking another column
+  no longer changes selection unexpectedly.
 
 ## Expected result
 
@@ -79,7 +93,7 @@ Object-level operations are executed with current context credentials and reflec
 
 ## You are done when
 
-The object list, inspector, or Operations overview shows the expected completed state for the selected object or prefix.
+The object list, details drawer, or Operations overview shows the expected completed state for the selected object or prefix.
 
 ## If you do not see this action
 

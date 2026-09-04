@@ -79,21 +79,13 @@ type BrowserObjectExplorerProps = {
   onListBackgroundClick: MouseEventHandler<HTMLDivElement>;
   onListKeyDown: KeyboardEventHandler<HTMLDivElement>;
   onGoUp: () => void;
-  onSelectItem: (
-    event: ReactMouseEvent<HTMLElement>,
-    item: BrowserItem,
-  ) => void;
-  onItemDoubleClick: (
-    event: ReactMouseEvent<HTMLElement>,
-    item: BrowserItem,
-  ) => void;
   onItemContextMenu: (
     event: ReactMouseEvent<HTMLElement>,
     item: BrowserItem,
   ) => void;
-  onToggleSelection: (item: BrowserItem) => void;
+  onToggleSelection: (item: BrowserItem, extendRange: boolean) => void;
   onItemNameClick: (
-    event: ReactMouseEvent<HTMLButtonElement>,
+    event: ReactMouseEvent<HTMLElement>,
     item: BrowserItem,
   ) => void;
   onRunItemAction: (item: BrowserItem, actionId: BrowserActionId) => void;
@@ -145,8 +137,6 @@ export default function BrowserObjectExplorer({
   onListBackgroundClick,
   onListKeyDown,
   onGoUp,
-  onSelectItem,
-  onItemDoubleClick,
   onItemContextMenu,
   onToggleSelection,
   onItemNameClick,
@@ -240,8 +230,6 @@ export default function BrowserObjectExplorer({
             workspaceObjectNounPlural={workspaceObjectNounPlural}
             rowActionButtonClasses={table.row.rowActionButtonClasses}
             onGoUp={onGoUp}
-            onSelectItem={onSelectItem}
-            onItemDoubleClick={onItemDoubleClick}
             onItemContextMenu={onItemContextMenu}
             onToggleSelection={onToggleSelection}
             onItemNameClick={onItemNameClick}
@@ -326,15 +314,15 @@ export default function BrowserObjectExplorer({
                   onClick={(event) => {
                     if (
                       isBrowserInteractiveTarget(event.target) ||
-                      isDeleted
-                    ) {
+                      event.detail > 1
+                    )
                       return;
-                    }
-                    onSelectItem(event, item);
+                    onItemNameClick(event, item);
                   }}
-                  onDoubleClick={(event) => onItemDoubleClick(event, item)}
                   onContextMenu={(event) => onItemContextMenu(event, item)}
-                  onToggleSelection={() => onToggleSelection(item)}
+                  onToggleSelection={(extendRange) =>
+                    onToggleSelection(item, extendRange)
+                  }
                   onNameClick={(event) => onItemNameClick(event, item)}
                   onRunAction={(actionId) => onRunItemAction(item, actionId)}
                   onOpenActions={(event) => onOpenActions(event, item)}

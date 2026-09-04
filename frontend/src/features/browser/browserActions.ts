@@ -89,7 +89,7 @@ type ResolveBrowserActionsInput = {
   copyUrlDisabledReason?: string;
   publicLinkAvailable?: boolean;
   restoreAvailable?: boolean;
-  inspectorAvailable?: boolean;
+  detailsAvailable?: boolean;
   currentPath?: string;
   showFolderItems?: boolean;
   showDeletedObjects?: boolean;
@@ -100,9 +100,11 @@ type ResolveBrowserActionsInput = {
   refreshPending?: boolean;
   multipartUploadsAvailable?: boolean;
   bucketConfigurationAvailable?: boolean;
+  bucketConfigurationReadOnly?: boolean;
 };
 
 export const CONTEXT_MENU_PATH_ACTION_IDS: BrowserActionId[] = [
+  "details",
   "newFolder",
   "uploadFiles",
   "uploadFolder",
@@ -150,6 +152,7 @@ export const CONTEXT_MENU_SELECTION_ACTION_IDS: BrowserActionId[] = [
 ];
 
 export const TOOLBAR_MORE_PATH_ACTION_IDS: BrowserActionId[] = [
+  "details",
   "uploadFiles",
   "uploadFolder",
   "newFolder",
@@ -393,7 +396,7 @@ export const resolveBrowserActions = ({
   copyUrlDisabledReason,
   publicLinkAvailable = false,
   restoreAvailable = false,
-  inspectorAvailable = false,
+  detailsAvailable = false,
   currentPath = "",
   showFolderItems = true,
   showDeletedObjects = false,
@@ -404,6 +407,7 @@ export const resolveBrowserActions = ({
   refreshPending = false,
   multipartUploadsAvailable = false,
   bucketConfigurationAvailable = false,
+  bucketConfigurationReadOnly = false,
 }: ResolveBrowserActionsInput): BrowserActionMap => {
   const states = ALL_ACTION_IDS.reduce<BrowserActionMap>((acc, id) => {
     acc[id] = createHiddenState(id);
@@ -454,6 +458,12 @@ export const resolveBrowserActions = ({
   };
 
   if (scope === "path") {
+    setState("details", {
+      section: "path",
+      label: "Path details",
+      visible: functionalProfile === "advanced" && hasBucket,
+      enabled: functionalProfile === "advanced" && canUseContextActions,
+    });
     setState("uploadFiles", {
       label: "Upload files",
       visible: true,
@@ -499,7 +509,7 @@ export const resolveBrowserActions = ({
         : "Select a bucket to inspect multipart uploads.",
     });
     setState("configureBucket", {
-      label: "Configure bucket",
+      label: bucketConfigurationReadOnly ? "Bucket details" : "Bucket settings",
       visible: bucketConfigurationAvailable,
       enabled: bucketConfigurationAvailable && canUseContextActions,
       disabledReason: canUseContextActions
@@ -551,11 +561,11 @@ export const resolveBrowserActions = ({
       visible:
         isSingle &&
         Boolean(primary) &&
-        inspectorAvailable,
+        detailsAvailable,
       enabled:
         isSingle &&
         Boolean(primary) &&
-        inspectorAvailable,
+        detailsAvailable,
     });
     if (isPrimaryFile && versioningEnabled) {
       setState("versions", {

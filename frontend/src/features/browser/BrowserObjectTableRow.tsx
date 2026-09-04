@@ -32,9 +32,8 @@ type BrowserObjectTableRowProps = {
   primaryItemButtonHeightClasses: string;
   rowActionButtonClasses: string;
   onClick: (event: ReactMouseEvent<HTMLTableRowElement>) => void;
-  onDoubleClick: (event: ReactMouseEvent<HTMLTableRowElement>) => void;
   onContextMenu: (event: ReactMouseEvent<HTMLTableRowElement>) => void;
-  onToggleSelection: () => void;
+  onToggleSelection: (extendRange: boolean) => void;
   onNameClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onRunAction: (actionId: BrowserActionId) => void;
   onOpenActions: (event: ReactMouseEvent<HTMLButtonElement>) => void;
@@ -72,7 +71,6 @@ export default function BrowserObjectTableRow({
   primaryItemButtonHeightClasses,
   rowActionButtonClasses,
   onClick,
-  onDoubleClick,
   onContextMenu,
   onToggleSelection,
   onNameClick,
@@ -88,9 +86,8 @@ export default function BrowserObjectTableRow({
         item.type === "file" && !item.isDeleted ? item.id : undefined
       }
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
-      className={`${rowHeightClasses} transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-[-2px] focus-within:outline-primary ${
+      className={`${rowHeightClasses} cursor-pointer transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-[-2px] focus-within:outline-primary ${
         selected
           ? "bg-primary-100/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
           : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
@@ -100,7 +97,8 @@ export default function BrowserObjectTableRow({
         <input
           type="checkbox"
           checked={!isDeleted && selected}
-          onChange={onToggleSelection}
+          onClick={(event) => onToggleSelection(event.shiftKey)}
+          onChange={() => undefined}
           aria-label={`Select ${item.name}`}
           className={uiCheckboxClass}
           disabled={isDeleted}
@@ -175,7 +173,7 @@ export default function BrowserObjectTableRow({
                 </span>
                 {(isDeleted || isHistorical) && (
                   <span
-                    className={`rounded-md border px-2 py-0.5 font-semibold ${
+                    className={`${comfortableMetadataLabelClasses} ${
                       isHistorical
                         ? "border-amber-200 text-amber-700 dark:border-amber-500/40 dark:text-amber-200"
                         : "border-rose-200 text-rose-700 dark:border-rose-500/40 dark:text-rose-200"

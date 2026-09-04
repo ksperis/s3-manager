@@ -19,6 +19,7 @@ export type BrowserObjectDetailsRouteTarget = {
   name: string;
   initialTab?: "preview" | "properties" | "versions";
   isDeleted?: boolean;
+  intent?: "create-public-link";
 };
 
 export type BrowserDeletedObjectTarget = BrowserObjectDetailsRouteTarget & {
@@ -58,17 +59,11 @@ export type BrowserPageProps = {
   lockedBucketName?: string;
   lockedBucketLabel?: string;
   storageEndpointCapabilities?: Record<string, boolean> | null;
-  contextEndpointProvider?: "ceph" | "aws" | "other" | null;
-  contextQuotaMaxSizeGb?: number | null;
-  contextQuotaMaxObjects?: number | null;
   allowFoldersPanel?: boolean;
-  allowInspectorPanel?: boolean;
   showPanelToggles?: boolean;
   defaultShowFolders?: boolean;
-  defaultShowInspector?: boolean;
   onSelectedBucketNameChange?: (bucketName: string) => void;
-  onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
-  onCreatePublicLinkForObject?: (target: BrowserObjectDetailsRouteTarget) => void;
+  onOpenObjectDetails?: (target: BrowserObjectDetailsRouteTarget) => void;
   deletedObjectsOptions?: BrowserDeletedObjectsOptions;
   refreshToken?: number;
   transferReporter?: BrowserTransferReporter;

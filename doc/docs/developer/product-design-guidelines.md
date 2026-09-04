@@ -96,13 +96,16 @@ workspace-specific visual themes when a shared product pattern fits.
 
 For the standalone Browser, keep functional access separate from presentation:
 **Technical S3 tools** controls the Advanced action set, while density and the
-optional Folders and Details panels remain user display preferences. The
-default is Compact with panels hidden. Compact uses one path-and-icon-action
+optional Folders panel remains a user display preference. The
+default is Compact with Folders hidden. Compact uses one path-and-icon-action
 row when width permits; Comfortable uses labeled actions on that row at wide
 viewports and moves them below the path before the toolbar becomes cramped.
 Selection actions replace controls inside the existing context bar rather than
-inserting a new row, and Details uses an overlay so opening it does not shrink
-or shift the object list.
+inserting a new row. Object, Advanced path, and bucket details use the shared
+contextual drawer, which overlays the list on desktop and becomes a modal
+full-screen surface below 1024px. Keep the header limited to the resource name,
+path, actions, tabs, and actual warnings/status; do not repeat object metadata
+under the tabs.
 
 ## Page or modal decision
 

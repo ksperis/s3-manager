@@ -96,10 +96,10 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
   <figure data-thumb-label="Panels">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/use-cases-storage-user.light.png" alt="Browser workspace with folders panel, action bar, and details inspector open on a daily report object" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/use-cases-storage-user.dark.png" alt="Browser workspace with folders panel, action bar, and details inspector open on a daily report object" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/use-cases-storage-user.light.png" alt="Browser workspace with folders visible on a daily report workflow" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/use-cases-storage-user.dark.png" alt="Browser workspace with folders visible on a daily report workflow" loading="lazy">
     </div>
-    <figcaption><strong>Panels.</strong> On the main `/browser` workspace, folders, selection actions, and inspector details can stay visible together for faster daily work.</figcaption>
+    <figcaption><strong>Folders.</strong> On the main `/browser` workspace, the folder tree can stay visible while object details open only when needed.</figcaption>
   </figure>
   <figure data-thumb-label="Operations">
     <div class="docs-themed-shot" data-docs-themed-shot>

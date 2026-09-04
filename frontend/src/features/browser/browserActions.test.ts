@@ -63,6 +63,7 @@ describe("resolveBrowserActions", () => {
     expect(path.cleanOldVersions.visible).toBe(false);
     expect(path.multipartUploads.visible).toBe(false);
     expect(path.configureBucket.visible).toBe(false);
+    expect(path.details.visible).toBe(false);
     expect(item.preview.visible).toBe(true);
     expect(item.properties.visible).toBe(true);
     expect(item.copyUrl.visible).toBe(false);
@@ -94,6 +95,27 @@ describe("resolveBrowserActions", () => {
     });
     expect(path.multipartUploads).toMatchObject({ visible: true, enabled: true });
     expect(path.configureBucket).toMatchObject({ visible: true, enabled: true });
+    expect(path.details).toMatchObject({
+      label: "Path details",
+      visible: true,
+      enabled: true,
+    });
+  });
+
+  it("uses an honest read-only label for dedicated Browser bucket details", () => {
+    const path = resolveBrowserActions({
+      ...baseInput,
+      scope: "path",
+      functionalProfile: "advanced",
+      bucketConfigurationAvailable: true,
+      bucketConfigurationReadOnly: true,
+    });
+
+    expect(path.configureBucket).toMatchObject({
+      label: "Bucket details",
+      visible: true,
+      enabled: true,
+    });
   });
 
   it("uses Portal capability facts without reconstructing permissions from roles", () => {
@@ -155,7 +177,7 @@ describe("resolveBrowserActions", () => {
       functionalProfile: "portal",
       capabilityFacts: FULL_BROWSER_CAPABILITY_FACTS,
       restoreAvailable: true,
-      inspectorAvailable: true,
+      detailsAvailable: true,
     });
 
     expect(actions.preview.visible).toBe(false);

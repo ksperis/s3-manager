@@ -55,7 +55,63 @@ export const isObjectLockUnavailableMessage = (message: string) => {
 export const nextTabAfterDeleted = (versioningEnabled: boolean): ObjectDetailsTabId =>
   versioningEnabled ? "versions" : "preview";
 
-export type BrowserObjectDetailsTab = {
+export const DELETED_OBJECT_DETAILS_MESSAGE =
+  "This object is deleted. Open versions to inspect or restore it.";
+
+export function resolveBrowserObjectDetailsTab({
+  isDeleted,
+  isStorageSpace,
+  profile,
+  requestedTab,
+  versioningEnabled,
+}: {
+  isDeleted: boolean;
+  isStorageSpace: boolean;
+  profile: "standard" | "advanced";
+  requestedTab: ObjectDetailsTabId;
+  versioningEnabled: boolean;
+}): { initialTab: ObjectDetailsTabId | null; warning?: string } {
+  if (isDeleted) {
+    return {
+      initialTab: versioningEnabled || isStorageSpace ? "versions" : null,
+      warning: DELETED_OBJECT_DETAILS_MESSAGE,
+    };
+  }
+  if (requestedTab === "versions" && !versioningEnabled && !isStorageSpace) {
+    return { initialTab: "preview" };
+  }
+  if (profile === "advanced" && requestedTab === "details") {
+    return { initialTab: "properties" };
+  }
+  if (
+    profile === "standard" &&
+    requestedTab !== "preview" &&
+    requestedTab !== "details"
+  ) {
+    return { initialTab: "details" };
+  }
+  return { initialTab: requestedTab };
+}
+
+export function resolveRoutedObjectDetailsTab({
+  isDeleted,
+  requestedTab,
+}: {
+  isDeleted: boolean;
+  requestedTab: ObjectDetailsTabId;
+}): "preview" | "properties" | "versions" {
+  if (isDeleted) return "versions";
+  if (
+    requestedTab === "preview" ||
+    requestedTab === "properties" ||
+    requestedTab === "versions"
+  ) {
+    return requestedTab;
+  }
+  return "properties";
+}
+
+type BrowserObjectDetailsTab = {
   id: ObjectDetailsTabId;
   label: string;
 };
@@ -63,29 +119,29 @@ export type BrowserObjectDetailsTab = {
 export const buildObjectDetailsTabs = ({
   hasArchiveTab,
   isDeleted,
-  readOnly,
+  profile,
   versioningEnabled,
 }: {
   hasArchiveTab: boolean;
   isDeleted: boolean;
-  readOnly: boolean;
+  profile: "standard" | "advanced";
   versioningEnabled: boolean;
 }): BrowserObjectDetailsTab[] => {
   if (isDeleted) {
     return versioningEnabled ? [{ id: "versions", label: "Versions" }] : [];
   }
 
-  const tabs: BrowserObjectDetailsTab[] = [
-    { id: "preview", label: "Preview" },
-  ];
-  if (versioningEnabled && !readOnly) {
+  const tabs: BrowserObjectDetailsTab[] = [{ id: "preview", label: "Preview" }];
+  if (profile === "standard") {
+    tabs.push({ id: "details", label: "Details" });
+    return tabs;
+  }
+  if (versioningEnabled) {
     tabs.push({ id: "versions", label: "Versions" });
   }
   tabs.push({ id: "properties", label: "Properties" });
-  if (!readOnly) {
-    tabs.push({ id: "protection", label: "Access & Protection" });
-  }
-  if (hasArchiveTab && !readOnly) {
+  tabs.push({ id: "protection", label: "Access & Protection" });
+  if (hasArchiveTab) {
     tabs.push({ id: "archive", label: "Archive" });
   }
   return tabs;

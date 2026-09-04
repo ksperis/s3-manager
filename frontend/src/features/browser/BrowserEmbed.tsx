@@ -28,12 +28,8 @@ type BrowserEmbedProps = {
   lockedBucketName?: string;
   lockedBucketLabel?: string;
   storageEndpointCapabilities?: Record<string, boolean> | null;
-  endpointProvider?: "ceph" | "aws" | "other" | null;
-  quotaMaxSizeGb?: number | null;
-  quotaMaxObjects?: number | null;
   onSelectedBucketNameChange?: (bucketName: string) => void;
-  onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
-  onCreatePublicLinkForObject?: (target: BrowserObjectDetailsRouteTarget) => void;
+  onOpenObjectDetails?: (target: BrowserObjectDetailsRouteTarget) => void;
   deletedObjectsOptions?: BrowserDeletedObjectsOptions;
   refreshToken?: number;
   transferReporter?: BrowserTransferReporter;
@@ -50,12 +46,8 @@ export default function BrowserEmbed({
   lockedBucketName,
   lockedBucketLabel,
   storageEndpointCapabilities,
-  endpointProvider,
-  quotaMaxSizeGb,
-  quotaMaxObjects,
   onSelectedBucketNameChange,
-  onOpenObjectDetailsRoute,
-  onCreatePublicLinkForObject,
+  onOpenObjectDetails,
   deletedObjectsOptions,
   refreshToken,
   transferReporter,
@@ -72,15 +64,10 @@ export default function BrowserEmbed({
       lockedBucketName={lockedBucketName}
       lockedBucketLabel={lockedBucketLabel}
       storageEndpointCapabilities={storageEndpointCapabilities}
-      contextEndpointProvider={endpointProvider}
-      contextQuotaMaxSizeGb={quotaMaxSizeGb}
-      contextQuotaMaxObjects={quotaMaxObjects}
       allowFoldersPanel={false}
-      allowInspectorPanel={false}
       showPanelToggles={false}
       onSelectedBucketNameChange={onSelectedBucketNameChange}
-      onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
-      onCreatePublicLinkForObject={onCreatePublicLinkForObject}
+      onOpenObjectDetails={onOpenObjectDetails}
       deletedObjectsOptions={deletedObjectsOptions}
       refreshToken={refreshToken}
       transferReporter={transferReporter}

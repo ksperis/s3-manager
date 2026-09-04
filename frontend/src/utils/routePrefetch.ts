@@ -28,7 +28,7 @@ export function prefetchWorkspaceBranch(pathname: string): void {
       import("../features/portal/PortalDashboard"),
       import("../features/portal/PortalAccessKeysPage"),
       import("../features/portal/PortalStorageSpacesPage"),
-      import("../features/portal/PortalObjectDetailPage"),
+      import("../features/portal/PortalStorageSpaceDetailPage"),
     ]);
     return;
   }

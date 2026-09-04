@@ -12,7 +12,7 @@ import type { ObjectRetentionMode } from "./useBrowserObjectProtection";
 const version: BrowserObjectVersion = {
   key: "reports/summary.csv",
   version_id: "version-a",
-  is_latest: true,
+  is_latest: false,
   is_delete_marker: false,
 };
 

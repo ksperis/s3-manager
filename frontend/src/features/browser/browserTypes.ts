@@ -157,12 +157,7 @@ export type BulkMetadataDraft = {
   expires: string;
 };
 
-export type ObjectDetailsTabId =
-  | "preview"
-  | "versions"
-  | "properties"
-  | "protection"
-  | "archive";
+export type { ObjectDetailsTabId } from "../shared/objectDetailsContract";
 
 export type ContextMenuKind = "item" | "selection" | "path" | "headerConfig";
 

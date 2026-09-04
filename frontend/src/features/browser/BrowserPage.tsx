@@ -46,7 +46,6 @@ import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserToolbar from "./BrowserToolbar";
 import { useBrowserBucketCors } from "./useBrowserBucketCors";
-import { useBrowserBucketInspector } from "./useBrowserBucketInspector";
 import { useBrowserBulkAttributes } from "./useBrowserBulkAttributes";
 import { useBrowserBulkRestore } from "./useBrowserBulkRestore";
 import { useBrowserBucketCatalog } from "./useBrowserBucketCatalog";
@@ -69,7 +68,7 @@ import { useBrowserMultipartUploads } from "./useBrowserMultipartUploads";
 import { useBrowserNavigationHistory } from "./useBrowserNavigationHistory";
 import { useBrowserNotices } from "./useBrowserNotices";
 import { useBrowserObjectColumns } from "./useBrowserObjectColumns";
-import { useBrowserObjectDetailsTarget } from "./useBrowserObjectDetailsTarget";
+import { useBrowserDetailsDrawerState } from "./useBrowserDetailsDrawerState";
 import { useBrowserObjectListing } from "./useBrowserObjectListing";
 import { useBrowserObjectSort } from "./useBrowserObjectSort";
 import { useBrowserOperationOverview } from "./useBrowserOperationOverview";
@@ -87,7 +86,6 @@ import { useBrowserSelection } from "./useBrowserSelection";
 import { useBrowserSseCustomerKeys } from "./useBrowserSseCustomerKeys";
 import { useBrowserStsSession } from "./useBrowserStsSession";
 import { useBrowserUploadQueue } from "./useBrowserUploadQueue";
-import { useBrowserVersionListing } from "./useBrowserVersionListing";
 import { useBrowserVersionCleanup } from "./useBrowserVersionCleanup";
 import { useBrowserVersionActions } from "./useBrowserVersionActions";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
@@ -111,16 +109,20 @@ import {
   BrowserCopyValueModal,
 } from "./BrowserDialogModals";
 import {
-  BrowserBucketConfigurationModal,
+  BrowserBucketConfigurationDrawer,
   BrowserCreateBucketModal,
   BrowserCreateFolderModal,
   BrowserSseCustomerKeyModal,
 } from "./BrowserBucketDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
-import BrowserInspectorPanel, {
-  type BrowserInspectorTab,
-} from "./BrowserInspectorPanel";
-import BrowserObjectDetailsModal from "./BrowserObjectDetailsModal";
+import BrowserObjectDetailsDrawer from "./BrowserObjectDetailsDrawer";
+import {
+  resolveBrowserObjectDetailsTab,
+  resolveRoutedObjectDetailsTab,
+} from "./browserObjectDetailsModel";
+import { resolveStorageSpaceObjectDetailsView } from "../shared/objectDetailsContract";
+import BrowserPathDetailsDrawer from "./BrowserPathDetailsDrawer";
+import BrowserStorageSpaceObjectDetailsDrawer from "./BrowserStorageSpaceObjectDetailsDrawer";
 import BrowserOperationsModal from "./BrowserOperationsModal";
 import BrowserOperationsPanel from "./BrowserOperationsPanel";
 import BrowserMultipartUploadsModal from "./BrowserMultipartUploadsModal";
@@ -134,11 +136,8 @@ import {
 } from "./browserRootUiState";
 import { shouldUseStsPresigner } from "./sseBrowserLogic";
 import { InfoIcon } from "./browserIcons";
-import { resolveBrowserContextQuotas } from "./browserQuota";
 import {
   VERSIONS_LIST_HARD_LIMIT,
-  VERSIONS_PAGE_SIZE,
-  bulkActionClasses,
   filterChipClasses,
   iconButtonClasses,
   storageClassOptions,
@@ -176,7 +175,6 @@ import {
   resolveColumnWidthPx,
   type BrowserColumnId,
 } from "./browserObjectTableModel";
-import { isBrowserInteractiveTarget } from "./browserObjectItemPresentation";
 import {
   resolveBucketAccessEntry,
   splitBucketPanelBuckets,
@@ -211,17 +209,11 @@ export default function BrowserPage({
   lockedBucketName,
   lockedBucketLabel,
   storageEndpointCapabilities,
-  contextEndpointProvider,
-  contextQuotaMaxSizeGb,
-  contextQuotaMaxObjects,
   allowFoldersPanel = true,
-  allowInspectorPanel = true,
   showPanelToggles = true,
   defaultShowFolders = false,
-  defaultShowInspector = false,
   onSelectedBucketNameChange,
-  onOpenObjectDetailsRoute,
-  onCreatePublicLinkForObject,
+  onOpenObjectDetails,
   deletedObjectsOptions,
   refreshToken,
   transferReporter,
@@ -241,7 +233,6 @@ export default function BrowserPage({
     isEmbeddedBrowserPath,
     usePortalWorkspaceLabels,
     workspaceNoun,
-    workspaceNounCapitalized,
     selectorWorkspaceNoun,
     selectorWorkspaceNounPlural,
     selectorWorkspaceNounTitle,
@@ -255,8 +246,7 @@ export default function BrowserPage({
   });
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
   const hasS3AccountContext = hasContextOverride ?? browserContext.hasContext;
-  const canOpenRoutedObjectDetails = Boolean(onOpenObjectDetailsRoute);
-  const canCreateRoutedPublicLink = Boolean(onCreatePublicLinkForObject);
+  const canOpenExternalObjectDetails = Boolean(onOpenObjectDetails);
   const browserRequestOptions = useMemo<BrowserRequestOptions | undefined>(
     () =>
       workspaceSurface === "portal" || workspaceSurface === "manager"
@@ -290,16 +280,13 @@ export default function BrowserPage({
         ? "advanced"
         : "standard");
   const resolvedCapabilityFacts = useMemo<BrowserCapabilityFacts>(
-    () =>
-      capabilityFactsOverride ?? {
-        ...FULL_BROWSER_CAPABILITY_FACTS,
-        canCreatePublicLinks: Boolean(onCreatePublicLinkForObject),
-      },
-    [capabilityFactsOverride, onCreatePublicLinkForObject],
+    () => capabilityFactsOverride ?? FULL_BROWSER_CAPABILITY_FACTS,
+    [capabilityFactsOverride],
   );
   const isPortalProfile = resolvedFunctionalProfile === "portal";
   const executionContextKind =
     executionContextKindOverride ?? selectedContext?.kind ?? null;
+  const isStorageSpaceContext = executionContextKind === "portal_account";
   const isCephAdminContext = executionContextKind === "ceph_admin";
   const isS3UserContext = executionContextKind === "s3_user";
   const isConnectionContext = executionContextKind === "connection";
@@ -364,33 +351,23 @@ export default function BrowserPage({
   const {
     adjustFoldersPanelWidth,
     canUseFoldersPanel,
-    canUseInspectorPanel,
-    closeInspectorPanel,
     foldersPanelResizeActive,
     isFoldersPanelVisible,
-    isInspectorPanelVisible,
     layoutContainerRef,
     layoutTemplateColumns,
-    openInspectorPanel,
     resolvedFoldersWidth,
     resetFoldersPanelWidth,
     showFolders,
-    showInspector,
     startFoldersPanelResize,
     toggleFoldersPanel,
-    toggleInspectorPanel,
   } = useBrowserPanelLayout({
     allowFoldersPanel,
-    allowInspectorPanel,
     initialFoldersPanelWidthPx:
       initialStoredRootUiState?.foldersPanelWidthPx ??
       DEFAULT_FOLDERS_PANEL_WIDTH_PX,
     initialShowFolders: isMainBrowserPath
       ? (initialStoredRootUiState?.showFolders ?? defaultShowFolders)
       : defaultShowFolders,
-    initialShowInspector: isMainBrowserPath
-      ? (initialStoredRootUiState?.showInspector ?? defaultShowInspector)
-      : defaultShowInspector,
     persistLayout: isMainBrowserPath,
   });
   const {
@@ -419,8 +396,6 @@ export default function BrowserPage({
     toggleSort: handleSortToggle,
   } = useBrowserObjectSort({ visibleColumns: visibleColumnSet });
   const isMobileViewport = useMediaQuery(MOBILE_OBJECT_LIST_MEDIA_QUERY);
-  const [inspectorTab, setInspectorTab] =
-    useState<BrowserInspectorTab>("bucket");
   const {
     canConfigure: canConfigureRootBrowserDensity,
     compactMode,
@@ -441,7 +416,7 @@ export default function BrowserPage({
     Number(
       isPortalProfile &&
         resolvedCapabilityFacts.canCreatePublicLinks &&
-        canCreateRoutedPublicLink,
+        canOpenExternalObjectDetails,
     );
   const actionsColumnButtonCount = 1 + maximumDirectItemActionCount;
   const actionsColumnWidthPx = Math.max(
@@ -541,12 +516,40 @@ export default function BrowserPage({
     updateBucketAccessEntry,
   });
   const {
-    close: closeObjectDetails,
-    open: openObjectDetailsTarget,
-    target: objectDetailsTarget,
-  } = useBrowserObjectDetailsTarget({
+    close: closeConfirmDialog,
+    dialog: confirmDialog,
+    loading: confirmDialogLoading,
+    open: openConfirmDialog,
+    submit: submitConfirmDialog,
+  } = useBrowserConfirmDialog();
+  const requestDiscardDrawerChanges = useCallback(
+    (onConfirm: () => void) => {
+      openConfirmDialog({
+        title: "Discard changes?",
+        message:
+          "You have unapplied changes in the open details drawer. Continuing will discard them.",
+        confirmLabel: "Discard changes",
+        tone: "danger",
+        onConfirm,
+      });
+    },
+    [openConfirmDialog],
+  );
+  const {
+    bucketName: configBucketName,
+    closeBucket: closeBucketConfigurationDrawer,
+    closeObject: closeObjectDetailsDrawer,
+    hasUnsavedChanges: hasUnsavedDrawerChanges,
+    objectTarget: objectDetailsTarget,
+    openBucket: openBucketConfigurationTarget,
+    openObject: openObjectDetailsTarget,
+    requestTransition: requestDetailsDrawerTransition,
+    setBucketDirty: setBucketConfigurationDirty,
+    setObjectDirty: setObjectDetailsDirty,
+  } = useBrowserDetailsDrawerState({
+    onRequestDiscardChanges: requestDiscardDrawerChanges,
     scopeKey: JSON.stringify([accountIdForApi, bucketName, prefix]),
-    versioningEnabled: isVersioningEnabled,
+    versioningEnabled: isStorageSpaceContext || isVersioningEnabled,
   });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const {
@@ -632,14 +635,6 @@ export default function BrowserPage({
     },
     [showOperationsBar, startRegisteredOperation],
   );
-  const [configBucketName, setConfigBucketName] = useState<string | null>(null);
-  const {
-    close: closeConfirmDialog,
-    dialog: confirmDialog,
-    loading: confirmDialogLoading,
-    open: openConfirmDialog,
-    submit: submitConfirmDialog,
-  } = useBrowserConfirmDialog();
   const { history: pathHistory, record: recordPathHistory } =
     useBrowserPathHistory({ bucketName });
   const {
@@ -677,23 +672,6 @@ export default function BrowserPage({
     storageEndpointCapabilities === undefined
       ? storageEndpointCaps
       : storageEndpointCapabilities;
-  const selectedContextEndpointProvider =
-    selectedContext?.endpoint_provider ?? null;
-  const effectiveContextEndpointProvider =
-    contextEndpointProvider === undefined
-      ? selectedContextEndpointProvider
-      : contextEndpointProvider;
-  const effectiveContextQuotaSizeGb = contextQuotaMaxSizeGb ?? null;
-  const effectiveContextQuotaObjects = contextQuotaMaxObjects ?? null;
-  const {
-    quotaSizeBytes: cephContextQuotaSizeBytes,
-    quotaObjects: cephContextQuotaObjects,
-  } = resolveBrowserContextQuotas(
-    effectiveContextQuotaSizeGb,
-    effectiveContextQuotaObjects,
-    usageSummary
-  );
-  const isCephContext = effectiveContextEndpointProvider === "ceph";
   const bucketManagementEnabled =
     normalizedPath.endsWith("/browser") &&
     !isEmbeddedBrowserPath &&
@@ -722,24 +700,6 @@ export default function BrowserPage({
   });
   const sseFeatureEnabled =
     Boolean(effectiveCaps?.sse) && resolvedFunctionalProfile === "advanced";
-  const bucketInspectorUsageEnabled = effectiveCaps
-    ? effectiveCaps.metrics !== false
-    : true;
-  const bucketInspectorStaticWebsiteEnabled =
-    effectiveCaps?.static_website ?? true;
-  const {
-    data: bucketInspectorData,
-    error: bucketInspectorError,
-    features: bucketInspectorFeatures,
-    load: loadBucketInspectorData,
-    loading: bucketInspectorLoading,
-  } = useBrowserBucketInspector({
-    accountId: accountIdForApi,
-    bucketName,
-    enabled: hasS3AccountContext,
-    includeStaticWebsite: bucketInspectorStaticWebsiteEnabled,
-    includeUsage: bucketInspectorUsageEnabled,
-  });
   const {
     keyBase64: sseCustomerKeyBase64,
     active: sseActive,
@@ -1010,10 +970,9 @@ export default function BrowserPage({
     activateItem,
     allSelected,
     clearActiveItem,
-    handleItemSelectionClick,
+    handleItemCheckboxClick,
     handleListBackgroundClick,
     handleListKeyDown: handleSelectionKeyDown,
-    inspectedItem,
     prepareItemActionsMenu,
     prepareItemContextMenu,
     removeItemsFromSelection,
@@ -1024,16 +983,11 @@ export default function BrowserPage({
     selectedIds,
     selectedItems,
     selectedSet,
-    selectItemDetails,
     toggleAllSelection,
-    toggleSelection,
   } = useBrowserSelection({
-    inspectorTab,
-    inspectorVisible: isInspectorPanelVisible,
     items,
     listItems,
     scopeKey: JSON.stringify([accountIdForApi, bucketName, prefix]),
-    setInspectorTab,
   });
 
   useLayoutEffect(() => {
@@ -1157,9 +1111,11 @@ export default function BrowserPage({
   const handleBucketChange = useCallback(
     (value: string) => {
       setShowBucketMenu(false);
-      if (selectBucket(value)) clearActiveItem();
+      requestDetailsDrawerTransition(() => {
+        if (selectBucket(value)) clearActiveItem();
+      });
     },
-    [clearActiveItem, selectBucket],
+    [clearActiveItem, requestDetailsDrawerTransition, selectBucket],
   );
   const workspaceAccountActionTarget = useMemo<"manager" | "portal" | null>(() => {
     if (
@@ -1346,9 +1302,6 @@ export default function BrowserPage({
     return [...ordered, ...unknown];
   }, [availableStorageClasses]);
 
-  const cephQuotaScopeLabel = isS3UserContext
-    ? "User quota"
-    : "Account quota";
   const handleVersionsHardLimit = useCallback(() => {
     setWarningMessage(
       `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
@@ -1374,33 +1327,6 @@ export default function BrowserPage({
     requestOptions: browserRequestOptions,
     versioningEnabled: isVersioningEnabled,
   });
-  const inspectedObjectKey =
-    inspectedItem?.type === "file" ? inspectedItem.key : null;
-  const {
-    canLoadMore: canLoadMoreObjectVersions,
-    error: objectVersionsError,
-    load: loadObjectVersions,
-    loading: objectVersionsLoading,
-    rows: objectVersionRows,
-  } = useBrowserVersionListing({
-    accountId: accountIdForApi,
-    autoLoad: true,
-    bucketName,
-    enabled:
-      isInspectorPanelVisible &&
-      inspectorTab === "details" &&
-      resolvedFunctionalProfile === "advanced" &&
-      hasS3AccountContext &&
-      Boolean(inspectedObjectKey) &&
-      isVersioningEnabled,
-    errorMessage: "Unable to list versions for this object.",
-    hardLimit: VERSIONS_LIST_HARD_LIMIT,
-    objectKey: inspectedObjectKey,
-    onHardLimit: handleVersionsHardLimit,
-    pageSize: VERSIONS_PAGE_SIZE,
-    requestOptions: browserRequestOptions,
-  });
-
   const selectionItems = selectedItems;
   const selectionInfo = getSelectionInfo(selectionItems);
   const selectionFiles = selectionInfo.files;
@@ -1496,6 +1422,7 @@ export default function BrowserPage({
         capabilityFacts: resolvedCapabilityFacts,
         multipartUploadsAvailable: resolvedFunctionalProfile === "advanced",
         bucketConfigurationAvailable: bucketConfigurationEnabled,
+        bucketConfigurationReadOnly: workspaceSurface === "browser",
       }),
     [
       bucketName,
@@ -1509,6 +1436,7 @@ export default function BrowserPage({
       resolvedCapabilityFacts,
       resolvedFunctionalProfile,
       bucketConfigurationEnabled,
+      workspaceSurface,
       showDeletedObjects,
       showFolderItems,
     ],
@@ -1553,20 +1481,21 @@ export default function BrowserPage({
         clipboardMode: clipboard?.mode ?? null,
         copyUrlDisabled: sseActive,
         copyUrlDisabledReason,
-        publicLinkAvailable: canCreateRoutedPublicLink,
+        publicLinkAvailable:
+          isPortalProfile &&
+          resolvedCapabilityFacts.canCreatePublicLinks &&
+          canOpenExternalObjectDetails,
         restoreAvailable: Boolean(deletedObjectsOptions?.onRestoreObject),
-        inspectorAvailable:
-          canUseInspectorPanel || canOpenRoutedObjectDetails,
+        detailsAvailable:
+          item.type === "file" || resolvedFunctionalProfile === "advanced",
         functionalProfile: resolvedFunctionalProfile,
         capabilityFacts: resolvedCapabilityFacts,
         previewAvailable: isBrowserItemPreviewAvailable(item),
       }),
     [
       bucketName,
-      canCreateRoutedPublicLink,
-      canOpenRoutedObjectDetails,
+      canOpenExternalObjectDetails,
       canPasteInFunctionalProfile,
-      canUseInspectorPanel,
       clipboard?.mode,
       copyUrlDisabledReason,
       deletedObjectsOptions?.onRestoreObject,
@@ -1574,6 +1503,7 @@ export default function BrowserPage({
       isVersioningEnabled,
       resolvedCapabilityFacts,
       resolvedFunctionalProfile,
+      isPortalProfile,
       sseActive,
     ],
   );
@@ -1603,47 +1533,41 @@ export default function BrowserPage({
       ),
     [selectionActionStates],
   );
-  const inspectedPath = inspectedItem
-    ? `${bucketName}/${inspectedItem.key}`
-    : currentPath;
-
   const openObjectDetails = (
     item: BrowserItem,
     requestedTab: ObjectDetailsTabId,
+    intent?: "create-public-link",
   ) => {
     if (item.type !== "file") return;
-    if (onOpenObjectDetailsRoute) {
-      const routedInitialTab =
-        item.isDeleted
-          ? "versions"
-          : requestedTab === "preview" ||
-              requestedTab === "properties" ||
-              requestedTab === "versions"
-            ? requestedTab
-            : "properties";
-      onOpenObjectDetailsRoute({
+    if (onOpenObjectDetails) {
+      onOpenObjectDetails({
         bucketName,
         key: item.key,
         name: item.name || item.key,
-        initialTab: routedInitialTab,
+        initialTab: resolveRoutedObjectDetailsTab({
+          isDeleted: Boolean(item.isDeleted),
+          requestedTab,
+        }),
         isDeleted: Boolean(item.isDeleted),
+        intent,
       });
       return;
     }
-    let initialTab = requestedTab;
-    if (item.isDeleted) {
-      setWarningMessage(
-        "This object is deleted. Open versions to inspect or restore it.",
-      );
-      if (!isVersioningEnabled) {
-        return;
-      }
-      initialTab = "versions";
-    } else if (requestedTab === "versions" && !isVersioningEnabled) {
-      initialTab = "preview";
-    }
-    activateItem(item);
-    openObjectDetailsTarget(item, initialTab);
+    const resolution = resolveBrowserObjectDetailsTab({
+      isDeleted: Boolean(item.isDeleted),
+      isStorageSpace: isStorageSpaceContext,
+      profile:
+        resolvedFunctionalProfile === "advanced" ? "advanced" : "standard",
+      requestedTab,
+      versioningEnabled: isVersioningEnabled,
+    });
+    if (resolution.warning) setWarningMessage(resolution.warning);
+    if (!resolution.initialTab) return;
+    const initialTab = resolution.initialTab;
+    requestDetailsDrawerTransition(() => {
+      activateItem(item);
+      openObjectDetailsTarget(item, initialTab, intent);
+    });
   };
 
   const openItemPrimaryAction = (item: BrowserItem) => {
@@ -1660,12 +1584,8 @@ export default function BrowserPage({
   };
 
   const createPublicLinkForItem = (item: BrowserItem) => {
-    if (!onCreatePublicLinkForObject || item.type !== "file" || item.isDeleted) return;
-    onCreatePublicLinkForObject({
-      bucketName,
-      key: item.key,
-      name: item.name || item.key,
-    });
+    if (item.type !== "file" || item.isDeleted) return;
+    openObjectDetails(item, "details", "create-public-link");
   };
 
   const restoreDeletedItem = (item: BrowserItem) => {
@@ -1681,27 +1601,22 @@ export default function BrowserPage({
   };
 
   const openItemDetails = (item: BrowserItem) => {
-    if (onOpenObjectDetailsRoute && item.type === "file") {
-      onOpenObjectDetailsRoute({
-        bucketName,
-        key: item.key,
-        name: item.name || item.key,
-        initialTab: item.isDeleted ? "versions" : "properties",
-        isDeleted: Boolean(item.isDeleted),
+    if (item.type === "folder") {
+      if (resolvedFunctionalProfile !== "advanced") return;
+      requestDetailsDrawerTransition(() => {
+        activateItem(item);
+        openObjectDetailsTarget(item, "details");
       });
       return;
     }
-    if (!canUseInspectorPanel) return;
-    selectItemDetails(item);
-    openInspectorPanel();
-  };
-
-  const handleItemDoubleClick = (
-    event: ReactMouseEvent<HTMLElement>,
-    item: BrowserItem,
-  ) => {
-    if (isBrowserInteractiveTarget(event.target)) return;
-    openItemPrimaryAction(item);
+    openObjectDetails(
+      item,
+      item.isDeleted
+        ? "versions"
+        : resolvedFunctionalProfile === "advanced"
+          ? "properties"
+          : "details",
+    );
   };
 
   const openAdvancedForItem = (item: BrowserItem) => {
@@ -1723,11 +1638,18 @@ export default function BrowserPage({
 
   const handleSelectPrefix = useCallback(
     (nextPrefix: string) => {
-      setPrefix(nextPrefix);
-      clearActiveItem();
-      recordPathHistory(nextPrefix);
+      requestDetailsDrawerTransition(() => {
+        setPrefix(nextPrefix);
+        clearActiveItem();
+        recordPathHistory(nextPrefix);
+      });
     },
-    [clearActiveItem, recordPathHistory, setPrefix],
+    [
+      clearActiveItem,
+      recordPathHistory,
+      requestDetailsDrawerTransition,
+      setPrefix,
+    ],
   );
   const {
     activeSuggestionIndex: pathSuggestionIndex,
@@ -1757,10 +1679,12 @@ export default function BrowserPage({
     bucketName,
     prefix,
     onNavigate: ({ bucketName: nextBucket, prefix: nextPrefix }) => {
-      setBucketName(nextBucket);
-      setPrefix(nextPrefix);
-      clearActiveItem();
-      cancelPathEdit();
+      return requestDetailsDrawerTransition(() => {
+        setBucketName(nextBucket);
+        setPrefix(nextPrefix);
+        clearActiveItem();
+        cancelPathEdit();
+      });
     },
   });
 
@@ -1776,26 +1700,6 @@ export default function BrowserPage({
       setStorageFilter("all");
     }
   }, [searchableStorageClasses, setStorageFilter, storageFilter]);
-
-  const handleOpenBucketInspector = useCallback(() => {
-    setInspectorTab("bucket");
-    void loadBucketInspectorData();
-  }, [loadBucketInspectorData]);
-
-  useEffect(() => {
-    if (
-      isInspectorPanelVisible &&
-      inspectorTab === "bucket" &&
-      !isPortalProfile
-    ) {
-      void loadBucketInspectorData();
-    }
-  }, [
-    inspectorTab,
-    isInspectorPanelVisible,
-    isPortalProfile,
-    loadBucketInspectorData,
-  ]);
 
   const handleItemNameClick = (
     event: ReactMouseEvent<HTMLElement>,
@@ -1863,28 +1767,22 @@ export default function BrowserPage({
     handleSelectionKeyDown(event, openItemPrimaryAction);
   };
 
-  const openBucketConfigurationModal = (targetBucket: string) => {
+  const openBucketConfigurationDrawer = (targetBucket: string) => {
     if (!bucketConfigurationEnabled) return;
     const normalized = targetBucket.trim();
     if (!normalized) return;
     setShowBucketMenu(false);
     setBucketFilter("");
-    setConfigBucketName(normalized);
-  };
-
-  const closeBucketConfigurationModal = () => {
-    setConfigBucketName(null);
-    if (bucketName) {
-      void loadBucketInspectorData(true);
-    }
+    requestDetailsDrawerTransition(() =>
+      openBucketConfigurationTarget(normalized),
+    );
   };
 
   const handleBrowserBucketCreated = useCallback(
     async (createdBucketName: string) => {
       await refreshBucketList({ preferredBucket: createdBucketName });
-      void loadBucketInspectorData(true);
     },
-    [loadBucketInspectorData, refreshBucketList],
+    [refreshBucketList],
   );
   const {
     showModal: showCreateBucketModal,
@@ -2341,16 +2239,6 @@ export default function BrowserPage({
     await refreshPrefixVersionsIfVisible();
   };
 
-  const refreshVersionsForKey = async (targetKey: string) => {
-    if (
-      inspectorTab === "details" &&
-      inspectedItem?.type === "file" &&
-      inspectedItem.key === targetKey
-    ) {
-      await loadObjectVersions({ force: true });
-    }
-  };
-
   const {
     remove: handleDeleteVersion,
     restore: handleRestoreVersion,
@@ -2364,7 +2252,7 @@ export default function BrowserPage({
     isOperationAborted,
     onConfirm: openConfirmDialog,
     onRefreshListing: refreshObjectListing,
-    onRefreshVersions: refreshVersionsForKey,
+    onRefreshVersions: async () => undefined,
     onStatus: setStatusMessage,
     onWarning: setWarningMessage,
     requestOptions: browserRequestOptions,
@@ -2382,7 +2270,24 @@ export default function BrowserPage({
       restoreToDate: () => openBulkRestoreModal([]),
       cleanOldVersions: openCleanupModal,
       multipartUploads: openMultipartUploadsModal,
-      configureBucket: () => openBucketConfigurationModal(bucketName),
+      configureBucket: () => openBucketConfigurationDrawer(bucketName),
+      details: () => {
+        if (resolvedFunctionalProfile !== "advanced" || !bucketName) return;
+        const pathItem: BrowserItem = {
+          id: `path:${bucketName}:${normalizedPrefix}`,
+          key: normalizedPrefix,
+          name:
+            normalizedPrefix.split("/").filter(Boolean).at(-1) ??
+            "Bucket root",
+          type: "folder",
+          size: "-",
+          modified: "-",
+          owner: "-",
+        };
+        requestDetailsDrawerTransition(() => {
+          openObjectDetailsTarget(pathItem, "details");
+        });
+      },
       copyPath: () => handleCopyPath(currentPath),
       refresh: handleRefresh,
       restore: () =>
@@ -2401,12 +2306,7 @@ export default function BrowserPage({
   const runSelectionAction = (actionId: BrowserActionId) => {
     runBrowserAction(selectionActionStates[actionId], {
       details: () => {
-        if (selectionPrimary?.type === "file") {
-          openObjectDetails(
-            selectionPrimary,
-            selectionPrimary.isDeleted ? "versions" : "properties",
-          );
-        }
+        if (selectionPrimary) openItemDetails(selectionPrimary);
       },
       download: () => {
         if (
@@ -2461,22 +2361,18 @@ export default function BrowserPage({
     }
   };
 
-  const runInspectedFullDetailsAction = () => {
-    if (!inspectedItem || inspectedItem.type !== "file") return;
-    const actionId: BrowserActionId = inspectedItem.isDeleted
-      ? "versions"
-      : "properties";
-    runItemAction(inspectedItem, actionId);
-  };
-
-  const leaveMessage =
-    "Operations are in progress (upload, download, copy, delete). Leaving now may interrupt them. Continue?";
+  const shouldConfirmLeave = hasPendingOperations || hasUnsavedDrawerChanges;
+  const leaveMessage = hasUnsavedDrawerChanges
+    ? hasPendingOperations
+      ? "Operations are in progress and the details drawer contains unapplied changes. Leaving now may interrupt operations and discard changes. Continue?"
+      : "The details drawer contains unapplied changes. Leaving now will discard them. Continue?"
+    : "Operations are in progress (upload, download, copy, delete). Leaving now may interrupt them. Continue?";
   unstable_usePrompt({
-    when: hasPendingOperations,
+    when: shouldConfirmLeave,
     message: leaveMessage,
   });
   useEffect(() => {
-    if (!hasPendingOperations || typeof window === "undefined") return;
+    if (!shouldConfirmLeave || typeof window === "undefined") return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = leaveMessage;
@@ -2484,12 +2380,10 @@ export default function BrowserPage({
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasPendingOperations, leaveMessage]);
+  }, [leaveMessage, shouldConfirmLeave]);
   const chromeChipButtonClasses = filterChipClasses;
   const chromeToolbarButtonClasses = toolbarButtonClasses;
-  const chromeBulkActionClasses = bulkActionClasses;
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
-  const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
   const isActionBarVisible = selectedCount > 0;
   const showContextToolbarActions = !isActionBarVisible;
   const browserChromeShellClasses =
@@ -2523,9 +2417,8 @@ export default function BrowserPage({
       : toolbarMoreSelectionFullActions
   ).filter(
     (selectionAction) =>
-      !toolbarPathActions.some(
-        (pathAction) => pathAction.id === selectionAction.id,
-      ),
+      isActionBarVisible ||
+      !toolbarPathActions.some((pathAction) => pathAction.id === selectionAction.id),
   );
   const hasToolbarSelectionActions =
     canSelectionActions && toolbarSelectionActions.length > 0;
@@ -2696,9 +2589,6 @@ export default function BrowserPage({
               layout: {
                 folders: showFolderToggle
                   ? { checked: showFolders, onToggle: toggleFoldersPanel }
-                  : undefined,
-                inspector: showInspectorToggle
-                  ? { checked: showInspector, onToggle: toggleInspectorPanel }
                   : undefined,
               },
               columns: hasToolbarColumnsSection
@@ -2904,12 +2794,10 @@ export default function BrowserPage({
                 onListBackgroundClick={handleListBackgroundClick}
                 onListKeyDown={handleListKeyDown}
                 onGoUp={handleGoUp}
-                onSelectItem={(event, item) =>
-                  handleItemSelectionClick(event, item.id)
-                }
-                onItemDoubleClick={handleItemDoubleClick}
                 onItemContextMenu={handleItemContextMenu}
-                onToggleSelection={(item) => toggleSelection(item.id)}
+                onToggleSelection={(item, extendRange) =>
+                  handleItemCheckboxClick(item.id, extendRange)
+                }
                 onItemNameClick={handleItemNameClick}
                 onRunItemAction={runItemAction}
                 onOpenActions={handleItemActionsButtonClick}
@@ -2957,55 +2845,6 @@ export default function BrowserPage({
               </div>
             )}
           </div>
-          {isInspectorPanelVisible && (
-            <div className="absolute inset-y-0 right-0 z-30 w-[min(24rem,calc(100%-1rem))]">
-              <BrowserInspectorPanel
-                activeTab={isPortalProfile ? "details" : inspectorTab}
-                workspaceNoun={workspaceNoun}
-                workspaceNounCapitalized={workspaceNounCapitalized}
-                usePortalWorkspaceLabels={usePortalWorkspaceLabels}
-                technicalDetailsEnabled={
-                  resolvedFunctionalProfile === "advanced"
-                }
-                actionButtonClasses={chromeBulkActionClasses}
-                bucket={{
-                  available: !isPortalProfile,
-                  name: bucketName,
-                  hasContext: hasS3AccountContext,
-                  loading: bucketInspectorLoading,
-                  error: bucketInspectorError,
-                  data: bucketInspectorData,
-                  features: bucketInspectorFeatures,
-                  isCephContext,
-                  cephQuotaScopeLabel,
-                  cephContextQuotaSizeBytes,
-                  cephContextQuotaObjects,
-                }}
-                details={{
-                  item: inspectedItem,
-                  path: inspectedPath,
-                  versioningEnabled: isVersioningEnabled,
-                  versions: {
-                    versions: objectVersionRows,
-                    loading: objectVersionsLoading,
-                    error: objectVersionsError,
-                    canLoadMore: Boolean(
-                      inspectedItem && canLoadMoreObjectVersions,
-                    ),
-                    onLoadMore: inspectedItem
-                      ? () => void loadObjectVersions({ append: true })
-                      : undefined,
-                    onRestoreVersion: handleRestoreVersion,
-                    onDeleteVersion: handleDeleteVersion,
-                  },
-                  onOpenFullDetails: runInspectedFullDetailsAction,
-                }}
-                onSelectDetails={() => setInspectorTab("details")}
-                onOpenBucket={handleOpenBucketInspector}
-                onClose={closeInspectorPanel}
-              />
-            </div>
-          )}
         </div>
       </div>
       </div>
@@ -3034,6 +2873,7 @@ export default function BrowserPage({
         copyUrlDisabledReason={copyUrlDisabledReason}
         multipartUploadsAvailable={resolvedFunctionalProfile === "advanced"}
         bucketConfigurationAvailable={bucketConfigurationEnabled}
+        bucketConfigurationReadOnly={workspaceSurface === "browser"}
         functionalProfile={resolvedFunctionalProfile}
         capabilityFacts={resolvedCapabilityFacts}
         clipboard={clipboard}
@@ -3045,7 +2885,8 @@ export default function BrowserPage({
         onOpenPrefixVersions={openPrefixVersions}
         onOpenCleanupVersions={openCleanupModal}
         onOpenMultipartUploads={openMultipartUploadsModal}
-        onConfigureBucket={() => openBucketConfigurationModal(bucketName)}
+        onConfigureBucket={() => openBucketConfigurationDrawer(bucketName)}
+        onOpenPathDetails={() => runPathAction("details")}
         onResolveItemActions={resolveItemActionStates}
         onRunItemAction={runItemAction}
         onCopyUrl={handleCopyUrl}
@@ -3079,8 +2920,34 @@ export default function BrowserPage({
           handleResetVisibleColumns();
         }}
       />
-      {objectDetailsTarget && objectDetailsTarget.item.type === "file" && (
-        <BrowserObjectDetailsModal
+      {objectDetailsTarget &&
+      objectDetailsTarget.item.type === "file" &&
+      isStorageSpaceContext ? (
+        <BrowserStorageSpaceObjectDetailsDrawer
+          key={`${bucketName}:${objectDetailsTarget.item.id}`}
+          accountId={accountIdForApi}
+          bucket={currentBucketPanelItem}
+          bucketName={bucketName}
+          canModifyObjects={
+            resolvedCapabilityFacts.canDeleteObjects &&
+            resolvedCapabilityFacts.canRestoreObjects
+          }
+          createPublicLinkOnOpen={
+            objectDetailsTarget.intent === "create-public-link"
+          }
+          initialView={resolveStorageSpaceObjectDetailsView({
+            initialTab: objectDetailsTarget.initialTab,
+            intent: objectDetailsTarget.intent,
+            isDeleted: objectDetailsTarget.item.isDeleted,
+          })}
+          item={objectDetailsTarget.item}
+          onClose={closeObjectDetailsDrawer}
+          onMessage={setStatusMessage}
+          onRefreshObjects={refreshObjectListing}
+        />
+      ) : objectDetailsTarget && objectDetailsTarget.item.type === "file" ? (
+        <BrowserObjectDetailsDrawer
+          key={`${bucketName}:${objectDetailsTarget.item.id}`}
           accountId={accountIdForApi}
           bucketName={bucketName}
           item={objectDetailsTarget.item}
@@ -3091,22 +2958,46 @@ export default function BrowserPage({
           sseActive={sseActive}
           copyUrlDisabled={sseActive}
           copyUrlDisabledReason={copyUrlDisabledReason}
+          canDelete={resolvedCapabilityFacts.canDeleteObjects}
           presignObjectRequest={presignObjectRequest}
-          onClose={closeObjectDetails}
+          onClose={closeObjectDetailsDrawer}
           onDownload={handleDownloadTarget}
           onCopyUrl={(item) => handleCopyUrl(item)}
+          onCopyPath={handleCopyPath}
+          onDelete={(item) => handleDeleteItems([item])}
           onRefreshBrowserObjects={refreshObjectListing}
           onRestoreVersion={handleRestoreVersion}
           onDeleteVersion={handleDeleteVersion}
-          readOnly={resolvedFunctionalProfile !== "advanced"}
+          profile={
+            resolvedFunctionalProfile === "advanced" ? "advanced" : "standard"
+          }
+          onDirtyChange={setObjectDetailsDirty}
           requestOptions={browserRequestOptions}
         />
-      )}
+      ) : objectDetailsTarget &&
+        objectDetailsTarget.item.type === "folder" &&
+        resolvedFunctionalProfile === "advanced" ? (
+        <BrowserPathDetailsDrawer
+          key={`${bucketName}:${objectDetailsTarget.item.id}`}
+          accountId={accountIdForApi}
+          bucketName={bucketName}
+          listAllObjectsForPrefix={listAllObjectsForPrefix}
+          prefix={objectDetailsTarget.item.key}
+          requestOptions={browserRequestOptions}
+          versioningEnabled={isVersioningEnabled}
+          onClose={closeObjectDetailsDrawer}
+          onCopyPath={(path) => void handleCopyPath(path)}
+        />
+      ) : null}
       {configBucketName && bucketConfigurationEnabled && (
-        <BrowserBucketConfigurationModal
+        <BrowserBucketConfigurationDrawer
+          accountId={accountIdForApi}
           bucketName={configBucketName}
+          includeStaticWebsite={effectiveCaps?.static_website ?? true}
+          includeUsage={effectiveCaps ? effectiveCaps.metrics !== false : true}
           workspaceSurface={workspaceSurface}
-          onClose={closeBucketConfigurationModal}
+          onClose={closeBucketConfigurationDrawer}
+          onDirtyChange={setBucketConfigurationDirty}
         />
       )}
       {showCreateBucketModal && (

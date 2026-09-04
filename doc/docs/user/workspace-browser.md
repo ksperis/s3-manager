@@ -20,31 +20,44 @@ Use **Browser** for direct bucket/object operations.
    - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` context and endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
 3. Navigate buckets and prefixes.
    - Use the workspace sidebar to search and switch buckets directly from the workspace.
-   - The object list starts in Compact view with optional panels hidden, so
+   - The object list starts in Compact view with the Folders panel hidden, so
      it remains usable in a small window and leaves maximum room for objects.
    - Open **More > Panels > Folders** when a tree is useful. Every `/browser`
      user can enable it, and folder data is loaded only while the panel is open.
 4. Perform object actions from the most appropriate surface:
-   - Activate the icon and name once to open the primary destination: folders
-     navigate, previewable files up to 50 MiB open on `Preview`, other files
-     open read-only or editable `Properties` according to the profile, and
-     deleted objects open `Versions`/`History`.
-   - Click the rest of a row or mobile card to select it. Desktop replaces the
-     right side of the stable context bar with selection actions, without
-     moving the object list; mobile shows a
-     safe-area action bar with `Open`, `Download`, and `More` when applicable.
+   - Click anywhere on a row or mobile card, outside its interactive controls,
+     to open the primary destination: folders navigate, files open on `Preview`
+     even when no inline preview is available, and deleted objects open
+     `Versions`/`History`.
+   - Use the checkbox only for selection and bulk actions; Shift-clicking a
+     checkbox extends the current selection. Desktop replaces the right side of
+     the stable context bar with selection actions without moving the object
+     list; mobile shows a safe-area action bar with `Open`, `Download`, and
+     `More` when applicable.
    - Right-click or use `More` for all secondary actions. On mobile, `More`
      opens an accessible bottom sheet and explains temporarily disabled actions.
-   - Open **More > Panels > Details** for an overlay with the selected object's
-     essential facts or the current bucket summary. It does not reduce the
-     object-list width or duplicate action toolbars. Advanced users additionally
-     see versions, Ceph quotas, and technical bucket feature states.
+     While a selection is active, the action-bar `More` menu stays focused on
+     secondary actions for that selection; clear the selection to return to
+     path and Browser settings.
+   - Open an object to display its contextual details drawer. It overlays the
+     right side without resizing the list on desktop and becomes full-screen on
+     narrow windows. Opening another object replaces its contents without
+     changing row selection.
 5. Perform uploads, downloads, previews, deletes, restores, and metadata/tag actions from those surfaces.
-   - File actions such as `Preview`, `Versions`, and advanced object operations open the same `Object details` modal on the relevant tab.
+   - File actions such as `Preview`, `Versions`, and advanced object operations open the same details drawer on the relevant tab.
+   - In Advanced, use **Details** on a folder or **Path details** from the
+     current-path menu to inspect its bucket, full path, and effective S3 prefix.
+     The drawer can run an explicit recursive count on demand, including current
+     objects and, when versioning is active, versions and delete markers
+     without navigating away.
    - Standard users can copy, cut, and paste inside the current connection.
      Transfers to another Browser context require the Advanced profile.
    - Cross-context moves remove the source only after the destination copy is verified.
-6. Use bucket dialogs for bucket creation or configuration if your effective permissions allow it.
+6. With Technical S3 tools, use **Bucket details** from `More` on the dedicated
+   Browser for a read-only summary of identity, usage, quotas, and feature
+   status. Embedded Manager and Ceph Admin Browsers expose **Bucket settings**
+   instead and reuse their capability-filtered editors. Unsaved changes in
+   those editors are protected before closing or changing context.
 7. Open **Usage & Metrics** from the sidebar when a read-only metrics page is available. The sidebar usage gauge appears only when reliable usage data is available for the selected connection.
 
 ## Notes
@@ -65,16 +78,20 @@ Use **Browser** for direct bucket/object operations.
   Enabling that administrator setting adds versions, metadata editing, advanced
   search and columns, batch and cross-context operations, multipart supervision,
   and bucket maintenance. It does not change the layout or density.
+- When `/browser` uses a Portal project context, opening a Storage Space file
+  reuses the Portal drawer with **Preview**, **History**, **Sharing**, and
+  **Details**. History and sharing data are loaded only when their tabs open,
+  and Portal grants continue to control every available action.
 - On `/browser`, every user can choose **Comfortable** or **Compact**
-  from **More > View**, and can independently show **Folders** or
-  **Details** from **More > Panels**. Compact keeps the path and icon actions on
+  from **More > View**, and can independently show **Folders** from
+  **More > Panels**. Compact keeps the path and icon actions on
   one row whenever width permits. Comfortable displays labeled action buttons
   on the path row when the window is wide enough, then moves them below the path
   when space becomes tighter. These root-only preferences are
   shared across Standard, Advanced, and Portal contexts. A user without saved
-  preferences starts in Compact with both panels hidden. On narrow
-  viewports the panels are temporarily hidden without erasing the saved choices.
-- Columns are configurable only with Technical S3 tools. Panel, density, and
+  preferences starts in Compact with Folders hidden. On narrow viewports the
+  panel is temporarily hidden without erasing the saved choice.
+- Columns are configurable only with Technical S3 tools. Folder, density, and
   column preferences belong only to `/browser`.
   Embedded Browser surfaces receive these settings explicitly and never read or
   write the root Browser preferences.

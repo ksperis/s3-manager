@@ -14,7 +14,7 @@ type BrowserHistoryState = BrowserNavigationLocation & {
 };
 
 type UseBrowserNavigationHistoryOptions = BrowserNavigationLocation & {
-  onNavigate: (location: BrowserNavigationLocation) => void;
+  onNavigate: (location: BrowserNavigationLocation) => boolean | void;
 };
 
 function currentBrowserPath(): string {
@@ -56,8 +56,20 @@ export function useBrowserNavigationHistory({
         const locationChanged =
           nextLocation.bucketName !== currentLocation.bucketName ||
           nextLocation.prefix !== currentLocation.prefix;
+        const accepted = onNavigateRef.current(nextLocation);
+        if (accepted === false) {
+          window.history.pushState(
+            {
+              ...(window.history.state ?? {}),
+              browserPage: true,
+              ...currentLocation,
+            } satisfies BrowserHistoryState,
+            "",
+            browserPathRef.current || currentBrowserPath(),
+          );
+          return;
+        }
         skipNextWriteRef.current = locationChanged;
-        onNavigateRef.current(nextLocation);
         return;
       }
 

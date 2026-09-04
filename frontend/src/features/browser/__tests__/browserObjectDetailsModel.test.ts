@@ -44,12 +44,12 @@ describe("browserObjectDetailsModel", () => {
     expect(buildInlinePreviewDisposition('rapport "été".txt')).toContain('filename="rapport \\"_t_\\".txt"');
   });
 
-  it("builds tabs for editable, read-only, and deleted object states", () => {
+  it("builds tabs for Advanced, Standard, and deleted object states", () => {
     expect(
       buildObjectDetailsTabs({
         hasArchiveTab: true,
         isDeleted: false,
-        readOnly: false,
+        profile: "advanced",
         versioningEnabled: true,
       }).map((tab) => tab.id),
     ).toEqual([
@@ -63,15 +63,15 @@ describe("browserObjectDetailsModel", () => {
       buildObjectDetailsTabs({
         hasArchiveTab: true,
         isDeleted: false,
-        readOnly: true,
+        profile: "standard",
         versioningEnabled: true,
       }).map((tab) => tab.id),
-    ).toEqual(["preview", "properties"]);
+    ).toEqual(["preview", "details"]);
     expect(
       buildObjectDetailsTabs({
         hasArchiveTab: false,
         isDeleted: true,
-        readOnly: false,
+        profile: "advanced",
         versioningEnabled: true,
       }).map((tab) => tab.id),
     ).toEqual(["versions"]);
@@ -79,7 +79,7 @@ describe("browserObjectDetailsModel", () => {
       buildObjectDetailsTabs({
         hasArchiveTab: false,
         isDeleted: true,
-        readOnly: false,
+        profile: "advanced",
         versioningEnabled: false,
       }),
     ).toEqual([]);

@@ -70,10 +70,13 @@ simple preferences.
   users, space details and governance activity are limited to spaces
   they can access; undisclosed usage can appear only as the anonymous `Other`
   aggregate.
-- File browsing inside a space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
+- File browsing inside a space uses a locked Portal profile of Browser. Opening
+  a file keeps the current folder visible behind a drawer with Preview, History,
+  Sharing, and Details. Advanced S3 editing remains in Browser or Manager.
 - `/browser` can also run with a Portal project context when the effective
   project setting `browser_access_enabled` is enabled. It still uses the
-  personal IAM identity and Portal permissions instead of management controls.
+  personal IAM identity and Portal permissions instead of management controls,
+  and reuses the same Preview, History, Sharing, and Details drawer.
 - Portal roles come from a private owner, the manager project role, the team access mode, and
   collaborator grants managed in Portal. External S3 keys are synchronized from
   those records; IAM is not the source of Portal listings or roles.

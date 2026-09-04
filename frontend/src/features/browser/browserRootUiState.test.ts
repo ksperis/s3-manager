@@ -23,7 +23,6 @@ describe("browserRootUiState v3", () => {
     expect(readBrowserRootUiState()).toMatchObject({
       density: "compact",
       showFolders: false,
-      showInspector: false,
       foldersPanelWidthPx: 280,
       objectColumns: [],
       objectColumnWidths: {},
@@ -68,7 +67,6 @@ describe("browserRootUiState v3", () => {
     expect(readBrowserRootUiState()).toMatchObject({
       density: "comfortable",
       showFolders: true,
-      showInspector: true,
       foldersPanelWidthPx: 360,
       objectColumns: ["modified", "etag"],
       objectColumnWidths: { name: 410 },
@@ -83,13 +81,12 @@ describe("browserRootUiState v3", () => {
     ).not.toBeNull();
   });
 
-  it("persists panels and columns in one root Browser scope", () => {
-    writeBrowserRootUiLayout({ showFolders: true, showInspector: true });
+  it("persists the folders preference and columns in one root Browser scope", () => {
+    writeBrowserRootUiLayout({ showFolders: true });
     writeBrowserRootObjectColumns(["size", "modified"]);
 
     expect(readBrowserRootUiState()).toMatchObject({
       showFolders: true,
-      showInspector: true,
     });
     expect(readBrowserRootObjectColumns()).toEqual(["size", "modified"]);
   });

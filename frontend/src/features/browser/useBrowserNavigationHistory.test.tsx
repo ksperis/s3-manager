@@ -93,6 +93,49 @@ describe("useBrowserNavigationHistory", () => {
     expect(pushState).not.toHaveBeenCalled();
   });
 
+  it("re-anchors the current location when popped navigation is rejected", async () => {
+    const pushState = vi.spyOn(window.history, "pushState");
+    const onNavigate = vi.fn(() => false);
+    renderHook(() =>
+      useBrowserNavigationHistory({
+        bucketName: "bucket-a",
+        prefix: "folder/",
+        onNavigate,
+      }),
+    );
+    await waitFor(() =>
+      expect(window.history.state).toMatchObject({ browserPage: true }),
+    );
+    pushState.mockClear();
+
+    act(() => {
+      window.dispatchEvent(
+        new PopStateEvent("popstate", {
+          state: {
+            browserPage: true,
+            bucketName: "bucket-a",
+            prefix: "",
+          },
+        }),
+      );
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith({
+      bucketName: "bucket-a",
+      prefix: "",
+    });
+    expect(pushState).toHaveBeenCalledWith(
+      {
+        source: "route",
+        browserPage: true,
+        bucketName: "bucket-a",
+        prefix: "folder/",
+      },
+      "",
+      "/browser?view=objects#content",
+    );
+  });
+
   it("re-anchors the browser after leaving its history entries", async () => {
     const pushState = vi.spyOn(window.history, "pushState");
     const onNavigate = vi.fn();

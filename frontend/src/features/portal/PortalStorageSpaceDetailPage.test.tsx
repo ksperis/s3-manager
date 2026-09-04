@@ -11,6 +11,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { ComponentProps } from "react";
 import PortalStorageSpaceDetailPage from "./PortalStorageSpaceDetailPage";
 import BrowserEmbed from "../browser/BrowserEmbed";
+import StorageSpaceObjectDetailsDrawer from "../shared/StorageSpaceObjectDetailsDrawer";
 
 const mocks = vi.hoisted(() => ({
   createPublicLinkMock: vi.fn(),
@@ -271,6 +272,10 @@ vi.mock("../browser/BrowserEmbed", () => ({
   ),
 }));
 
+vi.mock("../shared/StorageSpaceObjectDetailsDrawer", () => ({
+  default: vi.fn(() => <aside data-testid="portal-object-details-drawer" />),
+}));
+
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="location-probe">{`${location.pathname}${location.search}`}</output>;
@@ -513,12 +518,63 @@ describe("PortalStorageSpaceDetailPage", () => {
       },
       lockedBucketName: "research-data-internal",
       lockedBucketLabel: "Research Data",
-      quotaMaxSizeGb: 10,
-      quotaMaxObjects: 1000,
     });
     expect(embedProps.storageEndpointCapabilities).toEqual({ sse: true, sts: true });
-    expect(embedProps.onOpenObjectDetailsRoute).toEqual(expect.any(Function));
+    expect(embedProps.onOpenObjectDetails).toEqual(expect.any(Function));
     expect(embedProps.transferReporter).toBeUndefined();
+  });
+
+  it("opens object details in URL state, replaces tab state, and Back closes the drawer", async () => {
+    await renderPage([
+      "/portal/storage-spaces/research-data?prefix=reports%2F&show_deleted=1",
+    ]);
+
+    const browserProps = vi.mocked(BrowserEmbed).mock.calls.at(-1)?.[0] as ComponentProps<typeof BrowserEmbed>;
+    act(() => {
+      browserProps.onOpenObjectDetails?.({
+        bucketName: "research-data-internal",
+        key: "reports/annual report.csv",
+        name: "annual report.csv",
+        initialTab: "preview",
+      });
+    });
+
+    await waitFor(() => {
+      const location = screen.getByTestId("location-probe").textContent ?? "";
+      expect(location).toContain("object=reports%2Fannual+report.csv");
+      expect(location).toContain("object_view=preview");
+      expect(location).toContain("prefix=reports%2F");
+    });
+
+    let drawerProps = vi.mocked(StorageSpaceObjectDetailsDrawer).mock.calls.at(-1)?.[0] as ComponentProps<typeof StorageSpaceObjectDetailsDrawer>;
+    act(() => drawerProps.onViewChange("history"));
+    await waitFor(() => {
+      expect(screen.getByTestId("location-probe")).toHaveTextContent("object_view=history");
+    });
+
+    drawerProps = vi.mocked(StorageSpaceObjectDetailsDrawer).mock.calls.at(-1)?.[0] as ComponentProps<typeof StorageSpaceObjectDetailsDrawer>;
+    act(() => drawerProps.onClose());
+    await waitFor(() => {
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        "/portal/storage-spaces/research-data?prefix=reports%2F&show_deleted=1",
+      );
+    });
+  });
+
+  it("closes a deep-linked drawer without leaving the Storage Space", async () => {
+    await renderPage([
+      "/portal/storage-spaces/research-data?prefix=reports%2F&object=reports%2Freport.csv&object_view=details",
+    ]);
+
+    const drawerProps = vi.mocked(StorageSpaceObjectDetailsDrawer).mock.calls.at(-1)?.[0] as ComponentProps<typeof StorageSpaceObjectDetailsDrawer>;
+    expect(drawerProps.activeView).toBe("details");
+    act(() => drawerProps.onClose());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        "/portal/storage-spaces/research-data?prefix=reports%2F",
+      );
+    });
   });
 
   it("loads scoped external links lazily and supports copying and confirmed revocation", async () => {
@@ -1033,51 +1089,35 @@ describe("PortalStorageSpaceDetailPage", () => {
       canRestoreObjects: false,
       canCreatePublicLinks: false,
     });
-    expect(embedProps.onCreatePublicLinkForObject).toBeUndefined();
+    expect(embedProps.onOpenObjectDetails).toEqual(expect.any(Function));
   });
 
-  it("creates a public link from a Browser-selected file", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText },
-      configurable: true,
-    });
-
+  it("opens Sharing and delegates public-link creation to the shared drawer", async () => {
     await renderPage();
 
     await waitFor(() => {
       const latestProps = vi.mocked(BrowserEmbed).mock.calls.at(-1)?.[0] as ComponentProps<typeof BrowserEmbed> | undefined;
-      expect(latestProps?.onCreatePublicLinkForObject).toEqual(expect.any(Function));
+      expect(latestProps?.onOpenObjectDetails).toEqual(expect.any(Function));
     });
 
     const latestProps = vi.mocked(BrowserEmbed).mock.calls.at(-1)?.[0] as ComponentProps<typeof BrowserEmbed>;
     act(() => {
-      latestProps.onCreatePublicLinkForObject?.({
+      latestProps.onOpenObjectDetails?.({
         bucketName: "research-data-internal",
         key: "raw-data/report.csv",
         name: "report.csv",
+        intent: "create-public-link",
       });
     });
-
-    expect(screen.getByRole("dialog", { name: "Create public link" })).toBeInTheDocument();
-    expect(screen.getByText("raw-data/report.csv")).toBeInTheDocument();
-    expect(screen.getByLabelText("Public link expiration")).toHaveClass("ui-control");
-    fireEvent.change(screen.getByLabelText("Public link expiration"), {
-      target: { value: "2026-06-10T10:00" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create link" }));
 
     await waitFor(() => {
-      expect(mocks.createPublicLinkMock).toHaveBeenCalledWith("101", "research-data", {
-        object_key: "raw-data/report.csv",
-        label: "report.csv",
-        expires_at: expect.any(String),
-      });
+      const drawerProps = vi.mocked(StorageSpaceObjectDetailsDrawer).mock.calls.at(-1)?.[0] as
+        | ComponentProps<typeof StorageSpaceObjectDetailsDrawer>
+        | undefined;
+      expect(drawerProps?.activeView).toBe("sharing");
+      expect(drawerProps?.objectKey).toBe("raw-data/report.csv");
+      expect(drawerProps?.createPublicLinkRequestToken).toBeGreaterThan(0);
     });
-    expect(await screen.findByText("/api/portal/public-links/token/download")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
-    expect(writeText).toHaveBeenCalledWith("/api/portal/public-links/token/download");
-    expect(await screen.findByText("Link copied.")).toBeInTheDocument();
   });
 
   it("shows a disabled state when the Portal Browser kill switch is off", async () => {

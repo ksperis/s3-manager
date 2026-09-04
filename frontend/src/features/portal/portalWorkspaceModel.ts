@@ -163,15 +163,6 @@ export function decodePortalObjectPath(value?: string): string {
     .join("/");
 }
 
-export function storageSpaceObjectPath(space: Pick<PortalWorkspaceSpace, "id">, objectPath: string): string {
-  const encodedObjectPath = objectPath
-    .split("/")
-    .filter(Boolean)
-    .map((part) => encodeURIComponent(part))
-    .join("/");
-  return `${storageSpacePath(space)}/objects/${encodedObjectPath}`;
-}
-
 export function buildPortalWorkspaceModel({
   account,
   storageSpaces,
