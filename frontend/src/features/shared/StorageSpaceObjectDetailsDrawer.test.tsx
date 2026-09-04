@@ -120,7 +120,9 @@ describe("StorageSpaceObjectDetailsDrawer", () => {
     render(<StorageSpaceObjectDetailsDrawer {...baseProps} />);
 
     const drawer = await screen.findByRole("complementary", { name: "report.csv" });
-    expect(within(drawer).getByText("id,value", { exact: false })).toBeInTheDocument();
+    expect(
+      await within(drawer).findByText("id,value", { exact: false }),
+    ).toBeInTheDocument();
     expect(mocks.fetchVersions).not.toHaveBeenCalled();
     expect(mocks.listLinks).not.toHaveBeenCalled();
   });
