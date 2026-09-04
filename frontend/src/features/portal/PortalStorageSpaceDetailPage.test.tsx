@@ -471,6 +471,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     await renderPage();
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Upload files" })).not.toBeInTheDocument();
     expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({
       includeArchived: true,
       includeUsage: false,

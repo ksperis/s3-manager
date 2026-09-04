@@ -1445,12 +1445,6 @@ export default function PortalStorageSpaceDetailPage() {
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }), to: "/portal/storage-spaces" }, { label: space.name })}
         inlineContent={<UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(space.status, t)}</UiBadge>}
         actions={[
-          ...(canModifyObjects
-            ? [{
-                label: t({ en: "Upload files", fr: "Ajouter des fichiers", de: "Dateien hochladen" }),
-                to: `${storageSpacePath(space)}#space-files`,
-              }]
-            : []),
           ...(canInvitePeople && savedAccessMode === "restricted"
             ? [{
                 label: t({ en: "Invite people", fr: "Inviter", de: "Einladen" }),
